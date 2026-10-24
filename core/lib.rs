@@ -1,0 +1,72 @@
+//! Defines the Rust core's public module boundary and its initial contract tests.
+//!
+//! This file exports the hexagonal layers. Production implementations are added in
+//! their respective modules; tests below define the expected behavior first.
+
+/// Contains infrastructure implementations and operational concerns.
+pub mod adapters;
+/// Contains use-case orchestration that only depends on domain types and ports.
+pub mod application;
+/// Contains pure business types and business failures.
+pub mod domain;
+/// Contains dependency-inversion traits for external capabilities.
+pub mod ports;
+
+#[cfg(test)]
+mod scaffold_contract_tests {
+    use crate::{
+        application::meeting_recorder::MeetingRecorder,
+        domain::models::{AudioRecording, DeviceId, MeetingId, RecordingId, Transcript},
+        ports::{ai::TranscriptionEngine, storage::NoteRepository},
+    };
+
+    struct StubTranscriptionEngine;
+
+    impl TranscriptionEngine for StubTranscriptionEngine {
+        fn transcribe(
+            &self,
+            audio_recording: &AudioRecording,
+        ) -> Result<Transcript, crate::domain::errors::TranscriptionError> {
+            Ok(Transcript::new(
+                audio_recording.meeting_id().clone(),
+                "Discussed offline synchronization.",
+            ))
+        }
+    }
+
+    #[derive(Default)]
+    struct InMemoryNoteRepository;
+
+    impl NoteRepository for InMemoryNoteRepository {
+        fn save_transcript(
+            &self,
+            transcript: &Transcript,
+        ) -> Result<(), crate::domain::errors::StorageError> {
+            assert_eq!(transcript.content(), "Discussed offline synchronization.");
+            Ok(())
+        }
+    }
+
+    /// Verifies that application orchestration depends on AI and storage ports rather than adapters.
+    #[test]
+    fn recorder_transcribes_and_persists_through_ports() {
+        let meeting_identifier = MeetingId::new("meeting-42");
+        let audio_recording = AudioRecording::new(
+            RecordingId::new("recording-42"),
+            meeting_identifier.clone(),
+            DeviceId::new("device-rome"),
+        );
+        let meeting_recorder =
+            MeetingRecorder::new(StubTranscriptionEngine, InMemoryNoteRepository);
+
+        let persisted_transcript = meeting_recorder
+            .process_recording(&audio_recording)
+            .unwrap_or_else(|error| panic!("the port stubs should succeed: {error}"));
+
+        assert_eq!(persisted_transcript.meeting_id(), &meeting_identifier);
+        assert_eq!(
+            persisted_transcript.content(),
+            "Discussed offline synchronization."
+        );
+    }
+}

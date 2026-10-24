@@ -1,0 +1,26 @@
+# Defines the dependency-light Rust core scaffold; AI engines remain ports only.
+[package]
+name = "note-taker-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+description = "Offline-first meeting note-taking core"
+
+[lib]
+path = "core/lib.rs"
+
+[[bin]]
+name = "cli"
+path = "core/bin/cli.rs"
+
+[[bin]]
+name = "daemon"
+path = "core/bin/daemon.rs"
+
+[dependencies]
+anyhow = "1.0.100"
+thiserror = "2.0.17"
+tracing = "0.1.41"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "json"] }
