@@ -69,19 +69,32 @@ The application MUST be deployed across the following platforms, adhering to the
 *   **Variables:** MUST use highly descriptive, significant names. Complex variables require inline comments.
 *   **Context Files:** `ARCHITECTURE.md`, `API_SPECS.md`, and `CONTEXT.md` MUST be maintained and kept up to date.
 
-## 5. Observability, Logging & Debugging
+### 5.2 Testing & TDD (Test-Driven Development)
+*   **TDD Mandate:** Tests MUST be written *before* or *alongside* the implementation. 
+*   **Coverage:** Tests MUST cover general use cases, edge cases, and misuse/failure cases.
+*   **API/Protocol Testing:** Any defined protocol or API MUST have specific tests on both the client and server sides. A third party MUST be able to integrate using only the API documentation and tests, without seeing the internal code.
+*   **Pre-Commit Gate:** ALL tests MUST pass before a commit is finalized.
+
+
+### 5.3 Git & Workflow Rules
+*   **Repository:** All code MUST be committed to a private GitHub repository.
+*   **Micro-Commits:** Commits MUST be small, atomic, and incremental. (e.g., Do not commit "Add P2P". Commit "Add mDNS local peer discovery", then "Add NAT traversal").
+*   **Commit Messages:** MUST clearly document the changes between commits.
+
+
+## 6. Observability, Logging & Debugging
 *Because this is a distributed, offline-first application running on diverse hardware, robust logging is critical for debugging. The human QA tester will frequently export these logs to analyze them when debugging.*
 
-### 5.1 Log Levels & Runtime Configuration
+### 6.1 Log Levels & Runtime Configuration
 *   **Verbosity Levels:** The system MUST support standard logging levels: `ERROR`, `WARN`, `INFO`, `DEBUG`, and `TRACE`.
 *   **Runtime Toggle:** The user MUST be able to change the logging verbosity level at runtime via the UI settings (on GUI devices) or CLI flags (on headless/server devices) **without restarting the application**.
 *   **Default State:** The default log level in production builds MUST be `INFO`. `DEBUG` and `TRACE` must only be enabled when explicitly requested by the user.
 
-### 5.2 Log Persistence & Export (Crucial for Mobile)
+### 6.2 Log Persistence & Export (Crucial for Mobile)
 *   **File Persistence:** Logs MUST NOT only be printed to the console/stdout. They MUST be continuously written to a local, rotating log file (e.g., `app_log_YYYY-MM-DD.log`). This is mandatory for mobile devices where console access is restricted.
 *   **Export Mechanism:** The GUI applications (Android, Desktop) MUST include a "Share/Export Logs" button in the settings menu. This must use the native OS share sheet (Android) or file picker (Desktop) to allow the user to easily send the log file to the developer/AI.
 
-### 5.3 Structured Logging Format
+### 6.3 Structured Logging Format
 *   **JSON Format:** To ensure developers can easily parse and analyze the logs, all log entries MUST be written in **structured JSON format**, not plain text.
 *   **Required Metadata:** Every log entry MUST include:
     *   `timestamp` (ISO 8601 format)
@@ -91,23 +104,13 @@ The application MUST be deployed across the following platforms, adhering to the
     *   `message` (The actual log message)
     *   `context` (Optional JSON object for extra variables, e.g., `{"peer_id": "xyz", "latency_ms": 45}`)
 
-### 5.4 Implementation Constraints (Rust & Flutter)
+### 6.4 Implementation Constraints (Rust & Flutter)
 *   **Rust Core:** MUST use the `tracing` and `tracing-subscriber` crates. The subscriber must be configured to output JSON to both `stdout` (for the CLI/Server) and a rolling file appender.
 *   **Flutter UI:** MUST use a logging package that bridges to the Rust core's `tracing` system, or implements its own structured JSON logger that writes to the app's local document directory.
 *   **PII Redaction:** The logging system MUST have a built-in mechanism to automatically redact or hash sensitive data (like raw voice embeddings or E2EE keys) before writing them to the log file.
 
-### 5.2 Testing & TDD (Test-Driven Development)
-*   **TDD Mandate:** Tests MUST be written *before* or *alongside* the implementation. 
-*   **Coverage:** Tests MUST cover general use cases, edge cases, and misuse/failure cases.
-*   **API/Protocol Testing:** Any defined protocol or API MUST have specific tests on both the client and server sides. A third party MUST be able to integrate using only the API documentation and tests, without seeing the internal code.
-*   **Pre-Commit Gate:** ALL tests MUST pass before a commit is finalized.
 
-### 5.3 Git & Workflow Rules
-*   **Repository:** All code MUST be committed to a private GitHub repository.
-*   **Micro-Commits:** Commits MUST be small, atomic, and incremental. (e.g., Do not commit "Add P2P". Commit "Add mDNS local peer discovery", then "Add NAT traversal").
-*   **Commit Messages:** MUST clearly document the changes between commits.
-
-## 6. Definition of Done (DoD)
+## 7. Definition of Done (DoD)
 A feature is only considered "Done" when:
 1. The code is implemented and passes all linting/formatting checks.
 2. Unit and Integration tests are written and passing.
