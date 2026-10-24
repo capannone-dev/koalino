@@ -1,0 +1,70 @@
+note taker
+
+
+I want the app to be usable from different devices. Could be one or several laptops, desktop pc, smartphone ...
+
+each istance must talk to each  other so that wherever i open the app i see always an update repository of the note taken. 
+
+each device have different capabilities. for exaple a server istance might have powerfull GPUs, the laptop might have a smaller but efficient gpu. So more capable machines can run larger models and so on.
+the devices should present their capabilities and in a manifest.
+
+i would like to have an option on the app to decide if the AI worload should happen on the device or on another device, or auto to auto select the best fit
+
+
+the meeting can last from few minutes to hours.
+
+
+the network of devices must be P2P, a node going unreachable should not block the others. if a node is offline should be working also alone, and when connection can be established again it should sink with all other members.
+so the people voice signature should be shared as well.
+
+
+the comunication between the device of the group should be always secure and encryptred. as well as the voice signatures. 
+
+statiscs about AI load and capacity should be collected for each  AI task and should be grouped per device. so we can analyze performances. so like how much time takes to transcribe recordings, how much power it consumes (especially for mobile devices), latency, etc...
+
+once a meeting is transcribed there is no need to keep the voice recording. photos or screshots should insted be kept.
+
+the software must works in teams and detect when there is a screen share and take screen shots of slides or other informative content.
+
+it should be possible to add an atachment to a meeting (like a photo, a pdf ..) in a second time. checking file meta data should suggest to which meeting whould be linked.
+
+
+using teams is possible to distinguish people voices and initialize a library of voice signature. but different device and settings can strongly change how sounds are recorded. so even togh an heavy lifting can be done automatically assiging identities to voice signature from teams calls, when a person voice is not matched in the library it must be possible to manually assign a new identity or manually match to an existing identity. so that we can populate the library with new signature and have more then one signatures.
+in addition when the there is a match but is not strong the user should be prompted and asked if the poorly match is correct. the user should be able to correct it or confirm it. if confirmed a new signature should me created and memorized for that identity, because it probably means that it was in a settings or using a mic-speaker combination that altered how their voice sound. Considering that new settings migth appear again in the future, in this way next time we avoid missmatching.
+unti a voice is not assigned to an identity some clips of their voice must be preserved so the user can listen to them and understand who was speaking.
+There should a page where the gallery of voices and identity match can be managed.
+
+
+notes should be tagged with date time and acquistion device
+
+i need  aversion of the app for android, linux desktop (debian based distro and arch based distro, with gnome GUI) and windows, linux server (headless). for the device with GUI it need to adhere to modern simpleintuitive design guidelines for the respective device.the linux version need to offer also cli commands. The linux server version should provide WEB interface too.
+
+the devices migth be on the same network or not, and thus comunicate via internet. comunication must be always encripted.
+
+
+conversation are going to be mostly in italian or english.
+
+the system migth include "dumb" that do data acquistion only (only audio recordings) and send them to the p2p network. this is not to implement immediately but it migth come as a request. so the architecture should accomodate for it.
+
+the project codebase must be well documented each code directory, file, function, method, variable must have significant name. There must be several level of documentation. Functions must have their comment on wht is their input and what is their output, their intended use and how they are implemented. same things goes for fiels. each one must have a comment specifiyng what they contains at high level. simialr each folder must have a read me explaing what part of the project they cover.
+There must be a general over view read me of the code base presenting what is the project about, reference to built pachackges and how to install and selected instructions or example on how t uset. a specific detailed guide on the usega must be in a separate file and linked to the main read me. similarly a guide on how to build it must be a separate file and linked to the main readme.
+
+a reference file containing the code base structure must be maintained to help developers work on the code base more efficiently.
+
+use github private repo to commit incremental updates on the project. document changes between commits
+
+if protocols or api are used or defined or created, they need specific documentation and test on each side. the tests must cover general use case but also how edge cases or misusing cases are handeled. All test need to be passed before commit. given the api, or protocol, documentation a third party should be able to integrate withouth needing to see the code or requiring change. 
+
+
+ai model used can be changed over time and that should not require any code change
+
+app should be run also in the back ground and keep recording even with locked screen. it shoudl provide start  pause stop recording buttons even without unloking the device if is possible. 
+models should be running locally in first implementation, but the code architecture should allow for third party AI models (ie chatgpt, claude ...)
+
+
+
+The "Context" Files: Create an ARCHITECTURE.md (high-level design), API_SPECS.md (gRPC/REST definitions), and CONTEXT.md (current state of the project, what is done, what is next). Feed these to the AI at the start of every session.
+Test-Driven Development (TDD): You mentioned tests must pass before commit. Make the AI write the tests first. Prompt: "Write a failing test for the CRDT merge function. Then write the code to make it pass." This prevents the AI from writing hallucinated, untestable code.
+Micro-commits: Never ask the AI to "build the P2P sync." Ask it to "implement the libp2p peer discovery for local LAN." Commit. Then "implement the mDNS broadcast." Commit.
+
+
