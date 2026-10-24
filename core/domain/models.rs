@@ -154,6 +154,78 @@ impl DeviceId {
     }
 }
 
+/// Identifies a transcription model that a device can execute without exposing its implementation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TranscriptionModel {
+    /// The node can execute a Whisper-compatible transcription workload.
+    Whisper,
+    /// The node can execute a named provider or future model integration.
+    ThirdParty(String),
+}
+
+/// Advertises a node's non-sensitive AI capacity for decentralized workload selection.
+///
+/// A future encrypted P2P adapter broadcasts this portable value. It intentionally contains no
+/// credentials, model weights, raw audio, or hardware serial numbers.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DeviceManifest {
+    device_id: DeviceId,
+    cpu_cores: u16,
+    gpu_vram_megabytes: u32,
+    available_transcription_models: Vec<TranscriptionModel>,
+}
+
+impl DeviceManifest {
+    /// Creates a portable capability manifest for one decentralized node.
+    ///
+    /// Inputs: `device_id` identifies the node; CPU and GPU values describe available capacity;
+    /// `available_transcription_models` lists workloads that the node can execute.
+    /// Outputs: An immutable manifest suitable for encrypted P2P broadcast and routing.
+    /// Side effects: Takes ownership of model capability metadata only; it performs no hardware scan.
+    pub fn new(
+        device_id: DeviceId,
+        cpu_cores: u16,
+        gpu_vram_megabytes: u32,
+        available_transcription_models: Vec<TranscriptionModel>,
+    ) -> Self {
+        Self {
+            device_id,
+            cpu_cores,
+            gpu_vram_megabytes,
+            available_transcription_models,
+        }
+    }
+
+    /// Returns the stable identifier of the device that advertised this manifest.
+    ///
+    /// Inputs: None.
+    /// Outputs: A borrow of the originating device identifier.
+    /// Side effects: None.
+    pub fn device_id(&self) -> &DeviceId {
+        &self.device_id
+    }
+
+    /// Reports whether this node advertises support for a requested transcription model.
+    ///
+    /// Inputs: `transcription_model` is the model required by a workload.
+    /// Outputs: `true` only when the model is present in this manifest.
+    /// Side effects: None.
+    pub fn supports_transcription_model(&self, transcription_model: &TranscriptionModel) -> bool {
+        self.available_transcription_models
+            .iter()
+            .any(|available_model| available_model == transcription_model)
+    }
+
+    /// Produces a deterministic capacity score used only by the automatic routing policy.
+    ///
+    /// Inputs: None.
+    /// Outputs: A score prioritizing GPU memory, then CPU cores, without identifying hardware.
+    /// Side effects: None.
+    pub fn transcription_capacity_score(&self) -> u64 {
+        u64::from(self.gpu_vram_megabytes) * 1_000 + u64::from(self.cpu_cores)
+    }
+}
+
 /// Represents a captured recording without retaining raw audio content in the domain model.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AudioRecording {

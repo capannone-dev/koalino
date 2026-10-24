@@ -20,6 +20,12 @@
 | --- | --- | --- |
 | #3 AudioCapture port and local recording state machine | Ready for review | Portable PCM chunk/state subscriptions, TDD state-transition coverage, local deterministic adapter, and structured transition logging. |
 
+## WP4: AI & Compute Routing
+
+| Issue | Status | Scope |
+| --- | --- | --- |
+| #4 TranscriptionEngine trait, device manifests, and compute dispatcher | Ready for review | Trait-only transcription dispatch, non-sensitive capability manifests, deterministic local/specific/automatic routing, and mock-only TDD coverage. |
+
 ## Follow-up work
 
 - Define validation and IDs suitable for CRDT replication before storage adapters are introduced.
