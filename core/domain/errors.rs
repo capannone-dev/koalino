@@ -1,4 +1,45 @@
-//! Defines portable error types returned through AI, storage, and network ports.
+//! Defines portable error types returned through AI, audio, storage, and network ports.
+
+use crate::domain::models::AudioState;
+
+/// Identifies a lifecycle command rejected by an audio-capture state machine.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AudioAction {
+    /// Starts an idle recorder or resumes a paused recorder.
+    Start,
+    /// Pauses an active recorder while retaining its session.
+    Pause,
+    /// Closes an active or paused recorder permanently.
+    Stop,
+}
+
+/// Describes an audio-capture operation that could not complete.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum AudioError {
+    /// The requested lifecycle command is disallowed from the current state.
+    #[error("cannot {action:?} audio capture while it is {current_state:?}")]
+    InvalidState {
+        /// The lifecycle command that the adapter rejected.
+        action: AudioAction,
+        /// The state from which the rejected command was issued.
+        current_state: AudioState,
+    },
+    /// The requested format cannot be opened by the capture adapter.
+    #[error("audio configuration is invalid: {reason}")]
+    InvalidConfiguration {
+        /// A privacy-safe explanation that contains no raw audio data.
+        reason: String,
+    },
+    /// A subscriber cannot receive capture events because its channel is unavailable.
+    #[error("audio subscriber is unavailable")]
+    SubscriberUnavailable,
+    /// The underlying capture device or stream reported an unrecoverable failure.
+    #[error("audio capture is unavailable: {reason}")]
+    Unavailable {
+        /// A privacy-safe explanation of the adapter or device failure.
+        reason: String,
+    },
+}
 
 /// Describes a transcription operation that could not produce a transcript.
 #[derive(Debug, thiserror::Error)]

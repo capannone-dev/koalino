@@ -1,0 +1,2 @@
+# Rust compiler build artifacts are reproducible and must not be committed.
+/target/

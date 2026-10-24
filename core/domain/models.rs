@@ -1,5 +1,96 @@
 //! Defines immutable, strongly typed business values for meetings and recordings.
 
+/// Describes the lifecycle of an audio-capture session without exposing a platform stream.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AudioState {
+    /// The capture session has not started and accepts a start command.
+    Idle,
+    /// The capture session routes audio chunks to subscribers.
+    Recording,
+    /// The capture session is retained but temporarily discards captured chunks.
+    Paused,
+    /// The capture session is closed and cannot be restarted.
+    Stopped,
+    /// The capture session encountered an unrecoverable adapter failure.
+    Error,
+}
+
+/// Defines the portable PCM format requested from an audio-capture adapter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AudioConfig {
+    sample_rate_hz: u32,
+    channels: u16,
+}
+
+impl AudioConfig {
+    /// Creates a PCM capture configuration.
+    ///
+    /// Inputs: `sample_rate_hz` and `channels` describe the requested stream format; validation occurs
+    /// when an adapter opens a stream.
+    /// Outputs: A portable configuration that contains no operating-system device details.
+    /// Side effects: None.
+    pub fn new(sample_rate_hz: u32, channels: u16) -> Self {
+        Self {
+            sample_rate_hz,
+            channels,
+        }
+    }
+
+    /// Returns the requested number of PCM samples captured per second.
+    ///
+    /// Inputs: None.
+    /// Outputs: The requested sample rate in hertz.
+    /// Side effects: None.
+    pub fn sample_rate_hz(&self) -> u32 {
+        self.sample_rate_hz
+    }
+
+    /// Returns the requested number of interleaved PCM channels.
+    ///
+    /// Inputs: None.
+    /// Outputs: The requested channel count.
+    /// Side effects: None.
+    pub fn channels(&self) -> u16 {
+        self.channels
+    }
+}
+
+/// Carries one adapter-produced signed 16-bit PCM chunk and its format metadata.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AudioChunk {
+    samples: Vec<i16>,
+    config: AudioConfig,
+}
+
+impl AudioChunk {
+    /// Creates a portable signed 16-bit PCM chunk.
+    ///
+    /// Inputs: `samples` contains interleaved PCM values matching `config`.
+    /// Outputs: An immutable chunk suitable for local processing or future P2P streaming adapters.
+    /// Side effects: Takes ownership of the raw samples; callers must not log the returned value.
+    pub fn new(samples: Vec<i16>, config: AudioConfig) -> Self {
+        Self { samples, config }
+    }
+
+    /// Borrows the PCM samples without copying the raw audio content.
+    ///
+    /// Inputs: None.
+    /// Outputs: The interleaved signed 16-bit PCM samples.
+    /// Side effects: None.
+    pub fn samples(&self) -> &[i16] {
+        &self.samples
+    }
+
+    /// Returns the format metadata associated with this audio chunk.
+    ///
+    /// Inputs: None.
+    /// Outputs: The chunk's portable PCM configuration.
+    /// Side effects: None.
+    pub fn config(&self) -> AudioConfig {
+        self.config
+    }
+}
+
 /// Identifies a meeting across offline replicas.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct MeetingId(String);

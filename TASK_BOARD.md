@@ -14,6 +14,12 @@
 | --- | --- | --- |
 | #2 SQLite NoteRepository and Automerge CRDT integration | Ready for review | In-memory TDD coverage, SQLite meeting schema, opaque CRDT BLOB persistence, corruption handling, and offline merge service. |
 
+## WP3: Audio Capture
+
+| Issue | Status | Scope |
+| --- | --- | --- |
+| #3 AudioCapture port and local recording state machine | Ready for review | Portable PCM chunk/state subscriptions, TDD state-transition coverage, local deterministic adapter, and structured transition logging. |
+
 ## Follow-up work
 
 - Define validation and IDs suitable for CRDT replication before storage adapters are introduced.
