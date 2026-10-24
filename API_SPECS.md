@@ -7,7 +7,7 @@
 The initial public contracts are Rust traits, not a network protocol:
 
 - `TranscriptionEngine` receives `AudioRecording` metadata and returns a `Transcript`.
-- `NoteRepository` persists a `Transcript` locally before future synchronization.
+- `NoteRepository` creates a meeting with opaque CRDT bytes, persists and loads a `Transcript`, and atomically replaces or reads a serialized CRDT document. It returns only domain values and `StorageError`; it never exposes SQLite types.
 - `P2pNetwork` permits only encrypted opaque-payload transport.
 - `VoiceVectorDatabase` accepts embeddings only; it never accepts raw audio.
 

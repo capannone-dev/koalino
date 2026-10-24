@@ -2,3 +2,5 @@
 
 /// Configures structured, redaction-aware logging sinks.
 pub mod observability;
+/// Implements persistence ports with local storage technologies.
+pub mod storage;

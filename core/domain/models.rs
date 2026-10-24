@@ -13,6 +13,15 @@ impl MeetingId {
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
+
+    /// Borrows the identifier text for adapter boundary metadata.
+    ///
+    /// Inputs: None.
+    /// Outputs: The meeting identifier text.
+    /// Side effects: None.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 /// Identifies an audio recording belonging to a meeting.

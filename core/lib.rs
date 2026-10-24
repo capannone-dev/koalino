@@ -38,12 +38,42 @@ mod scaffold_contract_tests {
     struct InMemoryNoteRepository;
 
     impl NoteRepository for InMemoryNoteRepository {
+        fn create_meeting(
+            &self,
+            _meeting_id: &MeetingId,
+            _initial_crdt_document: &[u8],
+        ) -> Result<(), crate::domain::errors::StorageError> {
+            Ok(())
+        }
+
         fn save_transcript(
             &self,
             transcript: &Transcript,
         ) -> Result<(), crate::domain::errors::StorageError> {
             assert_eq!(transcript.content(), "Discussed offline synchronization.");
             Ok(())
+        }
+
+        fn load_transcript(
+            &self,
+            _meeting_id: &MeetingId,
+        ) -> Result<Option<Transcript>, crate::domain::errors::StorageError> {
+            Ok(None)
+        }
+
+        fn save_crdt_document(
+            &self,
+            _meeting_id: &MeetingId,
+            _crdt_document: &[u8],
+        ) -> Result<(), crate::domain::errors::StorageError> {
+            Ok(())
+        }
+
+        fn load_crdt_document(
+            &self,
+            _meeting_id: &MeetingId,
+        ) -> Result<Vec<u8>, crate::domain::errors::StorageError> {
+            Ok(Vec::new())
         }
     }
 
