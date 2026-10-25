@@ -67,3 +67,12 @@ selected transcription engine call, then saves duration/latency, a coarse CPU-or
 and timestamp only after success. `SqliteNoteRepository` stores metrics and current device load in
 dedicated tables and computes total duration plus average latency. Tests use its in-memory SQLite
 constructor; no AI model is loaded and no input/output payload is persisted as telemetry.
+
+Issue #13 adds attachment domain values plus ports for metadata extraction and attachment
+persistence. `AttachmentManager` owns only injected `MetadataExtractor` and `NoteRepository`
+ports: it receives a UTC capture time, gets overlapping `MeetingWindow` values, and ranks inclusive
+windows by linear midpoint proximity (1.0 at the midpoint, 0.0 at either edge). It does not read
+EXIF/PDF metadata or access files itself. Unit tests use a hardcoded mock extractor and mock
+repository windows only; no real file metadata is accessed in CI. Existing meeting IDs remain
+typed `MeetingId` strings across the established storage boundary, while attachments themselves
+have UUID identifiers.

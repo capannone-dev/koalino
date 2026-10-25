@@ -25,3 +25,8 @@ weak or absent classifications without exposing storage implementation types.
 `MetricsRepository` persists only privacy-safe completed-task metadata and the latest device-load
 snapshot. Application services use it to record duration, latency, coarse energy estimates, and
 aggregation data without passing AI inputs, outputs, raw audio, transcript content, or embeddings.
+
+`MetadataExtractor` reads a UTC capture timestamp through an adapter-defined file-metadata
+implementation. `NoteRepository::get_meetings_overlapping` returns only portable `MeetingWindow`
+values, and `AttachmentRepository` stores attachment metadata and links without ever reading file
+contents. This keeps EXIF, PDF, filesystem, and database details out of attachment orchestration.

@@ -23,6 +23,7 @@ path = "core/bin/daemon.rs"
 anyhow = "1.0.100"
 async-trait = "0.1.89"
 automerge = "0.6.1"
+chrono = { version = "0.4.42", default-features = false, features = ["clock", "std"] }
 futures = "0.3.31"
 libp2p = { version = "0.56.0", features = ["macros", "mdns", "noise", "request-response", "tcp", "tokio", "yamux"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }

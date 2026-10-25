@@ -38,3 +38,14 @@ heuristic: CPU-only manifests use 5 W and manifests advertising GPU VRAM use 25 
 mWh from measured milliseconds. The heuristic is an aggregate planning signal, not a battery
 measurement. SQLite aggregation returns total processing time and integer-truncated average
 latency without retaining audio, transcript content, or embeddings.
+
+## Attachment meeting suggestions
+
+`AttachmentManager` receives a local file path but delegates timestamp acquisition exclusively to
+`MetadataExtractor`; it never reads EXIF, PDF, or filesystem metadata directly. It passes that UTC
+timestamp to `NoteRepository::get_meetings_overlapping`, then ranks each inclusive candidate window
+by its midpoint. Confidence is `1 - distance_from_midpoint / half_window_duration`: an exact midpoint
+scores `1.0`, either edge scores `0.0`, and intermediate times decay linearly. Results are sorted by
+descending score with meeting ID as a deterministic tie-breaker. The manager logs only processing and
+suggestion counts, never paths or file contents, and returned candidates remain subject to user
+confirmation.

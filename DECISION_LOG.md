@@ -127,3 +127,14 @@
   converts elapsed milliseconds to mWh. It is intentionally a coarse planning estimate.
 - SQLite stores telemetry in dedicated tables and aggregation runs in SQL. Tests use in-memory
   SQLite and deterministic mock engines only.
+
+## 2026-10-25 — Issue #13 attachment metadata and meeting linking
+
+- Added `MetadataExtractor` as the sole attachment timestamp boundary. `AttachmentManager` sees
+  neither EXIF/PDF APIs nor filesystem metadata and tests use hardcoded timestamps only.
+- Preserved the established `MeetingId` string type for attachment links and suggestions; attachment
+  records themselves receive UUID identifiers. This prevents a new subsystem from splitting the
+  repository's existing meeting-identity contract.
+- `NoteRepository` supplies portable inclusive `MeetingWindow` values. The manager ranks only those
+  windows with linear midpoint proximity: 1.0 at midpoint, 0.0 at either edge, descending score
+  plus meeting-ID tie-break. Suggestions require user confirmation before attachment persistence.

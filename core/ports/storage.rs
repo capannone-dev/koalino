@@ -2,8 +2,9 @@
 
 use crate::domain::{
     errors::StorageError,
-    models::{MeetingId, Transcript, UnassignedVoiceClip},
+    models::{Attachment, MeetingId, MeetingWindow, Transcript, UnassignedVoiceClip},
 };
+use chrono::{DateTime, Utc};
 
 /// Persists meeting text in an offline-capable repository.
 pub trait NoteRepository {
@@ -66,4 +67,43 @@ pub trait NoteRepository {
         &self,
         meeting_id: &MeetingId,
     ) -> Result<Vec<UnassignedVoiceClip>, StorageError>;
+
+    /// Retrieves recorded meeting windows containing an attachment capture timestamp.
+    ///
+    /// Inputs: `timestamp` is a UTC attachment capture time obtained through `MetadataExtractor`.
+    /// Outputs: Candidate meeting windows containing that instant, or a storage error.
+    /// Side effects: Reads local meeting timeline metadata only.
+    fn get_meetings_overlapping(
+        &self,
+        _timestamp: DateTime<Utc>,
+    ) -> Result<Vec<MeetingWindow>, StorageError> {
+        Ok(Vec::new())
+    }
+}
+
+/// Persists attachment metadata independently from filesystem metadata extraction.
+pub trait AttachmentRepository {
+    /// Saves an attachment record, whether already linked or awaiting user confirmation.
+    ///
+    /// Inputs: `attachment` contains no file bytes, only metadata and an optional meeting ID.
+    /// Outputs: Success or a portable storage error.
+    /// Side effects: Persists attachment metadata locally and may enqueue CRDT synchronization.
+    fn save_attachment(&self, attachment: &Attachment) -> Result<(), StorageError>;
+
+    /// Returns every attachment explicitly linked to one meeting.
+    ///
+    /// Inputs: `meeting_id` identifies the meeting whose attachments are requested.
+    /// Outputs: Attachment metadata ordered by adapter policy, or a storage error.
+    /// Side effects: Reads local attachment metadata without opening attachment files.
+    fn get_attachments_for_meeting(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<Attachment>, StorageError>;
+
+    /// Returns attachment records still awaiting a user-selected meeting link.
+    ///
+    /// Inputs: None.
+    /// Outputs: Unlinked attachment metadata, or a storage error.
+    /// Side effects: Reads local attachment metadata without opening attachment files.
+    fn get_unlinked_attachments(&self) -> Result<Vec<Attachment>, StorageError>;
 }

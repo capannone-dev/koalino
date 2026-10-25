@@ -22,3 +22,8 @@ callers must never log those bytes.
 `TaskMetrics` records a completed AI task's device/model label, timings, coarse energy estimate,
 and UTC epoch timestamp without task payloads. `DeviceLoadStats` records a non-sensitive utilization
 snapshot, while `AggregatedStats` exposes only task count, total duration, and average latency.
+
+`Attachment` carries a UUID, optional established `MeetingId`, path, MIME type, UTC original
+timestamp, and acquisition-device metadata without opening the file. `MeetingWindow` describes a
+recorded meeting interval returned by storage. `MeetingSuggestion` is a presentation-safe candidate
+with a normalized midpoint-proximity confidence score; file-format parsing remains outside domain.

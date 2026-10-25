@@ -1,5 +1,6 @@
 //! Defines immutable, strongly typed business values for meetings and recordings.
 
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 /// Describes the lifecycle of an audio-capture session without exposing a platform stream.
@@ -114,6 +115,215 @@ impl MeetingId {
     /// Side effects: None.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+/// Represents the recorded time range used to associate externally acquired attachments.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MeetingWindow {
+    meeting_id: MeetingId,
+    meeting_start_time: DateTime<Utc>,
+    meeting_end_time: DateTime<Utc>,
+}
+
+impl MeetingWindow {
+    /// Creates a meeting window from recording lifecycle timestamps.
+    ///
+    /// Inputs: `meeting_id` identifies the meeting; timestamps must be UTC and end no earlier than start.
+    /// Outputs: An immutable time window for repository matching.
+    /// Side effects: None.
+    pub fn new(
+        meeting_id: MeetingId,
+        meeting_start_time: DateTime<Utc>,
+        meeting_end_time: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            meeting_id,
+            meeting_start_time,
+            meeting_end_time,
+        }
+    }
+
+    /// Returns the meeting identifier owning this time window.
+    ///
+    /// Inputs: None.
+    /// Outputs: A borrow of the stable meeting identifier.
+    /// Side effects: None.
+    pub fn meeting_id(&self) -> &MeetingId {
+        &self.meeting_id
+    }
+
+    /// Returns the inclusive UTC start of this meeting window.
+    ///
+    /// Inputs: None.
+    /// Outputs: The recorded meeting start timestamp.
+    /// Side effects: None.
+    pub fn meeting_start_time(&self) -> DateTime<Utc> {
+        self.meeting_start_time
+    }
+
+    /// Returns the inclusive UTC end of this meeting window.
+    ///
+    /// Inputs: None.
+    /// Outputs: The recorded meeting end timestamp.
+    /// Side effects: None.
+    pub fn meeting_end_time(&self) -> DateTime<Utc> {
+        self.meeting_end_time
+    }
+
+    /// Reports whether a timestamp lies within this inclusive meeting time range.
+    ///
+    /// Inputs: `timestamp` is an attachment capture timestamp in UTC.
+    /// Outputs: `true` when the timestamp is between the recorded start and end, inclusive.
+    /// Side effects: None.
+    pub fn contains(&self, timestamp: DateTime<Utc>) -> bool {
+        self.meeting_start_time <= timestamp && timestamp <= self.meeting_end_time
+    }
+}
+
+/// Describes a user-added file and its safe-to-persist acquisition metadata.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Attachment {
+    attachment_id: Uuid,
+    meeting_id: Option<MeetingId>,
+    file_path: String,
+    mime_type: String,
+    original_timestamp: DateTime<Utc>,
+    original_device_id: String,
+}
+
+impl Attachment {
+    /// Creates an attachment record without reading the file or assigning it to a meeting.
+    ///
+    /// Inputs: `attachment_id` must be unique; `meeting_id` remains absent until user confirmation.
+    /// Outputs: An immutable attachment suitable for an `AttachmentRepository`.
+    /// Side effects: Takes ownership of metadata only; it does not access or log the file.
+    pub fn new(
+        attachment_id: Uuid,
+        meeting_id: Option<MeetingId>,
+        file_path: impl Into<String>,
+        mime_type: impl Into<String>,
+        original_timestamp: DateTime<Utc>,
+        original_device_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            attachment_id,
+            meeting_id,
+            file_path: file_path.into(),
+            mime_type: mime_type.into(),
+            original_timestamp,
+            original_device_id: original_device_id.into(),
+        }
+    }
+
+    /// Returns the attachment's globally unique identifier.
+    /// Inputs: None.
+    /// Outputs: The attachment UUID.
+    /// Side effects: None.
+    pub fn attachment_id(&self) -> Uuid {
+        self.attachment_id
+    }
+
+    /// Returns the assigned meeting, if the attachment has been confirmed or linked.
+    /// Inputs: None.
+    /// Outputs: An optional borrow of the owning meeting identifier.
+    /// Side effects: None.
+    pub fn meeting_id(&self) -> Option<&MeetingId> {
+        self.meeting_id.as_ref()
+    }
+
+    /// Borrows the local path used by an adapter to locate this attachment.
+    /// Inputs: None.
+    /// Outputs: The caller-supplied local file path.
+    /// Side effects: None.
+    pub fn file_path(&self) -> &str {
+        &self.file_path
+    }
+
+    /// Borrows the attachment MIME type.
+    /// Inputs: None.
+    /// Outputs: The declared MIME type.
+    /// Side effects: None.
+    pub fn mime_type(&self) -> &str {
+        &self.mime_type
+    }
+
+    /// Returns the original UTC timestamp obtained through a metadata adapter.
+    /// Inputs: None.
+    /// Outputs: The attachment acquisition timestamp.
+    /// Side effects: None.
+    pub fn original_timestamp(&self) -> DateTime<Utc> {
+        self.original_timestamp
+    }
+
+    /// Borrows the source device identifier recorded with this attachment.
+    /// Inputs: None.
+    /// Outputs: The source device identifier.
+    /// Side effects: None.
+    pub fn original_device_id(&self) -> &str {
+        &self.original_device_id
+    }
+}
+
+/// Ranks one meeting as a possible owner of an attachment.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MeetingSuggestion {
+    meeting_id: MeetingId,
+    meeting_start_time: DateTime<Utc>,
+    meeting_end_time: DateTime<Utc>,
+    confidence_score: f32,
+}
+
+impl MeetingSuggestion {
+    /// Creates a meeting suggestion with a normalized confidence score.
+    ///
+    /// Inputs: timestamps identify the matching window; score must be between zero and one.
+    /// Outputs: An immutable suggestion for presentation or user confirmation.
+    /// Side effects: None.
+    pub fn new(
+        meeting_id: MeetingId,
+        meeting_start_time: DateTime<Utc>,
+        meeting_end_time: DateTime<Utc>,
+        confidence_score: f32,
+    ) -> Self {
+        Self {
+            meeting_id,
+            meeting_start_time,
+            meeting_end_time,
+            confidence_score,
+        }
+    }
+
+    /// Returns the candidate meeting identifier.
+    /// Inputs: None.
+    /// Outputs: A borrow of the candidate meeting identifier.
+    /// Side effects: None.
+    pub fn meeting_id(&self) -> &MeetingId {
+        &self.meeting_id
+    }
+
+    /// Returns the candidate meeting start timestamp.
+    /// Inputs: None.
+    /// Outputs: The UTC meeting start timestamp.
+    /// Side effects: None.
+    pub fn meeting_start_time(&self) -> DateTime<Utc> {
+        self.meeting_start_time
+    }
+
+    /// Returns the candidate meeting end timestamp.
+    /// Inputs: None.
+    /// Outputs: The UTC meeting end timestamp.
+    /// Side effects: None.
+    pub fn meeting_end_time(&self) -> DateTime<Utc> {
+        self.meeting_end_time
+    }
+
+    /// Returns the normalized time-window confidence score.
+    /// Inputs: None.
+    /// Outputs: A score from zero at an edge to one at the midpoint.
+    /// Side effects: None.
+    pub fn confidence_score(&self) -> f32 {
+        self.confidence_score
     }
 }
 
