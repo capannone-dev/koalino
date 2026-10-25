@@ -193,6 +193,16 @@
 - CLI logging is fixed at `error` to protect predictable terminal output while retaining the
   project's structured logging path for failures.
 
+## 2026-10-25 — Issue #19 Next.js local dashboard
+
+- Chose a standalone Next.js App Router project with typed Axum DTO clients and no direct database
+  access. The dashboard's server pages fetch current local state while its client components own
+  WebSocket status and explicit voice-assignment interaction.
+- Added `POST /api/voice/assign` as a JSON-only adapter that validates opaque UUIDs, finds clips
+  through `NoteRepository`, and delegates variant storage to `VoiceIdentityManager`.
+- Cloud CI installs Node 22 and runs lint, component tests, and production build. It is the source
+  of web verification because the local sandbox has no Node runtime.
+
 - `NoteRepository` supplies portable inclusive `MeetingWindow` values. The manager ranks only those
   windows with linear midpoint proximity: 1.0 at midpoint, 0.0 at either edge, descending score
   plus meeting-ID tie-break. Suggestions require user confirmation before attachment persistence.

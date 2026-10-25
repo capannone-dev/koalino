@@ -1,5 +1,6 @@
-<!-- This directory stores CI workflow definitions for repository quality gates. -->
+<!-- Documents continuous-integration workflows maintained by this repository. -->
 
-# Continuous-integration workflows
+# Workflows
 
-Each workflow invokes the Makefile targets, keeping CI behavior aligned with local verification.
+`web-ci.yml` verifies the standalone Next.js dashboard with a pinned Node release on relevant
+pushes and pull requests.

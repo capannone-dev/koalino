@@ -1,5 +1,6 @@
-<!-- This directory contains GitHub automation that enforces the project's verification contract. -->
+<!-- Documents repository-hosted automation configuration. -->
 
 # GitHub automation
 
-The workflows here run the same Make targets used locally so pull requests cannot bypass Rust formatting, linting, or unit tests.
+Workflow definitions live in `workflows/`. They provide cloud verification for runtimes that are
+not available in the local coding sandbox.

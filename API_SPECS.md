@@ -103,6 +103,10 @@ never serialized. `GET /api/telemetry` returns aggregate task count, duration, a
 opaque `meeting_id`, `sync_status_changed` with a safe status string, or `new_unassigned_clip`
 with opaque meeting/clip IDs. The router allows browser CORS only from `http://localhost:3000`.
 
+`POST /api/voice/assign` accepts JSON `{ "clip_id": "uuid", "identity_id": "uuid" }` and
+returns `204` after the existing voice identity service writes a derived signature variant. Invalid
+identifiers return `400`, a missing clip returns `404`, and no raw audio or embedding is returned.
+
 ## Linux CLI contract
 
 `note-taker` accepts `record start|stop|status`, `meetings list`, `meetings view <meeting-id>`,

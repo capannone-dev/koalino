@@ -20,7 +20,7 @@ use crate::{
     adapters::storage::{
         in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
     },
-    domain::models::{Attachment, MeetingId, Transcript},
+    domain::models::{Attachment, MeetingId, Transcript, UnassignedVoiceClip},
     ports::storage::{AttachmentRepository, NoteRepository},
     server::api::{ServerAppState, WebSocketEvent, build_router},
 };
@@ -44,6 +44,7 @@ fn seeded_router() -> (axum::Router, ServerAppState) {
             "Discussed offline-first sync.",
         ))
         .unwrap_or_else(|error| panic!("test transcript must persist: {error}"));
+    let review_clip_id = uuid::Uuid::from_u128(1);
     repository
         .save_attachment(&Attachment::new(
             uuid::Uuid::new_v4(),
@@ -54,6 +55,17 @@ fn seeded_router() -> (axum::Router, ServerAppState) {
             "in-memory-test-device",
         ))
         .unwrap_or_else(|error| panic!("test attachment must persist: {error}"));
+    repository
+        .save_unassigned_clip(UnassignedVoiceClip::with_review_context(
+            review_clip_id,
+            MeetingId::new("meeting-rome"),
+            0,
+            1_000,
+            vec![0, 1],
+            vec![0.25, 0.75],
+            None,
+        ))
+        .unwrap_or_else(|error| panic!("test review clip must persist: {error}"));
 
     let application_state = ServerAppState::new(repository, InMemoryVoiceVectorDB::new());
     let router = build_router(application_state.clone());
@@ -125,6 +137,27 @@ async fn unknown_meeting_returns_not_found() {
         .unwrap_or_else(|error| panic!("router must serve the test request: {error}"));
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+/// Verifies a browser can resolve a stored review clip through the application-backed API route.
+#[tokio::test]
+async fn voice_assignment_persists_a_variant_without_exposing_clip_audio() {
+    let response = seeded_router()
+        .0
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/voice/assign")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"clip_id":"00000000-0000-0000-0000-000000000001","identity_id":"00000000-0000-4000-8000-000000000002"}"#,
+                ))
+                .unwrap_or_else(|error| panic!("test request must build: {error}")),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("router must serve the test request: {error}"));
+
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
 }
 
 /// Verifies gallery and telemetry reads return JSON through their injected port boundaries.

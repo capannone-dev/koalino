@@ -13,13 +13,14 @@ use axum::{
     },
     http::{HeaderValue, StatusCode},
     response::IntoResponse,
-    routing::get,
+    routing::{get, post},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
+    application::voice_identity_manager::VoiceIdentityManager,
     domain::{
         errors::StorageError,
         models::{AggregatedStats, Attachment, MeetingId, SpeakerIdentity, UnassignedVoiceClip},
@@ -105,12 +106,13 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .route("/api/meetings", get(list_meetings))
         .route("/api/meetings/{meeting_id}", get(get_meeting))
         .route("/api/voice-gallery", get(get_voice_gallery))
+        .route("/api/voice/assign", post(assign_voice_clip))
         .route("/api/telemetry", get(get_telemetry))
         .route("/ws", get(web_socket_upgrade))
         .layer(
             CorsLayer::new()
                 .allow_origin(HeaderValue::from_static("http://localhost:3000"))
-                .allow_methods([axum::http::Method::GET]),
+                .allow_methods([axum::http::Method::GET, axum::http::Method::POST]),
         )
         .layer(TraceLayer::new_for_http())
         .with_state(application_state)
@@ -194,6 +196,41 @@ async fn get_telemetry(
             .get_aggregated_stats()
             .map_err(storage_error_status)?,
     )))
+}
+
+/// Resolves an unassigned clip to a user-selected identity through the voice application service.
+async fn assign_voice_clip(
+    State(application_state): State<ServerAppState>,
+    Json(assignment_request): Json<VoiceAssignmentRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let clip_id =
+        uuid::Uuid::parse_str(&assignment_request.clip_id).map_err(|_| StatusCode::BAD_REQUEST)?;
+    let identity_id = uuid::Uuid::parse_str(&assignment_request.identity_id)
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    tracing::info!(clip_id = %clip_id, identity_id = %identity_id, "headless voice assignment requested");
+    let review_clip = {
+        let repositories = application_state.repositories.lock().await;
+        let meeting_ids = repositories
+            .list_meeting_ids()
+            .map_err(storage_error_status)?;
+        let mut matching_clip = None;
+        for meeting_id in meeting_ids {
+            let clips = repositories
+                .get_unassigned_clips(&meeting_id)
+                .map_err(storage_error_status)?;
+            if let Some(clip) = clips.into_iter().find(|clip| clip.clip_id() == clip_id) {
+                matching_clip = Some(clip);
+                break;
+            }
+        }
+        matching_clip.ok_or(StatusCode::NOT_FOUND)?
+    };
+    let voice_database = application_state.voice_database.lock().await;
+    let voice_identity_manager = VoiceIdentityManager::new(&**voice_database);
+    voice_identity_manager
+        .confirm_weak_match(identity_id, review_clip.derived_embedding())
+        .map_err(storage_error_status)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Upgrades a local client connection and streams event-bus messages until disconnect.
@@ -326,6 +363,13 @@ struct TelemetryResponse {
     task_count: u64,
     total_duration_ms: u64,
     average_latency_ms: u64,
+}
+
+/// Deserializes the opaque identifiers supplied by the web voice-assignment form.
+#[derive(Deserialize)]
+struct VoiceAssignmentRequest {
+    clip_id: String,
+    identity_id: String,
 }
 impl From<AggregatedStats> for TelemetryResponse {
     fn from(stats: AggregatedStats) -> Self {

@@ -52,6 +52,12 @@
 | --- | --- | --- |
 | #18 Interactive recording, meeting, voice, and telemetry CLI | Ready for review | Clap parser, injected command dispatch, shared SQLite composition, quiet terminal logging, and mock/in-memory test coverage. |
 
+## WP9: Linux server dashboard
+
+| Issue | Status | Scope |
+| --- | --- | --- |
+| #19 Next.js dashboard and voice assignment | Ready for review | App Router dashboard, typed Axum REST/WebSocket client, cloud Node CI, and application-backed voice assignment endpoint. |
+
 ## WP6: P2P Network Layer
 
 | Issue | Status | Scope |

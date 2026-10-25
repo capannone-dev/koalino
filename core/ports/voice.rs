@@ -62,3 +62,33 @@ pub trait VoiceVectorDB {
     /// Side effects: Deletes sensitive biometric data from the adapter-owned store.
     fn delete_identity(&self, identity_id: Uuid) -> Result<(), StorageError>;
 }
+
+/// Forwards immutable voice-storage calls through references for application-service composition.
+impl<T> VoiceVectorDB for &T
+where
+    T: VoiceVectorDB + ?Sized,
+{
+    fn list_speaker_identities(&self) -> Result<Vec<SpeakerIdentity>, StorageError> {
+        (*self).list_speaker_identities()
+    }
+
+    fn voice_variant_count(&self, identity_id: Uuid) -> Result<usize, StorageError> {
+        (*self).voice_variant_count(identity_id)
+    }
+
+    fn store_embedding(&self, embedding: VoiceEmbedding) -> Result<(), StorageError> {
+        (*self).store_embedding(embedding)
+    }
+
+    fn search_similar(
+        &self,
+        vector: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<(VoiceEmbedding, f32)>, StorageError> {
+        (*self).search_similar(vector, top_k)
+    }
+
+    fn delete_identity(&self, identity_id: Uuid) -> Result<(), StorageError> {
+        (*self).delete_identity(identity_id)
+    }
+}

@@ -111,3 +111,9 @@ from the executable; `CoreCliService` delegates recording to `AudioCapture`, mee
 to repository ports, and manual clip resolution to `VoiceIdentityManager`. The binary opens the
 same SQLite path as the daemon and filters logs to error so terminal output remains human-readable.
 
+Issue #19 adds the Next.js App Router dashboard in `web/`. Typed clients consume the local Axum
+meeting, telemetry, voice-gallery, assignment, and WebSocket contracts; components never read
+SQLite. Node verification is intentionally delegated to `web-ci.yml` because the coding sandbox
+lacks Node. The new assignment API resolves clips through `NoteRepository` and invokes
+`VoiceIdentityManager`, keeping raw audio and embeddings outside HTTP responses.
+
