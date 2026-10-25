@@ -7,7 +7,7 @@ use crate::{
         errors::StorageError,
         models::{VoiceEmbedding, VoiceMatchResult},
     },
-    ports::voice::VoiceVectorDB,
+    ports::voice::{VoiceIdentityMatcher, VoiceVectorDB},
 };
 
 /// Defines conservative confidence cutoffs for application-level voice attribution.
@@ -18,6 +18,20 @@ const WEAK_MATCH_THRESHOLD: f32 = 0.50;
 /// Classifies adapter-provided voice candidates and persists user-confirmed acoustic variants.
 pub struct VoiceIdentityManager<VectorDatabase> {
     vector_database: VectorDatabase,
+}
+
+impl<VectorDatabase> VoiceIdentityMatcher for VoiceIdentityManager<VectorDatabase>
+where
+    VectorDatabase: VoiceVectorDB,
+{
+    /// Classifies a derived embedding through the configured vector-search port.
+    ///
+    /// Inputs: `embedding` contains derived biometric data and must never be logged.
+    /// Outputs: A conservative voice-match result or a portable storage failure.
+    /// Side effects: Queries the injected voice-vector storage port.
+    fn match_embedding(&self, embedding: &[f32]) -> Result<VoiceMatchResult, StorageError> {
+        Self::match_embedding(self, embedding)
+    }
 }
 
 impl<VectorDatabase> VoiceIdentityManager<VectorDatabase>

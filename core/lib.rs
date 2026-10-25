@@ -78,6 +78,23 @@ mod scaffold_contract_tests {
         ) -> Result<Vec<u8>, crate::domain::errors::StorageError> {
             Ok(Vec::new())
         }
+
+        fn save_unassigned_clip(
+            &self,
+            _clip: crate::domain::models::UnassignedVoiceClip,
+        ) -> Result<(), crate::domain::errors::StorageError> {
+            Ok(())
+        }
+
+        fn get_unassigned_clips(
+            &self,
+            _meeting_id: &MeetingId,
+        ) -> Result<
+            Vec<crate::domain::models::UnassignedVoiceClip>,
+            crate::domain::errors::StorageError,
+        > {
+            Ok(Vec::new())
+        }
     }
 
     /// Verifies that application orchestration depends on AI and storage ports rather than adapters.

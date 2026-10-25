@@ -2,7 +2,7 @@
 
 use crate::domain::{
     errors::StorageError,
-    models::{MeetingId, Transcript},
+    models::{MeetingId, Transcript, UnassignedVoiceClip},
 };
 
 /// Persists meeting text in an offline-capable repository.
@@ -49,4 +49,21 @@ pub trait NoteRepository {
     /// Outputs: Opaque CRDT bytes or a portable storage error.
     /// Side effects: An implementation reads local persistent state.
     fn load_crdt_document(&self, meeting_id: &MeetingId) -> Result<Vec<u8>, StorageError>;
+
+    /// Persists a temporary audio clip for a weak or absent speaker match.
+    ///
+    /// Inputs: `clip` belongs to an existing meeting and contains sensitive temporary review audio.
+    /// Outputs: Success or a portable storage error.
+    /// Side effects: Writes temporary sensitive data; adapters must not log audio bytes.
+    fn save_unassigned_clip(&self, clip: UnassignedVoiceClip) -> Result<(), StorageError>;
+
+    /// Retrieves all unresolved review clips owned by a meeting.
+    ///
+    /// Inputs: `meeting_id` identifies an existing meeting.
+    /// Outputs: Temporary unassigned clips or a portable storage error.
+    /// Side effects: Reads sensitive temporary audio; callers must not log returned bytes.
+    fn get_unassigned_clips(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<UnassignedVoiceClip>, StorageError>;
 }

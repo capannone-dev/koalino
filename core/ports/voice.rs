@@ -2,7 +2,20 @@
 
 use uuid::Uuid;
 
-use crate::domain::{errors::StorageError, models::VoiceEmbedding};
+use crate::domain::{
+    errors::StorageError,
+    models::{VoiceEmbedding, VoiceMatchResult},
+};
+
+/// Classifies a derived speaker embedding without exposing vector-search implementation details.
+pub trait VoiceIdentityMatcher {
+    /// Matches one derived embedding against the configured voice-signature library.
+    ///
+    /// Inputs: `embedding` contains model-derived biometric values and must never be logged.
+    /// Outputs: A conservative strong, weak, or absent match classification, or a storage error.
+    /// Side effects: Queries the adapter-owned voice-signature store.
+    fn match_embedding(&self, embedding: &[f32]) -> Result<VoiceMatchResult, StorageError>;
+}
 
 /// Stores derived voice signatures and returns adapter-calculated similarity candidates.
 pub trait VoiceVectorDB {

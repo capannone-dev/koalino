@@ -26,6 +26,7 @@
 | --- | --- | --- |
 | #4 TranscriptionEngine trait, device manifests, and compute dispatcher | Ready for review | Trait-only transcription dispatch, non-sensitive capability manifests, deterministic local/specific/automatic routing, and mock-only TDD coverage. |
 | #9 Voice identity domain, vector port, and matching policy | Ready for review | UUID-based identities and signature variants, adapter-owned vector search, conservative confidence thresholds, user-confirmed variant creation, and in-memory cosine adapter coverage. |
+| #10 DiarizationEngine port and unassigned clip preservation | Ready for review | Async segment/embedding port, mock-only processor orchestration, strong attribution links, and temporary weak/unmatched review clips. |
 
 ## WP5: Flutter UI & FFI
 

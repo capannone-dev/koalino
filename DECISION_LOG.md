@@ -90,3 +90,15 @@
   fresh signature variant UUID under the selected identity.
 - Added `InMemoryVoiceVectorDB` with a simple cosine loop solely for deterministic tests and local
   development. It has no persistence or at-rest encryption and must not become the production store.
+
+## 2026-10-25 — Issue #10 diarization orchestration and review clips
+
+- Replaced the unused synchronous diarization-label placeholder with an async `DiarizationEngine`
+  port returning portable time ranges and derived speaker embeddings. No Pyannote, SpeechBrain, or
+  other model dependency is coupled to the Rust core.
+- Added `VoiceIdentityMatcher` as the processor's narrow matching boundary. `VoiceIdentityManager`
+  implements it over the existing `VoiceVectorDB`, so diarization orchestration never knows vector
+  math or concrete storage.
+- `DiarizationProcessor` returns only strong segment-to-identity links. Weak and absent outcomes
+  create `UnassignedVoiceClip` records containing an opaque temporary audio payload and range for
+  later user review; structured logs contain only safe meeting and clip UUID metadata.

@@ -15,3 +15,9 @@ connections, or socket handles.
 `VoiceVectorDB` accepts and returns `VoiceEmbedding` values only. Its adapter owns all vector
 similarity calculations and biometric persistence details, while the application receives just
 candidate scores through the port.
+
+`DiarizationEngine` is an async AI port that accepts opaque audio bytes and returns portable
+`SpeakerSegment` timing plus derived embeddings. `VoiceIdentityMatcher` exposes only conservative
+identity classifications, allowing `DiarizationProcessor` tests to replace every external concern
+with deterministic mocks. `NoteRepository` persists temporary `UnassignedVoiceClip` values for
+weak or absent classifications without exposing storage implementation types.

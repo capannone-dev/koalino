@@ -14,3 +14,7 @@ only model-derived numeric features, never raw audio. `VoiceMatchResult` represe
 application-visible confidence category without revealing vector-search implementation details.
 
 The models here are immutable value objects representing meeting recordings, generated transcripts, voice identities, and device identity metadata.
+
+`UnassignedVoiceClip` identifies temporary manual-review audio by UUID, owning meeting, and a
+millisecond range. It retains opaque audio bytes only for weak or unknown diarization results;
+callers must never log those bytes.

@@ -76,6 +76,20 @@ impl NoteRepository for MockNoteRepository {
     fn load_crdt_document(&self, _meeting_id: &MeetingId) -> Result<Vec<u8>, StorageError> {
         Ok(self.stored_document.borrow().clone())
     }
+
+    fn save_unassigned_clip(
+        &self,
+        _clip: crate::domain::models::UnassignedVoiceClip,
+    ) -> Result<(), StorageError> {
+        Ok(())
+    }
+
+    fn get_unassigned_clips(
+        &self,
+        _meeting_id: &MeetingId,
+    ) -> Result<Vec<crate::domain::models::UnassignedVoiceClip>, StorageError> {
+        Ok(Vec::new())
+    }
 }
 
 /// Records encrypted sends and broadcast payloads without opening a network connection.

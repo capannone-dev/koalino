@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::{
     domain::{
         errors::StorageError,
-        models::{DeviceId, MeetingId, Transcript},
+        models::{DeviceId, MeetingId, Transcript, UnassignedVoiceClip},
     },
     ports::storage::NoteRepository,
 };
@@ -61,6 +61,14 @@ impl SqliteNoteRepository {
                     acquisition_device_id TEXT NOT NULL,
                     transcript TEXT,
                     automerge_document BLOB NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS unassigned_voice_clips (
+                    clip_id TEXT PRIMARY KEY NOT NULL,
+                    meeting_id TEXT NOT NULL,
+                    start_time_ms INTEGER NOT NULL,
+                    end_time_ms INTEGER NOT NULL,
+                    audio_bytes BLOB NOT NULL,
+                    FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
                 );",
             )
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
@@ -187,6 +195,65 @@ impl NoteRepository for SqliteNoteRepository {
         self.log_operation("load_crdt_document", meeting_id);
         Ok(serialized_document)
     }
+
+    /// Persists one temporary manual-review clip for an existing meeting.
+    ///
+    /// Inputs: `clip` must reference a meeting created through this repository.
+    /// Outputs: Success or an unknown-meeting/SQLite storage error.
+    /// Side effects: Stores temporary review audio without logging its contents.
+    fn save_unassigned_clip(&self, clip: UnassignedVoiceClip) -> Result<(), StorageError> {
+        let inserted_row_count = self.connection.execute(
+            "INSERT INTO unassigned_voice_clips (clip_id, meeting_id, start_time_ms, end_time_ms, audio_bytes)
+             SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
+            params![clip.clip_id().to_string(), clip.meeting_id().as_str(), clip.start_time_ms(), clip.end_time_ms(), clip.audio_bytes()],
+        ).map_err(|error| sqlite_error("unable to save unassigned voice clip", error))?;
+        ensure_meeting_was_updated(inserted_row_count, clip.meeting_id())?;
+        self.log_operation("save_unassigned_clip", clip.meeting_id());
+        Ok(())
+    }
+
+    /// Loads all temporary manual-review clips belonging to an existing meeting.
+    ///
+    /// Inputs: `meeting_id` identifies a meeting record.
+    /// Outputs: Every unresolved clip in insertion order or a portable storage error.
+    /// Side effects: Reads sensitive temporary audio without logging it.
+    fn get_unassigned_clips(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<UnassignedVoiceClip>, StorageError> {
+        self.load_crdt_document(meeting_id)?;
+        let mut statement = self.connection.prepare(
+            "SELECT clip_id, start_time_ms, end_time_ms, audio_bytes FROM unassigned_voice_clips WHERE meeting_id = ?1 ORDER BY rowid",
+        ).map_err(|error| sqlite_error("unable to prepare unassigned voice clip query", error))?;
+        let rows = statement
+            .query_map(params![meeting_id.as_str()], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, u64>(1)?,
+                    row.get::<_, u64>(2)?,
+                    row.get::<_, Vec<u8>>(3)?,
+                ))
+            })
+            .map_err(|error| sqlite_error("unable to load unassigned voice clips", error))?;
+        let mut clips = Vec::new();
+        for row in rows {
+            let (clip_id, start_time_ms, end_time_ms, audio_bytes) =
+                row.map_err(|error| sqlite_error("unable to decode unassigned voice clip", error))?;
+            let parsed_clip_id =
+                uuid::Uuid::parse_str(&clip_id).map_err(|error| StorageError::Rejected {
+                    reason: format!("stored unassigned voice clip has an invalid UUID: {error}"),
+                })?;
+            clips.push(UnassignedVoiceClip::new(
+                parsed_clip_id,
+                meeting_id.clone(),
+                start_time_ms,
+                end_time_ms,
+                audio_bytes,
+            ));
+        }
+        self.log_operation("get_unassigned_clips", meeting_id);
+        Ok(clips)
+    }
 }
 
 /// Converts a SQLite error into the domain-neutral error published by the storage port.
@@ -233,7 +300,7 @@ mod tests {
         adapters::storage::sqlite_adapter::SqliteNoteRepository,
         domain::{
             errors::StorageError,
-            models::{MeetingId, Transcript},
+            models::{MeetingId, Transcript, UnassignedVoiceClip},
         },
         ports::storage::NoteRepository,
     };
@@ -277,5 +344,32 @@ mod tests {
             .expect_err("an unknown meeting must reject note persistence");
 
         assert!(matches!(storage_error, StorageError::Rejected { .. }));
+    }
+
+    /// Verifies temporary clips retain their review range and opaque audio through the repository port.
+    #[test]
+    fn saves_and_loads_an_unassigned_voice_clip() {
+        let repository = SqliteNoteRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let meeting_id = MeetingId::new("meeting-unassigned-clip");
+        repository
+            .create_meeting(&meeting_id, &[1_u8])
+            .unwrap_or_else(|error| panic!("meeting creation should succeed: {error}"));
+        let unassigned_clip = UnassignedVoiceClip::new(
+            uuid::Uuid::new_v4(),
+            meeting_id.clone(),
+            100,
+            250,
+            vec![3_u8, 2_u8, 1_u8],
+        );
+
+        repository
+            .save_unassigned_clip(unassigned_clip.clone())
+            .unwrap_or_else(|error| panic!("unassigned clip save should succeed: {error}"));
+
+        assert_eq!(
+            repository.get_unassigned_clips(&meeting_id).ok(),
+            Some(vec![unassigned_clip])
+        );
     }
 }

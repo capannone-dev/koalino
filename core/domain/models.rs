@@ -516,6 +516,85 @@ pub enum VoiceMatchResult {
     NoMatch,
 }
 
+/// Retains a temporary, reviewable audio payload for a diarized segment without exposing storage details.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnassignedVoiceClip {
+    clip_id: Uuid,
+    meeting_id: MeetingId,
+    start_time_ms: u64,
+    end_time_ms: u64,
+    audio_bytes: Vec<u8>,
+}
+
+impl UnassignedVoiceClip {
+    /// Creates a temporary review clip for a segment that could not be attributed automatically.
+    ///
+    /// Inputs: `clip_id` uniquely identifies the review item; `meeting_id` owns it; the time range
+    /// identifies the segment inside `audio_bytes`, which is retained only until the user resolves it.
+    /// Outputs: An immutable clip value suitable for persistence through `NoteRepository`.
+    /// Side effects: Takes ownership of raw audio bytes; callers must not log the returned value.
+    pub fn new(
+        clip_id: Uuid,
+        meeting_id: MeetingId,
+        start_time_ms: u64,
+        end_time_ms: u64,
+        audio_bytes: Vec<u8>,
+    ) -> Self {
+        Self {
+            clip_id,
+            meeting_id,
+            start_time_ms,
+            end_time_ms,
+            audio_bytes,
+        }
+    }
+
+    /// Returns the UUID assigned to this temporary manual-review item.
+    ///
+    /// Inputs: None.
+    /// Outputs: The globally unique clip identifier.
+    /// Side effects: None.
+    pub fn clip_id(&self) -> Uuid {
+        self.clip_id
+    }
+
+    /// Returns the meeting that owns this temporary review clip.
+    ///
+    /// Inputs: None.
+    /// Outputs: A borrow of the owning meeting identifier.
+    /// Side effects: None.
+    pub fn meeting_id(&self) -> &MeetingId {
+        &self.meeting_id
+    }
+
+    /// Returns the segment start timestamp relative to the original recording.
+    ///
+    /// Inputs: None.
+    /// Outputs: Milliseconds from the start of the processed audio.
+    /// Side effects: None.
+    pub fn start_time_ms(&self) -> u64 {
+        self.start_time_ms
+    }
+
+    /// Returns the segment end timestamp relative to the original recording.
+    ///
+    /// Inputs: None.
+    /// Outputs: Milliseconds from the start of the processed audio.
+    /// Side effects: None.
+    pub fn end_time_ms(&self) -> u64 {
+        self.end_time_ms
+    }
+
+    /// Borrows the temporarily retained source audio without copying it.
+    ///
+    /// Inputs: None.
+    /// Outputs: Opaque raw audio bytes for a storage adapter or manual-review playback workflow.
+    /// Side effects: None; callers must not log the returned bytes.
+    pub fn audio_bytes(&self) -> &[u8] {
+        &self.audio_bytes
+    }
+}
+
 impl Transcript {
     /// Creates transcript content associated with its owning meeting.
     ///

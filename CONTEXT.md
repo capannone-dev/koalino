@@ -44,3 +44,10 @@ inclusive, and no match below 0.50. User confirmation of a weak match adds a fre
 the selected identity. `InMemoryVoiceVectorDB` is a dependency-light cosine-search adapter for
 tests and development; it is not persistent or encrypted and must be replaced before production
 biometric storage.
+
+Issue #10 replaces the earlier diarization placeholder with an async `DiarizationEngine` port that
+returns time-bounded `SpeakerSegment` values with derived embeddings. `DiarizationProcessor` uses
+only that port, `VoiceIdentityMatcher`, and `NoteRepository`: strong matches are returned as
+identity links, while weak and absent matches create UUID-keyed `UnassignedVoiceClip` records for
+manual review. Unit tests use hardcoded diarization segments and mocked matcher/repository ports;
+no ML model or dependency is initialized. Temporary clip bytes and embeddings are never logged.

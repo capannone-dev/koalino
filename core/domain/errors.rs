@@ -52,6 +52,20 @@ pub enum TranscriptionError {
     InvalidRecording { reason: String },
 }
 
+/// Describes a diarization operation that could not produce speaker segments.
+#[derive(Debug, thiserror::Error)]
+pub enum DiarizationError {
+    /// The configured engine is unavailable on this device or selected peer.
+    #[error("diarization engine is unavailable")]
+    Unavailable,
+    /// The adapter rejected the supplied audio before inference started.
+    #[error("audio cannot be diarized: {reason}")]
+    InvalidAudio {
+        /// A privacy-safe reason that never contains raw audio or embeddings.
+        reason: String,
+    },
+}
+
 /// Describes a persistence operation that could not complete.
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
