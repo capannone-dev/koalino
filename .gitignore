@@ -1,2 +1,5 @@
 # Rust compiler build artifacts are reproducible and must not be committed.
 /target/
+
+# Local SQLite runtime database; it may contain private meeting data.
+/note_taker.sqlite3
