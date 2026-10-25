@@ -18,3 +18,15 @@ returns audio bytes or biometric embeddings. The concrete bridge passes that nat
 Weak-match confirmation and new-identity actions send only clip and identity/name strings back to
 Rust. Rust retrieves retained derived embeddings from local storage and delegates variant creation
 to `VoiceIdentityManager`; Flutter never receives or constructs biometric data.
+
+## Attachment import
+
+`AttachmentImportScreen` provides the Meeting Detail paperclip action. Its controller obtains a
+PDF or image path from the injected `AttachmentFilePicker`, asks `AttachmentBridge` for an owned
+JSON array, and decodes that JSON in Flutter into display-safe ranked candidates. Widgets never
+load Rust types or parse native pointers. `RustAttachmentBridge` frees every returned string after
+copying it and sends only the opaque attachment and meeting IDs after the user presses **Select**.
+
+The Rust boundary delegates ranking to `AttachmentManager`; its filesystem metadata adapter reads
+only a local modification timestamp and its SQLite adapter persists metadata only after explicit
+user approval. Attachment file contents never cross FFI or enter SQLite through this workflow.

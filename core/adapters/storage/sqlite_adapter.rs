@@ -8,11 +8,14 @@ use crate::{
     domain::{
         errors::StorageError,
         models::{
-            AggregatedStats, DeviceId, MeetingId, TaskMetrics, TaskType, Transcript,
+            AggregatedStats, Attachment, DeviceId, MeetingId, TaskMetrics, TaskType, Transcript,
             UnassignedVoiceClip,
         },
     },
-    ports::{storage::NoteRepository, telemetry::MetricsRepository},
+    ports::{
+        storage::{AttachmentRepository, NoteRepository},
+        telemetry::MetricsRepository,
+    },
 };
 
 /// Persists meeting records locally without exposing SQLite types beyond the adapter boundary.
@@ -92,6 +95,15 @@ impl SqliteNoteRepository {
                     current_cpu_load_percent REAL NOT NULL,
                     current_gpu_vram_used_megabytes INTEGER NOT NULL,
                     active_tasks_count INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS attachments (
+                    attachment_id TEXT PRIMARY KEY NOT NULL,
+                    meeting_id TEXT,
+                    file_path TEXT NOT NULL,
+                    mime_type TEXT NOT NULL,
+                    original_timestamp_utc TEXT NOT NULL,
+                    original_device_id TEXT NOT NULL,
+                    FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
                 );",
             )
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
@@ -114,6 +126,122 @@ impl SqliteNoteRepository {
             operation,
             "SQLite meeting storage operation completed"
         );
+    }
+}
+
+impl AttachmentRepository for SqliteNoteRepository {
+    /// Saves user-approved attachment metadata after verifying any requested meeting exists.
+    ///
+    /// Inputs: `attachment` contains metadata only and may omit its meeting until confirmation.
+    /// Outputs: Success or a portable rejection for invalid meeting references/SQLite failures.
+    /// Side effects: Writes one local SQLite attachment row without opening the attachment file.
+    fn save_attachment(&self, attachment: &Attachment) -> Result<(), StorageError> {
+        let meeting_id = attachment.meeting_id().map(MeetingId::as_str);
+        let inserted_row_count = self.connection.execute(
+            "INSERT INTO attachments (attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6
+             WHERE ?2 IS NULL OR EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
+            params![
+                attachment.attachment_id().to_string(),
+                meeting_id,
+                attachment.file_path(),
+                attachment.mime_type(),
+                attachment.original_timestamp().to_rfc3339(),
+                attachment.original_device_id(),
+            ],
+        ).map_err(|error| sqlite_error("unable to save attachment", error))?;
+        if inserted_row_count == 0 {
+            return Err(StorageError::Rejected {
+                reason: String::from("cannot save attachment for an unknown meeting"),
+            });
+        }
+        if let Some(meeting_id) = attachment.meeting_id() {
+            self.log_operation("save_attachment", meeting_id);
+        }
+        Ok(())
+    }
+
+    /// Loads every locally persisted attachment explicitly linked to one meeting.
+    ///
+    /// Inputs: `meeting_id` must identify an existing meeting.
+    /// Outputs: Attachment metadata in insertion order, or a portable storage error.
+    /// Side effects: Reads SQLite metadata only and never opens attachment files.
+    fn get_attachments_for_meeting(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<Attachment>, StorageError> {
+        self.load_crdt_document(meeting_id)?;
+        self.load_attachments(Some(meeting_id))
+    }
+
+    /// Loads every imported attachment awaiting explicit meeting selection.
+    ///
+    /// Inputs: None.
+    /// Outputs: Unlinked attachment metadata in insertion order, or a portable storage error.
+    /// Side effects: Reads SQLite metadata only and never opens attachment files.
+    fn get_unlinked_attachments(&self) -> Result<Vec<Attachment>, StorageError> {
+        self.load_attachments(None)
+    }
+}
+
+impl SqliteNoteRepository {
+    /// Reads attachment rows for either one meeting or the unlinked import queue.
+    ///
+    /// Inputs: `meeting_id` narrows results when present; `None` selects unlinked records.
+    /// Outputs: Parsed attachment metadata in insertion order, or a portable storage error.
+    /// Side effects: Reads SQLite rows only and never opens attachment files.
+    fn load_attachments(
+        &self,
+        meeting_id: Option<&MeetingId>,
+    ) -> Result<Vec<Attachment>, StorageError> {
+        let (query, parameter) = match meeting_id {
+            Some(value) => (
+                "SELECT attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id FROM attachments WHERE meeting_id = ?1 ORDER BY rowid",
+                Some(value.as_str()),
+            ),
+            None => (
+                "SELECT attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id FROM attachments WHERE meeting_id IS NULL ORDER BY rowid",
+                None,
+            ),
+        };
+        let mut statement = self
+            .connection
+            .prepare(query)
+            .map_err(|error| sqlite_error("unable to prepare attachment query", error))?;
+        let rows = statement
+            .query_map(params![parameter], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                ))
+            })
+            .map_err(|error| sqlite_error("unable to load attachments", error))?;
+        rows.map(|row| {
+            let (attachment_id, persisted_meeting_id, file_path, mime_type, timestamp, device_id) =
+                row.map_err(|error| sqlite_error("unable to decode attachment", error))?;
+            let parsed_attachment_id =
+                uuid::Uuid::parse_str(&attachment_id).map_err(|error| StorageError::Rejected {
+                    reason: format!("stored attachment has an invalid UUID: {error}"),
+                })?;
+            let parsed_timestamp = chrono::DateTime::parse_from_rfc3339(&timestamp)
+                .map_err(|error| StorageError::Rejected {
+                    reason: format!("stored attachment has an invalid timestamp: {error}"),
+                })?
+                .with_timezone(&chrono::Utc);
+            Ok(Attachment::new(
+                parsed_attachment_id,
+                persisted_meeting_id.map(MeetingId::new),
+                file_path,
+                mime_type,
+                parsed_timestamp,
+                device_id,
+            ))
+        })
+        .collect()
     }
 }
 

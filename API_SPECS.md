@@ -52,3 +52,41 @@ or serialized domain structures.
 The Rust bridge materializes review audio in `NOTE_TAKER_REVIEW_CLIP_DIR` (default
 `voice_review_clips`) and the Flutter audio package opens the returned file path. The ABI never
 streams audio bytes to Dart.
+
+### Attachment import C ABI
+
+- `char *note_taker_process_attachment(const char *file_path)` accepts a non-empty local path and
+  returns an owned UTF-8 JSON array or `NULL`. Every item includes one opaque `attachment_id`,
+  `meeting_id`, `meeting_start_time`, `meeting_end_time`, and `confidence_score`. Ranking is
+  performed by `AttachmentManager`; Flutter must call `note_taker_free_string` exactly once after
+  copying a non-null response.
+- `int32_t note_taker_confirm_attachment_link(const char *attachment_id, const char *meeting_id)`
+  persists only an explicitly selected local metadata link. Both IDs are opaque strings returned by
+  the prior suggestion response. It returns the standard `0` success / nonzero rejection statuses.
+
+The ABI returns JSON strings rather than nested Rust structs. It neither accepts nor returns file
+contents, EXIF data, or database-specific values.
+
+### Background recording and lock-screen C ABI
+
+- `int32_t note_taker_start_recording(void)`, `note_taker_pause_recording(void)`, and
+  `note_taker_stop_recording(void)` may be called from Flutter, an OS foreground service, or a
+  lock-screen action thread. They serialize through the process-wide Rust mutex and return `0` on
+  accepted transitions, `1` for invalid input, `2` for state rejection, and `3` for unavailable
+  runtime state.
+- `int32_t note_taker_handle_audio_interruption(void)` records a platform audio suspension. It
+  moves an active stream to recoverable Interrupted and returns `0`; callers resume via Start.
+- `int32_t note_taker_get_current_state(void)` returns only state codes: Idle `10`, Recording
+  `11`, Paused `12`, Interrupted `13`, Stopped `14`, Error `15`. Runtime error codes remain below
+  `10`, so lock-screen hosts can distinguish a state response from an unavailable runtime.
+
+The core never accepts background-service handles, callbacks, or retained pointers over FFI.
+
+## External meeting bridge ports
+
+`MeetingBridge` provides standard-library receivers of provider-neutral `ExternalMediaChunk` and
+`SlideCapture` values. An external participant always contains both a stable `external_id` for
+mapping and a `display_name` for first-time local identity naming; optional email is metadata only.
+`TeamsIdentityMapper` persists the external-to-local association through `ExternalIdentityRepository`.
+`TeamsProcessor` uses only these ports plus `VoiceEmbeddingExtractor`, `VoiceVectorDB`,
+`TranscriptionEngine`, and `AttachmentWorkflow`; no external service SDK type reaches the core.

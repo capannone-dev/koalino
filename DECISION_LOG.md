@@ -159,6 +159,19 @@
 - Preserved the established `MeetingId` string type for attachment links and suggestions; attachment
   records themselves receive UUID identifiers. This prevents a new subsystem from splitting the
   repository's existing meeting-identity contract.
+
+## 2026-10-25 — Issue #14 attachment import FFI and confirmation UI
+
+- Chose caller-freed UTF-8 JSON for attachment suggestions. Every candidate repeats a single
+  opaque import UUID so Flutter parses only Dart view values and returns `(attachment_id,
+  meeting_id)` for explicit confirmation; no nested Rust struct crosses FFI.
+- The FFI suggestion command composes and directly delegates ranking to `AttachmentManager`.
+  The local adapter reads filesystem modification time as a portable fallback capture timestamp;
+  format-specific EXIF/PDF adapters can replace it without changing application policy.
+- SQLite persists attachment metadata only after the user selects a meeting. It stores no file
+  bytes, and Flutter exposes file selection behind an injectable `file_picker` adapter so widget
+  tests do not open native dialogs or load the Rust library.
+
 - `NoteRepository` supplies portable inclusive `MeetingWindow` values. The manager ranks only those
   windows with linear midpoint proximity: 1.0 at midpoint, 0.0 at either edge, descending score
   plus meeting-ID tie-break. Suggestions require user confirmation before attachment persistence.

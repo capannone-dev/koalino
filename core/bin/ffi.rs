@@ -12,14 +12,27 @@ use std::{
 use crate::{
     adapters::{
         audio::local_recorder::LocalRecorder,
+        media::local_file_metadata::LocalFileMetadataExtractor,
         observability::{LoggingConfiguration, LoggingRuntime, initialize_logging},
         storage::{
             in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
         },
     },
-    application::voice_identity_manager::VoiceIdentityManager,
-    domain::models::{AudioConfig, DeviceId, MeetingId, UnassignedVoiceClip},
-    ports::{audio::AudioCapture, storage::NoteRepository},
+    application::{
+        attachment_manager::AttachmentManager, voice_identity_manager::VoiceIdentityManager,
+    },
+    domain::{
+        errors::StorageError,
+        models::{
+            Attachment, AudioConfig, DeviceId, MeetingId, MeetingWindow, Transcript,
+            UnassignedVoiceClip,
+        },
+    },
+    ports::{
+        audio::AudioCapture,
+        media::MetadataExtractor,
+        storage::{AttachmentRepository, NoteRepository},
+    },
 };
 use uuid::Uuid;
 
@@ -68,6 +81,102 @@ struct FfiRuntime {
     voice_identity_manager: VoiceIdentityManager<InMemoryVoiceVectorDB>,
     review_clip_directory: PathBuf,
     loaded_review_clips: HashMap<Uuid, UnassignedVoiceClip>,
+    pending_attachment_imports: HashMap<Uuid, PendingAttachmentImport>,
+}
+
+/// Retains only metadata necessary to persist one explicitly user-approved attachment link.
+struct PendingAttachmentImport {
+    file_path: String,
+    original_timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+/// Borrows the SQLite adapter for one `AttachmentManager` invocation without moving FFI state.
+impl NoteRepository for &SqliteNoteRepository {
+    /// Forwards meeting creation to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::create_meeting`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn create_meeting(
+        &self,
+        meeting_id: &MeetingId,
+        initial_crdt_document: &[u8],
+    ) -> Result<(), StorageError> {
+        (*self).create_meeting(meeting_id, initial_crdt_document)
+    }
+
+    /// Forwards transcript persistence to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::save_transcript`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn save_transcript(&self, transcript: &Transcript) -> Result<(), StorageError> {
+        (*self).save_transcript(transcript)
+    }
+
+    /// Forwards transcript retrieval to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::load_transcript`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn load_transcript(&self, meeting_id: &MeetingId) -> Result<Option<Transcript>, StorageError> {
+        (*self).load_transcript(meeting_id)
+    }
+
+    /// Forwards CRDT persistence to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::save_crdt_document`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn save_crdt_document(
+        &self,
+        meeting_id: &MeetingId,
+        crdt_document: &[u8],
+    ) -> Result<(), StorageError> {
+        (*self).save_crdt_document(meeting_id, crdt_document)
+    }
+
+    /// Forwards CRDT retrieval to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::load_crdt_document`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn load_crdt_document(&self, meeting_id: &MeetingId) -> Result<Vec<u8>, StorageError> {
+        (*self).load_crdt_document(meeting_id)
+    }
+
+    /// Forwards temporary review-clip persistence to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::save_unassigned_clip`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn save_unassigned_clip(&self, clip: UnassignedVoiceClip) -> Result<(), StorageError> {
+        (*self).save_unassigned_clip(clip)
+    }
+
+    /// Forwards temporary review-clip retrieval to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::get_unassigned_clips`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn get_unassigned_clips(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<UnassignedVoiceClip>, StorageError> {
+        (*self).get_unassigned_clips(meeting_id)
+    }
+
+    /// Forwards timeline lookups to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::get_meetings_overlapping`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn get_meetings_overlapping(
+        &self,
+        timestamp: chrono::DateTime<chrono::Utc>,
+    ) -> Result<Vec<MeetingWindow>, StorageError> {
+        (*self).get_meetings_overlapping(timestamp)
+    }
 }
 
 impl FfiRuntime {
@@ -99,6 +208,7 @@ impl FfiRuntime {
             voice_identity_manager: VoiceIdentityManager::new(InMemoryVoiceVectorDB::new()),
             review_clip_directory,
             loaded_review_clips: HashMap::new(),
+            pending_attachment_imports: HashMap::new(),
         })
     }
 
@@ -134,6 +244,88 @@ impl FfiRuntime {
             self.loaded_review_clips.insert(clip.clip_id(), clip);
         }
         Ok(format!("[{}]", json_clips.join(",")))
+    }
+
+    /// Delegates candidate ranking to `AttachmentManager` and serializes only display-safe JSON.
+    ///
+    /// Inputs: `file_path` is a non-empty path selected by the Flutter platform picker.
+    /// Outputs: Ranked JSON suggestions with one opaque attachment ID, or a C status on failure.
+    /// Side effects: Reads metadata through its adapter and caches no file contents for confirmation.
+    fn process_attachment(&mut self, file_path: &str) -> Result<String, c_int> {
+        let metadata_extractor = LocalFileMetadataExtractor;
+        let original_timestamp = metadata_extractor
+            .extract_timestamp(file_path)
+            .map_err(|_| FFI_OPERATION_REJECTED)?;
+        let attachment_manager = AttachmentManager::new(metadata_extractor, &self.note_repository);
+        let suggestions = attachment_manager
+            .suggest_meetings(file_path)
+            .map_err(|_| FFI_OPERATION_REJECTED)?;
+        let attachment_id = Uuid::new_v4();
+        self.pending_attachment_imports.insert(
+            attachment_id,
+            PendingAttachmentImport {
+                file_path: String::from(file_path),
+                original_timestamp,
+            },
+        );
+        let serialized_suggestions = suggestions
+            .iter()
+            .map(|suggestion| {
+                format!(
+                    "{{\"attachment_id\":\"{}\",\"meeting_id\":\"{}\",\"meeting_start_time\":\"{}\",\"meeting_end_time\":\"{}\",\"confidence_score\":{}}}",
+                    attachment_id,
+                    json_escape(suggestion.meeting_id().as_str()),
+                    suggestion.meeting_start_time().to_rfc3339(),
+                    suggestion.meeting_end_time().to_rfc3339(),
+                    suggestion.confidence_score(),
+                )
+            })
+            .collect::<Vec<_>>();
+        Ok(format!("[{}]", serialized_suggestions.join(",")))
+    }
+
+    /// Persists a link chosen from the immediately preceding Rust-generated suggestion response.
+    ///
+    /// Inputs: `attachment_id` must be pending and `meeting_id` must identify a stored meeting.
+    /// Outputs: A documented C status describing validation or persistence success.
+    /// Side effects: Saves attachment metadata locally and removes the pending import on success.
+    fn confirm_attachment_link(&mut self, attachment_id: &str, meeting_id: &str) -> c_int {
+        let parsed_attachment_id = match Uuid::parse_str(attachment_id) {
+            Ok(value) => value,
+            Err(_) => return FFI_INVALID_ARGUMENT,
+        };
+        if meeting_id.is_empty() {
+            return FFI_INVALID_ARGUMENT;
+        }
+        let Some(pending_import) = self.pending_attachment_imports.get(&parsed_attachment_id)
+        else {
+            return FFI_OPERATION_REJECTED;
+        };
+        let attachment = Attachment::new(
+            parsed_attachment_id,
+            Some(MeetingId::new(meeting_id)),
+            &pending_import.file_path,
+            attachment_mime_type(&pending_import.file_path),
+            pending_import.original_timestamp,
+            self.note_repository_device_id(),
+        );
+        match self.note_repository.save_attachment(&attachment) {
+            Ok(()) => {
+                self.pending_attachment_imports
+                    .remove(&parsed_attachment_id);
+                FFI_SUCCESS
+            }
+            Err(_) => FFI_OPERATION_REJECTED,
+        }
+    }
+
+    /// Returns safe source-device metadata for a local attachment record.
+    ///
+    /// Inputs: None.
+    /// Outputs: The configured local device identifier or the documented fallback value.
+    /// Side effects: Reads one environment variable.
+    fn note_repository_device_id(&self) -> String {
+        env::var("NOTE_TAKER_DEVICE_ID").unwrap_or_else(|_| String::from("unconfigured-device"))
     }
 
     /// Delegates a user-approved candidate to the existing voice identity application service.
@@ -462,6 +654,51 @@ pub unsafe extern "C" fn note_taker_get_unassigned_clips(meeting_id: *const c_ch
     CString::new(json)
         .map(CString::into_raw)
         .unwrap_or(std::ptr::null_mut())
+}
+
+/// Returns ranked meeting suggestions for a picker-selected attachment as caller-freed UTF-8 JSON.
+///
+/// Inputs: `file_path` points to a non-empty NUL-terminated UTF-8 local path.
+/// Outputs: An owned JSON array with opaque `attachment_id` and meeting suggestion fields, or null.
+/// Side effects: Delegates suggestion ranking to `AttachmentManager` and caches metadata for approval.
+///
+/// # Safety
+/// `file_path` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_process_attachment(file_path: *const c_char) -> *mut c_char {
+    let Some(file_path) = (unsafe { ffi_string(file_path) }).filter(|value| !value.is_empty())
+    else {
+        return std::ptr::null_mut();
+    };
+    let json = match with_runtime_json(|runtime| runtime.process_attachment(file_path)) {
+        Ok(value) => value,
+        Err(_) => return std::ptr::null_mut(),
+    };
+    match CString::new(json) {
+        Ok(value) => value.into_raw(),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Persists the meeting link selected from a prior attachment suggestion response.
+///
+/// Inputs: Both pointers are NUL-terminated UTF-8 strings returned/selected through Flutter UI.
+/// Outputs: `FFI_SUCCESS` after persistence or a documented nonzero rejection status.
+/// Side effects: Saves attachment metadata and removes the runtime's pending import on success.
+///
+/// # Safety
+/// Both pointers must be null or valid NUL-terminated C strings for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_confirm_attachment_link(
+    attachment_id: *const c_char,
+    meeting_id: *const c_char,
+) -> c_int {
+    let (Some(attachment_id), Some(meeting_id)) = (unsafe { ffi_string(attachment_id) }, unsafe {
+        ffi_string(meeting_id)
+    }) else {
+        return FFI_INVALID_ARGUMENT;
+    };
+    with_runtime(|runtime| runtime.confirm_attachment_link(attachment_id, meeting_id))
 }
 
 /// Confirms a weak match through the existing voice identity application service.

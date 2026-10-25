@@ -20,6 +20,10 @@ application logs.
 
 The adapter rejects writes to unknown meetings rather than silently creating orphan notes. It emits structured `tracing` events with operation, device, and meeting identifiers only—never transcript content or CRDT bytes.
 
+The `attachments` table persists only an attachment UUID, optional confirmed meeting ID, local
+path, MIME type, original UTC timestamp, and source-device metadata. It never stores attachment
+bytes. `AttachmentRepository` checks referenced meetings before accepting a confirmed link.
+
 `in_memory_voice_vector_db.rs` implements `VoiceVectorDB` with a process-local collection and a
 simple cosine-similarity loop. It is suitable for deterministic unit tests and development only;
 it does not provide persistence or AES-256-GCM encryption and must never be selected as the

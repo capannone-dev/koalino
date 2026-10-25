@@ -91,3 +91,12 @@ EXIF/PDF metadata or access files itself. Unit tests use a hardcoded mock extrac
 repository windows only; no real file metadata is accessed in CI. Existing meeting IDs remain
 typed `MeetingId` strings across the established storage boundary, while attachments themselves
 have UUID identifiers.
+
+Issue #14 adds the attachment import FFI/UI flow. `note_taker_process_attachment` composes the
+filesystem timestamp adapter with the existing `AttachmentManager` and returns caller-freed JSON
+metadata only; `note_taker_confirm_attachment_link` persists a selected link through the SQLite
+`AttachmentRepository`. Flutter's Riverpod `AttachmentController` parses that JSON itself, and
+the Material 3 paperclip workflow keeps platform file selection behind an injectable picker. Files
+remain local: FFI transports only a path, metadata JSON, and opaque IDs; file bytes are never
+transferred or stored in SQLite.
+
