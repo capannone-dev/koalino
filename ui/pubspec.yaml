@@ -1,0 +1,21 @@
+# Defines the Flutter package used by the Note Taker mobile and desktop client.
+name: note_taker_ui
+description: Offline-first meeting note client with a Rust FFI boundary.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  ffi: ^2.1.4
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

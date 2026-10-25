@@ -9,6 +9,7 @@ description = "Offline-first meeting note-taking core"
 
 [lib]
 path = "core/lib.rs"
+crate-type = ["rlib", "cdylib"]
 
 [[bin]]
 name = "cli"

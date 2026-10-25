@@ -28,3 +28,15 @@
 - Added portable `DeviceManifest` values containing non-sensitive capacity metadata and advertised `TranscriptionModel` capabilities. P2P broadcast is intentionally deferred until an encrypted libp2p adapter exists.
 - `Automatic` selects the compatible target with the highest deterministic score, prioritizing GPU VRAM then CPU cores. `LocalOnly` and `SpecificPeer` do not silently reroute a user-selected workload.
 - Tests use a deterministic mock transcription adapter and call counts to prove route selection without model downloads or inference.
+
+## 2026-10-25 — Issue #5 Flutter bridge initialization
+
+- Flutter presentation and controllers depend on the Dart `RecordingBridge` interface only;
+  `RustRecordingBridge` is the single owner of `dart:ffi` calls. This preserves the hexagonal
+  boundary by keeping Rust domain structs, adapter types, and ownership details out of Dart.
+- The Rust crate emits a `cdylib` and exposes `note_taker_start_recording` plus
+  `note_taker_set_log_level` from `core/bin/ffi.rs`. Both return documented `int32_t` status codes
+  rather than exceptions, pointers, or serialized Rust values.
+- The C bridge owns a process-local `LocalRecorder`; it uses the existing 16 kHz mono portable
+  configuration and delegates state rules to the `AudioCapture` port. Logging is initialized only
+  on a successful non-empty filter request, preserving runtime verbosity control.

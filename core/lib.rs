@@ -9,6 +9,9 @@ pub mod adapters;
 pub mod application;
 /// Contains pure business types and business failures.
 pub mod domain;
+/// Exposes the C-compatible Flutter bridge without leaking Rust domain types across FFI.
+#[path = "bin/ffi.rs"]
+pub mod ffi;
 /// Contains dependency-inversion traits for external capabilities.
 pub mod ports;
 

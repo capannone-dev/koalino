@@ -26,6 +26,12 @@
 | --- | --- | --- |
 | #4 TranscriptionEngine trait, device manifests, and compute dispatcher | Ready for review | Trait-only transcription dispatch, non-sensitive capability manifests, deterministic local/specific/automatic routing, and mock-only TDD coverage. |
 
+## WP5: Flutter UI & FFI
+
+| Issue | Status | Scope |
+| --- | --- | --- |
+| #5 Initialize Flutter project and Rust FFI bridge | Ready for review | Material 3 recording start UI, bridge-injected widget tests, Dart FFI adapter, and C-compatible Rust recording/log-level commands. |
+
 ## Follow-up work
 
 - Define validation and IDs suitable for CRDT replication before storage adapters are introduced.

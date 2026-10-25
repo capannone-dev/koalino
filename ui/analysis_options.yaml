@@ -1,0 +1,8 @@
+# Applies the standard Flutter static-analysis rules to the Note Taker client.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - windows/**
+    - linux/**
+include: package:flutter_lints/flutter.yaml

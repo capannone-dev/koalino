@@ -15,3 +15,19 @@ The initial public contracts are Rust traits, not a network protocol:
 - `AudioCapture` controls a capture lifecycle and offers receiver-based subscriptions to portable PCM `AudioChunk` and `AudioState` events. It exposes neither OS audio stream types nor P2P transport types, allowing local-device and future streaming adapters to be substituted.
 
 Concrete libp2p, SQLite, Automerge, model, REST, and FFI protocols will be specified alongside their adapters. No central routing protocol is defined.
+
+## Flutter C ABI
+
+The Rust `cdylib` exports only primitive C-compatible functions. Flutter owns a Dart
+`RecordingBridge` interface and its `RustRecordingBridge` adapter; presentation and controller
+code receive that interface and never access Rust structs.
+
+- `int32_t note_taker_start_recording(void)` returns `0` when the Rust-owned local recorder accepts
+  its start transition. `1` is reserved for invalid arguments, `2` for an operation rejected by
+  the Rust core, and `3` when the bridge runtime cannot be acquired.
+- `int32_t note_taker_set_log_level(const char *filter_directive)` accepts a non-null,
+  NUL-terminated UTF-8 `tracing` filter directive and returns the same status codes. It installs
+  or reloads Rust's JSON stdout and rolling-file logging without passing logging structs to Dart.
+
+Neither function accepts raw audio, voice embeddings, P2P credentials, Rust ownership pointers,
+or serialized domain structures.

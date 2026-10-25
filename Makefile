@@ -10,14 +10,14 @@ rust-test:
 	cargo test --lib
 
 flutter-lint:
-	flutter format --set-exit-if-changed .
-	flutter analyze
+	cd ui && dart format --set-exit-if-changed .
+	cd ui && flutter analyze
 
 flutter-test:
-	flutter test
+	cd ui && flutter test
 
 build-desktop:
-	flutter build linux
+	cd ui && flutter build linux
 
 build-server:
 	cargo build --bin daemon
