@@ -9,6 +9,8 @@ pub enum AudioAction {
     Start,
     /// Pauses an active recorder while retaining its session.
     Pause,
+    /// Records an operating-system suspension of an active audio stream.
+    Interrupt,
     /// Closes an active or paused recorder permanently.
     Stop,
 }
@@ -16,6 +18,9 @@ pub enum AudioAction {
 /// Describes an audio-capture operation that could not complete.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum AudioError {
+    /// The operating system interrupted an active audio stream; the session can be resumed.
+    #[error("audio stream was interrupted by the operating system")]
+    Interrupted,
     /// The requested lifecycle command is disallowed from the current state.
     #[error("cannot {action:?} audio capture while it is {current_state:?}")]
     InvalidState {

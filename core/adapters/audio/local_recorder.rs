@@ -2,7 +2,7 @@
 
 use std::sync::mpsc::{self, Receiver, Sender};
 
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::{
     domain::{
@@ -72,6 +72,31 @@ impl LocalRecorder {
         Ok(())
     }
 
+    /// Marks an active stream as OS-interrupted while retaining it for a later safe resume.
+    ///
+    /// Inputs: None; a platform service calls this after its audio stream is suspended.
+    /// Outputs: `AudioError::Interrupted` after transitioning from recording, or an invalid-state
+    /// error when no active stream can be interrupted.
+    /// Side effects: Stops chunk routing, emits a structured warning, and publishes Interrupted.
+    fn transition_to_interrupted(&mut self) -> Result<(), AudioError> {
+        match self.current_state {
+            AudioState::Recording => {
+                self.current_state = AudioState::Interrupted;
+                warn!("Audio stream interrupted by OS, entering recoverable state");
+                Self::publish_to_subscribers(&mut self.state_subscribers, AudioState::Interrupted);
+                Err(AudioError::Interrupted)
+            }
+            AudioState::Interrupted => {
+                warn!("Audio stream interruption repeated while already recoverable");
+                Err(AudioError::Interrupted)
+            }
+            current_state => Err(AudioError::InvalidState {
+                action: AudioAction::Interrupt,
+                current_state,
+            }),
+        }
+    }
+
     /// Applies a validated lifecycle transition and publishes it without exposing audio payloads.
     ///
     /// Inputs: `action` identifies the requested command and `next_state` is its permitted target.
@@ -108,6 +133,8 @@ impl LocalRecorder {
                 | (AudioState::Recording, AudioAction::Stop)
                 | (AudioState::Paused, AudioAction::Start)
                 | (AudioState::Paused, AudioAction::Stop)
+                | (AudioState::Interrupted, AudioAction::Start)
+                | (AudioState::Interrupted, AudioAction::Stop)
         )
     }
 
@@ -150,6 +177,15 @@ impl AudioCapture for LocalRecorder {
     /// Side effects: Changes state, prevents future chunk routing, and notifies state subscribers.
     fn stop(&mut self) -> Result<(), AudioError> {
         self.transition(AudioAction::Stop, AudioState::Stopped)
+    }
+
+    /// Converts an OS audio suspension into a recoverable portable interruption state.
+    ///
+    /// Inputs: None; callers invoke this only after an adapter detects stream suspension.
+    /// Outputs: `AudioError::Interrupted` once the session is recoverable, or invalid-state error.
+    /// Side effects: Stops chunk routing and notifies state subscribers without destroying session state.
+    fn handle_interruption(&mut self) -> Result<(), AudioError> {
+        self.transition_to_interrupted()
     }
 
     /// Subscribes to future chunks routed while the recorder is recording.

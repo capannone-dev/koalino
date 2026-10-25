@@ -141,6 +141,17 @@
   before forwarding media to the transcription port. All behavior is covered by mocked channels,
   mapping storage, vector storage, transcription, and attachment workflow ports.
 
+## 2026-10-25 — Issue #16 background recording and interruption recovery
+
+- Made OS stream suspension an explicit portable `Interrupted` audio state rather than an Error or
+  terminal Stop. The interruption callback returns `AudioError::Interrupted` after safely halting
+  routing; Start is the sole recovery transition and repeated callbacks are idempotent.
+- Retained FFI ownership in the process-wide `OnceLock<Mutex<Option<FfiRuntime>>>`. Every
+  background/lock-screen lifecycle command obtains that mutex, accepts no retained pointer, and
+  returns a stable integer result. State values use `10`–`15` to avoid collision with FFI errors.
+- Kept Android foreground-service, Windows runner, and Linux systemd/logind work as documented
+  platform wiring. No Java, Kotlin, C#, OS service SDK, or wake-lock dependency enters the core.
+
 ## 2026-10-25 — Issue #13 attachment metadata and meeting linking
 
 - Added `MetadataExtractor` as the sole attachment timestamp boundary. `AttachmentManager` sees

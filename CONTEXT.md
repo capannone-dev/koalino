@@ -76,6 +76,13 @@ voice variant and forwards audio through `TranscriptionEngine`. Guaranteed parti
 bypass the local weak-match/diarization workflow. All core tests use standard-library channel and
 repository mocks, with no external bridge connection.
 
+Issue #16 adds recoverable OS interruption handling for local audio. `LocalRecorder` transitions
+from Recording to Interrupted, reports `AudioError::Interrupted`, emits a safe warning, and resumes
+only through Start; Stopped remains terminal. The FFI runtime retains its recorder behind a
+process-wide `OnceLock<Mutex<...>>` and now exposes background-safe Start/Pause/Stop/interruption
+commands plus distinct state-query codes. Android, Windows, and headless Linux integration remains
+documentation-only; no platform service implementation or external OS API is coupled to Rust.
+
 Issue #13 adds attachment domain values plus ports for metadata extraction and attachment
 persistence. `AttachmentManager` owns only injected `MetadataExtractor` and `NoteRepository`
 ports: it receives a UTC capture time, gets overlapping `MeetingWindow` values, and ranks inclusive

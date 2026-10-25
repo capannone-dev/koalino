@@ -12,6 +12,8 @@ pub enum AudioState {
     Recording,
     /// The capture session is retained but temporarily discards captured chunks.
     Paused,
+    /// The OS suspended the active stream; a later start command may safely recover it.
+    Interrupted,
     /// The capture session is closed and cannot be restarted.
     Stopped,
     /// The capture session encountered an unrecoverable adapter failure.

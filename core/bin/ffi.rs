@@ -31,6 +31,34 @@ pub const FFI_INVALID_ARGUMENT: c_int = 1;
 pub const FFI_OPERATION_REJECTED: c_int = 2;
 /// Indicates that the bridge could not acquire its process-local synchronization state.
 pub const FFI_RUNTIME_UNAVAILABLE: c_int = 3;
+/// Returns the portable Idle state from `note_taker_get_current_state`.
+pub const FFI_AUDIO_STATE_IDLE: c_int = 10;
+/// Returns the portable Recording state from `note_taker_get_current_state`.
+pub const FFI_AUDIO_STATE_RECORDING: c_int = 11;
+/// Returns the portable Paused state from `note_taker_get_current_state`.
+pub const FFI_AUDIO_STATE_PAUSED: c_int = 12;
+/// Returns the portable Interrupted state from `note_taker_get_current_state`.
+pub const FFI_AUDIO_STATE_INTERRUPTED: c_int = 13;
+/// Returns the portable Stopped state from `note_taker_get_current_state`.
+pub const FFI_AUDIO_STATE_STOPPED: c_int = 14;
+/// Returns the portable Error state from `note_taker_get_current_state`.
+pub const FFI_AUDIO_STATE_ERROR: c_int = 15;
+
+/// Converts a portable state to the stable integer C ABI used by background services.
+///
+/// Inputs: `audio_state` is a Rust-owned portable lifecycle value.
+/// Outputs: Its documented `FFI_AUDIO_STATE_*` value.
+/// Side effects: None.
+fn audio_state_code(audio_state: crate::domain::models::AudioState) -> c_int {
+    match audio_state {
+        crate::domain::models::AudioState::Idle => FFI_AUDIO_STATE_IDLE,
+        crate::domain::models::AudioState::Recording => FFI_AUDIO_STATE_RECORDING,
+        crate::domain::models::AudioState::Paused => FFI_AUDIO_STATE_PAUSED,
+        crate::domain::models::AudioState::Interrupted => FFI_AUDIO_STATE_INTERRUPTED,
+        crate::domain::models::AudioState::Stopped => FFI_AUDIO_STATE_STOPPED,
+        crate::domain::models::AudioState::Error => FFI_AUDIO_STATE_ERROR,
+    }
+}
 
 /// Stores adapter-owned state required by the primitive Flutter C ABI commands.
 struct FfiRuntime {
@@ -171,6 +199,51 @@ impl FfiRuntime {
             .unwrap_or(FFI_OPERATION_REJECTED)
     }
 
+    /// Pauses the recorder through the shared portable audio-capture state machine.
+    ///
+    /// Inputs: None.
+    /// Outputs: A C status indicating whether an active recording accepted the pause.
+    /// Side effects: Stops local chunk routing while preserving a session for resume.
+    fn pause_recording(&mut self) -> c_int {
+        self.local_recorder
+            .pause()
+            .map(|()| FFI_SUCCESS)
+            .unwrap_or(FFI_OPERATION_REJECTED)
+    }
+
+    /// Stops the recorder through the shared portable audio-capture state machine.
+    ///
+    /// Inputs: None.
+    /// Outputs: A C status indicating whether the session accepted its terminal stop.
+    /// Side effects: Permanently stops chunk routing for this runtime's recorder instance.
+    fn stop_recording(&mut self) -> c_int {
+        self.local_recorder
+            .stop()
+            .map(|()| FFI_SUCCESS)
+            .unwrap_or(FFI_OPERATION_REJECTED)
+    }
+
+    /// Converts a platform-reported OS suspension into a safe recoverable recorder state.
+    ///
+    /// Inputs: None.
+    /// Outputs: Success after a recording enters Interrupted; rejection for inactive states.
+    /// Side effects: Stops chunk routing while retaining the recorder for a later start/resume.
+    fn handle_audio_interruption(&mut self) -> c_int {
+        match self.local_recorder.handle_interruption() {
+            Err(crate::domain::errors::AudioError::Interrupted) => FFI_SUCCESS,
+            Ok(()) | Err(_) => FFI_OPERATION_REJECTED,
+        }
+    }
+
+    /// Reads the current recorder lifecycle state without exposing Rust state values over FFI.
+    ///
+    /// Inputs: None.
+    /// Outputs: One documented `FFI_AUDIO_STATE_*` integer.
+    /// Side effects: None; the runtime mutex serializes this read with lifecycle mutations.
+    fn current_recording_state(&self) -> c_int {
+        audio_state_code(self.local_recorder.state())
+    }
+
     /// Updates tracing verbosity while retaining the logging worker for the process lifetime.
     ///
     /// Inputs: `filter_directive` is a valid non-empty tracing filter directive.
@@ -208,15 +281,41 @@ impl FfiRuntime {
     }
 }
 
+/// Escapes UTF-8 text for the narrow JSON response without accepting arbitrary JSON values.
+///
+/// Inputs: `value` is text emitted in a JSON string field.
+/// Outputs: JSON string content with required quote and backslash escapes.
+/// Side effects: None.
+fn json_escape(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 /// Escapes a platform path for the narrow JSON response without accepting arbitrary JSON values.
 ///
 /// Inputs: `path` is an absolute local file-system path.
 /// Outputs: JSON string content with required quote and backslash escapes.
 /// Side effects: None.
 fn json_escape_path(path: &Path) -> String {
-    path.to_string_lossy()
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
+    json_escape(&path.to_string_lossy())
+}
+
+/// Classifies a selected attachment by extension for local metadata persistence.
+///
+/// Inputs: `file_path` identifies the user-selected local attachment.
+/// Outputs: A conservative supported media type, defaulting to binary data.
+/// Side effects: None.
+fn attachment_mime_type(file_path: &str) -> &'static str {
+    match Path::new(file_path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("pdf") => "application/pdf",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("png") => "image/png",
+        _ => "application/octet-stream",
+    }
 }
 
 /// Holds the process-local runtime without exposing it to Dart or other native consumers.
@@ -275,6 +374,46 @@ fn with_runtime_json(
 #[unsafe(no_mangle)]
 pub extern "C" fn note_taker_start_recording() -> c_int {
     with_runtime(FfiRuntime::start_recording)
+}
+
+/// Pauses the Rust-owned recording session from UI, lock-screen, or background service threads.
+///
+/// Inputs: None.
+/// Outputs: `FFI_SUCCESS` on an accepted pause or a documented nonzero status.
+/// Side effects: Acquires the process runtime mutex and pauses its portable recorder.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_pause_recording() -> c_int {
+    with_runtime(FfiRuntime::pause_recording)
+}
+
+/// Stops the Rust-owned recording session from UI, lock-screen, or background service threads.
+///
+/// Inputs: None.
+/// Outputs: `FFI_SUCCESS` on an accepted terminal stop or a documented nonzero status.
+/// Side effects: Acquires the process runtime mutex and stops its portable recorder.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_stop_recording() -> c_int {
+    with_runtime(FfiRuntime::stop_recording)
+}
+
+/// Reports an operating-system audio stream suspension from a background service thread.
+///
+/// Inputs: None.
+/// Outputs: `FFI_SUCCESS` once a recording has entered recoverable Interrupted state.
+/// Side effects: Acquires the process runtime mutex and stops routing audio until resume.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_handle_audio_interruption() -> c_int {
+    with_runtime(FfiRuntime::handle_audio_interruption)
+}
+
+/// Returns the lock-screen-safe current portable recorder state without waking Flutter UI state.
+///
+/// Inputs: None.
+/// Outputs: A documented `FFI_AUDIO_STATE_*` integer, or `FFI_RUNTIME_UNAVAILABLE` on lock/init failure.
+/// Side effects: May lazily initialize the process runtime, then performs only a mutex-protected read.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_get_current_state() -> c_int {
+    with_runtime(|runtime| runtime.current_recording_state())
 }
 
 /// Applies a Rust tracing filter supplied by a Flutter caller.
@@ -401,7 +540,11 @@ pub unsafe extern "C" fn note_taker_free_string(value: *mut c_char) {
 
 #[cfg(test)]
 mod ffi_contract_tests {
-    use super::{FFI_INVALID_ARGUMENT, FFI_OPERATION_REJECTED, FFI_SUCCESS, FfiRuntime};
+    use super::{
+        FFI_AUDIO_STATE_INTERRUPTED, FFI_AUDIO_STATE_PAUSED, FFI_AUDIO_STATE_RECORDING,
+        FFI_AUDIO_STATE_STOPPED, FFI_INVALID_ARGUMENT, FFI_OPERATION_REJECTED, FFI_SUCCESS,
+        FfiRuntime,
+    };
 
     /// Verifies that the bridge reports the first portable start as successful.
     #[test]
@@ -420,6 +563,36 @@ mod ffi_contract_tests {
 
         assert_eq!(ffi_runtime.start_recording(), FFI_SUCCESS);
         assert_eq!(ffi_runtime.start_recording(), FFI_OPERATION_REJECTED);
+    }
+
+    /// Verifies lifecycle commands share one serialized runtime and expose portable state codes.
+    #[test]
+    fn background_lifecycle_commands_are_serializable_and_report_portable_state() {
+        let mut ffi_runtime = FfiRuntime::new()
+            .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
+
+        assert_eq!(ffi_runtime.start_recording(), FFI_SUCCESS);
+        assert_eq!(
+            ffi_runtime.current_recording_state(),
+            FFI_AUDIO_STATE_RECORDING
+        );
+        assert_eq!(ffi_runtime.pause_recording(), FFI_SUCCESS);
+        assert_eq!(
+            ffi_runtime.current_recording_state(),
+            FFI_AUDIO_STATE_PAUSED
+        );
+        assert_eq!(ffi_runtime.start_recording(), FFI_SUCCESS);
+        assert_eq!(ffi_runtime.handle_audio_interruption(), FFI_SUCCESS);
+        assert_eq!(
+            ffi_runtime.current_recording_state(),
+            FFI_AUDIO_STATE_INTERRUPTED
+        );
+        assert_eq!(ffi_runtime.start_recording(), FFI_SUCCESS);
+        assert_eq!(ffi_runtime.stop_recording(), FFI_SUCCESS);
+        assert_eq!(
+            ffi_runtime.current_recording_state(),
+            FFI_AUDIO_STATE_STOPPED
+        );
     }
 
     /// Verifies that an empty logging directive is rejected before logging initialization.

@@ -56,6 +56,94 @@ fn start_resumes_paused_recorder() {
     assert_eq!(local_recorder.state(), AudioState::Recording);
 }
 
+/// Verifies an OS interruption makes a recording recoverable rather than terminating the session.
+#[test]
+fn os_interruption_moves_recording_to_recoverable_interrupted_state() {
+    let mut local_recorder = recorder_under_test();
+    let state_receiver = local_recorder
+        .subscribe_states()
+        .unwrap_or_else(|error| panic!("state subscription must succeed: {error}"));
+    local_recorder
+        .start()
+        .unwrap_or_else(|error| panic!("idle recorder must start: {error}"));
+    let _ = state_receiver
+        .recv()
+        .unwrap_or_else(|error| panic!("recording state must publish: {error}"));
+
+    let interruption_error = local_recorder
+        .handle_interruption()
+        .expect_err("an OS interruption must be reported to the platform bridge");
+
+    assert_eq!(interruption_error, AudioError::Interrupted);
+    assert_eq!(local_recorder.state(), AudioState::Interrupted);
+    assert_eq!(
+        state_receiver
+            .recv()
+            .unwrap_or_else(|error| panic!("interrupted state must publish: {error}")),
+        AudioState::Interrupted
+    );
+}
+
+/// Verifies the ordinary start command safely resumes a recoverable interrupted session.
+#[test]
+fn start_recovers_an_interrupted_recording_after_os_wake() {
+    let mut local_recorder = recorder_under_test();
+    local_recorder
+        .start()
+        .unwrap_or_else(|error| panic!("idle recorder must start: {error}"));
+    let _ = local_recorder.handle_interruption();
+
+    local_recorder
+        .start()
+        .unwrap_or_else(|error| panic!("interrupted recorder must resume: {error}"));
+
+    assert_eq!(local_recorder.state(), AudioState::Recording);
+}
+
+/// Verifies repeated interruption callbacks are idempotent while a stream remains suspended.
+#[test]
+fn repeated_os_interruption_keeps_the_recorder_recoverable() {
+    let mut local_recorder = recorder_under_test();
+    local_recorder
+        .start()
+        .unwrap_or_else(|error| panic!("idle recorder must start: {error}"));
+
+    assert_eq!(
+        local_recorder.handle_interruption(),
+        Err(AudioError::Interrupted)
+    );
+    assert_eq!(
+        local_recorder.handle_interruption(),
+        Err(AudioError::Interrupted)
+    );
+    assert_eq!(local_recorder.state(), AudioState::Interrupted);
+}
+
+/// Verifies an interruption cannot revive or corrupt a terminal stopped recording session.
+#[test]
+fn os_interruption_after_stop_is_rejected_without_changing_terminal_state() {
+    let mut local_recorder = recorder_under_test();
+    local_recorder
+        .start()
+        .unwrap_or_else(|error| panic!("idle recorder must start: {error}"));
+    local_recorder
+        .stop()
+        .unwrap_or_else(|error| panic!("recording recorder must stop: {error}"));
+
+    let interruption_error = local_recorder
+        .handle_interruption()
+        .expect_err("a stopped recorder cannot receive an active-stream interruption");
+
+    assert_eq!(
+        interruption_error,
+        AudioError::InvalidState {
+            action: AudioAction::Interrupt,
+            current_state: AudioState::Stopped,
+        }
+    );
+    assert_eq!(local_recorder.state(), AudioState::Stopped);
+}
+
 /// Verifies that pausing while idle reports the portable invalid-state failure.
 #[test]
 fn pause_while_idle_returns_invalid_state_error() {

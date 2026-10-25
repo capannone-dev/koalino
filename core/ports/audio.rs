@@ -33,6 +33,13 @@ pub trait AudioCapture {
     /// Side effects: Closes adapter-managed capture and publishes the stopped state.
     fn stop(&mut self) -> Result<(), AudioError>;
 
+    /// Reports an OS suspension of an active stream while retaining a recoverable session.
+    ///
+    /// Inputs: None; adapters call this after an OS/service interruption notification.
+    /// Outputs: `AudioError::Interrupted` after entering the recoverable state, or an invalid-state error.
+    /// Side effects: Stops chunk routing and publishes `AudioState::Interrupted`; `start` may resume it.
+    fn handle_interruption(&mut self) -> Result<(), AudioError>;
+
     /// Creates an independent subscription for captured PCM chunks.
     ///
     /// Inputs: None.
