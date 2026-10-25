@@ -22,6 +22,8 @@ path = "core/bin/daemon.rs"
 [dependencies]
 anyhow = "1.0.100"
 automerge = "0.6.1"
+futures = "0.3.31"
+libp2p = { version = "0.56.0", features = ["macros", "mdns", "noise", "tcp", "tokio", "yamux"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 thiserror = "2.0.17"
 tracing = "0.1.41"

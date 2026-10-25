@@ -32,6 +32,12 @@
 | --- | --- | --- |
 | #5 Initialize Flutter project and Rust FFI bridge | Ready for review | Material 3 recording start UI, bridge-injected widget tests, Dart FFI adapter, and C-compatible Rust recording/log-level commands. |
 
+## WP6: P2P Network Layer
+
+| Issue | Status | Scope |
+| --- | --- | --- |
+| #6 Initialize libp2p swarm, mDNS local discovery, and encrypted transport | Ready for review | Noise-encrypted TCP, Yamux, Tokio mDNS, portable network-event handling with mocked-port TDD, and no socket-based unit tests. |
+
 ## Follow-up work
 
 - Define validation and IDs suitable for CRDT replication before storage adapters are introduced.

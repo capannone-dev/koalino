@@ -6,3 +6,7 @@ pub mod compute_router;
 pub mod meeting_crdt;
 /// Coordinates recording transcription and transcript persistence.
 pub mod meeting_recorder;
+/// Applies adapter-neutral encrypted-network events to application state.
+pub mod network_events;
+#[cfg(test)]
+mod network_events_tests;

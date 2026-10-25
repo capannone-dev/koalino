@@ -17,3 +17,11 @@ Dart `RecordingController` depends on `RecordingBridge`, while `RustRecordingBri
 `dart:ffi` to call `note_taker_start_recording` and `note_taker_set_log_level`. Widget tests inject
 a fake bridge, proving widgets do not load or access Rust structs. The C ABI returns primitive
 status codes and keeps the process-local `LocalRecorder` and logging runtime on the Rust side.
+
+Issue #6 adds a libp2p-only network adapter. It generates an ephemeral Ed25519 identity and builds
+a Tokio swarm with TCP, Noise encryption, Yamux multiplexing, and mDNS local discovery. The adapter
+translates mDNS peer identifiers into portable `NetworkEvent` values and implements `P2pNetwork`
+and `PeerDiscovery`; application code records reachability solely through those events. Unit tests
+use a mocked `P2pNetwork` and never instantiate the adapter, bind an address, or open TCP/UDP
+sockets. Payload transmission intentionally remains rejected until a future encrypted application
+protocol (for CRDT sync or manifests) is defined.

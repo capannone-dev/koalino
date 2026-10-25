@@ -40,3 +40,18 @@
 - The C bridge owns a process-local `LocalRecorder`; it uses the existing 16 kHz mono portable
   configuration and delegates state rules to the `AudioCapture` port. Logging is initialized only
   on a successful non-empty filter request, preserving runtime verbosity control.
+
+## 2026-10-25 — Issue #6 libp2p encrypted local discovery
+
+- Added a libp2p adapter that configures an ephemeral Ed25519 identity, TCP, Noise, Yamux, and
+  Tokio mDNS. The adapter does not bind/listen by itself; a future composition root drives the
+  swarm and chooses listener addresses.
+- Added the adapter-neutral `NetworkEvent` contract and application `NetworkEventHandler`. The
+  handler is tested exclusively against a mock `P2pNetwork`, keeping libp2p event types and socket
+  operations out of unit tests and the application layer.
+- The adapter maps an authenticated libp2p `PeerId` into the existing opaque `DeviceId` value at
+  the boundary. This is a temporary identity mapping until device registration binds stable user
+  device IDs to peer keys.
+- `send_encrypted` rejects payloads by policy because transport initialization is not a data
+  protocol. CRDT, manifest, and compute payload framing remain future work and must be explicitly
+  specified before transmission is enabled.
