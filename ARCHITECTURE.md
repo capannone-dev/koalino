@@ -18,6 +18,7 @@
 └── bin/              # ENTRY POINTS
     ├── cli.rs        # Linux CLI
     └── daemon.rs     # Headless server / FFI bridge for Flutter
+└── server/            # Axum REST/WebSocket adapter, dependent only on ports
 
 /ui (Flutter)
 ├── presentation/     # UI Widgets (Dumb, just renders state)

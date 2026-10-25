@@ -13,3 +13,8 @@ For background services and lock-screen controls, `ffi.rs` owns its recorder in 
 interruption, and state-query commands take only this mutex and operate on the portable
 `AudioCapture` state machine. State query codes are deliberately `10` through `15`, leaving the
 documented nonzero status codes distinguishable from lifecycle states.
+
+`daemon.rs` composes the headless Axum server from `SqliteNoteRepository` and a local
+`VoiceVectorDB`, passing them only through `ServerAppState`. HTTP route handlers never use SQLite
+directly; they consume repository ports. The daemon defaults to loopback binding and must sit
+behind an authenticated reverse proxy before any non-loopback deployment.

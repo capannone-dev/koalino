@@ -100,3 +100,9 @@ the Material 3 paperclip workflow keeps platform file selection behind an inject
 remain local: FFI transports only a path, metadata JSON, and opaque IDs; file bytes are never
 transferred or stored in SQLite.
 
+Issue #17 adds the headless Axum adapter. `ServerAppState` accepts only shared repository-port and
+voice-vector-port implementations; handlers translate safe domain data into REST DTOs and never
+issue SQL. The WebSocket event bus carries opaque meeting/clip identifiers and sync status only.
+Integration tests use in-memory SQLite plus Axum `oneshot`; their WebSocket test binds an OS-chosen
+loopback port, avoiding CI collisions.
+

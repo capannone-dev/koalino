@@ -14,6 +14,8 @@ pub mod domain;
 pub mod ffi;
 /// Contains dependency-inversion traits for external capabilities.
 pub mod ports;
+/// Exposes the headless Axum API composition without leaking HTTP details into application services.
+pub mod server;
 
 #[cfg(test)]
 mod scaffold_contract_tests {

@@ -90,3 +90,15 @@ mapping and a `display_name` for first-time local identity naming; optional emai
 `TeamsIdentityMapper` persists the external-to-local association through `ExternalIdentityRepository`.
 `TeamsProcessor` uses only these ports plus `VoiceEmbeddingExtractor`, `VoiceVectorDB`,
 `TranscriptionEngine`, and `AttachmentWorkflow`; no external service SDK type reaches the core.
+
+## Headless HTTP and WebSocket API
+
+The headless daemon binds locally by default and accepts no mutation endpoints in this first
+version. `GET /api/meetings` returns meeting-ID metadata; `GET /api/meetings/{id}` adds a nullable
+transcript and attachment metadata but no CRDT or file bytes. `GET /api/voice-gallery` returns
+speaker labels and unresolved review-clip identifiers/timing only; voice vectors and raw audio are
+never serialized. `GET /api/telemetry` returns aggregate task count, duration, and latency.
+
+`GET /ws` upgrades to a WebSocket and sends tagged JSON text events: `meeting_started` with an
+opaque `meeting_id`, `sync_status_changed` with a safe status string, or `new_unassigned_clip`
+with opaque meeting/clip IDs. The router allows browser CORS only from `http://localhost:3000`.

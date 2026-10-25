@@ -172,6 +172,16 @@
   bytes, and Flutter exposes file selection behind an injectable `file_picker` adapter so widget
   tests do not open native dialogs or load the Rust library.
 
+## 2026-10-25 — Issue #17 headless Axum API
+
+- Kept HTTP and WebSocket concerns in `core/server`, injected through a mutex-protected aggregate
+  of existing repository ports plus a voice-vector port. Route handlers have no SQLite imports,
+  SQL, CRDT decoding, or raw-media access.
+- Chose Axum `oneshot` tests for REST and an ephemeral `127.0.0.1:0` listener only for the true
+  WebSocket upgrade test. This proves the wire contract while avoiding fixed-port CI collisions.
+- The WebSocket broadcaster sends typed, tagged JSON status events. It deliberately omits raw
+  audio, embeddings, transcript mutation, and sync payloads.
+
 - `NoteRepository` supplies portable inclusive `MeetingWindow` values. The manager ranks only those
   windows with linear midpoint proximity: 1.0 at midpoint, 0.0 at either edge, descending score
   plus meeting-ID tie-break. Suggestions require user confirmation before attachment persistence.

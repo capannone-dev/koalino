@@ -8,6 +8,15 @@ use chrono::{DateTime, Utc};
 
 /// Persists meeting text in an offline-capable repository.
 pub trait NoteRepository {
+    /// Lists stable identifiers for every locally known meeting.
+    ///
+    /// Inputs: None.
+    /// Outputs: Meeting identifiers in adapter-defined stable order, or a storage error.
+    /// Side effects: Reads local meeting metadata only; it never reads transcript or CRDT payloads.
+    fn list_meeting_ids(&self) -> Result<Vec<MeetingId>, StorageError> {
+        Ok(Vec::new())
+    }
+
     /// Creates a meeting record before its note or CRDT document can be changed.
     ///
     /// Inputs: `meeting_id` must be globally stable; `initial_crdt_document` must be a valid serialized document.

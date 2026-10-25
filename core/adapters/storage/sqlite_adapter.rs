@@ -246,6 +246,27 @@ impl SqliteNoteRepository {
 }
 
 impl NoteRepository for SqliteNoteRepository {
+    /// Lists locally persisted meeting identifiers without exposing SQLite rows to callers.
+    ///
+    /// Inputs: None.
+    /// Outputs: Identifiers ordered by creation time, or a portable storage error.
+    /// Side effects: Reads only the SQLite meeting index.
+    fn list_meeting_ids(&self) -> Result<Vec<MeetingId>, StorageError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT meeting_id FROM meetings ORDER BY created_at_utc, meeting_id")
+            .map_err(|error| sqlite_error("unable to prepare meeting index query", error))?;
+        let meeting_identifier_rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| sqlite_error("unable to load meeting index", error))?;
+        meeting_identifier_rows
+            .map(|row| {
+                row.map(MeetingId::new)
+                    .map_err(|error| sqlite_error("unable to decode meeting identifier", error))
+            })
+            .collect()
+    }
+
     /// Creates a meeting row with an initial serialized Automerge document.
     ///
     /// Inputs: `meeting_id` must be unique; `initial_crdt_document` must be non-sensitive serialized CRDT state.

@@ -40,6 +40,12 @@
 | #11 Voice Gallery, unassigned playback, and weak match prompting | Ready for review | JSON metadata/path FFI, local native playback, Riverpod controller, Material 3 review screen, and fake-bridge widget tests. |
 | #14 Attachment import UI, file picking, and meeting suggestion workflow | Ready for review | File-picker seam, JSON-only AttachmentManager FFI, Riverpod controller parsing, Material 3 ranked confirmation dialog, and fake-boundary widget tests. |
 
+## WP7: Headless server API
+
+| Issue | Status | Scope |
+| --- | --- | --- |
+| #17 Axum headless REST/WebSocket API | Ready for review | Port-injected meeting/gallery/telemetry reads, local-only CORS, typed status-event WebSocket, in-memory SQLite and ephemeral-port integration tests. |
+
 ## WP6: P2P Network Layer
 
 | Issue | Status | Scope |

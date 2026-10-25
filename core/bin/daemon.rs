@@ -1,19 +1,27 @@
-//! Starts the headless daemon composition root with structured JSON logging enabled.
+//! Starts the headless Axum daemon with structured JSON logging and injected local adapters.
 
 use std::{env, path::PathBuf};
 
 use anyhow::Result;
 use note_taker_core::{
-    adapters::observability::{LoggingConfiguration, initialize_logging},
+    adapters::{
+        observability::{LoggingConfiguration, initialize_logging},
+        storage::{
+            in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
+        },
+    },
     domain::models::DeviceId,
+    server::api::{ServerAppState, build_router},
 };
 
-/// Initializes daemon logging and reserves the executable boundary for server and FFI services.
+/// Initializes logging, composes headless server ports, and serves the local Axum API.
 ///
-/// Inputs: Reads optional `NOTE_TAKER_DEVICE_ID`, `NOTE_TAKER_LOG_DIR`, and `RUST_LOG` environment variables.
-/// Outputs: A process exit status indicating whether startup succeeded.
-/// Side effects: Creates a local log directory and installs JSON stdout/rolling-file logging.
-fn main() -> Result<()> {
+/// Inputs: Reads optional device, log, database, and bind-address environment variables.
+/// Outputs: A process exit status indicating whether startup or HTTP serving failed.
+/// Side effects: Opens local SQLite, creates logging sinks, binds the configured local TCP address,
+/// and serves REST/WebSocket requests until the process is stopped.
+#[tokio::main]
+async fn main() -> Result<()> {
     let device_id = DeviceId::new(
         env::var("NOTE_TAKER_DEVICE_ID").unwrap_or_else(|_| String::from("unconfigured-device")),
     );
@@ -24,6 +32,15 @@ fn main() -> Result<()> {
     let _logging_runtime = initialize_logging(
         LoggingConfiguration::new(device_id, log_directory).with_filter(log_filter),
     )?;
-    tracing::info!("daemon scaffold started");
+    let database_path = env::var("NOTE_TAKER_DATABASE_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
+    let bind_address =
+        env::var("NOTE_TAKER_BIND_ADDRESS").unwrap_or_else(|_| String::from("127.0.0.1:8080"));
+    let repository = SqliteNoteRepository::open(database_path, DeviceId::new("headless-server"))?;
+    let application_state = ServerAppState::new(repository, InMemoryVoiceVectorDB::new());
+    let listener = tokio::net::TcpListener::bind(&bind_address).await?;
+    tracing::info!(address = %bind_address, "headless Axum server started");
+    axum::serve(listener, build_router(application_state)).await?;
     Ok(())
 }
