@@ -28,6 +28,15 @@ pub trait VoiceVectorDB {
         Ok(Vec::new())
     }
 
+    /// Counts stored acoustic variants for one speaker without exposing vectors.
+    ///
+    /// Inputs: `identity_id` identifies the speaker whose variants should be counted.
+    /// Outputs: The number of stored variants, or a portable storage error.
+    /// Side effects: Reads biometric-store metadata only; implementations must not expose vectors.
+    fn voice_variant_count(&self, _identity_id: Uuid) -> Result<usize, StorageError> {
+        Ok(0)
+    }
+
     /// Stores one derived signature variant for its existing speaker identity.
     ///
     /// Inputs: `embedding` contains a model-derived vector and UUID metadata, never raw audio.

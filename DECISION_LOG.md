@@ -182,6 +182,17 @@
 - The WebSocket broadcaster sends typed, tagged JSON status events. It deliberately omits raw
   audio, embeddings, transcript mutation, and sync payloads.
 
+## 2026-10-25 — Issue #18 interactive clap CLI
+
+- Kept clap parsing and terminal formatting in `core/cli`, an injected driving adapter. The binary
+  contains only the shared-local-database composition root and command dispatch; it has no SQL or
+  voice-matching policy.
+- `voice assign` searches only through `NoteRepository` and delegates the selected clip's derived
+  embedding to `VoiceIdentityManager::confirm_weak_match`. This preserves the existing signature
+  persistence policy and avoids exposing audio to CLI output.
+- CLI logging is fixed at `error` to protect predictable terminal output while retaining the
+  project's structured logging path for failures.
+
 - `NoteRepository` supplies portable inclusive `MeetingWindow` values. The manager ranks only those
   windows with linear midpoint proximity: 1.0 at midpoint, 0.0 at either edge, descending score
   plus meeting-ID tie-break. Suggestions require user confirmation before attachment persistence.

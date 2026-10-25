@@ -106,3 +106,8 @@ issue SQL. The WebSocket event bus carries opaque meeting/clip identifiers and s
 Integration tests use in-memory SQLite plus Axum `oneshot`; their WebSocket test binds an OS-chosen
 loopback port, avoiding CI collisions.
 
+Issue #18 adds the clap-based Linux CLI driving adapter. Its parser is library-tested separately
+from the executable; `CoreCliService` delegates recording to `AudioCapture`, meeting/telemetry data
+to repository ports, and manual clip resolution to `VoiceIdentityManager`. The binary opens the
+same SQLite path as the daemon and filters logs to error so terminal output remains human-readable.
+

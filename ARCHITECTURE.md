@@ -19,6 +19,7 @@
     ├── cli.rs        # Linux CLI
     └── daemon.rs     # Headless server / FFI bridge for Flutter
 └── server/            # Axum REST/WebSocket adapter, dependent only on ports
+└── cli/               # Clap driving adapter, dependent only on application services and ports
 
 /ui (Flutter)
 ├── presentation/     # UI Widgets (Dumb, just renders state)

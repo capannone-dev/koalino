@@ -12,6 +12,13 @@ use crate::domain::{
 /// Local device capture and future P2P streaming adapters implement this same boundary. Consumers
 /// depend only on chunks, state events, and portable errors, never on an OS-specific stream type.
 pub trait AudioCapture {
+    /// Reads the current portable recording state.
+    ///
+    /// Inputs: None.
+    /// Outputs: The current lifecycle state without exposing platform stream types.
+    /// Side effects: None.
+    fn current_state(&self) -> AudioState;
+
     /// Starts an idle session or resumes a paused session.
     ///
     /// Inputs: None; the implementation uses configuration supplied at construction.

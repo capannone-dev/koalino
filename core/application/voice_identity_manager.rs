@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::{
     domain::{
         errors::StorageError,
-        models::{VoiceEmbedding, VoiceMatchResult},
+        models::{SpeakerIdentity, VoiceEmbedding, VoiceMatchResult},
     },
     ports::voice::{VoiceIdentityMatcher, VoiceVectorDB},
 };
@@ -94,5 +94,24 @@ where
         ))?;
         tracing::info!(identity = %identity_id, variant = %variant_id, "Confirmed voice variant stored");
         Ok(variant_id)
+    }
+
+    /// Lists display-safe identities and their adapter-provided signature-variant counts.
+    ///
+    /// Inputs: None.
+    /// Outputs: Identity metadata paired with variant counts, or a portable storage error.
+    /// Side effects: Reads voice-storage metadata without exposing embedding dimensions.
+    pub fn list_identities_with_variant_counts(
+        &self,
+    ) -> Result<Vec<(SpeakerIdentity, usize)>, StorageError> {
+        self.vector_database
+            .list_speaker_identities()?
+            .into_iter()
+            .map(|identity| {
+                self.vector_database
+                    .voice_variant_count(identity.identity_id())
+                    .map(|variant_count| (identity, variant_count))
+            })
+            .collect()
     }
 }

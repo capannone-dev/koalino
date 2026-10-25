@@ -18,3 +18,8 @@ documented nonzero status codes distinguishable from lifecycle states.
 `VoiceVectorDB`, passing them only through `ServerAppState`. HTTP route handlers never use SQLite
 directly; they consume repository ports. The daemon defaults to loopback binding and must sit
 behind an authenticated reverse proxy before any non-loopback deployment.
+
+`cli.rs` is the interactive terminal composition root. It parses the `core/cli` clap model, opens
+the same `NOTE_TAKER_DATABASE_PATH` as the daemon, and passes portable adapters to the thin CLI
+service. It fixes structured log filtering at `error` so a user's table/detail output is not mixed
+with operational logs.

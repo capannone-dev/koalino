@@ -102,3 +102,11 @@ never serialized. `GET /api/telemetry` returns aggregate task count, duration, a
 `GET /ws` upgrades to a WebSocket and sends tagged JSON text events: `meeting_started` with an
 opaque `meeting_id`, `sync_status_changed` with a safe status string, or `new_unassigned_clip`
 with opaque meeting/clip IDs. The router allows browser CORS only from `http://localhost:3000`.
+
+## Linux CLI contract
+
+`note-taker` accepts `record start|stop|status`, `meetings list`, `meetings view <meeting-id>`,
+`voice list`, `voice assign <clip-uuid> <identity-uuid>`, and `telemetry`. It calls only the
+portable `AudioCapture`, repository, and `VoiceIdentityManager` boundaries. Voice assignment
+receives UUIDs from clap, locates the review clip through `NoteRepository`, and stores the derived
+variant through the manager; raw audio and embedding values never appear in terminal output.

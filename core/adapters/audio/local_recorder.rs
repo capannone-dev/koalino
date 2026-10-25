@@ -152,6 +152,15 @@ impl LocalRecorder {
 }
 
 impl AudioCapture for LocalRecorder {
+    /// Returns the recorder's current portable lifecycle state.
+    ///
+    /// Inputs: None.
+    /// Outputs: The active local state-machine value.
+    /// Side effects: None.
+    fn current_state(&self) -> AudioState {
+        self.state()
+    }
+
     /// Starts this local recorder from idle or resumes it from paused.
     ///
     /// Inputs: None.

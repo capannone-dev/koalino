@@ -30,6 +30,20 @@ impl InMemoryVoiceVectorDB {
 }
 
 impl VoiceVectorDB for InMemoryVoiceVectorDB {
+    /// Counts retained variants owned by one identity without returning biometric dimensions.
+    ///
+    /// Inputs: `identity_id` identifies the in-memory identity.
+    /// Outputs: The number of stored variants for that identity.
+    /// Side effects: Reads the local in-memory biometric collection without logging it.
+    fn voice_variant_count(&self, identity_id: Uuid) -> Result<usize, StorageError> {
+        Ok(self
+            .stored_embeddings
+            .borrow()
+            .iter()
+            .filter(|embedding| embedding.identity_id() == identity_id)
+            .count())
+    }
+
     /// Validates and retains one derived embedding only for the lifetime of this process.
     ///
     /// Inputs: `embedding` must contain a non-empty, finite derived vector.

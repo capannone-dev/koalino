@@ -7,6 +7,8 @@
 pub mod adapters;
 /// Contains use-case orchestration that only depends on domain types and ports.
 pub mod application;
+/// Exposes the dependency-injected command-line driving adapter.
+pub mod cli;
 /// Contains pure business types and business failures.
 pub mod domain;
 /// Exposes the C-compatible Flutter bridge without leaking Rust domain types across FFI.

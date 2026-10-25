@@ -46,6 +46,12 @@
 | --- | --- | --- |
 | #17 Axum headless REST/WebSocket API | Ready for review | Port-injected meeting/gallery/telemetry reads, local-only CORS, typed status-event WebSocket, in-memory SQLite and ephemeral-port integration tests. |
 
+## WP8: Linux CLI
+
+| Issue | Status | Scope |
+| --- | --- | --- |
+| #18 Interactive recording, meeting, voice, and telemetry CLI | Ready for review | Clap parser, injected command dispatch, shared SQLite composition, quiet terminal logging, and mock/in-memory test coverage. |
+
 ## WP6: P2P Network Layer
 
 | Issue | Status | Scope |
