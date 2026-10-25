@@ -479,14 +479,14 @@ fn encode_embedding(embedding: &[f32]) -> Vec<u8> {
 /// Outputs: Derived dimensions or a portable storage rejection.
 /// Side effects: Allocates the returned vector; never logs biometric data.
 fn decode_embedding(serialized_embedding: &[u8]) -> Result<Vec<f32>, StorageError> {
-    let remainder = serialized_embedding.len() % std::mem::size_of::<f32>();
-    if remainder != 0 {
+    let (serialized_float_bytes, remainder) = serialized_embedding.as_chunks::<4>();
+    if !remainder.is_empty() {
         return Err(StorageError::Rejected {
             reason: String::from("stored voice embedding has an invalid byte length"),
         });
     }
-    Ok(serialized_embedding
-        .chunks_exact(std::mem::size_of::<f32>())
+    Ok(serialized_float_bytes
+        .iter()
         .map(|bytes| f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
         .collect())
 }

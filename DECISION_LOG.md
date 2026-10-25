@@ -203,6 +203,21 @@
 - Cloud CI installs Node 22 and runs lint, component tests, and production build. It is the source
   of web verification because the local sandbox has no Node runtime.
 
+## 2026-10-25 — Issue #20 local whisper.cpp transcription adapter
+
+- Added `local-ai` as an empty-by-default Cargo feature whose only optional dependency is
+  `whisper-rs` 0.16.0. Its supported native binding requires Rust 1.88, so the crate MSRV moved
+  from 1.85 to 1.88; native whisper.cpp building and model initialization still occur only when
+  local AI is explicitly requested.
+- Kept raw audio adapter-owned through `RecordingPcmSource`, which resolves only normalized 16 kHz
+  mono float PCM for portable `AudioRecording` metadata. Neither that source nor whisper.cpp types
+  enter the port or application layer.
+- `LocalWhisperCppTranscriptionEngine` serializes one native model context, creates a fresh
+  inference state per call, suppresses native progress/realtime output, and translates all native
+  failures to the established portable `TranscriptionError` values.
+- The `local-ai` test loads a real local model only if `NOTE_TAKER_WHISPER_MODEL` is explicitly
+  configured. Default mock tests never read model paths, load models, or download model weights.
+
 - `NoteRepository` supplies portable inclusive `MeetingWindow` values. The manager ranks only those
   windows with linear midpoint proximity: 1.0 at midpoint, 0.0 at either edge, descending score
   plus meeting-ID tie-break. Suggestions require user confirmation before attachment persistence.

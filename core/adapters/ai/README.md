@@ -1,0 +1,16 @@
+<!-- Documents optional local AI infrastructure kept outside the application layer. -->
+
+# Local AI adapters
+
+This directory contains opt-in local AI infrastructure. It is compiled only with
+`--features local-ai`; the default crate, `make rust-test`, and application layer remain free of
+Whisper/whisper.cpp types and native model initialization.
+
+`local_whisper_cpp.rs` implements `TranscriptionEngine` using `whisper-rs`, the Rust binding for
+whisper.cpp. The adapter owns a `RecordingPcmSource` seam that resolves adapter-local, 16 kHz,
+mono floating-point PCM for portable `AudioRecording` metadata. It returns only the existing
+domain `Transcript` and `TranscriptionError` values.
+
+To exercise a real model locally, set `NOTE_TAKER_WHISPER_MODEL` to an existing GGML/GGUF model
+path and run `cargo test --features local-ai`. No model path is read or model context initialized
+when the feature is absent or the environment variable is unset.

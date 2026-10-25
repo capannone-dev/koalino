@@ -117,3 +117,11 @@ SQLite. Node verification is intentionally delegated to `web-ci.yml` because the
 lacks Node. The new assignment API resolves clips through `NoteRepository` and invokes
 `VoiceIdentityManager`, keeping raw audio and embeddings outside HTTP responses.
 
+Issue #20 adds an opt-in `ai/local_whisper_cpp.rs` adapter using the optional `whisper-rs`
+whisper.cpp binding. The default Cargo feature set has no native model dependency, so `make
+rust-test` continues to use only mocks. `LocalWhisperCppTranscriptionEngine` owns both native
+context and an adapter-local source of normalized 16 kHz mono PCM keyed by `AudioRecording`; it
+implements only `TranscriptionEngine` and returns portable `Transcript`/`TranscriptionError`
+values. A feature-gated contract test runs real local inference only when both `local-ai` and
+`NOTE_TAKER_WHISPER_MODEL` are explicitly set; no model is downloaded or initialized by default.
+
