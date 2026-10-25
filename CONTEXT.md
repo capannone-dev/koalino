@@ -51,3 +51,12 @@ only that port, `VoiceIdentityMatcher`, and `NoteRepository`: strong matches are
 identity links, while weak and absent matches create UUID-keyed `UnassignedVoiceClip` records for
 manual review. Unit tests use hardcoded diarization segments and mocked matcher/repository ports;
 no ML model or dependency is initialized. Temporary clip bytes and embeddings are never logged.
+
+Issue #11 adds the Voice Gallery FFI/UI boundary. `UnassignedVoiceClip` now retains the derived
+segment embedding and optional weak candidate so confirmation can be deferred until user review;
+these sensitive values stay in Rust/SQLite. `note_taker_get_unassigned_clips` materializes each
+temporary clip in a configured local review directory and returns JSON metadata plus its absolute
+file path. Flutter uses `audioplayers` to open that path directly. `VoiceGalleryController` is a
+Riverpod-provided, bridge-injected controller; its widget tests use a fake bridge and do not load
+the native library. Confirmation and creation commands call the existing `VoiceIdentityManager`,
+not Flutter-side matching logic.

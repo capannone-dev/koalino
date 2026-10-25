@@ -68,6 +68,9 @@ impl SqliteNoteRepository {
                     start_time_ms INTEGER NOT NULL,
                     end_time_ms INTEGER NOT NULL,
                     audio_bytes BLOB NOT NULL,
+                    derived_embedding BLOB NOT NULL DEFAULT X'',
+                    weak_match_identity_id TEXT,
+                    weak_match_confidence_score REAL,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
                 );",
             )
@@ -203,9 +206,9 @@ impl NoteRepository for SqliteNoteRepository {
     /// Side effects: Stores temporary review audio without logging its contents.
     fn save_unassigned_clip(&self, clip: UnassignedVoiceClip) -> Result<(), StorageError> {
         let inserted_row_count = self.connection.execute(
-            "INSERT INTO unassigned_voice_clips (clip_id, meeting_id, start_time_ms, end_time_ms, audio_bytes)
-             SELECT ?1, ?2, ?3, ?4, ?5 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
-            params![clip.clip_id().to_string(), clip.meeting_id().as_str(), clip.start_time_ms(), clip.end_time_ms(), clip.audio_bytes()],
+            "INSERT INTO unassigned_voice_clips (clip_id, meeting_id, start_time_ms, end_time_ms, audio_bytes, derived_embedding, weak_match_identity_id, weak_match_confidence_score)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
+            params![clip.clip_id().to_string(), clip.meeting_id().as_str(), clip.start_time_ms(), clip.end_time_ms(), clip.audio_bytes(), encode_embedding(clip.derived_embedding()), clip.weak_match_candidate().map(|candidate| candidate.identity_id().to_string()), clip.weak_match_candidate().map(|candidate| candidate.confidence_score())],
         ).map_err(|error| sqlite_error("unable to save unassigned voice clip", error))?;
         ensure_meeting_was_updated(inserted_row_count, clip.meeting_id())?;
         self.log_operation("save_unassigned_clip", clip.meeting_id());
@@ -223,7 +226,7 @@ impl NoteRepository for SqliteNoteRepository {
     ) -> Result<Vec<UnassignedVoiceClip>, StorageError> {
         self.load_crdt_document(meeting_id)?;
         let mut statement = self.connection.prepare(
-            "SELECT clip_id, start_time_ms, end_time_ms, audio_bytes FROM unassigned_voice_clips WHERE meeting_id = ?1 ORDER BY rowid",
+            "SELECT clip_id, start_time_ms, end_time_ms, audio_bytes, derived_embedding, weak_match_identity_id, weak_match_confidence_score FROM unassigned_voice_clips WHERE meeting_id = ?1 ORDER BY rowid",
         ).map_err(|error| sqlite_error("unable to prepare unassigned voice clip query", error))?;
         let rows = statement
             .query_map(params![meeting_id.as_str()], |row| {
@@ -232,28 +235,91 @@ impl NoteRepository for SqliteNoteRepository {
                     row.get::<_, u64>(1)?,
                     row.get::<_, u64>(2)?,
                     row.get::<_, Vec<u8>>(3)?,
+                    row.get::<_, Vec<u8>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<f32>>(6)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to load unassigned voice clips", error))?;
         let mut clips = Vec::new();
         for row in rows {
-            let (clip_id, start_time_ms, end_time_ms, audio_bytes) =
+            let (
+                clip_id,
+                start_time_ms,
+                end_time_ms,
+                audio_bytes,
+                serialized_embedding,
+                weak_match_identity_id,
+                weak_match_confidence_score,
+            ) =
                 row.map_err(|error| sqlite_error("unable to decode unassigned voice clip", error))?;
             let parsed_clip_id =
                 uuid::Uuid::parse_str(&clip_id).map_err(|error| StorageError::Rejected {
                     reason: format!("stored unassigned voice clip has an invalid UUID: {error}"),
                 })?;
-            clips.push(UnassignedVoiceClip::new(
+            let weak_match_candidate = match (weak_match_identity_id, weak_match_confidence_score) {
+                (Some(identity_id), Some(confidence_score)) => {
+                    Some(crate::domain::models::WeakVoiceMatchCandidate::new(
+                        uuid::Uuid::parse_str(&identity_id).map_err(|error| {
+                            StorageError::Rejected {
+                                reason: format!(
+                                    "stored weak voice match has an invalid UUID: {error}"
+                                ),
+                            }
+                        })?,
+                        confidence_score,
+                    ))
+                }
+                (None, None) => None,
+                _ => {
+                    return Err(StorageError::Rejected {
+                        reason: String::from("stored weak voice match is incomplete"),
+                    });
+                }
+            };
+            clips.push(UnassignedVoiceClip::with_review_context(
                 parsed_clip_id,
                 meeting_id.clone(),
                 start_time_ms,
                 end_time_ms,
                 audio_bytes,
+                decode_embedding(&serialized_embedding)?,
+                weak_match_candidate,
             ));
         }
         self.log_operation("get_unassigned_clips", meeting_id);
         Ok(clips)
     }
+}
+
+/// Serializes derived floating-point features without exposing them outside the storage adapter.
+///
+/// Inputs: `embedding` contains model-derived values only.
+/// Outputs: Native-endian bytes for local SQLite persistence.
+/// Side effects: Allocates a byte buffer; never logs biometric data.
+fn encode_embedding(embedding: &[f32]) -> Vec<u8> {
+    embedding
+        .iter()
+        .flat_map(|value| value.to_le_bytes())
+        .collect()
+}
+
+/// Decodes a locally persisted embedding while rejecting malformed byte lengths.
+///
+/// Inputs: `serialized_embedding` contains adapter-owned SQLite BLOB data.
+/// Outputs: Derived dimensions or a portable storage rejection.
+/// Side effects: Allocates the returned vector; never logs biometric data.
+fn decode_embedding(serialized_embedding: &[u8]) -> Result<Vec<f32>, StorageError> {
+    let remainder = serialized_embedding.len() % std::mem::size_of::<f32>();
+    if remainder != 0 {
+        return Err(StorageError::Rejected {
+            reason: String::from("stored voice embedding has an invalid byte length"),
+        });
+    }
+    Ok(serialized_embedding
+        .chunks_exact(std::mem::size_of::<f32>())
+        .map(|bytes| f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+        .collect())
 }
 
 /// Converts a SQLite error into the domain-neutral error published by the storage port.

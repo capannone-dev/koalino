@@ -516,14 +516,55 @@ pub enum VoiceMatchResult {
     NoMatch,
 }
 
+/// Retains the candidate metadata needed to safely confirm a deferred weak match.
+#[derive(Clone, Debug, PartialEq)]
+pub struct WeakVoiceMatchCandidate {
+    identity_id: Uuid,
+    confidence_score: f32,
+}
+
+impl WeakVoiceMatchCandidate {
+    /// Creates a weak candidate returned by the existing identity-match policy.
+    ///
+    /// Inputs: `identity_id` identifies the candidate and `confidence_score` is the adapter score.
+    /// Outputs: Immutable metadata that contains no embedding or raw audio.
+    /// Side effects: None.
+    pub fn new(identity_id: Uuid, confidence_score: f32) -> Self {
+        Self {
+            identity_id,
+            confidence_score,
+        }
+    }
+
+    /// Returns the candidate identity UUID.
+    ///
+    /// Inputs: None.
+    /// Outputs: The suggested identity by value.
+    /// Side effects: None.
+    pub fn identity_id(&self) -> Uuid {
+        self.identity_id
+    }
+
+    /// Returns the adapter-provided weak-match confidence.
+    ///
+    /// Inputs: None.
+    /// Outputs: The score in the matching adapter's normalized range.
+    /// Side effects: None.
+    pub fn confidence_score(&self) -> f32 {
+        self.confidence_score
+    }
+}
+
 /// Retains a temporary, reviewable audio payload for a diarized segment without exposing storage details.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct UnassignedVoiceClip {
     clip_id: Uuid,
     meeting_id: MeetingId,
     start_time_ms: u64,
     end_time_ms: u64,
     audio_bytes: Vec<u8>,
+    derived_embedding: Vec<f32>,
+    weak_match_candidate: Option<WeakVoiceMatchCandidate>,
 }
 
 impl UnassignedVoiceClip {
@@ -546,6 +587,34 @@ impl UnassignedVoiceClip {
             start_time_ms,
             end_time_ms,
             audio_bytes,
+            derived_embedding: Vec::new(),
+            weak_match_candidate: None,
+        }
+    }
+
+    /// Creates a review clip retaining derived confirmation context from diarization.
+    ///
+    /// Inputs: `derived_embedding` is a model feature vector and `weak_match_candidate` is the
+    /// optional policy result; neither value may be logged or exposed through FFI.
+    /// Outputs: A clip that permits later application-level assignment or confirmation.
+    /// Side effects: Takes ownership of temporary audio and sensitive derived embedding data.
+    pub fn with_review_context(
+        clip_id: Uuid,
+        meeting_id: MeetingId,
+        start_time_ms: u64,
+        end_time_ms: u64,
+        audio_bytes: Vec<u8>,
+        derived_embedding: Vec<f32>,
+        weak_match_candidate: Option<WeakVoiceMatchCandidate>,
+    ) -> Self {
+        Self {
+            clip_id,
+            meeting_id,
+            start_time_ms,
+            end_time_ms,
+            audio_bytes,
+            derived_embedding,
+            weak_match_candidate,
         }
     }
 
@@ -592,6 +661,24 @@ impl UnassignedVoiceClip {
     /// Side effects: None; callers must not log the returned bytes.
     pub fn audio_bytes(&self) -> &[u8] {
         &self.audio_bytes
+    }
+
+    /// Borrows the derived biometric embedding retained solely for user-confirmed assignment.
+    ///
+    /// Inputs: None.
+    /// Outputs: Model-derived dimensions or an empty slice for legacy clips.
+    /// Side effects: None; callers must never log this biometric value.
+    pub fn derived_embedding(&self) -> &[f32] {
+        &self.derived_embedding
+    }
+
+    /// Borrows weak-match candidate metadata, if diarization produced a candidate.
+    ///
+    /// Inputs: None.
+    /// Outputs: Candidate UUID and score without biometric vector data.
+    /// Side effects: None.
+    pub fn weak_match_candidate(&self) -> Option<&WeakVoiceMatchCandidate> {
+        self.weak_match_candidate.as_ref()
     }
 }
 

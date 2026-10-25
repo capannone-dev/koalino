@@ -33,3 +33,20 @@ code receive that interface and never access Rust structs.
 
 Neither function accepts raw audio, voice embeddings, P2P credentials, Rust ownership pointers,
 or serialized domain structures.
+
+### Voice Gallery C ABI
+
+- `char *note_taker_get_unassigned_clips(const char *meeting_id)` returns an owned UTF-8 JSON
+  array or `NULL` on invalid input or failure. Each object contains `clip_id`, `start_time_ms`,
+  `end_time_ms`, `local_file_path`, and optionally `weak_match` with `identity_id` and
+  `confidence_score`. `local_file_path` is absolute; raw audio bytes and embeddings never cross
+  FFI. Call `note_taker_free_string` exactly once on a non-null result.
+- `int32_t note_taker_confirm_weak_match(const char *clip_id, const char *identity_id)` validates
+  the loaded local review clip and delegates derived-vector storage to `VoiceIdentityManager`.
+- `int32_t note_taker_assign_new_identity(const char *clip_id, const char *display_name)` validates
+  its strings and delegates first-variant creation to `VoiceIdentityManager` using the review
+  clip's retained derived embedding.
+
+The Rust bridge materializes review audio in `NOTE_TAKER_REVIEW_CLIP_DIR` (default
+`voice_review_clips`) and the Flutter audio package opens the returned file path. The ABI never
+streams audio bytes to Dart.

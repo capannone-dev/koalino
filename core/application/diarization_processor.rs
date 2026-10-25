@@ -122,16 +122,29 @@ where
                         speaker_segment.end_time_ms(),
                     ))
                 }
-                VoiceMatchResult::WeakMatch(_, _) | VoiceMatchResult::NoMatch => {
+                weak_match_result @ (VoiceMatchResult::WeakMatch(_, _)
+                | VoiceMatchResult::NoMatch) => {
                     let clip_id = Uuid::new_v4();
-                    self.note_repository
-                        .save_unassigned_clip(UnassignedVoiceClip::new(
+                    self.note_repository.save_unassigned_clip(
+                        UnassignedVoiceClip::with_review_context(
                             clip_id,
                             meeting_id.clone(),
                             speaker_segment.start_time_ms(),
                             speaker_segment.end_time_ms(),
                             audio_bytes.to_vec(),
-                        ))?;
+                            speaker_segment.embedding().to_vec(),
+                            match weak_match_result {
+                                VoiceMatchResult::WeakMatch(identity_id, confidence_score) => {
+                                    Some(crate::domain::models::WeakVoiceMatchCandidate::new(
+                                        identity_id,
+                                        confidence_score,
+                                    ))
+                                }
+                                VoiceMatchResult::NoMatch => None,
+                                VoiceMatchResult::StrongMatch(_) => None,
+                            },
+                        ),
+                    )?;
                     unassigned_clip_ids.push(clip_id);
                     tracing::warn!(meeting_id = %meeting_id.as_str(), clip_id = %clip_id, "Unassigned voice clip preserved for manual review");
                 }

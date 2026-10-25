@@ -33,6 +33,7 @@
 | Issue | Status | Scope |
 | --- | --- | --- |
 | #5 Initialize Flutter project and Rust FFI bridge | Ready for review | Material 3 recording start UI, bridge-injected widget tests, Dart FFI adapter, and C-compatible Rust recording/log-level commands. |
+| #11 Voice Gallery, unassigned playback, and weak match prompting | Ready for review | JSON metadata/path FFI, local native playback, Riverpod controller, Material 3 review screen, and fake-bridge widget tests. |
 
 ## WP6: P2P Network Layer
 

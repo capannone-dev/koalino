@@ -102,3 +102,15 @@
 - `DiarizationProcessor` returns only strong segment-to-identity links. Weak and absent outcomes
   create `UnassignedVoiceClip` records containing an opaque temporary audio payload and range for
   later user review; structured logs contain only safe meeting and clip UUID metadata.
+
+## 2026-10-25 — Issue #11 Voice Gallery FFI and local review playback
+
+- Flutter receives an owned JSON array containing review-clip metadata, optional weak candidate,
+  and absolute local paths only. Raw audio and biometric vectors never cross the FFI boundary.
+- The Rust FFI facade materializes temporary local review files, delegates retrieval to
+  `NoteRepository`, and delegates confirmation/new variant storage to `VoiceIdentityManager`.
+- Deferred review clips persist the segment's derived embedding and weak candidate in SQLite so
+  confirmation uses the original application-policy context instead of recomputing similarity in
+  Flutter. The data is never logged.
+- `VoiceGalleryController` is provided through Riverpod while widgets continue to depend on an
+  injectable Dart bridge. `audioplayers` opens only the returned local file path.
