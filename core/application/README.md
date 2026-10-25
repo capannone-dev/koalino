@@ -14,3 +14,10 @@ message through `MeetingCrdtService`, saves the merged document through `NoteRep
 the next acknowledgement when required. After a locally persisted edit, `notify_local_change()`
 broadcasts a fresh encrypted `SyncMessage`. The manager uses only `P2pNetwork` and
 `NoteRepository`, so its tests use mocks and never open sockets or SQLite files.
+
+`voice_identity_manager.rs` depends only on `VoiceVectorDB`, `VoiceEmbedding`, and
+`VoiceMatchResult`. The storage adapter calculates similarity; the manager classifies the best
+returned candidate as strong only above `0.80`, weak from `0.50` through `0.80` inclusive, and no
+match below `0.50`. A confirmed weak match creates a UUID-distinct embedding variant under the
+user-confirmed existing identity, allowing microphone and room changes to be learned without
+changing the identity.

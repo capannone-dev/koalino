@@ -11,3 +11,7 @@ without starting libp2p or opening sockets.
 `broadcast_encrypted` provides application-level fan-out of opaque protocol envelopes only through
 authenticated encrypted peers. It never gives application services access to libp2p topics,
 connections, or socket handles.
+
+`VoiceVectorDB` accepts and returns `VoiceEmbedding` values only. Its adapter owns all vector
+similarity calculations and biometric persistence details, while the application receives just
+candidate scores through the port.

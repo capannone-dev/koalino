@@ -14,3 +14,7 @@ mod network_events_tests;
 pub mod sync_manager;
 #[cfg(test)]
 mod sync_manager_tests;
+/// Classifies voice embeddings and records user-confirmed signature variants.
+pub mod voice_identity_manager;
+#[cfg(test)]
+mod voice_identity_manager_tests;

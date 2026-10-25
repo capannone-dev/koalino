@@ -14,3 +14,8 @@ The `meetings` table stores one offline-first meeting per `meeting_id`:
 - `automerge_document`: non-null serialized Automerge document BLOB.
 
 The adapter rejects writes to unknown meetings rather than silently creating orphan notes. It emits structured `tracing` events with operation, device, and meeting identifiers only—never transcript content or CRDT bytes.
+
+`in_memory_voice_vector_db.rs` implements `VoiceVectorDB` with a process-local collection and a
+simple cosine-similarity loop. It is suitable for deterministic unit tests and development only;
+it does not provide persistence or AES-256-GCM encryption and must never be selected as the
+production biometric store.

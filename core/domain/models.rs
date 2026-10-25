@@ -1,5 +1,7 @@
 //! Defines immutable, strongly typed business values for meetings and recordings.
 
+use uuid::Uuid;
+
 /// Describes the lifecycle of an audio-capture session without exposing a platform stream.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AudioState {
@@ -410,6 +412,108 @@ impl AudioRecording {
 pub struct Transcript {
     meeting_id: MeetingId,
     content: String,
+}
+
+/// Identifies a person whose voice signatures may have multiple acoustic variants.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SpeakerIdentity {
+    identity_id: Uuid,
+    display_name: String,
+}
+
+impl SpeakerIdentity {
+    /// Creates a speaker identity with an application-generated UUID and user-visible name.
+    ///
+    /// Inputs: `identity_id` must uniquely identify the person across replicas; `display_name` is
+    /// a user-provided label and must not be treated as an authentication credential.
+    /// Outputs: An immutable speaker identity without biometric data.
+    /// Side effects: Takes ownership of the display name; it does not persist or log it.
+    pub fn new(identity_id: Uuid, display_name: impl Into<String>) -> Self {
+        Self {
+            identity_id,
+            display_name: display_name.into(),
+        }
+    }
+
+    /// Returns the stable UUID associated with this person.
+    ///
+    /// Inputs: None.
+    /// Outputs: The identity UUID by value.
+    /// Side effects: None.
+    pub fn identity_id(&self) -> Uuid {
+        self.identity_id
+    }
+
+    /// Borrows the user-visible speaker label.
+    ///
+    /// Inputs: None.
+    /// Outputs: The display name without copying it.
+    /// Side effects: None.
+    pub fn display_name(&self) -> &str {
+        &self.display_name
+    }
+}
+
+/// Carries one derived voice-signature variant without retaining raw audio.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VoiceEmbedding {
+    identity_id: Uuid,
+    variant_id: Uuid,
+    vector: Vec<f32>,
+}
+
+impl VoiceEmbedding {
+    /// Creates a derived biometric signature variant for an existing speaker identity.
+    ///
+    /// Inputs: `identity_id` owns the variant; `variant_id` uniquely identifies this acoustic
+    /// environment; `vector` contains model-derived numeric features and never raw audio.
+    /// Outputs: An immutable embedding value suitable only for the voice-vector storage port.
+    /// Side effects: Takes ownership of the biometric vector; callers must not log the value.
+    pub fn new(identity_id: Uuid, variant_id: Uuid, vector: Vec<f32>) -> Self {
+        Self {
+            identity_id,
+            variant_id,
+            vector,
+        }
+    }
+
+    /// Returns the UUID of the identity that owns this signature variant.
+    ///
+    /// Inputs: None.
+    /// Outputs: The owning identity UUID by value.
+    /// Side effects: None.
+    pub fn identity_id(&self) -> Uuid {
+        self.identity_id
+    }
+
+    /// Returns the UUID that distinguishes this acoustic signature from sibling variants.
+    ///
+    /// Inputs: None.
+    /// Outputs: The variant UUID by value.
+    /// Side effects: None.
+    pub fn variant_id(&self) -> Uuid {
+        self.variant_id
+    }
+
+    /// Borrows the model-derived vector without copying sensitive biometric values.
+    ///
+    /// Inputs: None.
+    /// Outputs: The derived embedding dimensions.
+    /// Side effects: None.
+    pub fn vector(&self) -> &[f32] {
+        &self.vector
+    }
+}
+
+/// Reports the confidence category returned after a voice-vector similarity search.
+#[derive(Clone, Debug, PartialEq)]
+pub enum VoiceMatchResult {
+    /// A high-confidence candidate can be attributed without user confirmation.
+    StrongMatch(Uuid),
+    /// A plausible candidate requires user confirmation and reports its adapter-provided score.
+    WeakMatch(Uuid, f32),
+    /// No candidate is sufficiently similar to attribute safely.
+    NoMatch,
 }
 
 impl Transcript {

@@ -36,3 +36,11 @@ request-response protocol with bounded length-prefixed opaque payloads. The adap
 authenticated connections and translates inbound requests to `NetworkEvent::MessageReceived`; no
 libp2p type crosses the application boundary. Its memory-only integration test proves directed and
 broadcast payloads traverse Noise and trigger the portable event without binding TCP or UDP.
+
+Issue #9 adds `SpeakerIdentity`, UUID-keyed `VoiceEmbedding` variants, and `VoiceMatchResult`.
+`VoiceIdentityManager` relies only on the `VoiceVectorDB` port: it never computes cosine
+similarity. It classifies adapter-returned scores as strong above 0.80, weak from 0.50 through 0.80
+inclusive, and no match below 0.50. User confirmation of a weak match adds a fresh variant UUID to
+the selected identity. `InMemoryVoiceVectorDB` is a dependency-light cosine-search adapter for
+tests and development; it is not persistent or encrypted and must be replaced before production
+biometric storage.

@@ -8,3 +8,5 @@ pub mod audio;
 pub mod network;
 /// Declares contracts for transcript and voice-vector persistence.
 pub mod storage;
+/// Declares storage and similarity-search capabilities for derived voice embeddings.
+pub mod voice;

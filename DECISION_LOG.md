@@ -78,3 +78,15 @@
   peer and retain the existing offline-first application responsibility for later sync.
 - An adapter-local test constructs two Noise/Yamux swarms over `MemoryTransport` and verifies both
   directed and broadcast payloads arrive as portable message events without binding TCP or UDP.
+
+## 2026-10-25 — Issue #9 voice identity matching policy
+
+- Added UUID-keyed `SpeakerIdentity` and `VoiceEmbedding` variants. Voice embeddings contain only
+  model-derived vectors; raw audio remains outside the domain and port contract.
+- Defined `VoiceVectorDB` as the sole similarity-search boundary. The application receives scored
+  candidates but never knows or implements cosine similarity.
+- `VoiceIdentityManager` treats scores above 0.80 as strong, scores from 0.50 through 0.80 as weak
+  confirmation candidates, and lower or absent scores as no match. Confirmed weak matches create a
+  fresh signature variant UUID under the selected identity.
+- Added `InMemoryVoiceVectorDB` with a simple cosine loop solely for deterministic tests and local
+  development. It has no persistence or at-rest encryption and must not become the production store.

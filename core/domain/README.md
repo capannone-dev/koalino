@@ -2,4 +2,7 @@
 
 # Domain layer
 
-Domain types encode meetings, recordings, transcripts, device identities, and domain-specific failures. It must never import ports, application services, or adapters.
+Domain types encode meetings, recordings, transcripts, device identities, voice identities, and domain-specific failures. It must never import ports, application services, or adapters.
+
+Voice-signature values retain only UUID metadata and model-derived floating-point embeddings. They
+never retain raw audio; persistence and similarity calculation remain outside this layer.
