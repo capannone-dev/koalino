@@ -128,6 +128,19 @@
 - SQLite stores telemetry in dedicated tables and aggregation runs in SQL. Tests use in-memory
   SQLite and deterministic mock engines only.
 
+## 2026-10-25 — Issue #15 external bridge guaranteed identity
+
+- Kept provider integration outside the core through `MeetingBridge`; its standard-library
+  receivers publish portable `ExternalMediaChunk` and `SlideCapture` values only. No Graph, Azure,
+  bot SDK, token, or network type crosses the hexagonal boundary.
+- Stable `ExternalParticipant.external_id` is the sole durable mapping key. `TeamsIdentityMapper`
+  creates a UUID local `SpeakerIdentity` named from `display_name` only when the mapping is unseen;
+  existing mappings preserve their local name.
+- Isolated external-speaker audio bypasses probabilistic diarization and weak-match review. The
+  processor derives a vector through a port and stores a new `VoiceEmbedding` variant automatically
+  before forwarding media to the transcription port. All behavior is covered by mocked channels,
+  mapping storage, vector storage, transcription, and attachment workflow ports.
+
 ## 2026-10-25 — Issue #13 attachment metadata and meeting linking
 
 - Added `MetadataExtractor` as the sole attachment timestamp boundary. `AttachmentManager` sees

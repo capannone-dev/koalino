@@ -29,6 +29,7 @@
 | #10 DiarizationEngine port and unassigned clip preservation | Ready for review | Async segment/embedding port, mock-only processor orchestration, strong attribution links, and temporary weak/unmatched review clips. |
 | #12 AI task metrics, device load, and performance statistics | Ready for review | Telemetry domain/port, dispatcher timing wrapper, in-memory SQLite persistence and aggregation coverage. |
 | #13 Attachment domain, metadata extraction, and smart meeting linking | Ready for review | Attachment/time-window domain values, metadata and attachment ports, mock-only midpoint confidence ranking, and deterministic suggestion ordering. |
+| #15 Teams Bridge port, identity mapping, and auto-enrollment | Ready for review | Provider-neutral external media/slide ports, stable-ID local identity mapping, display-name auto-creation, automatic voice variants, and mock-only TDD coverage. |
 
 ## WP5: Flutter UI & FFI
 

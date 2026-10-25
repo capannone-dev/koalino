@@ -5,10 +5,12 @@
 ├── ports/            # INTERFACES (Traits)
 │   ├── ai.rs         # trait TranscriptionEngine, trait DiarizationEngine
 │   ├── network.rs    # trait P2PNetwork, trait PeerDiscovery
+│   ├── external_bridge.rs # provider-neutral meeting media and identity contracts
 │   └── storage.rs    # trait NoteRepository, trait VoiceVectorDB
 ├── application/      # USE CASES / ORCHESTRATION
 │   ├── meeting_recorder.rs # Orchestrates audio -> AI -> storage
-│   └── compute_router.rs   # Implements the Dispatcher pattern
+│   ├── compute_router.rs   # Implements the Dispatcher pattern
+│   └── teams_processor.rs  # Maps guaranteed external identities and auto-enrolls variants
 ├── adapters/         # IMPLEMENTATIONS (The "Plumbing")
 │   ├── ai/           # whisper_adapter.rs, openai_adapter.rs
 │   ├── network/      # libp2p_adapter.rs

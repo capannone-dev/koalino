@@ -49,3 +49,19 @@ scores `1.0`, either edge scores `0.0`, and intermediate times decay linearly. R
 descending score with meeting ID as a deterministic tie-breaker. The manager logs only processing and
 suggestion counts, never paths or file contents, and returned candidates remain subject to user
 confirmation.
+
+## External meeting bridge and guaranteed identity
+
+`TeamsProcessor` is provider-neutral application orchestration for external meeting bridges. It
+subscribes only through `MeetingBridge`, passes each isolated `ExternalMediaChunk` to an
+`IdentityMapper`, derives a voice vector through `VoiceEmbeddingExtractor`, stores a fresh variant
+through `VoiceVectorDB`, and forwards the chunk to `TranscriptionEngine`. It does not import or
+name a Microsoft, Graph, Azure, or bot SDK.
+
+`TeamsIdentityMapper` treats `ExternalParticipant.external_id` as the durable mapping key. An
+unseen key creates a new UUID `SpeakerIdentity` whose initial name is the participant's
+`display_name`; an existing key returns its existing local identity unchanged. Because an external
+bridge guarantees one participant per audio stream, this flow bypasses the local
+diarization/weak-match/manual-confirmation path and enrolls a new embedding variant automatically.
+`SlideCapture` values route only through `AttachmentWorkflow`, preserving an adapter boundary for
+the attachment manager and keeping image bytes out of logs.

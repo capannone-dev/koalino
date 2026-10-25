@@ -27,3 +27,8 @@ snapshot, while `AggregatedStats` exposes only task count, total duration, and a
 timestamp, and acquisition-device metadata without opening the file. `MeetingWindow` describes a
 recorded meeting interval returned by storage. `MeetingSuggestion` is a presentation-safe candidate
 with a normalized midpoint-proximity confidence score; file-format parsing remains outside domain.
+
+`ExternalParticipant` separates a provider-stable `external_id` from its mutable UI
+`display_name`, with optional email metadata. `ExternalMediaChunk` combines that guaranteed
+participant identity with opaque audio bytes, while `SlideCapture` carries opaque screen-frame
+bytes and an external meeting UUID. None of these values import a provider SDK or log raw media.

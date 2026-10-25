@@ -864,6 +864,183 @@ impl SpeakerIdentity {
     }
 }
 
+/// Identifies a participant supplied by an external meeting integration without provider coupling.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExternalParticipant {
+    external_id: String,
+    display_name: String,
+    email: Option<String>,
+}
+
+impl ExternalParticipant {
+    /// Creates externally supplied identity metadata for stable local mapping and UI naming.
+    ///
+    /// Inputs: `external_id` must be provider-stable; `display_name` is the initial UI label;
+    /// `email` is optional contact metadata and must not be logged by default.
+    /// Outputs: An immutable external participant value with no authentication credential.
+    /// Side effects: Takes ownership of identifier and display metadata only.
+    pub fn new(
+        external_id: impl Into<String>,
+        display_name: impl Into<String>,
+        email: Option<String>,
+    ) -> Self {
+        Self {
+            external_id: external_id.into(),
+            display_name: display_name.into(),
+            email,
+        }
+    }
+
+    /// Borrows the provider-stable identifier used for durable external-to-local mappings.
+    ///
+    /// Inputs: None.
+    /// Outputs: A non-secret stable external identifier.
+    /// Side effects: None.
+    pub fn external_id(&self) -> &str {
+        &self.external_id
+    }
+
+    /// Borrows the user-visible participant name used when auto-creating a local identity.
+    ///
+    /// Inputs: None.
+    /// Outputs: The integration-provided display name.
+    /// Side effects: None.
+    pub fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
+    /// Borrows optional contact metadata without treating it as an identity key.
+    ///
+    /// Inputs: None.
+    /// Outputs: An optional integration-provided email address.
+    /// Side effects: None.
+    pub fn email(&self) -> Option<&str> {
+        self.email.as_deref()
+    }
+}
+
+/// Carries an isolated external-speaker audio buffer with guaranteed participant metadata.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExternalMediaChunk {
+    external_participant: ExternalParticipant,
+    audio_bytes: Vec<u8>,
+    timestamp_ms: u64,
+}
+
+impl ExternalMediaChunk {
+    /// Creates one opaque external audio chunk from a bridge subscription.
+    ///
+    /// Inputs: `external_participant` identifies the isolated speaker; `audio_bytes` must never be
+    /// logged; `timestamp_ms` is relative to the external meeting stream.
+    /// Outputs: An immutable bridge-neutral media value.
+    /// Side effects: Takes ownership of raw audio bytes without persisting them.
+    pub fn new(
+        external_participant: ExternalParticipant,
+        audio_bytes: Vec<u8>,
+        timestamp_ms: u64,
+    ) -> Self {
+        Self {
+            external_participant,
+            audio_bytes,
+            timestamp_ms,
+        }
+    }
+
+    /// Borrows the guaranteed participant metadata associated with this isolated audio stream.
+    ///
+    /// Inputs: None.
+    /// Outputs: The immutable external participant.
+    /// Side effects: None.
+    pub fn external_participant(&self) -> &ExternalParticipant {
+        &self.external_participant
+    }
+
+    /// Borrows opaque audio bytes for approved AI ports only.
+    ///
+    /// Inputs: None.
+    /// Outputs: Raw bridge-provided audio that callers must never log.
+    /// Side effects: None.
+    pub fn audio_bytes(&self) -> &[u8] {
+        &self.audio_bytes
+    }
+
+    /// Returns the bridge timestamp for deterministic ordering and recording metadata.
+    ///
+    /// Inputs: None.
+    /// Outputs: Milliseconds relative to the bridge meeting stream.
+    /// Side effects: None.
+    pub fn timestamp_ms(&self) -> u64 {
+        self.timestamp_ms
+    }
+}
+
+/// Carries an external screen-share frame for attachment workflow processing.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SlideCapture {
+    meeting_id: Uuid,
+    image_bytes: Vec<u8>,
+    timestamp_ms: u64,
+    source: String,
+}
+
+impl SlideCapture {
+    /// Creates one opaque external slide frame associated with a meeting UUID.
+    ///
+    /// Inputs: `meeting_id` identifies the external meeting; `image_bytes` are sensitive capture
+    /// data; `timestamp_ms` orders the capture; `source` identifies the adapter-neutral origin.
+    /// Outputs: An immutable slide-capture value.
+    /// Side effects: Takes ownership of image bytes without logging or persisting them.
+    pub fn new(
+        meeting_id: Uuid,
+        image_bytes: Vec<u8>,
+        timestamp_ms: u64,
+        source: impl Into<String>,
+    ) -> Self {
+        Self {
+            meeting_id,
+            image_bytes,
+            timestamp_ms,
+            source: source.into(),
+        }
+    }
+
+    /// Returns the source meeting UUID from the external bridge.
+    ///
+    /// Inputs: None.
+    /// Outputs: The meeting UUID.
+    /// Side effects: None.
+    pub fn meeting_id(&self) -> Uuid {
+        self.meeting_id
+    }
+
+    /// Borrows image bytes for the attachment workflow without copying them.
+    ///
+    /// Inputs: None.
+    /// Outputs: Opaque frame bytes that callers must never log.
+    /// Side effects: None.
+    pub fn image_bytes(&self) -> &[u8] {
+        &self.image_bytes
+    }
+
+    /// Returns the source-relative capture timestamp.
+    ///
+    /// Inputs: None.
+    /// Outputs: Milliseconds relative to the external meeting stream.
+    /// Side effects: None.
+    pub fn timestamp_ms(&self) -> u64 {
+        self.timestamp_ms
+    }
+
+    /// Borrows the adapter-neutral source label.
+    ///
+    /// Inputs: None.
+    /// Outputs: The source label supplied by the bridge adapter.
+    /// Side effects: None.
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+}
+
 /// Carries one derived voice-signature variant without retaining raw audio.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VoiceEmbedding {

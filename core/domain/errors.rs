@@ -66,6 +66,20 @@ pub enum DiarizationError {
     },
 }
 
+/// Describes an adapter-neutral external meeting bridge operation that could not complete.
+#[derive(Debug, thiserror::Error)]
+pub enum ExternalBridgeError {
+    /// The configured bridge cannot currently subscribe to or deliver meeting data.
+    #[error("external meeting bridge is unavailable")]
+    Unavailable,
+    /// The bridge rejected media or metadata that fails portable validation.
+    #[error("external meeting data is invalid: {reason}")]
+    InvalidData {
+        /// A privacy-safe reason that excludes raw media and credentials.
+        reason: String,
+    },
+}
+
 /// Describes a persistence operation that could not complete.
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {

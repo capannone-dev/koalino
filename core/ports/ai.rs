@@ -2,7 +2,7 @@
 
 use crate::domain::{
     errors::{DiarizationError, TranscriptionError},
-    models::{AudioRecording, Transcript},
+    models::{AudioRecording, ExternalMediaChunk, Transcript},
 };
 
 /// Describes one time-bounded speaker region and its derived biometric representation.
@@ -67,6 +67,21 @@ pub trait TranscriptionEngine {
         &self,
         audio_recording: &AudioRecording,
     ) -> Result<Transcript, TranscriptionError>;
+
+    /// Transcribes one isolated external-media chunk while preserving the existing recording contract.
+    ///
+    /// Inputs: `media_chunk` carries opaque bridge audio; `audio_recording` identifies its local
+    /// meeting context. Both must remain free of provider SDK types.
+    /// Outputs: A meeting-associated transcript or a portable transcription error.
+    /// Side effects: Default behavior delegates recording-only transcription; external-aware
+    /// adapters override this method to consume `media_chunk.audio_bytes()` directly.
+    fn transcribe_external_media(
+        &self,
+        _media_chunk: &ExternalMediaChunk,
+        audio_recording: &AudioRecording,
+    ) -> Result<Transcript, TranscriptionError> {
+        self.transcribe(audio_recording)
+    }
 }
 
 /// Separates speaker segments and derives embeddings without exposing model implementation details.

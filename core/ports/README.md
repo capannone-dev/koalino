@@ -30,3 +30,10 @@ aggregation data without passing AI inputs, outputs, raw audio, transcript conte
 implementation. `NoteRepository::get_meetings_overlapping` returns only portable `MeetingWindow`
 values, and `AttachmentRepository` stores attachment metadata and links without ever reading file
 contents. This keeps EXIF, PDF, filesystem, and database details out of attachment orchestration.
+
+`external_bridge.rs` defines `MeetingBridge` for standard-library receivers of portable external
+media and slide values, never a provider SDK. `IdentityMapper` maps the stable
+`ExternalParticipant.external_id` to a local `SpeakerIdentity`, auto-creating it from
+`display_name` through `ExternalIdentityRepository` when needed. `VoiceEmbeddingExtractor` and
+`AttachmentWorkflow` keep isolated-audio enrollment and slide routing behind independently mocked
+ports.

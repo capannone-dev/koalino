@@ -22,6 +22,10 @@ mod network_events_tests;
 pub mod sync_manager;
 #[cfg(test)]
 mod sync_manager_tests;
+/// Coordinates external meeting bridge media with local identities and AI ports.
+pub mod teams_processor;
+#[cfg(test)]
+mod teams_processor_tests;
 /// Defines telemetry requirements before dispatcher and storage implementation.
 #[cfg(test)]
 mod telemetry_tests;
