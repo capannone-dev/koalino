@@ -31,6 +31,13 @@ pub trait P2pNetwork {
         payload: &[u8],
     ) -> Result<(), NetworkError>;
 
+    /// Publishes an opaque payload to every currently connected encrypted peer.
+    ///
+    /// Inputs: `payload` contains application-defined bytes safe only for encrypted transport.
+    /// Outputs: Success or a portable network error.
+    /// Side effects: An implementation broadcasts through authenticated libp2p connections.
+    fn broadcast_encrypted(&mut self, payload: &[u8]) -> Result<(), NetworkError>;
+
     /// Returns one already-observed portable network event without waiting for socket activity.
     ///
     /// Inputs: None.

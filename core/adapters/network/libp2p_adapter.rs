@@ -180,6 +180,17 @@ impl P2pNetwork for Libp2pNetworkAdapter {
         })
     }
 
+    /// Rejects broadcast transmission until a dedicated encrypted application protocol is configured.
+    ///
+    /// Inputs: `payload` contains opaque application bytes.
+    /// Outputs: A security-policy error because Issue #6 configures discovery and transport only.
+    /// Side effects: None; payload bytes are neither sent nor logged.
+    fn broadcast_encrypted(&mut self, _payload: &[u8]) -> Result<(), NetworkError> {
+        Err(NetworkError::SecurityPolicy {
+            reason: "an encrypted application payload protocol is not configured".to_owned(),
+        })
+    }
+
     /// Removes and returns one translated event already observed by the swarm driver.
     ///
     /// Inputs: None.

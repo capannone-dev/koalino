@@ -25,3 +25,12 @@ and `PeerDiscovery`; application code records reachability solely through those 
 use a mocked `P2pNetwork` and never instantiate the adapter, bind an address, or open TCP/UDP
 sockets. Payload transmission intentionally remains rejected until a future encrypted application
 protocol (for CRDT sync or manifests) is defined.
+
+The current sync application work adds a versioned `SyncMessage` envelope around Automerge sync
+bytes plus `SyncManager`, scoped to a single existing meeting document. It starts a peer-specific
+handshake on discovery, validates received envelopes, applies Automerge changes through
+`MeetingCrdtService`, and persists the result through `NoteRepository`. A local edit calls
+`notify_local_change()` to produce a fresh sync message for encrypted broadcast. Unit tests use
+mocked ports only. The libp2p adapter's payload protocol remains a separate infrastructure task:
+until it is configured, its `send_encrypted` and `broadcast_encrypted` methods reject data under
+the security policy rather than sending plaintext.

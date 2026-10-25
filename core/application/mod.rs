@@ -10,3 +10,7 @@ pub mod meeting_recorder;
 pub mod network_events;
 #[cfg(test)]
 mod network_events_tests;
+/// Coordinates Automerge sync messages through encrypted-network and storage ports.
+pub mod sync_manager;
+#[cfg(test)]
+mod sync_manager_tests;

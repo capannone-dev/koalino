@@ -1,6 +1,10 @@
 //! Coordinates Automerge meeting documents through the domain-neutral storage port.
 
-use automerge::{AutoCommit, ROOT, ReadDoc, ScalarValue, Value, transaction::Transactable};
+use automerge::{
+    AutoCommit, ROOT, ReadDoc, ScalarValue, Value,
+    sync::{self, SyncDoc},
+    transaction::Transactable,
+};
 
 use crate::{
     domain::{errors::StorageError, models::MeetingId},
@@ -73,6 +77,43 @@ where
             .map_err(|error| crdt_error("unable to merge remote CRDT document", error))?;
         self.note_repository
             .save_crdt_document(meeting_id, &local_document.save())
+    }
+
+    /// Generates one Automerge sync message for the current local meeting document.
+    ///
+    /// Inputs: `meeting_id` selects a stored document; `sync_state` tracks protocol state for one peer.
+    /// Outputs: An optional Automerge message or a portable storage error.
+    /// Side effects: Reads and deserializes persisted meeting state; updates the supplied sync state.
+    pub fn generate_sync_message(
+        &self,
+        meeting_id: &MeetingId,
+        sync_state: &mut sync::State,
+    ) -> Result<Option<sync::Message>, StorageError> {
+        let stored_document = self.note_repository.load_crdt_document(meeting_id)?;
+        let mut automerge_document = load_document(&stored_document)?;
+        Ok(automerge_document.sync().generate_sync_message(sync_state))
+    }
+
+    /// Applies one decoded Automerge sync message and persists the resulting meeting state.
+    ///
+    /// Inputs: `meeting_id` identifies an existing document; `sync_state` is per-peer protocol state;
+    /// `sync_message` is decoded from an authenticated peer's envelope.
+    /// Outputs: Success or a portable storage error when data cannot be merged or persisted.
+    /// Side effects: Reads, updates, serializes, and persists the local Automerge document.
+    pub fn apply_sync_message(
+        &self,
+        meeting_id: &MeetingId,
+        sync_state: &mut sync::State,
+        sync_message: sync::Message,
+    ) -> Result<(), StorageError> {
+        let stored_document = self.note_repository.load_crdt_document(meeting_id)?;
+        let mut automerge_document = load_document(&stored_document)?;
+        automerge_document
+            .sync()
+            .receive_sync_message(sync_state, sync_message)
+            .map_err(|error| crdt_error("unable to apply remote sync message", error))?;
+        self.note_repository
+            .save_crdt_document(meeting_id, &automerge_document.save())
     }
 
     /// Loads the root note text from an existing meeting document.

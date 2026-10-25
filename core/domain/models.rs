@@ -154,6 +154,149 @@ impl DeviceId {
     }
 }
 
+/// Carries one serialized Automerge sync-protocol message for a specific meeting document.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SyncMessage {
+    meeting_id: MeetingId,
+    automerge_sync_bytes: Vec<u8>,
+}
+
+impl SyncMessage {
+    /// Creates a sync envelope for one meeting document.
+    ///
+    /// Inputs: `meeting_id` identifies the target document and `automerge_sync_bytes` contains an
+    /// Automerge sync message encoded by the application CRDT service.
+    /// Outputs: A transport-neutral envelope ready for encrypted P2P transmission.
+    /// Side effects: Takes ownership of protocol bytes without inspecting or logging note content.
+    pub fn new(meeting_id: MeetingId, automerge_sync_bytes: Vec<u8>) -> Self {
+        Self {
+            meeting_id,
+            automerge_sync_bytes,
+        }
+    }
+
+    /// Returns the meeting document targeted by this protocol message.
+    ///
+    /// Inputs: None.
+    /// Outputs: A borrow of the target meeting identifier.
+    /// Side effects: None.
+    pub fn meeting_id(&self) -> &MeetingId {
+        &self.meeting_id
+    }
+
+    /// Returns the opaque Automerge sync-protocol bytes without copying them.
+    ///
+    /// Inputs: None.
+    /// Outputs: The encoded Automerge sync message.
+    /// Side effects: None.
+    pub fn sync_bytes(&self) -> &[u8] {
+        &self.automerge_sync_bytes
+    }
+
+    /// Serializes this envelope with a versioned, length-delimited binary framing.
+    ///
+    /// Inputs: None.
+    /// Outputs: Bytes suitable only for the encrypted P2P transport, or a framing error.
+    /// Side effects: Allocates an output buffer; it does not log or persist sync content.
+    pub fn to_bytes(&self) -> Result<Vec<u8>, SyncMessageEncodeError> {
+        const SYNC_ENVELOPE_HEADER: [u8; 4] = *b"NTS1";
+
+        let meeting_id_bytes = self.meeting_id.as_str().as_bytes();
+        let meeting_id_length = u32::try_from(meeting_id_bytes.len()).map_err(|_| {
+            SyncMessageEncodeError::MeetingIdentifierTooLong {
+                byte_length: meeting_id_bytes.len(),
+            }
+        })?;
+        let mut serialized_message = Vec::with_capacity(
+            SYNC_ENVELOPE_HEADER
+                .len()
+                .saturating_add(std::mem::size_of::<u32>())
+                .saturating_add(meeting_id_bytes.len())
+                .saturating_add(self.automerge_sync_bytes.len()),
+        );
+        serialized_message.extend_from_slice(&SYNC_ENVELOPE_HEADER);
+        serialized_message.extend_from_slice(&meeting_id_length.to_be_bytes());
+        serialized_message.extend_from_slice(meeting_id_bytes);
+        serialized_message.extend_from_slice(&self.automerge_sync_bytes);
+        Ok(serialized_message)
+    }
+
+    /// Deserializes a versioned sync envelope received through encrypted transport.
+    ///
+    /// Inputs: `serialized_message` must contain the framing produced by `to_bytes`.
+    /// Outputs: A typed envelope or a validation error for malformed peer-controlled bytes.
+    /// Side effects: Allocates only decoded metadata and payload bytes; it does not log content.
+    pub fn from_bytes(serialized_message: &[u8]) -> Result<Self, SyncMessageDecodeError> {
+        const SYNC_ENVELOPE_HEADER: [u8; 4] = *b"NTS1";
+        let header_and_length_size = SYNC_ENVELOPE_HEADER
+            .len()
+            .saturating_add(std::mem::size_of::<u32>());
+        if serialized_message.len() < header_and_length_size {
+            return Err(SyncMessageDecodeError::InvalidEnvelope {
+                reason: String::from("sync envelope is shorter than its header"),
+            });
+        }
+        if serialized_message[..SYNC_ENVELOPE_HEADER.len()] != SYNC_ENVELOPE_HEADER {
+            return Err(SyncMessageDecodeError::InvalidEnvelope {
+                reason: String::from("sync envelope has an unknown protocol header"),
+            });
+        }
+
+        let meeting_id_length_bytes: [u8; 4] = serialized_message
+            [SYNC_ENVELOPE_HEADER.len()..header_and_length_size]
+            .try_into()
+            .map_err(|_| SyncMessageDecodeError::InvalidEnvelope {
+                reason: String::from("sync envelope contains an invalid meeting identifier length"),
+            })?;
+        let meeting_id_length = usize::try_from(u32::from_be_bytes(meeting_id_length_bytes))
+            .map_err(|_| SyncMessageDecodeError::InvalidEnvelope {
+                reason: String::from("sync envelope meeting identifier length is unsupported"),
+            })?;
+        let meeting_id_end = header_and_length_size
+            .checked_add(meeting_id_length)
+            .ok_or_else(|| SyncMessageDecodeError::InvalidEnvelope {
+                reason: String::from("sync envelope meeting identifier length overflows"),
+            })?;
+        if serialized_message.len() < meeting_id_end {
+            return Err(SyncMessageDecodeError::InvalidEnvelope {
+                reason: String::from("sync envelope is truncated before its meeting identifier"),
+            });
+        }
+        let meeting_id =
+            std::str::from_utf8(&serialized_message[header_and_length_size..meeting_id_end])
+                .map_err(|_| SyncMessageDecodeError::InvalidEnvelope {
+                    reason: String::from("sync envelope meeting identifier is not UTF-8"),
+                })?;
+
+        Ok(Self::new(
+            MeetingId::new(meeting_id),
+            serialized_message[meeting_id_end..].to_vec(),
+        ))
+    }
+}
+
+/// Describes malformed peer-controlled sync-envelope bytes.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum SyncMessageDecodeError {
+    /// The envelope does not satisfy the versioned binary framing contract.
+    #[error("invalid sync message envelope: {reason}")]
+    InvalidEnvelope {
+        /// Explains the failed validation without including sync payload bytes.
+        reason: String,
+    },
+}
+
+/// Describes a local sync-envelope serialization failure.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum SyncMessageEncodeError {
+    /// The meeting identifier cannot be represented by the protocol's 32-bit length field.
+    #[error("meeting identifier is too long for a sync message: {byte_length} bytes")]
+    MeetingIdentifierTooLong {
+        /// The unrepresentable UTF-8 identifier length.
+        byte_length: usize,
+    },
+}
+
 /// Identifies a transcription model that a device can execute without exposing its implementation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TranscriptionModel {

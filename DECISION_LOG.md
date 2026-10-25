@@ -55,3 +55,16 @@
 - `send_encrypted` rejects payloads by policy because transport initialization is not a data
   protocol. CRDT, manifest, and compute payload framing remain future work and must be explicitly
   specified before transmission is enabled.
+
+## 2026-10-25 — Sync Manager Automerge protocol orchestration
+
+- Defined `SyncMessage` as a versioned, length-delimited binary envelope containing a target
+  meeting ID and opaque Automerge sync bytes. Malformed framing and malformed Automerge messages
+  are rejected and logged without retaining note content or payload bytes.
+- `SyncManager` owns a `MeetingCrdtService`, a `P2pNetwork`, and per-peer Automerge sync state.
+  It initiates peer-specific handshakes on discovery, applies and persists remote changes, and
+  generates required acknowledgement messages.
+- Local changes use a fresh Automerge sync state and `broadcast_encrypted`, favouring safe
+  offline-peer convergence over retained per-peer delivery state for the initial broadcast.
+  The eventual libp2p payload protocol must implement `send_encrypted` and `broadcast_encrypted`
+  before this application workflow can carry traffic outside mocked tests.

@@ -33,6 +33,10 @@ impl P2pNetwork for MockP2pNetwork {
         Ok(())
     }
 
+    fn broadcast_encrypted(&mut self, _payload: &[u8]) -> Result<(), NetworkError> {
+        Ok(())
+    }
+
     fn poll_event(&mut self) -> Result<Option<NetworkEvent>, NetworkError> {
         self.queued_results.pop_front().unwrap_or(Ok(None))
     }

@@ -7,3 +7,7 @@ Ports define the stable contracts for audio capture, AI processing, P2P networki
 The P2P port exposes `NetworkEvent` values for discovery, expiry, and future opaque payload
 delivery. Its nonblocking `poll_event` operation lets application tests inject a mock network
 without starting libp2p or opening sockets.
+
+`broadcast_encrypted` provides application-level fan-out of opaque protocol envelopes only through
+authenticated encrypted peers. It never gives application services access to libp2p topics,
+connections, or socket handles.
