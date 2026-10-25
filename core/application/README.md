@@ -27,3 +27,14 @@ changing the identity.
 segment into either a strong identity attribution or a temporary `UnassignedVoiceClip`. Weak and
 absent matches retain the source bytes plus a millisecond range so manual review can play the
 relevant interval and assign an identity later; the processor never logs audio or embeddings.
+
+## Telemetry collection
+
+`ComputeDispatcher` optionally owns a `MetricsRepository` port. It measures only the selected
+`TranscriptionEngine` call; engines return their normal result and never receive telemetry types.
+After a successful result, the dispatcher saves a `TaskMetrics` record with device, task/model
+labels, duration, end-to-end latency, and completion timestamp. It uses a documented coarse power
+heuristic: CPU-only manifests use 5 W and manifests advertising GPU VRAM use 25 W, converted to
+mWh from measured milliseconds. The heuristic is an aggregate planning signal, not a battery
+measurement. SQLite aggregation returns total processing time and integer-truncated average
+latency without retaining audio, transcript content, or embeddings.

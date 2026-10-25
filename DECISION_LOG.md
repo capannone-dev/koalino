@@ -114,3 +114,16 @@
   Flutter. The data is never logged.
 - `VoiceGalleryController` is provided through Riverpod while widgets continue to depend on an
   injectable Dart bridge. `audioplayers` opens only the returned local file path.
+
+## 2026-10-25 — Issue #12 AI telemetry and device load tracking
+
+- Added `MetricsRepository` as the adapter-neutral persistence boundary for completed AI task
+  metrics, aggregates, and latest device-load snapshots. It carries no task payload, raw audio,
+  transcript content, or embeddings.
+- `ComputeDispatcher` measures only the injected engine call and records successful transcription
+  completions through the optional port. This preserves engines as result-producing adapters with
+  no telemetry coupling.
+- The first power heuristic uses advertised GPU VRAM to choose 25 W versus 5 W CPU-only and
+  converts elapsed milliseconds to mWh. It is intentionally a coarse planning estimate.
+- SQLite stores telemetry in dedicated tables and aggregation runs in SQL. Tests use in-memory
+  SQLite and deterministic mock engines only.

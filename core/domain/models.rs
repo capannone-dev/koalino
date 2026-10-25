@@ -308,6 +308,20 @@ pub enum TranscriptionModel {
     ThirdParty(String),
 }
 
+impl TranscriptionModel {
+    /// Returns a stable non-sensitive model label for telemetry persistence.
+    ///
+    /// Inputs: None.
+    /// Outputs: A borrowed label; provider names retain their configured text.
+    /// Side effects: None.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Whisper => "whisper",
+            Self::ThirdParty(model_name) => model_name,
+        }
+    }
+}
+
 /// Advertises a node's non-sensitive AI capacity for decentralized workload selection.
 ///
 /// A future encrypted P2P adapter broadcasts this portable value. It intentionally contains no
@@ -348,6 +362,15 @@ impl DeviceManifest {
     /// Side effects: None.
     pub fn device_id(&self) -> &DeviceId {
         &self.device_id
+    }
+
+    /// Returns advertised GPU VRAM for telemetry's coarse CPU/GPU power heuristic.
+    ///
+    /// Inputs: None.
+    /// Outputs: Megabytes of GPU VRAM advertised by the device manifest.
+    /// Side effects: None.
+    pub fn gpu_vram_megabytes(&self) -> u32 {
+        self.gpu_vram_megabytes
     }
 
     /// Reports whether this node advertises support for a requested transcription model.
@@ -412,6 +435,183 @@ impl AudioRecording {
 pub struct Transcript {
     meeting_id: MeetingId,
     content: String,
+}
+
+/// Categorizes AI work for privacy-safe telemetry grouping.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TaskType {
+    /// Converts a meeting recording into transcript text.
+    Transcription,
+    /// Separates speakers and derives segment embeddings.
+    Diarization,
+}
+
+impl TaskType {
+    /// Returns the stable storage label for this task category.
+    ///
+    /// Inputs: None.
+    /// Outputs: A lowercase identifier safe for telemetry grouping.
+    /// Side effects: None.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Transcription => "transcription",
+            Self::Diarization => "diarization",
+        }
+    }
+}
+
+/// Records one completed AI task without retaining inputs, outputs, or biometric data.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TaskMetrics {
+    task_id: Uuid,
+    device_id: DeviceId,
+    task_type: TaskType,
+    model_name: String,
+    duration_ms: u64,
+    latency_ms: u64,
+    estimated_power_mwh: f32,
+    timestamp_epoch_ms: u64,
+}
+
+impl TaskMetrics {
+    /// Creates one completed-task telemetry record.
+    ///
+    /// Inputs: IDs and model label identify the execution; timing is milliseconds; power is an
+    /// estimated milli-watt-hour value; timestamp is UTC Unix epoch milliseconds.
+    /// Outputs: An immutable metrics value suitable for `MetricsRepository` persistence.
+    /// Side effects: Takes ownership of non-sensitive model metadata; never records task payloads.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        task_id: Uuid,
+        device_id: DeviceId,
+        task_type: TaskType,
+        model_name: impl Into<String>,
+        duration_ms: u64,
+        latency_ms: u64,
+        estimated_power_mwh: f32,
+        timestamp_epoch_ms: u64,
+    ) -> Self {
+        Self {
+            task_id,
+            device_id,
+            task_type,
+            model_name: model_name.into(),
+            duration_ms,
+            latency_ms,
+            estimated_power_mwh,
+            timestamp_epoch_ms,
+        }
+    }
+
+    /// Returns the unique task execution ID.
+    pub fn task_id(&self) -> Uuid {
+        self.task_id
+    }
+    /// Returns the device that executed the AI task.
+    pub fn device_id(&self) -> &DeviceId {
+        &self.device_id
+    }
+    /// Returns the completed AI task category.
+    pub fn task_type(&self) -> TaskType {
+        self.task_type
+    }
+    /// Returns the model label without exposing task data.
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
+    /// Returns elapsed engine execution time in milliseconds.
+    pub fn duration_ms(&self) -> u64 {
+        self.duration_ms
+    }
+    /// Returns observed end-to-end task latency in milliseconds.
+    pub fn latency_ms(&self) -> u64 {
+        self.latency_ms
+    }
+    /// Returns the heuristic energy estimate in milli-watt-hours.
+    pub fn estimated_power_mwh(&self) -> f32 {
+        self.estimated_power_mwh
+    }
+    /// Returns the UTC Unix epoch completion timestamp in milliseconds.
+    pub fn timestamp_epoch_ms(&self) -> u64 {
+        self.timestamp_epoch_ms
+    }
+}
+
+/// Captures a device's non-sensitive instantaneous compute utilization.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DeviceLoadStats {
+    device_id: DeviceId,
+    current_cpu_load_percent: f32,
+    current_gpu_vram_used_megabytes: u32,
+    active_tasks_count: u32,
+}
+
+impl DeviceLoadStats {
+    /// Creates one device-load observation.
+    ///
+    /// Inputs: `current_cpu_load_percent` is normalized 0–100; VRAM and task count are snapshots.
+    /// Outputs: An immutable load value for optional local telemetry persistence.
+    /// Side effects: None.
+    pub fn new(
+        device_id: DeviceId,
+        current_cpu_load_percent: f32,
+        current_gpu_vram_used_megabytes: u32,
+        active_tasks_count: u32,
+    ) -> Self {
+        Self {
+            device_id,
+            current_cpu_load_percent,
+            current_gpu_vram_used_megabytes,
+            active_tasks_count,
+        }
+    }
+    /// Returns the observed device identifier.
+    pub fn device_id(&self) -> &DeviceId {
+        &self.device_id
+    }
+    /// Returns current CPU utilization as a percentage.
+    pub fn current_cpu_load_percent(&self) -> f32 {
+        self.current_cpu_load_percent
+    }
+    /// Returns current GPU VRAM use in megabytes.
+    pub fn current_gpu_vram_used_megabytes(&self) -> u32 {
+        self.current_gpu_vram_used_megabytes
+    }
+    /// Returns the number of active AI tasks.
+    pub fn active_tasks_count(&self) -> u32 {
+        self.active_tasks_count
+    }
+}
+
+/// Summarizes persisted AI task metrics across devices and task categories.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AggregatedStats {
+    task_count: u64,
+    total_duration_ms: u64,
+    average_latency_ms: u64,
+}
+
+impl AggregatedStats {
+    /// Creates an aggregate summary returned by the telemetry repository.
+    pub fn new(task_count: u64, total_duration_ms: u64, average_latency_ms: u64) -> Self {
+        Self {
+            task_count,
+            total_duration_ms,
+            average_latency_ms,
+        }
+    }
+    /// Returns completed metric records included in the aggregate.
+    pub fn task_count(&self) -> u64 {
+        self.task_count
+    }
+    /// Returns cumulative AI processing time in milliseconds.
+    pub fn total_duration_ms(&self) -> u64 {
+        self.total_duration_ms
+    }
+    /// Returns integer-truncated average end-to-end latency in milliseconds.
+    pub fn average_latency_ms(&self) -> u64 {
+        self.average_latency_ms
+    }
 }
 
 /// Identifies a person whose voice signatures may have multiple acoustic variants.

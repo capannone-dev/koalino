@@ -18,6 +18,9 @@ mod network_events_tests;
 pub mod sync_manager;
 #[cfg(test)]
 mod sync_manager_tests;
+/// Defines telemetry requirements before dispatcher and storage implementation.
+#[cfg(test)]
+mod telemetry_tests;
 /// Classifies voice embeddings and records user-confirmed signature variants.
 pub mod voice_identity_manager;
 #[cfg(test)]

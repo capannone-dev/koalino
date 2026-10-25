@@ -7,9 +7,12 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::{
     domain::{
         errors::StorageError,
-        models::{DeviceId, MeetingId, Transcript, UnassignedVoiceClip},
+        models::{
+            AggregatedStats, DeviceId, MeetingId, TaskMetrics, TaskType, Transcript,
+            UnassignedVoiceClip,
+        },
     },
-    ports::storage::NoteRepository,
+    ports::{storage::NoteRepository, telemetry::MetricsRepository},
 };
 
 /// Persists meeting records locally without exposing SQLite types beyond the adapter boundary.
@@ -72,6 +75,23 @@ impl SqliteNoteRepository {
                     weak_match_identity_id TEXT,
                     weak_match_confidence_score REAL,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
+                );
+                CREATE TABLE IF NOT EXISTS task_metrics (
+                    task_id TEXT PRIMARY KEY NOT NULL,
+                    device_id TEXT NOT NULL,
+                    task_type TEXT NOT NULL,
+                    model_name TEXT NOT NULL,
+                    duration_ms INTEGER NOT NULL,
+                    latency_ms INTEGER NOT NULL,
+                    estimated_power_mwh REAL NOT NULL,
+                    timestamp_epoch_ms INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS task_metrics_device_id_index ON task_metrics(device_id);
+                CREATE TABLE IF NOT EXISTS device_load_stats (
+                    device_id TEXT PRIMARY KEY NOT NULL,
+                    current_cpu_load_percent REAL NOT NULL,
+                    current_gpu_vram_used_megabytes INTEGER NOT NULL,
+                    active_tasks_count INTEGER NOT NULL
                 );",
             )
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
@@ -327,6 +347,95 @@ fn decode_embedding(serialized_embedding: &[u8]) -> Result<Vec<f32>, StorageErro
 /// Inputs: `operation` identifies the failed SQL action; `error` is the adapter-private SQLite error.
 /// Outputs: A portable storage rejection.
 /// Side effects: None.
+impl MetricsRepository for SqliteNoteRepository {
+    /// Stores privacy-safe completed-task metrics in the local telemetry table.
+    fn save_metrics(&self, metrics: TaskMetrics) -> Result<(), StorageError> {
+        self.connection.execute(
+            "INSERT INTO task_metrics (task_id, device_id, task_type, model_name, duration_ms, latency_ms, estimated_power_mwh, timestamp_epoch_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![metrics.task_id().to_string(), metrics.device_id().as_str(), metrics.task_type().as_str(), metrics.model_name(), metrics.duration_ms(), metrics.latency_ms(), metrics.estimated_power_mwh(), metrics.timestamp_epoch_ms()],
+        ).map_err(|error| sqlite_error("unable to save task metrics", error))?;
+        tracing::info!(
+            task_type = metrics.task_type().as_str(),
+            duration_ms = metrics.duration_ms(),
+            "AI task metrics recorded"
+        );
+        Ok(())
+    }
+
+    /// Loads one device's completed metrics in completion order.
+    fn get_metrics_for_device(&self, device_id: &str) -> Result<Vec<TaskMetrics>, StorageError> {
+        let mut statement = self.connection.prepare("SELECT task_id, task_type, model_name, duration_ms, latency_ms, estimated_power_mwh, timestamp_epoch_ms FROM task_metrics WHERE device_id = ?1 ORDER BY timestamp_epoch_ms").map_err(|error| sqlite_error("unable to prepare device metrics query", error))?;
+        let rows = statement
+            .query_map(params![device_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, u64>(3)?,
+                    row.get::<_, u64>(4)?,
+                    row.get::<_, f32>(5)?,
+                    row.get::<_, u64>(6)?,
+                ))
+            })
+            .map_err(|error| sqlite_error("unable to load device metrics", error))?;
+        rows.map(|row| {
+            let (
+                task_id,
+                task_type,
+                model_name,
+                duration_ms,
+                latency_ms,
+                estimated_power_mwh,
+                timestamp_epoch_ms,
+            ) = row.map_err(|error| sqlite_error("unable to decode device metric", error))?;
+            Ok(TaskMetrics::new(
+                uuid::Uuid::parse_str(&task_id).map_err(|error| StorageError::Rejected {
+                    reason: format!("stored task metric has an invalid UUID: {error}"),
+                })?,
+                DeviceId::new(device_id),
+                parse_task_type(&task_type)?,
+                model_name,
+                duration_ms,
+                latency_ms,
+                estimated_power_mwh,
+                timestamp_epoch_ms,
+            ))
+        })
+        .collect()
+    }
+
+    /// Aggregates all persisted task metric rows without loading task payloads.
+    fn get_aggregated_stats(&self) -> Result<AggregatedStats, StorageError> {
+        let (task_count, total_duration_ms, total_latency_ms): (u64, u64, u64) = self.connection.query_row("SELECT COUNT(*), COALESCE(SUM(duration_ms), 0), COALESCE(SUM(latency_ms), 0) FROM task_metrics", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).map_err(|error| sqlite_error("unable to aggregate task metrics", error))?;
+        let average_latency_ms = total_latency_ms.checked_div(task_count).unwrap_or(0);
+        Ok(AggregatedStats::new(
+            task_count,
+            total_duration_ms,
+            average_latency_ms,
+        ))
+    }
+
+    /// Upserts one device's latest instantaneous utilization snapshot.
+    fn save_device_load(
+        &self,
+        device_load_stats: crate::domain::models::DeviceLoadStats,
+    ) -> Result<(), StorageError> {
+        self.connection.execute("INSERT INTO device_load_stats (device_id, current_cpu_load_percent, current_gpu_vram_used_megabytes, active_tasks_count) VALUES (?1, ?2, ?3, ?4) ON CONFLICT(device_id) DO UPDATE SET current_cpu_load_percent = excluded.current_cpu_load_percent, current_gpu_vram_used_megabytes = excluded.current_gpu_vram_used_megabytes, active_tasks_count = excluded.active_tasks_count", params![device_load_stats.device_id().as_str(), device_load_stats.current_cpu_load_percent(), device_load_stats.current_gpu_vram_used_megabytes(), device_load_stats.active_tasks_count()]).map_err(|error| sqlite_error("unable to save device load", error))?;
+        Ok(())
+    }
+}
+
+/// Decodes one stable telemetry task label from SQLite into the domain enum.
+fn parse_task_type(task_type: &str) -> Result<TaskType, StorageError> {
+    match task_type {
+        "transcription" => Ok(TaskType::Transcription),
+        "diarization" => Ok(TaskType::Diarization),
+        _ => Err(StorageError::Rejected {
+            reason: String::from("stored task metric has an unknown task type"),
+        }),
+    }
+}
+
 fn sqlite_error(operation: &str, error: rusqlite::Error) -> StorageError {
     StorageError::Rejected {
         reason: format!("{operation}: {error}"),

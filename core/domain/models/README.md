@@ -18,3 +18,7 @@ The models here are immutable value objects representing meeting recordings, gen
 `UnassignedVoiceClip` identifies temporary manual-review audio by UUID, owning meeting, and a
 millisecond range. It retains opaque audio bytes only for weak or unknown diarization results;
 callers must never log those bytes.
+
+`TaskMetrics` records a completed AI task's device/model label, timings, coarse energy estimate,
+and UTC epoch timestamp without task payloads. `DeviceLoadStats` records a non-sensitive utilization
+snapshot, while `AggregatedStats` exposes only task count, total duration, and average latency.

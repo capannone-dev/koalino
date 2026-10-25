@@ -21,3 +21,7 @@ candidate scores through the port.
 identity classifications, allowing `DiarizationProcessor` tests to replace every external concern
 with deterministic mocks. `NoteRepository` persists temporary `UnassignedVoiceClip` values for
 weak or absent classifications without exposing storage implementation types.
+
+`MetricsRepository` persists only privacy-safe completed-task metadata and the latest device-load
+snapshot. Application services use it to record duration, latency, coarse energy estimates, and
+aggregation data without passing AI inputs, outputs, raw audio, transcript content, or embeddings.

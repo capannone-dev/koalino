@@ -1,11 +1,16 @@
-//! Routes transcription work through injected AI ports using portable device manifests.
+//! Routes transcription work and records privacy-safe execution telemetry through injected ports.
+
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::{
     domain::{
-        errors::TranscriptionError,
-        models::{AudioRecording, DeviceId, DeviceManifest, Transcript, TranscriptionModel},
+        errors::{StorageError, TranscriptionError},
+        models::{
+            AudioRecording, DeviceId, DeviceManifest, TaskMetrics, TaskType, Transcript,
+            TranscriptionModel,
+        },
     },
-    ports::ai::TranscriptionEngine,
+    ports::{ai::TranscriptionEngine, telemetry::MetricsRepository},
 };
 
 /// Captures the user-selected policy for an AI workload without selecting an adapter directly.
@@ -37,6 +42,9 @@ pub enum ComputeDispatchError {
     /// The selected trait-based engine could not produce a transcript.
     #[error(transparent)]
     Transcription(#[from] TranscriptionError),
+    /// Telemetry storage could not persist a completed task metric.
+    #[error(transparent)]
+    Metrics(#[from] StorageError),
 }
 
 /// Owns a manifest and a transcription port for one local or registered remote compute target.
@@ -52,6 +60,7 @@ struct ComputeTarget {
 pub struct ComputeDispatcher {
     local_target: ComputeTarget,
     remote_targets: Vec<ComputeTarget>,
+    metrics_repository: Option<Box<dyn MetricsRepository>>,
 }
 
 impl ComputeDispatcher {
@@ -74,6 +83,31 @@ impl ComputeDispatcher {
                 transcription_engine: Box::new(local_transcription_engine),
             },
             remote_targets: Vec::new(),
+            metrics_repository: None,
+        }
+    }
+
+    /// Configures the optional telemetry sink used after successful AI task completion.
+    ///
+    /// Inputs: `metrics_repository` persists only safe aggregate execution metadata.
+    /// Outputs: None.
+    /// Side effects: Replaces the dispatcher telemetry sink without invoking an AI engine.
+    pub fn set_metrics_repository<Repository>(&mut self, metrics_repository: Repository)
+    where
+        Repository: MetricsRepository + 'static,
+    {
+        self.metrics_repository = Some(Box::new(metrics_repository));
+    }
+
+    /// Loads metrics for one device through the configured telemetry persistence port.
+    ///
+    /// Inputs: `device_id` identifies a local or remote compute target.
+    /// Outputs: Persisted metrics or a portable storage error; an absent sink returns an empty list.
+    /// Side effects: Reads local telemetry persistence only.
+    pub fn metrics_for_device(&self, device_id: &str) -> Result<Vec<TaskMetrics>, StorageError> {
+        match &self.metrics_repository {
+            Some(metrics_repository) => metrics_repository.get_metrics_for_device(device_id),
+            None => Ok(Vec::new()),
         }
     }
 
@@ -122,10 +156,52 @@ impl ComputeDispatcher {
             ComputePreference::Automatic => self.select_automatic_target(&transcription_model)?,
         };
 
-        selected_target
+        let execution_started_at = Instant::now();
+        let transcript = selected_target
             .transcription_engine
             .transcribe(audio_recording)
-            .map_err(Into::into)
+            .map_err(ComputeDispatchError::from)?;
+        self.record_transcription_metrics(
+            selected_target,
+            transcription_model,
+            execution_started_at,
+        )?;
+        Ok(transcript)
+    }
+
+    /// Times no AI work itself; it persists completion telemetry after the selected port returns.
+    fn record_transcription_metrics(
+        &self,
+        selected_target: &ComputeTarget,
+        transcription_model: TranscriptionModel,
+        execution_started_at: Instant,
+    ) -> Result<(), ComputeDispatchError> {
+        let Some(metrics_repository) = &self.metrics_repository else {
+            return Ok(());
+        };
+        let duration_ms =
+            u64::try_from(execution_started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
+        let watt_milliwatts = if selected_target.manifest.gpu_vram_megabytes() > 0 {
+            25_000.0
+        } else {
+            5_000.0
+        };
+        let estimated_power_mwh = duration_ms as f32 * watt_milliwatts / 3_600_000.0;
+        let timestamp_epoch_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
+            .unwrap_or(0);
+        metrics_repository.save_metrics(TaskMetrics::new(
+            uuid::Uuid::new_v4(),
+            selected_target.manifest.device_id().clone(),
+            TaskType::Transcription,
+            transcription_model.as_str(),
+            duration_ms,
+            duration_ms,
+            estimated_power_mwh,
+            timestamp_epoch_ms,
+        ))?;
+        Ok(())
     }
 
     /// Validates one target's advertised model capability before its port is invoked.

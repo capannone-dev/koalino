@@ -60,3 +60,10 @@ file path. Flutter uses `audioplayers` to open that path directly. `VoiceGallery
 Riverpod-provided, bridge-injected controller; its widget tests use a fake bridge and do not load
 the native library. Confirmation and creation commands call the existing `VoiceIdentityManager`,
 not Flutter-side matching logic.
+
+Issue #12 adds privacy-safe AI telemetry. `TaskMetrics`, `DeviceLoadStats`, and `AggregatedStats`
+are domain values persisted through the `MetricsRepository` port. `ComputeDispatcher` measures the
+selected transcription engine call, then saves duration/latency, a coarse CPU-or-GPU power estimate,
+and timestamp only after success. `SqliteNoteRepository` stores metrics and current device load in
+dedicated tables and computes total duration plus average latency. Tests use its in-memory SQLite
+constructor; no AI model is loaded and no input/output payload is persisted as telemetry.
