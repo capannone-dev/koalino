@@ -31,6 +31,8 @@ bytes plus `SyncManager`, scoped to a single existing meeting document. It start
 handshake on discovery, validates received envelopes, applies Automerge changes through
 `MeetingCrdtService`, and persists the result through `NoteRepository`. A local edit calls
 `notify_local_change()` to produce a fresh sync message for encrypted broadcast. Unit tests use
-mocked ports only. The libp2p adapter's payload protocol remains a separate infrastructure task:
-until it is configured, its `send_encrypted` and `broadcast_encrypted` methods reject data under
-the security policy rather than sending plaintext.
+mocked ports only. Issue #8 configures the adapter-local `/note-taker/sync-message/1` libp2p
+request-response protocol with bounded length-prefixed opaque payloads. The adapter sends only on
+authenticated connections and translates inbound requests to `NetworkEvent::MessageReceived`; no
+libp2p type crosses the application boundary. Its memory-only integration test proves directed and
+broadcast payloads traverse Noise and trigger the portable event without binding TCP or UDP.

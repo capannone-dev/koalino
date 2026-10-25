@@ -66,5 +66,15 @@
   generates required acknowledgement messages.
 - Local changes use a fresh Automerge sync state and `broadcast_encrypted`, favouring safe
   offline-peer convergence over retained per-peer delivery state for the initial broadcast.
-  The eventual libp2p payload protocol must implement `send_encrypted` and `broadcast_encrypted`
-  before this application workflow can carry traffic outside mocked tests.
+
+## 2026-10-25 — Issue #8 libp2p SyncMessage payload protocol
+
+- Added the adapter-private `/note-taker/sync-message/1` request-response behaviour with a bounded
+  length-prefixed codec for opaque application payloads. The protocol rides existing authenticated
+  Noise-encrypted libp2p connections; it does not add plaintext networking or expose libp2p types
+  above `core/adapters/network`.
+- Inbound requests become only `NetworkEvent::MessageReceived` at the hexagonal boundary. Directed
+  sends require an authenticated connection; broadcasts queue one request per currently connected
+  peer and retain the existing offline-first application responsibility for later sync.
+- An adapter-local test constructs two Noise/Yamux swarms over `MemoryTransport` and verifies both
+  directed and broadcast payloads arrive as portable message events without binding TCP or UDP.

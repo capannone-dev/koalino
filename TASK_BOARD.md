@@ -37,6 +37,7 @@
 | Issue | Status | Scope |
 | --- | --- | --- |
 | #6 Initialize libp2p swarm, mDNS local discovery, and encrypted transport | Ready for review | Noise-encrypted TCP, Yamux, Tokio mDNS, portable network-event handling with mocked-port TDD, and no socket-based unit tests. |
+| #8 Implement libp2p application payload protocol for SyncMessages | Ready for review | Private versioned request-response behaviour, bounded opaque payload framing, portable message translation, and Noise-over-memory directed/broadcast integration coverage. |
 
 ## Sync application orchestration
 
@@ -48,5 +49,4 @@
 
 - Define validation and IDs suitable for CRDT replication before storage adapters are introduced.
 - Add mock port implementations and expanded error-path tests under WP6.
-- Implement the libp2p encrypted payload protocol behind `send_encrypted` and `broadcast_encrypted`.
 - Implement AI adapters only in their assigned work packages.
