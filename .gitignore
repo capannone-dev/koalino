@@ -3,3 +3,6 @@
 
 # Local SQLite runtime database; it may contain private meeting data.
 /note_taker.sqlite3
+
+# Atomic content-addressed attachment transfer staging files.
+/.note_taker/files/.transfer-*.tmp

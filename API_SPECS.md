@@ -11,6 +11,17 @@ The initial public contracts are Rust traits, not a network protocol:
 - `ComputeDispatcher` accepts `LocalOnly`, `SpecificPeer`, or `Automatic` preferences. Automatic routing considers only model-compatible manifests and chooses the highest deterministic GPU-VRAM-then-CPU capacity score.
 - `NoteRepository` creates a meeting with opaque CRDT bytes, persists and loads a `Transcript`, and atomically replaces or reads a serialized CRDT document. It returns only domain values and `StorageError`; it never exposes SQLite types.
 - `P2pNetwork` permits only encrypted opaque-payload transport.
+- `FileTransferNetwork` is a separate encrypted attachment transport port. Its private libp2p
+  behaviour negotiates `/note-taker/file-transfer/1`, not the CRDT sync protocol. `FileStorage`
+  stores verified content by SHA-256 and exposes no SQLite or libp2p values.
+
+## Attachment file-transfer framing
+
+An attachment transfer frame has the explicit header `{ hash, total_size, chunk_size, offset,
+is_final }` plus at most 64 KiB of bytes. The receiver accepts only contiguous ascending offsets,
+requires `received_bytes == total_size` on the final frame, enforces a 100 MiB object limit, and
+verifies SHA-256 before atomic CAS commit. Zero-byte objects use one final frame; no empty-payload
+sentinel is used. Availability announcements contain `FileReference` metadata only.
 - `VoiceVectorDB` stores `VoiceEmbedding` variants, searches a derived query vector, and removes
   all variants for a UUID identity. It accepts no raw audio. Similarity calculations remain
   adapter-owned; application policy receives only scored candidates.

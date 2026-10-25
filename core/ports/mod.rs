@@ -6,6 +6,8 @@ pub mod ai;
 pub mod audio;
 /// Declares provider-neutral external meeting bridge contracts.
 pub mod external_bridge;
+/// Declares content-addressed attachment transfer and storage contracts.
+pub mod file_transfer;
 /// Declares attachment metadata extraction contracts.
 pub mod media;
 /// Declares contracts for encrypted P2P transport and discovery.

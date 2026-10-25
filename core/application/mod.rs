@@ -10,6 +10,10 @@ pub mod compute_router;
 pub mod diarization_processor;
 #[cfg(test)]
 mod diarization_processor_tests;
+/// Coordinates content-addressed attachment availability and binary transfers through ports.
+pub mod file_sync_manager;
+#[cfg(test)]
+mod file_sync_manager_tests;
 /// Coordinates Automerge meeting documents through storage ports.
 pub mod meeting_crdt;
 /// Coordinates recording transcription and transcript persistence.

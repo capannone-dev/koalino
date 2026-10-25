@@ -15,6 +15,12 @@ the next acknowledgement when required. After a locally persisted edit, `notify_
 broadcasts a fresh encrypted `SyncMessage`. The manager uses only `P2pNetwork` and
 `NoteRepository`, so its tests use mocks and never open sockets or SQLite files.
 
+`file_sync_manager.rs` handles attachment references after CRDT persistence, records
+meeting-scoped serving authorization, and makes a best-effort content-addressed fetch only when a
+peer advertises the SHA-256 hash. It never imports libp2p or waits in the CRDT apply path. Explicit
+64 KiB frames, a 100 MiB limit, two concurrent transfers, and final SHA-256 validation protect the
+local CAS commit.
+
 `voice_identity_manager.rs` depends only on `VoiceVectorDB`, `VoiceEmbedding`, and
 `VoiceMatchResult`. The storage adapter calculates similarity; the manager classifies the best
 returned candidate as strong only above `0.80`, weak from `0.50` through `0.80` inclusive, and no

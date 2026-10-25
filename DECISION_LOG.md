@@ -221,3 +221,12 @@
 - `NoteRepository` supplies portable inclusive `MeetingWindow` values. The manager ranks only those
   windows with linear midpoint proximity: 1.0 at midpoint, 0.0 at either edge, descending score
   plus meeting-ID tie-break. Suggestions require user confirmation before attachment persistence.
+
+## 2026-10-26 — Issue #21 P2P attachment file transfer
+
+- Attachment bytes use a dedicated `/note-taker/file-transfer/1` behaviour; CRDT SyncMessage bytes
+  remain on their existing independent behaviour.
+- Explicit 64 KiB `{ hash, total_size, chunk_size, offset, is_final }` frames permit deterministic
+  reassembly and reject inconsistent, short, oversized, or hash-mismatched streams.
+- `FileSyncManager` uses port-only availability, authorization, and SHA-256 CAS coordination so a
+  transfer failure remains best-effort work and cannot delay text synchronization.

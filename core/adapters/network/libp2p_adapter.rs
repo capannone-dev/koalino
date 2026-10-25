@@ -147,6 +147,9 @@ impl request_response::Codec for SyncPayloadCodec {
 }
 
 use crate::{
+    adapters::network::file_transfer_behaviour::{
+        self, FileTransferRequestPayload, FileTransferResponsePayload,
+    },
     domain::{errors::NetworkError, models::DeviceId},
     ports::network::{NetworkEvent, P2pNetwork, PeerDiscovery},
 };
@@ -159,6 +162,8 @@ struct NoteTakerBehaviour {
     mdns: Toggle<mdns::tokio::Behaviour>,
     /// Carries opaque versioned application payloads on encrypted authenticated substreams.
     sync_payloads: request_response::Behaviour<SyncPayloadCodec>,
+    /// Carries attachment-only frames and never CRDT sync bytes.
+    file_transfers: request_response::Behaviour<file_transfer_behaviour::FileTransferCodec>,
 }
 
 /// Normalizes individual behaviour events for the swarm event loop.
@@ -168,6 +173,8 @@ enum NoteTakerBehaviourEvent {
     Mdns(mdns::Event),
     /// Carries an inbound or outbound event from the private sync-payload protocol.
     SyncPayload(request_response::Event<Vec<u8>, Vec<u8>>),
+    /// Carries a message on the independently negotiated attachment protocol.
+    FileTransfer(request_response::Event<FileTransferRequestPayload, FileTransferResponsePayload>),
 }
 
 impl From<mdns::Event> for NoteTakerBehaviourEvent {
@@ -192,11 +199,27 @@ impl From<request_response::Event<Vec<u8>, Vec<u8>>> for NoteTakerBehaviourEvent
     }
 }
 
+impl From<request_response::Event<FileTransferRequestPayload, FileTransferResponsePayload>>
+    for NoteTakerBehaviourEvent
+{
+    /// Wraps an attachment-only protocol event without conflating it with CRDT payloads.
+    fn from(
+        file_transfer_event: request_response::Event<
+            FileTransferRequestPayload,
+            FileTransferResponsePayload,
+        >,
+    ) -> Self {
+        Self::FileTransfer(file_transfer_event)
+    }
+}
+
 /// Owns a local-only libp2p swarm and translates its events at the hexagonal boundary.
 pub struct Libp2pNetworkAdapter {
     swarm: Swarm<NoteTakerBehaviour>,
     reachable_peer_device_ids: HashSet<DeviceId>,
     pending_network_events: VecDeque<NetworkEvent>,
+    /// Retains adapter-private attachment frames separately from CRDT network events.
+    pending_file_transfer_payloads: VecDeque<Vec<u8>>,
 }
 
 impl Libp2pNetworkAdapter {
@@ -225,6 +248,7 @@ impl Libp2pNetworkAdapter {
                         local_peer_id,
                     )?)),
                     sync_payloads: Self::sync_payload_behaviour(),
+                    file_transfers: file_transfer_behaviour::new_file_transfer_behaviour(),
                 })
             })
             .map_err(|error| NetworkError::SecurityPolicy {
@@ -236,6 +260,7 @@ impl Libp2pNetworkAdapter {
             swarm,
             reachable_peer_device_ids: HashSet::new(),
             pending_network_events: VecDeque::new(),
+            pending_file_transfer_payloads: VecDeque::new(),
         })
     }
 
@@ -261,6 +286,9 @@ impl Libp2pNetworkAdapter {
                 NoteTakerBehaviourEvent::Mdns(mdns_event) => self.translate_mdns_event(mdns_event),
                 NoteTakerBehaviourEvent::SyncPayload(sync_payload_event) => {
                     self.translate_sync_payload_event(sync_payload_event);
+                }
+                NoteTakerBehaviourEvent::FileTransfer(file_transfer_event) => {
+                    self.translate_file_transfer_event(file_transfer_event);
                 }
             }
         }
@@ -306,6 +334,35 @@ impl Libp2pNetworkAdapter {
                 .behaviour_mut()
                 .sync_payloads
                 .send_response(channel, Vec::new());
+        }
+    }
+
+    /// Handles an attachment-only frame without injecting it into the CRDT payload event queue.
+    ///
+    /// Inputs: `file_transfer_event` is emitted only by `/note-taker/file-transfer/1`.
+    /// Outputs: None.
+    /// Side effects: queues its opaque adapter-private bytes and acknowledges the substream.
+    fn translate_file_transfer_event(
+        &mut self,
+        file_transfer_event: request_response::Event<
+            FileTransferRequestPayload,
+            FileTransferResponsePayload,
+        >,
+    ) {
+        if let request_response::Event::Message {
+            message:
+                request_response::Message::Request {
+                    request, channel, ..
+                },
+            ..
+        } = file_transfer_event
+        {
+            self.pending_file_transfer_payloads.push_back(request.0);
+            let _ = self
+                .swarm
+                .behaviour_mut()
+                .file_transfers
+                .send_response(channel, FileTransferResponsePayload(Vec::new()));
         }
     }
 
@@ -411,6 +468,7 @@ impl Libp2pNetworkAdapter {
             NoteTakerBehaviour {
                 mdns: Toggle::from(None),
                 sync_payloads: Self::sync_payload_behaviour(),
+                file_transfers: file_transfer_behaviour::new_file_transfer_behaviour(),
             },
             local_peer_id,
             Config::with_tokio_executor(),
@@ -419,6 +477,7 @@ impl Libp2pNetworkAdapter {
             swarm,
             reachable_peer_device_ids: HashSet::new(),
             pending_network_events: VecDeque::new(),
+            pending_file_transfer_payloads: VecDeque::new(),
         })
     }
 
@@ -470,6 +529,38 @@ impl Libp2pNetworkAdapter {
     fn is_connected_to(&self, peer_device_id: &DeviceId) -> bool {
         Self::peer_id_from_device_id(peer_device_id)
             .is_ok_and(|peer_id| self.swarm.is_connected(&peer_id))
+    }
+
+    /// Queues an adapter-private attachment frame on the dedicated protocol for integration testing.
+    ///
+    /// Inputs: `peer_device_id` is connected and `payload` is a bounded already-framed attachment message.
+    /// Outputs: Success after queuing, or a portable disconnected/policy error.
+    /// Side effects: Opens an encrypted file-transfer substream, never the CRDT sync behaviour.
+    #[cfg(test)]
+    fn send_file_transfer_frame(
+        &mut self,
+        peer_device_id: &DeviceId,
+        payload: Vec<u8>,
+    ) -> Result<(), NetworkError> {
+        let peer_id = Self::peer_id_from_device_id(peer_device_id)?;
+        if !self.swarm.is_connected(&peer_id) {
+            return Err(NetworkError::Disconnected);
+        }
+        self.swarm
+            .behaviour_mut()
+            .file_transfers
+            .send_request(&peer_id, FileTransferRequestPayload(payload));
+        Ok(())
+    }
+
+    /// Removes one adapter-private attachment frame observed by the test swarm driver.
+    ///
+    /// Inputs: None.
+    /// Outputs: The next attachment frame, if available.
+    /// Side effects: Removes it from the attachment-only queue.
+    #[cfg(test)]
+    fn poll_file_transfer_frame(&mut self) -> Option<Vec<u8>> {
+        self.pending_file_transfer_payloads.pop_front()
     }
 }
 
@@ -648,6 +739,59 @@ mod tests {
                 peer_device_id: sending_adapter.local_device_id(),
                 payload: expected_broadcast_payload,
             }
+        );
+    }
+
+    /// Proves binary attachment bytes use the independent protocol behaviour over Noise memory transport.
+    ///
+    /// Inputs: Two adapters connected only through a libp2p memory address.
+    /// Outputs: Success after the receiver observes the exact attachment frame outside CRDT events.
+    /// Side effects: Drives in-memory encrypted swarms and never binds TCP or UDP sockets.
+    #[tokio::test]
+    async fn memory_transport_delivers_file_transfer_frame_on_separate_behaviour() {
+        let mut sender = Libp2pNetworkAdapter::new_for_memory_transport()
+            .unwrap_or_else(|error| panic!("sender should initialize: {error}"));
+        let mut receiver = Libp2pNetworkAdapter::new_for_memory_transport()
+            .unwrap_or_else(|error| panic!("receiver should initialize: {error}"));
+        let address: Multiaddr = "/memory/8129"
+            .parse()
+            .unwrap_or_else(|error| panic!("memory address should parse: {error}"));
+        receiver
+            .listen_on_memory(address.clone())
+            .unwrap_or_else(|error| panic!("receiver should listen: {error}"));
+        sender
+            .dial_memory(address)
+            .unwrap_or_else(|error| panic!("sender should dial: {error}"));
+        let receiver_device_id = receiver.local_device_id();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !sender.is_connected_to(&receiver_device_id) {
+                tokio::select! {
+                    result = sender.drive_next_swarm_event() => result.unwrap_or_else(|error| panic!("sender drive failure: {error}")),
+                    result = receiver.drive_next_swarm_event() => result.unwrap_or_else(|error| panic!("receiver drive failure: {error}")),
+                }
+            }
+        }).await.unwrap_or_else(|_| panic!("memory swarms should connect"));
+        let file_chunk_frame = vec![7_u8; 64 * 1024];
+        sender
+            .send_file_transfer_frame(&receiver_device_id, file_chunk_frame.clone())
+            .unwrap_or_else(|error| panic!("file frame should queue: {error}"));
+        let received = tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                tokio::select! {
+                    result = sender.drive_next_swarm_event() => result.unwrap_or_else(|error| panic!("sender drive failure: {error}")),
+                    result = receiver.drive_next_swarm_event() => {
+                        result.unwrap_or_else(|error| panic!("receiver drive failure: {error}"));
+                        if let Some(frame) = receiver.poll_file_transfer_frame() { break frame; }
+                    }
+                }
+            }
+        }).await.unwrap_or_else(|_| panic!("file frame should arrive"));
+        assert_eq!(received, file_chunk_frame);
+        assert!(
+            receiver
+                .poll_event()
+                .unwrap_or_else(|error| panic!("event queue should be readable: {error}"))
+                .is_none()
         );
     }
 }

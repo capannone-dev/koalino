@@ -71,6 +71,7 @@
 | Scope | Status | Details |
 | --- | --- | --- |
 | Automerge Sync Manager | Ready for review | Versioned sync envelopes, discovery handshakes, remote merge-and-persist flow, local encrypted broadcast requests, and mocked-port TDD for valid, local-change, and malformed-message paths. |
+| Issue #21 attachment file transfer | Ready for review | Separate file-transfer behaviour, SHA-256 CAS, explicit chunk frames, mocked manager tests, and encrypted memory-transport verification. |
 
 ## Follow-up work
 

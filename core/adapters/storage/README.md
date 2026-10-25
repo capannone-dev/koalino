@@ -29,6 +29,10 @@ simple cosine-similarity loop. It is suitable for deterministic unit tests and d
 it does not provide persistence or AES-256-GCM encryption and must never be selected as the
 production biometric store.
 
+`file_storage_adapter.rs` implements `FileStorage` as a SHA-256 content-addressed store. It writes
+each verified object through a unique `.transfer-*.tmp` staging file and atomically renames it to
+its hash path, so duplicate content consumes one local object and failed writes are cleaned up.
+
 The same SQLite adapter implements `MetricsRepository`. Its `task_metrics` table stores only task
 and device identifiers, model labels, timings, coarse power estimates, and timestamps; it contains
 no recordings, transcript text, raw audio, or embeddings. `device_load_stats` stores the latest

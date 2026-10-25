@@ -194,6 +194,140 @@ pub struct Attachment {
     original_device_id: String,
 }
 
+/// Identifies one meeting attachment stored by SHA-256 content address rather than a mutable path.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FileReference {
+    hash: String,
+    size_bytes: u64,
+    mime_type: String,
+    meeting_id: MeetingId,
+    filename: String,
+}
+
+impl FileReference {
+    /// Creates immutable attachment-transfer metadata without retaining file contents.
+    ///
+    /// Inputs: `hash` is the lowercase SHA-256 content address; `size_bytes` is the exact file size.
+    /// Outputs: A reference suitable for CRDT metadata or availability announcements.
+    /// Side effects: Takes ownership of metadata only and never reads file content.
+    pub fn new(
+        hash: impl Into<String>,
+        size_bytes: u64,
+        mime_type: impl Into<String>,
+        meeting_id: MeetingId,
+        filename: impl Into<String>,
+    ) -> Self {
+        Self {
+            hash: hash.into(),
+            size_bytes,
+            mime_type: mime_type.into(),
+            meeting_id,
+            filename: filename.into(),
+        }
+    }
+    /// Borrows the expected SHA-256 content address.
+    pub fn hash(&self) -> &str {
+        &self.hash
+    }
+    /// Returns the exact expected byte count.
+    pub fn size_bytes(&self) -> u64 {
+        self.size_bytes
+    }
+    /// Borrows the media type declared for display and handling.
+    pub fn mime_type(&self) -> &str {
+        &self.mime_type
+    }
+    /// Borrows the meeting that authorizes this attachment.
+    pub fn meeting_id(&self) -> &MeetingId {
+        &self.meeting_id
+    }
+    /// Borrows the original safe display filename.
+    pub fn filename(&self) -> &str {
+        &self.filename
+    }
+}
+
+/// Requests an authorized content-addressed attachment from one authenticated portable peer.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FileTransferRequest {
+    hash: String,
+    requester_peer: DeviceId,
+}
+
+impl FileTransferRequest {
+    /// Creates one request for an exact SHA-256 hash.
+    pub fn new(hash: impl Into<String>, requester_peer: DeviceId) -> Self {
+        Self {
+            hash: hash.into(),
+            requester_peer,
+        }
+    }
+    /// Borrows the requested SHA-256 hash.
+    pub fn hash(&self) -> &str {
+        &self.hash
+    }
+    /// Borrows the authenticated requester identity.
+    pub fn requester_peer(&self) -> &DeviceId {
+        &self.requester_peer
+    }
+}
+
+/// Carries one explicitly bounded binary file-transfer frame.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FileChunk {
+    hash: String,
+    total_size: u64,
+    chunk_size: u32,
+    offset: u64,
+    is_final: bool,
+    data: Vec<u8>,
+}
+
+impl FileChunk {
+    /// Creates an explicit-header transfer frame; validation is performed by the receiver.
+    pub fn new(
+        hash: impl Into<String>,
+        total_size: u64,
+        chunk_size: u32,
+        offset: u64,
+        is_final: bool,
+        data: Vec<u8>,
+    ) -> Self {
+        Self {
+            hash: hash.into(),
+            total_size,
+            chunk_size,
+            offset,
+            is_final,
+            data,
+        }
+    }
+    /// Borrows the expected content address.
+    pub fn hash(&self) -> &str {
+        &self.hash
+    }
+    /// Returns the announced complete file size.
+    pub fn total_size(&self) -> u64 {
+        self.total_size
+    }
+    /// Returns the declared maximum chunk size.
+    pub fn chunk_size(&self) -> u32 {
+        self.chunk_size
+    }
+    /// Returns this frame's zero-based byte offset.
+    pub fn offset(&self) -> u64 {
+        self.offset
+    }
+    /// Reports whether this explicitly marks the final frame.
+    pub fn is_final(&self) -> bool {
+        self.is_final
+    }
+    /// Borrows the file bytes for this frame.
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+}
+
 impl Attachment {
     /// Creates an attachment record without reading the file or assigning it to a meeting.
     ///
@@ -656,6 +790,8 @@ pub enum TaskType {
     Transcription,
     /// Separates speakers and derives segment embeddings.
     Diarization,
+    /// Transfers a verified content-addressed attachment over encrypted P2P transport.
+    FileTransfer,
 }
 
 impl TaskType {
@@ -668,6 +804,7 @@ impl TaskType {
         match self {
             Self::Transcription => "transcription",
             Self::Diarization => "diarization",
+            Self::FileTransfer => "file_transfer",
         }
     }
 }

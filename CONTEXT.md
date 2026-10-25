@@ -125,3 +125,9 @@ implements only `TranscriptionEngine` and returns portable `Transcript`/`Transcr
 values. A feature-gated contract test runs real local inference only when both `local-ai` and
 `NOTE_TAKER_WHISPER_MODEL` are explicitly set; no model is downloaded or initialized by default.
 
+Issue #21 adds a separate `/note-taker/file-transfer/1` behaviour alongside CRDT synchronization.
+`FileSyncManager` uses only file-network and content-addressed-storage ports, keeps an expiring
+peer availability registry, and queues best-effort attachment fetches after CRDT metadata is
+persisted. Explicit 64 KiB frames are SHA-256 verified before atomic CAS commit; integration tests
+use Noise over libp2p memory transport only.
+
