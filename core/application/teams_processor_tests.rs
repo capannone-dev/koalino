@@ -155,6 +155,7 @@ impl TranscriptionEngine for MockTranscriptionEngine {
     fn transcribe(
         &self,
         _audio_recording: &AudioRecording,
+        _transcription_context: &crate::domain::models::TranscriptionContext,
     ) -> Result<Transcript, TranscriptionError> {
         Ok(Transcript::new(self.meeting_id.clone(), "unused"))
     }

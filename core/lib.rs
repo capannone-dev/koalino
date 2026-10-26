@@ -23,7 +23,9 @@ pub mod server;
 mod scaffold_contract_tests {
     use crate::{
         application::meeting_recorder::MeetingRecorder,
-        domain::models::{AudioRecording, DeviceId, MeetingId, RecordingId, Transcript},
+        domain::models::{
+            AudioRecording, DeviceId, MeetingId, RecordingId, Transcript, TranscriptionContext,
+        },
         ports::{ai::TranscriptionEngine, storage::NoteRepository},
     };
 
@@ -33,6 +35,7 @@ mod scaffold_contract_tests {
         fn transcribe(
             &self,
             audio_recording: &AudioRecording,
+            _transcription_context: &TranscriptionContext,
         ) -> Result<Transcript, crate::domain::errors::TranscriptionError> {
             Ok(Transcript::new(
                 audio_recording.meeting_id().clone(),

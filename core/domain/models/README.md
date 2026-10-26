@@ -13,7 +13,7 @@ to one identity and identifies one microphone/environment-specific signature var
 only model-derived numeric features, never raw audio. `VoiceMatchResult` represents the
 application-visible confidence category without revealing vector-search implementation details.
 
-The models here are immutable value objects representing meeting recordings, generated transcripts, voice identities, and device identity metadata.
+The models here are immutable value objects representing meeting recordings, generated transcripts, voice identities, and device identity metadata. `TranscriptionContext` carries only the immediately prior same-meeting transcript text to a context-aware AI adapter; it never carries raw audio, provider values, or text from another meeting.
 
 `UnassignedVoiceClip` identifies temporary manual-review audio by UUID, owning meeting, and a
 millisecond range. It retains opaque audio bytes only for weak or unknown diarization results;

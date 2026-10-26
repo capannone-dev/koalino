@@ -9,7 +9,7 @@ use crate::{
         errors::TranscriptionError,
         models::{
             AudioRecording, DeviceId, DeviceManifest, MeetingId, RecordingId, TaskMetrics,
-            TaskType, Transcript, TranscriptionModel,
+            TaskType, Transcript, TranscriptionContext, TranscriptionModel,
         },
     },
     ports::{ai::TranscriptionEngine, telemetry::MetricsRepository},
@@ -24,6 +24,7 @@ impl TranscriptionEngine for TimedTranscriptionEngine {
     fn transcribe(
         &self,
         audio_recording: &AudioRecording,
+        _transcription_context: &TranscriptionContext,
     ) -> Result<Transcript, TranscriptionError> {
         self.invocation_count
             .set(self.invocation_count.get().saturating_add(1));

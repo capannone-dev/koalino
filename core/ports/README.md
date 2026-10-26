@@ -4,6 +4,8 @@
 
 Ports define the stable contracts for audio capture, AI processing, P2P networking, and persistence. They prevent domain and application code from depending on OS audio APIs, libp2p, databases, or AI SDKs.
 
+`TranscriptionEngine::transcribe` accepts a portable `TranscriptionContext` beside recording metadata. Application callers provide an empty context for standalone work; `ComputeDispatcher` supplies the prior successful same-meeting chunk transcript. AI adapters map that text to their provider-specific prompt mechanisms without exposing provider types to the application.
+
 The P2P port exposes `NetworkEvent` values for discovery, expiry, and future opaque payload
 delivery. Its nonblocking `poll_event` operation lets application tests inject a mock network
 without starting libp2p or opening sockets.

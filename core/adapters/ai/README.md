@@ -14,3 +14,7 @@ domain `Transcript` and `TranscriptionError` values.
 To exercise a real model locally, set `NOTE_TAKER_WHISPER_MODEL` to an existing GGML/GGUF model
 path and run `cargo test --features local-ai`. No model path is read or model context initialized
 when the feature is absent or the environment variable is unset.
+
+When supplied, portable `TranscriptionContext.previous_text` becomes whisper.cpp's initial prompt.
+The OpenAI adapter maps the same value to its documented multipart `prompt` field. Neither adapter
+logs the context text.

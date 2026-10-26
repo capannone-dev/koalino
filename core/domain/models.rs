@@ -67,6 +67,37 @@ pub struct AudioChunk {
     config: AudioConfig,
 }
 
+/// Carries optional prior transcript text for one context-aware transcription request.
+///
+/// This portable value intentionally contains text only. Adapter-owned audio lookback handling and
+/// chunk-boundary metadata remain separate concerns so the transcription port never exposes raw
+/// audio outside the adapter boundary.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct TranscriptionContext {
+    previous_text: Option<String>,
+}
+
+impl TranscriptionContext {
+    /// Creates context for one transcription request.
+    ///
+    /// Inputs: `previous_text` is the immediately preceding successful chunk transcript for the
+    /// same meeting, when available. It must not contain raw audio or provider-specific values.
+    /// Outputs: An immutable portable context for a transcription adapter.
+    /// Side effects: Takes ownership of the optional transcript text.
+    pub fn new(previous_text: Option<String>) -> Self {
+        Self { previous_text }
+    }
+
+    /// Borrows the previous chunk transcript when context is available.
+    ///
+    /// Inputs: None.
+    /// Outputs: The immediately preceding transcript text, or `None` for a meeting's first chunk.
+    /// Side effects: None.
+    pub fn previous_text(&self) -> Option<&str> {
+        self.previous_text.as_deref()
+    }
+}
+
 impl AudioChunk {
     /// Creates a portable signed 16-bit PCM chunk.
     ///

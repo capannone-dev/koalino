@@ -2,7 +2,7 @@
 
 use crate::domain::{
     errors::{DiarizationError, TranscriptionError},
-    models::{AudioRecording, ExternalMediaChunk, Transcript},
+    models::{AudioRecording, ExternalMediaChunk, Transcript, TranscriptionContext},
 };
 
 /// Describes one time-bounded speaker region and its derived biometric representation.
@@ -60,12 +60,14 @@ impl SpeakerSegment {
 pub trait TranscriptionEngine {
     /// Transcribes one recording.
     ///
-    /// Inputs: `audio_recording` identifies a recording whose raw bytes are resolved by the adapter.
+    /// Inputs: `audio_recording` identifies a recording whose raw bytes are resolved by the adapter;
+    /// `transcription_context` contains optional prior text from the same meeting.
     /// Outputs: A meeting-associated transcript or a portable transcription error.
     /// Side effects: An implementation may consume temporary audio or use local/remote compute.
     fn transcribe(
         &self,
         audio_recording: &AudioRecording,
+        transcription_context: &TranscriptionContext,
     ) -> Result<Transcript, TranscriptionError>;
 
     /// Transcribes one isolated external-media chunk while preserving the existing recording contract.
@@ -73,14 +75,14 @@ pub trait TranscriptionEngine {
     /// Inputs: `media_chunk` carries opaque bridge audio; `audio_recording` identifies its local
     /// meeting context. Both must remain free of provider SDK types.
     /// Outputs: A meeting-associated transcript or a portable transcription error.
-    /// Side effects: Default behavior delegates recording-only transcription; external-aware
-    /// adapters override this method to consume `media_chunk.audio_bytes()` directly.
+    /// Side effects: Default behavior delegates recording-only transcription with an empty context;
+    /// external-aware adapters override this method to consume `media_chunk.audio_bytes()` directly.
     fn transcribe_external_media(
         &self,
         _media_chunk: &ExternalMediaChunk,
         audio_recording: &AudioRecording,
     ) -> Result<Transcript, TranscriptionError> {
-        self.transcribe(audio_recording)
+        self.transcribe(audio_recording, &TranscriptionContext::default())
     }
 }
 

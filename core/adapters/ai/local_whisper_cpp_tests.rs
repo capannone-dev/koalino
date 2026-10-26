@@ -3,7 +3,7 @@
 use std::{env, path::PathBuf, sync::Arc};
 
 use crate::{
-    domain::models::{AudioRecording, DeviceId, MeetingId, RecordingId},
+    domain::models::{AudioRecording, DeviceId, MeetingId, RecordingId, TranscriptionContext},
     ports::ai::TranscriptionEngine,
 };
 
@@ -54,7 +54,7 @@ fn transcribes_with_an_explicitly_configured_local_model() {
             .unwrap_or_else(|error| panic!("configured local Whisper model should load: {error}"));
 
     let transcript = transcription_engine
-        .transcribe(&audio_recording)
+        .transcribe(&audio_recording, &TranscriptionContext::default())
         .unwrap_or_else(|error| panic!("silent local inference should complete: {error}"));
 
     assert_eq!(transcript.meeting_id(), audio_recording.meeting_id());

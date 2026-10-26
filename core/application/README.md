@@ -26,6 +26,11 @@ registers only `TranscriptionEngine` trait objects and selects an explicit provi
 chain; local is preferred when configured. OpenAI remains adapter-only, while Anthropic is reserved
 for future text/LLM work and currently returns `ProviderUnsupported` for transcription.
 
+`ComputeDispatcher` retains the last successful transcript per meeting in an in-memory rolling
+buffer. Its next transcription request receives that text through `TranscriptionContext`, while a
+first chunk or a different meeting receives empty context. The buffer is not persisted, logged, or
+shared over the network.
+
 `voice_identity_manager.rs` depends only on `VoiceVectorDB`, `VoiceEmbedding`, and
 `VoiceMatchResult`. The storage adapter calculates similarity; the manager classifies the best
 returned candidate as strong only above `0.80`, weak from `0.50` through `0.80` inclusive, and no

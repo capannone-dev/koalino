@@ -239,3 +239,12 @@
   above 25 MiB before any request. `OPENAI_API_KEY` is adapter-private and never logged.
 - Anthropic remains a configuration reservation for future text tasks; explicit transcription
   selection returns the portable `ProviderUnsupported` error.
+
+## 2026-10-26 — Issue #23b transcription context propagation
+
+- Added the portable `TranscriptionContext` to the `TranscriptionEngine` boundary. It carries only
+  optional immediately preceding same-meeting transcript text, never raw audio or provider values.
+- `ComputeDispatcher` retains the last successful transcript per meeting in memory and supplies it
+  to the next request. It does not persist, log, or send the rolling buffer over P2P.
+- Local whisper.cpp maps prior text to its initial prompt; the OpenAI adapter maps it to the
+  multipart `prompt` field. Adapter-specific request details remain outside application code.

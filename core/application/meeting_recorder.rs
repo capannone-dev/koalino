@@ -3,7 +3,7 @@
 use crate::{
     domain::{
         errors::{StorageError, TranscriptionError},
-        models::{AudioRecording, Transcript},
+        models::{AudioRecording, Transcript, TranscriptionContext},
     },
     ports::{ai::TranscriptionEngine, storage::NoteRepository},
 };
@@ -51,7 +51,9 @@ where
         &self,
         audio_recording: &AudioRecording,
     ) -> Result<Transcript, MeetingProcessingError> {
-        let generated_transcript = self.transcription_engine.transcribe(audio_recording)?;
+        let generated_transcript = self
+            .transcription_engine
+            .transcribe(audio_recording, &TranscriptionContext::default())?;
         self.note_repository
             .save_transcript(&generated_transcript)?;
         Ok(generated_transcript)

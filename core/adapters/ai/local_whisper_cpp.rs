@@ -10,7 +10,7 @@ use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextPar
 use crate::{
     domain::{
         errors::TranscriptionError,
-        models::{AudioRecording, Transcript},
+        models::{AudioRecording, Transcript, TranscriptionContext},
     },
     ports::ai::TranscriptionEngine,
 };
@@ -148,8 +148,9 @@ impl LocalWhisperCppTranscriptionEngine {
 impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
     /// Transcribes one recording through adapter-owned whisper.cpp inference.
     ///
-    /// Inputs: `audio_recording` provides meeting metadata only; the injected local source
-    /// resolves its 16 kHz mono PCM without exposing raw audio through the port.
+    /// Inputs: `audio_recording` provides meeting metadata only; `transcription_context` provides
+    /// optional prior text; the injected local source resolves 16 kHz mono PCM without exposing
+    /// raw audio through the port.
     /// Outputs: A meeting-associated portable transcript, or an unavailable/invalid-recording
     /// error. Native whisper.cpp errors never cross the hexagonal boundary.
     /// Side effects: Reads temporary local audio through the source and runs CPU/GPU inference;
@@ -157,6 +158,7 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
     fn transcribe(
         &self,
         audio_recording: &AudioRecording,
+        transcription_context: &TranscriptionContext,
     ) -> Result<Transcript, TranscriptionError> {
         let pcm_samples = self
             .recording_pcm_source
@@ -177,6 +179,9 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
         inference_parameters.set_print_timestamps(false);
         if let Some(language) = self.language.as_deref() {
             inference_parameters.set_language(Some(language));
+        }
+        if let Some(previous_text) = transcription_context.previous_text() {
+            inference_parameters.set_initial_prompt(previous_text);
         }
         inference_state
             .full(inference_parameters, &pcm_samples)

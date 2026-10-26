@@ -7,7 +7,7 @@ use serde::Deserialize;
 use crate::{
     domain::{
         errors::TranscriptionError,
-        models::{AudioRecording, Transcript},
+        models::{AudioRecording, Transcript, TranscriptionContext},
     },
     ports::ai::TranscriptionEngine,
 };
@@ -27,6 +27,33 @@ pub trait AudioFileSource: Send + Sync {
 pub struct OpenAiHttpResponse {
     status: u16,
     body: String,
+}
+
+/// Groups optional OpenAI multipart text fields without exposing HTTP types outside this adapter.
+pub struct OpenAiTranscriptionOptions<'context> {
+    language: Option<&'context str>,
+    prompt: Option<&'context str>,
+}
+
+impl<'context> OpenAiTranscriptionOptions<'context> {
+    /// Creates optional request fields for one OpenAI transcription upload.
+    ///
+    /// Inputs: `language` is an optional Whisper language code; `prompt` is optional same-meeting
+    /// prior transcript text from the portable transcription context.
+    /// Outputs: Adapter-private multipart request options.
+    /// Side effects: Borrows text only; it does not log or persist either value.
+    pub fn new(language: Option<&'context str>, prompt: Option<&'context str>) -> Self {
+        Self { language, prompt }
+    }
+
+    /// Returns optional prior transcript text for safe mock request assertions.
+    ///
+    /// Inputs: None.
+    /// Outputs: The optional OpenAI multipart prompt value.
+    /// Side effects: None.
+    pub fn prompt(&self) -> Option<&str> {
+        self.prompt
+    }
 }
 impl OpenAiHttpResponse {
     /// Creates a successful mock/provider response body.
@@ -55,7 +82,7 @@ pub trait OpenAiHttpClient: Send + Sync {
         content_type: &str,
         audio_bytes: Vec<u8>,
         model: &str,
-        language: Option<&str>,
+        options: OpenAiTranscriptionOptions<'_>,
     ) -> Result<OpenAiHttpResponse, TranscriptionError>;
 }
 
@@ -81,7 +108,7 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
         content_type: &str,
         audio_bytes: Vec<u8>,
         model: &str,
-        language: Option<&str>,
+        options: OpenAiTranscriptionOptions<'_>,
     ) -> Result<OpenAiHttpResponse, TranscriptionError> {
         let part = reqwest::blocking::multipart::Part::bytes(audio_bytes)
             .file_name(filename.to_owned())
@@ -93,8 +120,11 @@ impl OpenAiHttpClient for ReqwestOpenAiHttpClient {
             .part("file", part)
             .text("model", model.to_owned())
             .text("response_format", "verbose_json");
-        if let Some(language) = language {
+        if let Some(language) = options.language {
             form = form.text("language", language.to_owned());
+        }
+        if let Some(prompt) = options.prompt {
+            form = form.text("prompt", prompt.to_owned());
         }
         let response = self
             .client
@@ -184,9 +214,15 @@ struct WhisperResponse {
 }
 impl TranscriptionEngine for OpenAiWhisperTranscriptionEngine {
     /// Uploads one adapter-owned WAV file and maps the response to the portable transcript contract.
+    ///
+    /// Inputs: `audio_recording` identifies adapter-owned WAV audio; `transcription_context`
+    /// contains optional prior same-meeting text forwarded as OpenAI's `prompt` multipart field.
+    /// Outputs: A portable meeting transcript or a bounded portable error.
+    /// Side effects: Reads adapter-owned audio and makes one HTTPS request without logging secrets.
     fn transcribe(
         &self,
         audio_recording: &AudioRecording,
+        transcription_context: &TranscriptionContext,
     ) -> Result<Transcript, TranscriptionError> {
         let audio_bytes = self.audio_file_source.load_wav(audio_recording)?;
         if audio_bytes.len() > OPENAI_MAX_AUDIO_BYTES {
@@ -201,7 +237,10 @@ impl TranscriptionEngine for OpenAiWhisperTranscriptionEngine {
             "audio/wav",
             audio_bytes,
             &self.configuration.model,
-            self.configuration.language.as_deref(),
+            OpenAiTranscriptionOptions::new(
+                self.configuration.language.as_deref(),
+                transcription_context.previous_text(),
+            ),
         )?;
         match response.status {
             200..=299 => {

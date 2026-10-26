@@ -33,6 +33,7 @@
 | #16 Background recording architecture and lock-screen control hooks | Ready for review | Recoverable interruption state, mutex-serialized lifecycle/state FFI, and platform wiring guides without OS-specific source code. |
 | #20 Local Whisper.cpp transcription adapter and Cargo feature flags | Ready for review | Optional Rust-1.88-compatible whisper.cpp binding, adapter-local normalized PCM seam, feature-gated real-model contract test, and mock-safe default test path. |
 | #22 OpenAI Whisper configuration and cloud adapter | Ready for review | Reqwest multipart WAV adapter, API-key environment loading, provider registry/configuration, and mock HTTP coverage. |
+| #23 VAD-based chunking and context-aware transcription | In progress | VAD framing, capability advertisement, and context propagation are implemented; feature-gated VAD classification and remaining chunk-boundary work remain. |
 
 ## WP5: Flutter UI & FFI
 

@@ -1,13 +1,17 @@
 //! Routes transcription work and records privacy-safe execution telemetry through injected ports.
 
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    sync::Mutex,
+    time::{Instant, SystemTime, UNIX_EPOCH},
+};
 
 use crate::{
     domain::{
         errors::{StorageError, TranscriptionError},
         models::{
-            AudioRecording, DeviceId, DeviceManifest, TaskMetrics, TaskType, Transcript,
-            TranscriptionModel,
+            AudioRecording, DeviceId, DeviceManifest, MeetingId, TaskMetrics, TaskType, Transcript,
+            TranscriptionContext, TranscriptionModel,
         },
     },
     ports::{ai::TranscriptionEngine, telemetry::MetricsRepository},
@@ -61,6 +65,7 @@ pub struct ComputeDispatcher {
     local_target: ComputeTarget,
     remote_targets: Vec<ComputeTarget>,
     metrics_repository: Option<Box<dyn MetricsRepository>>,
+    previous_chunk_transcripts: Mutex<HashMap<MeetingId, String>>,
 }
 
 impl ComputeDispatcher {
@@ -84,6 +89,7 @@ impl ComputeDispatcher {
             },
             remote_targets: Vec::new(),
             metrics_repository: None,
+            previous_chunk_transcripts: Mutex::new(HashMap::new()),
         }
     }
 
@@ -136,7 +142,8 @@ impl ComputeDispatcher {
     /// Selects a compatible port and transcribes one recording according to the user preference.
     ///
     /// Inputs: `audio_recording` identifies adapter-owned audio; `transcription_model` selects a
-    /// required capability; `compute_preference` constrains the eligible target set.
+    /// required capability; `compute_preference` constrains the eligible target set. The previous
+    /// successful transcript for the recording's meeting is forwarded as portable context.
     /// Outputs: A generated transcript or a portable routing/transcription failure.
     /// Side effects: Invokes exactly one selected transcription port, which may perform local or
     /// encrypted remote computation.
@@ -157,16 +164,54 @@ impl ComputeDispatcher {
         };
 
         let execution_started_at = Instant::now();
+        let transcription_context = self.transcription_context_for(audio_recording.meeting_id())?;
         let transcript = selected_target
             .transcription_engine
-            .transcribe(audio_recording)
+            .transcribe(audio_recording, &transcription_context)
             .map_err(ComputeDispatchError::from)?;
+        self.remember_transcript(&transcript)?;
         self.record_transcription_metrics(
             selected_target,
             transcription_model,
             execution_started_at,
         )?;
         Ok(transcript)
+    }
+
+    /// Builds portable context from the prior successful chunk of one meeting.
+    ///
+    /// Inputs: `meeting_id` scopes context to one meeting, preventing transcript text from one
+    /// meeting from reaching another meeting's transcription request.
+    /// Outputs: Context containing the immediately previous transcript when present, or empty
+    /// context for the first chunk.
+    /// Side effects: Reads the dispatcher's in-memory rolling transcript buffer.
+    fn transcription_context_for(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<TranscriptionContext, ComputeDispatchError> {
+        let previous_text = self
+            .previous_chunk_transcripts
+            .lock()
+            .map_err(|_| TranscriptionError::Unavailable)?
+            .get(meeting_id)
+            .cloned();
+        Ok(TranscriptionContext::new(previous_text))
+    }
+
+    /// Stores a successful transcript for the next chunk from the same meeting.
+    ///
+    /// Inputs: `transcript` was produced by the selected transcription port.
+    /// Outputs: Success or a portable unavailable error if the in-memory buffer is poisoned.
+    /// Side effects: Replaces the in-memory prior-chunk transcript for its meeting.
+    fn remember_transcript(&self, transcript: &Transcript) -> Result<(), ComputeDispatchError> {
+        self.previous_chunk_transcripts
+            .lock()
+            .map_err(|_| TranscriptionError::Unavailable)?
+            .insert(
+                transcript.meeting_id().clone(),
+                transcript.content().to_owned(),
+            );
+        Ok(())
     }
 
     /// Times no AI work itself; it persists completion telemetry after the selected port returns.
@@ -281,7 +326,7 @@ mod tests {
             errors::TranscriptionError,
             models::{
                 AudioRecording, DeviceId, DeviceManifest, MeetingId, RecordingId, Transcript,
-                TranscriptionModel,
+                TranscriptionContext, TranscriptionModel,
             },
         },
         ports::ai::TranscriptionEngine,
@@ -309,6 +354,7 @@ mod tests {
         fn transcribe(
             &self,
             audio_recording: &AudioRecording,
+            _transcription_context: &TranscriptionContext,
         ) -> Result<Transcript, TranscriptionError> {
             self.invocation_count
                 .set(self.invocation_count.get().saturating_add(1));

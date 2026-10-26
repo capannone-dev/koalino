@@ -5,16 +5,16 @@ use std::sync::{Arc, Mutex};
 use crate::{
     adapters::ai::openai_whisper_adapter::{
         AudioFileSource, OPENAI_MAX_AUDIO_BYTES, OpenAiHttpClient, OpenAiHttpResponse,
-        OpenAiWhisperConfig, OpenAiWhisperTranscriptionEngine,
+        OpenAiTranscriptionOptions, OpenAiWhisperConfig, OpenAiWhisperTranscriptionEngine,
     },
     domain::{
         errors::TranscriptionError,
-        models::{AudioRecording, DeviceId, MeetingId, RecordingId},
+        models::{AudioRecording, DeviceId, MeetingId, RecordingId, TranscriptionContext},
     },
     ports::ai::TranscriptionEngine,
 };
 
-type CapturedRequest = (String, String, String, Vec<u8>);
+type CapturedRequest = (String, String, String, Vec<u8>, Option<String>);
 
 #[derive(Clone)]
 struct MockHttpClient {
@@ -37,7 +37,7 @@ impl OpenAiHttpClient for MockHttpClient {
         content_type: &str,
         audio_bytes: Vec<u8>,
         _model: &str,
-        _language: Option<&str>,
+        options: OpenAiTranscriptionOptions<'_>,
     ) -> Result<OpenAiHttpResponse, TranscriptionError> {
         self.requests
             .lock()
@@ -47,6 +47,7 @@ impl OpenAiHttpClient for MockHttpClient {
                 filename.to_owned(),
                 content_type.to_owned(),
                 audio_bytes,
+                options.prompt().map(str::to_owned),
             ));
         self.responses
             .lock()
@@ -83,7 +84,7 @@ fn successful_response_uses_wav_filename_and_returns_portable_transcript() {
         Arc::new(http),
     );
     let transcript = engine
-        .transcribe(&recording())
+        .transcribe(&recording(), &TranscriptionContext::default())
         .unwrap_or_else(|error| panic!("mock success should transcribe: {error}"));
     assert_eq!(transcript.content(), "Ciao mondo");
     let recorded_requests = requests
@@ -105,7 +106,7 @@ fn rejects_payload_over_openai_limit_without_http_request() {
         Arc::new(http),
     );
     assert!(matches!(
-        engine.transcribe(&recording()),
+        engine.transcribe(&recording(), &TranscriptionContext::default()),
         Err(TranscriptionError::PayloadTooLarge { .. })
     ));
     assert!(
@@ -128,31 +129,40 @@ fn unauthorized_rate_limited_and_server_errors_are_safe_and_bounded() {
             )])),
         );
         let error = engine
-            .transcribe(&recording())
+            .transcribe(&recording(), &TranscriptionContext::default())
             .err()
             .unwrap_or_else(|| panic!("HTTP failure should be portable"));
         assert!(!error.to_string().contains("test-secret"));
     }
 }
 
-/// Requires cloud transcription to forward prior chunk text as OpenAI's multipart prompt field.
+/// Verifies cloud transcription forwards prior chunk text as OpenAI's multipart prompt field.
 ///
-/// Inputs: The OpenAI adapter source, which will receive `TranscriptionContext` during the
-/// context-propagation implementation.
-/// Outputs: Confirms the portable context is accepted and multipart construction contains the
-/// documented `prompt` field.
-/// Side effects: Reads compile-time source text only; it does not make an HTTP request or expose
-/// configuration secrets.
+/// Inputs: A portable context with the previous meeting chunk transcript and an injected HTTP
+/// client that records safe request metadata.
+/// Outputs: Confirms the recorded multipart request carries the exact prior text as `prompt`.
+/// Side effects: Invokes the injected mock only; it makes no HTTP request or exposes secrets.
 #[test]
 fn openai_adapter_receives_context_previous_text_and_includes_multipart_prompt_field() {
-    let adapter_source = include_str!("openai_whisper_adapter.rs");
-
-    assert!(
-        adapter_source.contains("TranscriptionContext"),
-        "OpenAI adapter must accept portable transcription context"
+    let http = MockHttpClient::new(vec![OpenAiHttpResponse::success(r#"{"text":"next"}"#)]);
+    let requests = http.requests.clone();
+    let engine = OpenAiWhisperTranscriptionEngine::with_dependencies(
+        OpenAiWhisperConfig::new("test-secret", "whisper-1", None)
+            .unwrap_or_else(|error| panic!("config should validate: {error}")),
+        Arc::new(StaticAudioSource(vec![1, 2, 3])),
+        Arc::new(http),
     );
-    assert!(
-        adapter_source.contains(".text(\"prompt\""),
-        "OpenAI multipart form must include the prior chunk text as prompt"
+    let transcription_context = TranscriptionContext::new(Some("previous chunk text".to_owned()));
+
+    engine
+        .transcribe(&recording(), &transcription_context)
+        .unwrap_or_else(|error| panic!("mock success should transcribe: {error}"));
+
+    let recorded_requests = requests
+        .lock()
+        .unwrap_or_else(|_| panic!("mock requests should be readable"));
+    assert_eq!(
+        recorded_requests[0].4.as_deref(),
+        Some("previous chunk text")
     );
 }
