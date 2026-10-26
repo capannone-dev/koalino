@@ -19,6 +19,12 @@ Weak-match confirmation and new-identity actions send only clip and identity/nam
 Rust. Rust retrieves retained derived embeddings from local storage and delegates variant creation
 to `VoiceIdentityManager`; Flutter never receives or constructs biometric data.
 
+## Telemetry dashboard
+
+The drawer opens a responsive Material 3 telemetry dashboard for mobile and desktop. It polls
+caller-freed Rust JSON every ten seconds and uses `fl_chart` for privacy-safe duration, latency,
+task-mix, and power views; no audio, transcript, biometric, or credential content crosses FFI.
+
 ## Attachment import
 
 `AttachmentImportScreen` provides the Meeting Detail paperclip action. Its controller obtains a

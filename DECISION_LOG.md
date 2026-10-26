@@ -270,3 +270,8 @@
 - The Next.js client uses Recharts with responsive containers and coalesces `telemetry_updated`
   WebSocket refreshes to one fetch sequence per ten seconds; its existing cloud Node workflow is
   the authoritative UI verification environment.
+
+## 2026-10-26 — Issue #25 Flutter telemetry dashboard
+
+- Flutter receives only caller-freed device, summary, and time-series JSON; raw task content never
+  crosses FFI. A controller owns ten-second polling and responsive Material 3 `fl_chart` views.

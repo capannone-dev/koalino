@@ -143,3 +143,6 @@ The Next.js `/dashboard` client renders responsive Recharts views, status-colore
 summary values; it treats `telemetry_updated` WebSocket events as a coalesced ten-second refresh
 signal. Node verification remains in the existing Node 22 GitHub Actions workflow.
 
+Issue #25 exposes privacy-safe telemetry through caller-freed Flutter FFI JSON. A Material 3
+dashboard uses an injectable bridge, ten-second polling, responsive layouts, and `fl_chart`.
+

@@ -24,14 +24,15 @@ use crate::{
     domain::{
         errors::StorageError,
         models::{
-            Attachment, AudioConfig, DeviceId, MeetingId, MeetingWindow, Transcript,
-            UnassignedVoiceClip,
+            Attachment, AudioConfig, DeviceId, MeetingId, MeetingWindow, TaskMetrics, TaskType,
+            Transcript, UnassignedVoiceClip,
         },
     },
     ports::{
         audio::AudioCapture,
         media::MetadataExtractor,
         storage::{AttachmentRepository, NoteRepository},
+        telemetry::MetricsRepository,
     },
 };
 use uuid::Uuid;
@@ -379,6 +380,67 @@ impl FfiRuntime {
             .unwrap_or(FFI_OPERATION_REJECTED)
     }
 
+    /// Serializes telemetry-observed device cards without exposing hardware identifiers or task data.
+    fn get_devices(&self) -> Result<String, c_int> {
+        let metrics = self
+            .note_repository
+            .get_all_metrics()
+            .map_err(|_| FFI_OPERATION_REJECTED)?;
+        let mut devices = std::collections::BTreeMap::<String, (Vec<String>, u64)>::new();
+        for metric in metrics {
+            let device = devices
+                .entry(metric.device_id().as_str().to_owned())
+                .or_insert((Vec::new(), 0));
+            if !device.0.contains(&metric.model_name().to_owned()) {
+                device.0.push(metric.model_name().to_owned());
+            }
+            device.1 = device.1.max(metric.timestamp_epoch_ms());
+        }
+        Ok(format!("[{}]", devices.into_iter().map(|(device_id, (models, last_seen))| format!("{{\"device_id\":\"{}\",\"supports_vad\":{},\"supported_models\":[{}],\"last_seen\":{}}}", json_escape(&device_id), cfg!(feature = "vad"), models.iter().map(|model| format!("\"{}\"", json_escape(model))).collect::<Vec<_>>().join(","), last_seen)).collect::<Vec<_>>().join(",")))
+    }
+
+    /// Serializes aggregate privacy-safe telemetry values for the Flutter summary cards.
+    fn get_telemetry_summary(&self) -> Result<String, c_int> {
+        let metrics = self
+            .note_repository
+            .get_all_metrics()
+            .map_err(|_| FFI_OPERATION_REJECTED)?;
+        let total_tasks = metrics.len() as u64;
+        let transcription_ms: u64 = metrics
+            .iter()
+            .filter(|metric| {
+                matches!(
+                    metric.task_type(),
+                    TaskType::Transcription | TaskType::CloudTranscription
+                )
+            })
+            .map(TaskMetrics::duration_ms)
+            .sum();
+        let latency_ms: u64 = metrics.iter().map(TaskMetrics::latency_ms).sum();
+        let power_mwh: f32 = metrics.iter().map(TaskMetrics::estimated_power_mwh).sum();
+        Ok(format!(
+            "{{\"total_transcription_time_ms\":{transcription_ms},\"average_latency_ms\":{},\"total_tasks\":{total_tasks},\"power_estimate_mwh\":{power_mwh}}}",
+            latency_ms.checked_div(total_tasks).unwrap_or_default()
+        ))
+    }
+
+    /// Serializes one device's most recent 24-hour metric series without task payloads.
+    fn get_device_telemetry(&self, device_id: &str) -> Result<String, c_int> {
+        let earliest_timestamp = u64::try_from(chrono::Utc::now().timestamp_millis())
+            .unwrap_or_default()
+            .saturating_sub(86_400_000);
+        let metrics = self
+            .note_repository
+            .get_metrics_for_device(device_id)
+            .map_err(|_| FFI_OPERATION_REJECTED)?;
+        let serialized_metrics = metrics.into_iter().filter(|metric| metric.timestamp_epoch_ms() >= earliest_timestamp).map(|metric| format!("{{\"task_type\":\"{}\",\"duration_ms\":{},\"latency_ms\":{},\"power_mwh\":{},\"recorded_at\":{}}}", metric.task_type().as_str(), metric.duration_ms(), metric.latency_ms(), metric.estimated_power_mwh(), metric.timestamp_epoch_ms())).collect::<Vec<_>>();
+        Ok(format!(
+            "{{\"device_id\":\"{}\",\"metrics\":[{}]}}",
+            json_escape(device_id),
+            serialized_metrics.join(",")
+        ))
+    }
+
     /// Starts the recorder through the portable audio-capture port.
     ///
     /// Inputs: None.
@@ -630,6 +692,55 @@ pub unsafe extern "C" fn note_taker_set_log_level(filter_directive: *const c_cha
     with_runtime(|runtime| runtime.set_log_level(filter_directive))
 }
 
+/// Returns telemetry-observed device cards as caller-freed UTF-8 JSON.
+///
+/// Inputs: None.
+/// Outputs: An owned JSON array or null when the local runtime is unavailable.
+/// Side effects: Reads privacy-safe SQLite telemetry metadata only.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_get_devices() -> *mut c_char {
+    with_runtime_json(|runtime| runtime.get_devices())
+        .ok()
+        .and_then(|json| CString::new(json).ok())
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Returns aggregate telemetry summary values as caller-freed UTF-8 JSON.
+///
+/// Inputs: None.
+/// Outputs: An owned JSON object or null when the local runtime is unavailable.
+/// Side effects: Reads privacy-safe SQLite telemetry metadata only.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_get_telemetry_summary() -> *mut c_char {
+    with_runtime_json(|runtime| runtime.get_telemetry_summary())
+        .ok()
+        .and_then(|json| CString::new(json).ok())
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Returns a device's recent telemetry series as caller-freed UTF-8 JSON.
+///
+/// Inputs: `device_id` is a valid non-empty NUL-terminated UTF-8 identifier.
+/// Outputs: An owned JSON object or null for invalid input/runtime failures.
+/// Side effects: Reads the last 24 hours of privacy-safe SQLite telemetry metadata.
+///
+/// # Safety
+/// `device_id` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_get_device_telemetry(device_id: *const c_char) -> *mut c_char {
+    let Some(device_id) = (unsafe { ffi_string(device_id) }).filter(|value| !value.is_empty())
+    else {
+        return std::ptr::null_mut();
+    };
+    with_runtime_json(|runtime| runtime.get_device_telemetry(device_id))
+        .ok()
+        .and_then(|json| CString::new(json).ok())
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
 /// Returns clip metadata and absolute local audio paths as caller-freed UTF-8 JSON.
 ///
 /// Inputs: `meeting_id` points to a valid NUL-terminated UTF-8 identifier.
@@ -782,6 +893,51 @@ mod ffi_contract_tests {
         FFI_AUDIO_STATE_STOPPED, FFI_INVALID_ARGUMENT, FFI_OPERATION_REJECTED, FFI_SUCCESS,
         FfiRuntime,
     };
+    use crate::{
+        domain::models::{DeviceId, TaskMetrics, TaskType},
+        ports::telemetry::MetricsRepository,
+    };
+
+    /// Verifies telemetry FFI JSON is derived from in-memory SQLite without exposing task payloads.
+    #[test]
+    fn telemetry_ffi_serializes_devices_summary_and_recent_device_metrics() {
+        let ffi_runtime = FfiRuntime::new()
+            .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
+        let timestamp_epoch_ms =
+            u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or_default();
+        ffi_runtime
+            .note_repository
+            .save_metrics(TaskMetrics::new(
+                uuid::Uuid::new_v4(),
+                DeviceId::new("ffi-device"),
+                TaskType::Transcription,
+                "whisper",
+                900,
+                90,
+                1.5,
+                timestamp_epoch_ms,
+            ))
+            .unwrap_or_else(|error| panic!("fixture metric must save: {error}"));
+
+        assert!(
+            ffi_runtime
+                .get_devices()
+                .unwrap_or_default()
+                .contains("ffi-device")
+        );
+        assert!(
+            ffi_runtime
+                .get_telemetry_summary()
+                .unwrap_or_default()
+                .contains("total_tasks")
+        );
+        assert!(
+            ffi_runtime
+                .get_device_telemetry("ffi-device")
+                .unwrap_or_default()
+                .contains("duration_ms")
+        );
+    }
 
     /// Verifies that the bridge reports the first portable start as successful.
     #[test]
