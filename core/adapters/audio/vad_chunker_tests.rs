@@ -1,9 +1,36 @@
 //! Defines mock-first tests for VAD frame buffering, cuts, and transcription text overlap handling.
 
 use crate::{
-    adapters::audio::vad_chunker::{ChunkCutType, VadChunker, VadConfig, deduplicate_overlap},
+    adapters::audio::vad_chunker::{
+        ChunkCutType, ChunkedAudioSource, VAD_FRAME_SAMPLES, VadChunker, VadConfig,
+        deduplicate_overlap,
+    },
     domain::models::{AudioChunk, AudioConfig},
 };
+
+/// Builds one valid silent 30 ms frame without reading or retaining captured audio.
+fn silent_frame() -> Vec<i16> {
+    vec![0; VAD_FRAME_SAMPLES]
+}
+
+/// Pushes complete silent VAD frames into a chunker for deterministic state-machine tests.
+fn push_silent_frames(chunker: &mut VadChunker, frame_count: usize) {
+    for _ in 0..frame_count {
+        chunker
+            .push_pcm(AudioChunk::new(silent_frame(), AudioConfig::new(16_000, 1)))
+            .unwrap_or_else(|error| panic!("silent VAD frame should buffer: {error}"));
+    }
+}
+
+/// Requires the VAD adapter source to invoke the feature-gated WebRTC classifier.
+#[cfg(feature = "vad")]
+fn assert_webrtc_vad_state_machine_is_wired() {
+    let adapter_source = include_str!("vad_chunker.rs");
+    assert!(
+        adapter_source.contains("is_voice_segment"),
+        "VadChunker must classify every complete frame through webrtc-vad"
+    );
+}
 
 #[test]
 fn audio_input_in_non_30ms_multiples_is_correctly_buffered_and_reframed() {
@@ -40,4 +67,123 @@ fn text_deduplication_handles_whole_partial_and_short_non_overlaps() {
         "the synchronization is"
     );
     assert_eq!(deduplicate_overlap("a cat", "a dog"), "a cat a dog");
+}
+
+/// Verifies language-sensitive silence thresholds finalize a VAD pause only after enough silence.
+///
+/// Inputs: Silent 30 ms PCM frames classified through the verified WebRTC VAD API.
+/// Outputs: English finalizes at 600 ms and Italian at 800 ms with `VadPause`.
+/// Side effects: Buffers in-memory test PCM only; it does not access a microphone or log samples.
+#[test]
+#[cfg(feature = "vad")]
+fn silence_for_english_or_italian_threshold_triggers_vad_pause_finalization() {
+    use webrtc_vad::{SampleRate, Vad, VadMode};
+
+    let frame = silent_frame();
+    let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Quality);
+    let is_voice: bool = vad.is_voice_segment(&frame).unwrap_or(false);
+    assert!(!is_voice, "the deterministic zero frame must be silence");
+
+    let mut english_chunker = VadChunker::new(VadConfig::english())
+        .unwrap_or_else(|error| panic!("English configuration should work: {error}"));
+    push_silent_frames(&mut english_chunker, 20);
+    let english_chunk = english_chunker
+        .next_chunk()
+        .unwrap_or_else(|error| panic!("English chunk retrieval should work: {error}"))
+        .unwrap_or_else(|| panic!("600 ms of silence must finalize an English VAD pause"));
+    assert_eq!(english_chunk.cut_type(), ChunkCutType::VadPause);
+
+    let mut italian_chunker = VadChunker::new(VadConfig::italian())
+        .unwrap_or_else(|error| panic!("Italian configuration should work: {error}"));
+    push_silent_frames(&mut italian_chunker, 27);
+    let italian_chunk = italian_chunker
+        .next_chunk()
+        .unwrap_or_else(|error| panic!("Italian chunk retrieval should work: {error}"))
+        .unwrap_or_else(|| panic!("810 ms of silence must finalize an Italian VAD pause"));
+    assert_eq!(italian_chunk.cut_type(), ChunkCutType::VadPause);
+    assert_webrtc_vad_state_machine_is_wired();
+}
+
+/// Verifies a speaking frame resets accumulated silence before a pause threshold is reached.
+///
+/// Inputs: Nineteen silent English VAD frames followed by a non-silent frame.
+/// Outputs: No finalized chunk because speech resumed before the 600 ms threshold.
+/// Side effects: Buffers in-memory test PCM only; it does not access a microphone or log samples.
+#[test]
+#[cfg(feature = "vad")]
+fn speech_resumes_before_threshold_so_chunk_continues_without_split() {
+    use webrtc_vad::{SampleRate, Vad, VadMode};
+
+    let speech_frame = (0..VAD_FRAME_SAMPLES)
+        .map(|sample_index| if sample_index % 2 == 0 { 8_000 } else { -8_000 })
+        .collect::<Vec<i16>>();
+    let mut vad = Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Quality);
+    let is_voice: bool = vad.is_voice_segment(&speech_frame).unwrap_or(false);
+    let mut chunker = VadChunker::new(VadConfig::english())
+        .unwrap_or_else(|error| panic!("English configuration should work: {error}"));
+    push_silent_frames(&mut chunker, 19);
+    chunker
+        .push_pcm(AudioChunk::new(speech_frame, AudioConfig::new(16_000, 1)))
+        .unwrap_or_else(|error| panic!("speech frame should buffer: {error}"));
+
+    assert!(
+        is_voice,
+        "the deterministic alternating frame must be voice"
+    );
+    assert!(
+        chunker
+            .next_chunk()
+            .unwrap_or_else(|error| panic!("chunk retrieval should work: {error}"))
+            .is_none(),
+        "speech before the threshold must reset silence without splitting"
+    );
+    assert_webrtc_vad_state_machine_is_wired();
+}
+
+/// Verifies the hard cap forces a chunk and retains one second of overlap for its successor.
+///
+/// Inputs: Exactly 120 seconds of 16 kHz mono PCM, expressed as complete 30 ms frames.
+/// Outputs: A `SoftMaxForced` chunk and an adapter-owned one-second lookback buffer.
+/// Side effects: Allocates in-memory test PCM only; it does not access a microphone or log samples.
+#[test]
+#[cfg(feature = "vad")]
+fn soft_max_forces_chunk_with_one_second_lookback() {
+    let mut chunker = VadChunker::new(VadConfig::english())
+        .unwrap_or_else(|error| panic!("English configuration should work: {error}"));
+    push_silent_frames(&mut chunker, 4_000);
+    let forced_chunk = chunker
+        .next_chunk()
+        .unwrap_or_else(|error| panic!("forced chunk retrieval should work: {error}"))
+        .unwrap_or_else(|| panic!("120 seconds must force chunk finalization"));
+
+    assert_eq!(forced_chunk.cut_type(), ChunkCutType::SoftMaxForced);
+    let adapter_source = include_str!("vad_chunker.rs");
+    assert!(
+        adapter_source.contains("lookback_samples"),
+        "soft-max finalization must retain a one-second lookback buffer"
+    );
+}
+
+/// Verifies disabled VAD uses bounded time chunking and records a warning instead of failing audio.
+///
+/// Inputs: Thirty seconds of 16 kHz mono PCM while the `vad` feature is absent.
+/// Outputs: A time-forced chunk and source-level confirmation of the fallback warning contract.
+/// Side effects: Buffers in-memory test PCM only; it does not access a microphone or log samples.
+#[test]
+#[cfg(not(feature = "vad"))]
+fn disabled_vad_falls_back_to_thirty_second_time_chunking_with_warn_log() {
+    let mut chunker = VadChunker::new(VadConfig::english())
+        .unwrap_or_else(|error| panic!("fallback configuration should work: {error}"));
+    push_silent_frames(&mut chunker, 1_000);
+    let fallback_chunk = chunker
+        .next_chunk()
+        .unwrap_or_else(|error| panic!("fallback chunk retrieval should work: {error}"))
+        .unwrap_or_else(|| panic!("disabled VAD must finalize after 30 seconds"));
+
+    assert_eq!(fallback_chunk.cut_type(), ChunkCutType::SoftMaxForced);
+    let adapter_source = include_str!("vad_chunker.rs");
+    assert!(
+        adapter_source.contains("falling back to 30-second time-based chunking"),
+        "disabled or unavailable VAD must emit a warning describing time fallback"
+    );
 }

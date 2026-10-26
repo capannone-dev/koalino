@@ -16,7 +16,7 @@ crate-type = ["rlib", "cdylib"]
 default = []
 # Enables the adapter-local whisper.cpp binding for explicitly opted-in local inference.
 local-ai = ["dep:whisper-rs"]
-vad = []
+vad = ["dep:webrtc-vad"]
 
 [[bin]]
 name = "cli"
@@ -49,6 +49,8 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "jso
 uuid = { version = "1.18.1", features = ["v4"] }
 # 0.16.0 provides native binding compatibility and requires the crate's Rust 1.88 MSRV.
 whisper-rs = { version = "=0.16.0", optional = true }
+# Provides feature-gated 16 kHz speech classification for the VAD adapter and its contract tests.
+webrtc-vad = { version = "=0.4.0", optional = true }
 
 [dev-dependencies]
 tokio-tungstenite = "0.28.0"
