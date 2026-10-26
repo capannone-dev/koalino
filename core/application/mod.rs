@@ -10,6 +10,8 @@ pub mod attachment_manager;
 mod attachment_manager_tests;
 /// Defines compute-routing policy seams for future distributed AI selection.
 pub mod compute_router;
+#[cfg(test)]
+mod compute_router_tests;
 /// Coordinates diarization, identity matching, and manual-review clip preservation through ports.
 pub mod diarization_processor;
 #[cfg(test)]

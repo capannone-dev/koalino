@@ -59,3 +59,25 @@ fn transcribes_with_an_explicitly_configured_local_model() {
 
     assert_eq!(transcript.meeting_id(), audio_recording.meeting_id());
 }
+
+/// Requires local whisper.cpp inference to apply prior chunk text as its initial prompt.
+///
+/// Inputs: The local adapter source, which will receive `TranscriptionContext` during the
+/// context-propagation implementation.
+/// Outputs: Confirms the native whisper.cpp parameter wiring includes both the portable context
+/// and `FullParams::set_initial_prompt`.
+/// Side effects: Reads compile-time source text only; it does not load a model or process audio.
+#[test]
+#[cfg(feature = "local-ai")]
+fn whisper_cpp_adapter_receives_context_previous_text_and_sets_initial_prompt() {
+    let adapter_source = include_str!("local_whisper_cpp.rs");
+
+    assert!(
+        adapter_source.contains("TranscriptionContext"),
+        "local Whisper adapter must accept portable transcription context"
+    );
+    assert!(
+        adapter_source.contains("set_initial_prompt"),
+        "local Whisper adapter must map previous_text to whisper.cpp initial_prompt"
+    );
+}

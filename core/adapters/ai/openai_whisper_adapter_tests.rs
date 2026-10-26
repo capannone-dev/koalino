@@ -134,3 +134,25 @@ fn unauthorized_rate_limited_and_server_errors_are_safe_and_bounded() {
         assert!(!error.to_string().contains("test-secret"));
     }
 }
+
+/// Requires cloud transcription to forward prior chunk text as OpenAI's multipart prompt field.
+///
+/// Inputs: The OpenAI adapter source, which will receive `TranscriptionContext` during the
+/// context-propagation implementation.
+/// Outputs: Confirms the portable context is accepted and multipart construction contains the
+/// documented `prompt` field.
+/// Side effects: Reads compile-time source text only; it does not make an HTTP request or expose
+/// configuration secrets.
+#[test]
+fn openai_adapter_receives_context_previous_text_and_includes_multipart_prompt_field() {
+    let adapter_source = include_str!("openai_whisper_adapter.rs");
+
+    assert!(
+        adapter_source.contains("TranscriptionContext"),
+        "OpenAI adapter must accept portable transcription context"
+    );
+    assert!(
+        adapter_source.contains(".text(\"prompt\""),
+        "OpenAI multipart form must include the prior chunk text as prompt"
+    );
+}
