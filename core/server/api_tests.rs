@@ -20,8 +20,13 @@ use crate::{
     adapters::storage::{
         in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
     },
-    domain::models::{Attachment, MeetingId, Transcript, UnassignedVoiceClip},
-    ports::storage::{AttachmentRepository, NoteRepository},
+    domain::models::{
+        Attachment, DeviceId, MeetingId, TaskMetrics, TaskType, Transcript, UnassignedVoiceClip,
+    },
+    ports::{
+        storage::{AttachmentRepository, NoteRepository},
+        telemetry::MetricsRepository,
+    },
     server::api::{ServerAppState, WebSocketEvent, build_router},
 };
 
@@ -66,10 +71,76 @@ fn seeded_router() -> (axum::Router, ServerAppState) {
             None,
         ))
         .unwrap_or_else(|error| panic!("test review clip must persist: {error}"));
+    let current_timestamp_ms =
+        u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or_default();
+    for (task_id, device_id, task_type, duration_ms, latency_ms, power_mwh) in [
+        (
+            uuid::Uuid::from_u128(11),
+            "device-rome",
+            TaskType::Transcription,
+            1_200,
+            120,
+            2.5,
+        ),
+        (
+            uuid::Uuid::from_u128(12),
+            "device-milan",
+            TaskType::Diarization,
+            800,
+            520,
+            1.5,
+        ),
+    ] {
+        repository
+            .save_metrics(TaskMetrics::new(
+                task_id,
+                DeviceId::new(device_id),
+                task_type,
+                "fixture-model",
+                duration_ms,
+                latency_ms,
+                power_mwh,
+                current_timestamp_ms,
+            ))
+            .unwrap_or_else(|error| panic!("test metric must persist: {error}"));
+    }
 
     let application_state = ServerAppState::new(repository, InMemoryVoiceVectorDB::new());
     let router = build_router(application_state.clone());
     (router, application_state)
+}
+
+/// Verifies telemetry dashboard endpoints expose only privacy-safe device and task metrics.
+#[tokio::test]
+async fn telemetry_dashboard_routes_return_device_series_and_power_summary() {
+    let router = seeded_router().0;
+    for (endpoint, assertion) in [
+        ("/api/devices", ("devices", "device-rome")),
+        (
+            "/api/telemetry/devices/device-rome",
+            ("metrics", "transcription"),
+        ),
+        ("/api/telemetry/summary", ("total_tasks", "2")),
+    ] {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(endpoint)
+                    .body(Body::empty())
+                    .unwrap_or_else(|error| panic!("test request must build: {error}")),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("router must serve telemetry endpoint: {error}"));
+        assert_eq!(response.status(), StatusCode::OK);
+        let response_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("response body must be readable: {error}"));
+        let response_json: serde_json::Value = serde_json::from_slice(&response_bytes)
+            .unwrap_or_else(|error| panic!("response must be JSON: {error}"));
+        assert!(response_json.to_string().contains(assertion.0));
+        assert!(response_json.to_string().contains(assertion.1));
+    }
 }
 
 /// Verifies meeting metadata is returned from an injected in-memory repository through HTTP.
@@ -219,6 +290,9 @@ fn websocket_event_serializes_without_sensitive_payloads() {
 
     assert_eq!(event_json["event_type"], "meeting_started");
     assert_eq!(event_json["meeting_id"], "meeting-rome");
+    let telemetry_event = serde_json::to_value(WebSocketEvent::TelemetryUpdated)
+        .unwrap_or_else(|error| panic!("telemetry event must serialize: {error}"));
+    assert_eq!(telemetry_event["event_type"], "telemetry_updated");
 }
 
 /// Verifies a websocket connection receives an event published through the injected state publisher.

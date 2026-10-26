@@ -23,7 +23,10 @@ use crate::{
     application::voice_identity_manager::VoiceIdentityManager,
     domain::{
         errors::StorageError,
-        models::{AggregatedStats, Attachment, MeetingId, SpeakerIdentity, UnassignedVoiceClip},
+        models::{
+            AggregatedStats, Attachment, MeetingId, SpeakerIdentity, TaskMetrics, TaskType,
+            UnassignedVoiceClip,
+        },
     },
     ports::{
         storage::{AttachmentRepository, NoteRepository},
@@ -94,6 +97,8 @@ pub enum WebSocketEvent {
     SyncStatusChanged { status: String },
     /// Indicates a review item was created without exposing raw temporary audio.
     NewUnassignedClip { meeting_id: String, clip_id: String },
+    /// Indicates privacy-safe telemetry changed and dashboard clients should refresh their views.
+    TelemetryUpdated,
 }
 
 /// Builds the complete version-one headless HTTP router from injected state.
@@ -108,6 +113,12 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .route("/api/voice-gallery", get(get_voice_gallery))
         .route("/api/voice/assign", post(assign_voice_clip))
         .route("/api/telemetry", get(get_telemetry))
+        .route("/api/devices", get(list_devices))
+        .route(
+            "/api/telemetry/devices/{device_id}",
+            get(get_device_telemetry),
+        )
+        .route("/api/telemetry/summary", get(get_telemetry_summary))
         .route("/ws", get(web_socket_upgrade))
         .layer(
             CorsLayer::new()
@@ -194,6 +205,52 @@ async fn get_telemetry(
     Ok(Json(TelemetryResponse::from(
         repositories
             .get_aggregated_stats()
+            .map_err(storage_error_status)?,
+    )))
+}
+
+/// Lists devices inferred from the privacy-safe telemetry rows known to this offline replica.
+async fn list_devices(
+    State(application_state): State<ServerAppState>,
+) -> Result<Json<DevicesResponse>, StatusCode> {
+    let repositories = application_state.repositories.lock().await;
+    Ok(Json(DevicesResponse::from_metrics(
+        repositories
+            .get_all_metrics()
+            .map_err(storage_error_status)?,
+    )))
+}
+
+/// Returns one device's completed metrics from the last 24 hours without task content.
+async fn get_device_telemetry(
+    Path(device_id): Path<String>,
+    State(application_state): State<ServerAppState>,
+) -> Result<Json<DeviceTelemetryResponse>, StatusCode> {
+    let repositories = application_state.repositories.lock().await;
+    let minimum_timestamp_ms = current_epoch_ms().saturating_sub(86_400_000);
+    let metrics: Vec<TaskMetrics> = repositories
+        .get_metrics_for_device(&device_id)
+        .map_err(storage_error_status)?
+        .into_iter()
+        .filter(|metric| metric.timestamp_epoch_ms() >= minimum_timestamp_ms)
+        .collect();
+    if metrics.is_empty() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    Ok(Json(DeviceTelemetryResponse {
+        device_id,
+        metrics: metrics.iter().map(MetricResponse::from).collect(),
+    }))
+}
+
+/// Returns timing, latency, task-count, and coarse power aggregates for the dashboard.
+async fn get_telemetry_summary(
+    State(application_state): State<ServerAppState>,
+) -> Result<Json<TelemetrySummaryResponse>, StatusCode> {
+    let repositories = application_state.repositories.lock().await;
+    Ok(Json(TelemetrySummaryResponse::from_metrics(
+        repositories
+            .get_all_metrics()
             .map_err(storage_error_status)?,
     )))
 }
@@ -363,6 +420,121 @@ struct TelemetryResponse {
     task_count: u64,
     total_duration_ms: u64,
     average_latency_ms: u64,
+}
+
+/// Serializes device observations inferred from locally persisted telemetry rows.
+#[derive(Serialize)]
+struct DevicesResponse {
+    devices: Vec<DeviceResponse>,
+}
+
+/// Serializes one dashboard device card without hardware serial numbers or task content.
+#[derive(Serialize)]
+struct DeviceResponse {
+    device_id: String,
+    supports_vad: bool,
+    supported_models: Vec<String>,
+    last_seen: u64,
+}
+
+impl DevicesResponse {
+    /// Groups persisted metrics into one display-safe observation per known device.
+    fn from_metrics(metrics: Vec<TaskMetrics>) -> Self {
+        let mut devices = std::collections::BTreeMap::new();
+        for metric in metrics {
+            let device_entry = devices
+                .entry(String::from(metric.device_id().as_str()))
+                .or_insert((Vec::new(), 0_u64));
+            let model_name = String::from(metric.model_name());
+            if !device_entry.0.contains(&model_name) {
+                device_entry.0.push(model_name);
+            }
+            device_entry.1 = device_entry.1.max(metric.timestamp_epoch_ms());
+        }
+        Self {
+            devices: devices
+                .into_iter()
+                .map(
+                    |(device_id, (supported_models, last_seen))| DeviceResponse {
+                        device_id,
+                        supports_vad: cfg!(feature = "vad"),
+                        supported_models,
+                        last_seen,
+                    },
+                )
+                .collect(),
+        }
+    }
+}
+
+/// Serializes one time-series point without inputs, outputs, or identifiers for a task.
+#[derive(Serialize)]
+struct MetricResponse {
+    task_type: &'static str,
+    duration_ms: u64,
+    latency_ms: u64,
+    power_mwh: f32,
+    recorded_at: u64,
+}
+
+impl From<&TaskMetrics> for MetricResponse {
+    fn from(metric: &TaskMetrics) -> Self {
+        Self {
+            task_type: metric.task_type().as_str(),
+            duration_ms: metric.duration_ms(),
+            latency_ms: metric.latency_ms(),
+            power_mwh: metric.estimated_power_mwh(),
+            recorded_at: metric.timestamp_epoch_ms(),
+        }
+    }
+}
+
+/// Serializes the time-series response for one requested device.
+#[derive(Serialize)]
+struct DeviceTelemetryResponse {
+    device_id: String,
+    metrics: Vec<MetricResponse>,
+}
+
+/// Serializes aggregate values rendered by the dashboard summary cards.
+#[derive(Serialize)]
+struct TelemetrySummaryResponse {
+    total_transcription_time_ms: u64,
+    average_latency_ms: u64,
+    total_tasks: u64,
+    power_estimate_mwh: f32,
+}
+
+impl TelemetrySummaryResponse {
+    /// Aggregates stored metrics without retaining or serializing task payloads.
+    fn from_metrics(metrics: Vec<TaskMetrics>) -> Self {
+        let total_tasks = metrics.len() as u64;
+        let total_transcription_time_ms = metrics
+            .iter()
+            .filter(|metric| {
+                matches!(
+                    metric.task_type(),
+                    TaskType::Transcription | TaskType::CloudTranscription
+                )
+            })
+            .map(TaskMetrics::duration_ms)
+            .sum();
+        let total_latency_ms: u64 = metrics.iter().map(TaskMetrics::latency_ms).sum();
+        let power_estimate_mwh = metrics.iter().map(TaskMetrics::estimated_power_mwh).sum();
+        Self {
+            total_transcription_time_ms,
+            average_latency_ms: total_latency_ms
+                .checked_div(total_tasks)
+                .unwrap_or_default(),
+            total_tasks,
+            power_estimate_mwh,
+        }
+    }
+}
+
+/// Returns the current UTC epoch in milliseconds, treating pre-epoch systems as zero.
+fn current_epoch_ms() -> u64 {
+    u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or_default()
 }
 
 /// Deserializes the opaque identifiers supplied by the web voice-assignment form.

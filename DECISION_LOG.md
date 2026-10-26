@@ -260,3 +260,13 @@
   30-second time chunking, keeping offline capture available when the optional capability is absent.
 - A 120-second soft maximum retains one second of adapter-owned PCM lookback for the successor
   chunk; callers receive only the existing portable chunk contract and cut type.
+
+## 2026-10-26 — Issue #24 telemetry dashboard
+
+- Dashboard API handlers depend only on `MetricsRepository`; all-device reads remain implemented
+  inside SQLite, and responses omit task inputs, outputs, raw audio, and biometric data.
+- Device cards are telemetry observations: models and last-seen time are derived from completed
+  metrics, while the feature-gated server VAD capability is exposed without hardware identifiers.
+- The Next.js client uses Recharts with responsive containers and coalesces `telemetry_updated`
+  WebSocket refreshes to one fetch sequence per ten seconds; its existing cloud Node workflow is
+  the authoritative UI verification environment.

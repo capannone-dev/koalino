@@ -23,6 +23,9 @@ cloud because the local coding sandbox has no Node.js runtime.
 
 ## Pages
 
+- `/dashboard` is the responsive telemetry dashboard. It renders device health, summary cards,
+  duration, latency, task mix, and power charts from the local Axum API. Its WebSocket client
+  refreshes a telemetry update at most once every ten seconds and reconnects after disconnect.
 - `/` shows aggregate telemetry and live Axum WebSocket status messages.
 - `/meetings` lists local meetings; `/meetings/<id>` shows transcript and attachment metadata.
 - `/voice-gallery` lists unresolved clips, provides an audio-control placeholder for the local

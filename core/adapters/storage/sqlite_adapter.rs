@@ -553,6 +553,54 @@ impl MetricsRepository for SqliteNoteRepository {
         .collect()
     }
 
+    /// Loads every completed metric so the local dashboard can form cross-device aggregates.
+    ///
+    /// Inputs: None.
+    /// Outputs: Privacy-safe metric metadata in timestamp order or a portable storage error.
+    /// Side effects: Reads SQLite rows only; it does not load AI inputs, outputs, or raw audio.
+    fn get_all_metrics(&self) -> Result<Vec<TaskMetrics>, StorageError> {
+        let mut statement = self.connection.prepare("SELECT task_id, device_id, task_type, model_name, duration_ms, latency_ms, estimated_power_mwh, timestamp_epoch_ms FROM task_metrics ORDER BY timestamp_epoch_ms").map_err(|error| sqlite_error("unable to prepare all metrics query", error))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, u64>(4)?,
+                    row.get::<_, u64>(5)?,
+                    row.get::<_, f32>(6)?,
+                    row.get::<_, u64>(7)?,
+                ))
+            })
+            .map_err(|error| sqlite_error("unable to load all metrics", error))?;
+        rows.map(|row| {
+            let (
+                task_id,
+                device_id,
+                task_type,
+                model_name,
+                duration_ms,
+                latency_ms,
+                estimated_power_mwh,
+                timestamp_epoch_ms,
+            ) = row.map_err(|error| sqlite_error("unable to decode metric", error))?;
+            Ok(TaskMetrics::new(
+                uuid::Uuid::parse_str(&task_id).map_err(|error| StorageError::Rejected {
+                    reason: format!("stored task metric has an invalid UUID: {error}"),
+                })?,
+                DeviceId::new(device_id),
+                parse_task_type(&task_type)?,
+                model_name,
+                duration_ms,
+                latency_ms,
+                estimated_power_mwh,
+                timestamp_epoch_ms,
+            ))
+        })
+        .collect()
+    }
+
     /// Aggregates all persisted task metric rows without loading task payloads.
     fn get_aggregated_stats(&self) -> Result<AggregatedStats, StorageError> {
         let (task_count, total_duration_ms, total_latency_ms): (u64, u64, u64) = self.connection.query_row("SELECT COUNT(*), COALESCE(SUM(duration_ms), 0), COALESCE(SUM(latency_ms), 0) FROM task_metrics", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).map_err(|error| sqlite_error("unable to aggregate task metrics", error))?;

@@ -137,3 +137,9 @@ adapter-owned WAV source. It implements only `TranscriptionEngine`; API keys are
 engines while reserving Anthropic for future text tasks. Cloud payloads over 25 MiB are rejected
 before HTTP and rate-limit errors remain portable for fallback handling.
 
+Issue #24 extends the headless server with device observations, 24-hour per-device metric series,
+and aggregate power-aware telemetry derived exclusively from the existing `MetricsRepository` port.
+The Next.js `/dashboard` client renders responsive Recharts views, status-colored device cards, and
+summary values; it treats `telemetry_updated` WebSocket events as a coalesced ten-second refresh
+signal. Node verification remains in the existing Node 22 GitHub Actions workflow.
+

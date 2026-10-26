@@ -13,14 +13,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
-        <header className="site-header">
+        <header className="mx-auto flex max-w-7xl items-center justify-between p-4">
           <Link href="/">Note Taker</Link>
-          <nav aria-label="Primary navigation">
+          <nav aria-label="Primary navigation" className="flex gap-4">
+            <Link href="/dashboard">Dashboard</Link>
             <Link href="/meetings">Meetings</Link>
             <Link href="/voice-gallery">Voice gallery</Link>
           </nav>
         </header>
-        <main>{children}</main>
+        <main className="mx-auto max-w-7xl p-4">{children}</main>
       </body>
     </html>
   );

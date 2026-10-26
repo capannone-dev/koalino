@@ -60,6 +60,7 @@
 | Issue | Status | Scope |
 | --- | --- | --- |
 | #19 Next.js dashboard and voice assignment | Ready for review | App Router dashboard, typed Axum REST/WebSocket client, cloud Node CI, and application-backed voice assignment endpoint. |
+| #24 Telemetry dashboard with device metrics and time-series charts | Ready for review | Privacy-safe device, series, and summary API endpoints; responsive Recharts dashboard; coalesced live refresh; and cloud UI verification. |
 
 ## WP6: P2P Network Layer
 
