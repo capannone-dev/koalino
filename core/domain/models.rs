@@ -479,7 +479,7 @@ impl RecordingId {
 }
 
 /// Identifies the node that acquired data or emitted an operational event.
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct DeviceId(String);
 
 impl DeviceId {
@@ -646,7 +646,7 @@ pub enum SyncMessageEncodeError {
 }
 
 /// Identifies a transcription model that a device can execute without exposing its implementation.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum TranscriptionModel {
     /// The node can execute a Whisper-compatible transcription workload.
     Whisper,
@@ -672,12 +672,14 @@ impl TranscriptionModel {
 ///
 /// A future encrypted P2P adapter broadcasts this portable value. It intentionally contains no
 /// credentials, model weights, raw audio, or hardware serial numbers.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DeviceManifest {
     device_id: DeviceId,
     cpu_cores: u16,
     gpu_vram_megabytes: u32,
     available_transcription_models: Vec<TranscriptionModel>,
+    /// Reports whether this device can run feature-gated local VAD chunking.
+    pub supports_vad: bool,
 }
 
 impl DeviceManifest {
@@ -698,6 +700,7 @@ impl DeviceManifest {
             cpu_cores,
             gpu_vram_megabytes,
             available_transcription_models,
+            supports_vad: cfg!(feature = "vad"),
         }
     }
 
@@ -737,6 +740,49 @@ impl DeviceManifest {
     /// Side effects: None.
     pub fn transcription_capacity_score(&self) -> u64 {
         u64::from(self.gpu_vram_megabytes) * 1_000 + u64::from(self.cpu_cores)
+    }
+}
+
+#[cfg(test)]
+mod device_manifest_tests {
+    //! Defines feature-sensitive serialization contracts for the device VAD capability flag.
+
+    use super::{DeviceId, DeviceManifest, TranscriptionModel};
+
+    fn manifest() -> DeviceManifest {
+        DeviceManifest::new(
+            DeviceId::new("vad-capability-test-device"),
+            4,
+            0,
+            vec![TranscriptionModel::Whisper],
+        )
+    }
+
+    #[test]
+    #[cfg(feature = "vad")]
+    fn smart_node_manifest_has_supports_vad_when_feature_enabled() {
+        assert!(manifest().supports_vad);
+    }
+
+    #[test]
+    #[cfg(not(feature = "vad"))]
+    fn dumb_node_manifest_has_supports_vad_when_feature_disabled() {
+        assert!(!manifest().supports_vad);
+    }
+
+    #[test]
+    fn manifest_serialization_includes_supports_vad_field() {
+        let serialized = serde_json::to_value(manifest())
+            .unwrap_or_else(|error| panic!("manifest should serialize: {error}"));
+        assert_eq!(
+            serialized
+                .get("supports_vad")
+                .and_then(|value| value.as_bool()),
+            Some(cfg!(feature = "vad"))
+        );
+        let round_tripped: DeviceManifest = serde_json::from_value(serialized)
+            .unwrap_or_else(|error| panic!("manifest should deserialize: {error}"));
+        assert_eq!(round_tripped.supports_vad, cfg!(feature = "vad"));
     }
 }
 
