@@ -248,3 +248,15 @@
   to the next request. It does not persist, log, or send the rolling buffer over P2P.
 - Local whisper.cpp maps prior text to its initial prompt; the OpenAI adapter maps it to the
   multipart `prompt` field. Adapter-specific request details remain outside application code.
+
+## 2026-10-26 — Issue #23c WebRTC VAD chunk state machine
+
+- The audio adapter owns a private `Idle -> Listening -> PauseDetected -> Finalize` state machine;
+  raw PCM remains adapter-local until a portable finalized chunk is emitted.
+- The optional `webrtc-vad` dependency, classifier instance, and frame classification call are all
+  compiled only with the `vad` feature. English finalizes after 600 ms of silence and Italian after
+  800 ms.
+- VAD-disabled builds and VAD classification failures warn without recording samples and use bounded
+  30-second time chunking, keeping offline capture available when the optional capability is absent.
+- A 120-second soft maximum retains one second of adapter-owned PCM lookback for the successor
+  chunk; callers receive only the existing portable chunk contract and cut type.
