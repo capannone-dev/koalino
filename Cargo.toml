@@ -16,6 +16,7 @@ crate-type = ["rlib", "cdylib"]
 default = []
 # Enables the adapter-local whisper.cpp binding for explicitly opted-in local inference.
 local-ai = ["dep:whisper-rs"]
+vad = []
 
 [[bin]]
 name = "cli"
