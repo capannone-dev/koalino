@@ -131,3 +131,9 @@ peer availability registry, and queues best-effort attachment fetches after CRDT
 persisted. Explicit 64 KiB frames are SHA-256 verified before atomic CAS commit; integration tests
 use Noise over libp2p memory transport only.
 
+Issue #22 adds the default-build OpenAI Whisper adapter with a reqwest multipart boundary and
+adapter-owned WAV source. It implements only `TranscriptionEngine`; API keys are loaded from
+`OPENAI_API_KEY` and are never logged. `AiConfig` and `AiRegistry` select portable local/OpenAI
+engines while reserving Anthropic for future text tasks. Cloud payloads over 25 MiB are rejected
+before HTTP and rate-limit errors remain portable for fallback handling.
+

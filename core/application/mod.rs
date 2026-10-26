@@ -1,5 +1,9 @@
 //! Exposes use cases that coordinate domain work solely through ports.
 
+/// Defines portable provider and fallback configuration for AI workloads.
+pub mod ai_config;
+/// Selects registered adapter-neutral AI engines from provider configuration.
+pub mod ai_registry;
 /// Suggests meeting ownership for externally acquired files through metadata and storage ports.
 pub mod attachment_manager;
 #[cfg(test)]

@@ -21,6 +21,11 @@ peer advertises the SHA-256 hash. It never imports libp2p or waits in the CRDT a
 64 KiB frames, a 100 MiB limit, two concurrent transfers, and final SHA-256 validation protect the
 local CAS commit.
 
+`ai_config.rs` keeps per-device defaults and optional task overrides provider-neutral. `ai_registry.rs`
+registers only `TranscriptionEngine` trait objects and selects an explicit provider or its fallback
+chain; local is preferred when configured. OpenAI remains adapter-only, while Anthropic is reserved
+for future text/LLM work and currently returns `ProviderUnsupported` for transcription.
+
 `voice_identity_manager.rs` depends only on `VoiceVectorDB`, `VoiceEmbedding`, and
 `VoiceMatchResult`. The storage adapter calculates similarity; the manager classifies the best
 returned candidate as strong only above `0.80`, weak from `0.50` through `0.80` inclusive, and no

@@ -580,6 +580,7 @@ fn parse_task_type(task_type: &str) -> Result<TaskType, StorageError> {
         "transcription" => Ok(TaskType::Transcription),
         "diarization" => Ok(TaskType::Diarization),
         "file_transfer" => Ok(TaskType::FileTransfer),
+        "cloud_transcription" => Ok(TaskType::CloudTranscription),
         _ => Err(StorageError::Rejected {
             reason: String::from("stored task metric has an unknown task type"),
         }),

@@ -55,6 +55,15 @@ pub enum TranscriptionError {
     /// The adapter rejected the recording before inference started.
     #[error("recording cannot be transcribed: {reason}")]
     InvalidRecording { reason: String },
+    /// The adapter refused audio exceeding the configured provider payload limit.
+    #[error("transcription payload exceeds the provider limit of {maximum_bytes} bytes")]
+    PayloadTooLarge { maximum_bytes: usize },
+    /// The selected provider does not offer the requested transcription capability.
+    #[error("selected transcription provider is unsupported")]
+    ProviderUnsupported,
+    /// The cloud provider rate limit was exhausted after bounded retries.
+    #[error("cloud transcription rate limit exhausted")]
+    RateLimited,
 }
 
 /// Describes a diarization operation that could not produce speaker segments.

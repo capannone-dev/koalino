@@ -792,6 +792,8 @@ pub enum TaskType {
     Diarization,
     /// Transfers a verified content-addressed attachment over encrypted P2P transport.
     FileTransfer,
+    /// Executes transcription through a cloud API provider.
+    CloudTranscription,
 }
 
 impl TaskType {
@@ -805,6 +807,7 @@ impl TaskType {
             Self::Transcription => "transcription",
             Self::Diarization => "diarization",
             Self::FileTransfer => "file_transfer",
+            Self::CloudTranscription => "cloud_transcription",
         }
     }
 }

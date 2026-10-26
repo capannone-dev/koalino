@@ -230,3 +230,12 @@
   reassembly and reject inconsistent, short, oversized, or hash-mismatched streams.
 - `FileSyncManager` uses port-only availability, authorization, and SHA-256 CAS coordination so a
   transfer failure remains best-effort work and cannot delay text synchronization.
+
+## 2026-10-26 — Issue #22 cloud transcription adapter
+
+- Kept OpenAI HTTP/multipart types inside `core/adapters/ai`; the application sees only
+  `TranscriptionEngine`, `AiConfig`, and `AiRegistry` provider values.
+- The adapter resolves a WAV source, uses `audio_chunk.wav` and `audio/wav`, and rejects uploads
+  above 25 MiB before any request. `OPENAI_API_KEY` is adapter-private and never logged.
+- Anthropic remains a configuration reservation for future text tasks; explicit transcription
+  selection returns the portable `ProviderUnsupported` error.
