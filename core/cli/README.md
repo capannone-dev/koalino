@@ -21,6 +21,8 @@ note-taker meetings export <meeting-id> --format <markdown|pdf|json> [--output <
 note-taker meetings export-all --format <markdown|pdf|json> [--date-range <YYYY-MM-DD>:<YYYY-MM-DD>] [--output <path>] [--no-attachments] [--no-metadata]
 note-taker voice list
 note-taker voice assign <clip-uuid> <identity-uuid>
+note-taker voice list-clusters <meeting-id>
+note-taker voice assign-cluster <cluster-uuid> <identity-name>
 note-taker telemetry
 ```
 
@@ -28,6 +30,37 @@ note-taker telemetry
 so date and duration display as `unknown` until recording timeline metadata is added. `voice assign`
 finds the clip through `NoteRepository` and delegates signature storage to `VoiceIdentityManager`;
 it never performs vector matching or SQL in the CLI.
+
+### Unknown-speaker clusters
+
+Both commands call `application::cluster_review`, the same use case as the HTTP API and FFI.
+
+`voice list-clusters <meeting-id>` prints the meeting's unresolved clusters. Durations are in
+seconds, rounded to one decimal place:
+
+```text
+Cluster ID | Total Duration | Chunks
+4b1c…-… | 12.5s | 3
+```
+
+A meeting with no unresolved clusters, including an unknown meeting ID, prints
+`No unresolved unknown-speaker clusters for meeting <meeting-id>`.
+
+`voice assign-cluster <cluster-uuid> "<identity name>"` resolves the name and assigns the cluster.
+A known identity with the same name (trimmed, case-insensitive) is reused. Any other name gets a
+new identity UUID. Every member embedding is stored as a voice variant, the cluster's transcript
+segments are relinked, the cluster is resolved, and its review audio is deleted. It prints:
+
+```text
+Assigned cluster <cluster-uuid> to "Grace Hopper" (new identity <identity-uuid>; 3 voice variants stored, 4 transcript segments updated)
+```
+
+Blank names, unknown clusters, and already-resolved clusters exit non-zero with a readable message.
+
+Two limitations come from the current ports. No port stores display names yet, so the name is
+printed but not saved. The CLI binary also composes `InMemoryVoiceVectorDB`, the same as
+`voice assign`, so stored voice variants last only for the command's process. The relinked
+segments and the resolved cluster are persisted in SQLite.
 
 ### Exports
 

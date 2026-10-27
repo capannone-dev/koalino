@@ -22,6 +22,7 @@ use crate::{
         },
     },
     application::export_manager::ExportWriter,
+    application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
     domain::models::{AudioConfig, ExportFormat, ExportOptions, MeetingId, TranscriptSegment},
     ports::storage::NoteRepository,
 };
@@ -33,6 +34,12 @@ type RecordedExportRequest = (Option<String>, ExportOptions, Option<PathBuf>);
 #[derive(Default)]
 struct MockCliService {
     assigned_clips: RefCell<Vec<(Uuid, Uuid)>>,
+    /// Rows returned by `list_unknown_clusters`.
+    cluster_rows: Vec<(String, u64, usize)>,
+    /// Meeting IDs passed to `list_unknown_clusters`.
+    listed_cluster_meetings: RefCell<Vec<String>>,
+    /// `(cluster_id, identity_name)` pairs passed to `assign_cluster`.
+    assigned_clusters: RefCell<Vec<(Uuid, String)>>,
     export_requests: RefCell<Vec<RecordedExportRequest>>,
 }
 
@@ -64,6 +71,18 @@ impl CliService for MockCliService {
             .borrow_mut()
             .push((clip_id, identity_id));
         Ok(String::from("voice clip assigned"))
+    }
+    fn list_unknown_clusters(&self, meeting_id: &str) -> Result<Vec<(String, u64, usize)>, String> {
+        self.listed_cluster_meetings
+            .borrow_mut()
+            .push(String::from(meeting_id));
+        Ok(self.cluster_rows.clone())
+    }
+    fn assign_cluster(&mut self, cluster_id: Uuid, identity_name: &str) -> Result<String, String> {
+        self.assigned_clusters
+            .borrow_mut()
+            .push((cluster_id, String::from(identity_name)));
+        Ok(String::from("cluster assigned"))
     }
     fn telemetry(&self) -> Result<String, String> {
         Ok(String::new())
@@ -414,4 +433,216 @@ fn core_service_reports_unknown_meeting_export() {
         .expect_err("unknown meetings must fail");
 
     assert!(export_failure.contains("meeting missing-meeting does not exist"));
+}
+
+/// Verifies `voice list-clusters` and `voice assign-cluster` parse their arguments.
+#[test]
+fn parses_cluster_review_commands() {
+    let listed = Cli::try_parse_from(["note-taker", "voice", "list-clusters", "meeting-rome"])
+        .unwrap_or_else(|error| panic!("voice list-clusters must parse: {error}"));
+    assert!(
+        matches!(listed.command, CliCommand::Voice(VoiceArgs { command: VoiceCommand::ListClusters { meeting_id } }) if meeting_id == "meeting-rome")
+    );
+
+    let cluster_id = Uuid::new_v4();
+    let assigned = Cli::try_parse_from([
+        "note-taker",
+        "voice",
+        "assign-cluster",
+        &cluster_id.to_string(),
+        "Grace Hopper",
+    ])
+    .unwrap_or_else(|error| panic!("voice assign-cluster must parse: {error}"));
+    assert!(
+        matches!(assigned.command, CliCommand::Voice(VoiceArgs { command: VoiceCommand::AssignCluster { cluster_id: parsed_cluster_id, identity_name } }) if parsed_cluster_id == cluster_id && identity_name == "Grace Hopper")
+    );
+}
+
+/// Verifies malformed cluster IDs and missing names are rejected by clap.
+#[test]
+fn rejects_malformed_cluster_assignment_arguments() {
+    assert!(
+        Cli::try_parse_from([
+            "note-taker",
+            "voice",
+            "assign-cluster",
+            "not-a-uuid",
+            "Grace"
+        ])
+        .is_err()
+    );
+    assert!(
+        Cli::try_parse_from([
+            "note-taker",
+            "voice",
+            "assign-cluster",
+            &Uuid::new_v4().to_string()
+        ])
+        .is_err()
+    );
+}
+
+/// Verifies `list-clusters` formats the service rows as a table.
+#[test]
+fn list_clusters_formats_mocked_rows_as_a_table() {
+    let mut mock_service = MockCliService {
+        cluster_rows: vec![
+            (String::from("cluster-a"), 3_500, 2),
+            (String::from("cluster-b"), 65_250, 7),
+        ],
+        ..MockCliService::default()
+    };
+
+    let output = dispatch(
+        CliCommand::Voice(VoiceArgs {
+            command: VoiceCommand::ListClusters {
+                meeting_id: String::from("meeting-rome"),
+            },
+        }),
+        &mut mock_service,
+    )
+    .unwrap_or_else(|error| panic!("list-clusters must dispatch: {error}"));
+
+    assert_eq!(
+        output,
+        "Cluster ID | Total Duration | Chunks\ncluster-a | 3.5s | 2\ncluster-b | 65.3s | 7"
+    );
+    assert_eq!(
+        mock_service.listed_cluster_meetings.into_inner(),
+        vec![String::from("meeting-rome")]
+    );
+}
+
+/// Verifies `list-clusters` explains an empty result instead of printing a bare header.
+#[test]
+fn list_clusters_reports_when_no_cluster_is_unresolved() {
+    let mut mock_service = MockCliService::default();
+
+    let output = dispatch(
+        CliCommand::Voice(VoiceArgs {
+            command: VoiceCommand::ListClusters {
+                meeting_id: String::from("meeting-rome"),
+            },
+        }),
+        &mut mock_service,
+    )
+    .unwrap_or_else(|error| panic!("list-clusters must dispatch: {error}"));
+
+    assert_eq!(
+        output,
+        "No unresolved unknown-speaker clusters for meeting meeting-rome"
+    );
+}
+
+/// Verifies `assign-cluster` passes the parsed cluster ID and typed name to the service once.
+#[test]
+fn assign_cluster_delegates_arguments_to_the_service() {
+    let cluster_id = Uuid::new_v4();
+    let mut mock_service = MockCliService::default();
+
+    let output = dispatch(
+        CliCommand::Voice(VoiceArgs {
+            command: VoiceCommand::AssignCluster {
+                cluster_id,
+                identity_name: String::from("Grace Hopper"),
+            },
+        }),
+        &mut mock_service,
+    )
+    .unwrap_or_else(|error| panic!("assign-cluster must dispatch: {error}"));
+
+    assert_eq!(output, "cluster assigned");
+    assert_eq!(
+        mock_service.assigned_clusters.into_inner(),
+        vec![(cluster_id, String::from("Grace Hopper"))]
+    );
+}
+
+/// Builds the concrete CLI service over in-memory SQLite holding one meeting with one cluster.
+///
+/// Outputs: The service and the cluster ID (two chunks, 2.5 s total).
+fn core_service_with_cluster() -> (
+    CoreCliService<LocalRecorder, SqliteNoteRepository, InMemoryVoiceVectorDB>,
+    Uuid,
+) {
+    let repository = SqliteNoteRepository::open_in_memory()
+        .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    let meeting_id = MeetingId::new("meeting-clusters");
+    repository
+        .create_meeting(&meeting_id, &[1])
+        .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+    let clusterer = UnknownSpeakerClusterer::new(&repository, ClusteringConfig::default());
+    let cluster_id = clusterer
+        .find_or_create_cluster(&meeting_id, &[1.0, 0.0], String::from("c1"), 1_000)
+        .unwrap_or_else(|error| panic!("fixture chunk must cluster: {error}"))
+        .cluster_id();
+    clusterer
+        .find_or_create_cluster(&meeting_id, &[0.9, 0.3], String::from("c2"), 1_500)
+        .unwrap_or_else(|error| panic!("fixture chunk must cluster: {error}"));
+    let recorder = LocalRecorder::new(AudioConfig::new(16_000, 1))
+        .unwrap_or_else(|error| panic!("fixture recorder must initialize: {error}"));
+    (
+        CoreCliService::new(
+            recorder,
+            repository,
+            InMemoryVoiceVectorDB::new(),
+            ExportWriter::new(default_exporters(), std::env::temp_dir()),
+        ),
+        cluster_id,
+    )
+}
+
+/// Verifies the concrete service lists and assigns clusters through the cluster-review use case.
+#[test]
+fn core_service_lists_and_assigns_clusters_from_sqlite() {
+    let (mut cli_service, cluster_id) = core_service_with_cluster();
+    let list_command = || {
+        CliCommand::Voice(VoiceArgs {
+            command: VoiceCommand::ListClusters {
+                meeting_id: String::from("meeting-clusters"),
+            },
+        })
+    };
+
+    let listed = dispatch(list_command(), &mut cli_service)
+        .unwrap_or_else(|error| panic!("list-clusters must dispatch: {error}"));
+    assert!(listed.contains(&format!("{cluster_id} | 2.5s | 2")));
+
+    let assigned = dispatch(
+        CliCommand::Voice(VoiceArgs {
+            command: VoiceCommand::AssignCluster {
+                cluster_id,
+                identity_name: String::from("Grace Hopper"),
+            },
+        }),
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("assign-cluster must dispatch: {error}"));
+    assert!(assigned.starts_with(&format!(
+        "Assigned cluster {cluster_id} to \"Grace Hopper\""
+    )));
+    assert!(assigned.contains("new identity"));
+    assert!(assigned.contains("2 voice variants stored, 0 transcript segments updated"));
+
+    let relisted = dispatch(list_command(), &mut cli_service)
+        .unwrap_or_else(|error| panic!("list-clusters must dispatch: {error}"));
+    assert!(relisted.starts_with("No unresolved unknown-speaker clusters"));
+}
+
+/// Verifies the concrete service reports blank names and unknown clusters as errors.
+#[test]
+fn core_service_rejects_blank_names_and_unknown_clusters() {
+    let (mut cli_service, cluster_id) = core_service_with_cluster();
+
+    let blank = cli_service.assign_cluster(cluster_id, "  ");
+    assert_eq!(blank, Err(String::from("identity name must not be blank")));
+
+    let missing_cluster_id = Uuid::new_v4();
+    let missing = cli_service.assign_cluster(missing_cluster_id, "Grace");
+    assert_eq!(
+        missing,
+        Err(format!(
+            "unknown-speaker cluster {missing_cluster_id} was not found"
+        ))
+    );
 }

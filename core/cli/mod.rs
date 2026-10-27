@@ -11,6 +11,9 @@ use uuid::Uuid;
 
 use crate::{
     application::{
+        cluster_review::{
+            NamedClusterAssignment, assign_cluster_to_named_identity, list_unknown_clusters,
+        },
         export_manager::{ExportManager, ExportWriter},
         voice_identity_manager::VoiceIdentityManager,
     },
@@ -185,7 +188,22 @@ pub struct MeetingArgs {
 #[derive(Debug, Subcommand)]
 pub enum VoiceCommand {
     List,
-    Assign { clip_id: Uuid, identity_id: Uuid },
+    Assign {
+        clip_id: Uuid,
+        identity_id: Uuid,
+    },
+    /// Lists a meeting's unresolved unknown-speaker clusters.
+    ListClusters {
+        /// Meeting whose clusters are listed.
+        meeting_id: String,
+    },
+    /// Assigns every chunk of an unknown-speaker cluster to a named identity.
+    AssignCluster {
+        /// Cluster UUID printed by `voice list-clusters`.
+        cluster_id: Uuid,
+        /// Name of the person; a known identity with this name is reused, otherwise one is created.
+        identity_name: String,
+    },
 }
 
 /// Holds a nested voice action for clap.
@@ -212,6 +230,11 @@ pub trait CliService {
     fn list_voices(&self) -> Result<Vec<(String, String, usize)>, String>;
     /// Resolves a clip through the voice identity application service.
     fn assign_voice_clip(&mut self, clip_id: Uuid, identity_id: Uuid) -> Result<String, String>;
+    /// Loads `(cluster_id, total_duration_ms, chunk_count)` rows for a meeting's unresolved
+    /// unknown-speaker clusters.
+    fn list_unknown_clusters(&self, meeting_id: &str) -> Result<Vec<(String, u64, usize)>, String>;
+    /// Assigns a cluster to the identity named `identity_name` and describes the outcome.
+    fn assign_cluster(&mut self, cluster_id: Uuid, identity_name: &str) -> Result<String, String>;
     /// Loads aggregate metrics.
     fn telemetry(&self) -> Result<String, String>;
     /// Exports one meeting through the shared export manager.
@@ -278,6 +301,19 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
                     identity_id,
                 },
         }) => cli_service.assign_voice_clip(clip_id, identity_id),
+        CliCommand::Voice(VoiceArgs {
+            command: VoiceCommand::ListClusters { meeting_id },
+        }) => Ok(format_cluster_table(
+            &meeting_id,
+            cli_service.list_unknown_clusters(&meeting_id)?,
+        )),
+        CliCommand::Voice(VoiceArgs {
+            command:
+                VoiceCommand::AssignCluster {
+                    cluster_id,
+                    identity_name,
+                },
+        }) => cli_service.assign_cluster(cluster_id, &identity_name),
         CliCommand::Telemetry => cli_service.telemetry(),
     }
 }
@@ -304,6 +340,53 @@ fn format_voice_table(voices: Vec<(String, String, usize)>) -> String {
         )
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Formats unknown-speaker cluster rows, or a sentence when the meeting has none.
+///
+/// Inputs: `meeting_id` for the empty message; `(cluster_id, total_duration_ms, chunk_count)` rows.
+/// Outputs: A `Cluster ID | Total Duration | Chunks` table with durations in seconds.
+/// Side effects: None.
+fn format_cluster_table(meeting_id: &str, clusters: Vec<(String, u64, usize)>) -> String {
+    if clusters.is_empty() {
+        return format!("No unresolved unknown-speaker clusters for meeting {meeting_id}");
+    }
+    std::iter::once(String::from("Cluster ID | Total Duration | Chunks"))
+        .chain(
+            clusters
+                .into_iter()
+                .map(|(cluster_id, total_duration_ms, chunk_count)| {
+                    format!(
+                        "{cluster_id} | {} | {chunk_count}",
+                        format_seconds(total_duration_ms)
+                    )
+                }),
+        )
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Formats milliseconds as seconds rounded half-up to one decimal, such as `3.5s`.
+fn format_seconds(duration_ms: u64) -> String {
+    let tenths_of_second = duration_ms.saturating_add(50) / 100;
+    format!("{}.{}s", tenths_of_second / 10, tenths_of_second % 10)
+}
+
+/// Describes a completed cluster assignment for the terminal.
+fn format_cluster_assignment(assignment: &NamedClusterAssignment) -> String {
+    format!(
+        "Assigned cluster {} to \"{}\" ({} {}; {} voice variants stored, {} transcript segments updated)",
+        assignment.cluster_id(),
+        assignment.identity_name(),
+        if assignment.identity_created() {
+            "new identity"
+        } else {
+            "existing identity"
+        },
+        assignment.identity_id(),
+        assignment.variants_stored(),
+        assignment.segments_updated(),
+    )
 }
 
 /// Adapts existing portable recorder, repository, and voice-manager services for the CLI.
@@ -453,6 +536,32 @@ where
             .confirm_weak_match(identity_id, clip.derived_embedding())
             .map(|_| String::from("voice clip assigned"))
             .map_err(|error| error.to_string())
+    }
+    fn list_unknown_clusters(&self, meeting_id: &str) -> Result<Vec<(String, u64, usize)>, String> {
+        list_unknown_clusters(&self.repository, &MeetingId::new(meeting_id))
+            .map(|summaries| {
+                summaries
+                    .iter()
+                    .map(|summary| {
+                        (
+                            summary.cluster_id().to_string(),
+                            summary.total_duration_ms(),
+                            summary.chunk_count(),
+                        )
+                    })
+                    .collect()
+            })
+            .map_err(|error| error.to_string())
+    }
+    fn assign_cluster(&mut self, cluster_id: Uuid, identity_name: &str) -> Result<String, String> {
+        assign_cluster_to_named_identity(
+            &self.repository,
+            self.voice_identity_manager.vector_database(),
+            cluster_id,
+            identity_name,
+        )
+        .map(|assignment| format_cluster_assignment(&assignment))
+        .map_err(|error| error.to_string())
     }
     fn telemetry(&self) -> Result<String, String> {
         self.repository
