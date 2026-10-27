@@ -28,6 +28,32 @@ pub trait VoiceVectorDB {
         Ok(Vec::new())
     }
 
+    /// Creates a speaker identity, or renames it when its UUID is already stored.
+    ///
+    /// Inputs: `identity` carries a stable UUID and a non-blank user-visible display name.
+    /// Outputs: Success or a portable storage error; the default reports `Unavailable`.
+    /// Side effects: Persists display metadata only (no biometric data); a rename keeps the
+    /// identity's creation time and voice variants.
+    fn save_speaker_identity(&self, _identity: &SpeakerIdentity) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
+    }
+
+    /// Loads one speaker identity by UUID.
+    ///
+    /// Inputs: `identity_id` identifies the person.
+    /// Outputs: The identity, `None` when it is not stored, or a portable storage error. The
+    /// default searches `list_speaker_identities`.
+    /// Side effects: Reads identity metadata only.
+    fn load_speaker_identity(
+        &self,
+        identity_id: Uuid,
+    ) -> Result<Option<SpeakerIdentity>, StorageError> {
+        Ok(self
+            .list_speaker_identities()?
+            .into_iter()
+            .find(|identity| identity.identity_id() == identity_id))
+    }
+
     /// Counts stored acoustic variants for one speaker without exposing vectors.
     ///
     /// Inputs: `identity_id` identifies the speaker whose variants should be counted.
@@ -70,6 +96,17 @@ where
 {
     fn list_speaker_identities(&self) -> Result<Vec<SpeakerIdentity>, StorageError> {
         (*self).list_speaker_identities()
+    }
+
+    fn save_speaker_identity(&self, identity: &SpeakerIdentity) -> Result<(), StorageError> {
+        (*self).save_speaker_identity(identity)
+    }
+
+    fn load_speaker_identity(
+        &self,
+        identity_id: Uuid,
+    ) -> Result<Option<SpeakerIdentity>, StorageError> {
+        (*self).load_speaker_identity(identity_id)
     }
 
     fn voice_variant_count(&self, identity_id: Uuid) -> Result<usize, StorageError> {

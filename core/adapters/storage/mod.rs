@@ -6,3 +6,7 @@ pub mod file_storage_adapter;
 pub mod in_memory_voice_vector_db;
 /// Implements the note repository port using SQLite tables and CRDT byte blobs.
 pub mod sqlite_adapter;
+/// Implements the voice-vector port with SQLite-persisted speaker names and voice variants.
+pub mod sqlite_voice_vector_db;
+#[cfg(test)]
+mod sqlite_voice_vector_db_tests;

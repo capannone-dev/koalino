@@ -5,17 +5,23 @@ use std::cell::RefCell;
 use uuid::Uuid;
 
 use crate::{
-    domain::{errors::StorageError, models::VoiceEmbedding},
+    domain::{
+        errors::StorageError,
+        models::{SpeakerIdentity, VoiceEmbedding},
+    },
     ports::voice::VoiceVectorDB,
 };
 
 /// Stores voice variants in process memory and calculates cosine similarity with a simple loop.
 ///
-/// This adapter exists for tests and local development only. A production adapter must provide
-/// encrypted-at-rest persistence while preserving the same port contract.
+/// This adapter exists for tests and local development only; production composition uses
+/// `SqliteVoiceVectorDB`. Unlike the SQLite store, it accepts variants for identities whose name
+/// was never saved, so application tests can enroll bare UUIDs.
 #[derive(Default)]
 pub struct InMemoryVoiceVectorDB {
     stored_embeddings: RefCell<Vec<VoiceEmbedding>>,
+    /// Saved identities in creation order.
+    stored_identities: RefCell<Vec<SpeakerIdentity>>,
 }
 
 impl InMemoryVoiceVectorDB {
@@ -30,6 +36,32 @@ impl InMemoryVoiceVectorDB {
 }
 
 impl VoiceVectorDB for InMemoryVoiceVectorDB {
+    /// Lists saved identities in creation order.
+    ///
+    /// Inputs: None.
+    /// Outputs: Identity metadata without embeddings.
+    /// Side effects: Reads the in-memory identity list.
+    fn list_speaker_identities(&self) -> Result<Vec<SpeakerIdentity>, StorageError> {
+        Ok(self.stored_identities.borrow().clone())
+    }
+
+    /// Adds the identity, or renames it in place when its UUID is already saved.
+    ///
+    /// Inputs: `identity` to store.
+    /// Outputs: Success.
+    /// Side effects: Mutates the in-memory identity list for this process only.
+    fn save_speaker_identity(&self, identity: &SpeakerIdentity) -> Result<(), StorageError> {
+        let mut stored_identities = self.stored_identities.borrow_mut();
+        match stored_identities
+            .iter_mut()
+            .find(|stored| stored.identity_id() == identity.identity_id())
+        {
+            Some(stored_identity) => *stored_identity = identity.clone(),
+            None => stored_identities.push(identity.clone()),
+        }
+        Ok(())
+    }
+
     /// Counts retained variants owned by one identity without returning biometric dimensions.
     ///
     /// Inputs: `identity_id` identifies the in-memory identity.
@@ -86,7 +118,7 @@ impl VoiceVectorDB for InMemoryVoiceVectorDB {
         Ok(scored_embeddings)
     }
 
-    /// Removes all stored variants belonging to an identity.
+    /// Removes an identity's name and all of its stored variants.
     ///
     /// Inputs: `identity_id` identifies every in-memory variant to delete.
     /// Outputs: Success, including when the identity has no stored variants.
@@ -95,6 +127,9 @@ impl VoiceVectorDB for InMemoryVoiceVectorDB {
         self.stored_embeddings
             .borrow_mut()
             .retain(|embedding| embedding.identity_id() != identity_id);
+        self.stored_identities
+            .borrow_mut()
+            .retain(|identity| identity.identity_id() != identity_id);
         Ok(())
     }
 }
@@ -104,7 +139,7 @@ impl VoiceVectorDB for InMemoryVoiceVectorDB {
 /// Inputs: `vector` is a caller-provided derived embedding.
 /// Outputs: Success for non-empty finite dimensions or a portable rejection.
 /// Side effects: None.
-fn validate_vector(vector: &[f32]) -> Result<(), StorageError> {
+pub(super) fn validate_vector(vector: &[f32]) -> Result<(), StorageError> {
     if vector.is_empty() {
         return Err(StorageError::Rejected {
             reason: String::from("voice embedding vector cannot be empty"),
@@ -123,7 +158,7 @@ fn validate_vector(vector: &[f32]) -> Result<(), StorageError> {
 /// Inputs: `query_vector` and `stored_vector` contain finite derived embedding dimensions.
 /// Outputs: A score clamped to -1 through 1, or `None` for incompatible or zero-magnitude vectors.
 /// Side effects: None.
-fn cosine_similarity(query_vector: &[f32], stored_vector: &[f32]) -> Option<f32> {
+pub(super) fn cosine_similarity(query_vector: &[f32], stored_vector: &[f32]) -> Option<f32> {
     if query_vector.len() != stored_vector.len() {
         return None;
     }
@@ -152,8 +187,42 @@ mod tests {
 
     use crate::{
         adapters::storage::in_memory_voice_vector_db::InMemoryVoiceVectorDB,
-        domain::models::VoiceEmbedding, ports::voice::VoiceVectorDB,
+        domain::models::{SpeakerIdentity, VoiceEmbedding},
+        ports::voice::VoiceVectorDB,
     };
+
+    /// Verifies names are saved, renamed in place, loaded, listed, and removed with the identity.
+    #[test]
+    fn saves_renames_lists_and_deletes_identity_names() {
+        let database = InMemoryVoiceVectorDB::new();
+        let grace_id = Uuid::new_v4();
+        let ada = SpeakerIdentity::new(Uuid::new_v4(), "Ada");
+        for identity in [
+            SpeakerIdentity::new(grace_id, "Grace"),
+            ada.clone(),
+            SpeakerIdentity::new(grace_id, "Grace Hopper"),
+        ] {
+            database
+                .save_speaker_identity(&identity)
+                .unwrap_or_else(|error| panic!("identity should save: {error}"));
+        }
+
+        assert_eq!(
+            database.list_speaker_identities().ok(),
+            Some(vec![
+                SpeakerIdentity::new(grace_id, "Grace Hopper"),
+                ada.clone()
+            ])
+        );
+        assert_eq!(
+            database.load_speaker_identity(ada.identity_id()).ok(),
+            Some(Some(ada.clone()))
+        );
+        database
+            .delete_identity(grace_id)
+            .unwrap_or_else(|error| panic!("identity should delete: {error}"));
+        assert_eq!(database.list_speaker_identities().ok(), Some(vec![ada]));
+    }
 
     /// Verifies the adapter calculates and ranks cosine candidates without a vector-DB dependency.
     #[test]

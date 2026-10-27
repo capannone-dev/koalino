@@ -705,7 +705,7 @@ impl NoteRepository for SqliteNoteRepository {
 /// Inputs: `embedding` contains model-derived values only.
 /// Outputs: Native-endian bytes for local SQLite persistence.
 /// Side effects: Allocates a byte buffer; never logs biometric data.
-fn encode_embedding(embedding: &[f32]) -> Vec<u8> {
+pub(super) fn encode_embedding(embedding: &[f32]) -> Vec<u8> {
     embedding
         .iter()
         .flat_map(|value| value.to_le_bytes())
@@ -717,7 +717,7 @@ fn encode_embedding(embedding: &[f32]) -> Vec<u8> {
 /// Inputs: `serialized_embedding` contains adapter-owned SQLite BLOB data.
 /// Outputs: Derived dimensions or a portable storage rejection.
 /// Side effects: Allocates the returned vector; never logs biometric data.
-fn decode_embedding(serialized_embedding: &[u8]) -> Result<Vec<f32>, StorageError> {
+pub(super) fn decode_embedding(serialized_embedding: &[u8]) -> Result<Vec<f32>, StorageError> {
     let (serialized_float_bytes, remainder) = serialized_embedding.as_chunks::<4>();
     if !remainder.is_empty() {
         return Err(StorageError::Rejected {
@@ -904,7 +904,7 @@ fn sqlite_milliseconds(milliseconds: u64) -> Result<i64, StorageError> {
     })
 }
 
-fn sqlite_error(operation: &str, error: rusqlite::Error) -> StorageError {
+pub(super) fn sqlite_error(operation: &str, error: rusqlite::Error) -> StorageError {
     StorageError::Rejected {
         reason: format!("{operation}: {error}"),
     }
