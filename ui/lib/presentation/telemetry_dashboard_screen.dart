@@ -32,8 +32,9 @@ final class _TelemetryDashboardScreenState
           animation: widget.controller,
           builder: (BuildContext context, Widget? child) {
             final controller = widget.controller;
-            if (controller.summary == null)
+            if (controller.summary == null) {
               return const Center(child: CircularProgressIndicator());
+            }
             final summary = controller.summary!;
             final allMetrics = controller.metrics.values
                 .expand((List value) => value)
@@ -88,7 +89,7 @@ final class _TelemetryDashboardScreenState
                     ChartCard(
                         title: 'Latency Distribution',
                         chart: BarChart(BarChartData(
-                            barGroups: <BarChartGroupData>[0, 100, 500, 1000]
+                            barGroups: <int>[0, 100, 500, 1000]
                                 .asMap()
                                 .entries
                                 .map((entry) => BarChartGroupData(
