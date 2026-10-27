@@ -1,13 +1,14 @@
 //! Specifies the cluster-review use case shared by the CLI, HTTP, and FFI driving adapters.
 //!
-//! Tests use in-memory SQLite plus the in-memory vector database (optionally wrapped to report
-//! named identities); no AI model is loaded and embeddings are short hand-written vectors.
+//! Tests use in-memory SQLite plus the in-memory or file-backed SQLite voice store; no AI model is
+//! loaded and embeddings are short hand-written vectors.
 
 use uuid::Uuid;
 
 use crate::{
     adapters::storage::{
         in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
+        sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
     application::{
         cluster_review::{
@@ -15,44 +16,9 @@ use crate::{
         },
         unknown_speaker_clusterer::{ClusteringConfig, ClusteringError, UnknownSpeakerClusterer},
     },
-    domain::{
-        errors::StorageError,
-        models::{MeetingId, SpeakerIdentity, TranscriptSegment, VoiceEmbedding},
-    },
+    domain::models::{DeviceId, MeetingId, SpeakerIdentity, TranscriptSegment, VoiceEmbedding},
     ports::{storage::NoteRepository, voice::VoiceVectorDB},
 };
-
-/// Wraps the in-memory vector database and reports a fixed set of named identities.
-struct NamedVoiceDatabase {
-    inner: InMemoryVoiceVectorDB,
-    identities: Vec<SpeakerIdentity>,
-}
-
-impl VoiceVectorDB for NamedVoiceDatabase {
-    fn list_speaker_identities(&self) -> Result<Vec<SpeakerIdentity>, StorageError> {
-        Ok(self.identities.clone())
-    }
-
-    fn voice_variant_count(&self, identity_id: Uuid) -> Result<usize, StorageError> {
-        self.inner.voice_variant_count(identity_id)
-    }
-
-    fn store_embedding(&self, embedding: VoiceEmbedding) -> Result<(), StorageError> {
-        self.inner.store_embedding(embedding)
-    }
-
-    fn search_similar(
-        &self,
-        vector: &[f32],
-        top_k: usize,
-    ) -> Result<Vec<(VoiceEmbedding, f32)>, StorageError> {
-        self.inner.search_similar(vector, top_k)
-    }
-
-    fn delete_identity(&self, identity_id: Uuid) -> Result<(), StorageError> {
-        self.inner.delete_identity(identity_id)
-    }
-}
 
 /// Creates an in-memory repository with one meeting and two unknown-speaker clusters.
 ///
@@ -158,10 +124,10 @@ fn assigning_a_new_name_creates_an_identity_and_resolves_the_cluster() {
 fn assigning_a_known_name_reuses_the_existing_identity() {
     let (note_repository, _, large_cluster_id, _) = repository_with_two_clusters();
     let existing_identity_id = Uuid::new_v4();
-    let voice_vector_database = NamedVoiceDatabase {
-        inner: InMemoryVoiceVectorDB::new(),
-        identities: vec![SpeakerIdentity::new(existing_identity_id, "Ada Lovelace")],
-    };
+    let voice_vector_database = InMemoryVoiceVectorDB::new();
+    voice_vector_database
+        .save_speaker_identity(&SpeakerIdentity::new(existing_identity_id, "Ada Lovelace"))
+        .unwrap_or_else(|error| panic!("existing identity should save: {error}"));
     voice_vector_database
         .store_embedding(VoiceEmbedding::new(
             existing_identity_id,
@@ -181,6 +147,14 @@ fn assigning_a_known_name_reuses_the_existing_identity() {
     assert_eq!(assignment.identity_id(), existing_identity_id);
     assert_eq!(assignment.identity_name(), "Ada Lovelace");
     assert!(!assignment.identity_created());
+    assert_eq!(
+        voice_vector_database
+            .list_speaker_identities()
+            .map(|identities| identities.len())
+            .ok(),
+        Some(1),
+        "reusing a name must not create a duplicate identity"
+    );
 }
 
 /// Verifies blank names are rejected before anything is written.
@@ -264,4 +238,91 @@ fn accepts_trait_object_ports() {
     );
     assign_cluster_to_named_identity(repository_object, voice_object, large_cluster_id, "Grace")
         .unwrap_or_else(|error| panic!("assignment should succeed: {error}"));
+}
+
+/// Assign cluster with name → restart app → the name is still there, and assigning another
+/// cluster with the same name in any letter case reuses that identity without a duplicate.
+#[test]
+fn assigned_names_survive_a_restart_and_are_reused_case_insensitively() {
+    let database_path = std::env::temp_dir().join(format!(
+        "note-taker-cluster-review-{}.sqlite3",
+        Uuid::new_v4()
+    ));
+    let meeting_id = MeetingId::new("meeting-restart");
+    let open_stores = || {
+        (
+            SqliteNoteRepository::open(&database_path, DeviceId::new("cluster-review-test"))
+                .unwrap_or_else(|error| panic!("note repository should open: {error}")),
+            SqliteVoiceVectorDB::open(&database_path)
+                .unwrap_or_else(|error| panic!("voice store should open: {error}")),
+        )
+    };
+    let (first_cluster_id, second_cluster_id, first_assignment) = {
+        let (note_repository, voice_store) = open_stores();
+        note_repository
+            .create_meeting(&meeting_id, &[])
+            .unwrap_or_else(|error| panic!("meeting should be created: {error}"));
+        let clusterer = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default());
+        let first_cluster_id = clusterer
+            .find_or_create_cluster(&meeting_id, &[1.0, 0.0], String::from("c1"), 1_000)
+            .unwrap_or_else(|error| panic!("chunk should cluster: {error}"))
+            .cluster_id();
+        let second_cluster_id = clusterer
+            .find_or_create_cluster(&meeting_id, &[0.0, 1.0], String::from("c2"), 1_000)
+            .unwrap_or_else(|error| panic!("chunk should cluster: {error}"))
+            .cluster_id();
+        let first_assignment = assign_cluster_to_named_identity(
+            &note_repository,
+            &voice_store,
+            first_cluster_id,
+            "Grace Hopper",
+        )
+        .unwrap_or_else(|error| panic!("first assignment should succeed: {error}"));
+        (first_cluster_id, second_cluster_id, first_assignment)
+    };
+
+    let (note_repository, voice_store) = open_stores();
+    let names_after_restart: Vec<String> = voice_store
+        .list_speaker_identities()
+        .unwrap_or_default()
+        .iter()
+        .map(|identity| String::from(identity.display_name()))
+        .collect();
+    let second_assignment = assign_cluster_to_named_identity(
+        &note_repository,
+        &voice_store,
+        second_cluster_id,
+        "grace HOPPER",
+    );
+    let identity_count = voice_store
+        .list_speaker_identities()
+        .map(|identities| identities.len())
+        .unwrap_or_default();
+    let variant_count = voice_store
+        .voice_variant_count(first_assignment.identity_id())
+        .unwrap_or_default();
+    let first_cluster = note_repository
+        .load_unknown_speaker_cluster(first_cluster_id)
+        .unwrap_or_default();
+    drop((note_repository, voice_store));
+    for suffix in ["", "-journal", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{}{suffix}", database_path.display()));
+    }
+
+    assert!(first_assignment.identity_created());
+    assert_eq!(names_after_restart, vec!["Grace Hopper"]);
+    let second_assignment = second_assignment
+        .unwrap_or_else(|error| panic!("second assignment should succeed: {error}"));
+    assert_eq!(
+        second_assignment.identity_id(),
+        first_assignment.identity_id()
+    );
+    assert_eq!(second_assignment.identity_name(), "Grace Hopper");
+    assert!(!second_assignment.identity_created());
+    assert_eq!(identity_count, 1, "no duplicate identity may be created");
+    assert_eq!(variant_count, 2);
+    assert_eq!(
+        first_cluster.and_then(|cluster| cluster.resolved_identity_id()),
+        Some(first_assignment.identity_id())
+    );
 }

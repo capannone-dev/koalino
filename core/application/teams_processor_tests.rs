@@ -118,13 +118,40 @@ impl VoiceEmbeddingExtractor for MockVoiceEmbeddingExtractor {
 }
 
 /// Records automatic vector enrollment requests without using a vector database.
+///
+/// Like `SqliteVoiceVectorDB`, it rejects variants whose identity was never saved.
 struct MockVoiceVectorDatabase {
     stored_embeddings: Rc<RefCell<Vec<VoiceEmbedding>>>,
+    saved_identities: RefCell<Vec<SpeakerIdentity>>,
 }
 
 impl VoiceVectorDB for MockVoiceVectorDatabase {
-    /// Records the enrollment variant for assertions.
+    /// Lists identities saved by the processor.
+    fn list_speaker_identities(&self) -> Result<Vec<SpeakerIdentity>, StorageError> {
+        Ok(self.saved_identities.borrow().clone())
+    }
+
+    /// Records a saved identity for the foreign-key check in `store_embedding`.
+    fn save_speaker_identity(&self, identity: &SpeakerIdentity) -> Result<(), StorageError> {
+        self.saved_identities.borrow_mut().push(identity.clone());
+        Ok(())
+    }
+
+    /// Records the enrollment variant for assertions, rejecting unsaved identities.
     fn store_embedding(&self, embedding: VoiceEmbedding) -> Result<(), StorageError> {
+        if !self
+            .saved_identities
+            .borrow()
+            .iter()
+            .any(|identity| identity.identity_id() == embedding.identity_id())
+        {
+            return Err(StorageError::Rejected {
+                reason: format!(
+                    "speaker identity {} does not exist",
+                    embedding.identity_id()
+                ),
+            });
+        }
         self.stored_embeddings.borrow_mut().push(embedding);
         Ok(())
     }
@@ -289,6 +316,7 @@ fn processor_for(
         },
         MockVoiceVectorDatabase {
             stored_embeddings: Rc::clone(&stored_embeddings),
+            saved_identities: RefCell::new(Vec::new()),
         },
         MockTranscriptionEngine {
             forwarded_audio: Rc::clone(&forwarded_audio),

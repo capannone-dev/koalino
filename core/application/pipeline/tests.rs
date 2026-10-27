@@ -1152,7 +1152,11 @@ async fn five_unknown_chunks_form_two_clusters_and_assignment_attributes_three_s
     let alice_id = Uuid::new_v4();
 
     let assignment = session
-        .assign_identity_to_cluster(&voice_vector_database, clusters[0].cluster_id(), alice_id)
+        .assign_identity_to_cluster(
+            &voice_vector_database,
+            clusters[0].cluster_id(),
+            &SpeakerIdentity::new(alice_id, "Alice"),
+        )
         .unwrap_or_else(|error| panic!("assignment should succeed: {error}"));
 
     assert_eq!(assignment.segments_updated(), 3);

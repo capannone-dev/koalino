@@ -203,8 +203,8 @@ where
     ///
     /// Inputs: None; meeting and device context were supplied at construction.
     /// Outputs: Safe processing counts and generated variant IDs, or a portable port error.
-    /// Side effects: Maps/creates identities, stores biometric variants, invokes transcription, and
-    /// routes screen frames through the attachment workflow. It never logs raw media or embeddings.
+    /// Side effects: Maps/creates identities, saves unseen identity names in the voice store,
+    /// stores biometric variants, invokes transcription, and routes screen frames through the attachment workflow. It never logs raw media or embeddings.
     pub fn process_available(&self) -> Result<TeamsProcessingResult, TeamsProcessingError> {
         let media_chunk_receiver = self.meeting_bridge.subscribe_media_chunks()?;
         let slide_capture_receiver = self.meeting_bridge.subscribe_slide_captures()?;
@@ -219,6 +219,16 @@ where
             let derived_embedding = self
                 .voice_embedding_extractor
                 .extract_embedding(&media_chunk)?;
+            // Persist the participant's name before its first variant; an identity the user already
+            // knows keeps its stored (possibly renamed) display name.
+            if self
+                .voice_vector_database
+                .load_speaker_identity(local_identity.identity_id())?
+                .is_none()
+            {
+                self.voice_vector_database
+                    .save_speaker_identity(&local_identity)?;
+            }
             let variant_id = Uuid::new_v4();
             self.voice_vector_database
                 .store_embedding(VoiceEmbedding::new(

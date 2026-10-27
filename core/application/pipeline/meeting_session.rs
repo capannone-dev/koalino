@@ -16,8 +16,8 @@ use crate::{
     domain::{
         errors::{StorageError, TranscriptionError},
         models::{
-            AudioRecording, ExternalMediaChunk, MeetingId, TranscriptSegment, TranscriptionContext,
-            UnassignedVoiceClip, VoiceMatchResult, WeakVoiceMatchCandidate,
+            AudioRecording, ExternalMediaChunk, MeetingId, SpeakerIdentity, TranscriptSegment,
+            TranscriptionContext, UnassignedVoiceClip, VoiceMatchResult, WeakVoiceMatchCandidate,
         },
     },
     ports::{
@@ -198,23 +198,23 @@ where
     /// the session rewrites the whole timeline per chunk, so it must observe the relinked segments.
     ///
     /// Inputs: `voice_vector_database` stores the enrolled variants; `cluster_id` must be an
-    /// unresolved cluster; `identity_id` is an existing or new identity UUID.
+    /// unresolved cluster; `identity` is an existing identity or a new UUID with its chosen name.
     /// Outputs: The assignment summary, or a clustering/storage error (the in-memory timeline is
     /// reloaded only after success).
-    /// Side effects: Stores voice variants, rewrites segments, resolves the cluster, deletes its
-    /// review clips, and reloads the session's segment timeline from storage.
+    /// Side effects: Saves the identity, stores voice variants, rewrites segments, resolves the
+    /// cluster, deletes its review clips, and reloads the session's segment timeline from storage.
     pub fn assign_identity_to_cluster<VectorDatabase>(
         &mut self,
         voice_vector_database: &VectorDatabase,
         cluster_id: Uuid,
-        identity_id: Uuid,
+        identity: &SpeakerIdentity,
     ) -> Result<ClusterAssignment, MeetingSessionError>
     where
         VectorDatabase: VoiceVectorDB,
     {
         let assignment =
             UnknownSpeakerClusterer::new(&self.note_repository, self.clustering_config)
-                .assign_identity_to_cluster(voice_vector_database, cluster_id, identity_id)?;
+                .assign_identity_to_cluster(voice_vector_database, cluster_id, identity)?;
         self.persisted_segments = self
             .note_repository
             .load_transcript_segments(&self.meeting_id)?;

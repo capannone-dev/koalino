@@ -6,10 +6,10 @@
 //! validates the typed name, resolves it to an identity, and delegates to
 //! `UnknownSpeakerClusterer::assign_identity_to_cluster`.
 //!
-//! Name resolution: a name matching an identity reported by `VoiceVectorDB` (trimmed,
-//! case-insensitive) reuses that identity; any other name gets a fresh UUID, which the clusterer
-//! turns into an identity by enrolling its first voice variants. No port persists display names
-//! yet, so a fresh identity's name is returned to the caller but not stored.
+//! Name resolution: a name matching an identity stored in `VoiceVectorDB` (trimmed,
+//! case-insensitive) reuses that identity and keeps its stored spelling; any other name becomes a
+//! new identity with a fresh UUID. The clusterer persists the identity, so names survive restarts
+//! wherever the composition root uses a persistent voice store (`SqliteVoiceVectorDB`).
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -18,7 +18,7 @@ use crate::{
     application::unknown_speaker_clusterer::{
         ClusterAssignment, ClusteringConfig, ClusteringError, UnknownSpeakerClusterer,
     },
-    domain::models::{MeetingId, UnknownSpeakerCluster},
+    domain::models::{MeetingId, SpeakerIdentity, UnknownSpeakerCluster},
     ports::{storage::NoteRepository, voice::VoiceVectorDB},
 };
 
@@ -81,18 +81,16 @@ impl UnknownClusterSummary {
     }
 }
 
-/// Summarizes a cluster assignment together with the name it was resolved from.
+/// Summarizes a cluster assignment to a named, persisted identity.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NamedClusterAssignment {
-    /// The trimmed typed name, or the stored name of the reused identity.
-    identity_name: String,
     assignment: ClusterAssignment,
 }
 
 impl NamedClusterAssignment {
-    /// Returns the display name of the identity the cluster was assigned to.
+    /// Returns the stored display name of the identity the cluster was assigned to.
     pub fn identity_name(&self) -> &str {
-        &self.identity_name
+        self.assignment.identity().display_name()
     }
 
     /// Returns the resolved cluster.
@@ -150,9 +148,9 @@ where
 /// non-whitespace character.
 /// Outputs: The assignment summary, or `BlankIdentityName`, or the clusterer's not-found,
 /// already-resolved, or storage error.
-/// Side effects: Reads identities, then (through the clusterer) stores one voice variant per
-/// member embedding, relinks the meeting's transcript segments, resolves the cluster, and deletes
-/// its review clips. Nothing is written when the name is blank.
+/// Side effects: Reads identities, then (through the clusterer) saves the identity, stores one
+/// voice variant per member embedding, relinks the meeting's transcript segments, resolves the
+/// cluster, and deletes its review clips. Nothing is written when the name is blank.
 pub fn assign_cluster_to_named_identity<RepositoryPort, VectorDatabase>(
     note_repository: &RepositoryPort,
     voice_vector_database: &VectorDatabase,
@@ -174,17 +172,9 @@ where
         .find(|identity| {
             identity.display_name().trim().to_lowercase() == trimmed_name.to_lowercase()
         });
-    let (identity_id, resolved_name) = match known_identity {
-        Some(identity) => (
-            identity.identity_id(),
-            String::from(identity.display_name()),
-        ),
-        None => (Uuid::new_v4(), String::from(trimmed_name)),
-    };
+    let identity =
+        known_identity.unwrap_or_else(|| SpeakerIdentity::new(Uuid::new_v4(), trimmed_name));
     let assignment = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default())
-        .assign_identity_to_cluster(&voice_vector_database, cluster_id, identity_id)?;
-    Ok(NamedClusterAssignment {
-        identity_name: resolved_name,
-        assignment,
-    })
+        .assign_identity_to_cluster(&voice_vector_database, cluster_id, &identity)?;
+    Ok(NamedClusterAssignment { assignment })
 }

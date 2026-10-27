@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::{
     adapters::storage::{
         in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
+        sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
     application::unknown_speaker_clusterer::{
         ClusteringConfig, ClusteringError, DEFAULT_CLUSTER_SIMILARITY_THRESHOLD,
@@ -17,7 +18,8 @@ use crate::{
     domain::{
         errors::StorageError,
         models::{
-            MeetingId, Transcript, TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerCluster,
+            MeetingId, SpeakerIdentity, Transcript, TranscriptSegment, UnassignedVoiceClip,
+            UnknownSpeakerCluster,
         },
     },
     ports::{storage::NoteRepository, voice::VoiceVectorDB},
@@ -375,10 +377,25 @@ fn assigning_identity_updates_chunks_segments_and_resolves_cluster() {
     let new_identity_id = Uuid::new_v4();
 
     let assignment = clusterer
-        .assign_identity_to_cluster(&voice_vector_database, target_cluster_id, new_identity_id)
+        .assign_identity_to_cluster(
+            &voice_vector_database,
+            target_cluster_id,
+            &SpeakerIdentity::new(new_identity_id, "Grace Hopper"),
+        )
         .unwrap_or_else(|error| panic!("assignment should succeed: {error}"));
 
     assert!(assignment.identity_created());
+    assert_eq!(
+        assignment.identity(),
+        &SpeakerIdentity::new(new_identity_id, "Grace Hopper")
+    );
+    assert_eq!(
+        voice_vector_database
+            .load_speaker_identity(new_identity_id)
+            .unwrap_or_default(),
+        Some(SpeakerIdentity::new(new_identity_id, "Grace Hopper")),
+        "the assigned identity must be persisted"
+    );
     assert_eq!(assignment.variants_stored(), 2);
     assert_eq!(assignment.segments_updated(), 2);
     assert_eq!(
@@ -416,7 +433,7 @@ fn assigning_identity_updates_chunks_segments_and_resolves_cluster() {
     );
 }
 
-/// Verifies assigning to an identity that already has variants reports it as existing.
+/// Verifies assigning to an already-stored identity reports it as existing and keeps one record.
 #[test]
 fn assigning_existing_identity_adds_variants_without_creating_it() {
     let meeting_id = MeetingId::new("meeting-a");
@@ -425,6 +442,10 @@ fn assigning_existing_identity_adds_variants_without_creating_it() {
     let (cluster_id, _) = add_chunk(&clusterer, &meeting_id, &[1.0, 0.0], "c1", 1_000);
     let voice_vector_database = InMemoryVoiceVectorDB::new();
     let existing_identity_id = Uuid::new_v4();
+    let existing_identity = SpeakerIdentity::new(existing_identity_id, "Ada Lovelace");
+    voice_vector_database
+        .save_speaker_identity(&existing_identity)
+        .unwrap_or_else(|error| panic!("identity should save: {error}"));
     voice_vector_database
         .store_embedding(crate::domain::models::VoiceEmbedding::new(
             existing_identity_id,
@@ -434,10 +455,18 @@ fn assigning_existing_identity_adds_variants_without_creating_it() {
         .unwrap_or_else(|error| panic!("enrollment should succeed: {error}"));
 
     let assignment = clusterer
-        .assign_identity_to_cluster(&voice_vector_database, cluster_id, existing_identity_id)
+        .assign_identity_to_cluster(&voice_vector_database, cluster_id, &existing_identity)
         .unwrap_or_else(|error| panic!("assignment should succeed: {error}"));
 
     assert!(!assignment.identity_created());
+    assert_eq!(assignment.identity(), &existing_identity);
+    assert_eq!(
+        voice_vector_database
+            .list_speaker_identities()
+            .unwrap_or_default(),
+        vec![existing_identity],
+        "reusing an identity must not duplicate it"
+    );
     assert_eq!(
         voice_vector_database
             .voice_variant_count(existing_identity_id)
@@ -454,18 +483,19 @@ fn assigning_missing_or_resolved_cluster_is_rejected() {
     let clusterer = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default());
     let voice_vector_database = InMemoryVoiceVectorDB::new();
     let identity_id = Uuid::new_v4();
+    let identity = SpeakerIdentity::new(identity_id, "Grace");
 
     assert!(matches!(
-        clusterer.assign_identity_to_cluster(&voice_vector_database, Uuid::new_v4(), identity_id),
+        clusterer.assign_identity_to_cluster(&voice_vector_database, Uuid::new_v4(), &identity),
         Err(ClusteringError::ClusterNotFound { .. })
     ));
 
     let (cluster_id, _) = add_chunk(&clusterer, &meeting_id, &[1.0, 0.0], "c1", 1_000);
     clusterer
-        .assign_identity_to_cluster(&voice_vector_database, cluster_id, identity_id)
+        .assign_identity_to_cluster(&voice_vector_database, cluster_id, &identity)
         .unwrap_or_else(|error| panic!("first assignment should succeed: {error}"));
     assert!(matches!(
-        clusterer.assign_identity_to_cluster(&voice_vector_database, cluster_id, identity_id),
+        clusterer.assign_identity_to_cluster(&voice_vector_database, cluster_id, &identity),
         Err(ClusteringError::ClusterAlreadyResolved { .. })
     ));
     assert_eq!(
@@ -487,7 +517,7 @@ fn resolved_cluster_is_not_reused_for_new_chunks() {
         .assign_identity_to_cluster(
             &InMemoryVoiceVectorDB::new(),
             resolved_cluster_id,
-            Uuid::new_v4(),
+            &SpeakerIdentity::new(Uuid::new_v4(), "Grace"),
         )
         .unwrap_or_else(|error| panic!("assignment should succeed: {error}"));
 
@@ -496,4 +526,35 @@ fn resolved_cluster_is_not_reused_for_new_chunks() {
 
     assert!(is_new_cluster);
     assert_ne!(new_cluster_id, resolved_cluster_id);
+}
+
+/// Verifies assignment against the SQLite voice store saves the identity before its variants, so
+/// the store's identity foreign key is satisfied and the name is persisted.
+#[test]
+fn assignment_persists_identity_in_the_sqlite_voice_store() {
+    let meeting_id = MeetingId::new("meeting-a");
+    let note_repository = repository_with_meetings(&[&meeting_id]);
+    let clusterer = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default());
+    let (cluster_id, _) = add_chunk(&clusterer, &meeting_id, &[1.0, 0.0], "c1", 1_000);
+    add_chunk(&clusterer, &meeting_id, &[0.9, 0.3], "c2", 1_000);
+    let voice_store = SqliteVoiceVectorDB::open_in_memory()
+        .unwrap_or_else(|error| panic!("voice store should open: {error}"));
+    let identity = SpeakerIdentity::new(Uuid::new_v4(), "Grace Hopper");
+
+    let assignment = clusterer
+        .assign_identity_to_cluster(&voice_store, cluster_id, &identity)
+        .unwrap_or_else(|error| panic!("assignment should succeed: {error}"));
+
+    assert!(assignment.identity_created());
+    assert_eq!(assignment.identity(), &identity);
+    assert_eq!(
+        voice_store.list_speaker_identities().unwrap_or_default(),
+        vec![identity.clone()]
+    );
+    assert_eq!(
+        voice_store
+            .voice_variant_count(identity.identity_id())
+            .unwrap_or_default(),
+        2
+    );
 }

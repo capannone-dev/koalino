@@ -18,7 +18,9 @@ use uuid::Uuid;
 use crate::{
     domain::{
         errors::StorageError,
-        models::{MeetingId, UnknownSpeakerChunk, UnknownSpeakerCluster, VoiceEmbedding},
+        models::{
+            MeetingId, SpeakerIdentity, UnknownSpeakerChunk, UnknownSpeakerCluster, VoiceEmbedding,
+        },
     },
     ports::{storage::NoteRepository, voice::VoiceVectorDB},
 };
@@ -125,11 +127,12 @@ impl ClusterMembership {
 }
 
 /// Summarizes a completed cluster-to-identity assignment.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClusterAssignment {
     cluster_id: Uuid,
-    identity_id: Uuid,
-    /// `true` when the identity had no voice variants before this assignment.
+    /// The identity as read back from the voice store after it was saved.
+    identity: SpeakerIdentity,
+    /// `true` when the voice store had no record of the identity before this assignment.
     identity_created: bool,
     variants_stored: usize,
     segments_updated: usize,
@@ -141,12 +144,17 @@ impl ClusterAssignment {
         self.cluster_id
     }
 
-    /// Returns the identity the cluster was assigned to.
+    /// Returns the UUID of the identity the cluster was assigned to.
     pub fn identity_id(&self) -> Uuid {
-        self.identity_id
+        self.identity.identity_id()
     }
 
-    /// Reports whether this assignment enrolled the identity's first voice variants.
+    /// Borrows the persisted identity (UUID and stored display name) the cluster was assigned to.
+    pub fn identity(&self) -> &SpeakerIdentity {
+        &self.identity
+    }
+
+    /// Reports whether this assignment created the identity's voice-store record.
     pub fn identity_created(&self) -> bool {
         self.identity_created
     }
@@ -287,14 +295,15 @@ where
             .collect())
     }
 
-    /// Assigns a user-chosen identity to every chunk of a cluster.
+    /// Assigns a user-chosen identity to every chunk of a cluster and persists that identity.
     ///
-    /// Inputs: `voice_vector_database` stores voice variants; `cluster_id` must exist and be
-    /// unresolved; `identity_id` is an existing identity or a fresh UUID for a new person (an
-    /// identity exists once it has a stored variant).
-    /// Outputs: A summary of created variants and updated segments, or not-found,
-    /// already-resolved, or storage errors.
-    /// Side effects: In order, stores one voice variant per member embedding, rewrites the
+    /// Inputs: `voice_vector_database` stores identities and voice variants; `cluster_id` must
+    /// exist and be unresolved; `identity` is an existing identity or a fresh UUID with the
+    /// user's chosen name for a new person.
+    /// Outputs: A summary carrying the identity as read back from the voice store, plus created
+    /// variants and updated segments; or not-found, already-resolved, or storage errors.
+    /// Side effects: In order, saves the identity (creating it, or renaming it to
+    /// `identity.display_name()`), stores one voice variant per member embedding, rewrites the
     /// meeting's transcript segments, then marks the cluster resolved and deletes its review
     /// clips. A failure part-way leaves earlier steps applied; retrying after a segment failure
     /// re-stores variants, which only adds duplicate acoustic variants.
@@ -302,7 +311,7 @@ where
         &self,
         voice_vector_database: &VectorDatabase,
         cluster_id: Uuid,
-        identity_id: Uuid,
+        identity: &SpeakerIdentity,
     ) -> Result<ClusterAssignment, ClusteringError>
     where
         VectorDatabase: VoiceVectorDB,
@@ -315,7 +324,16 @@ where
             return Err(ClusteringError::ClusterAlreadyResolved { cluster_id });
         }
 
-        let identity_created = voice_vector_database.voice_variant_count(identity_id)? == 0;
+        let identity_id = identity.identity_id();
+        let identity_created = voice_vector_database
+            .load_speaker_identity(identity_id)?
+            .is_none();
+        voice_vector_database.save_speaker_identity(identity)?;
+        let persisted_identity = voice_vector_database
+            .load_speaker_identity(identity_id)?
+            .ok_or_else(|| StorageError::Rejected {
+                reason: format!("speaker identity {identity_id} was not persisted"),
+            })?;
         let member_chunks = self
             .note_repository
             .load_unknown_speaker_chunks(cluster_id)?;
@@ -360,7 +378,7 @@ where
         );
         Ok(ClusterAssignment {
             cluster_id,
-            identity_id,
+            identity: persisted_identity,
             identity_created,
             variants_stored: member_chunks.len(),
             segments_updated,
