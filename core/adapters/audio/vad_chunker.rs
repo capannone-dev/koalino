@@ -24,6 +24,8 @@ pub enum ChunkCutType {
     SoftMaxForced,
     /// The capture stream was interrupted before normal chunk finalization.
     Interrupted,
+    /// The recording stopped and the remaining buffered audio was flushed.
+    StreamEnded,
 }
 
 /// Carries raw PCM with its deterministic finalization reason.
@@ -31,6 +33,8 @@ pub enum ChunkCutType {
 pub struct FinalizedAudioChunk {
     audio_chunk: AudioChunk,
     cut_type: ChunkCutType,
+    /// Leading samples repeated from the previous chunk's end (soft-max lookback).
+    overlap_sample_count: usize,
 }
 
 impl FinalizedAudioChunk {
@@ -41,6 +45,34 @@ impl FinalizedAudioChunk {
     /// Side effects: None.
     pub fn cut_type(&self) -> ChunkCutType {
         self.cut_type
+    }
+
+    /// Borrows the chunk's raw 16 kHz mono PCM; callers must never log it.
+    ///
+    /// Inputs: None.
+    /// Outputs: The PCM chunk, including any leading overlap.
+    /// Side effects: None.
+    pub fn audio_chunk(&self) -> &AudioChunk {
+        &self.audio_chunk
+    }
+
+    /// Returns how many leading samples repeat the end of the previous chunk.
+    ///
+    /// Inputs: None.
+    /// Outputs: The overlap length in samples (0 unless the previous chunk was soft-max forced),
+    /// which callers subtract when placing the chunk on the meeting timeline.
+    /// Side effects: None.
+    pub fn overlap_sample_count(&self) -> usize {
+        self.overlap_sample_count
+    }
+
+    /// Takes ownership of the chunk's raw PCM.
+    ///
+    /// Inputs: None.
+    /// Outputs: The PCM chunk.
+    /// Side effects: Consumes the finalized chunk.
+    pub fn into_audio_chunk(self) -> AudioChunk {
+        self.audio_chunk
     }
 }
 
@@ -99,6 +131,8 @@ pub struct VadChunker {
     pending_samples: Vec<i16>,
     active_samples: Vec<i16>,
     lookback_samples: Vec<i16>,
+    /// Lookback samples prepended to the current active chunk.
+    active_overlap_samples: usize,
     processed_frames: usize,
     silence_duration_ms: u64,
     samples_since_soft_max: usize,
@@ -119,23 +153,40 @@ impl VadChunker {
         #[cfg(not(feature = "vad"))]
         tracing::warn!("VAD is disabled; falling back to 30-second time-based chunking");
 
-        Ok(Self {
+        Ok(Self::with_mode(configuration, !cfg!(feature = "vad")))
+    }
+
+    /// Creates a chunker that always cuts every 30 seconds, without speech detection.
+    ///
+    /// Inputs: `configuration` (its pause threshold is unused in this mode).
+    /// Outputs: An empty time-based chunker.
+    /// Side effects: None; used when VAD is disabled at runtime (`NOTE_TAKER_VAD_ENABLED=false`).
+    pub fn time_based(configuration: VadConfig) -> Self {
+        Self::with_mode(configuration, true)
+    }
+
+    /// Builds an empty chunker in VAD or time-based mode.
+    ///
+    /// Inputs: The language configuration and whether to use time-based cuts.
+    /// Outputs: The chunker; the WebRTC classifier is only created in VAD mode.
+    /// Side effects: None.
+    fn with_mode(configuration: VadConfig, using_time_fallback: bool) -> Self {
+        Self {
             configuration,
             pending_samples: Vec::new(),
             active_samples: Vec::new(),
             lookback_samples: Vec::new(),
+            active_overlap_samples: 0,
             processed_frames: 0,
             silence_duration_ms: 0,
             samples_since_soft_max: 0,
             state: ChunkingState::Idle,
-            using_time_fallback: !cfg!(feature = "vad"),
+            using_time_fallback,
             ready_chunks: Vec::new(),
             #[cfg(feature = "vad")]
-            vad: Some(Vad::new_with_rate_and_mode(
-                SampleRate::Rate16kHz,
-                VadMode::Quality,
-            )),
-        })
+            vad: (!using_time_fallback)
+                .then(|| Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Quality)),
+        }
     }
 
     /// Buffers raw PCM and processes every complete 30 ms frame.
@@ -177,7 +228,44 @@ impl VadChunker {
                 AudioConfig::new(16_000, 1),
             ),
             cut_type: ChunkCutType::Interrupted,
+            overlap_sample_count: std::mem::take(&mut self.active_overlap_samples),
         })
+    }
+
+    /// Flushes all remaining audio when the recording stops.
+    ///
+    /// Inputs: None.
+    /// Outputs: A `StreamEnded` chunk with the active and unframed samples, or `None` when nothing
+    /// was buffered. Chunks already finalized stay available through `drain_ready_chunks`.
+    /// Side effects: Clears every internal buffer, including the lookback, so the chunker restarts
+    /// empty.
+    pub fn finish(&mut self) -> Option<FinalizedAudioChunk> {
+        self.active_samples.append(&mut self.pending_samples);
+        self.lookback_samples.clear();
+        self.silence_duration_ms = 0;
+        self.samples_since_soft_max = 0;
+        self.state = ChunkingState::Idle;
+        let overlap_sample_count = std::mem::take(&mut self.active_overlap_samples);
+        if self.active_samples.is_empty() {
+            return None;
+        }
+        Some(FinalizedAudioChunk {
+            audio_chunk: AudioChunk::new(
+                std::mem::take(&mut self.active_samples),
+                AudioConfig::new(16_000, 1),
+            ),
+            cut_type: ChunkCutType::StreamEnded,
+            overlap_sample_count,
+        })
+    }
+
+    /// Removes every finalized chunk, oldest first.
+    ///
+    /// Inputs: None.
+    /// Outputs: The finalized chunks in the order their boundaries were reached.
+    /// Side effects: Empties the ready queue.
+    pub fn drain_ready_chunks(&mut self) -> Vec<FinalizedAudioChunk> {
+        std::mem::take(&mut self.ready_chunks)
     }
 
     /// Returns processed exact frame count.
@@ -228,6 +316,7 @@ impl VadChunker {
     /// Starts a new active chunk, prepending preserved soft-max overlap when available.
     fn begin_listening_if_needed(&mut self) {
         if matches!(self.state, ChunkingState::Idle | ChunkingState::Finalize) {
+            self.active_overlap_samples = self.lookback_samples.len();
             self.active_samples.append(&mut self.lookback_samples);
             self.silence_duration_ms = 0;
             self.state = ChunkingState::Listening;
@@ -294,6 +383,7 @@ impl VadChunker {
         self.ready_chunks.push(FinalizedAudioChunk {
             audio_chunk: AudioChunk::new(finalized_samples, AudioConfig::new(16_000, 1)),
             cut_type,
+            overlap_sample_count: std::mem::take(&mut self.active_overlap_samples),
         });
         self.silence_duration_ms = 0;
         self.state = ChunkingState::Finalize;

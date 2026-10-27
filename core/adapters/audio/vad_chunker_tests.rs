@@ -187,3 +187,75 @@ fn disabled_vad_falls_back_to_thirty_second_time_chunking_with_warn_log() {
         "disabled or unavailable VAD must emit a warning describing time fallback"
     );
 }
+
+/// Verifies runtime time-based mode cuts every 30 seconds even when the `vad` feature is built,
+/// and that the successor chunk reports its one-second lookback as overlap.
+#[test]
+fn time_based_mode_cuts_every_thirty_seconds_and_reports_overlap() {
+    let mut chunker = VadChunker::time_based(VadConfig::english());
+    push_silent_frames(&mut chunker, 2_000);
+
+    let chunks = chunker.drain_ready_chunks();
+    assert_eq!(chunks.len(), 2);
+    assert!(
+        chunks
+            .iter()
+            .all(|chunk| chunk.cut_type() == ChunkCutType::SoftMaxForced)
+    );
+    assert_eq!(chunks[0].overlap_sample_count(), 0);
+    assert_eq!(chunks[0].audio_chunk().samples().len(), 480_000);
+    assert_eq!(chunks[1].overlap_sample_count(), 16_000);
+    assert_eq!(chunks[1].audio_chunk().samples().len(), 16_000 + 480_000);
+    assert!(chunker.drain_ready_chunks().is_empty());
+}
+
+/// Verifies `drain_ready_chunks` returns chunks in finalization order (oldest first).
+#[test]
+fn drained_chunks_are_returned_oldest_first() {
+    let mut chunker = VadChunker::time_based(VadConfig::english());
+    chunker
+        .push_pcm(AudioChunk::new(
+            vec![7; 480_000],
+            AudioConfig::new(16_000, 1),
+        ))
+        .unwrap_or_else(|error| panic!("first block should buffer: {error}"));
+    chunker
+        .push_pcm(AudioChunk::new(
+            vec![9; 480_000],
+            AudioConfig::new(16_000, 1),
+        ))
+        .unwrap_or_else(|error| panic!("second block should buffer: {error}"));
+
+    let chunks = chunker.drain_ready_chunks();
+    assert_eq!(chunks.len(), 2);
+    assert_eq!(chunks[0].audio_chunk().samples().first(), Some(&7));
+    assert_eq!(chunks[1].audio_chunk().samples().last(), Some(&9));
+}
+
+/// Verifies stopping flushes buffered audio, including a trailing partial frame, as a final chunk.
+#[test]
+fn finish_flushes_remaining_audio_as_a_stream_ended_chunk() {
+    let mut chunker = VadChunker::time_based(VadConfig::english());
+    chunker
+        .push_pcm(AudioChunk::new(
+            vec![3; 500_000],
+            AudioConfig::new(16_000, 1),
+        ))
+        .unwrap_or_else(|error| panic!("audio should buffer: {error}"));
+    assert_eq!(chunker.drain_ready_chunks().len(), 1);
+
+    let final_chunk = chunker
+        .finish()
+        .unwrap_or_else(|| panic!("remaining audio should be flushed"));
+    assert_eq!(final_chunk.cut_type(), ChunkCutType::StreamEnded);
+    assert_eq!(final_chunk.overlap_sample_count(), 16_000);
+    assert_eq!(final_chunk.audio_chunk().samples().len(), 16_000 + 20_000);
+    assert!(chunker.finish().is_none());
+}
+
+/// Verifies finishing an empty chunker yields nothing instead of an empty chunk.
+#[test]
+fn finish_without_audio_returns_none() {
+    let mut chunker = VadChunker::time_based(VadConfig::english());
+    assert!(chunker.finish().is_none());
+}
