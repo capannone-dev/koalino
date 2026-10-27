@@ -27,7 +27,11 @@ name = "daemon"
 path = "core/bin/daemon.rs"
 
 [dependencies]
+# AES-256-GCM for voice embeddings at rest; `zeroize` wipes key schedules on drop (Issue #31).
+aes-gcm = { version = "0.10.3", features = ["zeroize"] }
 anyhow = "1.0.100"
+# Argon2id passphrase key derivation; only the raw `hash_password_into` API is needed.
+argon2 = { version = "0.5.3", default-features = false, features = ["alloc", "zeroize"] }
 async-trait = "0.1.89"
 automerge = "0.6.1"
 axum = { version = "0.8.6", features = ["json", "ws"] }
@@ -48,6 +52,8 @@ tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "json"] }
 uuid = { version = "1.18.1", features = ["v4"] }
+# Wipes encryption keys and passphrases from memory when dropped.
+zeroize = "1.8.1"
 # 0.16.0 provides native binding compatibility and requires the crate's Rust 1.88 MSRV.
 whisper-rs = { version = "=0.16.0", optional = true }
 # Provides feature-gated 16 kHz speech classification for the VAD adapter and its contract tests.

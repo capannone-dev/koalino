@@ -173,3 +173,50 @@ pub enum FileTransferError {
     #[error(transparent)]
     Storage(#[from] StorageError),
 }
+
+/// Describes an at-rest encryption, decryption, or key-management failure.
+///
+/// Messages never contain key material, passphrases, plaintext embeddings, or ciphertext.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum CryptoError {
+    /// The stored value is too short, has an unknown format header, or decrypts to a length that
+    /// is not a whole number of `f32` values.
+    #[error("sealed embedding is malformed")]
+    MalformedCiphertext,
+    /// The authentication tag did not verify: the key is wrong, the data was tampered with, or the
+    /// value belongs to another row.
+    #[error("sealed embedding failed authentication")]
+    AuthenticationFailed,
+    /// The cipher refused to encrypt the embedding.
+    #[error("embedding could not be encrypted")]
+    EncryptionFailed,
+    /// Argon2id parameters were invalid or derivation failed.
+    #[error("encryption key derivation failed: {reason}")]
+    KeyDerivation {
+        /// A reason that contains no passphrase or key material.
+        reason: String,
+    },
+    /// The random key file could not be located, created, read, or validated.
+    #[error("encryption key file error: {reason}")]
+    KeyFile {
+        /// A reason that names paths but never key bytes.
+        reason: String,
+    },
+    /// The configured key does not decrypt this database's key-check value.
+    #[error("the configured encryption key does not match this database")]
+    WrongKey,
+    /// The database was set up with a different key source than the one configured now.
+    #[error("this database uses a {stored} key, but a {configured} key is configured")]
+    KeySourceMismatch {
+        /// The key source recorded in the database (`passphrase` or `key file`).
+        stored: &'static str,
+        /// The key source selected by the current configuration.
+        configured: &'static str,
+    },
+    /// Encryption metadata could not be read or written.
+    #[error("encryption metadata is unavailable: {reason}")]
+    Metadata {
+        /// A reason that contains no key material.
+        reason: String,
+    },
+}

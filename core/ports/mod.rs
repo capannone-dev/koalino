@@ -4,6 +4,8 @@
 pub mod ai;
 /// Declares portable lifecycle and stream contracts for audio capture.
 pub mod audio;
+/// Declares at-rest encryption contracts for voice embeddings and their key metadata.
+pub mod crypto;
 /// Declares format-neutral meeting-export rendering contracts.
 pub mod export;
 /// Declares provider-neutral external meeting bridge contracts.

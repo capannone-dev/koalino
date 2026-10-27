@@ -16,6 +16,8 @@ mod cluster_review_tests;
 pub mod compute_router;
 #[cfg(test)]
 mod compute_router_tests;
+/// Encrypts voice embeddings at rest and resolves the key protecting them.
+pub mod crypto;
 /// Coordinates diarization, identity matching, and manual-review clip preservation through ports.
 pub mod diarization_processor;
 #[cfg(test)]
