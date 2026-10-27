@@ -16,6 +16,10 @@ mod compute_router_tests;
 pub mod diarization_processor;
 #[cfg(test)]
 mod diarization_processor_tests;
+/// Orchestrates repository extraction, attachment staging, and dispatch to meeting exporters.
+pub mod export_manager;
+#[cfg(test)]
+mod export_manager_tests;
 /// Coordinates content-addressed attachment availability and binary transfers through ports.
 pub mod file_sync_manager;
 #[cfg(test)]

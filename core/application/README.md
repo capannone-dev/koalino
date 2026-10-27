@@ -81,3 +81,35 @@ bridge guarantees one participant per audio stream, this flow bypasses the local
 diarization/weak-match/manual-confirmation path and enrolls a new embedding variant automatically.
 `SlideCapture` values route only through `AttachmentWorkflow`, preserving an adapter boundary for
 the attachment manager and keeping image bytes out of logs.
+
+## Meeting export workflow
+
+`export_manager.rs` orchestrates Markdown, PDF, and JSON exports. It talks only to ports:
+`NoteRepository` (meeting metadata, transcript segments, flat transcript), `AttachmentRepository`,
+`VoiceVectorDB` (display names only, never vectors), and `MeetingExporter`.
+
+1. **Validate the format.** `ExportWriter::ensure_format_supported` rejects formats with no
+   configured exporter (including the reserved `Srt`) with `ExportError::UnsupportedFormat`
+   before anything is read or written.
+2. **Select meetings.** `export_meeting` takes one ID, `export_meetings` a list, and `export_all`
+   every meeting whose creation time lies in `ExportOptions::date_range` (all meetings without a
+   range). An empty selection fails with `ExportError::NoMeetingsSelected`.
+3. **Extract.** `extract_meeting` returns `ExportError::MeetingNotFound` for unknown meetings. It
+   prefers stored `TranscriptSegment`s, labelling speakers by resolved identity name, as
+   `Unknown speaker` (identity no longer in the voice store), or as `Unattributed` (no identity).
+   Without segments, a non-empty flat transcript becomes one unattributed segment; with neither,
+   the export has an empty transcript. Attachments are loaded only when
+   `include_attachments` is set. Titles equal the meeting ID because no title is stored.
+4. **Stage attachments (`ExportWriter::write`).** Markdown copies sources into
+   `<export stem>_attachments/` beside the file so relative links keep working when the folder is
+   moved. PDF copies into a unique OS temp directory that is always deleted afterwards. JSON copies
+   nothing and lists source paths. Unreadable sources are logged by attachment ID and rendered as
+   unavailable. Source files are never moved or modified.
+5. **Name and write.** Generated names are `{meeting date}_{meeting_id}_{export timestamp}.{ext}`
+   (or `meetings-export_{count}_{timestamp}.{ext}` for batches), sanitized to `[A-Za-z0-9._-]`,
+   with `-N` appended on collision. An explicit destination overrides the generated name.
+
+`ExportManager::into_writer` releases the repository borrows so a driver can extract under a lock
+and then render on a blocking thread (the HTTP API does this with `spawn_blocking`). Errors are
+`anyhow` values wrapping `ExportError`, so interfaces can `downcast_ref::<ExportError>()` to map
+not-found, bad-request, and internal failures.
