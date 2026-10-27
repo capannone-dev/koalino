@@ -32,7 +32,8 @@ use crate::{
         errors::ExportError,
         models::{
             Attachment, AudioState, DeviceId, ExportFormat, ExportOptions, MeetingId,
-            SpeakerIdentity, TaskMetrics, TaskType, UnassignedVoiceClip,
+            MeetingMetadata, MeetingTitle, SpeakerIdentity, TaskMetrics, TaskType,
+            UnassignedVoiceClip,
         },
     },
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
@@ -230,6 +231,41 @@ struct FfiExportOptions {
 /// Side effects: None.
 fn export_error_json(error_code: &str, message: &str) -> String {
     serde_json::json!({ "ok": false, "error_code": error_code, "error": message }).to_string()
+}
+
+/// Serializes the meeting fields shared by `note_taker_get_meetings` and `note_taker_get_meeting`.
+///
+/// Inputs: Persisted meeting metadata.
+/// Outputs: `{"meeting_id","title","created_at"}` with the display title and RFC 3339 UTC time.
+/// Side effects: None.
+fn meeting_summary_json(meeting_metadata: &MeetingMetadata) -> serde_json::Value {
+    serde_json::json!({
+        "meeting_id": meeting_metadata.meeting_id().as_str(),
+        "title": meeting_metadata.display_title(),
+        "created_at": meeting_metadata.created_at().to_rfc3339(),
+    })
+}
+
+/// Validates the arguments of `note_taker_start_recording_with_title`.
+///
+/// Inputs: The decoded meeting ID and title; `None` means the caller passed null.
+/// Outputs: The trimmed meeting ID (`None` generates one) and validated title, or
+/// `FFI_INVALID_ARGUMENT` for a blank meeting ID or an invalid title.
+/// Side effects: None.
+fn titled_start_arguments(
+    meeting_id: Option<&str>,
+    title: Option<&str>,
+) -> Result<(Option<MeetingId>, Option<MeetingTitle>), c_int> {
+    let meeting_id = match meeting_id.map(str::trim) {
+        Some("") => return Err(FFI_INVALID_ARGUMENT),
+        Some(meeting_id) => Some(MeetingId::new(meeting_id)),
+        None => None,
+    };
+    let title = title
+        .map(MeetingTitle::parse)
+        .transpose()
+        .map_err(|_| FFI_INVALID_ARGUMENT)?;
+    Ok((meeting_id, title))
 }
 
 /// Retains only metadata necessary to persist one explicitly user-approved attachment link.
@@ -884,14 +920,92 @@ impl FfiRuntime {
     /// Starts a recording into `meeting_id` (created if missing), or resumes a paused one.
     ///
     /// Inputs: The meeting to record into; `None` generates one. Ignored when resuming.
-    /// Outputs: `FFI_SUCCESS`, `FFI_OPERATION_REJECTED` (e.g. already recording), or
-    /// `FFI_PIPELINE_UNAVAILABLE`.
-    /// Side effects: Composes the pipeline on first use and opens a meeting session.
+    /// Outputs: See `start_recording_titled`.
+    /// Side effects: See `start_recording_titled`; an existing meeting keeps its title.
     fn start_recording_for(&mut self, meeting_id: Option<MeetingId>) -> c_int {
+        self.start_recording_titled(meeting_id, None)
+    }
+
+    /// Starts an optionally titled recording, or resumes a paused one.
+    ///
+    /// Inputs: The meeting to record into (`None` generates one) and its title (`None` keeps the
+    /// current title); both are ignored when resuming.
+    /// Outputs: `FFI_SUCCESS`, `FFI_OPERATION_REJECTED` (e.g. already recording, or the title
+    /// could not be stored), or `FFI_PIPELINE_UNAVAILABLE`.
+    /// Side effects: Composes the pipeline on first use, opens a meeting session, and stores the
+    /// title in SQLite.
+    fn start_recording_titled(
+        &mut self,
+        meeting_id: Option<MeetingId>,
+        title: Option<MeetingTitle>,
+    ) -> c_int {
         match self.recording_controller() {
-            Ok(recording_controller) => recording_status(recording_controller.start(meeting_id)),
+            Ok(recording_controller) => {
+                recording_status(recording_controller.start_titled(meeting_id, title))
+            }
             Err(status) => status,
         }
+    }
+
+    /// Lists every local meeting with its display title as JSON.
+    ///
+    /// Inputs: None.
+    /// Outputs: `[{"meeting_id","title","created_at"}]` in repository order, where `title` is the
+    /// stored title or the dated fallback and `created_at` is RFC 3339 UTC; or
+    /// `{"ok":false,"error_code":"list_failed","error"}`.
+    /// Side effects: Reads SQLite meeting metadata only.
+    fn get_meetings(&self) -> String {
+        let meeting_ids = match self.note_repository.list_meeting_ids() {
+            Ok(meeting_ids) => meeting_ids,
+            Err(error) => return export_error_json("list_failed", &error.to_string()),
+        };
+        let mut serialized_meetings = Vec::with_capacity(meeting_ids.len());
+        for meeting_id in meeting_ids {
+            match self.note_repository.load_meeting_metadata(&meeting_id) {
+                Ok(Some(meeting_metadata)) => {
+                    serialized_meetings.push(meeting_summary_json(&meeting_metadata));
+                }
+                Ok(None) => {}
+                Err(error) => return export_error_json("list_failed", &error.to_string()),
+            }
+        }
+        serde_json::Value::Array(serialized_meetings).to_string()
+    }
+
+    /// Describes one meeting with its display title and flat transcript as JSON.
+    ///
+    /// Inputs: A non-blank `meeting_id`.
+    /// Outputs: `{"meeting_id","title","created_at","transcript"}` (`transcript` is null until
+    /// one is stored), or `{"ok":false,"error_code","error"}` where `error_code` is
+    /// `invalid_argument`, `meeting_not_found`, or `load_failed`.
+    /// Side effects: Reads SQLite.
+    fn get_meeting(&self, meeting_id: &str) -> String {
+        if meeting_id.trim().is_empty() {
+            return export_error_json("invalid_argument", "meeting_id must not be empty");
+        }
+        let typed_meeting_id = MeetingId::new(meeting_id);
+        let meeting_metadata = match self
+            .note_repository
+            .load_meeting_metadata(&typed_meeting_id)
+        {
+            Ok(Some(meeting_metadata)) => meeting_metadata,
+            Ok(None) => {
+                return export_error_json(
+                    "meeting_not_found",
+                    &format!("meeting {meeting_id} does not exist"),
+                );
+            }
+            Err(error) => return export_error_json("load_failed", &error.to_string()),
+        };
+        let transcript = match self.note_repository.load_transcript(&typed_meeting_id) {
+            Ok(transcript) => transcript,
+            Err(error) => return export_error_json("load_failed", &error.to_string()),
+        };
+        let mut meeting_json = meeting_summary_json(&meeting_metadata);
+        meeting_json["transcript"] = transcript
+            .map(|transcript| serde_json::Value::from(transcript.content()))
+            .unwrap_or(serde_json::Value::Null);
+        meeting_json.to_string()
     }
 
     /// Feeds captured 16 kHz mono PCM into the active recording.
@@ -1153,6 +1267,89 @@ pub unsafe extern "C" fn note_taker_start_recording_for_meeting(
         }),
         _ => FFI_INVALID_ARGUMENT,
     }
+}
+
+/// Starts a recording with an optional meeting ID and title (Issue #35).
+///
+/// Inputs: `meeting_id` is null (generate `meeting-<uuid>`) or a non-blank NUL-terminated UTF-8
+/// string; `title` is null (keep the meeting's title; new meetings show a dated fallback) or a
+/// NUL-terminated UTF-8 title of at most 200 characters without control characters.
+/// Outputs: `FFI_SUCCESS`, `FFI_INVALID_ARGUMENT` (invalid UTF-8, blank ID, or invalid title),
+/// `FFI_OPERATION_REJECTED` (a recording is already active, or the title could not be stored),
+/// or `FFI_PIPELINE_UNAVAILABLE`. Both arguments are ignored when resuming a paused recording.
+/// Side effects: Composes the meeting pipeline on first use (call it from a background isolate),
+/// opens a pipeline session, and stores the title in SQLite. The title is never logged.
+///
+/// # Safety
+/// Each pointer must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_start_recording_with_title(
+    meeting_id: *const c_char,
+    title: *const c_char,
+) -> c_int {
+    let decoded_meeting_id = match (meeting_id.is_null(), unsafe { ffi_string(meeting_id) }) {
+        (true, _) => None,
+        (false, Some(meeting_id)) => Some(meeting_id),
+        (false, None) => return FFI_INVALID_ARGUMENT,
+    };
+    let decoded_title = match (title.is_null(), unsafe { ffi_string(title) }) {
+        (true, _) => None,
+        (false, Some(title)) => Some(title),
+        (false, None) => return FFI_INVALID_ARGUMENT,
+    };
+    match titled_start_arguments(decoded_meeting_id, decoded_title) {
+        Ok((meeting_id, title)) => {
+            with_runtime(|runtime| runtime.start_recording_titled(meeting_id, title))
+        }
+        Err(status) => status,
+    }
+}
+
+/// Lists every local meeting with its title as caller-freed JSON.
+///
+/// Inputs: None.
+/// Outputs: An owned JSON string (free with `note_taker_free_string`):
+/// `[{"meeting_id","title","created_at"}]`, where an untitled meeting's `title` is its dated
+/// fallback such as `Meeting 2026-10-27 09:05 UTC`; or `{"ok":false,"error_code","error"}`.
+/// Null only if the response cannot be allocated.
+/// Side effects: Reads SQLite meeting metadata.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_get_meetings() -> *mut c_char {
+    let response_json =
+        with_runtime_json(|runtime| Ok(runtime.get_meetings())).unwrap_or_else(|_| {
+            export_error_json("runtime_unavailable", "the native runtime is unavailable")
+        });
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Describes one meeting, including its title, as caller-freed JSON.
+///
+/// Inputs: `meeting_id` is a non-null, non-blank NUL-terminated UTF-8 string.
+/// Outputs: An owned JSON string (free with `note_taker_free_string`):
+/// `{"meeting_id","title","created_at","transcript"}`, or `{"ok":false,"error_code","error"}`
+/// where `error_code` is `invalid_argument`, `meeting_not_found`, `load_failed`, or
+/// `runtime_unavailable`. Null only if the response cannot be allocated.
+/// Side effects: Reads SQLite.
+///
+/// # Safety
+/// `meeting_id` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_get_meeting(meeting_id: *const c_char) -> *mut c_char {
+    let response_json = match unsafe { ffi_string(meeting_id) } {
+        Some(meeting_id) => with_runtime_json(|runtime| Ok(runtime.get_meeting(meeting_id)))
+            .unwrap_or_else(|_| {
+                export_error_json("runtime_unavailable", "the native runtime is unavailable")
+            }),
+        None => export_error_json(
+            "invalid_argument",
+            "meeting_id must be a valid UTF-8 C string",
+        ),
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
 }
 
 /// Feeds captured 16 kHz mono signed 16-bit PCM into the active recording.
@@ -1533,12 +1730,13 @@ mod ffi_contract_tests {
         FFI_AUDIO_STATE_IDLE, FFI_AUDIO_STATE_INTERRUPTED, FFI_AUDIO_STATE_PAUSED,
         FFI_AUDIO_STATE_RECORDING, FFI_AUDIO_STATE_STOPPED, FFI_INVALID_ARGUMENT,
         FFI_OPERATION_REJECTED, FFI_PIPELINE_UNAVAILABLE, FFI_SUCCESS, FfiRuntime,
-        pcm_samples_from_raw,
+        pcm_samples_from_raw, titled_start_arguments,
     };
     use crate::{
         application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
         domain::models::{
-            DeviceId, MeetingId, TaskMetrics, TaskType, TranscriptSegment, UnassignedVoiceClip,
+            DeviceId, MeetingId, MeetingTitle, TaskMetrics, TaskType, TranscriptSegment,
+            UnassignedVoiceClip,
         },
         ports::{storage::NoteRepository, telemetry::MetricsRepository},
     };
@@ -2047,6 +2245,82 @@ mod ffi_contract_tests {
         assert_eq!(
             (segments[0].start_time_ms(), segments[0].end_time_ms()),
             (0, 2_000)
+        );
+    }
+
+    /// Verifies a titled start persists the title, and `get_meetings`/`get_meeting` return it
+    /// alongside untitled meetings' dated fallback.
+    #[test]
+    fn start_recording_with_title_persists_it_in_meeting_json() {
+        let test_directory =
+            std::env::temp_dir().join(format!("note-taker-ffi-title-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&test_directory)
+            .unwrap_or_else(|error| panic!("test directory must be created: {error}"));
+        let mut ffi_runtime =
+            FfiRuntime::open_for_tests(&test_directory.join("notes.sqlite3"), &test_directory)
+                .unwrap_or_else(|status| {
+                    panic!("fixture runtime must initialize: status {status}")
+                });
+        ffi_runtime
+            .note_repository
+            .create_meeting(&MeetingId::new("ffi-untitled"), &[1])
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        let title = MeetingTitle::parse("Project Sync")
+            .unwrap_or_else(|error| panic!("title must parse: {error}"));
+
+        assert_eq!(
+            ffi_runtime.start_recording_titled(Some(MeetingId::new("ffi-titled")), Some(title)),
+            FFI_SUCCESS
+        );
+        assert_eq!(ffi_runtime.stop_recording(), FFI_SUCCESS);
+        let meetings = parse_response(&ffi_runtime.get_meetings());
+        let titled_meeting = parse_response(&ffi_runtime.get_meeting("ffi-titled"));
+        let missing_meeting = parse_response(&ffi_runtime.get_meeting("ffi-missing"));
+        drop(ffi_runtime);
+        let _ = std::fs::remove_dir_all(&test_directory);
+
+        let listed_titles: std::collections::HashMap<&str, &str> = meetings
+            .as_array()
+            .unwrap_or_else(|| panic!("meetings must be an array: {meetings}"))
+            .iter()
+            .filter_map(|meeting| {
+                Some((meeting["meeting_id"].as_str()?, meeting["title"].as_str()?))
+            })
+            .collect();
+        assert_eq!(listed_titles.get("ffi-titled"), Some(&"Project Sync"));
+        assert!(
+            listed_titles
+                .get("ffi-untitled")
+                .is_some_and(|title| title.starts_with("Meeting ")),
+            "{meetings}"
+        );
+        assert!(meetings[0]["created_at"].is_string(), "{meetings}");
+        assert_eq!(titled_meeting["meeting_id"], "ffi-titled");
+        assert_eq!(titled_meeting["title"], "Project Sync");
+        assert_eq!(titled_meeting["transcript"], serde_json::Value::Null);
+        assert_eq!(missing_meeting["ok"], false);
+        assert_eq!(missing_meeting["error_code"], "meeting_not_found");
+    }
+
+    /// Verifies the titled-start C arguments: null means absent, blank IDs and invalid titles are
+    /// rejected, and titles are trimmed.
+    #[test]
+    fn titled_start_arguments_are_validated() {
+        assert_eq!(titled_start_arguments(None, None), Ok((None, None)));
+        assert_eq!(
+            titled_start_arguments(Some(" standup "), Some(" Daily ")),
+            Ok((
+                Some(MeetingId::new("standup")),
+                MeetingTitle::parse("Daily").ok()
+            ))
+        );
+        assert_eq!(
+            titled_start_arguments(Some("  "), None),
+            Err(FFI_INVALID_ARGUMENT)
+        );
+        assert_eq!(
+            titled_start_arguments(None, Some("\t")),
+            Err(FFI_INVALID_ARGUMENT)
         );
     }
 
