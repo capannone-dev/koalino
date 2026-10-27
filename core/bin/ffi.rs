@@ -21,7 +21,11 @@ use crate::{
     },
     application::{
         attachment_manager::AttachmentManager,
+        cluster_review::{
+            ClusterReviewError, assign_cluster_to_named_identity, list_unknown_clusters,
+        },
         export_manager::{ExportManager, ExportWriter},
+        unknown_speaker_clusterer::ClusteringError,
         voice_identity_manager::VoiceIdentityManager,
     },
     domain::{
@@ -101,7 +105,7 @@ struct FfiExportOptions {
     output_path: Option<PathBuf>,
 }
 
-/// Builds the JSON error object returned by `note_taker_export_meeting`.
+/// Builds the JSON error object returned by the JSON-returning export and cluster commands.
 ///
 /// Inputs: A stable machine-readable `error_code` and a human-readable `message`.
 /// Outputs: `{"ok":false,"error_code":…,"error":…}` as a string.
@@ -428,6 +432,161 @@ impl FfiRuntime {
             .confirm_weak_match(Uuid::new_v4(), clip.derived_embedding())
             .map(|_| FFI_SUCCESS)
             .unwrap_or(FFI_OPERATION_REJECTED)
+    }
+
+    /// Lists a meeting's unresolved unknown-speaker clusters as JSON for the Voice Gallery.
+    ///
+    /// Inputs: `meeting_id` is a non-blank meeting identifier; an unknown meeting has no clusters.
+    /// Outputs: A JSON array of `{"cluster_id","meeting_id","total_duration_ms","chunk_count",
+    /// "created_at"}` objects in creation order, each with an absolute `review_clip_path` when
+    /// the cluster still has a review clip; or `{"ok":false,"error_code","error"}` where
+    /// `error_code` is `invalid_argument` or `list_failed`.
+    /// Side effects: Reads SQLite and writes each cluster's review clip into the review-clip
+    /// directory. A clip that cannot be written is omitted (logged by cluster ID only). Embeddings
+    /// never leave Rust.
+    fn get_unknown_clusters(&mut self, meeting_id: &str) -> String {
+        if meeting_id.trim().is_empty() {
+            return export_error_json("invalid_argument", "meeting_id must not be empty");
+        }
+        let typed_meeting_id = MeetingId::new(meeting_id);
+        let summaries = match list_unknown_clusters(&self.note_repository, &typed_meeting_id) {
+            Ok(summaries) => summaries,
+            Err(error) => return export_error_json("list_failed", &error.to_string()),
+        };
+        if summaries.is_empty() {
+            // Clips are only read for meetings that have clusters; the repository rejects
+            // clip reads for unknown meetings, which simply have no clusters here.
+            return String::from("[]");
+        }
+        let review_clips = match self.note_repository.get_unassigned_clips(&typed_meeting_id) {
+            Ok(review_clips) => review_clips,
+            Err(error) => return export_error_json("list_failed", &error.to_string()),
+        };
+        let serialized_clusters = summaries
+            .iter()
+            .map(|summary| {
+                let mut cluster_json = serde_json::json!({
+                    "cluster_id": summary.cluster_id().to_string(),
+                    "meeting_id": summary.meeting_id().as_str(),
+                    "total_duration_ms": summary.total_duration_ms(),
+                    "chunk_count": summary.chunk_count(),
+                    "created_at": summary.created_at().to_rfc3339(),
+                });
+                let cluster_clip = review_clips
+                    .iter()
+                    .find(|clip| clip.cluster_id() == Some(summary.cluster_id()));
+                if let Some(clip) = cluster_clip {
+                    match self.materialize_review_clip(clip) {
+                        Ok(clip_path) => {
+                            cluster_json["review_clip_path"] =
+                                serde_json::Value::from(clip_path.to_string_lossy().into_owned());
+                        }
+                        Err(_) => tracing::warn!(
+                            cluster_id = %summary.cluster_id(),
+                            "unable to materialize cluster review clip"
+                        ),
+                    }
+                }
+                cluster_json
+            })
+            .collect::<Vec<_>>();
+        serde_json::Value::Array(serialized_clusters).to_string()
+    }
+
+    /// Writes one review clip as `<clip_id>.wav` in the review-clip directory.
+    ///
+    /// Inputs: A clip loaded from SQLite.
+    /// Outputs: The clip's absolute path, or the I/O error.
+    /// Side effects: Creates the review-clip directory if needed and writes temporary raw audio.
+    fn materialize_review_clip(&self, clip: &UnassignedVoiceClip) -> std::io::Result<PathBuf> {
+        fs::create_dir_all(&self.review_clip_directory)?;
+        let clip_path = self
+            .review_clip_directory
+            .join(format!("{}.wav", clip.clip_id()));
+        fs::write(&clip_path, clip.audio_bytes())?;
+        fs::canonicalize(&clip_path)
+    }
+
+    /// Assigns an unknown-speaker cluster to a named identity and describes the outcome as JSON.
+    ///
+    /// Inputs: `cluster_id` is a UUID string; `identity_name` is the person's non-blank name.
+    /// Outputs: `{"ok":true,"cluster_id","identity_id","identity_name","identity_created",
+    /// "variants_stored","segments_updated"}`, or `{"ok":false,"error_code","error"}` where
+    /// `error_code` is `invalid_argument`, `cluster_not_found`, `cluster_already_resolved`, or
+    /// `assignment_failed`.
+    /// Side effects: Through `cluster_review`, stores voice variants, relinks transcript
+    /// segments, resolves the cluster, and deletes its review clip rows; then deletes the
+    /// cluster's materialized review files from the review-clip directory.
+    fn assign_cluster(&mut self, cluster_id: &str, identity_name: &str) -> String {
+        let Ok(parsed_cluster_id) = Uuid::parse_str(cluster_id) else {
+            return export_error_json("invalid_argument", "cluster_id must be a UUID");
+        };
+        let cluster_clip_ids = self.review_clip_ids_for_cluster(parsed_cluster_id);
+        match assign_cluster_to_named_identity(
+            &self.note_repository,
+            self.voice_identity_manager.vector_database(),
+            parsed_cluster_id,
+            identity_name,
+        ) {
+            Ok(assignment) => {
+                for clip_id in cluster_clip_ids {
+                    self.loaded_review_clips.remove(&clip_id);
+                    let clip_path = self.review_clip_directory.join(format!("{clip_id}.wav"));
+                    if let Err(error) = fs::remove_file(&clip_path)
+                        && error.kind() != std::io::ErrorKind::NotFound
+                    {
+                        tracing::warn!(clip_id = %clip_id, "unable to delete resolved review clip file");
+                    }
+                }
+                serde_json::json!({
+                    "ok": true,
+                    "cluster_id": assignment.cluster_id().to_string(),
+                    "identity_id": assignment.identity_id().to_string(),
+                    "identity_name": assignment.identity_name(),
+                    "identity_created": assignment.identity_created(),
+                    "variants_stored": assignment.variants_stored(),
+                    "segments_updated": assignment.segments_updated(),
+                })
+                .to_string()
+            }
+            Err(error) => {
+                let error_code = match &error {
+                    ClusterReviewError::BlankIdentityName => "invalid_argument",
+                    ClusterReviewError::Clustering(ClusteringError::ClusterNotFound { .. }) => {
+                        "cluster_not_found"
+                    }
+                    ClusterReviewError::Clustering(ClusteringError::ClusterAlreadyResolved {
+                        ..
+                    }) => "cluster_already_resolved",
+                    ClusterReviewError::Clustering(_) => "assignment_failed",
+                };
+                export_error_json(error_code, &error.to_string())
+            }
+        }
+    }
+
+    /// Returns the IDs of the review clips that belong to one cluster.
+    ///
+    /// Inputs: `cluster_id` identifies a cluster, which need not exist.
+    /// Outputs: Matching clip IDs; empty when the cluster or its meeting cannot be read.
+    /// Side effects: Reads SQLite.
+    fn review_clip_ids_for_cluster(&self, cluster_id: Uuid) -> Vec<Uuid> {
+        let Ok(Some(cluster)) = self
+            .note_repository
+            .load_unknown_speaker_cluster(cluster_id)
+        else {
+            return Vec::new();
+        };
+        self.note_repository
+            .get_unassigned_clips(cluster.meeting_id())
+            .map(|clips| {
+                clips
+                    .iter()
+                    .filter(|clip| clip.cluster_id() == Some(cluster_id))
+                    .map(UnassignedVoiceClip::clip_id)
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Serializes telemetry-observed device cards without exposing hardware identifiers or task data.
@@ -904,6 +1063,75 @@ pub unsafe extern "C" fn note_taker_assign_new_identity(
     with_runtime(|runtime| runtime.assign_new_identity(clip_id, display_name))
 }
 
+/// Lists a meeting's unresolved unknown-speaker clusters as caller-freed UTF-8 JSON.
+///
+/// Inputs: `meeting_id` is a non-null NUL-terminated UTF-8 meeting identifier.
+/// Outputs: An owned JSON string (free with `note_taker_free_string`): an array of cluster
+/// summaries with optional absolute `review_clip_path`, or `{"ok":false,"error_code","error"}`
+/// with `invalid_argument`, `list_failed`, or `runtime_unavailable`. Returns null only if the
+/// response cannot be allocated as a C string.
+/// Side effects: Reads SQLite and materializes review clips locally; never returns audio bytes or
+/// embeddings. Runs synchronously, so Flutter should call it from a background isolate.
+///
+/// # Safety
+/// `meeting_id` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_get_unknown_clusters(meeting_id: *const c_char) -> *mut c_char {
+    let response_json = match unsafe { ffi_string(meeting_id) } {
+        Some(meeting_id) => {
+            with_runtime_json(|runtime| Ok(runtime.get_unknown_clusters(meeting_id)))
+                .unwrap_or_else(|_| {
+                    export_error_json("runtime_unavailable", "the native runtime is unavailable")
+                })
+        }
+        None => export_error_json(
+            "invalid_argument",
+            "meeting_id must be a valid UTF-8 C string",
+        ),
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Assigns an unknown-speaker cluster to a named identity and returns caller-freed result JSON.
+///
+/// Inputs: `cluster_id` (a UUID) and `identity_name` (non-blank) are non-null NUL-terminated
+/// UTF-8 strings.
+/// Outputs: An owned JSON string (free with `note_taker_free_string`): `{"ok":true,"cluster_id",
+/// "identity_id","identity_name","identity_created","variants_stored","segments_updated"}` or
+/// `{"ok":false,"error_code","error"}` with `invalid_argument`, `cluster_not_found`,
+/// `cluster_already_resolved`, `assignment_failed`, or `runtime_unavailable`. Returns null only
+/// if the response cannot be allocated as a C string.
+/// Side effects: Stores voice variants, relinks transcript segments, resolves the cluster, and
+/// deletes its review audio, synchronously; Flutter should call it from a background isolate.
+///
+/// # Safety
+/// Both pointers must be null or point to valid NUL-terminated C strings for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_assign_cluster(
+    cluster_id: *const c_char,
+    identity_name: *const c_char,
+) -> *mut c_char {
+    let response_json = match (unsafe { ffi_string(cluster_id) }, unsafe {
+        ffi_string(identity_name)
+    }) {
+        (Some(cluster_id), Some(identity_name)) => {
+            with_runtime_json(|runtime| Ok(runtime.assign_cluster(cluster_id, identity_name)))
+                .unwrap_or_else(|_| {
+                    export_error_json("runtime_unavailable", "the native runtime is unavailable")
+                })
+        }
+        _ => export_error_json(
+            "invalid_argument",
+            "cluster_id and identity_name must be valid UTF-8 C strings",
+        ),
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
 /// Converts a borrowed C string to UTF-8 without retaining its pointer.
 ///
 /// Inputs: `value` is a nullable C string pointer.
@@ -985,7 +1213,10 @@ mod ffi_contract_tests {
         FfiRuntime,
     };
     use crate::{
-        domain::models::{DeviceId, MeetingId, TaskMetrics, TaskType, TranscriptSegment},
+        application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
+        domain::models::{
+            DeviceId, MeetingId, TaskMetrics, TaskType, TranscriptSegment, UnassignedVoiceClip,
+        },
         ports::{storage::NoteRepository, telemetry::MetricsRepository},
     };
 
@@ -1197,5 +1428,140 @@ mod ffi_contract_tests {
             .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
 
         assert_eq!(ffi_runtime.set_log_level(""), FFI_INVALID_ARGUMENT);
+    }
+
+    /// Seeds one meeting with a two-chunk cluster that owns a review clip and one segment.
+    ///
+    /// Outputs: The cluster ID and the review clip ID.
+    fn seed_cluster(ffi_runtime: &FfiRuntime, meeting_id: &MeetingId) -> (uuid::Uuid, uuid::Uuid) {
+        ffi_runtime
+            .note_repository
+            .create_meeting(meeting_id, &[1])
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        let clusterer =
+            UnknownSpeakerClusterer::new(&ffi_runtime.note_repository, ClusteringConfig::default());
+        let cluster_id = clusterer
+            .find_or_create_cluster(meeting_id, &[1.0, 0.0], String::from("c1"), 1_000)
+            .unwrap_or_else(|error| panic!("fixture chunk must cluster: {error}"))
+            .cluster_id();
+        clusterer
+            .find_or_create_cluster(meeting_id, &[0.9, 0.3], String::from("c2"), 1_500)
+            .unwrap_or_else(|error| panic!("fixture chunk must cluster: {error}"));
+        let review_clip_id = uuid::Uuid::new_v4();
+        ffi_runtime
+            .note_repository
+            .save_unassigned_clip(
+                UnassignedVoiceClip::new(review_clip_id, meeting_id.clone(), 0, 1_000, vec![7, 8])
+                    .with_cluster_id(Some(cluster_id)),
+            )
+            .unwrap_or_else(|error| panic!("fixture clip must persist: {error}"));
+        ffi_runtime
+            .note_repository
+            .save_transcript_segments(
+                meeting_id,
+                &[
+                    TranscriptSegment::new(meeting_id.clone(), 0, 1_000, None, "hi")
+                        .with_unknown_cluster_id(Some(cluster_id)),
+                ],
+            )
+            .unwrap_or_else(|error| panic!("fixture segments must persist: {error}"));
+        (cluster_id, review_clip_id)
+    }
+
+    /// Verifies cluster listing serializes summaries and a playable review clip path as JSON.
+    #[test]
+    fn unknown_clusters_serialize_summaries_with_review_clip_paths() {
+        let (mut ffi_runtime, export_directory) = export_runtime();
+        let meeting_id = MeetingId::new("ffi-cluster-meeting");
+        let (cluster_id, review_clip_id) = seed_cluster(&ffi_runtime, &meeting_id);
+
+        let response = parse_response(&ffi_runtime.get_unknown_clusters("ffi-cluster-meeting"));
+        let review_clip_path = response[0]["review_clip_path"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let review_clip_bytes = std::fs::read(&review_clip_path).unwrap_or_default();
+        let empty_response = parse_response(&ffi_runtime.get_unknown_clusters("other-meeting"));
+        let invalid_response = parse_response(&ffi_runtime.get_unknown_clusters(" "));
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert_eq!(response.as_array().map(Vec::len), Some(1));
+        assert_eq!(response[0]["cluster_id"], cluster_id.to_string());
+        assert_eq!(response[0]["meeting_id"], "ffi-cluster-meeting");
+        assert_eq!(response[0]["total_duration_ms"], 2_500);
+        assert_eq!(response[0]["chunk_count"], 2);
+        assert!(response[0]["created_at"].is_string());
+        assert!(response[0].get("representative_embedding").is_none());
+        assert!(review_clip_path.ends_with(&format!("{review_clip_id}.wav")));
+        assert_eq!(review_clip_bytes, vec![7, 8]);
+        assert_eq!(empty_response, serde_json::json!([]));
+        assert_eq!(invalid_response["ok"], false);
+        assert_eq!(invalid_response["error_code"], "invalid_argument");
+    }
+
+    /// Verifies assignment returns the summary JSON and deletes the materialized review audio.
+    #[test]
+    fn assign_cluster_returns_success_json_and_removes_review_audio() {
+        let (mut ffi_runtime, export_directory) = export_runtime();
+        let meeting_id = MeetingId::new("ffi-assign-meeting");
+        let (cluster_id, _) = seed_cluster(&ffi_runtime, &meeting_id);
+        let listed = parse_response(&ffi_runtime.get_unknown_clusters("ffi-assign-meeting"));
+        let review_clip_path =
+            std::path::PathBuf::from(listed[0]["review_clip_path"].as_str().unwrap_or_default());
+        let review_clip_existed = review_clip_path.exists();
+
+        let response =
+            parse_response(&ffi_runtime.assign_cluster(&cluster_id.to_string(), "Grace Hopper"));
+        let review_clip_remains = review_clip_path.exists();
+        let relisted = parse_response(&ffi_runtime.get_unknown_clusters("ffi-assign-meeting"));
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert!(review_clip_existed);
+        assert_eq!(response["ok"], true);
+        assert_eq!(response["cluster_id"], cluster_id.to_string());
+        assert_eq!(response["identity_name"], "Grace Hopper");
+        assert_eq!(response["identity_created"], true);
+        assert_eq!(response["variants_stored"], 2);
+        assert_eq!(response["segments_updated"], 1);
+        assert!(
+            response["identity_id"]
+                .as_str()
+                .and_then(|identity_id| uuid::Uuid::parse_str(identity_id).ok())
+                .is_some()
+        );
+        assert!(
+            !review_clip_remains,
+            "raw review audio must be deleted after assignment"
+        );
+        assert_eq!(relisted, serde_json::json!([]));
+    }
+
+    /// Verifies assignment failures are reported as structured error JSON.
+    #[test]
+    fn assign_cluster_reports_structured_errors() {
+        let (mut ffi_runtime, export_directory) = export_runtime();
+        let meeting_id = MeetingId::new("ffi-error-meeting");
+        let (cluster_id, _) = seed_cluster(&ffi_runtime, &meeting_id);
+        let cluster_text = cluster_id.to_string();
+
+        let malformed = parse_response(&ffi_runtime.assign_cluster("not-a-uuid", "Grace"));
+        let blank = parse_response(&ffi_runtime.assign_cluster(&cluster_text, "  "));
+        let missing =
+            parse_response(&ffi_runtime.assign_cluster(&uuid::Uuid::new_v4().to_string(), "Grace"));
+        let first = parse_response(&ffi_runtime.assign_cluster(&cluster_text, "Grace"));
+        let repeated = parse_response(&ffi_runtime.assign_cluster(&cluster_text, "Grace"));
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        for (response, expected_code) in [
+            (&malformed, "invalid_argument"),
+            (&blank, "invalid_argument"),
+            (&missing, "cluster_not_found"),
+            (&repeated, "cluster_already_resolved"),
+        ] {
+            assert_eq!(response["ok"], false, "{response}");
+            assert_eq!(response["error_code"], expected_code, "{response}");
+            assert!(response["error"].is_string(), "{response}");
+        }
+        assert_eq!(first["ok"], true);
     }
 }

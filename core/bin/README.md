@@ -28,3 +28,9 @@ with operational logs.
 shared `ExportManager` and returns caller-freed JSON describing the written file or a structured
 error (see `API_SPECS.md`). The CLI binary composes an `ExportWriter` from
 `adapters::export::default_exporters()` and `NOTE_TAKER_EXPORT_DIR`.
+
+`ffi.rs` exports two Voice Gallery commands that call `application::cluster_review`, the same use
+case as the CLI and HTTP API. `note_taker_get_unknown_clusters(meeting_id)` returns unresolved
+unknown-speaker clusters with optional local review-clip paths. `note_taker_assign_cluster(
+cluster_id, identity_name)` assigns a cluster to a named identity and deletes its review audio.
+Both return caller-freed JSON; see `API_SPECS.md`.

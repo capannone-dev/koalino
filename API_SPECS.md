@@ -80,6 +80,29 @@ The Rust bridge materializes review audio in `NOTE_TAKER_REVIEW_CLIP_DIR` (defau
 `voice_review_clips`) and the Flutter audio package opens the returned file path. The ABI never
 streams audio bytes to Dart.
 
+### Unknown-speaker cluster C ABI
+
+Both functions call `application::cluster_review`, the same use case as the CLI and HTTP API.
+They always return caller-freed JSON (release it with `note_taker_free_string`), and they return
+`NULL` only if the response cannot be allocated. They run synchronously, so Dart should call them
+from a background isolate.
+
+- `char *note_taker_get_unknown_clusters(const char *meeting_id)` returns a JSON array in
+  creation order:
+  `[{"cluster_id":"uuid","meeting_id":"m1","total_duration_ms":2500,"chunk_count":2,"created_at":"RFC 3339","review_clip_path":"/abs/<clip>.wav"}]`.
+  `review_clip_path` is present only while the cluster still has a review clip. The clip is written
+  to `NOTE_TAKER_REVIEW_CLIP_DIR` for local playback. A meeting without clusters, including an
+  unknown meeting, returns `[]`. On failure the function returns
+  `{"ok":false,"error_code":"invalid_argument|list_failed|runtime_unavailable","error":"…"}`.
+  Embeddings never cross FFI.
+- `char *note_taker_assign_cluster(const char *cluster_id, const char *identity_name)` returns
+  `{"ok":true,"cluster_id":"uuid","identity_id":"uuid","identity_name":"Grace Hopper","identity_created":true,"variants_stored":2,"segments_updated":1}`.
+  A known identity with the same name (trimmed, ignoring case) is reused. Any other name gets a
+  new identity UUID. After success the cluster's materialized review files are deleted. On failure
+  it returns `{"ok":false,"error_code","error"}`, where `error_code` is `invalid_argument` (bad UUID
+  or blank name), `cluster_not_found`, `cluster_already_resolved`, `assignment_failed`, or
+  `runtime_unavailable`.
+
 ### Attachment import C ABI
 
 - `char *note_taker_process_attachment(const char *file_path)` accepts a non-empty local path and
