@@ -19,6 +19,7 @@ use tower::ServiceExt;
 use crate::{
     adapters::storage::{
         in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
+        sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
     application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
     domain::models::{
@@ -648,4 +649,70 @@ async fn cluster_assignment_endpoint_rejects_invalid_requests() {
     .await;
     assert_eq!(missing_status, StatusCode::NOT_FOUND);
     assert!(missing_body["error"].is_string());
+}
+
+/// Builds a router over the SQLite file at `database_path`, composed as `bin/daemon.rs` does.
+fn file_backed_router(database_path: &std::path::Path) -> axum::Router {
+    let repository = SqliteNoteRepository::open(database_path, DeviceId::new("headless-server"))
+        .unwrap_or_else(|error| panic!("file SQLite repository must open: {error}"));
+    let voice_store = SqliteVoiceVectorDB::open(database_path)
+        .unwrap_or_else(|error| panic!("file voice store must open: {error}"));
+    build_router(ServerAppState::new(repository, voice_store))
+}
+
+/// Verifies a cluster assigned over HTTP appears by name in the voice gallery, including after
+/// the daemon restarts on the same database file.
+#[tokio::test]
+async fn assigned_cluster_names_appear_in_the_voice_gallery_after_a_restart() {
+    let database_path = std::env::temp_dir().join(format!(
+        "note-taker-api-voice-{}.sqlite3",
+        uuid::Uuid::new_v4()
+    ));
+    let meeting_id = MeetingId::new("meeting-api-persist");
+    let cluster_id = {
+        let repository = SqliteNoteRepository::open(&database_path, DeviceId::new("seed"))
+            .unwrap_or_else(|error| panic!("file SQLite repository must open: {error}"));
+        repository
+            .create_meeting(&meeting_id, &[])
+            .unwrap_or_else(|error| panic!("test meeting must persist: {error}"));
+        UnknownSpeakerClusterer::new(&repository, ClusteringConfig::default())
+            .find_or_create_cluster(&meeting_id, &[1.0, 0.0], String::from("c1"), 1_000)
+            .unwrap_or_else(|error| panic!("test chunk must cluster: {error}"))
+            .cluster_id()
+    };
+    let gallery_names = |gallery: &serde_json::Value| -> Vec<String> {
+        gallery["identities"]
+            .as_array()
+            .map(|identities| {
+                identities
+                    .iter()
+                    .filter_map(|identity| identity["display_name"].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+
+    let running_router = file_backed_router(&database_path);
+    let (assign_status, assignment) = send_json(
+        &running_router,
+        "POST",
+        &format!("/api/clusters/{cluster_id}/assign"),
+        Some(r#"{"identity_name":"Grace Hopper"}"#),
+    )
+    .await;
+    let (_, live_gallery) = send_json(&running_router, "GET", "/api/voice-gallery", None).await;
+    drop(running_router);
+    let restarted_router = file_backed_router(&database_path);
+    let (restarted_status, restarted_gallery) =
+        send_json(&restarted_router, "GET", "/api/voice-gallery", None).await;
+    drop(restarted_router);
+    for suffix in ["", "-journal", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{}{suffix}", database_path.display()));
+    }
+
+    assert_eq!(assign_status, StatusCode::OK);
+    assert_eq!(assignment["identity_name"], "Grace Hopper");
+    assert_eq!(gallery_names(&live_gallery), vec!["Grace Hopper"]);
+    assert_eq!(restarted_status, StatusCode::OK);
+    assert_eq!(gallery_names(&restarted_gallery), vec!["Grace Hopper"]);
 }

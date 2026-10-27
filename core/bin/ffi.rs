@@ -16,7 +16,7 @@ use crate::{
         media::local_file_metadata::LocalFileMetadataExtractor,
         observability::{LoggingConfiguration, LoggingRuntime, initialize_logging},
         storage::{
-            in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
+            sqlite_adapter::SqliteNoteRepository, sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
     },
     application::{
@@ -31,8 +31,8 @@ use crate::{
     domain::{
         errors::ExportError,
         models::{
-            Attachment, AudioConfig, DeviceId, ExportFormat, ExportOptions, MeetingId, TaskMetrics,
-            TaskType, UnassignedVoiceClip,
+            Attachment, AudioConfig, DeviceId, ExportFormat, ExportOptions, MeetingId,
+            SpeakerIdentity, TaskMetrics, TaskType, UnassignedVoiceClip,
         },
     },
     ports::{
@@ -40,6 +40,7 @@ use crate::{
         media::MetadataExtractor,
         storage::{AttachmentRepository, NoteRepository},
         telemetry::MetricsRepository,
+        voice::VoiceVectorDB,
     },
 };
 use uuid::Uuid;
@@ -86,7 +87,7 @@ struct FfiRuntime {
     local_recorder: LocalRecorder,
     logging_runtime: Option<LoggingRuntime>,
     note_repository: SqliteNoteRepository,
-    voice_identity_manager: VoiceIdentityManager<InMemoryVoiceVectorDB>,
+    voice_identity_manager: VoiceIdentityManager<SqliteVoiceVectorDB>,
     review_clip_directory: PathBuf,
     loaded_review_clips: HashMap<Uuid, UnassignedVoiceClip>,
     pending_attachment_imports: HashMap<Uuid, PendingAttachmentImport>,
@@ -125,7 +126,8 @@ impl FfiRuntime {
     ///
     /// Inputs: None; the portable 16 kHz mono capture format is fixed for this initial bridge.
     /// Outputs: A ready runtime or an audio configuration error encoded as a C status by callers.
-    /// Side effects: Allocates an in-memory recorder; it does not open an OS device or capture audio.
+    /// Side effects: Allocates an in-memory recorder (it does not open an OS device or capture
+    /// audio) and opens the note repository and the voice store on the same SQLite file.
     fn new() -> Result<Self, c_int> {
         let local_recorder =
             LocalRecorder::new(AudioConfig::new(16_000, 1)).map_err(|_| FFI_OPERATION_REJECTED)?;
@@ -136,8 +138,10 @@ impl FfiRuntime {
             env::var("NOTE_TAKER_DEVICE_ID")
                 .unwrap_or_else(|_| String::from("unconfigured-device")),
         );
-        let note_repository = SqliteNoteRepository::open(database_path, device_id)
+        let note_repository = SqliteNoteRepository::open(&database_path, device_id)
             .map_err(|_| FFI_OPERATION_REJECTED)?;
+        let voice_store =
+            SqliteVoiceVectorDB::open(&database_path).map_err(|_| FFI_OPERATION_REJECTED)?;
         let review_clip_directory = env::var("NOTE_TAKER_REVIEW_CLIP_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("voice_review_clips"));
@@ -145,6 +149,7 @@ impl FfiRuntime {
         Ok(Self::from_parts(
             local_recorder,
             note_repository,
+            voice_store,
             review_clip_directory,
             ExportWriter::new(default_exporters(), default_export_directory()),
         ))
@@ -152,12 +157,14 @@ impl FfiRuntime {
 
     /// Assembles runtime state from already-opened adapters.
     ///
-    /// Inputs: The recorder, repository, review-clip directory, and export writer.
-    /// Outputs: The runtime with empty caches and an in-memory voice store.
+    /// Inputs: The recorder, note repository, voice store (persisting speaker names and voice
+    /// variants), review-clip directory, and export writer.
+    /// Outputs: The runtime with empty caches.
     /// Side effects: None.
     fn from_parts(
         local_recorder: LocalRecorder,
         note_repository: SqliteNoteRepository,
+        voice_store: SqliteVoiceVectorDB,
         review_clip_directory: PathBuf,
         export_writer: ExportWriter,
     ) -> Self {
@@ -165,7 +172,7 @@ impl FfiRuntime {
             local_recorder,
             logging_runtime: None,
             note_repository,
-            voice_identity_manager: VoiceIdentityManager::new(InMemoryVoiceVectorDB::new()),
+            voice_identity_manager: VoiceIdentityManager::new(voice_store),
             review_clip_directory,
             loaded_review_clips: HashMap::new(),
             pending_attachment_imports: HashMap::new(),
@@ -184,9 +191,34 @@ impl FfiRuntime {
             LocalRecorder::new(AudioConfig::new(16_000, 1)).map_err(|_| FFI_OPERATION_REJECTED)?;
         let note_repository =
             SqliteNoteRepository::open_in_memory().map_err(|_| FFI_OPERATION_REJECTED)?;
+        let voice_store =
+            SqliteVoiceVectorDB::open_in_memory().map_err(|_| FFI_OPERATION_REJECTED)?;
         Ok(Self::from_parts(
             local_recorder,
             note_repository,
+            voice_store,
+            export_directory.join("review-clips"),
+            ExportWriter::new(default_exporters(), export_directory),
+        ))
+    }
+
+    /// Creates a runtime over the SQLite file at `database_path`, as one app launch would.
+    ///
+    /// Inputs: The database file (created when missing) and the export directory.
+    /// Outputs: A runtime whose stores persist in `database_path`, or a C status.
+    /// Side effects: Opens or creates the SQLite file; creates no directories.
+    #[cfg(test)]
+    fn open_for_tests(database_path: &Path, export_directory: &Path) -> Result<Self, c_int> {
+        let local_recorder =
+            LocalRecorder::new(AudioConfig::new(16_000, 1)).map_err(|_| FFI_OPERATION_REJECTED)?;
+        let note_repository = SqliteNoteRepository::open(database_path, DeviceId::new("ffi-test"))
+            .map_err(|_| FFI_OPERATION_REJECTED)?;
+        let voice_store =
+            SqliteVoiceVectorDB::open(database_path).map_err(|_| FFI_OPERATION_REJECTED)?;
+        Ok(Self::from_parts(
+            local_recorder,
+            note_repository,
+            voice_store,
             export_directory.join("review-clips"),
             ExportWriter::new(default_exporters(), export_directory),
         ))
@@ -409,13 +441,16 @@ impl FfiRuntime {
             .unwrap_or(FFI_OPERATION_REJECTED)
     }
 
-    /// Creates a fresh identity UUID and delegates its initial signature to the existing manager.
+    /// Creates a named identity with a fresh UUID and delegates its initial signature to the manager.
     ///
-    /// Inputs: `clip_id` must be loaded and `display_name` must be non-empty user-facing text.
-    /// Outputs: A C status indicating whether a signature variant was persisted.
-    /// Side effects: Stores one derived voice-signature variant; the display name remains UI metadata.
+    /// Inputs: `clip_id` must be loaded and `display_name` must be non-empty user-facing text
+    /// (surrounding whitespace is trimmed).
+    /// Outputs: A C status indicating whether the identity and its signature variant were persisted.
+    /// Side effects: Saves the identity name in the voice store, then stores one derived
+    /// voice-signature variant for it.
     fn assign_new_identity(&mut self, clip_id: &str, display_name: &str) -> c_int {
-        if display_name.trim().is_empty() {
+        let trimmed_display_name = display_name.trim();
+        if trimmed_display_name.is_empty() {
             return FFI_INVALID_ARGUMENT;
         }
         let parsed_clip_id = match Uuid::parse_str(clip_id) {
@@ -428,8 +463,17 @@ impl FfiRuntime {
         if clip.derived_embedding().is_empty() {
             return FFI_OPERATION_REJECTED;
         }
+        let identity = SpeakerIdentity::new(Uuid::new_v4(), trimmed_display_name);
+        if self
+            .voice_identity_manager
+            .vector_database()
+            .save_speaker_identity(&identity)
+            .is_err()
+        {
+            return FFI_OPERATION_REJECTED;
+        }
         self.voice_identity_manager
-            .confirm_weak_match(Uuid::new_v4(), clip.derived_embedding())
+            .confirm_weak_match(identity.identity_id(), clip.derived_embedding())
             .map(|_| FFI_SUCCESS)
             .unwrap_or(FFI_OPERATION_REJECTED)
     }
@@ -1534,6 +1578,88 @@ mod ffi_contract_tests {
             "raw review audio must be deleted after assignment"
         );
         assert_eq!(relisted, serde_json::json!([]));
+    }
+
+    /// Verifies a name assigned in one app launch is reused, not duplicated, in the next launch.
+    #[test]
+    fn assigned_cluster_names_persist_across_runtimes() {
+        let test_directory =
+            std::env::temp_dir().join(format!("note-taker-ffi-persist-{}", uuid::Uuid::new_v4()));
+        let database_path = test_directory.join("note_taker.sqlite3");
+        std::fs::create_dir_all(&test_directory)
+            .unwrap_or_else(|error| panic!("test directory must be created: {error}"));
+        let open_runtime = || {
+            FfiRuntime::open_for_tests(&database_path, &test_directory)
+                .unwrap_or_else(|status| panic!("file runtime must open: status {status}"))
+        };
+        let first_response = {
+            let mut first_launch = open_runtime();
+            let (cluster_id, _) = seed_cluster(&first_launch, &MeetingId::new("ffi-first-launch"));
+            parse_response(&first_launch.assign_cluster(&cluster_id.to_string(), "Grace Hopper"))
+        };
+
+        let mut second_launch = open_runtime();
+        let (cluster_id, _) = seed_cluster(&second_launch, &MeetingId::new("ffi-second-launch"));
+        let second_response =
+            parse_response(&second_launch.assign_cluster(&cluster_id.to_string(), "grace HOPPER"));
+        let stored_identities = second_launch
+            .voice_identity_manager
+            .list_identities_with_variant_counts()
+            .unwrap_or_else(|error| panic!("identities must list: {error}"));
+        drop(second_launch);
+        let _ = std::fs::remove_dir_all(&test_directory);
+
+        assert_eq!(first_response["identity_created"], true);
+        assert_eq!(second_response["ok"], true);
+        assert_eq!(
+            second_response["identity_id"],
+            first_response["identity_id"]
+        );
+        assert_eq!(second_response["identity_name"], "Grace Hopper");
+        assert_eq!(second_response["identity_created"], false);
+        assert_eq!(stored_identities.len(), 1);
+        assert_eq!(stored_identities[0].0.display_name(), "Grace Hopper");
+        assert_eq!(stored_identities[0].1, 4);
+    }
+
+    /// Verifies `assign_new_identity` stores the typed display name with the first variant.
+    #[test]
+    fn assign_new_identity_persists_the_display_name() {
+        let (mut ffi_runtime, export_directory) = export_runtime();
+        let meeting_id = MeetingId::new("ffi-new-identity-meeting");
+        let clip_id = uuid::Uuid::new_v4();
+        ffi_runtime
+            .note_repository
+            .create_meeting(&meeting_id, &[1])
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        ffi_runtime
+            .note_repository
+            .save_unassigned_clip(UnassignedVoiceClip::with_review_context(
+                clip_id,
+                meeting_id.clone(),
+                0,
+                1_000,
+                vec![7, 8],
+                vec![1.0, 0.0],
+                None,
+            ))
+            .unwrap_or_else(|error| panic!("fixture clip must persist: {error}"));
+        std::fs::create_dir_all(&ffi_runtime.review_clip_directory)
+            .unwrap_or_else(|error| panic!("review clip directory must be created: {error}"));
+        let loaded_clips = ffi_runtime.get_unassigned_clips("ffi-new-identity-meeting");
+
+        let status = ffi_runtime.assign_new_identity(&clip_id.to_string(), " Ada Lovelace ");
+        let stored_identities = ffi_runtime
+            .voice_identity_manager
+            .list_identities_with_variant_counts()
+            .unwrap_or_else(|error| panic!("identities must list: {error}"));
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert!(loaded_clips.is_ok());
+        assert_eq!(status, FFI_SUCCESS);
+        assert_eq!(stored_identities.len(), 1);
+        assert_eq!(stored_identities[0].0.display_name(), "Ada Lovelace");
+        assert_eq!(stored_identities[0].1, 1);
     }
 
     /// Verifies assignment failures are reported as structured error JSON.

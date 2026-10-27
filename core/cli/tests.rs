@@ -19,11 +19,14 @@ use crate::{
         export::default_exporters,
         storage::{
             in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
+            sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
     },
     application::export_manager::ExportWriter,
     application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
-    domain::models::{AudioConfig, ExportFormat, ExportOptions, MeetingId, TranscriptSegment},
+    domain::models::{
+        AudioConfig, DeviceId, ExportFormat, ExportOptions, MeetingId, TranscriptSegment,
+    },
     ports::storage::NoteRepository,
 };
 
@@ -645,4 +648,61 @@ fn core_service_rejects_blank_names_and_unknown_clusters() {
             "unknown-speaker cluster {missing_cluster_id} was not found"
         ))
     );
+}
+
+/// Opens the concrete CLI service over the SQLite file at `database_path`, as `bin/cli.rs` does.
+fn file_backed_service(
+    database_path: &Path,
+) -> CoreCliService<LocalRecorder, SqliteNoteRepository, SqliteVoiceVectorDB> {
+    let repository = SqliteNoteRepository::open(database_path, DeviceId::new("cli-test"))
+        .unwrap_or_else(|error| panic!("file SQLite must open: {error}"));
+    let voice_store = SqliteVoiceVectorDB::open(database_path)
+        .unwrap_or_else(|error| panic!("file voice store must open: {error}"));
+    let recorder = LocalRecorder::new(AudioConfig::new(16_000, 1))
+        .unwrap_or_else(|error| panic!("fixture recorder must initialize: {error}"));
+    CoreCliService::new(
+        recorder,
+        repository,
+        voice_store,
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    )
+}
+
+/// Verifies `voice assign-cluster` names survive a restart: a new CLI process lists them.
+#[test]
+fn assigned_cluster_names_are_listed_after_a_restart() {
+    let database_path =
+        std::env::temp_dir().join(format!("note-taker-cli-voice-{}.sqlite3", Uuid::new_v4()));
+    let meeting_id = MeetingId::new("meeting-cli-persist");
+    let assigned = {
+        let mut first_run = file_backed_service(&database_path);
+        let clusterer =
+            UnknownSpeakerClusterer::new(&first_run.repository, ClusteringConfig::default());
+        first_run
+            .repository
+            .create_meeting(&meeting_id, &[1])
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        let cluster_id = clusterer
+            .find_or_create_cluster(&meeting_id, &[1.0, 0.0], String::from("c1"), 1_000)
+            .unwrap_or_else(|error| panic!("fixture chunk must cluster: {error}"))
+            .cluster_id();
+        first_run.assign_cluster(cluster_id, "Grace Hopper")
+    };
+
+    let mut second_run = file_backed_service(&database_path);
+    let listed = dispatch(
+        CliCommand::Voice(VoiceArgs {
+            command: VoiceCommand::List,
+        }),
+        &mut second_run,
+    );
+    drop(second_run);
+    for suffix in ["", "-journal", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{}{suffix}", database_path.display()));
+    }
+
+    assert!(assigned.is_ok_and(|output| output.contains("new identity")));
+    let listed = listed.unwrap_or_else(|error| panic!("voice list must dispatch: {error}"));
+    assert!(listed.contains("Grace Hopper"), "{listed}");
+    assert!(listed.contains("| 1"), "{listed}");
 }

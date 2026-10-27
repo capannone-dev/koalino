@@ -42,8 +42,8 @@ Issue #9 adds `SpeakerIdentity`, UUID-keyed `VoiceEmbedding` variants, and `Voic
 similarity. It classifies adapter-returned scores as strong above 0.80, weak from 0.50 through 0.80
 inclusive, and no match below 0.50. User confirmation of a weak match adds a fresh variant UUID to
 the selected identity. `InMemoryVoiceVectorDB` is a dependency-light cosine-search adapter for
-tests and development; it is not persistent or encrypted and must be replaced before production
-biometric storage.
+tests and development; it is not persistent or encrypted. Issue #30 replaced it in the CLI, daemon,
+and FFI with `SqliteVoiceVectorDB`.
 
 Issue #10 replaces the earlier diarization placeholder with an async `DiarizationEngine` port that
 returns time-bounded `SpeakerSegment` values with derived embeddings. `DiarizationProcessor` uses
@@ -185,8 +185,15 @@ for the CLI (`voice list-clusters`, `voice assign-cluster`), HTTP
 (`note_taker_get_unknown_clusters`, `note_taker_assign_cluster`). It calls the clusterer's
 `get_clusters_for_meeting` and `assign_identity_to_cluster` unchanged. Listing returns
 embedding-free summaries. Assignment rejects blank names, reuses an identity whose name matches
-(trimmed, ignoring case), and otherwise creates a new identity UUID. No port persists display names
-yet, so a new identity's name is returned but not stored. The FFI listing materializes each
+(trimmed, ignoring case), and otherwise creates a new identity UUID. The FFI listing materializes each
 cluster's review clip for playback and deletes those files after assignment. The Flutter and web
 Voice Galleries now show cluster cards with a name field and an Assign button instead of individual
 clips. `NoteRepository` gained a `&T` forwarding impl so services accept the server's `dyn` port.
+
+Issue #30 persists speaker identities. `VoiceVectorDB` gained `save_speaker_identity` and
+`load_speaker_identity`. `SqliteVoiceVectorDB` stores names in `speaker_identities` and variants in
+`voice_variants` in the same database file, and rejects variants for unsaved identities. The
+clusterer saves the identity on assignment and returns the persisted record, so names assigned
+through the CLI, HTTP, or FFI survive restarts and are reused case-insensitively. `TeamsProcessor`
+and FFI `assign_new_identity` also save names. The CLI, daemon, and FFI compose the SQLite store.
+Embeddings are not yet encrypted at rest.

@@ -71,10 +71,12 @@ it from a background isolate.
   `confidence_score`. `local_file_path` is absolute; raw audio bytes and embeddings never cross
   FFI. Call `note_taker_free_string` exactly once on a non-null result.
 - `int32_t note_taker_confirm_weak_match(const char *clip_id, const char *identity_id)` validates
-  the loaded local review clip and delegates derived-vector storage to `VoiceIdentityManager`.
+  the loaded local review clip and delegates derived-vector storage to `VoiceIdentityManager`. It
+  is rejected when the identity was never saved in the voice store.
 - `int32_t note_taker_assign_new_identity(const char *clip_id, const char *display_name)` validates
-  its strings and delegates first-variant creation to `VoiceIdentityManager` using the review
-  clip's retained derived embedding.
+  its strings, saves a new identity with the trimmed `display_name` in the voice store, and
+  delegates first-variant creation to `VoiceIdentityManager` using the review clip's retained
+  derived embedding.
 
 The Rust bridge materializes review audio in `NOTE_TAKER_REVIEW_CLIP_DIR` (default
 `voice_review_clips`) and the Flutter audio package opens the returned file path. The ABI never
@@ -155,7 +157,8 @@ with opaque meeting/clip IDs. The router allows browser CORS only from `http://l
 
 `POST /api/voice/assign` accepts JSON `{ "clip_id": "uuid", "identity_id": "uuid" }` and
 returns `204` after the existing voice identity service writes a derived signature variant. Invalid
-identifiers return `400`, a missing clip returns `404`, and no raw audio or embedding is returned.
+identifiers return `400`, a missing clip or an identity the voice store has never saved returns
+`404`, and no raw audio or embedding is returned.
 
 ### Meeting export
 
@@ -196,8 +199,8 @@ identity UUID. On success it returns `200`:
 The call stores one voice variant per member embedding, relinks the cluster's transcript segments,
 resolves the cluster, and deletes its review clips. A non-UUID `cluster_id` or a blank name
 returns `400`, an unknown cluster `404`, an already-resolved cluster `409`, and storage failures
-`500`. No port stores display names yet, so a new identity's name is echoed in the response but
-not saved.
+`500`. The identity and its name are persisted in the voice store, so they appear in
+`GET /api/voice-gallery` and survive a daemon restart.
 
 ## Linux CLI contract
 

@@ -51,10 +51,26 @@ The `attachments` table persists only an attachment UUID, optional confirmed mee
 path, MIME type, original UTC timestamp, and source-device metadata. It never stores attachment
 bytes. `AttachmentRepository` checks referenced meetings before accepting a confirmed link.
 
+`sqlite_voice_vector_db.rs` implements `VoiceVectorDB` on the same SQLite file as the note
+repository, through its own connection with a 5 s busy timeout:
+
+| Table | Columns |
+| --- | --- |
+| `speaker_identities` | `id` (UUID PK), `display_name` (non-blank), `created_at`, `updated_at` (RFC 3339) |
+| `voice_variants` | `id` (UUID PK), `identity_id` (FK → `speaker_identities`), `embedding` BLOB, `created_at` |
+
+Saving an existing identity ID renames it. Identities list in creation order. `store_embedding`
+rejects empty or non-finite vectors and any variant whose identity was never saved.
+`search_similar` ranks every variant by cosine similarity inside the adapter. `delete_identity`
+removes the variants and the name in one transaction. Both tables are created with
+`IF NOT EXISTS` on every open, so databases from before Issue #30 migrate without touching
+existing rows. Embeddings are little-endian `f32` BLOBs, never logged, and not yet encrypted at
+rest (AES-256-GCM follow-up). The CLI, daemon, and FFI compose this store.
+
 `in_memory_voice_vector_db.rs` implements `VoiceVectorDB` with a process-local collection and a
-simple cosine-similarity loop. It is suitable for deterministic unit tests and development only;
-it does not provide persistence or AES-256-GCM encryption and must never be selected as the
-production biometric store.
+simple cosine-similarity loop. It is suitable for deterministic unit tests and development only.
+It does not provide persistence or AES-256-GCM encryption, and it accepts variants for unsaved
+identities, so it must never be selected as the production biometric store.
 
 `file_storage_adapter.rs` implements `FileStorage` as a SHA-256 content-addressed store. It writes
 each verified object through a unique `.transfer-*.tmp` staging file and atomically renames it to

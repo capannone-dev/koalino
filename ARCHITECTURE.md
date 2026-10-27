@@ -64,7 +64,8 @@
                                      > 0.70 join (running mean) / new        cluster_chunks
  CLI / HTTP / FFI ─▶ application::cluster_review  (list summaries · name → identity, Issue #29)
  user assigns identity to cluster ─▶ assign_identity_to_cluster
-                                     1 VoiceVectorDB.store_embedding × members (creates identity)
+                                     0 VoiceVectorDB.save_speaker_identity (persist name, #30)
+                                     1 VoiceVectorDB.store_embedding × members
                                      2 relink transcript_segments where unknown_cluster_id = cluster
                                      3 resolve cluster + delete its review clips
 ```

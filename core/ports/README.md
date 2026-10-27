@@ -16,7 +16,10 @@ connections, or socket handles.
 
 `VoiceVectorDB` accepts and returns `VoiceEmbedding` values only. Its adapter owns all vector
 similarity calculations and biometric persistence details, while the application receives just
-candidate scores through the port.
+candidate scores through the port. It also persists `SpeakerIdentity` names
+(`save_speaker_identity` inserts or renames by UUID, `load_speaker_identity`,
+`list_speaker_identities`); `delete_identity` removes a name together with its variants. A
+persistent adapter may reject variants for identities that were never saved.
 
 `DiarizationEngine` is an async AI port that accepts opaque audio bytes and returns portable
 `SpeakerSegment` timing plus derived embeddings. `VoiceIdentityMatcher` exposes only conservative

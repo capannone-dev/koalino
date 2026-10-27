@@ -152,9 +152,11 @@ one cluster, so one label would mis-attribute the other person. 0.70 sits below 
 same-speaker similarity is usually high. It is a starting point to tune against real embeddings.
 Configure it with `MeetingSession::with_clustering_config`.
 
-**Identity creation.** No port stores identities on their own: an identity exists in
-`VoiceVectorDB` once it has a variant. Assigning a fresh UUID therefore creates the identity by
-enrolling the cluster's embeddings. Display names are not persisted yet (tracked follow-up).
+**Identity creation.** `assign_identity_to_cluster` takes a `SpeakerIdentity`. It saves the
+identity through `VoiceVectorDB::save_speaker_identity` before enrolling the cluster's embeddings,
+then returns the reloaded, persisted identity. `identity_created` reports whether the voice store
+had no record of that UUID before. `TeamsProcessor` likewise saves an unseen participant's
+identity before its first variant, without renaming identities that already exist.
 
 **Partial failures.** The assignment steps are not one transaction across ports. Variants are
 stored first. If saving segments or resolving fails, a retry re-stores variants, which only adds
@@ -176,5 +178,6 @@ duplicate acoustic variants. A cluster is never marked resolved before its segme
   `assign_identity_to_cluster` and returns a `NamedClusterAssignment`.
 
 Both functions accept unsized (`dyn`) ports, as the HTTP server holds them, through the
-`&T` forwarding impls of `NoteRepository` and `VoiceVectorDB`. Because display names are not
-persisted, a freshly created identity's name lasts only as long as the response.
+`&T` forwarding impls of `NoteRepository` and `VoiceVectorDB`. With a persistent voice store
+(`SqliteVoiceVectorDB`, as composed by the CLI, daemon, and FFI), an assigned name survives
+restarts and is reused by later assignments.

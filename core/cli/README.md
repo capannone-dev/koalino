@@ -57,10 +57,10 @@ Assigned cluster <cluster-uuid> to "Grace Hopper" (new identity <identity-uuid>;
 
 Blank names, unknown clusters, and already-resolved clusters exit non-zero with a readable message.
 
-Two limitations come from the current ports. No port stores display names yet, so the name is
-printed but not saved. The CLI binary also composes `InMemoryVoiceVectorDB`, the same as
-`voice assign`, so stored voice variants last only for the command's process. The relinked
-segments and the resolved cluster are persisted in SQLite.
+The CLI binary composes `SqliteVoiceVectorDB` on `NOTE_TAKER_DATABASE_PATH`, so the name and
+the voice variants persist with the relinked segments and resolved cluster. A later
+`voice list` shows the identity, and a later `voice assign-cluster` with the same name in any
+letter case reuses it.
 
 ### Exports
 

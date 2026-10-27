@@ -7,7 +7,7 @@ use note_taker_core::{
     adapters::{
         observability::{LoggingConfiguration, initialize_logging},
         storage::{
-            in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
+            sqlite_adapter::SqliteNoteRepository, sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
     },
     domain::models::DeviceId,
@@ -18,7 +18,7 @@ use note_taker_core::{
 ///
 /// Inputs: Reads optional device, log, database, and bind-address environment variables.
 /// Outputs: A process exit status indicating whether startup or HTTP serving failed.
-/// Side effects: Opens local SQLite, creates logging sinks, binds the configured local TCP address,
+/// Side effects: Opens the note repository and the voice store on one local SQLite file, creates logging sinks, binds the configured local TCP address,
 /// and serves REST/WebSocket requests until the process is stopped.
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -37,8 +37,9 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
     let bind_address =
         env::var("NOTE_TAKER_BIND_ADDRESS").unwrap_or_else(|_| String::from("127.0.0.1:8080"));
-    let repository = SqliteNoteRepository::open(database_path, DeviceId::new("headless-server"))?;
-    let application_state = ServerAppState::new(repository, InMemoryVoiceVectorDB::new());
+    let repository = SqliteNoteRepository::open(&database_path, DeviceId::new("headless-server"))?;
+    let voice_store = SqliteVoiceVectorDB::open(&database_path)?;
+    let application_state = ServerAppState::new(repository, voice_store);
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!(address = %bind_address, "headless Axum server started");
     axum::serve(listener, build_router(application_state)).await?;

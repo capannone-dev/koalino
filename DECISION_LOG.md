@@ -378,3 +378,40 @@
   `ResizeObserver`. Both were fixed. A Flutter CI workflow (`flutter-ci.yml`, pinned to Flutter 3.47.8)
   was then added. Its first runs required applying `dart format` across `ui/`, refreshing the stale
   `pubspec.lock`, and fixing a #25 type error in `telemetry_dashboard_screen.dart`.
+
+## 2026-10-27 — Issue #30 persisted speaker identities
+
+- Identity names live behind `VoiceVectorDB`, not `NoteRepository` and not a new port. The voice
+  port already owned identities (`list_speaker_identities`, `delete_identity`), while
+  `NoteRepository` holds meeting data and already has 17 methods. Splitting names from variants
+  across two ports would also lose the single-transaction delete of a name and its variants. The
+  port gained `save_speaker_identity` (insert or rename by ID) and `load_speaker_identity`. Both
+  have defaults (`Unavailable`; a scan of `list_speaker_identities`) so search-only test doubles
+  stay small.
+- IDs stay `Uuid` rather than the issue's `&str`, matching every other identity API (strict typing).
+- `SqliteVoiceVectorDB` adds `speaker_identities(id, display_name, created_at, updated_at)` and
+  `voice_variants(id, identity_id → speaker_identities, embedding, created_at)` to the database
+  file the note repository already uses, through a second connection with a 5 s busy timeout.
+  The migration is `CREATE TABLE/INDEX IF NOT EXISTS` and runs on every open. No earlier release
+  persisted identities or variants, so there is nothing to convert, and existing meeting, cluster,
+  and segment rows are untouched. A test opens a pre-#30 database twice and checks that they survive.
+- The store enforces the foreign key itself: `store_embedding` inserts only when the identity row
+  exists and otherwise returns `Rejected("… does not exist")`. Callers that create identities
+  therefore save them first. The clusterer does this on assignment, `TeamsProcessor` for an unseen
+  participant, and FFI `assign_new_identity`, which used to drop the typed name. Confirming a weak
+  match against an unknown identity UUID now fails instead of conjuring a nameless identity.
+  `InMemoryVoiceVectorDB` keeps its lenient behaviour for unit tests.
+- `assign_identity_to_cluster` now takes a `SpeakerIdentity`, saves it, reloads it, and returns the
+  persisted identity in `ClusterAssignment`. Interfaces therefore report the stored spelling.
+  `identity_created` now means "no voice-store record existed before"; before #30 it meant "no
+  variants existed".
+- Deleting an identity removes its name and variants in one transaction. Transcript segments that
+  referenced it keep the dangling UUID and render as an unknown speaker; nothing cascades into
+  meeting data.
+- The CLI, daemon, and FFI now compose `SqliteVoiceVectorDB` on `NOTE_TAKER_DATABASE_PATH`.
+  `InMemoryVoiceVectorDB` remains for tests only.
+- Embeddings are stored as unencrypted little-endian `f32` BLOBs, the same at-rest policy as the
+  #28 cluster embeddings. CONTRIBUTING.md requires AES-256-GCM for voice signatures, but that needs a
+  crypto crate and therefore approval. It remains the tracked follow-up the issue itself defers.
+- No FFI function lists identities, so the FFI test checks persistence by reusing a name across
+  two runtimes opened on the same file.
