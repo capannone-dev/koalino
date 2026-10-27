@@ -154,8 +154,8 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
         .toSet();
     final List<TextEditingController> staleControllers =
         <TextEditingController>[];
-    _nameControllers.removeWhere(
-        (String clusterId, TextEditingController nameController) {
+    _nameControllers
+        .removeWhere((String clusterId, TextEditingController nameController) {
       if (listedClusterIds.contains(clusterId)) {
         return false;
       }

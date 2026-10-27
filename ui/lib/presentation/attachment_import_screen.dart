@@ -38,7 +38,8 @@ final class AttachmentImportScreen extends StatelessWidget {
       body: AnimatedBuilder(
         animation: attachmentController,
         builder: (BuildContext context, Widget? child) {
-          if (attachmentController.errorMessage case final String errorMessage) {
+          if (attachmentController.errorMessage
+              case final String errorMessage) {
             return Center(child: Text(errorMessage));
           }
           return const Center(child: Text('No attachments imported'));
@@ -98,11 +99,13 @@ final class _AttachmentSuggestionDialog extends StatelessWidget {
             final int confidencePercent =
                 (suggestion.confidenceScore * 100).round();
             return ListTile(
-              title: Text('${suggestion.meetingId} ($confidencePercent% match)'),
+              title:
+                  Text('${suggestion.meetingId} ($confidencePercent% match)'),
               trailing: FilledButton(
                 onPressed: () async {
                   await attachmentController.confirmSuggestion(suggestion);
-                  if (context.mounted && attachmentController.errorMessage == null) {
+                  if (context.mounted &&
+                      attachmentController.errorMessage == null) {
                     Navigator.pop(context);
                   }
                 },

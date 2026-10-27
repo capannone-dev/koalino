@@ -62,12 +62,14 @@ final class RustAttachmentBridge implements AttachmentBridge {
   /// Side effects: Opens the configured Rust dynamic library when omitted.
   RustAttachmentBridge({DynamicLibrary? dynamicLibrary})
       : _dynamicLibrary = dynamicLibrary ?? _openCoreLibrary() {
-    _processAttachment = _dynamicLibrary.lookupFunction<_NativeProcessAttachment,
+    _processAttachment = _dynamicLibrary.lookupFunction<
+        _NativeProcessAttachment,
         _DartProcessAttachment>('note_taker_process_attachment');
     _confirmAttachmentLink = _dynamicLibrary.lookupFunction<
         _NativeConfirmAttachmentLink,
         _DartConfirmAttachmentLink>('note_taker_confirm_attachment_link');
-    _freeString = _dynamicLibrary.lookupFunction<_NativeFreeString, _DartFreeString>(
+    _freeString =
+        _dynamicLibrary.lookupFunction<_NativeFreeString, _DartFreeString>(
       'note_taker_free_string',
     );
   }
@@ -140,7 +142,8 @@ final class RustAttachmentBridge implements AttachmentBridge {
 
 typedef _NativeProcessAttachment = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _DartProcessAttachment = Pointer<Utf8> Function(Pointer<Utf8>);
-typedef _NativeConfirmAttachmentLink = Int32 Function(Pointer<Utf8>, Pointer<Utf8>);
+typedef _NativeConfirmAttachmentLink = Int32 Function(
+    Pointer<Utf8>, Pointer<Utf8>);
 typedef _DartConfirmAttachmentLink = int Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef _NativeFreeString = Void Function(Pointer<Utf8>);
 typedef _DartFreeString = void Function(Pointer<Utf8>);

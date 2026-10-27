@@ -82,7 +82,8 @@ void main() {
     );
   }
 
-  testWidgets('Add Attachment triggers the picker and displays ranked suggestions',
+  testWidgets(
+      'Add Attachment triggers the picker and displays ranked suggestions',
       (WidgetTester tester) async {
     final FakeAttachmentFilePicker attachmentFilePicker =
         FakeAttachmentFilePicker('/private/agenda.pdf');

@@ -121,9 +121,9 @@ ClusterAssignmentResult decodeClusterAssignment(String responseJson) {
 }
 
 /// Builds the exception for a Rust `{"ok":false,"error_code","error"}` response.
-StateError _nativeError(Map<String, Object?> json) => StateError(
-    'Rust rejected the Voice Gallery request '
-    '(${json['error_code'] ?? 'unknown_error'}): ${json['error'] ?? ''}');
+StateError _nativeError(Map<String, Object?> json) =>
+    StateError('Rust rejected the Voice Gallery request '
+        '(${json['error_code'] ?? 'unknown_error'}): ${json['error'] ?? ''}');
 
 /// Declares Voice Gallery operations available to presentation and controller code.
 abstract interface class VoiceGalleryBridge {
@@ -203,9 +203,9 @@ String _callNativeJson(String symbolName, List<String> arguments) {
       .toList(growable: false);
   try {
     final Pointer<Utf8> responsePointer = switch (nativeArguments) {
-      [final Pointer<Utf8> onlyArgument] => coreLibrary
-          .lookupFunction<_NativeOneStringJson, _DartOneStringJson>(
-              symbolName)(onlyArgument),
+      [final Pointer<Utf8> onlyArgument] =>
+        coreLibrary.lookupFunction<_NativeOneStringJson, _DartOneStringJson>(
+            symbolName)(onlyArgument),
       [final Pointer<Utf8> firstArgument, final Pointer<Utf8> secondArgument] =>
         coreLibrary.lookupFunction<_NativeTwoStringJson, _DartTwoStringJson>(
             symbolName)(firstArgument, secondArgument),

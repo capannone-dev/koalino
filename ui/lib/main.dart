@@ -42,7 +42,18 @@ final class NoteTakerApp extends StatelessWidget {
     return MaterialApp(
       title: 'Note Taker',
       theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
-      home: Scaffold(body: RecordingScreen(recordingController: recordingController), drawer: Drawer(child: ListView(children: <Widget>[const DrawerHeader(child: Text('Note Taker')), ListTile(title: const Text('Telemetry Dashboard'), onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => TelemetryDashboardScreen(controller: TelemetryDashboardController(telemetryBridge: RustTelemetryBridge())))))]))),
+      home: Scaffold(
+          body: RecordingScreen(recordingController: recordingController),
+          drawer: Drawer(
+              child: ListView(children: <Widget>[
+            const DrawerHeader(child: Text('Note Taker')),
+            ListTile(
+                title: const Text('Telemetry Dashboard'),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                    builder: (_) => TelemetryDashboardScreen(
+                        controller: TelemetryDashboardController(
+                            telemetryBridge: RustTelemetryBridge())))))
+          ]))),
     );
   }
 }

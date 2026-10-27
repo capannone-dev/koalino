@@ -157,7 +157,8 @@ final class AttachmentController extends ChangeNotifier {
     }
     return decodedJson.map<AttachmentSuggestion>((Object? value) {
       if (value is! Map) {
-        throw const FormatException('Attachment suggestion must be a JSON object.');
+        throw const FormatException(
+            'Attachment suggestion must be a JSON object.');
       }
       return AttachmentSuggestion.fromJson(value.cast<String, Object?>());
     }).toList(growable: false);

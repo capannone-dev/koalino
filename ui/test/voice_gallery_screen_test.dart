@@ -183,7 +183,8 @@ void main() {
   });
 
   group('FFI JSON decoding', () {
-    test('decodes the cluster array returned by note_taker_get_unknown_clusters',
+    test(
+        'decodes the cluster array returned by note_taker_get_unknown_clusters',
         () {
       final List<UnknownSpeakerCluster> clusters = decodeUnknownClusters(
         '[{"cluster_id":"c1","meeting_id":"m1","total_duration_ms":2500,'
