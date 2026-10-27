@@ -11,7 +11,6 @@ use std::{
 
 use crate::{
     adapters::{
-        audio::local_recorder::LocalRecorder,
         export::{default_export_directory, default_exporters},
         media::local_file_metadata::LocalFileMetadataExtractor,
         observability::{LoggingConfiguration, LoggingRuntime, initialize_logging},
@@ -32,17 +31,18 @@ use crate::{
     domain::{
         errors::ExportError,
         models::{
-            Attachment, AudioConfig, DeviceId, ExportFormat, ExportOptions, MeetingId,
+            Attachment, AudioState, DeviceId, ExportFormat, ExportOptions, MeetingId,
             SpeakerIdentity, TaskMetrics, TaskType, UnassignedVoiceClip,
         },
     },
+    pipeline_composition::{PipelineConfig, spawn_recording_controller},
     ports::{
-        audio::AudioCapture,
         media::MetadataExtractor,
         storage::{AttachmentRepository, NoteRepository},
         telemetry::MetricsRepository,
         voice::VoiceVectorDB,
     },
+    recording_controller::{RecordingControlError, RecordingController},
     storage_composition::{EncryptedStores, open_encrypted_stores},
 };
 use uuid::Uuid;
@@ -55,6 +55,9 @@ pub const FFI_INVALID_ARGUMENT: c_int = 1;
 pub const FFI_OPERATION_REJECTED: c_int = 2;
 /// Indicates that the bridge could not acquire its process-local synchronization state.
 pub const FFI_RUNTIME_UNAVAILABLE: c_int = 3;
+/// Indicates that the meeting pipeline could not be built, e.g. no transcription engine is
+/// configured (see the Rust logs for the variables to set).
+pub const FFI_PIPELINE_UNAVAILABLE: c_int = 4;
 /// Returns the portable Idle state from `note_taker_get_current_state`.
 pub const FFI_AUDIO_STATE_IDLE: c_int = 10;
 /// Returns the portable Recording state from `note_taker_get_current_state`.
@@ -84,9 +87,121 @@ fn audio_state_code(audio_state: crate::domain::models::AudioState) -> c_int {
     }
 }
 
+/// Maps a recording command result to its C status.
+///
+/// Inputs: The controller's result.
+/// Outputs: `FFI_SUCCESS`, `FFI_PIPELINE_UNAVAILABLE` when the worker is unavailable, or
+/// `FFI_OPERATION_REJECTED` for lifecycle, audio, and session rejections.
+/// Side effects: Logs the rejection reason (never audio or transcript text).
+fn recording_status<Value>(result: Result<Value, RecordingControlError>) -> c_int {
+    use crate::application::recording_manager::RecordingManagerError;
+
+    match result {
+        Ok(_) => FFI_SUCCESS,
+        Err(error) => {
+            tracing::warn!(error = %error, "Recording command rejected");
+            match error {
+                RecordingControlError::Pipeline(
+                    RecordingManagerError::PipelineUnavailable { .. }
+                    | RecordingManagerError::WorkerStopped,
+                ) => FFI_PIPELINE_UNAVAILABLE,
+                _ => FFI_OPERATION_REJECTED,
+            }
+        }
+    }
+}
+
+/// Copies caller-owned PCM samples into Rust memory.
+///
+/// Inputs: `samples` points to `sample_count` contiguous `int16_t` values; it may be null only
+/// when `sample_count` is 0.
+/// Outputs: The copied samples, or `None` for a null pointer with a nonzero count.
+/// Side effects: None; the pointer is not retained.
+///
+/// # Safety
+/// A non-null `samples` must be valid for reading `sample_count` aligned `i16` values.
+unsafe fn pcm_samples_from_raw(samples: *const i16, sample_count: usize) -> Option<Vec<i16>> {
+    if sample_count == 0 {
+        return Some(Vec::new());
+    }
+    if samples.is_null() {
+        return None;
+    }
+    Some(unsafe { std::slice::from_raw_parts(samples, sample_count) }.to_vec())
+}
+
+/// Returns a fixed transcript without reading audio, standing in for a real engine in tests.
+#[cfg(test)]
+struct FixedTranscriptionEngine;
+
+#[cfg(test)]
+impl crate::ports::ai::TranscriptionEngine for FixedTranscriptionEngine {
+    /// Returns "transcribed chunk" for the recording's meeting.
+    fn transcribe(
+        &self,
+        audio_recording: &crate::domain::models::AudioRecording,
+        _transcription_context: &crate::domain::models::TranscriptionContext,
+    ) -> Result<crate::domain::models::Transcript, crate::domain::errors::TranscriptionError> {
+        Ok(crate::domain::models::Transcript::new(
+            audio_recording.meeting_id().clone(),
+            "transcribed chunk",
+        ))
+    }
+}
+
+/// Builds a time-chunked controller around `FixedTranscriptionEngine` for FFI tests.
+///
+/// Inputs: The database file and cipher to share with the runtime, or `None` for a separate
+/// in-memory database.
+/// Outputs: The controller, or the storage error.
+/// Side effects: Spawns a pipeline worker; opens SQLite on the given file when provided.
+#[cfg(test)]
+fn test_recording_controller(
+    shared_database: Option<(
+        PathBuf,
+        std::sync::Arc<dyn crate::ports::crypto::EmbeddingCipher>,
+    )>,
+) -> anyhow::Result<RecordingController> {
+    use crate::{
+        adapters::audio::chunk_audio_store::ChunkAudioStore,
+        application::{
+            crypto::voice_encryptor::ephemeral_cipher, pipeline::pipeline_factory::PipelineFactory,
+            recording_manager::RecordingManager,
+        },
+        recording_controller::ChunkingMode,
+    };
+
+    let recording_manager = RecordingManager::spawn(move || -> anyhow::Result<_> {
+        let note_repository = match shared_database {
+            Some((database_path, embedding_cipher)) => SqliteNoteRepository::open(
+                database_path,
+                DeviceId::new("ffi-test"),
+                embedding_cipher,
+            )?,
+            None => SqliteNoteRepository::open_in_memory(ephemeral_cipher())?,
+        };
+        Ok(PipelineFactory::new(
+            FixedTranscriptionEngine,
+            note_repository,
+        ))
+    })?;
+    Ok(RecordingController::new(
+        recording_manager,
+        std::sync::Arc::new(ChunkAudioStore::new()),
+        ChunkingMode::TimeBased,
+        DeviceId::new("ffi-test"),
+    ))
+}
+
+/// Builds the recording controller (pipeline worker plus capture driver) on first use.
+type RecordingControllerBuilder = Box<dyn Fn() -> anyhow::Result<RecordingController> + Send>;
+
 /// Stores adapter-owned state required by the primitive Flutter C ABI commands.
 struct FfiRuntime {
-    local_recorder: LocalRecorder,
+    /// Built on the first recording start and reused for every later recording.
+    recording_controller: Option<RecordingController>,
+    /// Composes the meeting pipeline; retried on the next start if it fails.
+    recording_controller_builder: RecordingControllerBuilder,
     logging_runtime: Option<LoggingRuntime>,
     note_repository: SqliteNoteRepository,
     voice_identity_manager: VoiceIdentityManager<SqliteVoiceVectorDB>,
@@ -128,12 +243,10 @@ impl FfiRuntime {
     ///
     /// Inputs: None; the portable 16 kHz mono capture format is fixed for this initial bridge.
     /// Outputs: A ready runtime or an audio configuration error encoded as a C status by callers.
-    /// Side effects: Allocates an in-memory recorder (it does not open an OS device or capture
-    /// audio), unlocks the embedding encryption key (`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, else the
-    /// key file), and opens the note repository and the voice store on the same SQLite file.
+    /// Side effects: Unlocks the embedding encryption key (`NOTE_TAKER_ENCRYPTION_PASSPHRASE`,
+    /// else the key file) and opens the note repository and the voice store on the same SQLite
+    /// file. The meeting pipeline is composed later, on the first recording start.
     fn new() -> Result<Self, c_int> {
-        let local_recorder =
-            LocalRecorder::new(AudioConfig::new(16_000, 1)).map_err(|_| FFI_OPERATION_REJECTED)?;
         let database_path = env::var("NOTE_TAKER_DATABASE_PATH")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
@@ -144,10 +257,10 @@ impl FfiRuntime {
         let EncryptedStores {
             note_repository,
             voice_store,
-            ..
+            embedding_cipher,
         } = open_encrypted_stores(
             &database_path,
-            device_id,
+            device_id.clone(),
             KeyManagerConfig::from_environment(),
         )
         .map_err(|error| {
@@ -158,8 +271,16 @@ impl FfiRuntime {
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("voice_review_clips"));
         fs::create_dir_all(&review_clip_directory).map_err(|_| FFI_OPERATION_REJECTED)?;
+        let recording_controller_builder: RecordingControllerBuilder = Box::new(move || {
+            spawn_recording_controller(
+                &database_path,
+                device_id.clone(),
+                std::sync::Arc::clone(&embedding_cipher),
+                PipelineConfig::from_environment()?,
+            )
+        });
         Ok(Self::from_parts(
-            local_recorder,
+            recording_controller_builder,
             note_repository,
             voice_store,
             review_clip_directory,
@@ -174,14 +295,15 @@ impl FfiRuntime {
     /// Outputs: The runtime with empty caches.
     /// Side effects: None.
     fn from_parts(
-        local_recorder: LocalRecorder,
+        recording_controller_builder: RecordingControllerBuilder,
         note_repository: SqliteNoteRepository,
         voice_store: SqliteVoiceVectorDB,
         review_clip_directory: PathBuf,
         export_writer: ExportWriter,
     ) -> Self {
         Self {
-            local_recorder,
+            recording_controller: None,
+            recording_controller_builder,
             logging_runtime: None,
             note_repository,
             voice_identity_manager: VoiceIdentityManager::new(voice_store),
@@ -199,8 +321,6 @@ impl FfiRuntime {
     /// Side effects: Allocates in-memory SQLite; creates no directories.
     #[cfg(test)]
     fn in_memory_for_tests(export_directory: &Path) -> Result<Self, c_int> {
-        let local_recorder =
-            LocalRecorder::new(AudioConfig::new(16_000, 1)).map_err(|_| FFI_OPERATION_REJECTED)?;
         let embedding_cipher = crate::application::crypto::voice_encryptor::ephemeral_cipher();
         let note_repository =
             SqliteNoteRepository::open_in_memory(std::sync::Arc::clone(&embedding_cipher))
@@ -208,7 +328,7 @@ impl FfiRuntime {
         let voice_store = SqliteVoiceVectorDB::open_in_memory(embedding_cipher)
             .map_err(|_| FFI_OPERATION_REJECTED)?;
         Ok(Self::from_parts(
-            local_recorder,
+            Box::new(|| test_recording_controller(None)),
             note_repository,
             voice_store,
             export_directory.join("review-clips"),
@@ -224,25 +344,43 @@ impl FfiRuntime {
     /// Side effects: Opens or creates the SQLite file and the key file.
     #[cfg(test)]
     fn open_for_tests(database_path: &Path, export_directory: &Path) -> Result<Self, c_int> {
-        let local_recorder =
-            LocalRecorder::new(AudioConfig::new(16_000, 1)).map_err(|_| FFI_OPERATION_REJECTED)?;
         let EncryptedStores {
             note_repository,
             voice_store,
-            ..
+            embedding_cipher,
         } = open_encrypted_stores(
             database_path,
             DeviceId::new("ffi-test"),
             crate::storage_composition::key_file_config_for_tests(&export_directory.join("keys")),
         )
         .map_err(|_| FFI_OPERATION_REJECTED)?;
+        let worker_database_path = database_path.to_path_buf();
         Ok(Self::from_parts(
-            local_recorder,
+            Box::new(move || {
+                test_recording_controller(Some((
+                    worker_database_path.clone(),
+                    std::sync::Arc::clone(&embedding_cipher),
+                )))
+            }),
             note_repository,
             voice_store,
             export_directory.join("review-clips"),
             ExportWriter::new(default_exporters(), export_directory),
         ))
+    }
+
+    /// Replaces the pipeline builder, e.g. with one that fails or counts its calls.
+    ///
+    /// Inputs: The builder invoked on the first recording start.
+    /// Outputs: The runtime using it.
+    /// Side effects: None.
+    #[cfg(test)]
+    fn with_recording_controller_builder(
+        mut self,
+        recording_controller_builder: RecordingControllerBuilder,
+    ) -> Self {
+        self.recording_controller_builder = recording_controller_builder;
+        self
     }
 
     /// Exports one meeting through the shared `ExportManager` and describes the result as JSON.
@@ -715,61 +853,122 @@ impl FfiRuntime {
         ))
     }
 
-    /// Starts the recorder through the portable audio-capture port.
+    /// Returns the recording controller, composing the meeting pipeline on first use.
     ///
     /// Inputs: None.
-    /// Outputs: A C status indicating whether the state transition was accepted.
-    /// Side effects: Transitions the Rust-owned recorder to recording and emits its safe state log.
-    fn start_recording(&mut self) -> c_int {
-        self.local_recorder
-            .start()
-            .map(|()| FFI_SUCCESS)
-            .unwrap_or(FFI_OPERATION_REJECTED)
+    /// Outputs: The controller, or `FFI_PIPELINE_UNAVAILABLE` when the builder fails.
+    /// Side effects: The first call spawns the pipeline worker and may load a model (slow; call
+    /// recording commands from a background isolate). A failure is logged and retried next time.
+    fn recording_controller(&mut self) -> Result<&mut RecordingController, c_int> {
+        if self.recording_controller.is_none() {
+            let recording_controller = (self.recording_controller_builder)().map_err(|error| {
+                tracing::error!(error = %format!("{error:#}"), "Meeting pipeline is unavailable");
+                FFI_PIPELINE_UNAVAILABLE
+            })?;
+            self.recording_controller = Some(recording_controller);
+        }
+        self.recording_controller
+            .as_mut()
+            .ok_or(FFI_RUNTIME_UNAVAILABLE)
     }
 
-    /// Pauses the recorder through the shared portable audio-capture state machine.
+    /// Starts a recording with a generated meeting ID, or resumes a paused one.
+    ///
+    /// Inputs: None.
+    /// Outputs: A C status.
+    /// Side effects: See `start_recording_for`.
+    fn start_recording(&mut self) -> c_int {
+        self.start_recording_for(None)
+    }
+
+    /// Starts a recording into `meeting_id` (created if missing), or resumes a paused one.
+    ///
+    /// Inputs: The meeting to record into; `None` generates one. Ignored when resuming.
+    /// Outputs: `FFI_SUCCESS`, `FFI_OPERATION_REJECTED` (e.g. already recording), or
+    /// `FFI_PIPELINE_UNAVAILABLE`.
+    /// Side effects: Composes the pipeline on first use and opens a meeting session.
+    fn start_recording_for(&mut self, meeting_id: Option<MeetingId>) -> c_int {
+        match self.recording_controller() {
+            Ok(recording_controller) => recording_status(recording_controller.start(meeting_id)),
+            Err(status) => status,
+        }
+    }
+
+    /// Feeds captured 16 kHz mono PCM into the active recording.
+    ///
+    /// Inputs: Raw samples (never logged).
+    /// Outputs: `FFI_SUCCESS` (also while paused, when audio is discarded) or
+    /// `FFI_OPERATION_REJECTED` when no recording is active.
+    /// Side effects: Buffers audio and queues finished chunks for transcription.
+    fn push_audio_pcm(&mut self, samples: Vec<i16>) -> c_int {
+        match self.recording_controller.as_mut() {
+            Some(recording_controller) => recording_status(recording_controller.push_pcm(samples)),
+            None => FFI_OPERATION_REJECTED,
+        }
+    }
+
+    /// Pauses the active recording.
     ///
     /// Inputs: None.
     /// Outputs: A C status indicating whether an active recording accepted the pause.
-    /// Side effects: Stops local chunk routing while preserving a session for resume.
+    /// Side effects: Later PCM is discarded until a start resumes the recording.
     fn pause_recording(&mut self) -> c_int {
-        self.local_recorder
-            .pause()
-            .map(|()| FFI_SUCCESS)
-            .unwrap_or(FFI_OPERATION_REJECTED)
+        match self.recording_controller.as_mut() {
+            Some(recording_controller) => recording_status(recording_controller.pause()),
+            None => FFI_OPERATION_REJECTED,
+        }
     }
 
-    /// Stops the recorder through the shared portable audio-capture state machine.
+    /// Stops the active recording once all captured audio is transcribed.
     ///
     /// Inputs: None.
-    /// Outputs: A C status indicating whether the session accepted its terminal stop.
-    /// Side effects: Permanently stops chunk routing for this runtime's recorder instance.
+    /// Outputs: A C status indicating whether a recording was stopped.
+    /// Side effects: Blocks (holding the runtime lock) until queued chunks finish, persists
+    /// their segments, and deletes unprocessed raw audio. A later start is a new recording.
     fn stop_recording(&mut self) -> c_int {
-        self.local_recorder
-            .stop()
-            .map(|()| FFI_SUCCESS)
-            .unwrap_or(FFI_OPERATION_REJECTED)
+        match self.recording_controller.as_mut() {
+            Some(recording_controller) => recording_status(recording_controller.stop()),
+            None => FFI_OPERATION_REJECTED,
+        }
     }
 
     /// Converts a platform-reported OS suspension into a safe recoverable recorder state.
     ///
     /// Inputs: None.
     /// Outputs: Success after a recording enters Interrupted; rejection for inactive states.
-    /// Side effects: Stops chunk routing while retaining the recorder for a later start/resume.
+    /// Side effects: Queues buffered audio for transcription; a start resumes the recording.
     fn handle_audio_interruption(&mut self) -> c_int {
-        match self.local_recorder.handle_interruption() {
-            Err(crate::domain::errors::AudioError::Interrupted) => FFI_SUCCESS,
-            Ok(()) | Err(_) => FFI_OPERATION_REJECTED,
+        match self.recording_controller.as_mut() {
+            Some(recording_controller) => {
+                recording_status(recording_controller.handle_interruption())
+            }
+            None => FFI_OPERATION_REJECTED,
         }
     }
 
     /// Reads the current recorder lifecycle state without exposing Rust state values over FFI.
     ///
     /// Inputs: None.
-    /// Outputs: One documented `FFI_AUDIO_STATE_*` integer.
+    /// Outputs: One documented `FFI_AUDIO_STATE_*` integer (`Idle` before the first recording).
     /// Side effects: None; the runtime mutex serializes this read with lifecycle mutations.
     fn current_recording_state(&self) -> c_int {
-        audio_state_code(self.local_recorder.state())
+        audio_state_code(
+            self.recording_controller
+                .as_ref()
+                .map_or(AudioState::Idle, RecordingController::state),
+        )
+    }
+
+    /// Returns the meeting being recorded, if any.
+    ///
+    /// Inputs: None.
+    /// Outputs: The meeting ID while a recording is active (including paused).
+    /// Side effects: None.
+    fn active_meeting_id(&self) -> Option<String> {
+        self.recording_controller
+            .as_ref()
+            .and_then(RecordingController::active_meeting_id)
+            .map(|meeting_id| meeting_id.as_str().to_owned())
     }
 
     /// Updates tracing verbosity while retaining the logging worker for the process lifetime.
@@ -932,6 +1131,64 @@ pub extern "C" fn note_taker_stop_recording() -> c_int {
 #[unsafe(no_mangle)]
 pub extern "C" fn note_taker_handle_audio_interruption() -> c_int {
     with_runtime(FfiRuntime::handle_audio_interruption)
+}
+
+/// Starts a recording into a specific meeting, creating the meeting if it does not exist.
+///
+/// Inputs: `meeting_id` is a non-null, non-blank NUL-terminated UTF-8 string.
+/// Outputs: `FFI_SUCCESS`, `FFI_INVALID_ARGUMENT`, `FFI_OPERATION_REJECTED` (a recording is
+/// already active), or `FFI_PIPELINE_UNAVAILABLE` (no transcription engine is configured).
+/// Side effects: Composes the meeting pipeline on first use (may load a model; call it from a
+/// background isolate) and opens a pipeline session for the meeting.
+///
+/// # Safety
+/// `meeting_id` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_start_recording_for_meeting(
+    meeting_id: *const c_char,
+) -> c_int {
+    match unsafe { ffi_string(meeting_id) } {
+        Some(meeting_id) if !meeting_id.trim().is_empty() => with_runtime(|runtime| {
+            runtime.start_recording_for(Some(MeetingId::new(meeting_id.trim())))
+        }),
+        _ => FFI_INVALID_ARGUMENT,
+    }
+}
+
+/// Feeds captured 16 kHz mono signed 16-bit PCM into the active recording.
+///
+/// Inputs: `samples` points to `sample_count` samples (null is allowed only for a count of 0).
+/// Outputs: `FFI_SUCCESS` (audio is discarded while paused), `FFI_INVALID_ARGUMENT`, or
+/// `FFI_OPERATION_REJECTED` when no recording is active.
+/// Side effects: Copies the samples, buffers them, and queues finished chunks for background
+/// transcription; it never waits for transcription. Audio is never logged.
+///
+/// # Safety
+/// A non-null `samples` must be valid for reading `sample_count` `int16_t` values during this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_push_audio_pcm(
+    samples: *const i16,
+    sample_count: usize,
+) -> c_int {
+    match unsafe { pcm_samples_from_raw(samples, sample_count) } {
+        Some(samples) => with_runtime(|runtime| runtime.push_audio_pcm(samples)),
+        None => FFI_INVALID_ARGUMENT,
+    }
+}
+
+/// Returns the meeting ID of the active recording as a caller-freed C string.
+///
+/// Inputs: None.
+/// Outputs: The meeting ID (free with `note_taker_free_string`), or null when no recording is
+/// active or the runtime is unavailable.
+/// Side effects: May lazily initialize the process runtime.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_get_active_meeting_id() -> *mut c_char {
+    with_runtime_json(|runtime| runtime.active_meeting_id().ok_or(FFI_OPERATION_REJECTED))
+        .ok()
+        .and_then(|meeting_id| CString::new(meeting_id).ok())
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
 }
 
 /// Returns the lock-screen-safe current portable recorder state without waking Flutter UI state.
@@ -1273,9 +1530,10 @@ pub unsafe extern "C" fn note_taker_free_string(value: *mut c_char) {
 #[cfg(test)]
 mod ffi_contract_tests {
     use super::{
-        FFI_AUDIO_STATE_INTERRUPTED, FFI_AUDIO_STATE_PAUSED, FFI_AUDIO_STATE_RECORDING,
-        FFI_AUDIO_STATE_STOPPED, FFI_INVALID_ARGUMENT, FFI_OPERATION_REJECTED, FFI_SUCCESS,
-        FfiRuntime,
+        FFI_AUDIO_STATE_IDLE, FFI_AUDIO_STATE_INTERRUPTED, FFI_AUDIO_STATE_PAUSED,
+        FFI_AUDIO_STATE_RECORDING, FFI_AUDIO_STATE_STOPPED, FFI_INVALID_ARGUMENT,
+        FFI_OPERATION_REJECTED, FFI_PIPELINE_UNAVAILABLE, FFI_SUCCESS, FfiRuntime,
+        pcm_samples_from_raw,
     };
     use crate::{
         application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
@@ -1710,5 +1968,115 @@ mod ffi_contract_tests {
             assert!(response["error"].is_string(), "{response}");
         }
         assert_eq!(first["ok"], true);
+    }
+
+    /// Verifies a pipeline that cannot be built is reported with its own status, not a crash.
+    #[test]
+    fn start_reports_an_unavailable_pipeline() {
+        let mut ffi_runtime = FfiRuntime::in_memory_for_tests(&std::env::temp_dir())
+            .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"))
+            .with_recording_controller_builder(Box::new(|| {
+                Err(anyhow::anyhow!("no transcription engine is configured"))
+            }));
+
+        assert_eq!(ffi_runtime.start_recording(), FFI_PIPELINE_UNAVAILABLE);
+        assert_eq!(ffi_runtime.current_recording_state(), FFI_AUDIO_STATE_IDLE);
+    }
+
+    /// Verifies PCM is rejected without a recording, and accepted once one is active.
+    #[test]
+    fn push_audio_requires_an_active_recording() {
+        let mut ffi_runtime = FfiRuntime::in_memory_for_tests(&std::env::temp_dir())
+            .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
+
+        assert_eq!(
+            ffi_runtime.push_audio_pcm(vec![0; 160]),
+            FFI_OPERATION_REJECTED
+        );
+        assert_eq!(ffi_runtime.start_recording(), FFI_SUCCESS);
+        assert_eq!(ffi_runtime.push_audio_pcm(vec![0; 160]), FFI_SUCCESS);
+    }
+
+    /// Verifies raw PCM pointers are validated before any sample is read.
+    #[test]
+    fn pcm_pointers_are_validated() {
+        let samples = [1_i16, 2, 3];
+
+        assert_eq!(unsafe { pcm_samples_from_raw(std::ptr::null(), 4) }, None);
+        assert_eq!(
+            unsafe { pcm_samples_from_raw(std::ptr::null(), 0) },
+            Some(Vec::new())
+        );
+        assert_eq!(
+            unsafe { pcm_samples_from_raw(samples.as_ptr(), samples.len()) },
+            Some(vec![1, 2, 3])
+        );
+    }
+
+    /// Verifies the full FFI flow: start for a meeting, push PCM, stop, and read the persisted
+    /// segment through the runtime's own repository on the same database file.
+    #[test]
+    fn recorded_audio_is_transcribed_into_the_meeting() {
+        let test_directory =
+            std::env::temp_dir().join(format!("note-taker-ffi-pipeline-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&test_directory)
+            .unwrap_or_else(|error| panic!("test directory must be created: {error}"));
+        let mut ffi_runtime =
+            FfiRuntime::open_for_tests(&test_directory.join("notes.sqlite3"), &test_directory)
+                .unwrap_or_else(|status| {
+                    panic!("fixture runtime must initialize: status {status}")
+                });
+
+        assert_eq!(
+            ffi_runtime.start_recording_for(Some(MeetingId::new("ffi-live"))),
+            FFI_SUCCESS
+        );
+        assert_eq!(ffi_runtime.active_meeting_id().as_deref(), Some("ffi-live"));
+        assert_eq!(ffi_runtime.push_audio_pcm(vec![100; 32_000]), FFI_SUCCESS);
+        assert_eq!(ffi_runtime.stop_recording(), FFI_SUCCESS);
+        assert_eq!(ffi_runtime.active_meeting_id(), None);
+
+        let segments = ffi_runtime
+            .note_repository
+            .load_transcript_segments(&MeetingId::new("ffi-live"))
+            .unwrap_or_else(|error| panic!("segments must load: {error}"));
+        drop(ffi_runtime);
+        let _ = std::fs::remove_dir_all(&test_directory);
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].text(), "transcribed chunk");
+        assert_eq!(
+            (segments[0].start_time_ms(), segments[0].end_time_ms()),
+            (0, 2_000)
+        );
+    }
+
+    /// Verifies the pipeline is built once and reused, and a start after stop is a new recording.
+    #[test]
+    fn the_pipeline_is_built_once_and_reused_across_recordings() {
+        let build_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted_builds = std::sync::Arc::clone(&build_count);
+        let mut ffi_runtime = FfiRuntime::in_memory_for_tests(&std::env::temp_dir())
+            .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"))
+            .with_recording_controller_builder(Box::new(move || {
+                counted_builds.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                super::test_recording_controller(None)
+            }));
+
+        assert_eq!(ffi_runtime.start_recording(), FFI_SUCCESS);
+        let first_meeting = ffi_runtime.active_meeting_id();
+        assert_eq!(ffi_runtime.stop_recording(), FFI_SUCCESS);
+        assert_eq!(
+            ffi_runtime.current_recording_state(),
+            FFI_AUDIO_STATE_STOPPED
+        );
+        assert_eq!(ffi_runtime.start_recording(), FFI_SUCCESS);
+        assert_eq!(
+            ffi_runtime.current_recording_state(),
+            FFI_AUDIO_STATE_RECORDING
+        );
+
+        assert!(first_meeting.is_some());
+        assert_ne!(ffi_runtime.active_meeting_id(), first_meeting);
+        assert_eq!(build_count.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 }

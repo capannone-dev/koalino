@@ -125,6 +125,19 @@ enum ChunkingState {
     Finalize,
 }
 
+/// Owns a WebRTC VAD instance so a chunker can move to another thread (e.g. inside the FFI
+/// runtime's mutex).
+#[cfg(feature = "vad")]
+struct SendableVad(Vad);
+
+// SAFETY: `Vad` holds a raw pointer to a heap-allocated libfvad instance that it owns
+// exclusively (created in `new`, freed in `Drop`). libfvad keeps all of its state in that
+// instance, with no thread-local or global state, so moving ownership to another thread is
+// sound. Classification needs `&mut`, so the instance is never used from two threads at once;
+// `Sync` is deliberately not implemented.
+#[cfg(feature = "vad")]
+unsafe impl Send for SendableVad {}
+
 /// Buffers arbitrary PCM input into exact 480-sample VAD frames.
 pub struct VadChunker {
     configuration: VadConfig,
@@ -140,7 +153,7 @@ pub struct VadChunker {
     using_time_fallback: bool,
     ready_chunks: Vec<FinalizedAudioChunk>,
     #[cfg(feature = "vad")]
-    vad: Option<Vad>,
+    vad: Option<SendableVad>,
 }
 
 impl VadChunker {
@@ -184,8 +197,12 @@ impl VadChunker {
             using_time_fallback,
             ready_chunks: Vec::new(),
             #[cfg(feature = "vad")]
-            vad: (!using_time_fallback)
-                .then(|| Vad::new_with_rate_and_mode(SampleRate::Rate16kHz, VadMode::Quality)),
+            vad: (!using_time_fallback).then(|| {
+                SendableVad(Vad::new_with_rate_and_mode(
+                    SampleRate::Rate16kHz,
+                    VadMode::Quality,
+                ))
+            }),
         }
     }
 
@@ -347,7 +364,7 @@ impl VadChunker {
     fn is_voice_frame(&mut self, frame: &[i16]) -> Option<bool> {
         self.vad
             .as_mut()
-            .and_then(|vad| vad.is_voice_segment(frame).ok())
+            .and_then(|vad| vad.0.is_voice_segment(frame).ok())
     }
 
     /// Omits VAD classification entirely when the optional dependency is disabled.
