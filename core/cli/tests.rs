@@ -11,11 +11,10 @@ use uuid::Uuid;
 
 use super::{
     Cli, CliCommand, CliService, CoreCliService, MeetingArgs, MeetingCommand, RecordArgs,
-    RecordCommand, VoiceArgs, VoiceCommand, dispatch,
+    RecordCommand, RecordingControl, VoiceArgs, VoiceCommand, dispatch,
 };
 use crate::{
     adapters::{
-        audio::local_recorder::LocalRecorder,
         export::default_exporters,
         storage::{
             in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
@@ -24,9 +23,7 @@ use crate::{
     },
     application::export_manager::ExportWriter,
     application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
-    domain::models::{
-        AudioConfig, DeviceId, ExportFormat, ExportOptions, MeetingId, TranscriptSegment,
-    },
+    domain::models::{DeviceId, ExportFormat, ExportOptions, MeetingId, TranscriptSegment},
     ports::storage::NoteRepository,
 };
 
@@ -44,10 +41,33 @@ struct MockCliService {
     /// `(cluster_id, identity_name)` pairs passed to `assign_cluster`.
     assigned_clusters: RefCell<Vec<(Uuid, String)>>,
     export_requests: RefCell<Vec<RecordedExportRequest>>,
+    /// `(meeting_id, input)` pairs passed to `start_recording`.
+    recording_requests: Vec<(Option<String>, PathBuf)>,
+}
+
+/// Rejects every recording command; for service tests that never record.
+struct NoRecordingControl;
+
+impl RecordingControl for NoRecordingControl {
+    fn record(&mut self, _meeting_id: Option<MeetingId>, _input: &Path) -> Result<String, String> {
+        Err(String::from("recording is not available in this test"))
+    }
+    fn request_stop(&mut self) -> Result<String, String> {
+        Err(String::from("no recording is active"))
+    }
+    fn status(&self) -> Result<String, String> {
+        Ok(String::from("Idle"))
+    }
 }
 
 impl CliService for MockCliService {
-    fn start_recording(&mut self) -> Result<String, String> {
+    fn start_recording(
+        &mut self,
+        meeting_id: Option<&str>,
+        input: &Path,
+    ) -> Result<String, String> {
+        self.recording_requests
+            .push((meeting_id.map(str::to_owned), input.to_path_buf()));
         Ok(String::from("recording started"))
     }
     fn stop_recording(&mut self) -> Result<String, String> {
@@ -116,14 +136,48 @@ impl CliService for MockCliService {
 /// Verifies clap derives parse the nested recording command without a process exit.
 #[test]
 fn parses_record_start_command() {
-    let parsed_cli = Cli::try_parse_from(["note-taker", "record", "start"])
-        .unwrap_or_else(|error| panic!("record start must parse: {error}"));
-    assert!(matches!(
-        parsed_cli.command,
+    let parsed_cli = Cli::try_parse_from([
+        "note-taker",
+        "record",
+        "start",
+        "--input",
+        "standup.wav",
+        "--meeting-id",
+        "standup",
+    ])
+    .unwrap_or_else(|error| panic!("record start must parse: {error}"));
+    match parsed_cli.command {
         CliCommand::Record(RecordArgs {
-            command: RecordCommand::Start
-        })
-    ));
+            command: RecordCommand::Start { meeting_id, input },
+        }) => {
+            assert_eq!(meeting_id.as_deref(), Some("standup"));
+            assert_eq!(input, PathBuf::from("standup.wav"));
+        }
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+/// Verifies `record start` requires an input until a microphone adapter exists.
+#[test]
+fn record_start_requires_an_input() {
+    assert!(Cli::try_parse_from(["note-taker", "record", "start"]).is_err());
+}
+
+/// Verifies `record start` forwards its meeting and input to the service.
+#[test]
+fn dispatches_record_start_with_meeting_and_input() {
+    let mut cli_service = MockCliService::default();
+    let parsed_cli = Cli::try_parse_from(["note-taker", "record", "start", "--input", "-"])
+        .unwrap_or_else(|error| panic!("record start must parse: {error}"));
+
+    let output = dispatch(parsed_cli.command, &mut cli_service)
+        .unwrap_or_else(|error| panic!("record start must dispatch: {error}"));
+
+    assert_eq!(output, "recording started");
+    assert_eq!(
+        cli_service.recording_requests,
+        vec![(None, PathBuf::from("-"))]
+    );
 }
 
 /// Verifies the CLI requires both stable UUID arguments when manually resolving a voice clip.
@@ -214,10 +268,8 @@ fn meetings_list_reads_an_in_memory_sqlite_fixture_without_cli_sql() {
     repository
         .create_meeting(&meeting_id, &[1, 2, 3])
         .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
-    let recorder = LocalRecorder::new(AudioConfig::new(16_000, 1))
-        .unwrap_or_else(|error| panic!("fixture recorder must initialize: {error}"));
     let mut cli_service = CoreCliService::new(
-        recorder,
+        NoRecordingControl,
         repository,
         InMemoryVoiceVectorDB::new(),
         ExportWriter::new(default_exporters(), std::env::temp_dir()),
@@ -382,13 +434,11 @@ fn core_service_exports_meeting_markdown_to_requested_output() {
             )],
         )
         .unwrap_or_else(|error| panic!("fixture segments must persist: {error}"));
-    let recorder = LocalRecorder::new(AudioConfig::new(16_000, 1))
-        .unwrap_or_else(|error| panic!("fixture recorder must initialize: {error}"));
     let export_directory =
         std::env::temp_dir().join(format!("note-taker-cli-export-{}", Uuid::new_v4()));
     let output_path = export_directory.join("minutes.md");
     let mut cli_service = CoreCliService::new(
-        recorder,
+        NoRecordingControl,
         repository,
         InMemoryVoiceVectorDB::new(),
         ExportWriter::new(default_exporters(), &export_directory),
@@ -424,10 +474,8 @@ fn core_service_reports_unknown_meeting_export() {
         crate::application::crypto::voice_encryptor::ephemeral_cipher(),
     )
     .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
-    let recorder = LocalRecorder::new(AudioConfig::new(16_000, 1))
-        .unwrap_or_else(|error| panic!("fixture recorder must initialize: {error}"));
     let cli_service = CoreCliService::new(
-        recorder,
+        NoRecordingControl,
         repository,
         InMemoryVoiceVectorDB::new(),
         ExportWriter::new(default_exporters(), std::env::temp_dir()),
@@ -571,7 +619,7 @@ fn assign_cluster_delegates_arguments_to_the_service() {
 ///
 /// Outputs: The service and the cluster ID (two chunks, 2.5 s total).
 fn core_service_with_cluster() -> (
-    CoreCliService<LocalRecorder, SqliteNoteRepository, InMemoryVoiceVectorDB>,
+    CoreCliService<NoRecordingControl, SqliteNoteRepository, InMemoryVoiceVectorDB>,
     Uuid,
 ) {
     let repository = SqliteNoteRepository::open_in_memory(
@@ -590,11 +638,9 @@ fn core_service_with_cluster() -> (
     clusterer
         .find_or_create_cluster(&meeting_id, &[0.9, 0.3], String::from("c2"), 1_500)
         .unwrap_or_else(|error| panic!("fixture chunk must cluster: {error}"));
-    let recorder = LocalRecorder::new(AudioConfig::new(16_000, 1))
-        .unwrap_or_else(|error| panic!("fixture recorder must initialize: {error}"));
     (
         CoreCliService::new(
-            recorder,
+            NoRecordingControl,
             repository,
             InMemoryVoiceVectorDB::new(),
             ExportWriter::new(default_exporters(), std::env::temp_dir()),
@@ -661,7 +707,7 @@ fn core_service_rejects_blank_names_and_unknown_clusters() {
 /// Opens the concrete CLI service over the SQLite file at `database_path`, as `bin/cli.rs` does.
 fn file_backed_service(
     database_path: &Path,
-) -> CoreCliService<LocalRecorder, SqliteNoteRepository, SqliteVoiceVectorDB> {
+) -> CoreCliService<NoRecordingControl, SqliteNoteRepository, SqliteVoiceVectorDB> {
     let crate::storage_composition::EncryptedStores {
         note_repository: repository,
         voice_store,
@@ -674,10 +720,8 @@ fn file_backed_service(
         ),
     )
     .unwrap_or_else(|error| panic!("encrypted stores must open: {error:#}"));
-    let recorder = LocalRecorder::new(AudioConfig::new(16_000, 1))
-        .unwrap_or_else(|error| panic!("fixture recorder must initialize: {error}"));
     CoreCliService::new(
-        recorder,
+        NoRecordingControl,
         repository,
         voice_store,
         ExportWriter::new(default_exporters(), std::env::temp_dir()),

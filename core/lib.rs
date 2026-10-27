@@ -9,12 +9,15 @@ pub mod adapters;
 pub mod application;
 /// Exposes the dependency-injected command-line driving adapter.
 pub mod cli;
+/// Opens the encrypted SQLite stores for the CLI, daemon, and FFI composition roots.
+/// Runs foreground CLI recordings and coordinates `record stop` across processes.
+#[path = "bin/cli_recording.rs"]
+pub mod cli_recording;
 /// Contains pure business types and business failures.
 pub mod domain;
 /// Exposes the C-compatible Flutter bridge without leaking Rust domain types across FFI.
 #[path = "bin/ffi.rs"]
 pub mod ffi;
-/// Opens the encrypted SQLite stores for the CLI, daemon, and FFI composition roots.
 /// Composes the live meeting pipeline from environment configuration.
 #[path = "bin/pipeline_composition.rs"]
 pub mod pipeline_composition;
