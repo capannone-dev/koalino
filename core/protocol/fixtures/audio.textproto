@@ -1,0 +1,6 @@
+audio {
+  participant { external_id: "teams-user-1" display_name: "Ada Lovelace" email: "ada@example.com" }
+  audio_data: "\001\000\002\000\377\377"
+  timestamp_ms: 12000
+  sample_rate: 16000
+}

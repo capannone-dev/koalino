@@ -1,0 +1,7 @@
+metadata {
+  meeting_id: "19:meeting_abc@thread.v2"
+  meeting_title: "Weekly sync"
+  start_time_ms: 1793000000000
+  participants { external_id: "teams-user-1" display_name: "Ada Lovelace" }
+  participants { external_id: "teams-user-2" display_name: "Alan Turing" email: "alan@example.com" }
+}

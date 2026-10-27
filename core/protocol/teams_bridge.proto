@@ -1,0 +1,48 @@
+// Wire protocol between the C# Teams bot and the local Rust app (Issue #33).
+//
+// Transport: one WebSocket connection to ws://127.0.0.1:<port> (default 8765). When a shared
+// secret is configured, the first frame is the text frame {"auth":"<secret>"}; every other frame
+// is a binary frame holding exactly one serialized TeamsBridgeMessage. See README.md.
+syntax = "proto3";
+
+package note_taker.teams_bridge.v1;
+
+// A Teams participant; `external_id` is the stable Teams user ID used for identity mapping.
+message ExternalParticipant {
+  string external_id = 1;  // Teams User ID
+  string display_name = 2;
+  string email = 3;  // Optional; empty when unknown. Never logged.
+}
+
+// One participant's isolated (unmixed) audio. The bot SHOULD send 1-30 s per chunk; chunks
+// longer than 30 s are rejected.
+message AudioChunk {
+  ExternalParticipant participant = 1;
+  bytes audio_data = 2;  // PCM 16kHz mono, signed 16-bit little-endian
+  uint64 timestamp_ms = 3;  // Chunk start, relative to MeetingMetadata.start_time_ms
+  uint32 sample_rate = 4;  // Must be 16000
+}
+
+// A video frame; only "screen_share" frames become slide captures.
+message VideoFrame {
+  bytes image_data = 1;  // JPEG or PNG
+  uint64 timestamp_ms = 2;  // Relative to MeetingMetadata.start_time_ms
+  string source = 3;  // "screen_share" or "camera"
+}
+
+// Starts (or, after a reconnect, resumes) a meeting; must precede its audio and video.
+message MeetingMetadata {
+  string meeting_id = 1;  // Teams meeting ID; mapped to a stable local meeting UUID
+  string meeting_title = 2;
+  uint64 start_time_ms = 3;  // Unix epoch milliseconds
+  repeated ExternalParticipant participants = 4;
+}
+
+// The envelope carried by every binary WebSocket frame.
+message TeamsBridgeMessage {
+  oneof payload {
+    AudioChunk audio = 1;
+    VideoFrame video = 2;
+    MeetingMetadata metadata = 3;
+  }
+}

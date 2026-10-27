@@ -39,6 +39,8 @@ chrono = { version = "0.4.42", default-features = false, features = ["clock", "s
 clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.31"
 libp2p = { version = "0.56.0", features = ["macros", "mdns", "noise", "request-response", "tcp", "tokio", "yamux"] }
+# Teams bridge wire format (Issue #33): rust-protobuf 3.x runtime for the generated messages.
+protobuf = "=3.7.2"
 printpdf = { version = "0.7.0", features = ["embedded_images"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
@@ -47,11 +49,14 @@ serde_json = "1.0.145"
 sha2 = "0.10.9"
 thiserror = "2.0.17"
 tokio = { version = "1.48.0", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+# Teams bridge WebSocket server (Issue #33); also used by the API WebSocket tests.
+tokio-tungstenite = "0.28.0"
 tower-http = { version = "0.6.6", features = ["cors", "trace"] }
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "json"] }
-uuid = { version = "1.18.1", features = ["v4"] }
+# `v5` derives stable local meeting UUIDs from Teams meeting IDs (Issue #33).
+uuid = { version = "1.18.1", features = ["v4", "v5"] }
 # Wipes encryption keys and passphrases from memory when dropped.
 zeroize = "1.8.1"
 # 0.16.0 provides native binding compatibility and requires the crate's Rust 1.88 MSRV.
@@ -60,5 +65,8 @@ whisper-rs = { version = "=0.16.0", optional = true }
 webrtc-vad = { version = "=0.4.0", optional = true }
 
 [dev-dependencies]
-tokio-tungstenite = "0.28.0"
+# Regenerates core/protocol/generated/ from teams_bridge.proto (pure-Rust parser, no protoc) in
+# a freshness test. A dev-dependency rather than a build script so the host build graph, and
+# with it the native whisper.cpp build, is unchanged.
+protobuf-codegen = "=3.7.2"
 tower = { version = "0.5.2", features = ["util"] }

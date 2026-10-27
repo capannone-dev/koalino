@@ -23,6 +23,8 @@ pub mod ffi;
 pub mod pipeline_composition;
 /// Contains dependency-inversion traits for external capabilities.
 pub mod ports;
+/// Defines wire protocols with external processes (the Teams bot bridge).
+pub mod protocol;
 /// Drives live recordings from raw PCM through the meeting pipeline worker.
 #[path = "bin/recording_controller.rs"]
 pub mod recording_controller;
