@@ -3,7 +3,7 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use crate::domain::errors::ExportError;
+use crate::domain::errors::{ExportError, MeetingTitleError};
 
 /// Selects the portable representation written by a meeting export request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -2295,11 +2295,54 @@ impl TranscriptSegment {
     }
 }
 
+/// A validated, human-readable meeting name (Issue #35).
+///
+/// Invariant: trimmed, non-empty, at most `MAX_CHARACTERS` Unicode scalar values, and free of
+/// control characters, so it is safe to print in a terminal and to embed in export headers.
+/// Titles are user content: adapters must not log them.
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct MeetingTitle(String);
+
+impl MeetingTitle {
+    /// Longest accepted title, counted in Unicode scalar values after trimming.
+    pub const MAX_CHARACTERS: usize = 200;
+
+    /// Validates user-supplied title text.
+    ///
+    /// Inputs: `raw_title` from a CLI flag, FFI string, HTTP body, or the Teams metadata; leading
+    /// and trailing whitespace is ignored.
+    /// Outputs: The trimmed title, or `Blank`, `TooLong`, or `ControlCharacter`.
+    /// Side effects: None.
+    pub fn parse(raw_title: &str) -> Result<Self, MeetingTitleError> {
+        let trimmed_title = raw_title.trim();
+        if trimmed_title.is_empty() {
+            return Err(MeetingTitleError::Blank);
+        }
+        if trimmed_title.chars().count() > Self::MAX_CHARACTERS {
+            return Err(MeetingTitleError::TooLong {
+                max_characters: Self::MAX_CHARACTERS,
+            });
+        }
+        if trimmed_title.chars().any(char::is_control) {
+            return Err(MeetingTitleError::ControlCharacter);
+        }
+        Ok(Self(trimmed_title.to_owned()))
+    }
+
+    /// Borrows the title text.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Describes repository-level facts about a meeting that are independent of its content.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MeetingMetadata {
     meeting_id: MeetingId,
     created_at: DateTime<Utc>,
+    /// The user-chosen title; `None` for meetings created without one (including every meeting
+    /// stored before Issue #35).
+    title: Option<MeetingTitle>,
 }
 
 impl MeetingMetadata {
@@ -2312,7 +2355,18 @@ impl MeetingMetadata {
         Self {
             meeting_id,
             created_at,
+            title: None,
         }
+    }
+
+    /// Attaches the persisted title.
+    ///
+    /// Inputs: The stored title, or `None` for an untitled meeting.
+    /// Outputs: The metadata carrying that title.
+    /// Side effects: None.
+    pub fn with_title(mut self, title: Option<MeetingTitle>) -> Self {
+        self.title = title;
+        self
     }
 
     /// Borrows the meeting identifier.
@@ -2323,5 +2377,75 @@ impl MeetingMetadata {
     /// Returns the UTC instant at which the meeting record was created.
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
+    }
+
+    /// Borrows the user-chosen title, if one was stored.
+    pub fn title(&self) -> Option<&MeetingTitle> {
+        self.title.as_ref()
+    }
+
+    /// Returns the name shown to people: the stored title, or for an untitled meeting a fallback
+    /// derived from its creation time, such as `Meeting 2026-10-27 09:05 UTC`.
+    ///
+    /// Inputs: None.
+    /// Outputs: A non-empty display name. The fallback is computed on read and never persisted.
+    /// Side effects: None.
+    pub fn display_title(&self) -> String {
+        match &self.title {
+            Some(title) => title.as_str().to_owned(),
+            None => format!("Meeting {}", self.created_at.format("%Y-%m-%d %H:%M UTC")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod meeting_title_tests {
+    //! Specifies meeting-title validation and the display fallback for untitled meetings.
+
+    use chrono::{TimeZone, Utc};
+
+    use super::{MeetingId, MeetingMetadata, MeetingTitle};
+    use crate::domain::errors::MeetingTitleError;
+
+    /// Verifies titles are trimmed and blank, oversized, or control-character titles rejected.
+    #[test]
+    fn meeting_titles_are_trimmed_and_validated() {
+        let parsed_title = MeetingTitle::parse("  Project Sync \n")
+            .unwrap_or_else(|error| panic!("title must parse: {error}"));
+        assert_eq!(parsed_title.as_str(), "Project Sync");
+
+        assert_eq!(MeetingTitle::parse(" \t "), Err(MeetingTitleError::Blank));
+        assert_eq!(
+            MeetingTitle::parse(&"x".repeat(MeetingTitle::MAX_CHARACTERS + 1)),
+            Err(MeetingTitleError::TooLong {
+                max_characters: MeetingTitle::MAX_CHARACTERS
+            })
+        );
+        assert!(MeetingTitle::parse(&"é".repeat(MeetingTitle::MAX_CHARACTERS)).is_ok());
+        assert_eq!(
+            MeetingTitle::parse("Sync\u{0007}"),
+            Err(MeetingTitleError::ControlCharacter)
+        );
+    }
+
+    /// Verifies a stored title is displayed as is, and an untitled meeting gets a dated fallback.
+    #[test]
+    fn display_title_falls_back_to_the_creation_time() {
+        let created_at = Utc
+            .with_ymd_and_hms(2026, 10, 27, 9, 5, 0)
+            .single()
+            .unwrap_or_else(|| panic!("fixture time must be valid"));
+        let untitled_metadata = MeetingMetadata::new(MeetingId::new("meeting-1"), created_at);
+        assert_eq!(untitled_metadata.title(), None);
+        assert_eq!(
+            untitled_metadata.display_title(),
+            "Meeting 2026-10-27 09:05 UTC"
+        );
+
+        let title = MeetingTitle::parse("Project Sync")
+            .unwrap_or_else(|error| panic!("title must parse: {error}"));
+        let titled_metadata = untitled_metadata.with_title(Some(title.clone()));
+        assert_eq!(titled_metadata.title(), Some(&title));
+        assert_eq!(titled_metadata.display_title(), "Project Sync");
     }
 }

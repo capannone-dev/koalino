@@ -3,6 +3,11 @@
 //! Voice embeddings in `unassigned_voice_clips`, `unknown_speaker_clusters`, and `cluster_chunks`
 //! are sealed through the injected `EmbeddingCipher` (Issue #31); opening the repository
 //! re-encrypts plaintext embeddings left by older databases.
+//!
+//! Meeting titles (Issue #35) live in the nullable `meetings.title` column; opening a database
+//! created earlier adds that column, leaving existing meetings untitled (`NULL`). Untitled
+//! meetings get their display fallback on read (`MeetingMetadata::display_title`), so nothing is
+//! back-filled.
 
 use std::{path::Path, sync::Arc};
 
@@ -20,9 +25,9 @@ use crate::{
     domain::{
         errors::StorageError,
         models::{
-            AggregatedStats, Attachment, DeviceId, MeetingId, MeetingMetadata, TaskMetrics,
-            TaskType, Transcript, TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk,
-            UnknownSpeakerCluster,
+            AggregatedStats, Attachment, DeviceId, MeetingId, MeetingMetadata, MeetingTitle,
+            TaskMetrics, TaskType, Transcript, TranscriptSegment, UnassignedVoiceClip,
+            UnknownSpeakerChunk, UnknownSpeakerCluster,
         },
     },
     ports::{
@@ -84,8 +89,9 @@ impl SqliteNoteRepository {
     /// Inputs: `sqlite_connection` must be a usable connection; `device_id` identifies safe log
     /// metadata; `embedding_cipher` seals embeddings.
     /// Outputs: A repository with a `meetings` table ready for use, or a storage error.
-    /// Side effects: Executes SQLite DDL, seals legacy plaintext embeddings in one transaction
-    /// per table, and emits a structured initialization log.
+    /// Side effects: Executes SQLite DDL (including the Issue #35 `title` column migration),
+    /// seals legacy plaintext embeddings in one transaction per table, and emits a structured
+    /// initialization log.
     fn from_connection(
         sqlite_connection: Connection,
         device_id: DeviceId,
@@ -101,7 +107,8 @@ impl SqliteNoteRepository {
                     created_at_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     acquisition_device_id TEXT NOT NULL,
                     transcript TEXT,
-                    automerge_document BLOB NOT NULL
+                    automerge_document BLOB NOT NULL,
+                    title TEXT
                 );
                 CREATE TABLE IF NOT EXISTS unassigned_voice_clips (
                     clip_id TEXT PRIMARY KEY NOT NULL,
@@ -154,6 +161,7 @@ impl SqliteNoteRepository {
                     ON transcript_segments(meeting_id, start_time_ms);",
             )
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
+        add_meeting_title_column(&sqlite_connection)?;
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
         for embedding_column in [
             &CLIP_EMBEDDINGS,
@@ -323,30 +331,65 @@ impl NoteRepository for SqliteNoteRepository {
             .collect()
     }
 
-    /// Reads a meeting's SQLite creation timestamp as portable metadata.
+    /// Reads a meeting's SQLite creation timestamp and title as portable metadata.
     ///
     /// Inputs: `meeting_id` identifies a meeting record.
-    /// Outputs: Metadata, `None` for an unknown meeting, or a portable storage error.
-    /// Side effects: Reads one SQLite row without transcript or CRDT content.
+    /// Outputs: Metadata (untitled when the column is `NULL` or holds text that is no longer a
+    /// valid title), `None` for an unknown meeting, or a portable storage error.
+    /// Side effects: Reads one SQLite row without transcript or CRDT content; logs a warning
+    /// (without the text) when a stored title is invalid.
     fn load_meeting_metadata(
         &self,
         meeting_id: &MeetingId,
     ) -> Result<Option<MeetingMetadata>, StorageError> {
-        let created_at_text = self
+        let metadata_row = self
             .connection
             .query_row(
-                "SELECT created_at_utc FROM meetings WHERE meeting_id = ?1",
+                "SELECT created_at_utc, title FROM meetings WHERE meeting_id = ?1",
                 params![meeting_id.as_str()],
-                |row| row.get::<_, String>(0),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
             )
             .optional()
             .map_err(|error| sqlite_error("unable to load meeting metadata", error))?;
-        created_at_text
-            .map(|created_at_text| {
-                parse_sqlite_timestamp(&created_at_text)
-                    .map(|created_at| MeetingMetadata::new(meeting_id.clone(), created_at))
-            })
-            .transpose()
+        let Some((created_at_text, stored_title)) = metadata_row else {
+            return Ok(None);
+        };
+        let title = stored_title.and_then(|stored_title| {
+            MeetingTitle::parse(&stored_title)
+                .inspect_err(|error| {
+                    tracing::warn!(
+                        meeting_id = %meeting_id.as_str(),
+                        error = %error,
+                        "Stored meeting title is invalid; using the fallback title"
+                    );
+                })
+                .ok()
+        });
+        parse_sqlite_timestamp(&created_at_text).map(|created_at| {
+            Some(MeetingMetadata::new(meeting_id.clone(), created_at).with_title(title))
+        })
+    }
+
+    /// Stores or replaces a meeting's title.
+    ///
+    /// Inputs: `meeting_id` must exist; `title` is validated user content.
+    /// Outputs: Success or an unknown-meeting/SQLite storage error.
+    /// Side effects: Updates one SQLite row and emits a debug trace event without the title.
+    fn save_meeting_title(
+        &self,
+        meeting_id: &MeetingId,
+        title: &MeetingTitle,
+    ) -> Result<(), StorageError> {
+        let updated_row_count = self
+            .connection
+            .execute(
+                "UPDATE meetings SET title = ?1 WHERE meeting_id = ?2",
+                params![title.as_str(), meeting_id.as_str()],
+            )
+            .map_err(|error| sqlite_error("unable to save meeting title", error))?;
+        ensure_meeting_was_updated(updated_row_count, meeting_id)?;
+        self.log_operation("save_meeting_title", meeting_id);
+        Ok(())
     }
 
     /// Replaces a meeting's transcript segments inside one SQLite transaction.
@@ -959,6 +1002,28 @@ fn missing_meeting_error(meeting_id: &MeetingId) -> StorageError {
     }
 }
 
+/// Adds the nullable `meetings.title` column to databases created before Issue #35.
+///
+/// Inputs: A connection whose `meetings` table exists.
+/// Outputs: Success (also when the column already exists) or a portable storage error.
+/// Side effects: May run one `ALTER TABLE`; existing rows keep a `NULL` title.
+fn add_meeting_title_column(sqlite_connection: &Connection) -> Result<(), StorageError> {
+    let title_column_count: i64 = sqlite_connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('meetings') WHERE name = 'title'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| sqlite_error("unable to inspect meetings schema", error))?;
+    if title_column_count == 0 {
+        sqlite_connection
+            .execute("ALTER TABLE meetings ADD COLUMN title TEXT", [])
+            .map_err(|error| sqlite_error("unable to add meeting title column", error))?;
+        tracing::info!("Added the meeting title column to an existing database");
+    }
+    Ok(())
+}
+
 /// Ensures an SQL update affected exactly one existing meeting row.
 ///
 /// Inputs: `updated_row_count` is SQLite's update result; `meeting_id` identifies the target record.
@@ -1077,6 +1142,105 @@ mod tests {
                 .ok(),
             Some(None)
         );
+    }
+
+    /// Verifies a new meeting is untitled until a title is saved, which replaces any earlier one,
+    /// and that titles cannot be saved for unknown meetings.
+    #[test]
+    fn saves_and_loads_a_meeting_title() {
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let meeting_id = MeetingId::new("meeting-titled");
+        repository
+            .create_meeting(&meeting_id, &[1_u8])
+            .unwrap_or_else(|error| panic!("meeting creation should succeed: {error}"));
+        let load_title = || {
+            repository
+                .load_meeting_metadata(&meeting_id)
+                .unwrap_or_else(|error| panic!("metadata load should succeed: {error}"))
+                .unwrap_or_else(|| panic!("created meeting must have metadata"))
+                .title()
+                .map(|title| title.as_str().to_owned())
+        };
+        assert_eq!(load_title(), None);
+
+        for title_text in ["Project Sync", "Project Sync (renamed)"] {
+            repository
+                .save_meeting_title(&meeting_id, &meeting_title(title_text))
+                .unwrap_or_else(|error| panic!("title save should succeed: {error}"));
+            assert_eq!(load_title().as_deref(), Some(title_text));
+        }
+
+        let storage_error = repository
+            .save_meeting_title(&MeetingId::new("missing"), &meeting_title("Orphan"))
+            .expect_err("an unknown meeting must reject a title");
+        assert!(matches!(storage_error, StorageError::Rejected { .. }));
+    }
+
+    /// Verifies a database created before Issue #35 gains the `title` column on open, its
+    /// meetings read as untitled with a dated display fallback, and they can then be titled.
+    #[test]
+    fn migrates_a_legacy_database_without_a_title_column() {
+        let database_directory =
+            std::env::temp_dir().join(format!("note-taker-title-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&database_directory)
+            .unwrap_or_else(|error| panic!("test directory must be created: {error}"));
+        let database_path = database_directory.join("legacy.sqlite3");
+        let legacy_connection = rusqlite::Connection::open(&database_path)
+            .unwrap_or_else(|error| panic!("legacy database must open: {error}"));
+        legacy_connection
+            .execute_batch(
+                "CREATE TABLE meetings (
+                    meeting_id TEXT PRIMARY KEY NOT NULL,
+                    created_at_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    acquisition_device_id TEXT NOT NULL,
+                    transcript TEXT,
+                    automerge_document BLOB NOT NULL
+                );
+                INSERT INTO meetings (meeting_id, created_at_utc, acquisition_device_id, automerge_document)
+                    VALUES ('legacy-meeting', '2026-10-20 14:30:00', 'old-device', X'01');",
+            )
+            .unwrap_or_else(|error| panic!("legacy schema must be created: {error}"));
+        drop(legacy_connection);
+        let open_repository = || {
+            SqliteNoteRepository::open(
+                &database_path,
+                crate::domain::models::DeviceId::new("migration-test"),
+                crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+            )
+            .unwrap_or_else(|error| panic!("legacy database must migrate: {error}"))
+        };
+        let meeting_id = MeetingId::new("legacy-meeting");
+
+        let repository = open_repository();
+        let legacy_metadata = repository
+            .load_meeting_metadata(&meeting_id)
+            .unwrap_or_else(|error| panic!("metadata load should succeed: {error}"))
+            .unwrap_or_else(|| panic!("legacy meeting must have metadata"));
+        assert_eq!(legacy_metadata.title(), None);
+        assert_eq!(
+            legacy_metadata.display_title(),
+            "Meeting 2026-10-20 14:30 UTC"
+        );
+        repository
+            .save_meeting_title(&meeting_id, &meeting_title("Retro"))
+            .unwrap_or_else(|error| panic!("title save should succeed: {error}"));
+        drop(repository);
+
+        let reopened_title = open_repository()
+            .load_meeting_metadata(&meeting_id)
+            .unwrap_or_else(|error| panic!("metadata load should succeed: {error}"))
+            .and_then(|metadata| metadata.title().map(|title| title.as_str().to_owned()));
+        let _ = std::fs::remove_dir_all(&database_directory);
+        assert_eq!(reopened_title.as_deref(), Some("Retro"));
+    }
+
+    /// Parses a fixture title.
+    fn meeting_title(title_text: &str) -> crate::domain::models::MeetingTitle {
+        crate::domain::models::MeetingTitle::parse(title_text)
+            .unwrap_or_else(|error| panic!("fixture title must parse: {error}"))
     }
 
     /// Verifies adapter initialization creates its schema and stores both transcript and CRDT bytes.

@@ -105,6 +105,23 @@ pub enum StorageError {
     Rejected { reason: String },
 }
 
+/// Describes why user-supplied text is not a valid meeting title.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum MeetingTitleError {
+    /// The title is empty or contains only whitespace.
+    #[error("meeting title must not be blank")]
+    Blank,
+    /// The trimmed title is longer than the allowed number of characters.
+    #[error("meeting title must be at most {max_characters} characters")]
+    TooLong {
+        /// The maximum number of Unicode scalar values.
+        max_characters: usize,
+    },
+    /// The title contains a control character such as a newline or terminal escape.
+    #[error("meeting title must not contain control characters")]
+    ControlCharacter,
+}
+
 /// Describes a meeting export that could not be selected, rendered, or written.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ExportError {

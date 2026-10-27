@@ -3,8 +3,8 @@
 use crate::domain::{
     errors::StorageError,
     models::{
-        Attachment, MeetingId, MeetingMetadata, MeetingWindow, Transcript, TranscriptSegment,
-        UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
+        Attachment, MeetingId, MeetingMetadata, MeetingTitle, MeetingWindow, Transcript,
+        TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
     },
 };
 use chrono::{DateTime, Utc};
@@ -103,6 +103,20 @@ pub trait NoteRepository {
         _meeting_id: &MeetingId,
     ) -> Result<Option<MeetingMetadata>, StorageError> {
         Ok(None)
+    }
+
+    /// Stores or replaces the user-chosen title of one existing meeting.
+    ///
+    /// Inputs: `meeting_id` must exist; `title` is validated user content and must not be logged.
+    /// Outputs: Success, an unknown-meeting rejection, or `Unavailable` for repositories that do
+    /// not store titles.
+    /// Side effects: Writes local meeting metadata; the title is not part of the CRDT document.
+    fn save_meeting_title(
+        &self,
+        _meeting_id: &MeetingId,
+        _title: &MeetingTitle,
+    ) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
     }
 
     /// Replaces every speaker-attributed transcript segment of one existing meeting.
@@ -282,6 +296,14 @@ where
         meeting_id: &MeetingId,
     ) -> Result<Option<MeetingMetadata>, StorageError> {
         (*self).load_meeting_metadata(meeting_id)
+    }
+
+    fn save_meeting_title(
+        &self,
+        meeting_id: &MeetingId,
+        title: &MeetingTitle,
+    ) -> Result<(), StorageError> {
+        (*self).save_meeting_title(meeting_id, title)
     }
 
     fn save_transcript_segments(
