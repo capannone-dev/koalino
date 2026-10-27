@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{6CE03AB7-DAF4-4942-BB4D-7399EB649CEC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamsBot.Core", "src\TeamsBot.Core\TeamsBot.Core.csproj", "{79E33AC3-B342-4F83-B7E5-8EA3DCB719D3}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{60B86E89-CF60-4123-8D85-F73EBA091F1A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TeamsBot.Core.Tests", "tests\TeamsBot.Core.Tests\TeamsBot.Core.Tests.csproj", "{57BB363F-DBDE-4C0F-998E-228025D4BF48}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{79E33AC3-B342-4F83-B7E5-8EA3DCB719D3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{79E33AC3-B342-4F83-B7E5-8EA3DCB719D3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{79E33AC3-B342-4F83-B7E5-8EA3DCB719D3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{79E33AC3-B342-4F83-B7E5-8EA3DCB719D3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57BB363F-DBDE-4C0F-998E-228025D4BF48}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57BB363F-DBDE-4C0F-998E-228025D4BF48}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57BB363F-DBDE-4C0F-998E-228025D4BF48}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57BB363F-DBDE-4C0F-998E-228025D4BF48}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{79E33AC3-B342-4F83-B7E5-8EA3DCB719D3} = {6CE03AB7-DAF4-4942-BB4D-7399EB649CEC}
+		{57BB363F-DBDE-4C0F-998E-228025D4BF48} = {60B86E89-CF60-4123-8D85-F73EBA091F1A}
+	EndGlobalSection
+EndGlobal

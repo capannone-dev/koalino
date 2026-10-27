@@ -1,0 +1,10 @@
+# .NET build output and IDE state are reproducible and must not be committed.
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+
+# Local overrides may hold secrets (client secret, shared secret, API key).
+appsettings.Development.json
+appsettings.Local.json

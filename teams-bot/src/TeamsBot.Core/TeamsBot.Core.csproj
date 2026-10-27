@@ -1,0 +1,23 @@
+<!--
+  Portable bot logic with no Teams SDK dependency: audio and video processing, the Protobuf
+  serializer, the WebSocket bridge client, and the meeting lifecycle (BotService). It builds and
+  is tested on any OS; the Windows-only media SDK is adapted in TeamsBot.Media.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>TeamsBot.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" />
+    <PackageReference Include="Grpc.Tools" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="SkiaSharp" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The single source of truth shared with the Rust core; never copy it. -->
+    <Protobuf Include="../../../core/protocol/teams_bridge.proto" Link="Protocol/teams_bridge.proto" GrpcServices="None" Access="Public" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="TeamsBot.Core.Tests" />
+  </ItemGroup>
+</Project>

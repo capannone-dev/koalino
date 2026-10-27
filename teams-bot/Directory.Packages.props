@@ -1,0 +1,26 @@
+<!--
+  Pins every NuGet dependency in one place (central package management). Versions were at least
+  two weeks old when chosen; bump them deliberately and re-run `dotnet test`.
+-->
+<Project>
+  <ItemGroup>
+    <!-- Protocol: C# code generated from ../core/protocol/teams_bridge.proto (Issue #33). -->
+    <PackageVersion Include="Google.Protobuf" Version="3.36.2" />
+    <PackageVersion Include="Grpc.Tools" Version="2.84.0" />
+    <!-- Video: NV12 → JPEG encoding (MIT). -->
+    <PackageVersion Include="SkiaSharp" Version="4.153.1" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.153.1" />
+    <!-- Teams: Graph Communications calling SDK with app-hosted (Real-Time) media; Windows-only at runtime. -->
+    <PackageVersion Include="Microsoft.Graph.Communications.Calls.Media" Version="1.2.0.18736" />
+    <!-- Azure AD client-credentials tokens (MSAL). -->
+    <PackageVersion Include="Microsoft.Identity.Client" Version="4.90.1" />
+    <!-- Logging. -->
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.7" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="8.0.3" />
+    <!-- Tests. -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,29 @@
+<!--
+  Unit and integration tests for TeamsBot.Core. Teams SDK types are never loaded: the core's
+  abstractions are mocked with NSubstitute, and the WebSocket tests use an in-process server.
+  The golden Protobuf frames from core/protocol/fixtures prove compatibility with the Rust decoder.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- Test method names describe behaviour; XML docs on every test are still required. -->
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="NSubstitute" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Kestrel hosts the in-process mock of the Rust bridge server. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/TeamsBot.Core/TeamsBot.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="../../../core/protocol/fixtures/*.bin" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
