@@ -618,3 +618,19 @@ fn json_batch_contains_all_meetings_and_honors_metadata_option() {
     assert_eq!(export_result.metadata_value("schema_version"), Some("1.0"));
     assert_eq!(export_result.metadata_value("meeting_count"), Some("2"));
 }
+
+/// Verifies transparent image pixels are composited onto white rather than turning black.
+#[test]
+fn pdf_flattens_transparent_image_pixels_onto_white() {
+    let mut transparent_image = printpdf::image_crate::RgbaImage::new(2, 1);
+    transparent_image.put_pixel(0, 0, printpdf::image_crate::Rgba([0, 0, 0, 0]));
+    transparent_image.put_pixel(1, 0, printpdf::image_crate::Rgba([0, 0, 255, 255]));
+
+    let flattened_image = super::pdf_exporter::flatten_onto_white(
+        printpdf::image_crate::DynamicImage::ImageRgba8(transparent_image),
+    )
+    .to_rgb8();
+
+    assert_eq!(flattened_image.get_pixel(0, 0).0, [255, 255, 255]);
+    assert_eq!(flattened_image.get_pixel(1, 0).0, [0, 0, 255]);
+}

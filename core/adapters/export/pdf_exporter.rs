@@ -444,7 +444,7 @@ fn layout_attachment(body_layout: &mut BodyLayout, attachment: &ExportAttachment
     if attachment.is_image() {
         match image_crate::open(staged_path) {
             Ok(decoded_image) => {
-                body_layout.push_image(DynamicImage::ImageRgb8(decoded_image.to_rgb8()));
+                body_layout.push_image(flatten_onto_white(decoded_image));
             }
             Err(_) => {
                 tracing::warn!(attachment_id = %attachment.attachment_id(), "PDF export could not decode image attachment");
@@ -480,6 +480,36 @@ fn layout_attachment(body_layout: &mut BodyLayout, attachment: &ExportAttachment
         }
     }
     body_layout.push_gap(2.0);
+}
+
+/// Composites any alpha channel onto a white page background and returns an opaque RGB image.
+///
+/// Inputs: A decoded image of any color type.
+/// Outputs: An RGB8 image; fully transparent pixels become white instead of black.
+/// Side effects: None.
+pub(crate) fn flatten_onto_white(decoded_image: DynamicImage) -> DynamicImage {
+    if !decoded_image.color().has_alpha() {
+        return DynamicImage::ImageRgb8(decoded_image.to_rgb8());
+    }
+    let rgba_image = decoded_image.to_rgba8();
+    let flattened_image = image_crate::RgbImage::from_fn(
+        rgba_image.width(),
+        rgba_image.height(),
+        |pixel_x, pixel_y| {
+            let [red, green, blue, alpha] = rgba_image.get_pixel(pixel_x, pixel_y).0;
+            let blend_channel = |channel: u8| {
+                let opacity = u16::from(alpha);
+                let blended = (u16::from(channel) * opacity + 255 * (255 - opacity)) / 255;
+                u8::try_from(blended).unwrap_or(u8::MAX)
+            };
+            image_crate::Rgb([
+                blend_channel(red),
+                blend_channel(green),
+                blend_channel(blue),
+            ])
+        },
+    );
+    DynamicImage::ImageRgb8(flattened_image)
 }
 
 /// Lays out the title page: meeting metadata for one meeting, or a meeting list for a batch.

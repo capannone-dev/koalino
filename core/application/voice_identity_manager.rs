@@ -47,6 +47,15 @@ where
         Self { vector_database }
     }
 
+    /// Borrows the injected voice-storage port for read-only collaborators such as exports.
+    ///
+    /// Inputs: None.
+    /// Outputs: The owned `VoiceVectorDB` implementation by reference.
+    /// Side effects: None.
+    pub fn vector_database(&self) -> &VectorDatabase {
+        &self.vector_database
+    }
+
     /// Classifies the best adapter-provided similarity candidate for a derived query embedding.
     ///
     /// Inputs: `raw_embedding` contains derived numeric features, never raw audio samples.

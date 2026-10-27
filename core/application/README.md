@@ -109,7 +109,7 @@ the attachment manager and keeping image bytes out of logs.
    (or `meetings-export_{count}_{timestamp}.{ext}` for batches), sanitized to `[A-Za-z0-9._-]`,
    with `-N` appended on collision. An explicit destination overrides the generated name.
 
-`ExportManager::into_writer` releases the repository borrows so a driver can extract under a lock
-and then render on a blocking thread (the HTTP API does this with `spawn_blocking`). Errors are
+`ExportManager` only borrows its `ExportWriter`, so a driver can extract under a repository lock,
+drop the manager, and render on a blocking thread (the HTTP API does this with `spawn_blocking`). Errors are
 `anyhow` values wrapping `ExportError`, so interfaces can `downcast_ref::<ExportError>()` to map
 not-found, bad-request, and internal failures.

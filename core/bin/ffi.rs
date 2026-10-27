@@ -12,6 +12,7 @@ use std::{
 use crate::{
     adapters::{
         audio::local_recorder::LocalRecorder,
+        export::{default_export_directory, default_exporters},
         media::local_file_metadata::LocalFileMetadataExtractor,
         observability::{LoggingConfiguration, LoggingRuntime, initialize_logging},
         storage::{
@@ -19,13 +20,16 @@ use crate::{
         },
     },
     application::{
-        attachment_manager::AttachmentManager, voice_identity_manager::VoiceIdentityManager,
+        attachment_manager::AttachmentManager,
+        export_manager::{ExportManager, ExportWriter},
+        voice_identity_manager::VoiceIdentityManager,
     },
     domain::{
-        errors::StorageError,
+        errors::{ExportError, StorageError},
         models::{
-            Attachment, AudioConfig, DeviceId, MeetingId, MeetingMetadata, MeetingWindow,
-            TaskMetrics, TaskType, Transcript, TranscriptSegment, UnassignedVoiceClip,
+            Attachment, AudioConfig, DeviceId, ExportFormat, ExportOptions, MeetingId,
+            MeetingMetadata, MeetingWindow, TaskMetrics, TaskType, Transcript, TranscriptSegment,
+            UnassignedVoiceClip,
         },
     },
     ports::{
@@ -83,6 +87,28 @@ struct FfiRuntime {
     review_clip_directory: PathBuf,
     loaded_review_clips: HashMap<Uuid, UnassignedVoiceClip>,
     pending_attachment_imports: HashMap<Uuid, PendingAttachmentImport>,
+    export_writer: ExportWriter,
+}
+
+/// Options accepted by `note_taker_export_meeting`; omitted fields use defaults.
+#[derive(Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FfiExportOptions {
+    /// Defaults to `true`.
+    include_attachments: Option<bool>,
+    /// Defaults to `true`.
+    include_metadata: Option<bool>,
+    /// Explicit destination file; defaults to a generated name in the export directory.
+    output_path: Option<PathBuf>,
+}
+
+/// Builds the JSON error object returned by `note_taker_export_meeting`.
+///
+/// Inputs: A stable machine-readable `error_code` and a human-readable `message`.
+/// Outputs: `{"ok":false,"error_code":…,"error":…}` as a string.
+/// Side effects: None.
+fn export_error_json(error_code: &str, message: &str) -> String {
+    serde_json::json!({ "ok": false, "error_code": error_code, "error": message }).to_string()
 }
 
 /// Retains only metadata necessary to persist one explicitly user-approved attachment link.
@@ -239,7 +265,26 @@ impl FfiRuntime {
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("voice_review_clips"));
         fs::create_dir_all(&review_clip_directory).map_err(|_| FFI_OPERATION_REJECTED)?;
-        Ok(Self {
+        Ok(Self::from_parts(
+            local_recorder,
+            note_repository,
+            review_clip_directory,
+            ExportWriter::new(default_exporters(), default_export_directory()),
+        ))
+    }
+
+    /// Assembles runtime state from already-opened adapters.
+    ///
+    /// Inputs: The recorder, repository, review-clip directory, and export writer.
+    /// Outputs: The runtime with empty caches and an in-memory voice store.
+    /// Side effects: None.
+    fn from_parts(
+        local_recorder: LocalRecorder,
+        note_repository: SqliteNoteRepository,
+        review_clip_directory: PathBuf,
+        export_writer: ExportWriter,
+    ) -> Self {
+        Self {
             local_recorder,
             logging_runtime: None,
             note_repository,
@@ -247,7 +292,102 @@ impl FfiRuntime {
             review_clip_directory,
             loaded_review_clips: HashMap::new(),
             pending_attachment_imports: HashMap::new(),
-        })
+            export_writer,
+        }
+    }
+
+    /// Creates a runtime over in-memory SQLite that exports into `export_directory`.
+    ///
+    /// Inputs: The directory for generated export filenames.
+    /// Outputs: A runtime that never touches the developer database, or a C status.
+    /// Side effects: Allocates in-memory SQLite; creates no directories.
+    #[cfg(test)]
+    fn in_memory_for_tests(export_directory: &Path) -> Result<Self, c_int> {
+        let local_recorder =
+            LocalRecorder::new(AudioConfig::new(16_000, 1)).map_err(|_| FFI_OPERATION_REJECTED)?;
+        let note_repository =
+            SqliteNoteRepository::open_in_memory().map_err(|_| FFI_OPERATION_REJECTED)?;
+        Ok(Self::from_parts(
+            local_recorder,
+            note_repository,
+            export_directory.join("review-clips"),
+            ExportWriter::new(default_exporters(), export_directory),
+        ))
+    }
+
+    /// Exports one meeting through the shared `ExportManager` and describes the result as JSON.
+    ///
+    /// Inputs: `meeting_id` (non-empty), `format` (`markdown`/`md`, `pdf`, `json`), and
+    /// `options_json` (empty or a `FfiExportOptions` object).
+    /// Outputs: `{"ok":true,"file_path","format","size_bytes","metadata":{…}}` on success, or
+    /// `{"ok":false,"error_code","error"}` where `error_code` is `invalid_argument`,
+    /// `unsupported_format`, `meeting_not_found`, or `export_failed`.
+    /// Side effects: Reads SQLite, copies attachments, and writes the export file synchronously;
+    /// Flutter must call it from a background isolate.
+    fn export_meeting(&self, meeting_id: &str, format: &str, options_json: &str) -> String {
+        if meeting_id.trim().is_empty() {
+            return export_error_json("invalid_argument", "meeting_id must not be empty");
+        }
+        let export_format = match format.parse::<ExportFormat>() {
+            Ok(export_format) => export_format,
+            Err(error) => return export_error_json("invalid_argument", &error.to_string()),
+        };
+        let ffi_options = if options_json.trim().is_empty() {
+            FfiExportOptions::default()
+        } else {
+            match serde_json::from_str::<FfiExportOptions>(options_json) {
+                Ok(ffi_options) => ffi_options,
+                Err(error) => {
+                    return export_error_json(
+                        "invalid_argument",
+                        &format!("options_json is invalid: {error}"),
+                    );
+                }
+            }
+        };
+        let export_options = ExportOptions::new(
+            export_format,
+            ffi_options.include_attachments.unwrap_or(true),
+            ffi_options.include_metadata.unwrap_or(true),
+            None,
+        );
+        let export_manager = ExportManager::new(
+            &self.note_repository,
+            &self.note_repository,
+            self.voice_identity_manager.vector_database(),
+            &self.export_writer,
+        );
+        match export_manager.export_meeting(
+            &MeetingId::new(meeting_id),
+            &export_options,
+            ffi_options.output_path.as_deref(),
+        ) {
+            Ok(export_result) => serde_json::json!({
+                "ok": true,
+                "file_path": export_result.file_path(),
+                "format": export_result.format().as_str(),
+                "size_bytes": export_result.size_bytes(),
+                "metadata": export_result
+                    .metadata()
+                    .iter()
+                    .map(|(metadata_key, metadata_value)| {
+                        (metadata_key.clone(), serde_json::Value::from(metadata_value.as_str()))
+                    })
+                    .collect::<serde_json::Map<String, serde_json::Value>>()
+            })
+            .to_string(),
+            Err(error) => {
+                let error_code = match error.downcast_ref::<ExportError>() {
+                    Some(ExportError::MeetingNotFound { .. }) => "meeting_not_found",
+                    Some(ExportError::UnsupportedFormat { .. }) => "unsupported_format",
+                    Some(ExportError::UnknownFormat { .. } | ExportError::InvalidDateRange) => {
+                        "invalid_argument"
+                    }
+                    _ => "export_failed",
+                };
+                export_error_json(error_code, &format!("{error:#}"))
+            }
+        }
     }
 
     /// Loads clip metadata, writes only local review files, and serializes metadata as JSON.
@@ -906,6 +1046,47 @@ unsafe fn ffi_string<'a>(value: *const c_char) -> Option<&'a str> {
     unsafe { CStr::from_ptr(value) }.to_str().ok()
 }
 
+/// Exports one meeting to Markdown, PDF, or JSON and returns caller-freed result JSON.
+///
+/// Inputs: `meeting_id` and `format` are non-null NUL-terminated UTF-8 strings; `options_json` is
+/// null, empty, or a JSON object with optional `include_attachments`, `include_metadata`, and
+/// `output_path`.
+/// Outputs: An owned JSON string (free with `note_taker_free_string`): `{"ok":true,"file_path",
+/// "format","size_bytes","metadata"}` or `{"ok":false,"error_code","error"}`. Returns null only if
+/// the response cannot be allocated as a C string.
+/// Side effects: Reads SQLite, copies attachments, and writes the export file synchronously, so
+/// Flutter must call it from a background isolate.
+///
+/// # Safety
+/// Each pointer must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_export_meeting(
+    meeting_id: *const c_char,
+    format: *const c_char,
+    options_json: *const c_char,
+) -> *mut c_char {
+    let response_json = match (unsafe { ffi_string(meeting_id) }, unsafe {
+        ffi_string(format)
+    }) {
+        (Some(meeting_id), Some(format)) => {
+            let options_json = unsafe { ffi_string(options_json) }.unwrap_or("");
+            with_runtime_json(|runtime| {
+                Ok(runtime.export_meeting(meeting_id, format, options_json))
+            })
+            .unwrap_or_else(|_| {
+                export_error_json("runtime_unavailable", "the native runtime is unavailable")
+            })
+        }
+        _ => export_error_json(
+            "invalid_argument",
+            "meeting_id and format must be valid UTF-8 C strings",
+        ),
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
 /// Frees a JSON string returned by `note_taker_get_unassigned_clips`.
 ///
 /// Inputs: `value` must be null or a pointer returned by this library and not previously freed.
@@ -931,9 +1112,120 @@ mod ffi_contract_tests {
         FfiRuntime,
     };
     use crate::{
-        domain::models::{DeviceId, TaskMetrics, TaskType},
-        ports::telemetry::MetricsRepository,
+        domain::models::{DeviceId, MeetingId, TaskMetrics, TaskType, TranscriptSegment},
+        ports::{storage::NoteRepository, telemetry::MetricsRepository},
     };
+
+    /// Builds a runtime backed by in-memory SQLite exporting into a unique temp directory.
+    fn export_runtime() -> (FfiRuntime, std::path::PathBuf) {
+        let export_directory =
+            std::env::temp_dir().join(format!("note-taker-ffi-export-{}", uuid::Uuid::new_v4()));
+        let ffi_runtime = FfiRuntime::in_memory_for_tests(&export_directory)
+            .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
+        (ffi_runtime, export_directory)
+    }
+
+    /// Parses an FFI export response.
+    fn parse_response(response_json: &str) -> serde_json::Value {
+        serde_json::from_str(response_json)
+            .unwrap_or_else(|error| panic!("FFI export response must be JSON: {error}"))
+    }
+
+    /// Verifies the FFI export writes through ExportManager and returns result metadata as JSON.
+    #[test]
+    fn export_meeting_returns_result_json_for_a_stored_meeting() {
+        let (ffi_runtime, export_directory) = export_runtime();
+        let meeting_id = MeetingId::new("ffi-export-meeting");
+        ffi_runtime
+            .note_repository
+            .create_meeting(&meeting_id, &[1])
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        ffi_runtime
+            .note_repository
+            .save_transcript_segments(
+                &meeting_id,
+                &[TranscriptSegment::new(
+                    meeting_id.clone(),
+                    0,
+                    1_000,
+                    None,
+                    "From Flutter.",
+                )],
+            )
+            .unwrap_or_else(|error| panic!("fixture segments must persist: {error}"));
+
+        let response = parse_response(&ffi_runtime.export_meeting(
+            "ffi-export-meeting",
+            "json",
+            r#"{"include_metadata":false}"#,
+        ));
+        let file_path = response["file_path"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let exported_json = std::fs::read_to_string(&file_path).unwrap_or_default();
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert_eq!(response["ok"], true);
+        assert_eq!(response["format"], "json");
+        assert!(response["size_bytes"].as_u64().unwrap_or_default() > 0);
+        assert_eq!(response["metadata"]["meeting_count"], "1");
+        assert!(file_path.starts_with(&*export_directory.to_string_lossy()));
+        assert!(exported_json.contains("From Flutter."));
+        assert!(!exported_json.contains("\"title\""));
+    }
+
+    /// Verifies explicit output paths are honored and empty options use defaults.
+    #[test]
+    fn export_meeting_honors_output_path_option() {
+        let (ffi_runtime, export_directory) = export_runtime();
+        ffi_runtime
+            .note_repository
+            .create_meeting(&MeetingId::new("ffi-output"), &[1])
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        let output_path = export_directory.join("custom.md");
+
+        let response = parse_response(&ffi_runtime.export_meeting(
+            "ffi-output",
+            "markdown",
+            &serde_json::json!({ "output_path": output_path }).to_string(),
+        ));
+        let output_exists = output_path.exists();
+        let default_response = parse_response(&ffi_runtime.export_meeting("ffi-output", "md", ""));
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert_eq!(response["ok"], true);
+        assert!(output_exists);
+        assert_eq!(default_response["ok"], true);
+    }
+
+    /// Verifies invalid input and missing meetings produce structured error JSON, never a crash.
+    #[test]
+    fn export_meeting_reports_structured_errors() {
+        let (ffi_runtime, export_directory) = export_runtime();
+
+        for (meeting_id, format, options_json, expected_code) in [
+            ("missing", "json", "{}", "meeting_not_found"),
+            ("missing", "docx", "{}", "invalid_argument"),
+            ("missing", "srt", "{}", "unsupported_format"),
+            ("missing", "json", "{not json", "invalid_argument"),
+            ("", "json", "{}", "invalid_argument"),
+        ] {
+            let response =
+                parse_response(&ffi_runtime.export_meeting(meeting_id, format, options_json));
+            assert_eq!(response["ok"], false);
+            assert_eq!(
+                response["error_code"], expected_code,
+                "{format} {options_json}"
+            );
+            assert!(
+                response["error"]
+                    .as_str()
+                    .is_some_and(|message| !message.is_empty())
+            );
+        }
+        assert!(!export_directory.exists());
+    }
 
     /// Verifies telemetry FFI JSON is derived from in-memory SQLite without exposing task payloads.
     #[test]

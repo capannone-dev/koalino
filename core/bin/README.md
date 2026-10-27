@@ -23,3 +23,8 @@ behind an authenticated reverse proxy before any non-loopback deployment.
 the same `NOTE_TAKER_DATABASE_PATH` as the daemon, and passes portable adapters to the thin CLI
 service. It fixes structured log filtering at `error` so a user's table/detail output is not mixed
 with operational logs.
+
+`ffi.rs` also exports `note_taker_export_meeting(meeting_id, format, options_json)`, which runs the
+shared `ExportManager` and returns caller-freed JSON describing the written file or a structured
+error (see `API_SPECS.md`). The CLI binary composes an `ExportWriter` from
+`adapters::export::default_exporters()` and `NOTE_TAKER_EXPORT_DIR`.

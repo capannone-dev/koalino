@@ -33,6 +33,12 @@ separately authenticated reverse proxy is configured. CORS permits only `http://
   when the device has no recent metric.
 - `GET /api/telemetry/summary` returns `total_transcription_time_ms`, `average_latency_ms`,
   `total_tasks`, and `power_estimate_mwh`; no raw task inputs or outputs are included.
+- `POST /api/meetings/{meeting_id}/export` accepts
+  `{"format":"markdown|pdf|json","options":{"include_attachments":true,"include_metadata":true}}`
+  and returns the exported file as a download (`Content-Disposition: attachment`). Unknown or
+  reserved formats return `400`, unknown meetings `404`, and errors are `{"error":"..."}`.
+  Extraction runs under the repository lock; rendering runs on `spawn_blocking` in a per-request
+  temp directory that is removed before the response is sent. See `API_SPECS.md`.
 - `GET /ws` upgrades to a WebSocket. Text events are tagged JSON: `meeting_started`,
   `sync_status_changed`, `new_unassigned_clip`, or `telemetry_updated`; their payload carries only
   opaque IDs/status.

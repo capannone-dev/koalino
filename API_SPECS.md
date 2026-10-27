@@ -47,6 +47,22 @@ code receive that interface and never access Rust structs.
 Neither function accepts raw audio, voice embeddings, P2P credentials, Rust ownership pointers,
 or serialized domain structures.
 
+### Meeting export C ABI
+
+`char *note_taker_export_meeting(const char *meeting_id, const char *format, const char *options_json)`
+exports one meeting through the shared `ExportManager` and always returns caller-freed JSON
+(release it with `note_taker_free_string`):
+
+- Success: `{"ok":true,"file_path":"/abs/path.pdf","format":"pdf","size_bytes":1234,"metadata":{"schema_version":"1.0","meeting_count":"1"}}`.
+- Failure: `{"ok":false,"error_code":"…","error":"…"}`, where `error_code` is
+  `invalid_argument`, `unsupported_format`, `meeting_not_found`, `export_failed`, or
+  `runtime_unavailable`.
+
+`format` accepts `markdown`/`md`, `pdf`, or `json`. `options_json` may be null, empty, or an
+object with optional `include_attachments`, `include_metadata` (both default `true`), and
+`output_path`. Unknown keys are rejected. The call writes files synchronously, so Dart must invoke
+it from a background isolate.
+
 ### Voice Gallery C ABI
 
 - `char *note_taker_get_unassigned_clips(const char *meeting_id)` returns an owned UTF-8 JSON
@@ -118,10 +134,25 @@ with opaque meeting/clip IDs. The router allows browser CORS only from `http://l
 returns `204` after the existing voice identity service writes a derived signature variant. Invalid
 identifiers return `400`, a missing clip returns `404`, and no raw audio or embedding is returned.
 
+### Meeting export
+
+`POST /api/meetings/{id}/export` accepts JSON
+`{ "format": "markdown|md|pdf|json", "options": { "include_attachments": true, "include_metadata": true } }`
+(`options` and each flag are optional and default to `true`). It returns `200` with the rendered
+file as the body, `Content-Type` `text/markdown; charset=utf-8`, `application/pdf`, or
+`application/json`, and `Content-Disposition: attachment; filename="<generated name>"`, which CORS
+exposes to the web client. Unknown or reserved formats (`srt`) return `400`, an unknown meeting
+returns `404`, and other failures return `500`. Every error body is `{ "error": "message" }`, and
+500 responses carry no internal details. The handler extracts data under the repository lock and
+renders on a blocking thread into a per-request temp directory that is deleted before responding.
+A Markdown download contains only the `.md` file, so its attachment links are not bundled.
+
 ## Linux CLI contract
 
 `note-taker` accepts `record start|stop|status`, `meetings list`, `meetings view <meeting-id>`,
-`voice list`, `voice assign <clip-uuid> <identity-uuid>`, and `telemetry`. It calls only the
+`voice list`, `voice assign <clip-uuid> <identity-uuid>`, `telemetry`,
+`meetings export <meeting-id> --format <markdown|pdf|json> [--output <path>]`, and
+`meetings export-all --format <format> [--date-range <start>:<end>]` (see `core/cli/README.md`). It calls only the
 portable `AudioCapture`, repository, and `VoiceIdentityManager` boundaries. Voice assignment
 receives UUIDs from clap, locates the review clip through `NoteRepository`, and stores the derived
 variant through the manager; raw audio and embedding values never appear in terminal output.

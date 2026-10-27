@@ -275,3 +275,23 @@
 
 - Flutter receives only caller-freed device, summary, and time-series JSON; raw task content never
   crosses FFI. A controller owns ten-second polling and responsive Material 3 `fl_chart` views.
+
+## 2026-10-27 — Issue #26 meeting export
+
+- Transcripts were stored only as flat text, and diarization attributions were never persisted.
+  Added a `transcript_segments` table behind new `NoteRepository` methods with backward-compatible
+  trait defaults. Populating it from the pipeline is tracked as follow-up work. Until then, exports
+  fall back to the flat transcript as one `Unattributed` segment.
+- `MeetingExporter` takes extracted `ExportDocument` values, not meeting IDs, so adapters never
+  read repositories. `ExportManager` keeps the ID-based API, and all three interfaces call it.
+  Meeting IDs stay `MeetingId` (string) rather than the issue's `Uuid`, matching the codebase.
+- `ExportManager` borrows its `ExportWriter`, so the HTTP handler extracts under the repository
+  lock and renders PDF/Markdown on `spawn_blocking`, keeping the async runtime free.
+- PDF uses `printpdf` 0.7 with its re-exported `image` and `lopdf`. The direct `image` dependency
+  was removed, so no crate beyond `printpdf` was added. Non-image attachments are embedded through
+  the `/EmbeddedFiles` name tree. Built-in Helvetica covers only WinAnsi, and unencodable
+  characters render as `?` rather than vanishing.
+- Markdown copies attachments into `<stem>_attachments/` beside the file for portable relative
+  links. PDF staging uses a temp directory that is always removed. JSON lists original paths.
+- Exports and segment text follow the existing `transcript` column's at-rest policy. Neither is
+  encrypted yet, and neither ever contains embeddings or raw audio.

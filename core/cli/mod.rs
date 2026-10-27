@@ -3,12 +3,18 @@
 //! Command parsing and terminal formatting stay here while domain policy and persistence remain
 //! behind existing application services and repository ports.
 
+use std::path::{Path, PathBuf};
+
+use chrono::{NaiveDate, NaiveTime};
 use clap::{Args, Parser, Subcommand};
 use uuid::Uuid;
 
 use crate::{
-    application::voice_identity_manager::VoiceIdentityManager,
-    domain::models::MeetingId,
+    application::{
+        export_manager::{ExportManager, ExportWriter},
+        voice_identity_manager::VoiceIdentityManager,
+    },
+    domain::models::{ExportDateRange, ExportFormat, ExportOptions, ExportResult, MeetingId},
     ports::{
         audio::AudioCapture,
         storage::{AttachmentRepository, NoteRepository},
@@ -58,11 +64,113 @@ pub struct RecordArgs {
     pub command: RecordCommand,
 }
 
-/// Defines meeting read actions.
+/// Defines meeting read and export actions.
 #[derive(Debug, Subcommand)]
 pub enum MeetingCommand {
     List,
-    View { meeting_id: String },
+    View {
+        meeting_id: String,
+    },
+    /// Exports one meeting as Markdown, PDF, or JSON.
+    Export {
+        /// The meeting to export.
+        meeting_id: String,
+        /// Shared format, destination, and inclusion flags.
+        #[command(flatten)]
+        export_arguments: ExportCommandArgs,
+    },
+    /// Exports every meeting (optionally within a creation date range) into one file.
+    ExportAll {
+        /// Inclusive UTC day range `YYYY-MM-DD:YYYY-MM-DD` filtering meetings by creation date.
+        #[arg(long, value_parser = parse_export_date_range)]
+        date_range: Option<ExportDateRange>,
+        /// Shared format, destination, and inclusion flags.
+        #[command(flatten)]
+        export_arguments: ExportCommandArgs,
+    },
+}
+
+/// Holds the flags shared by `meetings export` and `meetings export-all`.
+#[derive(Debug, Args)]
+pub struct ExportCommandArgs {
+    /// Output format: markdown (md), pdf, or json.
+    #[arg(long, value_parser = parse_export_format)]
+    pub format: ExportFormat,
+    /// Destination file; defaults to a generated name in the export directory.
+    #[arg(long)]
+    pub output: Option<PathBuf>,
+    /// Omits attachments from the export.
+    #[arg(long)]
+    pub no_attachments: bool,
+    /// Omits the meeting metadata header (date, duration, participants).
+    #[arg(long)]
+    pub no_metadata: bool,
+}
+
+impl ExportCommandArgs {
+    /// Converts parsed flags into portable export options.
+    ///
+    /// Inputs: The optional batch `date_range`.
+    /// Outputs: `ExportOptions` with attachments and metadata included unless disabled.
+    /// Side effects: None.
+    pub fn export_options(&self, date_range: Option<ExportDateRange>) -> ExportOptions {
+        ExportOptions::new(
+            self.format,
+            !self.no_attachments,
+            !self.no_metadata,
+            date_range,
+        )
+    }
+}
+
+/// Parses a case-insensitive export format name for clap.
+///
+/// Inputs: Raw `--format` text.
+/// Outputs: The format or a user-readable error.
+/// Side effects: None.
+fn parse_export_format(raw_format: &str) -> Result<ExportFormat, String> {
+    raw_format
+        .parse::<ExportFormat>()
+        .map_err(|error| error.to_string())
+}
+
+/// Parses `YYYY-MM-DD:YYYY-MM-DD` into an inclusive range covering both whole UTC days.
+///
+/// Inputs: Raw `--date-range` text.
+/// Outputs: A range from the start day's midnight to the end day's last millisecond, or an
+/// error for malformed dates or a start after the end.
+/// Side effects: None.
+fn parse_export_date_range(raw_range: &str) -> Result<ExportDateRange, String> {
+    let (raw_start, raw_end) = raw_range
+        .split_once(':')
+        .ok_or_else(|| String::from("expected YYYY-MM-DD:YYYY-MM-DD"))?;
+    let parse_day = |raw_day: &str| {
+        NaiveDate::parse_from_str(raw_day.trim(), "%Y-%m-%d")
+            .map_err(|error| format!("invalid date `{raw_day}`: {error}"))
+    };
+    let last_millisecond = NaiveTime::from_hms_milli_opt(23, 59, 59, 999)
+        .ok_or_else(|| String::from("unable to build end-of-day time"))?;
+    ExportDateRange::new(
+        parse_day(raw_start)?.and_time(NaiveTime::MIN).and_utc(),
+        parse_day(raw_end)?.and_time(last_millisecond).and_utc(),
+    )
+    .map_err(|error| error.to_string())
+}
+
+/// Formats a successful export for terminal output.
+fn format_export_result(export_result: &ExportResult) -> String {
+    let meeting_count = export_result.metadata_value("meeting_count").unwrap_or("1");
+    let meeting_noun = if meeting_count == "1" {
+        "meeting"
+    } else {
+        "meetings"
+    };
+    format!(
+        "Exported {meeting_count} {meeting_noun} as {} to {} ({} bytes)",
+        export_result.format(),
+        export_result.file_path(),
+        export_result.size_bytes()
+    )
 }
 
 /// Holds a nested meeting action for clap.
@@ -106,6 +214,15 @@ pub trait CliService {
     fn assign_voice_clip(&mut self, clip_id: Uuid, identity_id: Uuid) -> Result<String, String>;
     /// Loads aggregate metrics.
     fn telemetry(&self) -> Result<String, String>;
+    /// Exports one meeting through the shared export manager.
+    fn export_meeting(
+        &self,
+        meeting_id: &str,
+        options: &ExportOptions,
+        output: Option<&Path>,
+    ) -> Result<String, String>;
+    /// Exports every meeting matching the options' date range into one file.
+    fn export_all(&self, options: &ExportOptions, output: Option<&Path>) -> Result<String, String>;
 }
 
 /// Dispatches a clap-validated command to an injected service.
@@ -130,6 +247,27 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
         CliCommand::Meetings(MeetingArgs {
             command: MeetingCommand::View { meeting_id },
         }) => cli_service.view_meeting(&meeting_id),
+        CliCommand::Meetings(MeetingArgs {
+            command:
+                MeetingCommand::Export {
+                    meeting_id,
+                    export_arguments,
+                },
+        }) => cli_service.export_meeting(
+            &meeting_id,
+            &export_arguments.export_options(None),
+            export_arguments.output.as_deref(),
+        ),
+        CliCommand::Meetings(MeetingArgs {
+            command:
+                MeetingCommand::ExportAll {
+                    date_range,
+                    export_arguments,
+                },
+        }) => cli_service.export_all(
+            &export_arguments.export_options(date_range),
+            export_arguments.output.as_deref(),
+        ),
         CliCommand::Voice(VoiceArgs {
             command: VoiceCommand::List,
         }) => Ok(format_voice_table(cli_service.list_voices()?)),
@@ -173,6 +311,7 @@ pub struct CoreCliService<RecorderPort, RepositoryPort, VectorDatabasePort> {
     recorder: RecorderPort,
     repository: RepositoryPort,
     voice_identity_manager: VoiceIdentityManager<VectorDatabasePort>,
+    export_writer: ExportWriter,
 }
 
 impl<RecorderPort, RepositoryPort, VectorDatabasePort>
@@ -182,19 +321,37 @@ where
 {
     /// Composes a CLI service from existing adapters and the voice identity application service.
     ///
-    /// Inputs: A recorder port, repository port, and vector database port.
+    /// Inputs: A recorder port, repository port, vector database port, and the export writer
+    /// (exporters plus default export directory) composed by the binary.
     /// Outputs: A driving adapter service with no SQLite or business-policy implementation.
     /// Side effects: Takes ownership of supplied dependencies without calling them.
     pub fn new(
         recorder: RecorderPort,
         repository: RepositoryPort,
         vector_database: VectorDatabasePort,
+        export_writer: ExportWriter,
     ) -> Self {
         Self {
             recorder,
             repository,
             voice_identity_manager: VoiceIdentityManager::new(vector_database),
+            export_writer,
         }
+    }
+
+    /// Builds an export manager over this service's ports for one command.
+    fn export_manager(
+        &self,
+    ) -> ExportManager<'_, RepositoryPort, RepositoryPort, VectorDatabasePort>
+    where
+        RepositoryPort: NoteRepository + AttachmentRepository,
+    {
+        ExportManager::new(
+            &self.repository,
+            &self.repository,
+            self.voice_identity_manager.vector_database(),
+            &self.export_writer,
+        )
     }
 }
 
@@ -308,6 +465,23 @@ where
                 )
             })
             .map_err(|error| error.to_string())
+    }
+    fn export_meeting(
+        &self,
+        meeting_id: &str,
+        options: &ExportOptions,
+        output: Option<&Path>,
+    ) -> Result<String, String> {
+        self.export_manager()
+            .export_meeting(&MeetingId::new(meeting_id), options, output)
+            .map(|export_result| format_export_result(&export_result))
+            .map_err(|error| format!("{error:#}"))
+    }
+    fn export_all(&self, options: &ExportOptions, output: Option<&Path>) -> Result<String, String> {
+        self.export_manager()
+            .export_all(options, output)
+            .map(|export_result| format_export_result(&export_result))
+            .map_err(|error| format!("{error:#}"))
     }
 }
 

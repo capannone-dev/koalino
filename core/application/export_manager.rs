@@ -4,7 +4,8 @@
 //! The work is split in two so drivers can keep heavy rendering off async runtimes:
 //! - `ExportManager` (read side) borrows the repositories and builds `ExportDocument` values.
 //! - `ExportWriter` (write side) owns the exporters and output directory, is `Send`, and performs
-//!   all filesystem work. `ExportManager::into_writer` hands it off after extraction.
+//!   all filesystem work. The manager only borrows it, so a driver can drop the manager (and its
+//!   repository locks) after extraction and move the writer onto a blocking thread.
 
 use std::{
     collections::HashMap,
@@ -41,7 +42,7 @@ pub struct ExportManager<'repository, NotePort: ?Sized, AttachmentPort: ?Sized, 
     note_repository: &'repository NotePort,
     attachment_repository: &'repository AttachmentPort,
     voice_database: &'repository VoicePort,
-    writer: ExportWriter,
+    writer: &'repository ExportWriter,
 }
 
 impl<'repository, NotePort, AttachmentPort, VoicePort>
@@ -53,15 +54,15 @@ where
 {
     /// Creates an export orchestrator from injected ports and a configured writer.
     ///
-    /// Inputs: Borrowed meeting, attachment, and voice-identity ports; `writer` holds exporters
-    /// and the default output directory.
+    /// Inputs: Borrowed meeting, attachment, and voice-identity ports; borrowed `writer` holding
+    /// exporters and the default output directory.
     /// Outputs: A manager ready to export.
     /// Side effects: None.
     pub fn new(
         note_repository: &'repository NotePort,
         attachment_repository: &'repository AttachmentPort,
         voice_database: &'repository VoicePort,
-        writer: ExportWriter,
+        writer: &'repository ExportWriter,
     ) -> Self {
         Self {
             note_repository,
@@ -69,15 +70,6 @@ where
             voice_database,
             writer,
         }
-    }
-
-    /// Releases the repository borrows and returns the writer for off-thread rendering.
-    ///
-    /// Inputs: None.
-    /// Outputs: The owned `ExportWriter`.
-    /// Side effects: None.
-    pub fn into_writer(self) -> ExportWriter {
-        self.writer
     }
 
     /// Extracts and writes one meeting.

@@ -38,6 +38,15 @@ The application MUST be deployed across the following platforms, adhering to the
 *   **Offline-First Sync:** The system MUST function 100% offline. When a node reconnects, it MUST seamlessly synchronize its repository with all other peers without data loss or complex manual merge conflicts.
 *   **Shared State:** Voice signature libraries and meeting repositories MUST be shared across the P2P network.
 
+### 3.3.1 Meeting Export
+*   **Formats:** Meetings MUST be exportable as Markdown, PDF, and versioned JSON (schema `1.0`, documented in `core/adapters/export/README.md`). SRT is reserved for a future release.
+*   **Interfaces:** The CLI (`meetings export`, `meetings export-all`), the HTTP API (`POST /api/meetings/{id}/export`), and the Flutter FFI (`note_taker_export_meeting`) MUST share the same `ExportManager`.
+*   **Default export directory:** `~/Documents/NoteTaker/exports/`, overridable with the `NOTE_TAKER_EXPORT_DIR` environment variable. The CLI `--output` flag and the FFI `output_path` option override both.
+*   **Filename pattern:** `{date}_{meeting_id}_{export timestamp}.{ext}` for single meetings and `meetings-export_{count}_{export timestamp}.{ext}` for batches, sanitized to `[A-Za-z0-9._-]` and suffixed `-N` on collision. Meeting titles are not stored yet, so the meeting ID stands in for `{meeting_title}`.
+*   **Attachments:** Markdown links copies placed beside the export, PDF embeds images inline and other files as PDF attachments, and JSON lists original file paths. Source files are never modified.
+*   **Privacy:** Exports MUST NOT contain voice embeddings or raw audio.
+*   **PDF template customization:** Future work. PDFs currently use the built-in Helvetica faces, which cover only WinAnsi (Latin-1-like) characters.
+
 ### 3.4 Distributed AI Compute & Routing
 *   **Device Manifests:** Every node MUST broadcast a manifest detailing its hardware capabilities (e.g., GPU VRAM, CPU cores, available models).
 *   **Workload Routing:** Users MUST be able to select where AI workloads run: `Local Device`, `Specific Remote Device`, or `Auto` (system selects the best fit based on manifests).

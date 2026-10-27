@@ -331,3 +331,127 @@ async fn websocket_client_receives_a_local_meeting_event() {
     );
     server_task.abort();
 }
+
+/// Sends `POST /api/meetings/{meeting_id}/export` with a JSON body.
+async fn post_export(meeting_id: &str, json_body: &str) -> axum::response::Response {
+    seeded_router()
+        .0
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/meetings/{meeting_id}/export"))
+                .header("content-type", "application/json")
+                .body(Body::from(String::from(json_body)))
+                .unwrap_or_else(|error| panic!("test request must build: {error}")),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("router must serve the export request: {error}"))
+}
+
+/// Reads a response header as text.
+fn header_text(response: &axum::response::Response, header_name: &str) -> String {
+    response
+        .headers()
+        .get(header_name)
+        .and_then(|header_value| header_value.to_str().ok())
+        .map(String::from)
+        .unwrap_or_default()
+}
+
+/// Verifies Markdown export returns the rendered file as a named download.
+#[tokio::test]
+async fn export_endpoint_returns_markdown_download() {
+    let response = post_export(
+        "meeting-rome",
+        r#"{"format":"markdown","options":{"include_attachments":true,"include_metadata":true}}"#,
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        header_text(&response, "content-type"),
+        "text/markdown; charset=utf-8"
+    );
+    let content_disposition = header_text(&response, "content-disposition");
+    assert!(content_disposition.starts_with("attachment; filename=\""));
+    assert!(content_disposition.contains("meeting-rome"));
+    assert!(content_disposition.ends_with(".md\""));
+    let response_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_else(|error| panic!("response body must be readable: {error}"));
+    let markdown_body = String::from_utf8_lossy(&response_bytes);
+    assert!(markdown_body.contains("# meeting-rome"));
+    assert!(markdown_body.contains("Discussed offline-first sync."));
+    assert!(markdown_body.contains("agenda.pdf"));
+}
+
+/// Verifies PDF and JSON exports return their native content types and bodies, with defaults.
+#[tokio::test]
+async fn export_endpoint_returns_pdf_and_json_bodies() {
+    let pdf_response = post_export("meeting-rome", r#"{"format":"pdf"}"#).await;
+    assert_eq!(pdf_response.status(), StatusCode::OK);
+    assert_eq!(
+        header_text(&pdf_response, "content-type"),
+        "application/pdf"
+    );
+    let pdf_bytes = axum::body::to_bytes(pdf_response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_else(|error| panic!("PDF body must be readable: {error}"));
+    assert!(pdf_bytes.starts_with(b"%PDF-"));
+
+    let json_response = post_export("meeting-rome", r#"{"format":"json"}"#).await;
+    assert_eq!(json_response.status(), StatusCode::OK);
+    assert_eq!(
+        header_text(&json_response, "content-type"),
+        "application/json"
+    );
+    let json_bytes = axum::body::to_bytes(json_response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_else(|error| panic!("JSON body must be readable: {error}"));
+    let export_json: serde_json::Value = serde_json::from_slice(&json_bytes)
+        .unwrap_or_else(|error| panic!("export body must be JSON: {error}"));
+    assert_eq!(export_json["schema_version"], "1.0");
+    assert_eq!(
+        export_json["meetings"][0]["attachments"][0]["file_path"],
+        "/fixtures/agenda.pdf"
+    );
+}
+
+/// Verifies invalid formats are 400s with a message and unknown meetings are 404s.
+#[tokio::test]
+async fn export_endpoint_rejects_bad_formats_and_unknown_meetings() {
+    for (meeting_id, json_body, expected_status) in [
+        (
+            "meeting-rome",
+            r#"{"format":"docx"}"#,
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            "meeting-rome",
+            r#"{"format":"srt"}"#,
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            "meeting-missing",
+            r#"{"format":"json"}"#,
+            StatusCode::NOT_FOUND,
+        ),
+    ] {
+        let response = post_export(meeting_id, json_body).await;
+        assert_eq!(
+            response.status(),
+            expected_status,
+            "{json_body} for {meeting_id}"
+        );
+        let response_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap_or_else(|error| panic!("error body must be readable: {error}"));
+        let error_json: serde_json::Value = serde_json::from_slice(&response_bytes)
+            .unwrap_or_else(|error| panic!("error body must be JSON: {error}"));
+        assert!(
+            error_json["error"]
+                .as_str()
+                .is_some_and(|message| !message.is_empty())
+        );
+    }
+}

@@ -11,8 +11,8 @@ use axum::{
         Path, State, WebSocketUpgrade,
         ws::{Message, WebSocket},
     },
-    http::{HeaderValue, StatusCode},
-    response::IntoResponse,
+    http::{HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
@@ -20,12 +20,16 @@ use tokio::sync::{Mutex, broadcast};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
-    application::voice_identity_manager::VoiceIdentityManager,
+    adapters::export::default_exporters,
+    application::{
+        export_manager::{ExportManager, ExportWriter},
+        voice_identity_manager::VoiceIdentityManager,
+    },
     domain::{
-        errors::StorageError,
+        errors::{ExportError, StorageError},
         models::{
-            AggregatedStats, Attachment, MeetingId, SpeakerIdentity, TaskMetrics, TaskType,
-            UnassignedVoiceClip,
+            AggregatedStats, Attachment, ExportFormat, ExportOptions, MeetingId, SpeakerIdentity,
+            TaskMetrics, TaskType, UnassignedVoiceClip,
         },
     },
     ports::{
@@ -110,6 +114,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
     Router::new()
         .route("/api/meetings", get(list_meetings))
         .route("/api/meetings/{meeting_id}", get(get_meeting))
+        .route("/api/meetings/{meeting_id}/export", post(export_meeting))
         .route("/api/voice-gallery", get(get_voice_gallery))
         .route("/api/voice/assign", post(assign_voice_clip))
         .route("/api/telemetry", get(get_telemetry))
@@ -123,7 +128,9 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .layer(
             CorsLayer::new()
                 .allow_origin(HeaderValue::from_static("http://localhost:3000"))
-                .allow_methods([axum::http::Method::GET, axum::http::Method::POST]),
+                .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+                .allow_headers([header::CONTENT_TYPE])
+                .expose_headers([header::CONTENT_DISPOSITION]),
         )
         .layer(TraceLayer::new_for_http())
         .with_state(application_state)
@@ -162,6 +169,153 @@ async fn get_meeting(
         transcript: transcript.map(|value| String::from(value.content())),
         attachments: attachments.iter().map(AttachmentSummary::from).collect(),
     }))
+}
+
+/// Request body for `POST /api/meetings/{meeting_id}/export`.
+#[derive(Deserialize)]
+struct ExportRequestBody {
+    /// `markdown`/`md`, `pdf`, or `json`.
+    format: String,
+    /// Optional inclusion policy; omitted fields default to `true`.
+    #[serde(default)]
+    options: ExportRequestOptions,
+}
+
+/// Inclusion flags accepted by the export endpoint.
+#[derive(Default, Deserialize)]
+struct ExportRequestOptions {
+    include_attachments: Option<bool>,
+    include_metadata: Option<bool>,
+}
+
+/// JSON error body returned by the export endpoint.
+#[derive(Serialize)]
+struct ExportErrorBody {
+    error: String,
+}
+
+/// Exports one meeting and returns the rendered file as a download.
+///
+/// Inputs: The meeting ID path segment and an `ExportRequestBody` JSON body.
+/// Outputs: `200` with the file bytes, `Content-Type` for the format, and a
+/// `Content-Disposition: attachment` filename; `400` for unknown or unsupported formats; `404`
+/// for unknown meetings; `500` for storage or rendering failures. Errors are `{"error": "…"}`.
+/// Side effects: Reads repositories under their locks, then renders on a blocking thread into a
+/// per-request temporary directory that is deleted before responding. Markdown downloads contain
+/// only the `.md` file, so attachment links point to files that are not bundled.
+async fn export_meeting(
+    Path(meeting_identifier): Path<String>,
+    State(application_state): State<ServerAppState>,
+    Json(request_body): Json<ExportRequestBody>,
+) -> Response {
+    tracing::info!(endpoint = "/api/meetings/:meeting_id/export", meeting_id = %meeting_identifier, "headless API request received");
+    let format = match request_body.format.parse::<ExportFormat>() {
+        Ok(format) => format,
+        Err(error) => return export_error_response(StatusCode::BAD_REQUEST, error.to_string()),
+    };
+    let options = ExportOptions::new(
+        format,
+        request_body.options.include_attachments.unwrap_or(true),
+        request_body.options.include_metadata.unwrap_or(true),
+        None,
+    );
+    let request_directory = std::env::temp_dir()
+        .join("note-taker-http-exports")
+        .join(uuid::Uuid::new_v4().to_string());
+    let export_writer = ExportWriter::new(default_exporters(), &request_directory);
+    let document = {
+        let repositories = application_state.repositories.lock().await;
+        let voice_database = application_state.voice_database.lock().await;
+        let export_manager = ExportManager::new(
+            &**repositories,
+            &**repositories,
+            &**voice_database,
+            &export_writer,
+        );
+        export_writer
+            .ensure_format_supported(format)
+            .map_err(anyhow::Error::from)
+            .and_then(|()| {
+                export_manager.extract_meeting(&MeetingId::new(meeting_identifier), &options)
+            })
+    };
+    let document = match document {
+        Ok(document) => document,
+        Err(error) => return export_failure_response(&error),
+    };
+    let rendering_outcome = tokio::task::spawn_blocking(move || {
+        let write_outcome = export_writer
+            .write(vec![document], &options, None)
+            .and_then(|export_result| {
+                let file_bytes = std::fs::read(export_result.file_path())?;
+                Ok((export_result, file_bytes))
+            });
+        let _ = std::fs::remove_dir_all(&request_directory);
+        write_outcome
+    })
+    .await;
+    match rendering_outcome {
+        Ok(Ok((export_result, file_bytes))) => {
+            let download_name = std::path::Path::new(export_result.file_path())
+                .file_name()
+                .and_then(|file_name| file_name.to_str())
+                .unwrap_or("export")
+                .replace('"', "_");
+            (
+                StatusCode::OK,
+                [
+                    (header::CONTENT_TYPE, export_content_type(format)),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        format!("attachment; filename=\"{download_name}\""),
+                    ),
+                ],
+                file_bytes,
+            )
+                .into_response()
+        }
+        Ok(Err(error)) => export_failure_response(&error),
+        Err(_) => export_error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            String::from("export task was cancelled"),
+        ),
+    }
+}
+
+/// Returns the HTTP media type for an export format.
+fn export_content_type(format: ExportFormat) -> String {
+    String::from(match format {
+        ExportFormat::Markdown => "text/markdown; charset=utf-8",
+        ExportFormat::Pdf => "application/pdf",
+        ExportFormat::Json => "application/json",
+        ExportFormat::Srt => "application/x-subrip",
+    })
+}
+
+/// Maps an export failure to a status code, keeping internal details out of 500 responses.
+fn export_failure_response(error: &anyhow::Error) -> Response {
+    match error.downcast_ref::<ExportError>() {
+        Some(ExportError::MeetingNotFound { .. }) => {
+            export_error_response(StatusCode::NOT_FOUND, error.to_string())
+        }
+        Some(
+            ExportError::UnknownFormat { .. }
+            | ExportError::UnsupportedFormat { .. }
+            | ExportError::InvalidDateRange,
+        ) => export_error_response(StatusCode::BAD_REQUEST, error.to_string()),
+        _ => {
+            tracing::error!(error = %format!("{error:#}"), "meeting export failed");
+            export_error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                String::from("meeting export failed"),
+            )
+        }
+    }
+}
+
+/// Builds a JSON error response.
+fn export_error_response(status_code: StatusCode, message: String) -> Response {
+    (status_code, Json(ExportErrorBody { error: message })).into_response()
 }
 
 /// Returns speaker labels and metadata-only unresolved review items for the local gallery.

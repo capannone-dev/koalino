@@ -44,6 +44,12 @@
 | #14 Attachment import UI, file picking, and meeting suggestion workflow | Ready for review | File-picker seam, JSON-only AttachmentManager FFI, Riverpod controller parsing, Material 3 ranked confirmation dialog, and fake-boundary widget tests. |
 | #25 Flutter telemetry dashboard | Ready for review | Caller-freed telemetry FFI JSON, polling controller, responsive Material 3 fl_chart dashboard, and drawer navigation. |
 
+## WP10: Meeting export
+
+| Issue | Status | Scope |
+| --- | --- | --- |
+| #26 Meeting export to Markdown, PDF, and JSON | Ready for review | Persisted speaker-attributed transcript segments, `MeetingExporter` port with Markdown/PDF/JSON adapters, `ExportManager` extraction and attachment staging, and shared CLI/HTTP/FFI entry points with in-memory SQLite tests. |
+
 ## WP7: Headless server API
 
 | Issue | Status | Scope |
@@ -78,6 +84,10 @@
 | Issue #21 attachment file transfer | Ready for review | Separate file-transfer behaviour, SHA-256 CAS, explicit chunk frames, mocked manager tests, and encrypted memory-transport verification. |
 
 ## Follow-up work
+
+- Populate `transcript_segments` from the transcription and diarization pipeline. Exports read them, but the pipeline still persists only flat transcript text and keeps strong speaker attributions in memory.
+- Persist meeting titles and speaker display names so exports can show them instead of meeting IDs and `Unknown speaker`.
+- Add a Dart binding and UI for `note_taker_export_meeting`.
 
 - Define validation and IDs suitable for CRDT replication before storage adapters are introduced.
 - Add mock port implementations and expanded error-path tests under WP6.

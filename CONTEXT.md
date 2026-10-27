@@ -146,3 +146,12 @@ signal. Node verification remains in the existing Node 22 GitHub Actions workflo
 Issue #25 exposes privacy-safe telemetry through caller-freed Flutter FFI JSON. A Material 3
 dashboard uses an injectable bridge, ten-second polling, responsive layouts, and `fl_chart`.
 
+Issue #26 adds meeting export. `NoteRepository` gains a `transcript_segments` table
+(`save_`/`load_transcript_segments`) and `load_meeting_metadata`. `ExportManager` extracts
+`ExportDocument` values (segments with speaker names from `VoiceVectorDB`, attachments, creation
+time) and passes them to `MeetingExporter` adapters for Markdown, PDF (`printpdf` + bundled `lopdf`),
+and JSON schema `1.0`. `ExportWriter` stages attachment copies and picks collision-free filenames.
+The CLI (`meetings export`/`export-all`), `POST /api/meetings/{id}/export`, and
+`note_taker_export_meeting` all share this manager. Segments are not yet produced by the
+transcription pipeline, so current exports fall back to the flat transcript as one unattributed
+segment.

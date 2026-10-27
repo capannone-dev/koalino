@@ -60,6 +60,7 @@ impl VoiceVectorDB for NamedVoiceDatabase {
 struct ExportFixture {
     repository: SqliteNoteRepository,
     voice_database: NamedVoiceDatabase,
+    writer: ExportWriter,
     output_directory: PathBuf,
     source_directory: PathBuf,
 }
@@ -78,6 +79,7 @@ impl ExportFixture {
             voice_database: NamedVoiceDatabase {
                 identities: vec![SpeakerIdentity::new(ALICE_IDENTITY, "Alice")],
             },
+            writer: ExportWriter::new(default_exporters(), fixture_root.join("exports")),
             output_directory: fixture_root.join("exports"),
             source_directory,
         }
@@ -91,7 +93,7 @@ impl ExportFixture {
             &self.repository,
             &self.repository,
             &self.voice_database,
-            ExportWriter::new(default_exporters(), &self.output_directory),
+            &self.writer,
         )
     }
 
