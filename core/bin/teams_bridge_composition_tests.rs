@@ -30,7 +30,11 @@ use crate::{
         errors::TranscriptionError,
         models::{AudioRecording, DeviceId, MeetingId, Transcript, TranscriptionContext},
     },
-    ports::{ai::TranscriptionEngine, crypto::EmbeddingCipher, storage::AttachmentRepository},
+    ports::{
+        ai::TranscriptionEngine,
+        crypto::EmbeddingCipher,
+        storage::{AttachmentRepository, NoteRepository},
+    },
     protocol::teams_bridge::{
         AudioChunk, ExternalParticipant, MeetingMetadata, TeamsBridgeMessage, VideoFrame,
     },
@@ -251,6 +255,7 @@ async fn five_audio_chunks_are_processed_by_the_meeting_session() {
     send_frame(&mut bot, Message::text(r#"{"auth":"bridge-test-secret"}"#)).await;
     let mut metadata = MeetingMetadata::new();
     metadata.meeting_id = "19:integration@thread.v2".to_owned();
+    metadata.meeting_title = "  Weekly sync ".to_owned();
     metadata
         .participants
         .push(participant("teams-user-1", "Ada Lovelace"));
@@ -258,8 +263,13 @@ async fn five_audio_chunks_are_processed_by_the_meeting_session() {
         .participants
         .push(participant("teams-user-2", "Alan Turing"));
     let mut metadata_message = TeamsBridgeMessage::new();
-    metadata_message.set_metadata(metadata);
+    metadata_message.set_metadata(metadata.clone());
     send_frame(&mut bot, frame(&metadata_message)).await;
+    // A roster change re-sends the metadata; it must not replace the stored title.
+    metadata.meeting_title = "Renamed by Teams".to_owned();
+    let mut resent_metadata_message = TeamsBridgeMessage::new();
+    resent_metadata_message.set_metadata(metadata);
+    send_frame(&mut bot, frame(&resent_metadata_message)).await;
     for chunk_index in 0..5_u64 {
         let mut audio = AudioChunk::new();
         let speaker = if chunk_index % 2 == 0 {
@@ -327,4 +337,14 @@ async fn five_audio_chunks_are_processed_by_the_meeting_session() {
         .get_attachments_for_meeting(&meeting_id)
         .unwrap_or_else(|error| panic!("attachments should load: {error}"));
     assert_eq!(attachments.len(), 1);
+    let stored_title = installation
+        .note_repository()
+        .load_meeting_metadata(&meeting_id)
+        .unwrap_or_else(|error| panic!("metadata should load: {error}"))
+        .and_then(|meeting_metadata| {
+            meeting_metadata
+                .title()
+                .map(|title| title.as_str().to_owned())
+        });
+    assert_eq!(stored_title.as_deref(), Some("Weekly sync"));
 }

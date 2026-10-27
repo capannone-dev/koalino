@@ -54,7 +54,7 @@ use crate::{
         recording_manager::{ExternalChunkRequest, RecordingManager, SharedIdentityMapper},
         teams_processor::TeamsIdentityMapper,
     },
-    domain::models::{AudioRecording, DeviceId, MeetingId, RecordingId},
+    domain::models::{AudioRecording, DeviceId, MeetingId, MeetingTitle, RecordingId},
     pipeline_composition::parse_flag,
     ports::{crypto::EmbeddingCipher, external_bridge::AttachmentWorkflow},
     recording_controller::RecordingController,
@@ -455,7 +455,8 @@ where
 
     /// Opens (or resumes) the worker's external session for `meeting`.
     ///
-    /// Side effects: May create the meeting in SQLite and end a previous external meeting.
+    /// Side effects: May create the meeting in SQLite, store its Teams title, and end a previous
+    /// external meeting.
     fn begin_meeting(&mut self, meeting: &BridgeMeeting) {
         match self.ports.recording_manager.begin_external_meeting(
             meeting.meeting_id().clone(),
@@ -464,6 +465,7 @@ where
             Ok(()) => {
                 self.statistics.meetings_started += 1;
                 self.active_meeting_id = Some(meeting.meeting_id().clone());
+                self.store_title_if_untitled(meeting);
             }
             Err(error) => {
                 self.active_meeting_id = None;
@@ -473,6 +475,36 @@ where
                     "Teams meeting could not be opened; its media will be dropped"
                 );
             }
+        }
+    }
+
+    /// Stores the Teams meeting title when the local meeting has none yet (Issue #35).
+    ///
+    /// A title already stored (from an earlier metadata frame or set locally) is kept, so
+    /// re-sent metadata never overwrites it. An empty or invalid Teams title is ignored.
+    /// Side effects: Reads and may write meeting metadata on the worker thread; never logs the
+    /// title. Failures are logged and do not affect media processing.
+    fn store_title_if_untitled(&self, meeting: &BridgeMeeting) {
+        let Ok(teams_title) = MeetingTitle::parse(meeting.title()) else {
+            return;
+        };
+        let meeting_id = meeting.meeting_id().clone();
+        let stored = self
+            .ports
+            .recording_manager
+            .with_note_repository(move |note_repository| {
+                match note_repository.load_meeting_metadata(&meeting_id)? {
+                    Some(metadata) if metadata.title().is_none() => {
+                        note_repository.save_meeting_title(&meeting_id, &teams_title)
+                    }
+                    _ => Ok(()),
+                }
+            });
+        if let Err(error) = stored
+            .map_err(|error| error.to_string())
+            .and_then(|stored| stored.map_err(|error| error.to_string()))
+        {
+            tracing::warn!(error = %error, "Teams meeting title could not be stored");
         }
     }
 
