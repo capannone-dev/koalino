@@ -164,7 +164,8 @@ impl RecordingManager {
                 let factory = match build_pipeline() {
                     Ok(factory) => factory,
                     Err(error) => {
-                        let _ = ready_sender.send(Err(error.to_string()));
+                        // `{:#}` includes the cause chain of `anyhow` errors.
+                        let _ = ready_sender.send(Err(format!("{error:#}")));
                         return;
                     }
                 };

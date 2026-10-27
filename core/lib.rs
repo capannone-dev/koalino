@@ -14,9 +14,12 @@ pub mod domain;
 /// Exposes the C-compatible Flutter bridge without leaking Rust domain types across FFI.
 #[path = "bin/ffi.rs"]
 pub mod ffi;
+/// Opens the encrypted SQLite stores for the CLI, daemon, and FFI composition roots.
+/// Composes the live meeting pipeline from environment configuration.
+#[path = "bin/pipeline_composition.rs"]
+pub mod pipeline_composition;
 /// Contains dependency-inversion traits for external capabilities.
 pub mod ports;
-/// Opens the encrypted SQLite stores for the CLI, daemon, and FFI composition roots.
 /// Drives live recordings from raw PCM through the meeting pipeline worker.
 #[path = "bin/recording_controller.rs"]
 pub mod recording_controller;

@@ -25,6 +25,9 @@ pub struct EncryptedStores {
     pub note_repository: SqliteNoteRepository,
     /// Speaker identities and voice variants.
     pub voice_store: SqliteVoiceVectorDB,
+    /// The verified cipher, for opening further connections (e.g. the recording worker's)
+    /// without unlocking the key again.
+    pub embedding_cipher: Arc<dyn EmbeddingCipher>,
 }
 
 /// Unlocks the database key and opens both stores on `database_path`.
@@ -50,11 +53,12 @@ pub fn open_encrypted_stores(
     let note_repository =
         SqliteNoteRepository::open(database_path, device_id, Arc::clone(&embedding_cipher))
             .context("unable to open the note repository")?;
-    let voice_store = SqliteVoiceVectorDB::open(database_path, embedding_cipher)
+    let voice_store = SqliteVoiceVectorDB::open(database_path, Arc::clone(&embedding_cipher))
         .context("unable to open the voice store")?;
     Ok(EncryptedStores {
         note_repository,
         voice_store,
+        embedding_cipher,
     })
 }
 

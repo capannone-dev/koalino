@@ -39,6 +39,7 @@ async fn main() -> Result<()> {
     let EncryptedStores {
         note_repository,
         voice_store,
+        ..
     } = open_encrypted_stores(
         &database_path,
         DeviceId::new("headless-server"),

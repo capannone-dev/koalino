@@ -19,7 +19,9 @@ use crate::{
     },
 };
 
-use crate::application::meeting_crdt::MeetingCrdtService;
+use crate::application::{
+    meeting_crdt::MeetingCrdtService, unknown_speaker_clusterer::ClusteringConfig,
+};
 
 use super::meeting_session::{MeetingSession, MeetingSessionError};
 
@@ -117,6 +119,8 @@ pub struct PipelineFactory<TranscriptionPort, DiarizationPort, MatcherPort, Repo
     diarization_engine: Option<DiarizationPort>,
     voice_identity_matcher: OptionalVoiceMatcher<MatcherPort>,
     note_repository: RepositoryPort,
+    /// Similarity policy every session uses to group unknown voices.
+    clustering_config: ClusteringConfig,
 }
 
 impl<TranscriptionPort, RepositoryPort>
@@ -135,6 +139,7 @@ impl<TranscriptionPort, RepositoryPort>
                 voice_identity_matcher: None,
             },
             note_repository,
+            clustering_config: ClusteringConfig::default(),
         }
     }
 }
@@ -156,6 +161,7 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
             diarization_engine,
             voice_identity_matcher: self.voice_identity_matcher,
             note_repository: self.note_repository,
+            clustering_config: self.clustering_config,
         }
     }
 
@@ -175,7 +181,18 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
                 voice_identity_matcher,
             },
             note_repository: self.note_repository,
+            clustering_config: self.clustering_config,
         }
+    }
+
+    /// Replaces the unknown-speaker clustering policy (default threshold 0.70).
+    ///
+    /// Inputs: A validated clustering configuration.
+    /// Outputs: The factory applying it to every later session.
+    /// Side effects: None.
+    pub fn with_clustering_config(mut self, clustering_config: ClusteringConfig) -> Self {
+        self.clustering_config = clustering_config;
+        self
     }
 
     /// Reports which optional dependencies are configured.
@@ -237,5 +254,6 @@ where
             &self.voice_identity_matcher,
             &self.note_repository,
         )
+        .map(|session| session.with_clustering_config(self.clustering_config))
     }
 }

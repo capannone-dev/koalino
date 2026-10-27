@@ -144,6 +144,7 @@ impl FfiRuntime {
         let EncryptedStores {
             note_repository,
             voice_store,
+            ..
         } = open_encrypted_stores(
             &database_path,
             device_id,
@@ -228,6 +229,7 @@ impl FfiRuntime {
         let EncryptedStores {
             note_repository,
             voice_store,
+            ..
         } = open_encrypted_stores(
             database_path,
             DeviceId::new("ffi-test"),

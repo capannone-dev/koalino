@@ -43,6 +43,7 @@ fn main() -> Result<()> {
     let EncryptedStores {
         note_repository: repository,
         voice_store,
+        ..
     } = open_encrypted_stores(
         &database_path,
         DeviceId::new(

@@ -665,6 +665,7 @@ fn file_backed_service(
     let crate::storage_composition::EncryptedStores {
         note_repository: repository,
         voice_store,
+        ..
     } = crate::storage_composition::open_encrypted_stores(
         database_path,
         DeviceId::new("cli-test"),

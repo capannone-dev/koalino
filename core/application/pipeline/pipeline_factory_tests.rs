@@ -14,6 +14,7 @@ use crate::{
             meeting_session::{SpeakerAttribution, VadAudioChunk},
             pipeline_factory::{PipelineAvailability, PipelineFactory},
         },
+        unknown_speaker_clusterer::ClusteringConfig,
     },
     domain::{
         errors::{DiarizationError, StorageError, TranscriptionError},
@@ -285,4 +286,60 @@ async fn sessions_reuse_the_factory_engines_across_recordings() {
     }
 
     assert_eq!(factory.transcription_engine().call_count.get(), 2);
+}
+
+/// Reports two speakers whose embeddings have cosine similarity 0.8.
+struct TwoSimilarSpeakersDiarizationEngine;
+
+#[async_trait::async_trait]
+impl DiarizationEngine for TwoSimilarSpeakersDiarizationEngine {
+    /// Returns two consecutive segments with embeddings [1, 0] and [0.8, 0.6].
+    async fn diarize(&self, _audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        Ok(vec![
+            SpeakerSegment::new(0, 1_500, vec![1.0, 0.0]),
+            SpeakerSegment::new(1_500, 3_000, vec![0.8, 0.6]),
+        ])
+    }
+}
+
+/// Returns the cluster IDs of the two unknown voices in one processed chunk.
+async fn cluster_ids_with(clustering_config: Option<ClusteringConfig>) -> Vec<Option<Uuid>> {
+    let factory = PipelineFactory::new(
+        CountingTranscriptionEngine::default(),
+        in_memory_repository(),
+    )
+    .with_diarization_engine(Some(TwoSimilarSpeakersDiarizationEngine));
+    let factory = match clustering_config {
+        Some(clustering_config) => factory.with_clustering_config(clustering_config),
+        None => factory,
+    };
+    let mut session = factory
+        .create_session(&MeetingId::new("meeting-clusters"))
+        .unwrap_or_else(|error| panic!("session should start: {error}"));
+    session
+        .process_vad_chunk(&vad_chunk("meeting-clusters", 1, 0))
+        .await
+        .unwrap_or_else(|error| panic!("chunk should process: {error}"))
+        .iter()
+        .map(|segment| match segment.attribution() {
+            SpeakerAttribution::Unknown { cluster_id, .. } => cluster_id.to_owned(),
+            other => panic!("expected an unknown voice, got {other:?}"),
+        })
+        .collect()
+}
+
+/// Verifies sessions use the factory's clustering policy: 0.8 similarity joins one cluster under
+/// the default 0.70 threshold but founds two clusters under a 0.90 threshold.
+#[tokio::test]
+async fn sessions_use_the_factory_clustering_policy() {
+    let default_clusters = cluster_ids_with(None).await;
+    assert_eq!(default_clusters.len(), 2);
+    assert!(default_clusters[0].is_some());
+    assert_eq!(default_clusters[0], default_clusters[1]);
+
+    let strict_config = ClusteringConfig::new(0.9)
+        .unwrap_or_else(|error| panic!("threshold should be valid: {error}"));
+    let strict_clusters = cluster_ids_with(Some(strict_config)).await;
+    assert_eq!(strict_clusters.len(), 2);
+    assert_ne!(strict_clusters[0], strict_clusters[1]);
 }
