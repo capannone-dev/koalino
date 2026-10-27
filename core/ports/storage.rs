@@ -220,3 +220,119 @@ pub trait AttachmentRepository {
     /// Side effects: Reads local attachment metadata without opening attachment files.
     fn get_unlinked_attachments(&self) -> Result<Vec<Attachment>, StorageError>;
 }
+
+/// Forwards every repository call through a shared reference so application services can borrow
+/// one adapter (or an unsized `dyn` port object) without taking ownership of it.
+impl<T> NoteRepository for &T
+where
+    T: NoteRepository + ?Sized,
+{
+    fn list_meeting_ids(&self) -> Result<Vec<MeetingId>, StorageError> {
+        (*self).list_meeting_ids()
+    }
+
+    fn create_meeting(
+        &self,
+        meeting_id: &MeetingId,
+        initial_crdt_document: &[u8],
+    ) -> Result<(), StorageError> {
+        (*self).create_meeting(meeting_id, initial_crdt_document)
+    }
+
+    fn save_transcript(&self, transcript: &Transcript) -> Result<(), StorageError> {
+        (*self).save_transcript(transcript)
+    }
+
+    fn load_transcript(&self, meeting_id: &MeetingId) -> Result<Option<Transcript>, StorageError> {
+        (*self).load_transcript(meeting_id)
+    }
+
+    fn save_crdt_document(
+        &self,
+        meeting_id: &MeetingId,
+        crdt_document: &[u8],
+    ) -> Result<(), StorageError> {
+        (*self).save_crdt_document(meeting_id, crdt_document)
+    }
+
+    fn load_crdt_document(&self, meeting_id: &MeetingId) -> Result<Vec<u8>, StorageError> {
+        (*self).load_crdt_document(meeting_id)
+    }
+
+    fn save_unassigned_clip(&self, clip: UnassignedVoiceClip) -> Result<(), StorageError> {
+        (*self).save_unassigned_clip(clip)
+    }
+
+    fn get_unassigned_clips(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<UnassignedVoiceClip>, StorageError> {
+        (*self).get_unassigned_clips(meeting_id)
+    }
+
+    fn get_meetings_overlapping(
+        &self,
+        timestamp: DateTime<Utc>,
+    ) -> Result<Vec<MeetingWindow>, StorageError> {
+        (*self).get_meetings_overlapping(timestamp)
+    }
+
+    fn load_meeting_metadata(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Option<MeetingMetadata>, StorageError> {
+        (*self).load_meeting_metadata(meeting_id)
+    }
+
+    fn save_transcript_segments(
+        &self,
+        meeting_id: &MeetingId,
+        segments: &[TranscriptSegment],
+    ) -> Result<(), StorageError> {
+        (*self).save_transcript_segments(meeting_id, segments)
+    }
+
+    fn load_transcript_segments(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<TranscriptSegment>, StorageError> {
+        (*self).load_transcript_segments(meeting_id)
+    }
+
+    fn save_unknown_speaker_cluster_chunk(
+        &self,
+        cluster: &UnknownSpeakerCluster,
+        chunk: &UnknownSpeakerChunk,
+    ) -> Result<(), StorageError> {
+        (*self).save_unknown_speaker_cluster_chunk(cluster, chunk)
+    }
+
+    fn load_unknown_speaker_clusters(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<UnknownSpeakerCluster>, StorageError> {
+        (*self).load_unknown_speaker_clusters(meeting_id)
+    }
+
+    fn load_unknown_speaker_cluster(
+        &self,
+        cluster_id: Uuid,
+    ) -> Result<Option<UnknownSpeakerCluster>, StorageError> {
+        (*self).load_unknown_speaker_cluster(cluster_id)
+    }
+
+    fn load_unknown_speaker_chunks(
+        &self,
+        cluster_id: Uuid,
+    ) -> Result<Vec<UnknownSpeakerChunk>, StorageError> {
+        (*self).load_unknown_speaker_chunks(cluster_id)
+    }
+
+    fn resolve_unknown_speaker_cluster(
+        &self,
+        cluster_id: Uuid,
+        identity_id: Uuid,
+    ) -> Result<(), StorageError> {
+        (*self).resolve_unknown_speaker_cluster(cluster_id, identity_id)
+    }
+}
