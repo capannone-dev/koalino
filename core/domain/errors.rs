@@ -1,6 +1,6 @@
 //! Defines portable error types returned through AI, audio, storage, and network ports.
 
-use crate::domain::models::AudioState;
+use crate::domain::models::{AudioState, ExportFormat};
 
 /// Identifies a lifecycle command rejected by an audio-capture state machine.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -103,6 +103,47 @@ pub enum StorageError {
     /// The repository rejected a value because it violates its storage invariant.
     #[error("repository rejected data: {reason}")]
     Rejected { reason: String },
+}
+
+/// Describes a meeting export that could not be selected, rendered, or written.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum ExportError {
+    /// The requested format name is not recognized by any interface.
+    #[error("unknown export format `{value}`; expected markdown, pdf, or json")]
+    UnknownFormat {
+        /// The rejected user-supplied value.
+        value: String,
+    },
+    /// The format is recognized but reserved for a future release.
+    #[error("{format} export is not supported yet")]
+    UnsupportedFormat {
+        /// The reserved format.
+        format: ExportFormat,
+    },
+    /// A batch date range ends before it starts or cannot be parsed.
+    #[error("export date range is invalid; expected an inclusive start that is not after its end")]
+    InvalidDateRange,
+    /// The requested meeting is not present in the local repository.
+    #[error("meeting {meeting_id} does not exist")]
+    MeetingNotFound {
+        /// The missing meeting identifier.
+        meeting_id: String,
+    },
+    /// A batch selection matched no meetings, so there is nothing to export.
+    #[error("no meetings matched the export selection")]
+    NoMeetingsSelected,
+    /// A filesystem operation on the export artifact or its staged attachments failed.
+    #[error("export file operation failed: {reason}")]
+    Io {
+        /// A safe description that contains no meeting text.
+        reason: String,
+    },
+    /// A renderer could not produce a valid document.
+    #[error("export rendering failed: {reason}")]
+    Rendering {
+        /// A safe description that contains no meeting text.
+        reason: String,
+    },
 }
 
 /// Describes a P2P operation that could not be completed without central routing.

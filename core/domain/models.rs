@@ -3,6 +3,516 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use crate::domain::errors::ExportError;
+
+/// Selects the portable representation written by a meeting export request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum ExportFormat {
+    /// Human-readable Markdown suitable for editors and source control.
+    Markdown,
+    /// Paginated Portable Document Format suitable for sharing and printing.
+    Pdf,
+    /// Versioned structured data suitable for external integrations.
+    Json,
+    /// Reserved SubRip subtitle output; parsing accepts it but no exporter implements it yet.
+    Srt,
+}
+
+impl ExportFormat {
+    /// Returns the conventional filename suffix for this format.
+    ///
+    /// Inputs: None.
+    /// Outputs: A lowercase extension without a leading dot.
+    /// Side effects: None.
+    pub fn file_extension(self) -> &'static str {
+        match self {
+            Self::Markdown => "md",
+            Self::Pdf => "pdf",
+            Self::Json => "json",
+            Self::Srt => "srt",
+        }
+    }
+
+    /// Returns the canonical lowercase name accepted by every driving interface.
+    ///
+    /// Inputs: None.
+    /// Outputs: `markdown`, `pdf`, `json`, or `srt`.
+    /// Side effects: None.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Markdown => "markdown",
+            Self::Pdf => "pdf",
+            Self::Json => "json",
+            Self::Srt => "srt",
+        }
+    }
+}
+
+impl std::fmt::Display for ExportFormat {
+    /// Writes the canonical lowercase format name.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for ExportFormat {
+    type Err = ExportError;
+
+    /// Parses a case-insensitive format name (`markdown`/`md`, `pdf`, `json`, `srt`).
+    ///
+    /// Inputs: `value` is user-supplied text from a CLI flag, HTTP body, or FFI string.
+    /// Outputs: The matching format or `ExportError::UnknownFormat`.
+    /// Side effects: None.
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "markdown" | "md" => Ok(Self::Markdown),
+            "pdf" => Ok(Self::Pdf),
+            "json" => Ok(Self::Json),
+            "srt" => Ok(Self::Srt),
+            _ => Err(ExportError::UnknownFormat {
+                value: String::from(value),
+            }),
+        }
+    }
+}
+
+/// Narrows a batch export to meetings created in an inclusive UTC date range.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExportDateRange {
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+}
+
+impl ExportDateRange {
+    /// Creates an inclusive export date range.
+    ///
+    /// Inputs: `start` and `end` are UTC instants.
+    /// Outputs: The range, or `ExportError::InvalidDateRange` when `start` is after `end`.
+    /// Side effects: None.
+    pub fn new(start: DateTime<Utc>, end: DateTime<Utc>) -> Result<Self, ExportError> {
+        if start > end {
+            return Err(ExportError::InvalidDateRange);
+        }
+        Ok(Self { start, end })
+    }
+
+    /// Returns the inclusive UTC start instant.
+    pub fn start(&self) -> DateTime<Utc> {
+        self.start
+    }
+
+    /// Returns the inclusive UTC end instant.
+    pub fn end(&self) -> DateTime<Utc> {
+        self.end
+    }
+
+    /// Reports whether `timestamp` lies inside this inclusive range.
+    ///
+    /// Inputs: `timestamp` is a UTC instant such as a meeting creation time.
+    /// Outputs: `true` when `start <= timestamp <= end`.
+    /// Side effects: None.
+    pub fn contains(&self, timestamp: DateTime<Utc>) -> bool {
+        self.start <= timestamp && timestamp <= self.end
+    }
+}
+
+/// Configures one meeting or batch export request without exposing transport-specific values.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExportOptions {
+    format: ExportFormat,
+    include_attachments: bool,
+    include_metadata: bool,
+    date_range: Option<ExportDateRange>,
+}
+
+impl ExportOptions {
+    /// Creates export options with explicit inclusion policy and an optional batch date range.
+    ///
+    /// Inputs: `format` selects the exporter; the booleans control attachment and metadata
+    /// sections; `date_range` filters batch selection and is ignored for explicit meeting IDs.
+    /// Outputs: Immutable options.
+    /// Side effects: None.
+    pub fn new(
+        format: ExportFormat,
+        include_attachments: bool,
+        include_metadata: bool,
+        date_range: Option<ExportDateRange>,
+    ) -> Self {
+        Self {
+            format,
+            include_attachments,
+            include_metadata,
+            date_range,
+        }
+    }
+
+    /// Returns defaults for one format: attachments and metadata included, no date filter.
+    pub fn for_format(format: ExportFormat) -> Self {
+        Self::new(format, true, true, None)
+    }
+
+    /// Returns the selected output format.
+    pub fn format(&self) -> ExportFormat {
+        self.format
+    }
+
+    /// Reports whether attachment references (and staged copies) belong in the output.
+    pub fn include_attachments(&self) -> bool {
+        self.include_attachments
+    }
+
+    /// Reports whether the meeting metadata header (date, duration, participants) belongs in output.
+    pub fn include_metadata(&self) -> bool {
+        self.include_metadata
+    }
+
+    /// Borrows the optional inclusive batch-selection range.
+    pub fn date_range(&self) -> Option<&ExportDateRange> {
+        self.date_range.as_ref()
+    }
+}
+
+/// Reports the file created by an export adapter without including meeting text or attachment bytes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExportResult {
+    file_path: String,
+    format: ExportFormat,
+    size_bytes: u64,
+    /// Safe key/value facts such as `schema_version` and `meeting_count`.
+    metadata: Vec<(String, String)>,
+}
+
+impl ExportResult {
+    /// Creates an immutable successful export summary.
+    ///
+    /// Inputs: `file_path` is the written artifact; `size_bytes` its final length; `metadata`
+    /// contains display-safe facts only.
+    /// Outputs: The summary.
+    /// Side effects: None.
+    pub fn new(
+        file_path: impl Into<String>,
+        format: ExportFormat,
+        size_bytes: u64,
+        metadata: Vec<(String, String)>,
+    ) -> Self {
+        Self {
+            file_path: file_path.into(),
+            format,
+            size_bytes,
+            metadata,
+        }
+    }
+
+    /// Borrows the created file's local path.
+    pub fn file_path(&self) -> &str {
+        &self.file_path
+    }
+
+    /// Returns the format used to create the result.
+    pub fn format(&self) -> ExportFormat {
+        self.format
+    }
+
+    /// Returns the final byte length observed after writing.
+    pub fn size_bytes(&self) -> u64 {
+        self.size_bytes
+    }
+
+    /// Borrows safe result metadata, such as schema version or exported meeting count.
+    pub fn metadata(&self) -> &[(String, String)] {
+        &self.metadata
+    }
+
+    /// Looks up one metadata value by key.
+    ///
+    /// Inputs: `key` is a metadata name such as `meeting_count`.
+    /// Outputs: The first matching value, if present.
+    /// Side effects: None.
+    pub fn metadata_value(&self, key: &str) -> Option<&str> {
+        self.metadata
+            .iter()
+            .find(|(metadata_key, _)| metadata_key == key)
+            .map(|(_, metadata_value)| metadata_value.as_str())
+    }
+}
+
+/// Represents attachment metadata prepared for rendering.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExportAttachment {
+    attachment_id: Uuid,
+    /// Original repository path of the attachment; never modified by export.
+    file_path: String,
+    mime_type: String,
+    original_timestamp: DateTime<Utc>,
+    /// Export-owned copy of the file, set by the application layer when staging succeeded.
+    staged_path: Option<String>,
+}
+
+impl ExportAttachment {
+    /// Creates attachment metadata for an export document without a staged copy.
+    ///
+    /// Inputs: Values copied from a persisted `Attachment`.
+    /// Outputs: Renderer-ready attachment metadata.
+    /// Side effects: None.
+    pub fn new(
+        attachment_id: Uuid,
+        file_path: impl Into<String>,
+        mime_type: impl Into<String>,
+        original_timestamp: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            attachment_id,
+            file_path: file_path.into(),
+            mime_type: mime_type.into(),
+            original_timestamp,
+            staged_path: None,
+        }
+    }
+
+    /// Records the export-owned copy that renderers may read or link to.
+    ///
+    /// Inputs: `staged_path` is a readable copy created by the export orchestrator.
+    /// Outputs: The updated attachment metadata.
+    /// Side effects: None.
+    pub fn with_staged_path(mut self, staged_path: impl Into<String>) -> Self {
+        self.staged_path = Some(staged_path.into());
+        self
+    }
+
+    /// Returns the attachment's stable UUID.
+    pub fn attachment_id(&self) -> Uuid {
+        self.attachment_id
+    }
+
+    /// Borrows the original source file path.
+    pub fn file_path(&self) -> &str {
+        &self.file_path
+    }
+
+    /// Borrows the declared MIME type.
+    pub fn mime_type(&self) -> &str {
+        &self.mime_type
+    }
+
+    /// Returns the original UTC acquisition timestamp.
+    pub fn original_timestamp(&self) -> DateTime<Utc> {
+        self.original_timestamp
+    }
+
+    /// Borrows the staged export copy, when one exists.
+    pub fn staged_path(&self) -> Option<&str> {
+        self.staged_path.as_deref()
+    }
+
+    /// Returns the source file name, falling back to `attachment` for path-less values.
+    pub fn display_name(&self) -> &str {
+        std::path::Path::new(&self.file_path)
+            .file_name()
+            .and_then(|file_name| file_name.to_str())
+            .unwrap_or("attachment")
+    }
+
+    /// Reports whether the declared MIME type is an image that renderers may show inline.
+    pub fn is_image(&self) -> bool {
+        self.mime_type.starts_with("image/")
+    }
+}
+
+/// Represents one speaker-attributed transcript interval prepared for export rendering.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExportTranscriptSegment {
+    start_time_ms: u64,
+    end_time_ms: u64,
+    /// The resolved identity, or `None` when the segment is unattributed.
+    speaker_identity_id: Option<Uuid>,
+    speaker: String,
+    text: String,
+}
+
+impl ExportTranscriptSegment {
+    /// Creates one time-bounded transcript segment with a resolved speaker label.
+    ///
+    /// Inputs: Offsets from the meeting start in milliseconds, the optional identity UUID, the
+    /// human-readable speaker label, and the segment text.
+    /// Outputs: Renderer-ready segment.
+    /// Side effects: None.
+    pub fn new(
+        start_time_ms: u64,
+        end_time_ms: u64,
+        speaker_identity_id: Option<Uuid>,
+        speaker: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Self {
+        Self {
+            start_time_ms,
+            end_time_ms,
+            speaker_identity_id,
+            speaker: speaker.into(),
+            text: text.into(),
+        }
+    }
+
+    /// Returns the start offset in milliseconds.
+    pub fn start_time_ms(&self) -> u64 {
+        self.start_time_ms
+    }
+
+    /// Returns the end offset in milliseconds.
+    pub fn end_time_ms(&self) -> u64 {
+        self.end_time_ms
+    }
+
+    /// Returns the attributed identity, if any.
+    pub fn speaker_identity_id(&self) -> Option<Uuid> {
+        self.speaker_identity_id
+    }
+
+    /// Borrows the human-readable speaker label.
+    pub fn speaker(&self) -> &str {
+        &self.speaker
+    }
+
+    /// Borrows the segment text.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+}
+
+/// Carries all format-neutral data for one meeting that a renderer needs.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExportDocument {
+    meeting_id: MeetingId,
+    title: String,
+    started_at: DateTime<Utc>,
+    transcript_segments: Vec<ExportTranscriptSegment>,
+    attachments: Vec<ExportAttachment>,
+    /// Identities referenced by at least one segment; never contains embeddings.
+    voice_identities: Vec<SpeakerIdentity>,
+}
+
+impl ExportDocument {
+    /// Creates a complete, immutable renderer input assembled by the application layer.
+    ///
+    /// Inputs: Meeting identity and title, UTC start instant, ordered segments, attachments, and
+    /// the identities referenced by those segments.
+    /// Outputs: The export document.
+    /// Side effects: None.
+    pub fn new(
+        meeting_id: MeetingId,
+        title: impl Into<String>,
+        started_at: DateTime<Utc>,
+        transcript_segments: Vec<ExportTranscriptSegment>,
+        attachments: Vec<ExportAttachment>,
+        voice_identities: Vec<SpeakerIdentity>,
+    ) -> Self {
+        Self {
+            meeting_id,
+            title: title.into(),
+            started_at,
+            transcript_segments,
+            attachments,
+            voice_identities,
+        }
+    }
+
+    /// Replaces attachment metadata, typically after the orchestrator staged copies.
+    pub fn with_attachments(mut self, attachments: Vec<ExportAttachment>) -> Self {
+        self.attachments = attachments;
+        self
+    }
+
+    /// Borrows the stable meeting identifier.
+    pub fn meeting_id(&self) -> &MeetingId {
+        &self.meeting_id
+    }
+
+    /// Borrows the display title.
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    /// Returns the UTC meeting start time.
+    pub fn started_at(&self) -> DateTime<Utc> {
+        self.started_at
+    }
+
+    /// Borrows ordered transcript segments.
+    pub fn transcript_segments(&self) -> &[ExportTranscriptSegment] {
+        &self.transcript_segments
+    }
+
+    /// Borrows attachment metadata.
+    pub fn attachments(&self) -> &[ExportAttachment] {
+        &self.attachments
+    }
+
+    /// Borrows identities referenced by the transcript.
+    pub fn voice_identities(&self) -> &[SpeakerIdentity] {
+        &self.voice_identities
+    }
+
+    /// Returns the meeting duration as the latest segment end offset (0 without segments).
+    pub fn duration_ms(&self) -> u64 {
+        self.transcript_segments
+            .iter()
+            .map(ExportTranscriptSegment::end_time_ms)
+            .max()
+            .unwrap_or_default()
+    }
+
+    /// Returns distinct speaker labels in order of first appearance.
+    pub fn participants(&self) -> Vec<&str> {
+        let mut participants: Vec<&str> = Vec::new();
+        for segment in &self.transcript_segments {
+            if !participants.contains(&segment.speaker()) {
+                participants.push(segment.speaker());
+            }
+        }
+        participants
+    }
+
+    /// Counts whitespace-delimited words across all segments.
+    pub fn word_count(&self) -> usize {
+        self.transcript_segments
+            .iter()
+            .map(|segment| segment.text().split_whitespace().count())
+            .sum()
+    }
+
+    /// Totals speaking time per speaker label, sorted by label for deterministic output.
+    ///
+    /// Inputs: None.
+    /// Outputs: `(speaker, milliseconds)` pairs; inverted segment bounds count as zero.
+    /// Side effects: None.
+    pub fn speaking_time_by_speaker(&self) -> Vec<(String, u64)> {
+        let mut speaking_totals = std::collections::BTreeMap::<&str, u64>::new();
+        for segment in &self.transcript_segments {
+            *speaking_totals.entry(segment.speaker()).or_default() += segment
+                .end_time_ms()
+                .saturating_sub(segment.start_time_ms());
+        }
+        speaking_totals
+            .into_iter()
+            .map(|(speaker, total_ms)| (String::from(speaker), total_ms))
+            .collect()
+    }
+}
+
+/// Formats a millisecond offset as zero-padded `HH:MM:SS` (hours grow beyond two digits if needed).
+///
+/// Inputs: `offset_ms` is a non-negative duration or offset.
+/// Outputs: Text such as `01:02:05`; sub-second remainders are truncated.
+/// Side effects: None.
+pub fn format_export_offset(offset_ms: u64) -> String {
+    let total_seconds = offset_ms / 1_000;
+    format!(
+        "{:02}:{:02}:{:02}",
+        total_seconds / 3_600,
+        (total_seconds % 3_600) / 60,
+        total_seconds % 60
+    )
+}
+
 /// Describes the lifecycle of an audio-capture session without exposing a platform stream.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AudioState {

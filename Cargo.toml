@@ -35,6 +35,7 @@ chrono = { version = "0.4.42", default-features = false, features = ["clock", "s
 clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.31"
 libp2p = { version = "0.56.0", features = ["macros", "mdns", "noise", "request-response", "tcp", "tokio", "yamux"] }
+printpdf = { version = "0.7.0", features = ["embedded_images"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }

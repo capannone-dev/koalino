@@ -9,3 +9,8 @@ adapters. `ai/local_whisper_cpp.rs` is compiled only with `--features local-ai`;
 voice-vector adapter is deliberately lightweight and test-oriented;
 it performs cosine similarity locally and must be replaced by an encrypted-at-rest production
 adapter without changing the application or domain boundaries.
+
+`export/` implements the `MeetingExporter` port for Markdown, PDF (`printpdf` with its bundled
+`lopdf`), and versioned JSON. `export::default_exporters()` supplies all three to composition roots,
+and `export::default_export_directory()` resolves `NOTE_TAKER_EXPORT_DIR` or
+`~/Documents/NoteTaker/exports`. See `export/README.md` for formats and the JSON schema.

@@ -39,3 +39,11 @@ media and slide values, never a provider SDK. `IdentityMapper` maps the stable
 `display_name` through `ExternalIdentityRepository` when needed. `VoiceEmbeddingExtractor` and
 `AttachmentWorkflow` keep isolated-audio enrollment and slide routing behind independently mocked
 ports.
+
+`export.rs` defines `MeetingExporter`, the renderer contract for meeting exports. Its
+`export_meeting`/`export_meetings` methods receive fully extracted `ExportDocument` values plus
+`ExportOptions` and a destination path, and return an `ExportResult` or a portable `ExportError`.
+Exporters never receive meeting IDs or repositories, so data selection stays in
+`application::export_manager` and format adapters remain pure presentation. `NoteRepository` also
+exposes `load_meeting_metadata` and `save_`/`load_transcript_segments` so exports can show
+speaker-attributed, timestamped transcripts.
