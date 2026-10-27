@@ -8,6 +8,10 @@ pub mod ai_registry;
 pub mod attachment_manager;
 #[cfg(test)]
 mod attachment_manager_tests;
+/// Lists unknown-speaker clusters and assigns them to named identities for driving adapters.
+pub mod cluster_review;
+#[cfg(test)]
+mod cluster_review_tests;
 /// Defines compute-routing policy seams for future distributed AI selection.
 pub mod compute_router;
 #[cfg(test)]
