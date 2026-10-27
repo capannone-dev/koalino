@@ -11,7 +11,7 @@ The initial Rust scaffold is verified with `make rust-lint`, `make rust-test`, a
 ## Project documents
 
 - [Architecture](ARCHITECTURE.md)
-- [Requirements](REQUIRMENTS.md) (current repository filename)
+- [Requirements](REQUIREMENTS.md)
 - [API contract](API_SPECS.md)
 - [Engineering context](CONTEXT.md)
 - [Task board](TASK_BOARD.md)

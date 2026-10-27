@@ -7,7 +7,7 @@
 - Adopted the documented hexagonal layout: domain, ports, application, adapters, and binary composition roots.
 - Kept AI, P2P, storage, and CRDT integrations behind traits; no heavyweight model dependencies were added.
 - Selected `tracing`, `tracing-subscriber`, and `tracing-appender` for required JSON stdout and daily rolling-file logs. The filter is reloadable at runtime.
-- The repository currently spells the requirements file `REQUIRMENTS.md`; links retain that existing filename to avoid an unrelated rename.
+- The repository currently spells the requirements file `REQUIRMENTS.md`; links retain that existing filename to avoid an unrelated rename. Superseded on 2026-10-27: the file was renamed to `REQUIREMENTS.md` at the owner's request.
 
 ## 2026-10-25 — Issue #2 SQLite and Automerge storage
 
