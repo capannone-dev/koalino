@@ -2,7 +2,7 @@
 //!
 //! `speaker_identities` holds one row per person (UUID, display name, creation and update
 //! times); `voice_variants` holds one row per acoustic signature variant with its derived
-//! embedding as a little-endian `f32` BLOB. Every variant must belong to a stored identity.
+//! embedding sealed by the injected `EmbeddingCipher` (AES-256-GCM, bound to the variant ID). Every variant must belong to a stored identity.
 //! Similarity search loads the variants and ranks them by cosine similarity in Rust, which is
 //! adequate for a personal voice library of tens to hundreds of variants.
 //!
@@ -11,10 +11,10 @@
 //! may create its tables first. Schema creation is idempotent, so databases created before
 //! Issue #30 gain the voice tables on first open without any existing table being altered.
 //!
-//! Embeddings follow the existing clip and cluster at-rest policy: unencrypted until an
-//! AES-256-GCM crate is approved. They are never logged.
+//! Embeddings are encrypted at rest (Issue #31) and never logged. Opening the store re-encrypts
+//! any plaintext variant written before #31 (see `sqlite_embedding_encryption`).
 
-use std::{path::Path, time::Duration};
+use std::{path::Path, sync::Arc, time::Duration};
 
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -22,14 +22,15 @@ use uuid::Uuid;
 
 use super::{
     in_memory_voice_vector_db::{cosine_similarity, validate_vector},
-    sqlite_adapter::{decode_embedding, encode_embedding, sqlite_error},
+    sqlite_adapter::sqlite_error,
+    sqlite_embedding_encryption::{SEALED_EMBEDDING_FORMAT, VOICE_VARIANT_EMBEDDINGS},
 };
 use crate::{
     domain::{
         errors::StorageError,
         models::{SpeakerIdentity, VoiceEmbedding},
     },
-    ports::voice::VoiceVectorDB,
+    ports::{crypto::EmbeddingCipher, voice::VoiceVectorDB},
 };
 
 /// How long a write waits for a lock held by the note repository's connection to the same file.
@@ -38,38 +39,50 @@ const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 /// Persists speaker identities and voice variants in SQLite.
 pub struct SqliteVoiceVectorDB {
     connection: Connection,
+    /// Seals and opens every stored variant embedding.
+    embedding_cipher: Arc<dyn EmbeddingCipher>,
 }
 
 impl SqliteVoiceVectorDB {
     /// Opens (or creates) the voice store in the SQLite database at `database_path`.
     ///
     /// Inputs: `database_path` must be a writable SQLite path; it may already hold the meeting
-    /// schema.
+    /// schema. `embedding_cipher` holds the database key unlocked by `KeyManager`.
     /// Outputs: A ready voice store, or a portable storage error.
-    /// Side effects: Opens or creates the database file and creates the voice tables when absent.
-    pub fn open(database_path: impl AsRef<Path>) -> Result<Self, StorageError> {
+    /// Side effects: Opens or creates the database file, creates the voice tables when absent,
+    /// and re-encrypts plaintext variants left by databases from before Issue #31.
+    pub fn open(
+        database_path: impl AsRef<Path>,
+        embedding_cipher: Arc<dyn EmbeddingCipher>,
+    ) -> Result<Self, StorageError> {
         let sqlite_connection = Connection::open(database_path)
             .map_err(|error| sqlite_error("unable to open voice store database", error))?;
-        Self::from_connection(sqlite_connection)
+        Self::from_connection(sqlite_connection, embedding_cipher)
     }
 
     /// Opens an isolated in-memory voice store for tests and ephemeral workflows.
     ///
-    /// Inputs: None.
+    /// Inputs: The cipher for stored variants (typically an ephemeral one).
     /// Outputs: A ready voice store, or a portable storage error.
     /// Side effects: Allocates an in-memory SQLite database and creates the voice tables.
-    pub fn open_in_memory() -> Result<Self, StorageError> {
+    pub fn open_in_memory(
+        embedding_cipher: Arc<dyn EmbeddingCipher>,
+    ) -> Result<Self, StorageError> {
         let sqlite_connection = Connection::open_in_memory()
             .map_err(|error| sqlite_error("unable to open in-memory voice store", error))?;
-        Self::from_connection(sqlite_connection)
+        Self::from_connection(sqlite_connection, embedding_cipher)
     }
 
-    /// Configures the connection and creates the voice schema idempotently.
+    /// Configures the connection, creates the voice schema idempotently, and encrypts legacy rows.
     ///
-    /// Inputs: An open connection.
+    /// Inputs: An open connection and the embedding cipher.
     /// Outputs: The voice store, or a portable storage error.
-    /// Side effects: Sets a busy timeout and executes `CREATE ... IF NOT EXISTS` DDL.
-    fn from_connection(sqlite_connection: Connection) -> Result<Self, StorageError> {
+    /// Side effects: Sets a busy timeout, executes `CREATE ... IF NOT EXISTS` DDL, adds the
+    /// `embedding_format` column when missing, and seals plaintext variants in one transaction.
+    fn from_connection(
+        sqlite_connection: Connection,
+        embedding_cipher: Arc<dyn EmbeddingCipher>,
+    ) -> Result<Self, StorageError> {
         sqlite_connection
             .busy_timeout(BUSY_TIMEOUT)
             .map_err(|error| sqlite_error("unable to configure voice store busy timeout", error))?;
@@ -92,9 +105,11 @@ impl SqliteVoiceVectorDB {
                     ON voice_variants(identity_id);",
             )
             .map_err(|error| sqlite_error("unable to initialize voice store schema", error))?;
+        VOICE_VARIANT_EMBEDDINGS.prepare(&sqlite_connection, embedding_cipher.as_ref())?;
         tracing::info!("SQLite voice store initialized");
         Ok(Self {
             connection: sqlite_connection,
+            embedding_cipher,
         })
     }
 }
@@ -204,19 +219,26 @@ impl VoiceVectorDB for SqliteVoiceVectorDB {
     /// Inputs: `embedding` with a non-empty finite vector whose identity is stored.
     /// Outputs: Success, or a rejection for an invalid vector, an unknown identity, a duplicate
     /// variant ID, or a SQLite failure.
-    /// Side effects: Writes one biometric BLOB; never logs it.
+    /// Side effects: Encrypts and writes one biometric BLOB; never logs it.
     fn store_embedding(&self, embedding: VoiceEmbedding) -> Result<(), StorageError> {
         validate_vector(embedding.vector())?;
+        let variant_id = embedding.variant_id().to_string();
+        let sealed_embedding = VOICE_VARIANT_EMBEDDINGS.seal(
+            self.embedding_cipher.as_ref(),
+            &[&variant_id],
+            embedding.vector(),
+        )?;
         let inserted_rows = self
             .connection
             .execute(
-                "INSERT INTO voice_variants (id, identity_id, embedding, created_at)
-                 SELECT ?1, ?2, ?3, ?4
+                "INSERT INTO voice_variants (id, identity_id, embedding, embedding_format, created_at)
+                 SELECT ?1, ?2, ?3, ?4, ?5
                  WHERE EXISTS (SELECT 1 FROM speaker_identities WHERE id = ?2)",
                 params![
-                    embedding.variant_id().to_string(),
+                    variant_id,
                     embedding.identity_id().to_string(),
-                    encode_embedding(embedding.vector()),
+                    sealed_embedding,
+                    SEALED_EMBEDDING_FORMAT,
                     Utc::now().to_rfc3339(),
                 ],
             )
@@ -241,7 +263,8 @@ impl VoiceVectorDB for SqliteVoiceVectorDB {
     ///
     /// Inputs: `vector` must be a non-empty finite query; `top_k` limits the result.
     /// Outputs: Variants with scores (dimension mismatches are skipped), or a storage error.
-    /// Side effects: Reads every stored biometric BLOB into memory; never logs them.
+    /// Side effects: Reads and decrypts every stored biometric BLOB in memory; never logs them.
+    /// A value that fails to decrypt (wrong key, tampering) fails the whole search.
     fn search_similar(
         &self,
         vector: &[f32],
@@ -268,7 +291,11 @@ impl VoiceVectorDB for SqliteVoiceVectorDB {
         for variant_row in variant_rows {
             let (variant_id, identity_id, serialized_embedding) = variant_row
                 .map_err(|error| sqlite_error("unable to decode voice variant", error))?;
-            let stored_vector = decode_embedding(&serialized_embedding)?;
+            let stored_vector = VOICE_VARIANT_EMBEDDINGS.open(
+                self.embedding_cipher.as_ref(),
+                &[&variant_id],
+                &serialized_embedding,
+            )?;
             if let Some(score) = cosine_similarity(vector, &stored_vector) {
                 scored_variants.push((
                     VoiceEmbedding::new(

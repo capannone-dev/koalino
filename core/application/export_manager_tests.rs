@@ -74,8 +74,10 @@ impl ExportFixture {
         fs::create_dir_all(&source_directory)
             .unwrap_or_else(|error| panic!("source directory must be creatable: {error}"));
         Self {
-            repository: SqliteNoteRepository::open_in_memory()
-                .unwrap_or_else(|error| panic!("fixture repository must open: {error}")),
+            repository: SqliteNoteRepository::open_in_memory(
+                crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+            )
+            .unwrap_or_else(|error| panic!("fixture repository must open: {error}")),
             voice_database: NamedVoiceDatabase {
                 identities: vec![SpeakerIdentity::new(ALICE_IDENTITY, "Alice")],
             },

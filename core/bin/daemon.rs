@@ -4,21 +4,20 @@ use std::{env, path::PathBuf};
 
 use anyhow::Result;
 use note_taker_core::{
-    adapters::{
-        observability::{LoggingConfiguration, initialize_logging},
-        storage::{
-            sqlite_adapter::SqliteNoteRepository, sqlite_voice_vector_db::SqliteVoiceVectorDB,
-        },
-    },
+    adapters::observability::{LoggingConfiguration, initialize_logging},
+    application::crypto::key_manager::KeyManagerConfig,
     domain::models::DeviceId,
     server::api::{ServerAppState, build_router},
+    storage_composition::{EncryptedStores, open_encrypted_stores},
 };
 
 /// Initializes logging, composes headless server ports, and serves the local Axum API.
 ///
-/// Inputs: Reads optional device, log, database, and bind-address environment variables.
+/// Inputs: Reads optional device, log, database, bind-address, and encryption
+/// (`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, `NOTE_TAKER_ENCRYPTION_KEY_DIR`) environment variables.
 /// Outputs: A process exit status indicating whether startup or HTTP serving failed.
-/// Side effects: Opens the note repository and the voice store on one local SQLite file, creates logging sinks, binds the configured local TCP address,
+/// Side effects: Unlocks the embedding encryption key, opens the note repository and the voice
+/// store on one local SQLite file, creates logging sinks, binds the configured local TCP address,
 /// and serves REST/WebSocket requests until the process is stopped.
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -37,9 +36,15 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
     let bind_address =
         env::var("NOTE_TAKER_BIND_ADDRESS").unwrap_or_else(|_| String::from("127.0.0.1:8080"));
-    let repository = SqliteNoteRepository::open(&database_path, DeviceId::new("headless-server"))?;
-    let voice_store = SqliteVoiceVectorDB::open(&database_path)?;
-    let application_state = ServerAppState::new(repository, voice_store);
+    let EncryptedStores {
+        note_repository,
+        voice_store,
+    } = open_encrypted_stores(
+        &database_path,
+        DeviceId::new("headless-server"),
+        KeyManagerConfig::from_environment(),
+    )?;
+    let application_state = ServerAppState::new(note_repository, voice_store);
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!(address = %bind_address, "headless Axum server started");
     axum::serve(listener, build_router(application_state)).await?;

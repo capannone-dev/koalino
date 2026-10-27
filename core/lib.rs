@@ -18,6 +18,9 @@ pub mod ffi;
 pub mod ports;
 /// Exposes the headless Axum API composition without leaking HTTP details into application services.
 pub mod server;
+/// Opens the encrypted SQLite stores for the CLI, daemon, and FFI composition roots.
+#[path = "bin/storage_composition.rs"]
+pub mod storage_composition;
 
 #[cfg(test)]
 mod scaffold_contract_tests {

@@ -177,8 +177,10 @@ mod tests {
     /// Verifies note text is created, changed, persisted, and reloaded through the storage port.
     #[test]
     fn creates_updates_and_loads_a_meeting_note() {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         let service = MeetingCrdtService::new(repository);
         let meeting_id = MeetingId::new("meeting-milan");
 
@@ -198,8 +200,10 @@ mod tests {
     /// Verifies corrupt persisted CRDT bytes fail safely instead of producing a partial note.
     #[test]
     fn rejects_a_corrupted_crdt_document() {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         let meeting_id = MeetingId::new("meeting-corrupt");
 
         repository
@@ -216,8 +220,10 @@ mod tests {
     /// Verifies divergent documents merge offline and remain readable through the application service.
     #[test]
     fn merges_a_remote_offline_document_without_a_central_service() {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         let meeting_id = MeetingId::new("meeting-merge");
         let mut initial_document = AutoCommit::new();
         repository

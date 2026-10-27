@@ -59,8 +59,10 @@ fn telemetry_manifest() -> DeviceManifest {
 #[test]
 fn transcription_dispatch_persists_duration_device_and_power_metrics() {
     let invocation_count = Rc::new(Cell::new(0));
-    let telemetry_repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory telemetry repository should open: {error}"));
+    let telemetry_repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory telemetry repository should open: {error}"));
     let mut dispatcher = ComputeDispatcher::new(
         telemetry_manifest(),
         TimedTranscriptionEngine {
@@ -93,8 +95,10 @@ fn transcription_dispatch_persists_duration_device_and_power_metrics() {
 /// Verifies the SQLite repository groups persisted task metrics into stable aggregates.
 #[test]
 fn aggregated_stats_sum_duration_and_average_latency_in_memory() {
-    let telemetry_repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory telemetry repository should open: {error}"));
+    let telemetry_repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory telemetry repository should open: {error}"));
     telemetry_repository
         .save_metrics(TaskMetrics::new(
             uuid::Uuid::new_v4(),

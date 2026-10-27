@@ -1,6 +1,10 @@
 //! Implements the note repository port with SQLite-backed transcript and Automerge BLOB storage.
+//!
+//! Voice embeddings in `unassigned_voice_clips`, `unknown_speaker_clusters`, and `cluster_chunks`
+//! are sealed through the injected `EmbeddingCipher` (Issue #31); opening the repository
+//! re-encrypts plaintext embeddings left by older databases.
 
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -8,6 +12,10 @@ use rusqlite::{Connection, OptionalExtension, params};
 #[path = "sqlite_unknown_speaker_clusters.rs"]
 mod unknown_speaker_clusters;
 
+use super::sqlite_embedding_encryption::{
+    CLIP_EMBEDDINGS, CLUSTER_CHUNK_EMBEDDINGS, CLUSTER_REPRESENTATIVE_EMBEDDINGS,
+    SEALED_EMBEDDING_FORMAT,
+};
 use crate::{
     domain::{
         errors::StorageError,
@@ -18,52 +26,74 @@ use crate::{
         },
     },
     ports::{
+        crypto::EmbeddingCipher,
         storage::{AttachmentRepository, NoteRepository},
         telemetry::MetricsRepository,
     },
 };
 
+/// How long a write waits for a lock held by another connection (the voice store, or another
+/// process such as the daemon) to the same database file.
+const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Persists meeting records locally without exposing SQLite types beyond the adapter boundary.
 pub struct SqliteNoteRepository {
     connection: Connection,
     device_id: DeviceId,
+    /// Seals and opens clip and cluster embeddings.
+    embedding_cipher: Arc<dyn EmbeddingCipher>,
 }
 
 impl SqliteNoteRepository {
     /// Opens a SQLite database at `database_path` and initializes the meeting schema.
     ///
-    /// Inputs: `database_path` must be a writable SQLite path; `device_id` identifies structured log events.
+    /// Inputs: `database_path` must be a writable SQLite path; `device_id` identifies structured log
+    /// events; `embedding_cipher` holds the database key unlocked by `KeyManager`.
     /// Outputs: A repository ready to implement the storage port, or a portable storage error.
-    /// Side effects: Opens or creates a SQLite database and creates the `meetings` table when absent.
+    /// Side effects: Opens or creates a SQLite database, creates the schema when absent, and
+    /// re-encrypts plaintext embeddings left by databases from before Issue #31.
     pub fn open(
         database_path: impl AsRef<Path>,
         device_id: DeviceId,
+        embedding_cipher: Arc<dyn EmbeddingCipher>,
     ) -> Result<Self, StorageError> {
         let sqlite_connection = Connection::open(database_path)
             .map_err(|error| sqlite_error("unable to open SQLite database", error))?;
-        Self::from_connection(sqlite_connection, device_id)
+        Self::from_connection(sqlite_connection, device_id, embedding_cipher)
     }
 
     /// Opens an isolated in-memory SQLite repository for tests and ephemeral local workflows.
     ///
-    /// Inputs: None.
+    /// Inputs: The cipher for stored embeddings (typically an ephemeral one).
     /// Outputs: An initialized repository or a portable storage error.
     /// Side effects: Allocates an in-memory SQLite database and creates its schema.
-    pub fn open_in_memory() -> Result<Self, StorageError> {
+    pub fn open_in_memory(
+        embedding_cipher: Arc<dyn EmbeddingCipher>,
+    ) -> Result<Self, StorageError> {
         let sqlite_connection = Connection::open_in_memory()
             .map_err(|error| sqlite_error("unable to open in-memory SQLite database", error))?;
-        Self::from_connection(sqlite_connection, DeviceId::new("in-memory-test-device"))
+        Self::from_connection(
+            sqlite_connection,
+            DeviceId::new("in-memory-test-device"),
+            embedding_cipher,
+        )
     }
 
     /// Initializes the required SQLite schema for an already-open connection.
     ///
-    /// Inputs: `sqlite_connection` must be a usable connection; `device_id` identifies safe log metadata.
+    /// Inputs: `sqlite_connection` must be a usable connection; `device_id` identifies safe log
+    /// metadata; `embedding_cipher` seals embeddings.
     /// Outputs: A repository with a `meetings` table ready for use, or a storage error.
-    /// Side effects: Executes SQLite DDL and emits a structured initialization log.
+    /// Side effects: Executes SQLite DDL, seals legacy plaintext embeddings in one transaction
+    /// per table, and emits a structured initialization log.
     fn from_connection(
         sqlite_connection: Connection,
         device_id: DeviceId,
+        embedding_cipher: Arc<dyn EmbeddingCipher>,
     ) -> Result<Self, StorageError> {
+        sqlite_connection
+            .busy_timeout(BUSY_TIMEOUT)
+            .map_err(|error| sqlite_error("unable to configure SQLite busy timeout", error))?;
         sqlite_connection
             .execute_batch(
                 "CREATE TABLE IF NOT EXISTS meetings (
@@ -125,10 +155,18 @@ impl SqliteNoteRepository {
             )
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
+        for embedding_column in [
+            &CLIP_EMBEDDINGS,
+            &CLUSTER_REPRESENTATIVE_EMBEDDINGS,
+            &CLUSTER_CHUNK_EMBEDDINGS,
+        ] {
+            embedding_column.prepare(&sqlite_connection, embedding_cipher.as_ref())?;
+        }
         tracing::info!(device_id = %device_id.as_str(), "SQLite meeting repository initialized");
         Ok(Self {
             connection: sqlite_connection,
             device_id,
+            embedding_cipher,
         })
     }
 
@@ -537,12 +575,19 @@ impl NoteRepository for SqliteNoteRepository {
     ///
     /// Inputs: `clip` must reference a meeting created through this repository.
     /// Outputs: Success or an unknown-meeting/SQLite storage error.
-    /// Side effects: Stores temporary review audio without logging its contents.
+    /// Side effects: Stores temporary review audio and the encrypted derived embedding without
+    /// logging either.
     fn save_unassigned_clip(&self, clip: UnassignedVoiceClip) -> Result<(), StorageError> {
+        let clip_id = clip.clip_id().to_string();
+        let sealed_embedding = CLIP_EMBEDDINGS.seal(
+            self.embedding_cipher.as_ref(),
+            &[&clip_id],
+            clip.derived_embedding(),
+        )?;
         let inserted_row_count = self.connection.execute(
-            "INSERT INTO unassigned_voice_clips (clip_id, meeting_id, start_time_ms, end_time_ms, audio_bytes, derived_embedding, weak_match_identity_id, weak_match_confidence_score, cluster_id)
-             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
-            params![clip.clip_id().to_string(), clip.meeting_id().as_str(), clip.start_time_ms(), clip.end_time_ms(), clip.audio_bytes(), encode_embedding(clip.derived_embedding()), clip.weak_match_candidate().map(|candidate| candidate.identity_id().to_string()), clip.weak_match_candidate().map(|candidate| candidate.confidence_score()), clip.cluster_id().map(|cluster_id| cluster_id.to_string())],
+            "INSERT INTO unassigned_voice_clips (clip_id, meeting_id, start_time_ms, end_time_ms, audio_bytes, derived_embedding, weak_match_identity_id, weak_match_confidence_score, cluster_id, embedding_format)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
+            params![clip_id, clip.meeting_id().as_str(), clip.start_time_ms(), clip.end_time_ms(), clip.audio_bytes(), sealed_embedding, clip.weak_match_candidate().map(|candidate| candidate.identity_id().to_string()), clip.weak_match_candidate().map(|candidate| candidate.confidence_score()), clip.cluster_id().map(|cluster_id| cluster_id.to_string()), SEALED_EMBEDDING_FORMAT],
         ).map_err(|error| sqlite_error("unable to save unassigned voice clip", error))?;
         ensure_meeting_was_updated(inserted_row_count, clip.meeting_id())?;
         self.log_operation("save_unassigned_clip", clip.meeting_id());
@@ -627,7 +672,11 @@ impl NoteRepository for SqliteNoteRepository {
                     start_time_ms,
                     end_time_ms,
                     audio_bytes,
-                    decode_embedding(&serialized_embedding)?,
+                    CLIP_EMBEDDINGS.open(
+                        self.embedding_cipher.as_ref(),
+                        &[&clip_id],
+                        &serialized_embedding,
+                    )?,
                     weak_match_candidate,
                 )
                 .with_cluster_id(parsed_cluster_id),
@@ -700,19 +749,8 @@ impl NoteRepository for SqliteNoteRepository {
     }
 }
 
-/// Serializes derived floating-point features without exposing them outside the storage adapter.
-///
-/// Inputs: `embedding` contains model-derived values only.
-/// Outputs: Native-endian bytes for local SQLite persistence.
-/// Side effects: Allocates a byte buffer; never logs biometric data.
-pub(super) fn encode_embedding(embedding: &[f32]) -> Vec<u8> {
-    embedding
-        .iter()
-        .flat_map(|value| value.to_le_bytes())
-        .collect()
-}
-
-/// Decodes a locally persisted embedding while rejecting malformed byte lengths.
+/// Decodes a legacy plaintext embedding (written before Issue #31) for re-encryption, rejecting
+/// malformed byte lengths.
 ///
 /// Inputs: `serialized_embedding` contains adapter-owned SQLite BLOB data.
 /// Outputs: Derived dimensions or a portable storage rejection.
@@ -951,8 +989,10 @@ mod tests {
     /// Verifies speaker-attributed segments are stored in timeline order and replaced atomically.
     #[test]
     fn saves_replaces_and_loads_transcript_segments_in_order() {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         let meeting_id = MeetingId::new("meeting-segments");
         repository
             .create_meeting(&meeting_id, &[1_u8])
@@ -996,8 +1036,10 @@ mod tests {
     /// Verifies segments cannot be attached to a meeting that was never created.
     #[test]
     fn rejects_transcript_segments_for_a_missing_meeting() {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         let missing_meeting_id = MeetingId::new("missing-segment-meeting");
         let orphan_segment =
             TranscriptSegment::new(missing_meeting_id.clone(), 0, 1, None, "Orphaned.");
@@ -1012,8 +1054,10 @@ mod tests {
     /// Verifies meeting metadata exposes the creation instant and reports unknown meetings as absent.
     #[test]
     fn loads_meeting_metadata_with_creation_time() {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         let meeting_id = MeetingId::new("meeting-metadata");
         let before_creation = chrono::Utc::now() - chrono::Duration::seconds(2);
         repository
@@ -1038,8 +1082,10 @@ mod tests {
     /// Verifies adapter initialization creates its schema and stores both transcript and CRDT bytes.
     #[test]
     fn saves_and_loads_a_meeting_in_memory() {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         let meeting_id = MeetingId::new("meeting-rome");
         let crdt_document = vec![1_u8, 2_u8, 3_u8];
         let transcript = Transcript::new(meeting_id.clone(), "Discussed offline sync.");
@@ -1064,8 +1110,10 @@ mod tests {
     /// Verifies an orphaned note cannot be persisted without an explicitly created meeting.
     #[test]
     fn rejects_a_transcript_for_a_missing_meeting() {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         let missing_meeting_transcript =
             Transcript::new(MeetingId::new("missing-meeting"), "Orphaned note.");
 
@@ -1079,8 +1127,10 @@ mod tests {
     /// Verifies temporary clips retain their review range and opaque audio through the repository port.
     #[test]
     fn saves_and_loads_an_unassigned_voice_clip() {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         let meeting_id = MeetingId::new("meeting-unassigned-clip");
         repository
             .create_meeting(&meeting_id, &[1_u8])

@@ -3,14 +3,16 @@
 //! `unknown_speaker_clusters` holds one row per cluster (representative embedding, running
 //! duration, creation time, and the assigned identity once resolved); `cluster_chunks` holds one
 //! row per member chunk with its own embedding so every member can be enrolled on assignment.
-//! Embeddings are little-endian `f32` BLOBs, never logged. This child module of `sqlite_adapter`
+//! Embeddings are sealed through the repository's `EmbeddingCipher` (bound to the cluster or
+//! cluster-and-chunk IDs) and never logged. This child module of `sqlite_adapter`
 //! also migrates pre-#28 databases by adding the clip and segment cluster-link columns.
 
 use rusqlite::{Connection, OptionalExtension, params};
 use uuid::Uuid;
 
 use super::{
-    SqliteNoteRepository, decode_embedding, encode_embedding, sqlite_error, sqlite_milliseconds,
+    CLUSTER_CHUNK_EMBEDDINGS, CLUSTER_REPRESENTATIVE_EMBEDDINGS, SEALED_EMBEDDING_FORMAT,
+    SqliteNoteRepository, sqlite_error, sqlite_milliseconds,
 };
 use crate::domain::{
     errors::StorageError,
@@ -92,32 +94,45 @@ impl SqliteNoteRepository {
     /// row with its ID); `chunk` is a new member.
     /// Outputs: Success, or a rejection for an unknown meeting, a meeting mismatch, a duplicate
     /// member, or another SQLite failure.
-    /// Side effects: Writes biometric BLOBs; never logs them.
+    /// Side effects: Encrypts and writes biometric BLOBs; never logs them.
     pub(super) fn save_cluster_chunk(
         &self,
         cluster: &UnknownSpeakerCluster,
         chunk: &UnknownSpeakerChunk,
     ) -> Result<(), StorageError> {
+        let cluster_id = cluster.cluster_id().to_string();
+        let sealed_representative = CLUSTER_REPRESENTATIVE_EMBEDDINGS.seal(
+            self.embedding_cipher.as_ref(),
+            &[&cluster_id],
+            cluster.representative_embedding(),
+        )?;
+        let sealed_chunk = CLUSTER_CHUNK_EMBEDDINGS.seal(
+            self.embedding_cipher.as_ref(),
+            &[&cluster_id, chunk.chunk_id()],
+            chunk.embedding(),
+        )?;
         let transaction = self
             .connection
             .unchecked_transaction()
             .map_err(|error| sqlite_error("unable to begin cluster transaction", error))?;
         let changed_cluster_rows = transaction
             .execute(
-                "INSERT INTO unknown_speaker_clusters (cluster_id, meeting_id, representative_embedding, total_duration_ms, created_at_utc, resolved_identity_id)
-                 SELECT ?1, ?2, ?3, ?4, ?5, ?6 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)
+                "INSERT INTO unknown_speaker_clusters (cluster_id, meeting_id, representative_embedding, total_duration_ms, created_at_utc, resolved_identity_id, embedding_format)
+                 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)
                  ON CONFLICT(cluster_id) DO UPDATE SET
                     representative_embedding = excluded.representative_embedding,
+                    embedding_format = excluded.embedding_format,
                     total_duration_ms = excluded.total_duration_ms,
                     resolved_identity_id = excluded.resolved_identity_id
                  WHERE unknown_speaker_clusters.meeting_id = excluded.meeting_id",
                 params![
-                    cluster.cluster_id().to_string(),
+                    cluster_id,
                     cluster.meeting_id().as_str(),
-                    encode_embedding(cluster.representative_embedding()),
+                    sealed_representative,
                     sqlite_milliseconds(cluster.total_duration_ms())?,
                     cluster.created_at().to_rfc3339(),
                     cluster.resolved_identity_id().map(|identity_id| identity_id.to_string()),
+                    SEALED_EMBEDDING_FORMAT,
                 ],
             )
             .map_err(|error| sqlite_error("unable to save unknown-speaker cluster", error))?;
@@ -131,12 +146,13 @@ impl SqliteNoteRepository {
         }
         transaction
             .execute(
-                "INSERT INTO cluster_chunks (cluster_id, chunk_id, derived_embedding, duration_ms) VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO cluster_chunks (cluster_id, chunk_id, derived_embedding, duration_ms, embedding_format) VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![
-                    cluster.cluster_id().to_string(),
+                    cluster_id,
                     chunk.chunk_id(),
-                    encode_embedding(chunk.embedding()),
+                    sealed_chunk,
                     sqlite_milliseconds(chunk.duration_ms())?,
+                    SEALED_EMBEDDING_FORMAT,
                 ],
             )
             .map_err(|error| sqlite_error("unable to save unknown-speaker cluster chunk", error))?;
@@ -205,11 +221,12 @@ impl SqliteNoteRepository {
     ///
     /// Inputs: `cluster_id` identifies the cluster.
     /// Outputs: Members (empty for an unknown cluster) or a portable storage error.
-    /// Side effects: Reads biometric BLOBs; never logs them.
+    /// Side effects: Reads and decrypts biometric BLOBs; never logs them.
     pub(super) fn load_cluster_chunks(
         &self,
         cluster_id: Uuid,
     ) -> Result<Vec<UnknownSpeakerChunk>, StorageError> {
+        let cluster_key = cluster_id.to_string();
         let mut statement = self
             .connection
             .prepare(
@@ -229,9 +246,14 @@ impl SqliteNoteRepository {
             .map(|row| {
                 let (chunk_id, serialized_embedding, duration_ms) =
                     row.map_err(|error| sqlite_error("unable to decode cluster chunk", error))?;
+                let embedding = CLUSTER_CHUNK_EMBEDDINGS.open(
+                    self.embedding_cipher.as_ref(),
+                    &[&cluster_key, &chunk_id],
+                    &serialized_embedding,
+                )?;
                 Ok(UnknownSpeakerChunk::new(
                     chunk_id,
-                    decode_embedding(&serialized_embedding)?,
+                    embedding,
                     stored_milliseconds(duration_ms)?,
                 ))
             })
@@ -309,7 +331,11 @@ impl SqliteNoteRepository {
         Ok(UnknownSpeakerCluster::new(
             cluster_id,
             MeetingId::new(cluster_row.meeting_id),
-            decode_embedding(&cluster_row.representative_embedding)?,
+            CLUSTER_REPRESENTATIVE_EMBEDDINGS.open(
+                self.embedding_cipher.as_ref(),
+                &[&cluster_row.cluster_id],
+                &cluster_row.representative_embedding,
+            )?,
             chunk_ids,
             stored_milliseconds(cluster_row.total_duration_ms)?,
             created_at,
@@ -373,8 +399,10 @@ mod tests {
 
     /// Opens an in-memory repository with one meeting.
     fn repository_with_meeting(meeting_id: &MeetingId) -> SqliteNoteRepository {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         repository
             .create_meeting(meeting_id, &[1_u8])
             .unwrap_or_else(|error| panic!("meeting creation should succeed: {error}"));
@@ -506,8 +534,10 @@ mod tests {
     /// Verifies cluster writes for an unknown meeting are rejected.
     #[test]
     fn rejects_clusters_for_a_missing_meeting() {
-        let repository = SqliteNoteRepository::open_in_memory()
-            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
         let missing_meeting_id = MeetingId::new("missing");
 
         let storage_error = repository
@@ -628,9 +658,12 @@ mod tests {
                 );",
             )
             .unwrap_or_else(|error| panic!("legacy schema should be created: {error}"));
-        let repository =
-            SqliteNoteRepository::from_connection(legacy_connection, DeviceId::new("legacy"))
-                .unwrap_or_else(|error| panic!("legacy database should migrate: {error}"));
+        let repository = SqliteNoteRepository::from_connection(
+            legacy_connection,
+            DeviceId::new("legacy"),
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("legacy database should migrate: {error}"));
         let meeting_id = MeetingId::new("meeting-legacy");
         repository
             .create_meeting(&meeting_id, &[1_u8])

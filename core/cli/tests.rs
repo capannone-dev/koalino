@@ -206,8 +206,10 @@ fn voice_assign_delegates_to_the_service_once() {
 /// Verifies the concrete CLI service reads a meeting fixture through in-memory SQLite ports.
 #[test]
 fn meetings_list_reads_an_in_memory_sqlite_fixture_without_cli_sql() {
-    let repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
     let meeting_id = MeetingId::new("meeting-in-memory");
     repository
         .create_meeting(&meeting_id, &[1, 2, 3])
@@ -360,8 +362,10 @@ fn meetings_export_commands_delegate_options_to_the_service() {
 /// Verifies the concrete CLI service exports an in-memory SQLite meeting through ExportManager.
 #[test]
 fn core_service_exports_meeting_markdown_to_requested_output() {
-    let repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
     let meeting_id = MeetingId::new("meeting-cli-export");
     repository
         .create_meeting(&meeting_id, &[1])
@@ -416,8 +420,10 @@ fn core_service_exports_meeting_markdown_to_requested_output() {
 /// Verifies an unknown meeting surfaces a readable error through the CLI service.
 #[test]
 fn core_service_reports_unknown_meeting_export() {
-    let repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
     let recorder = LocalRecorder::new(AudioConfig::new(16_000, 1))
         .unwrap_or_else(|error| panic!("fixture recorder must initialize: {error}"));
     let cli_service = CoreCliService::new(
@@ -568,8 +574,10 @@ fn core_service_with_cluster() -> (
     CoreCliService<LocalRecorder, SqliteNoteRepository, InMemoryVoiceVectorDB>,
     Uuid,
 ) {
-    let repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
     let meeting_id = MeetingId::new("meeting-clusters");
     repository
         .create_meeting(&meeting_id, &[1])
@@ -654,10 +662,17 @@ fn core_service_rejects_blank_names_and_unknown_clusters() {
 fn file_backed_service(
     database_path: &Path,
 ) -> CoreCliService<LocalRecorder, SqliteNoteRepository, SqliteVoiceVectorDB> {
-    let repository = SqliteNoteRepository::open(database_path, DeviceId::new("cli-test"))
-        .unwrap_or_else(|error| panic!("file SQLite must open: {error}"));
-    let voice_store = SqliteVoiceVectorDB::open(database_path)
-        .unwrap_or_else(|error| panic!("file voice store must open: {error}"));
+    let crate::storage_composition::EncryptedStores {
+        note_repository: repository,
+        voice_store,
+    } = crate::storage_composition::open_encrypted_stores(
+        database_path,
+        DeviceId::new("cli-test"),
+        crate::storage_composition::key_file_config_for_tests(
+            &database_path.with_extension("keys"),
+        ),
+    )
+    .unwrap_or_else(|error| panic!("encrypted stores must open: {error:#}"));
     let recorder = LocalRecorder::new(AudioConfig::new(16_000, 1))
         .unwrap_or_else(|error| panic!("fixture recorder must initialize: {error}"));
     CoreCliService::new(
@@ -700,6 +715,7 @@ fn assigned_cluster_names_are_listed_after_a_restart() {
     for suffix in ["", "-journal", "-wal", "-shm"] {
         let _ = std::fs::remove_file(format!("{}{suffix}", database_path.display()));
     }
+    let _ = std::fs::remove_dir_all(database_path.with_extension("keys"));
 
     assert!(assigned.is_ok_and(|output| output.contains("new identity")));
     let listed = listed.unwrap_or_else(|error| panic!("voice list must dispatch: {error}"));

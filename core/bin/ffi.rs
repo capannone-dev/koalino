@@ -24,6 +24,7 @@ use crate::{
         cluster_review::{
             ClusterReviewError, assign_cluster_to_named_identity, list_unknown_clusters,
         },
+        crypto::key_manager::KeyManagerConfig,
         export_manager::{ExportManager, ExportWriter},
         unknown_speaker_clusterer::ClusteringError,
         voice_identity_manager::VoiceIdentityManager,
@@ -42,6 +43,7 @@ use crate::{
         telemetry::MetricsRepository,
         voice::VoiceVectorDB,
     },
+    storage_composition::{EncryptedStores, open_encrypted_stores},
 };
 use uuid::Uuid;
 
@@ -127,7 +129,8 @@ impl FfiRuntime {
     /// Inputs: None; the portable 16 kHz mono capture format is fixed for this initial bridge.
     /// Outputs: A ready runtime or an audio configuration error encoded as a C status by callers.
     /// Side effects: Allocates an in-memory recorder (it does not open an OS device or capture
-    /// audio) and opens the note repository and the voice store on the same SQLite file.
+    /// audio), unlocks the embedding encryption key (`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, else the
+    /// key file), and opens the note repository and the voice store on the same SQLite file.
     fn new() -> Result<Self, c_int> {
         let local_recorder =
             LocalRecorder::new(AudioConfig::new(16_000, 1)).map_err(|_| FFI_OPERATION_REJECTED)?;
@@ -138,10 +141,18 @@ impl FfiRuntime {
             env::var("NOTE_TAKER_DEVICE_ID")
                 .unwrap_or_else(|_| String::from("unconfigured-device")),
         );
-        let note_repository = SqliteNoteRepository::open(&database_path, device_id)
-            .map_err(|_| FFI_OPERATION_REJECTED)?;
-        let voice_store =
-            SqliteVoiceVectorDB::open(&database_path).map_err(|_| FFI_OPERATION_REJECTED)?;
+        let EncryptedStores {
+            note_repository,
+            voice_store,
+        } = open_encrypted_stores(
+            &database_path,
+            device_id,
+            KeyManagerConfig::from_environment(),
+        )
+        .map_err(|error| {
+            tracing::error!(error = %format!("{error:#}"), "unable to open encrypted stores");
+            FFI_OPERATION_REJECTED
+        })?;
         let review_clip_directory = env::var("NOTE_TAKER_REVIEW_CLIP_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("voice_review_clips"));
@@ -189,10 +200,12 @@ impl FfiRuntime {
     fn in_memory_for_tests(export_directory: &Path) -> Result<Self, c_int> {
         let local_recorder =
             LocalRecorder::new(AudioConfig::new(16_000, 1)).map_err(|_| FFI_OPERATION_REJECTED)?;
+        let embedding_cipher = crate::application::crypto::voice_encryptor::ephemeral_cipher();
         let note_repository =
-            SqliteNoteRepository::open_in_memory().map_err(|_| FFI_OPERATION_REJECTED)?;
-        let voice_store =
-            SqliteVoiceVectorDB::open_in_memory().map_err(|_| FFI_OPERATION_REJECTED)?;
+            SqliteNoteRepository::open_in_memory(std::sync::Arc::clone(&embedding_cipher))
+                .map_err(|_| FFI_OPERATION_REJECTED)?;
+        let voice_store = SqliteVoiceVectorDB::open_in_memory(embedding_cipher)
+            .map_err(|_| FFI_OPERATION_REJECTED)?;
         Ok(Self::from_parts(
             local_recorder,
             note_repository,
@@ -204,17 +217,23 @@ impl FfiRuntime {
 
     /// Creates a runtime over the SQLite file at `database_path`, as one app launch would.
     ///
-    /// Inputs: The database file (created when missing) and the export directory.
+    /// Inputs: The database file (created when missing) and the export directory, which also
+    /// holds the random key file in `keys/`.
     /// Outputs: A runtime whose stores persist in `database_path`, or a C status.
-    /// Side effects: Opens or creates the SQLite file; creates no directories.
+    /// Side effects: Opens or creates the SQLite file and the key file.
     #[cfg(test)]
     fn open_for_tests(database_path: &Path, export_directory: &Path) -> Result<Self, c_int> {
         let local_recorder =
             LocalRecorder::new(AudioConfig::new(16_000, 1)).map_err(|_| FFI_OPERATION_REJECTED)?;
-        let note_repository = SqliteNoteRepository::open(database_path, DeviceId::new("ffi-test"))
-            .map_err(|_| FFI_OPERATION_REJECTED)?;
-        let voice_store =
-            SqliteVoiceVectorDB::open(database_path).map_err(|_| FFI_OPERATION_REJECTED)?;
+        let EncryptedStores {
+            note_repository,
+            voice_store,
+        } = open_encrypted_stores(
+            database_path,
+            DeviceId::new("ffi-test"),
+            crate::storage_composition::key_file_config_for_tests(&export_directory.join("keys")),
+        )
+        .map_err(|_| FFI_OPERATION_REJECTED)?;
         Ok(Self::from_parts(
             local_recorder,
             note_repository,
@@ -1378,7 +1397,7 @@ mod ffi_contract_tests {
     /// Verifies telemetry FFI JSON is derived from in-memory SQLite without exposing task payloads.
     #[test]
     fn telemetry_ffi_serializes_devices_summary_and_recent_device_metrics() {
-        let ffi_runtime = FfiRuntime::new()
+        let ffi_runtime = FfiRuntime::in_memory_for_tests(&std::env::temp_dir())
             .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
         let timestamp_epoch_ms =
             u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or_default();
@@ -1419,7 +1438,7 @@ mod ffi_contract_tests {
     /// Verifies that the bridge reports the first portable start as successful.
     #[test]
     fn starts_an_idle_recorder_through_the_c_boundary_runtime() {
-        let mut ffi_runtime = FfiRuntime::new()
+        let mut ffi_runtime = FfiRuntime::in_memory_for_tests(&std::env::temp_dir())
             .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
 
         assert_eq!(ffi_runtime.start_recording(), FFI_SUCCESS);
@@ -1428,7 +1447,7 @@ mod ffi_contract_tests {
     /// Verifies that the bridge preserves the audio port's terminal duplicate-start rejection.
     #[test]
     fn rejects_a_second_start_without_exposing_the_rust_audio_error() {
-        let mut ffi_runtime = FfiRuntime::new()
+        let mut ffi_runtime = FfiRuntime::in_memory_for_tests(&std::env::temp_dir())
             .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
 
         assert_eq!(ffi_runtime.start_recording(), FFI_SUCCESS);
@@ -1438,7 +1457,7 @@ mod ffi_contract_tests {
     /// Verifies lifecycle commands share one serialized runtime and expose portable state codes.
     #[test]
     fn background_lifecycle_commands_are_serializable_and_report_portable_state() {
-        let mut ffi_runtime = FfiRuntime::new()
+        let mut ffi_runtime = FfiRuntime::in_memory_for_tests(&std::env::temp_dir())
             .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
 
         assert_eq!(ffi_runtime.start_recording(), FFI_SUCCESS);
@@ -1468,7 +1487,7 @@ mod ffi_contract_tests {
     /// Verifies that an empty logging directive is rejected before logging initialization.
     #[test]
     fn rejects_an_empty_logging_directive() {
-        let mut ffi_runtime = FfiRuntime::new()
+        let mut ffi_runtime = FfiRuntime::in_memory_for_tests(&std::env::temp_dir())
             .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
 
         assert_eq!(ffi_runtime.set_log_level(""), FFI_INVALID_ARGUMENT);

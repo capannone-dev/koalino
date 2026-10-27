@@ -3,7 +3,7 @@
 //! File-backed tests use unique paths under the OS temp directory and delete them afterwards; no
 //! AI model is loaded and embeddings are short hand-written vectors.
 
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use uuid::Uuid;
 
@@ -11,14 +11,19 @@ use crate::{
     adapters::storage::{
         sqlite_adapter::SqliteNoteRepository, sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
-    application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
+    application::{
+        crypto::voice_encryptor::ephemeral_cipher,
+        unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
+    },
     domain::models::{DeviceId, MeetingId, SpeakerIdentity, TranscriptSegment, VoiceEmbedding},
-    ports::{storage::NoteRepository, voice::VoiceVectorDB},
+    ports::{crypto::EmbeddingCipher, storage::NoteRepository, voice::VoiceVectorDB},
 };
 
 /// Deletes a temporary SQLite file (and its journal files) when dropped.
 struct TemporaryDatabase {
     path: PathBuf,
+    /// One key for every open of this file, as a real installation has.
+    cipher: Arc<dyn EmbeddingCipher>,
 }
 
 impl TemporaryDatabase {
@@ -26,19 +31,24 @@ impl TemporaryDatabase {
     fn new() -> Self {
         Self {
             path: std::env::temp_dir().join(format!("note-taker-voice-{}.sqlite3", Uuid::new_v4())),
+            cipher: ephemeral_cipher(),
         }
     }
 
     /// Opens the voice store on this file.
     fn open_voice_store(&self) -> SqliteVoiceVectorDB {
-        SqliteVoiceVectorDB::open(&self.path)
+        SqliteVoiceVectorDB::open(&self.path, Arc::clone(&self.cipher))
             .unwrap_or_else(|error| panic!("voice store should open: {error}"))
     }
 
     /// Opens the note repository on this file.
     fn open_note_repository(&self) -> SqliteNoteRepository {
-        SqliteNoteRepository::open(&self.path, DeviceId::new("voice-store-test"))
-            .unwrap_or_else(|error| panic!("note repository should open: {error}"))
+        SqliteNoteRepository::open(
+            &self.path,
+            DeviceId::new("voice-store-test"),
+            Arc::clone(&self.cipher),
+        )
+        .unwrap_or_else(|error| panic!("note repository should open: {error}"))
     }
 }
 
@@ -52,8 +62,10 @@ impl Drop for TemporaryDatabase {
 
 /// Opens an isolated in-memory voice store.
 fn in_memory_store() -> SqliteVoiceVectorDB {
-    SqliteVoiceVectorDB::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory voice store should open: {error}"))
+    SqliteVoiceVectorDB::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory voice store should open: {error}"))
 }
 
 /// Saves `identity`, failing the test on error.

@@ -25,8 +25,10 @@ use crate::{
 /// Outputs: The repository, the meeting, the two-chunk cluster ID, and the one-chunk cluster ID.
 fn repository_with_two_clusters() -> (SqliteNoteRepository, MeetingId, Uuid, Uuid) {
     let meeting_id = MeetingId::new("meeting-review");
-    let note_repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
+    let note_repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
     note_repository
         .create_meeting(&meeting_id, &[])
         .unwrap_or_else(|error| panic!("meeting should be created: {error}"));
@@ -249,11 +251,16 @@ fn assigned_names_survive_a_restart_and_are_reused_case_insensitively() {
         Uuid::new_v4()
     ));
     let meeting_id = MeetingId::new("meeting-restart");
+    let database_cipher = crate::application::crypto::voice_encryptor::ephemeral_cipher();
     let open_stores = || {
         (
-            SqliteNoteRepository::open(&database_path, DeviceId::new("cluster-review-test"))
-                .unwrap_or_else(|error| panic!("note repository should open: {error}")),
-            SqliteVoiceVectorDB::open(&database_path)
+            SqliteNoteRepository::open(
+                &database_path,
+                DeviceId::new("cluster-review-test"),
+                std::sync::Arc::clone(&database_cipher),
+            )
+            .unwrap_or_else(|error| panic!("note repository should open: {error}")),
+            SqliteVoiceVectorDB::open(&database_path, std::sync::Arc::clone(&database_cipher))
                 .unwrap_or_else(|error| panic!("voice store should open: {error}")),
         )
     };

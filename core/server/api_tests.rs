@@ -19,7 +19,6 @@ use tower::ServiceExt;
 use crate::{
     adapters::storage::{
         in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
-        sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
     application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
     domain::models::{
@@ -39,8 +38,10 @@ use crate::{
 /// Outputs: A router that exposes deterministic test data only through repository ports.
 /// Side effects: Allocates an in-memory SQLite database and stores fixture metadata.
 fn seeded_router() -> (axum::Router, ServerAppState) {
-    let repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("test SQLite repository must initialize: {error}"));
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("test SQLite repository must initialize: {error}"));
     let meeting_id = MeetingId::new("meeting-rome");
     let mut initial_document = AutoCommit::new();
     repository
@@ -464,8 +465,10 @@ async fn export_endpoint_rejects_bad_formats_and_unknown_meetings() {
 /// Outputs: The router, the two-chunk cluster ID (2.5 s, one linked segment), and the one-chunk
 /// cluster ID.
 fn cluster_router() -> (axum::Router, uuid::Uuid, uuid::Uuid) {
-    let repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("test SQLite repository must initialize: {error}"));
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("test SQLite repository must initialize: {error}"));
     let meeting_id = MeetingId::new("meeting-clusters");
     repository
         .create_meeting(&meeting_id, &[])
@@ -653,11 +656,26 @@ async fn cluster_assignment_endpoint_rejects_invalid_requests() {
 
 /// Builds a router over the SQLite file at `database_path`, composed as `bin/daemon.rs` does.
 fn file_backed_router(database_path: &std::path::Path) -> axum::Router {
-    let repository = SqliteNoteRepository::open(database_path, DeviceId::new("headless-server"))
-        .unwrap_or_else(|error| panic!("file SQLite repository must open: {error}"));
-    let voice_store = SqliteVoiceVectorDB::open(database_path)
-        .unwrap_or_else(|error| panic!("file voice store must open: {error}"));
-    build_router(ServerAppState::new(repository, voice_store))
+    let stores = file_backed_stores(database_path, "headless-server");
+    build_router(ServerAppState::new(
+        stores.note_repository,
+        stores.voice_store,
+    ))
+}
+
+/// Opens the encrypted stores on `database_path` with a key directory beside the file.
+fn file_backed_stores(
+    database_path: &std::path::Path,
+    device_id: &str,
+) -> crate::storage_composition::EncryptedStores {
+    crate::storage_composition::open_encrypted_stores(
+        database_path,
+        DeviceId::new(device_id),
+        crate::storage_composition::key_file_config_for_tests(
+            &database_path.with_extension("keys"),
+        ),
+    )
+    .unwrap_or_else(|error| panic!("encrypted stores must open: {error:#}"))
 }
 
 /// Verifies a cluster assigned over HTTP appears by name in the voice gallery, including after
@@ -670,8 +688,7 @@ async fn assigned_cluster_names_appear_in_the_voice_gallery_after_a_restart() {
     ));
     let meeting_id = MeetingId::new("meeting-api-persist");
     let cluster_id = {
-        let repository = SqliteNoteRepository::open(&database_path, DeviceId::new("seed"))
-            .unwrap_or_else(|error| panic!("file SQLite repository must open: {error}"));
+        let repository = file_backed_stores(&database_path, "seed").note_repository;
         repository
             .create_meeting(&meeting_id, &[])
             .unwrap_or_else(|error| panic!("test meeting must persist: {error}"));
@@ -709,6 +726,7 @@ async fn assigned_cluster_names_appear_in_the_voice_gallery_after_a_restart() {
     for suffix in ["", "-journal", "-wal", "-shm"] {
         let _ = std::fs::remove_file(format!("{}{suffix}", database_path.display()));
     }
+    let _ = std::fs::remove_dir_all(database_path.with_extension("keys"));
 
     assert_eq!(assign_status, StatusCode::OK);
     assert_eq!(assignment["identity_name"], "Grace Hopper");

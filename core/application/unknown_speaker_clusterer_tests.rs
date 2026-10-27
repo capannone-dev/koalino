@@ -27,8 +27,10 @@ use crate::{
 
 /// Creates an in-memory repository containing the given meetings.
 fn repository_with_meetings(meeting_ids: &[&MeetingId]) -> SqliteNoteRepository {
-    let note_repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
+    let note_repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
     for meeting_id in meeting_ids {
         note_repository
             .create_meeting(meeting_id, &[])
@@ -537,8 +539,10 @@ fn assignment_persists_identity_in_the_sqlite_voice_store() {
     let clusterer = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default());
     let (cluster_id, _) = add_chunk(&clusterer, &meeting_id, &[1.0, 0.0], "c1", 1_000);
     add_chunk(&clusterer, &meeting_id, &[0.9, 0.3], "c2", 1_000);
-    let voice_store = SqliteVoiceVectorDB::open_in_memory()
-        .unwrap_or_else(|error| panic!("voice store should open: {error}"));
+    let voice_store = SqliteVoiceVectorDB::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("voice store should open: {error}"));
     let identity = SpeakerIdentity::new(Uuid::new_v4(), "Grace Hopper");
 
     let assignment = clusterer

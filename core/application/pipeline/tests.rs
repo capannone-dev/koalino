@@ -842,8 +842,10 @@ impl DiarizationEngine for ScriptedIntegrationDiarizer {
 #[tokio::test]
 async fn full_meeting_persists_three_attributed_segments_through_sqlite() {
     let meeting_id = MeetingId::new("meeting-integration");
-    let note_repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
+    let note_repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
     note_repository
         .create_meeting(&meeting_id, &[])
         .unwrap_or_else(|error| panic!("meeting should be created: {error}"));
@@ -929,8 +931,10 @@ async fn full_meeting_persists_three_attributed_segments_through_sqlite() {
 
 /// Builds an in-memory SQLite repository containing the pipeline meeting.
 fn sqlite_repository_with_meeting(meeting_id: &MeetingId) -> SqliteNoteRepository {
-    let note_repository = SqliteNoteRepository::open_in_memory()
-        .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
+    let note_repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
     note_repository
         .create_meeting(meeting_id, &[])
         .unwrap_or_else(|error| panic!("meeting should be created: {error}"));
