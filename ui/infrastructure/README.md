@@ -4,3 +4,6 @@
 
 `RustRecordingBridge` is the sole Flutter-side owner of `dart:ffi` calls for recording and logging.
 It maps C-compatible status codes into Dart outcomes; no Rust struct crosses this boundary.
+
+The current bridges live in `lib/infrastructure/`. `RustMeetingBridge` (Issue #36) owns the
+meeting-read calls.

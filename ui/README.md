@@ -6,6 +6,47 @@ The Flutter client renders application state and delegates native work to `infra
 Presentation widgets never import Rust-generated or `dart:ffi` bindings. Controllers depend on
 small Dart bridge interfaces, allowing widget tests to use deterministic fakes.
 
+## Navigation
+
+`HomeShell` hosts the Record, Meetings, and Telemetry destinations. Windows narrower than 840 px
+(phones) use a Material 3 `NavigationBar`, and wider ones (desktops, tablets in landscape) use a
+`NavigationRail`. Only the selected destination is built. Meetings and Telemetry each own their
+controller and dispose it when left, so the telemetry timer stops and the meeting list reloads
+on every visit. The app-lifetime `RecordingController` keeps an active recording across
+destinations. This replaces the earlier drawer, whose push used a context above the navigator.
+
+## Meeting titles (Issue #36)
+
+- **Recording:** `RecordingScreen` has an optional **Meeting title** field ("Enter meeting
+  title (optional)", at most 200 characters; Enter starts the recording).
+  - `RecordingController.startRecording(title:)` trims the title and sends a blank one as
+    `null`.
+  - `RustRecordingBridge.startRecordingWithTitle` passes it to
+    `note_taker_start_recording_with_title` with a null meeting ID. Rust rejects an empty
+    string, so blank titles never become `""`.
+  - The field is locked while recording, and the status reads `Recording "<title>"`.
+  - The content is capped at 480 px wide and scrolls above the on-screen keyboard.
+- **Meeting list:** `MeetingListScreen` lists meetings newest first.
+  - Each row shows the title (bold `titleMedium`) above `YYYY-MM-DD HH:MM UTC · M:SS`.
+  - Untitled meetings show Rust's fallback, `Meeting YYYY-MM-DD HH:MM UTC`. The decoder
+    rebuilds the same fallback if a response ever lacks a title.
+  - Phones push `MeetingDetailScreen`. From 840 px the list and `MeetingDetailView` sit side by
+    side, and the selected row is highlighted.
+  - Includes pull-to-refresh, a refresh action, and empty and error (with **Retry**) states.
+- **Meeting detail:** shows, in order:
+  - the title as a bold `headlineMedium` semantic header;
+  - the date and duration;
+  - the selectable meeting ID;
+  - the speaker-attributed segments (`speaker · start`), the flat transcript, or "No
+    transcript is available."
+
+  The app bar's paperclip opens `AttachmentImportScreen`.
+- **Bridge:** `RustMeetingBridge` calls `note_taker_get_meetings` and `note_taker_get_meeting`
+  in `Isolate.run`, because they read SQLite synchronously. The pure functions `decodeMeetings`
+  and `decodeMeetingDetail` parse the JSON (`title`, `created_at`, `duration_ms`, `segments`)
+  and turn Rust's `{"ok":false,...}` errors into a `StateError`. Controllers show generic
+  messages, because Rust errors can contain storage paths.
+
 ## Voice Gallery
 
 `VoiceGalleryScreen` renders `VoiceGalleryController` state for a meeting's unresolved
@@ -31,7 +72,7 @@ older clip FFI symbols remain exported, but the Dart bridge no longer binds them
 
 ## Telemetry dashboard
 
-The drawer opens a responsive Material 3 telemetry dashboard for mobile and desktop. It polls
+The Telemetry destination opens a responsive Material 3 telemetry dashboard for mobile and desktop. It polls
 caller-freed Rust JSON every ten seconds and uses `fl_chart` for privacy-safe duration, latency,
 task-mix, and power views; no audio, transcript, biometric, or credential content crosses FFI.
 

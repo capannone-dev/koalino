@@ -47,6 +47,7 @@
 | #11 Voice Gallery, unassigned playback, and weak match prompting | Ready for review | JSON metadata/path FFI, local native playback, Riverpod controller, Material 3 review screen, and fake-bridge widget tests. |
 | #14 Attachment import UI, file picking, and meeting suggestion workflow | Ready for review | File-picker seam, JSON-only AttachmentManager FFI, Riverpod controller parsing, Material 3 ranked confirmation dialog, and fake-boundary widget tests. |
 | #25 Flutter telemetry dashboard | Ready for review | Caller-freed telemetry FFI JSON, polling controller, responsive Material 3 fl_chart dashboard, and drawer navigation. |
+| #36 Flutter meeting titles | Ready for review | Optional title field on the recording screen (blank → null) via `note_taker_start_recording_with_title`; `RustMeetingBridge` + JSON decoders for `note_taker_get_meetings`/`note_taker_get_meeting`, which now also return `duration_ms` and speaker `segments`; title-first meeting list (phone route, desktop list-detail ≥ 840 px) and bold headline detail header; adaptive `NavigationBar`/`NavigationRail` shell replacing the broken drawer. Verified with `make flutter-lint`/`flutter-test` (42 tests) and a Dart script against the real `cdylib`. Not verified: a GUI run on a device (no emulator, no `cmake`/`ninja`, no transcription engine). |
 
 ## WP11: Unknown-speaker clustering
 
@@ -61,7 +62,7 @@
 
 | Issue | Status | Scope |
 | --- | --- | --- |
-| #35 Meeting titles | Ready for review | Validated `MeetingTitle` and `MeetingMetadata::display_title()` fallback (`Meeting YYYY-MM-DD HH:MM UTC`, computed on read); nullable `meetings.title` with an idempotent migration for older databases; `record start --title` and title-aware `meetings list`/`view`; FFI `note_taker_start_recording_with_title`, `note_taker_get_meetings`, `note_taker_get_meeting`; `title`/`created_at` on `GET /api/meetings[/{id}]` and a new `POST /api/meetings`; title-based export headers and filenames; Teams metadata titles stored on untitled meetings; web meeting pages show titles. Follow-up: Dart binding/UI, replicating titles through the CRDT, and a rename command. |
+| #35 Meeting titles | Ready for review | Validated `MeetingTitle` and `MeetingMetadata::display_title()` fallback (`Meeting YYYY-MM-DD HH:MM UTC`, computed on read); nullable `meetings.title` with an idempotent migration for older databases; `record start --title` and title-aware `meetings list`/`view`; FFI `note_taker_start_recording_with_title`, `note_taker_get_meetings`, `note_taker_get_meeting`; `title`/`created_at` on `GET /api/meetings[/{id}]` and a new `POST /api/meetings`; title-based export headers and filenames; Teams metadata titles stored on untitled meetings; web meeting pages show titles. Follow-up: replicating titles through the CRDT and a rename command (Dart binding/UI done in #36). |
 | #26 Meeting export to Markdown, PDF, and JSON | Ready for review | Persisted speaker-attributed transcript segments, `MeetingExporter` port with Markdown/PDF/JSON adapters, `ExportManager` extraction and attachment staging, and shared CLI/HTTP/FFI entry points with in-memory SQLite tests. |
 
 ## WP7: Headless server API
@@ -107,7 +108,7 @@
 - Replace proportional word distribution with word-level timestamps once `TranscriptionEngine` exposes them.
 - Resolve segment speakers through the persisted voice-store names (#30), so exports can show them instead of `Unknown speaker`. (Meeting titles were added in #35.)
 - Replicate meeting titles through the Automerge document so peers see them, and add a rename command (CLI, FFI, and `PATCH /api/meetings/{id}`).
-- Add a Dart binding and UI for `note_taker_start_recording_with_title`, `note_taker_get_meetings`, and `note_taker_get_meeting`.
+- Capture microphone PCM in Flutter and feed `note_taker_push_audio_pcm`, and add stop/pause controls; the recording screen still only starts recordings.
 - Add a Dart binding and UI for `note_taker_export_meeting`.
 
 - Define validation and IDs suitable for CRDT replication before storage adapters are introduced.

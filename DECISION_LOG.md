@@ -654,3 +654,29 @@
   - CRDT replication of titles.
   - A rename command.
   - A Dart binding and UI.
+
+## 2026-10-28 — Issue #36 Flutter meeting titles
+
+- Bindings: they live in `ui/lib/infrastructure/` (the issue named a non-existent
+  `ui/lib/ffi/note_taker_bindings.dart`).
+  - `startRecordingWithTitle(String? title)` sends null for both a blank title and the meeting
+    ID, so Rust generates the ID and the fallback title.
+  - The issue's meeting-query bindings did not exist and were added as `RustMeetingBridge`.
+- FFI extension: `note_taker_get_meetings`/`note_taker_get_meeting` gained `duration_ms` and
+  `segments`. Recordings store only segments, so without them every recorded meeting's detail
+  would read "No transcript". Participant counts are not exposed. The list shows date and
+  duration only.
+- Fallback title: Rust always sends a display title. Dart rebuilds the identical fallback only
+  defensively, for null or blank values.
+- Navigation: the drawer was replaced by `HomeShell`, because its push used a context above the
+  `Navigator`, and the inner `Scaffold` hid its menu button.
+  - 840 px (Material 3 "expanded") is the single breakpoint for both the rail and the
+    list-detail layout.
+  - Destinations own and dispose their controllers. This fixes the telemetry timer leak.
+- State: `ChangeNotifier` controllers injected through constructors, matching the recording and
+  attachment screens.
+- Verification:
+  - Flutter 3.47.8 (the CI version) was installed locally.
+  - Bindings were exercised from a Dart script against the real `cdylib`.
+  - No GUI run: there is no emulator, `cmake`/`ninja` are missing for `flutter build linux`,
+    and no transcription engine is configured.

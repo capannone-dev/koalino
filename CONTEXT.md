@@ -261,3 +261,15 @@ Issue #35 adds meeting titles:
     meetings.
 - **Exports:** the display title is the export heading. A stored title also names the file.
 - **Teams:** the bridge stores the Teams title on meetings that have none yet.
+
+Issue #36 brings meeting titles to Flutter:
+
+- **Recording:** the recording screen takes an optional title. Blank becomes `null`, never `""`,
+  because Rust rejects an empty title.
+- **Meetings:** a new Meetings destination lists titles above their date and duration. The
+  detail screen shows the title as a bold headline header and the speaker-attributed transcript.
+  - The meeting FFI JSON gained `duration_ms` and, for detail, `segments`.
+- **Bridges:** `RustMeetingBridge` decodes the JSON off the UI isolate.
+- **Navigation:** an adaptive `HomeShell` replaces the drawer, using `NavigationBar` on phones
+  and `NavigationRail` from 840 px. The meeting list becomes list-detail at that width.
+- **Gap:** Flutter still neither captures audio nor stops recordings.
