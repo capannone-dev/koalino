@@ -105,9 +105,13 @@ the attachment manager and keeping image bytes out of logs.
    moved. PDF copies into a unique OS temp directory that is always deleted afterwards. JSON copies
    nothing and lists source paths. Unreadable sources are logged by attachment ID and rendered as
    unavailable. Source files are never moved or modified.
-5. **Name and write.** Generated names are `{meeting date}_{meeting_id}_{export timestamp}.{ext}`
+5. **Name and write.** Generated names are `{meeting date}_{label}_{export timestamp}.{ext}`
    (or `meetings-export_{count}_{timestamp}.{ext}` for batches), sanitized to `[A-Za-z0-9._-]`,
-   with `-N` appended on collision. An explicit destination overrides the generated name.
+   with `-N` appended on collision. `label` is the stored meeting title, truncated to 80
+   characters (Issue #35). Untitled meetings, and titles without ASCII letters or digits, use the
+   meeting ID instead, because the dated fallback title would only repeat the date prefix.
+   Documents always carry the display title (stored or fallback), which the renderers use as the
+   Markdown heading, PDF title, and JSON `meeting.title`. An explicit destination overrides the generated name.
 
 `ExportManager` only borrows its `ExportWriter`, so a driver can extract under a repository lock,
 drop the manager, and render on a blocking thread (the HTTP API does this with `spawn_blocking`). Errors are

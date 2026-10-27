@@ -31,10 +31,13 @@ documented nonzero status codes distinguishable from lifecycle states.
   every chunk and wipes raw audio that no engine consumed.
 - `ffi.rs` composes the controller on the first `note_taker_start_recording` and reuses it for
   every later recording. A failure returns `FFI_PIPELINE_UNAVAILABLE` (`4`) and is retried on the
-  next start. `note_taker_start_recording_for_meeting`, `note_taker_push_audio_pcm`, and
-  `note_taker_get_active_meeting_id` complete the ABI (see `API_SPECS.md`). Stop blocks while the
+  next start. `note_taker_start_recording_for_meeting`,
+  `note_taker_start_recording_with_title` (Issue #35), `note_taker_push_audio_pcm`, and
+  `note_taker_get_active_meeting_id` complete the ABI (see `API_SPECS.md`).
+  `RecordingController::start_titled` stores the title through the worker's repository once the
+  session is open. Stop blocks while the
   last chunks are transcribed, so Flutter must call it from a background isolate.
-- `cli_recording.rs` runs `record start --input <wav|->` in the foreground until the input ends, on
+- `cli_recording.rs` runs `record start --input <wav|-> [--title <title>]` in the foreground until the input ends, on
   Ctrl+C, or on `record stop`. Processes coordinate through `<db>.recording-active` (PID and
   meeting) and `<db>.recording-stop`. A lock left by a dead process is replaced.
 - `daemon.rs` composes the pipeline at start-up on a blocking thread and logs its availability (a
@@ -80,6 +83,10 @@ behind an authenticated reverse proxy before any non-loopback deployment.
 the same `NOTE_TAKER_DATABASE_PATH` as the daemon, and passes portable adapters to the thin CLI
 service. It fixes structured log filtering at `error` so a user's table/detail output is not mixed
 with operational logs.
+
+`ffi.rs` exports `note_taker_get_meetings()` and `note_taker_get_meeting(meeting_id)`, which return
+caller-freed JSON with each meeting's ID, display title, and creation time (see `API_SPECS.md`).
+`teams_bridge_composition.rs` stores the Teams meeting title on a meeting that has none yet.
 
 `ffi.rs` also exports `note_taker_export_meeting(meeting_id, format, options_json)`, which runs the
 shared `ExportManager` and returns caller-freed JSON describing the written file or a structured

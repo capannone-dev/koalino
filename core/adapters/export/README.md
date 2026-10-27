@@ -98,7 +98,9 @@ carries `schema_version` and `meeting_count` metadata. An empty batch is rejecte
 ## Customization
 
 The default output directory is `NOTE_TAKER_EXPORT_DIR`, else `~/Documents/NoteTaker/exports`.
-Filenames follow `{date}_{meeting_id}_{export timestamp}.{ext}` (see `application/README.md`).
+Filenames follow `{date}_{title or meeting_id}_{export timestamp}.{ext}` (see
+`application/README.md`). The heading and document title come from `ExportDocument::title()`,
+which is the stored meeting title or the `Meeting YYYY-MM-DD HH:MM UTC` fallback (Issue #35).
 To add a format, implement `MeetingExporter` for a new unit struct here, add it to
 `default_exporters()`, and add its renderer tests to `tests.rs`. PDF templates are not
 customizable yet.

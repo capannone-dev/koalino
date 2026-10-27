@@ -18,7 +18,7 @@ The executable intentionally fixes its tracing filter to `error`; terminal outpu
 only command results.
 
 ```text
-note-taker record start --input <file.wav|-> [--meeting-id <id>]
+note-taker record start --input <file.wav|-> [--meeting-id <id>] [--title <title>]
 note-taker record stop|status
 note-taker meetings list
 note-taker meetings view <meeting-id>
@@ -31,8 +31,15 @@ note-taker voice assign-cluster <cluster-uuid> <identity-name>
 note-taker telemetry
 ```
 
-`meetings list` prints `ID | Date | Duration`; the current storage port exposes meeting IDs only,
-so date and duration display as `unknown` until recording timeline metadata is added. `voice assign`
+`record start --title` stores a title on the meeting (Issue #35). Without it, a new meeting is
+untitled and an existing one keeps its title. Blank titles, titles longer than 200 characters,
+and titles with control characters are rejected before recording starts.
+
+`meetings list` prints `ID | Title | Date | Duration`. Title is the stored title, or
+`Meeting YYYY-MM-DD HH:MM UTC` for untitled meetings. Date is the UTC creation time. Duration is
+the end of the latest transcript segment (`M:SS`, or `H:MM:SS` from one hour). `meetings view`
+prints the title, underlined, on its first line, followed by the ID, creation time, transcript,
+and attachments, and reports unknown meetings as errors. `voice assign`
 finds the clip through `NoteRepository` and delegates signature storage to `VoiceIdentityManager`;
 it never performs vector matching or SQL in the CLI.
 

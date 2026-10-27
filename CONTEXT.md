@@ -243,3 +243,21 @@ component only):
   `POST /api/join`.
 - **Connection:** the bot reaches the loopback-only Rust server on the same host or through an
   SSH tunnel; plaintext `ws://` to a remote host is refused.
+
+Issue #35 adds meeting titles:
+
+- **Domain:** `MeetingTitle` is a validated newtype (trimmed, 1–200 characters, no control
+  characters). `MeetingMetadata` carries `Option<MeetingTitle>`, and `display_title()` falls
+  back to `Meeting YYYY-MM-DD HH:MM UTC`. The fallback is computed on read, never stored.
+- **Storage:** titles live in a nullable `meetings.title` column. Older databases gain it on
+  open, and their meetings stay untitled. `NoteRepository::save_meeting_title` writes it. Titles
+  are local metadata, not CRDT content, and are never logged.
+- **Entry points:**
+  - CLI: `record start --title` (through `RecordingController::start_titled`), and
+    `meetings list`/`view` show titles.
+  - FFI: `note_taker_start_recording_with_title`, `note_taker_get_meetings`, and
+    `note_taker_get_meeting`.
+  - HTTP: `title` on `GET /api/meetings[/{id}]`, and `POST /api/meetings` creates titled
+    meetings.
+- **Exports:** the display title is the export heading. A stored title also names the file.
+- **Teams:** the bridge stores the Teams title on meetings that have none yet.

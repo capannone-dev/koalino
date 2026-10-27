@@ -15,8 +15,14 @@ separately authenticated reverse proxy is configured. CORS permits only `http://
 
 ## HTTP contract
 
-- `GET /api/meetings` returns `[{"meeting_id":"..."}]` metadata only.
-- `GET /api/meetings/{meeting_id}` returns `meeting_id`, nullable `transcript`, and linked
+- `GET /api/meetings` returns `[{"meeting_id","title","created_at"}]` metadata only. `title`
+  is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for untitled meetings; `created_at` is
+  RFC 3339 UTC.
+- `POST /api/meetings` accepts `{"title":"..."}` or `{}` and returns `201` with the new
+  meeting's summary (generated `meeting-<uuid>` ID). An invalid title returns `400` and creates
+  nothing. A malformed body gets axum's `4xx`.
+- `GET /api/meetings/{meeting_id}` returns `meeting_id`, `title`, `created_at`, nullable
+  `transcript`, and linked
   attachment metadata (`attachment_id`, `file_path`, `mime_type`, `original_timestamp_utc`). It
   returns `404` for an unknown meeting and never returns CRDT bytes or attachment contents.
 - `GET /api/voice-gallery` returns display-safe identity labels and unresolved clip ID/time-range

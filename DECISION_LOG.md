@@ -624,3 +624,33 @@
   - Run the real-meeting test on a Windows host.
   - Support multiple concurrent meetings.
   - Add camera video, which is ignored by the Rust side today.
+
+## 2026-10-27 — Issue #35 Meeting titles
+
+- Model: there is no `Meeting` struct, so the title lives on `MeetingMetadata`, which every
+  entry point already loads. `MeetingTitle` validates at the boundary: it is trimmed, 1–200
+  characters, and has no control characters, so it is terminal- and export-safe.
+- Migration: titles are filled in on read, not back-filled. Existing rows stay `NULL`, and
+  `display_title()` derives `Meeting YYYY-MM-DD HH:MM UTC` from `created_at_utc`. The time is
+  included (the issue's example was date-only) so that same-day meetings can be told apart. A
+  stored fallback would go stale and could not be distinguished from a real title.
+- Port: `save_meeting_title` is a separate method with a default `Unavailable`, rather than a
+  new `create_meeting` parameter. This keeps every test double unchanged and serves as the
+  future rename primitive.
+- Recording: the title is written through `RecordingManager::with_note_repository` right after
+  the worker opens the session. An untitled start never clears an existing title.
+- FFI: the existing `note_taker_start_recording*` ABI is unchanged, and the new
+  `note_taker_start_recording_with_title` takes nullable arguments. The issue named
+  `note_taker_get_meetings`/`note_taker_get_meeting`, but they did not exist, so they were added.
+- HTTP: the issue's `POST /api/meetings` did not exist, so it was added (create-only, generated
+  ID). The server previously had no meeting mutation endpoints.
+- Export filenames: they use the stored title, and otherwise keep the meeting ID. The dated
+  fallback would repeat the filename's date prefix and drop the only distinguishing part.
+  Headers always use the display title.
+- Teams: the metadata title is stored only when the meeting is untitled, because metadata is
+  re-sent on every roster change.
+- Not replicated: titles are SQLite metadata, not CRDT content, so peers do not see them yet.
+- Follow-ups:
+  - CRDT replication of titles.
+  - A rename command.
+  - A Dart binding and UI.

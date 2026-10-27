@@ -135,6 +135,19 @@ contents, EXIF data, or database-specific values.
 - `int32_t note_taker_start_recording_for_meeting(const char *meeting_id)` starts a recording into
   the given non-blank meeting, creating it when missing. A recording into an existing meeting
   continues after its last segment.
+- `int32_t note_taker_start_recording_with_title(const char *meeting_id, const char *title)`
+  (Issue #35) accepts null for either argument. A null `meeting_id` generates `meeting-<uuid>`,
+  and a null `title` keeps the meeting's current title. Otherwise it behaves like
+  `..._for_meeting` and stores the trimmed title on the meeting. Invalid UTF-8, a blank meeting
+  ID, or a blank, over-200-character, or control-character title returns `1`. Both arguments are
+  ignored when resuming a paused recording.
+- `char *note_taker_get_meetings(void)` returns `[{"meeting_id","title","created_at"}]`, and
+  `char *note_taker_get_meeting(const char *meeting_id)` returns
+  `{"meeting_id","title","created_at","transcript"}` (`transcript` is null until stored). `title`
+  is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting; `created_at`
+  is RFC 3339 UTC. Errors use `{"ok":false,"error_code","error"}` with `invalid_argument`,
+  `meeting_not_found`, `list_failed`, `load_failed`, or `runtime_unavailable`. Free results
+  with `note_taker_free_string`.
 - `int32_t note_taker_push_audio_pcm(const int16_t *samples, size_t sample_count)` copies 16 kHz
   mono signed 16-bit PCM from the platform capture into the active recording. It returns `0`
   (audio is discarded while paused), `1` for a null pointer with a nonzero count, or `2` when no
@@ -160,9 +173,12 @@ mapping and a `display_name` for first-time local identity naming; optional emai
 
 ## Headless HTTP and WebSocket API
 
-The headless daemon binds locally by default and accepts no mutation endpoints in this first
-version. `GET /api/meetings` returns meeting-ID metadata; `GET /api/meetings/{id}` adds a nullable
-transcript and attachment metadata but no CRDT or file bytes. `GET /api/voice-gallery` returns
+The headless daemon binds locally by default. `GET /api/meetings` returns
+`[{"meeting_id","title","created_at"}]`. `GET /api/meetings/{id}` adds the same `title` and
+`created_at`, a nullable transcript, and attachment metadata, but no CRDT or file bytes. `title`
+is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting. `POST
+/api/meetings` with `{"title":"..."}` (or `{}`) creates an empty meeting and returns `201` with
+its summary. An invalid title returns `400` (Issue #35). `GET /api/voice-gallery` returns
 speaker labels and unresolved review-clip identifiers/timing only; voice vectors and raw audio are
 never serialized. `GET /api/telemetry` returns aggregate task count, duration, and latency.
 
@@ -219,7 +235,8 @@ returns `400`, an unknown cluster `404`, an already-resolved cluster `409`, and 
 
 ## Linux CLI contract
 
-`note-taker` accepts `record start|stop|status`, `meetings list`, `meetings view <meeting-id>`,
+`note-taker` accepts `record start [--title <title>]|stop|status`, `meetings list` (ID, title,
+date, duration), `meetings view <meeting-id>` (title first),
 `voice list`, `voice assign <clip-uuid> <identity-uuid>`, `voice list-clusters <meeting-id>`,
 `voice assign-cluster <cluster-uuid> <identity-name>`, `telemetry`,
 `meetings export <meeting-id> --format <markdown|pdf|json> [--output <path>]`, and

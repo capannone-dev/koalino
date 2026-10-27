@@ -61,6 +61,7 @@
 
 | Issue | Status | Scope |
 | --- | --- | --- |
+| #35 Meeting titles | Ready for review | Validated `MeetingTitle` and `MeetingMetadata::display_title()` fallback (`Meeting YYYY-MM-DD HH:MM UTC`, computed on read); nullable `meetings.title` with an idempotent migration for older databases; `record start --title` and title-aware `meetings list`/`view`; FFI `note_taker_start_recording_with_title`, `note_taker_get_meetings`, `note_taker_get_meeting`; `title`/`created_at` on `GET /api/meetings[/{id}]` and a new `POST /api/meetings`; title-based export headers and filenames; Teams metadata titles stored on untitled meetings; web meeting pages show titles. Follow-up: Dart binding/UI, replicating titles through the CRDT, and a rename command. |
 | #26 Meeting export to Markdown, PDF, and JSON | Ready for review | Persisted speaker-attributed transcript segments, `MeetingExporter` port with Markdown/PDF/JSON adapters, `ExportManager` extraction and attachment staging, and shared CLI/HTTP/FFI entry points with in-memory SQLite tests. |
 
 ## WP7: Headless server API
@@ -104,7 +105,9 @@
 - Store the embedding encryption key in the platform keychain (macOS/iOS Keychain, Android Keystore, Secret Service) instead of `~/.note_taker/encryption.key`, and support re-keying or changing the passphrase.
 - Tune the 0.70 clustering threshold against real diarization embeddings.
 - Replace proportional word distribution with word-level timestamps once `TranscriptionEngine` exposes them.
-- Persist meeting titles, and resolve segment speakers through the persisted voice-store names (#30), so exports can show them instead of meeting IDs and `Unknown speaker`.
+- Resolve segment speakers through the persisted voice-store names (#30), so exports can show them instead of `Unknown speaker`. (Meeting titles were added in #35.)
+- Replicate meeting titles through the Automerge document so peers see them, and add a rename command (CLI, FFI, and `PATCH /api/meetings/{id}`).
+- Add a Dart binding and UI for `note_taker_start_recording_with_title`, `note_taker_get_meetings`, and `note_taker_get_meeting`.
 - Add a Dart binding and UI for `note_taker_export_meeting`.
 
 - Define validation and IDs suitable for CRDT replication before storage adapters are introduced.

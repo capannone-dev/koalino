@@ -12,6 +12,14 @@ The `meetings` table stores one offline-first meeting per `meeting_id`:
 - `acquisition_device_id`: device metadata captured from the adapter configuration.
 - `transcript`: nullable normalized transcript text, populated only after transcription.
 - `automerge_document`: non-null serialized Automerge document BLOB.
+- `title` (Issue #35): nullable user-chosen title, written by `save_meeting_title` (a validated
+  `MeetingTitle`: trimmed, 1–200 characters, no control characters) and never logged. `NULL`
+  means untitled. `load_meeting_metadata` returns it, and `MeetingMetadata::display_title()`
+  then supplies `Meeting YYYY-MM-DD HH:MM UTC` (from `created_at_utc`) for untitled meetings. The
+  fallback is computed on read, never stored. Databases created before Issue #35 gain the column
+  on open through an idempotent `ALTER TABLE meetings ADD COLUMN title TEXT`, and their existing
+  meetings stay untitled. The title is local metadata, not part of the CRDT document, so it does
+  not replicate to peers yet.
 
 The `unassigned_voice_clips` table retains temporary review audio for weak or unknown speaker
 matches, keyed by a UUID and its owning meeting. Each record includes the segment's start and end
@@ -23,7 +31,7 @@ The `transcript_segments` table stores speaker-attributed transcript intervals: 
 `speaker_identity_id` (a `SpeakerIdentity` UUID, `NULL` when unattributed), and `segment_text`.
 `save_transcript_segments` replaces a meeting's rows in one transaction; `load_transcript_segments`
 returns them ordered by start time. `load_meeting_metadata` exposes the meeting's `created_at_utc`
-instant without reading transcript or CRDT payloads. Segment text follows the same at-rest policy
+instant and `title` without reading transcript or CRDT payloads. Segment text follows the same at-rest policy
 as the `transcript` column.
 
 The `unknown_speaker_clusters` and `cluster_chunks` tables (in
