@@ -152,6 +152,17 @@ Issue #26 adds meeting export. `NoteRepository` gains a `transcript_segments` ta
 time) and passes them to `MeetingExporter` adapters for Markdown, PDF (`printpdf` + bundled `lopdf`),
 and JSON schema `1.0`. `ExportWriter` stages attachment copies and picks collision-free filenames.
 The CLI (`meetings export`/`export-all`), `POST /api/meetings/{id}/export`, and
-`note_taker_export_meeting` all share this manager. Segments are not yet produced by the
-transcription pipeline, so current exports fall back to the flat transcript as one unattributed
-segment.
+`note_taker_export_meeting` all share this manager. Meetings without stored segments still fall
+back to the flat transcript as one unattributed segment.
+
+Issue #27 connects the pipeline in `core/application/pipeline`. `MeetingSession` holds the meeting
+ID and the injected transcription, optional diarization, voice-matcher, and repository ports. It
+processes each `VadAudioChunk` in five steps: transcribe, diarize, match voices, align, and persist
+through `save_transcript_segments`. The persisted timeline is seeded from storage at start. Strong
+matches persist their identity. Weak matches, no match, matcher failures, and diarization failures
+persist `None`, and `AttributedSegment` distinguishes them as "Unknown (pending review)",
+"Unknown", or "Unattributed". Weak and no-match segments also save review clips. A transcription
+failure persists nothing. External bridge chunks skip diarization and use the `IdentityMapper`
+identity. Alignment uses VAD chunk bounds as the reference: it clamps regions, merges same-speaker
+neighbours, tiles gaps at midpoints, and splits words by duration because the transcription port
+has no word timestamps. Nothing wires sessions into the daemon, CLI, or `TeamsProcessor` yet.

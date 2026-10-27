@@ -1,0 +1,79 @@
+<!-- Explains the end-to-end meeting pipeline that turns audio chunks into speaker-attributed segments. -->
+
+# Meeting pipeline
+
+This directory connects transcription, diarization, voice identity, and storage into one
+application-layer flow. It uses only existing ports: `TranscriptionEngine`, `DiarizationEngine`,
+`VoiceIdentityMatcher`, `IdentityMapper`, and `NoteRepository`. No adapter, model, or SQL detail
+is imported.
+
+## Contents
+
+| File | Purpose |
+| --- | --- |
+| `meeting_session.rs` | `MeetingSession`: per-recording orchestration of local VAD chunks and external bridge chunks. |
+| `alignment.rs` | Pure timestamp alignment and transcript text distribution against VAD chunk boundaries. |
+| `tests.rs` | Mock-port TDD specification plus an in-memory SQLite integration test of a three-chunk meeting. |
+
+## MeetingSession
+
+`MeetingSession::start` is called when a recording starts for an existing meeting. It holds the
+meeting ID, the transcription engine chosen by compute routing, an optional diarization engine, the
+voice-identity matcher, and the note repository. It loads the meeting's existing segments, because
+`save_transcript_segments` replaces a meeting's whole timeline. Later chunks are appended to that
+timeline instead of overwriting it. The previous chunk's text is passed as `TranscriptionContext`.
+
+## Local VAD chunk flow
+
+```text
+VadAudioChunk (recording, meeting-relative start/end, opaque audio)
+  │
+  ├─1─ TranscriptionEngine::transcribe ──── error → log, return Err, persist nothing
+  ├─2─ DiarizationEngine::diarize ───────── missing/error → whole chunk "Unattributed"
+  ├─3─ VoiceIdentityMatcher per segment
+  │      strong   → Known(identity)
+  │      weak     → "Unknown (pending review)" + UnassignedVoiceClip (with candidate)
+  │      none     → "Unknown" + UnassignedVoiceClip
+  │      error    → "Unknown" + UnassignedVoiceClip, log, continue
+  ├─4─ alignment::align_chunk_regions (merge text with speaker regions)
+  └─5─ NoteRepository::save_transcript_segments (whole meeting timeline)
+```
+
+## External bridge (Teams) flow
+
+`process_external_chunk` never calls diarization: the bridge guarantees one isolated speaker per
+stream. It transcribes through `transcribe_external_media` and then resolves the participant through
+`IdentityMapper`. It persists one `Known` segment from `timestamp_ms` to
+`timestamp_ms + duration_ms`. A mapping failure degrades the segment to `Unknown`, with no review
+clip because there is no embedding to review. Voice auto-enrollment stays in `TeamsProcessor`.
+
+## Timestamp alignment
+
+The transcription port returns chunk-level text without word timestamps, so the VAD chunk is the
+alignment reference:
+
+1. Diarization regions, which are relative to the chunk, are clamped to the chunk duration and
+   sorted. Overlaps are cut at the earlier region's end.
+2. Adjacent regions with the same attribution are merged. A sentence that transcription splits
+   but diarization keeps together therefore stays one segment.
+3. Regions are stretched to tile the chunk. The first region starts at 0, the last ends at the
+   chunk end, and each gap is split at its midpoint.
+4. Words are distributed in proportion to each region's duration, using rounded cumulative
+   boundaries. Regions that receive no words are dropped. Blank transcripts produce no segment.
+5. Offsets are shifted by the chunk start into meeting time.
+
+Without usable regions, the whole chunk becomes one `Unattributed` segment. Proportional word
+distribution is a heuristic. Word-level timestamps from the transcription port would replace it.
+
+## Persistence and labels
+
+`TranscriptSegment` stores only `Option<Uuid>`, so only `Known` segments carry an identity.
+"Unknown (pending review)", "Unknown", and "Unattributed" are all persisted as `None`, and their
+distinction is returned in `AttributedSegment::attribution()`. Review clips keep chunk audio and
+derived embeddings in `NoteRepository` until a user resolves them in the Voice Gallery. Logs carry
+meeting IDs, offsets, counts, and clip IDs only, never text, audio, or embeddings.
+
+## Runtime note
+
+`TranscriptionEngine` is synchronous. Drive a session from a blocking-capable worker, such as a
+dedicated thread or `spawn_blocking`, rather than directly on the main async runtime.

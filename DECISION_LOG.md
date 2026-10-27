@@ -295,3 +295,24 @@
   links. PDF staging uses a temp directory that is always removed. JSON lists original paths.
 - Exports and segment text follow the existing `transcript` column's at-rest policy. Neither is
   encrypted yet, and neither ever contains embeddings or raw audio.
+
+## 2026-10-27 — Issue #27 speaker-attributed transcript pipeline
+
+- `MeetingSession` lives in `core/application/pipeline` and uses only existing ports. The VAD
+  chunker is an adapter, so the session takes its own `VadAudioChunk` value, which carries the
+  recording, meeting-relative bounds, and opaque audio.
+- The transcription port returns text without word timestamps. VAD chunk bounds are therefore the
+  alignment reference: regions are clamped, same-speaker neighbours merged, gaps split at midpoints,
+  and words distributed by duration. This is documented as a heuristic until word timestamps exist.
+- `save_transcript_segments` replaces a meeting's whole timeline. The session therefore mirrors the
+  timeline in memory, seeds it from storage at start, and rewrites it per chunk. On a save failure
+  the in-memory state is left unchanged.
+- The segment schema was not changed. Pending-review, unknown, and unattributed segments persist
+  `speaker_identity_id = None`, and the category is returned in `AttributedSegment`. Persisting the
+  category is tracked as follow-up.
+- Failure policy: a transcription error persists nothing and is returned. Diarization errors or an
+  absent engine produce "Unattributed". Matcher errors produce "Unknown" with a review clip.
+  External mapping errors produce "Unknown" with no clip. Review-clip storage errors are logged,
+  and the segment is still persisted.
+- The external path takes `duration_ms` explicitly because `ExternalMediaChunk` carries only a
+  start timestamp. It treats the bridge timestamp as meeting-relative.

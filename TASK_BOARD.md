@@ -33,6 +33,7 @@
 | #16 Background recording architecture and lock-screen control hooks | Ready for review | Recoverable interruption state, mutex-serialized lifecycle/state FFI, and platform wiring guides without OS-specific source code. |
 | #20 Local Whisper.cpp transcription adapter and Cargo feature flags | Ready for review | Optional Rust-1.88-compatible whisper.cpp binding, adapter-local normalized PCM seam, feature-gated real-model contract test, and mock-safe default test path. |
 | #22 OpenAI Whisper configuration and cloud adapter | Ready for review | Reqwest multipart WAV adapter, API-key environment loading, provider registry/configuration, and mock HTTP coverage. |
+| #27 Speaker-attributed transcript pipeline | Ready for review | `MeetingSession` wires transcription, optional diarization, voice matching, VAD-anchored alignment, and segment persistence; Teams chunks use mapped identities without diarization; mock-port TDD plus an in-memory SQLite three-chunk integration test. |
 | #23 VAD-based chunking and context-aware transcription | Ready for review | Feature-gated WebRTC VAD state machine, language-sensitive pause cuts, soft-max lookback, graceful time fallback, capability advertisement, and context propagation are implemented. |
 
 ## WP5: Flutter UI & FFI
@@ -85,7 +86,9 @@
 
 ## Follow-up work
 
-- Populate `transcript_segments` from the transcription and diarization pipeline. Exports read them, but the pipeline still persists only flat transcript text and keeps strong speaker attributions in memory.
+- Compose `MeetingSession` in the daemon/FFI/CLI recording entry points and in `TeamsProcessor`, which still transcribes external chunks without persisting segments.
+- Persist the attribution category (pending review / unknown / unattributed) alongside `speaker_identity_id`, and relink segments when a review clip is resolved.
+- Replace proportional word distribution with word-level timestamps once `TranscriptionEngine` exposes them.
 - Persist meeting titles and speaker display names so exports can show them instead of meeting IDs and `Unknown speaker`.
 - Add a Dart binding and UI for `note_taker_export_meeting`.
 

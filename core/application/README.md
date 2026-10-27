@@ -113,3 +113,8 @@ the attachment manager and keeping image bytes out of logs.
 drop the manager, and render on a blocking thread (the HTTP API does this with `spawn_blocking`). Errors are
 `anyhow` values wrapping `ExportError`, so interfaces can `downcast_ref::<ExportError>()` to map
 not-found, bad-request, and internal failures.
+
+`pipeline/` connects transcription, diarization, voice identity, and segment persistence.
+`MeetingSession` turns each VAD chunk or external bridge chunk into speaker-attributed
+`TranscriptSegment` rows. See `pipeline/README.md` for the flow, alignment policy, and failure
+handling.
