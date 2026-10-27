@@ -6,7 +6,7 @@ Issues #1 and #2 establish the Rust core and its first storage adapter. `core/do
 
 Logging emits JSON to stdout and a daily `app_log` rolling file. The `LoggingRuntime` provides a reloadable filter for a future UI or CLI runtime-control surface. Events must include `device_id` and must never log raw audio, voice embeddings, E2EE keys, or other sensitive values.
 
-The SQLite adapter logs initialization and completed persistence operations with device and meeting identifiers only. It stores creation time and acquisition-device metadata, rejects orphan writes, and does not yet store voice embeddings; a future implementation must encrypt voice embeddings at rest with AES-256-GCM.
+The SQLite adapter logs initialization and completed persistence operations with device and meeting identifiers only. It stores creation time and acquisition-device metadata, rejects orphan writes, and at first did not store voice embeddings; since Issue #31 every stored embedding is encrypted at rest with AES-256-GCM.
 
 Issue #3 adds the portable `AudioCapture` port, `AudioConfig`, `AudioChunk`, and `AudioState` domain values. `core/adapters/audio/local_recorder.rs` is a dependency-free local state machine with terminal `Stopped` sessions: it routes signed 16-bit PCM chunks only in `Recording`, publishes state transitions through standard-library receivers, rejects invalid lifecycle commands with `AudioError::InvalidState`, and logs only state transitions. Its `push_test_chunk` seam is intentionally adapter-local; no application layer depends on it. A future P2P streaming adapter can implement the same port without changing application consumers. OS permissions, background services, wake-locks, and lock-screen controls remain Flutter responsibilities.
 
@@ -196,4 +196,11 @@ Issue #30 persists speaker identities. `VoiceVectorDB` gained `save_speaker_iden
 clusterer saves the identity on assignment and returns the persisted record, so names assigned
 through the CLI, HTTP, or FFI survive restarts and are reused case-insensitively. `TeamsProcessor`
 and FFI `assign_new_identity` also save names. The CLI, daemon, and FFI compose the SQLite store.
-Embeddings are not yet encrypted at rest.
+
+Issue #31 encrypts every stored voice embedding (variants, cluster representatives and members,
+review-clip embeddings) with AES-256-GCM. `application/crypto` holds `VoiceEncryptor` and
+`KeyManager`. The key comes from Argon2id over `NOTE_TAKER_ENCRYPTION_PASSPHRASE`, or else from a
+random key file in `~/.note_taker` (`NOTE_TAKER_ENCRYPTION_KEY_DIR` overrides it). The SQLite
+adapters call only the `EmbeddingCipher` port. `storage_composition::open_encrypted_stores`
+verifies the key against the database's key-check value before opening the stores, and plaintext
+rows from older databases are re-encrypted on first open.

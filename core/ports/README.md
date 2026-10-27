@@ -21,6 +21,12 @@ candidate scores through the port. It also persists `SpeakerIdentity` names
 `list_speaker_identities`); `delete_identity` removes a name together with its variants. A
 persistent adapter may reject variants for identities that were never saved.
 
+`EmbeddingCipher` (`crypto.rs`) seals and opens embeddings for a named row context. Storage
+adapters call it for every embedding BLOB and never see keys or cipher types. The implementation
+is `application::crypto::VoiceEncryptor`. `EncryptionMetadataRepository` stores the single
+non-secret record (key source, Argon2id salt and parameters, key-check value) that
+`KeyManager` needs to rebuild and verify the key.
+
 `DiarizationEngine` is an async AI port that accepts opaque audio bytes and returns portable
 `SpeakerSegment` timing plus derived embeddings. `VoiceIdentityMatcher` exposes only conservative
 identity classifications, allowing `DiarizationProcessor` tests to replace every external concern

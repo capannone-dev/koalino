@@ -14,8 +14,14 @@ interruption, and state-query commands take only this mutex and operate on the p
 `AudioCapture` state machine. State query codes are deliberately `10` through `15`, leaving the
 documented nonzero status codes distinguishable from lifecycle states.
 
-`daemon.rs` composes the headless Axum server from `SqliteNoteRepository` and a local
-`VoiceVectorDB`, passing them only through `ServerAppState`. HTTP route handlers never use SQLite
+`storage_composition.rs` (`open_encrypted_stores`) is shared by all three roots. It opens the
+`encryption_meta` record, unlocks and verifies the embedding key through `KeyManager`
+(`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, else the key file in `NOTE_TAKER_ENCRYPTION_KEY_DIR` or
+`~/.note_taker`), and only then opens `SqliteNoteRepository` and `SqliteVoiceVectorDB` with one
+shared cipher. A wrong key stops start-up with a readable error before any embedding is read.
+
+`daemon.rs` composes the headless Axum server from the encrypted `SqliteNoteRepository` and
+`SqliteVoiceVectorDB`, passing them only through `ServerAppState`. HTTP route handlers never use SQLite
 directly; they consume repository ports. The daemon defaults to loopback binding and must sit
 behind an authenticated reverse proxy before any non-loopback deployment.
 

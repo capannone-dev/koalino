@@ -51,6 +51,7 @@
 | --- | --- | --- |
 | #29 Expose unknown-speaker cluster listing and identity assignment | Ready for review | Shared `cluster_review` use case; `voice list-clusters`/`assign-cluster` CLI; `GET /api/meetings/{id}/unknown-clusters` and `POST /api/clusters/{id}/assign`; `note_taker_get_unknown_clusters`/`note_taker_assign_cluster` FFI; cluster-card Voice Galleries in Flutter and web. Rust and web verified locally; Flutter verified by `flutter-ci.yml`. |
 | #30 Persist speaker identity names in the voice store | Ready for review | `VoiceVectorDB::save_speaker_identity`/`load_speaker_identity`; `SqliteVoiceVectorDB` (`speaker_identities`, `voice_variants`, idempotent migration tested on a pre-#30 database); cluster assignment, Teams auto-enrollment, and FFI `assign_new_identity` persist names; CLI, daemon, and FFI compose the SQLite store, with restart tests for each. |
+| #31 Encrypt voice embeddings at rest using AES-256-GCM | Ready for review | `application/crypto` (`VoiceEncryptor`, Argon2id/key-file `KeyManager`); `EmbeddingCipher` and `EncryptionMetadataRepository` ports; all four SQLite embedding columns sealed and bound to their row; `embedding_format` migration of pre-#31 plaintext; key verified before stores open in the CLI, daemon, and FFI; 1000-embedding benchmark under 1 s. |
 | #28 Cluster unknown speaker chunks by voice similarity within meetings | Ready for review | `UnknownSpeakerCluster` domain model, cosine-similarity clusterer (0.70 default, running-mean representative), SQLite cluster tables with legacy migration, one review clip per cluster in `MeetingSession`, and cluster identity assignment that enrolls variants, relinks segments, and deletes review audio. |
 
 ## WP10: Meeting export
@@ -97,7 +98,7 @@
 - Compose `MeetingSession` in the daemon/FFI/CLI recording entry points and in `TeamsProcessor`, which still transcribes external chunks without persisting segments.
 - Persist the attribution category (pending review / unknown / unattributed) alongside `speaker_identity_id`. Segments are now relinked when a cluster is resolved (#28); single-clip resolution through `assign_voice_clip` still does not relink them.
 - Decide how the Voice Galleries should surface unclustered fallback clips, now that they show only clusters.
-- Encrypt voice variants (`voice_variants`), cluster, and clip embeddings at rest with AES-256-GCM once an approved crypto crate is chosen.
+- Store the embedding encryption key in the platform keychain (macOS/iOS Keychain, Android Keystore, Secret Service) instead of `~/.note_taker/encryption.key`, and support re-keying or changing the passphrase.
 - Tune the 0.70 clustering threshold against real diarization embeddings.
 - Replace proportional word distribution with word-level timestamps once `TranscriptionEngine` exposes them.
 - Persist meeting titles, and resolve segment speakers through the persisted voice-store names (#30), so exports can show them instead of meeting IDs and `Unknown speaker`.

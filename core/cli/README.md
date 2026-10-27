@@ -10,6 +10,10 @@ raw audio itself.
 ## Commands
 
 All commands open `NOTE_TAKER_DATABASE_PATH` (default `note_taker.sqlite3`), matching the daemon.
+Voice embeddings in it are encrypted. Set `NOTE_TAKER_ENCRYPTION_PASSPHRASE` to derive the key
+from a passphrase; otherwise a random key is created in `~/.note_taker/encryption.key` (or
+`NOTE_TAKER_ENCRYPTION_KEY_DIR`). Keep using the same choice: a database encrypted one way refuses
+to open the other way, and a lost passphrase or key file makes its voice data unrecoverable.
 The executable intentionally fixes its tracing filter to `error`; terminal output therefore contains
 only command results.
 

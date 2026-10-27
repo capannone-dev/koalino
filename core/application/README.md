@@ -181,3 +181,11 @@ Both functions accept unsized (`dyn`) ports, as the HTTP server holds them, thro
 `&T` forwarding impls of `NoteRepository` and `VoiceVectorDB`. With a persistent voice store
 (`SqliteVoiceVectorDB`, as composed by the CLI, daemon, and FFI), an assigned name survives
 restarts and is reused by later assignments.
+
+## Embedding encryption
+
+`crypto/` (Issue #31) holds `VoiceEncryptor`, which seals embeddings with AES-256-GCM and
+implements the `EmbeddingCipher` port, and `KeyManager`, which resolves the key from
+`NOTE_TAKER_ENCRYPTION_PASSPHRASE` (Argon2id) or a random local key file and verifies it against
+the database's key-check value. Storage adapters receive the cipher through the port and never
+handle keys. The scheme and the key-storage tradeoff are documented in `crypto/README.md`.

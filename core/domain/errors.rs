@@ -206,7 +206,7 @@ pub enum CryptoError {
     #[error("the configured encryption key does not match this database")]
     WrongKey,
     /// The database was set up with a different key source than the one configured now.
-    #[error("this database uses a {stored} key, but a {configured} key is configured")]
+    #[error("this database is encrypted with a {stored}, but a {configured} is configured")]
     KeySourceMismatch {
         /// The key source recorded in the database (`passphrase` or `key file`).
         stored: &'static str,

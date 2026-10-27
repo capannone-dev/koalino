@@ -56,6 +56,18 @@
  transcript_segments (SQLite) → ExportManager / CLI / HTTP / FFI
 ```
 
+## Voice embedding encryption at rest (Issue #31)
+
+```text
+ CLI / daemon / FFI ─▶ storage_composition::open_encrypted_stores
+                        1 KeyManager.unlock(SqliteEncryptionMetadataStore)   passphrase → Argon2id
+                                                                             else ~/.note_taker/encryption.key
+                          verify key-check value (wrong key → stop)
+                        2 SqliteNoteRepository / SqliteVoiceVectorDB (Arc<dyn EmbeddingCipher>)
+                          re-encrypt embedding_format = 0 rows, then seal/open every embedding
+ ports::crypto::EmbeddingCipher ◀── application::crypto::VoiceEncryptor (AES-256-GCM)
+```
+
 ## Unknown-speaker clustering (Issue #28)
 
 ```text

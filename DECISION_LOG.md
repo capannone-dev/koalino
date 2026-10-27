@@ -415,3 +415,54 @@
   crypto crate and therefore approval. It remains the tracked follow-up the issue itself defers.
 - No FFI function lists identities, so the FFI test checks persistence by reusing a name across
   two runtimes opened on the same file.
+
+## 2026-10-27 — Issue #31 voice embeddings encrypted at rest
+
+- Scope: all four embedding columns, not only `voice_variants`. The issue's context names cluster
+  representatives too, and cluster members and review-clip embeddings are the same biometric
+  data. Covered: `voice_variants.embedding`, `unknown_speaker_clusters.representative_embedding`,
+  `cluster_chunks.derived_embedding`, and `unassigned_voice_clips.derived_embedding`.
+- Hexagonal boundary: AES-GCM and key handling live in `core/application/crypto/`. The adapters
+  depend only on the new `EmbeddingCipher` port (`core/ports/crypto.rs`) and receive an
+  `Arc<dyn EmbeddingCipher>`, so they never import application code. The metadata record goes
+  through a second port, `EncryptionMetadataRepository`, implemented by
+  `SqliteEncryptionMetadataStore`.
+- Scheme: AES-256-GCM (`aes-gcm` 0.10) with a fresh OS-random 96-bit nonce per value, stored as
+  `"NTE1"` ‖ nonce ‖ ciphertext ‖ tag. The header and a row context (`table:row-id`) are associated
+  data, which goes beyond the issue's `encrypt_embedding(embedding, key)` signature (kept as the
+  plain form): a value moved to another row fails to decrypt.
+- Keys: Argon2id (`argon2` 0.5; 19 MiB, 2 passes, 1 lane) from `NOTE_TAKER_ENCRYPTION_PASSPHRASE`,
+  otherwise a random 32-byte key in `~/.note_taker/encryption.key` (override with
+  `NOTE_TAKER_ENCRYPTION_KEY_DIR`), created 0600 in a 0700 directory and never overwritten. The
+  tradeoff (a key file next to the data only protects a leaked database file) is documented in
+  `core/application/crypto/README.md`.
+- Deviations from the issue, approved before implementation:
+  - The salt and Argon2 parameters live in the database (`encryption_meta`), not in
+    `~/.note_taker/encryption.salt`. The salt is not secret, and keeping it with the data means
+    database plus passphrase always suffices; a lost salt file would make data unrecoverable.
+  - `NOTE_TAKER_ENCRYPTION_ENABLED` is not implemented, because CONTRIBUTING.md requires encryption of
+    biometrics. There is no plaintext write path; even in-memory stores use an ephemeral key.
+  - No interactive passphrase prompt: Flutter and the daemon cannot answer one.
+  - `rand` was not added; `aes-gcm` re-exports the OS RNG used for nonces, salts, and keys.
+    `zeroize` was added to wipe keys, passphrases, and plaintext buffers.
+- Key verification: `encryption_meta` stores a key-check value (a known plaintext sealed with the
+  key). `storage_composition::open_encrypted_stores` unlocks and verifies the key before either
+  adapter opens. A wrong passphrase, a deleted key file (no replacement is generated), or a
+  switch between passphrase and key-file mode therefore stops start-up before any row is read or
+  migrated. Re-keying is not supported yet. When two processes initialize at once, the loser of
+  the insert adopts the stored record.
+- Migration detection: the issue's "first 12 bytes look like a nonce" heuristic cannot work (any
+  12 bytes are a valid nonce, and plaintext and ciphertext lengths are both multiples of 4).
+  Each embedding table instead gains `embedding_format` (`0` plaintext, `1` sealed v1), added
+  with default `0`, so pre-#31 rows are identified exactly. They are sealed in one transaction
+  per table on open. Only format `0` is migrated; a row that already opens with the key is only
+  re-marked; reads always decrypt and never accept plaintext.
+- Performance: a 256-dimension embedding seals and opens in microseconds. The benchmark test
+  requires 1000 round trips in under 1 s in the unoptimized test build. Argon2id runs once per
+  process at start-up (about 0.6 s in a debug build).
+- Fixed along the way: three FFI tests called the production `FfiRuntime::new()`, which wrote to
+  the repo-root developer database and, with encryption, created `~/.note_taker/encryption.key`.
+  They now use the in-memory runtime. The note repository also gained the voice store's 5 s busy
+  timeout, because opening can now write.
+- Follow-ups: store the key in the platform keychain (Keychain, Keystore, Secret Service), and
+  support re-keying or a passphrase change.

@@ -42,8 +42,7 @@ creation order. `resolve_unknown_speaker_cluster` sets `resolved_identity_id` an
 cluster's `unassigned_voice_clips` rows in one transaction. `unassigned_voice_clips.cluster_id`
 and `transcript_segments.unknown_cluster_id` link clips and segments to their cluster. Databases
 created before Issue #28 gain both columns on open through `ALTER TABLE ... ADD COLUMN`.
-Embeddings are little-endian `f32` BLOBs, never logged. Like the existing clip embeddings they
-are not yet encrypted at rest (tracked follow-up).
+Embeddings are encrypted at rest (see below) and never logged.
 
 The adapter rejects writes to unknown meetings rather than silently creating orphan notes. It emits structured `tracing` events with operation, device, and meeting identifiers only—never transcript content or CRDT bytes.
 
@@ -61,11 +60,39 @@ repository, through its own connection with a 5 s busy timeout:
 
 Saving an existing identity ID renames it. Identities list in creation order. `store_embedding`
 rejects empty or non-finite vectors and any variant whose identity was never saved.
+Each variant embedding is sealed with the injected cipher.
 `search_similar` ranks every variant by cosine similarity inside the adapter. `delete_identity`
 removes the variants and the name in one transaction. Both tables are created with
 `IF NOT EXISTS` on every open, so databases from before Issue #30 migrate without touching
-existing rows. Embeddings are little-endian `f32` BLOBs, never logged, and not yet encrypted at
-rest (AES-256-GCM follow-up). The CLI, daemon, and FFI compose this store.
+existing rows. The CLI, daemon, and FFI compose this store.
+
+## Embedding encryption (Issue #31)
+
+Both SQLite adapters take an `Arc<dyn EmbeddingCipher>` and seal every embedding before writing
+it:
+
+| Table | Column | Sealing context |
+| --- | --- | --- |
+| `voice_variants` | `embedding` | `voice_variants:<variant id>` |
+| `unknown_speaker_clusters` | `representative_embedding` | `unknown_speaker_clusters:<cluster id>` |
+| `cluster_chunks` | `derived_embedding` | `cluster_chunks:<cluster id>:<chunk id>` |
+| `unassigned_voice_clips` | `derived_embedding` | `unassigned_voice_clips:<clip id>` |
+
+`sqlite_embedding_encryption.rs` holds this table and the migration. Each table has an
+`embedding_format` column: `0` is plaintext from before #31, `1` is sealed (AES-256-GCM, format
+v1). Older databases gain the column with default `0`. Opening an adapter seals all format `0`
+rows in one transaction per table; a row that already opens with the key is only re-marked, and
+other formats are never touched. Reads always decrypt, so a plaintext or tampered value is an
+error, never silently accepted. The adapters contain no cryptography; see
+`core/application/crypto/README.md`.
+
+`sqlite_encryption_metadata.rs` implements `EncryptionMetadataRepository` with the single-row
+`encryption_meta` table: `key_source` (`key_file` or `passphrase`), `salt`,
+`argon2_memory_kib`, `argon2_iterations`, `argon2_parallelism`, `key_check`, and `created_at`.
+The row is inserted once (`ON CONFLICT DO NOTHING`) and never overwritten.
+
+`open_in_memory(cipher)` exists for tests and ephemeral workflows; callers pass
+`application::crypto::voice_encryptor::ephemeral_cipher()`, so even in-memory data is sealed.
 
 `in_memory_voice_vector_db.rs` implements `VoiceVectorDB` with a process-local collection and a
 simple cosine-similarity loop. It is suitable for deterministic unit tests and development only.
