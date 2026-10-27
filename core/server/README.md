@@ -39,6 +39,13 @@ separately authenticated reverse proxy is configured. CORS permits only `http://
   reserved formats return `400`, unknown meetings `404`, and errors are `{"error":"..."}`.
   Extraction runs under the repository lock; rendering runs on `spawn_blocking` in a per-request
   temp directory that is removed before the response is sent. See `API_SPECS.md`.
+- `GET /api/meetings/{meeting_id}/unknown-clusters` returns the meeting's unresolved
+  unknown-speaker clusters as `[{"cluster_id","meeting_id","total_duration_ms","chunk_count",
+  "created_at"}]`. An unknown meeting returns `[]`, and embeddings are never serialized.
+- `POST /api/clusters/{cluster_id}/assign` accepts `{"identity_name":"..."}` and returns `200`
+  with `cluster_id`, `identity_id`, `identity_name`, `identity_created`, `variants_stored`, and
+  `segments_updated`. A bad UUID or blank name returns `400`, an unknown cluster `404`, and an
+  already-resolved cluster `409`. Both routes call `application::cluster_review`. See `API_SPECS.md`.
 - `GET /ws` upgrades to a WebSocket. Text events are tagged JSON: `meeting_started`,
   `sync_status_changed`, `new_unassigned_clip`, or `telemetry_updated`; their payload carries only
   opaque IDs/status.

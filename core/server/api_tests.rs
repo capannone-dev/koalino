@@ -20,8 +20,10 @@ use crate::{
     adapters::storage::{
         in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
     },
+    application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
     domain::models::{
-        Attachment, DeviceId, MeetingId, TaskMetrics, TaskType, Transcript, UnassignedVoiceClip,
+        Attachment, DeviceId, MeetingId, TaskMetrics, TaskType, Transcript, TranscriptSegment,
+        UnassignedVoiceClip,
     },
     ports::{
         storage::{AttachmentRepository, NoteRepository},
@@ -454,4 +456,196 @@ async fn export_endpoint_rejects_bad_formats_and_unknown_meetings() {
                 .is_some_and(|message| !message.is_empty())
         );
     }
+}
+
+/// Builds a router over in-memory SQLite holding one meeting with two unknown-speaker clusters.
+///
+/// Outputs: The router, the two-chunk cluster ID (2.5 s, one linked segment), and the one-chunk
+/// cluster ID.
+fn cluster_router() -> (axum::Router, uuid::Uuid, uuid::Uuid) {
+    let repository = SqliteNoteRepository::open_in_memory()
+        .unwrap_or_else(|error| panic!("test SQLite repository must initialize: {error}"));
+    let meeting_id = MeetingId::new("meeting-clusters");
+    repository
+        .create_meeting(&meeting_id, &[])
+        .unwrap_or_else(|error| panic!("test meeting must persist: {error}"));
+    let clusterer = UnknownSpeakerClusterer::new(&repository, ClusteringConfig::default());
+    let add_chunk = |embedding: &[f32], chunk_id: &str, duration_ms: u64| {
+        clusterer
+            .find_or_create_cluster(&meeting_id, embedding, String::from(chunk_id), duration_ms)
+            .unwrap_or_else(|error| panic!("test chunk must cluster: {error}"))
+            .cluster_id()
+    };
+    let large_cluster_id = add_chunk(&[1.0, 0.0], "c1", 1_000);
+    add_chunk(&[0.9, 0.3], "c2", 1_500);
+    let small_cluster_id = add_chunk(&[0.0, 1.0], "c3", 400);
+    repository
+        .save_transcript_segments(
+            &meeting_id,
+            &[
+                TranscriptSegment::new(meeting_id.clone(), 0, 1_000, None, "hello")
+                    .with_unknown_cluster_id(Some(large_cluster_id)),
+            ],
+        )
+        .unwrap_or_else(|error| panic!("test segments must persist: {error}"));
+    let router = build_router(ServerAppState::new(
+        repository,
+        InMemoryVoiceVectorDB::new(),
+    ));
+    (router, large_cluster_id, small_cluster_id)
+}
+
+/// Sends one request and returns its status and JSON body (`Null` for an empty body).
+async fn send_json(
+    router: &axum::Router,
+    method: &str,
+    uri: &str,
+    json_body: Option<&str>,
+) -> (StatusCode, serde_json::Value) {
+    let mut request_builder = Request::builder().method(method).uri(uri);
+    if json_body.is_some() {
+        request_builder = request_builder.header("content-type", "application/json");
+    }
+    let response = router
+        .clone()
+        .oneshot(
+            request_builder
+                .body(json_body.map_or_else(Body::empty, |body| Body::from(String::from(body))))
+                .unwrap_or_else(|error| panic!("test request must build: {error}")),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("router must serve the test request: {error}"));
+    let status = response.status();
+    let response_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_else(|error| panic!("response body must be readable: {error}"));
+    let response_json = if response_bytes.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::from_slice(&response_bytes).unwrap_or(serde_json::Value::Null)
+    };
+    (status, response_json)
+}
+
+/// Verifies the cluster listing returns embedding-free summaries in creation order.
+#[tokio::test]
+async fn unknown_clusters_endpoint_lists_unresolved_cluster_summaries() {
+    let (router, large_cluster_id, small_cluster_id) = cluster_router();
+
+    let (status, clusters) = send_json(
+        &router,
+        "GET",
+        "/api/meetings/meeting-clusters/unknown-clusters",
+        None,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    let cluster_list = clusters
+        .as_array()
+        .unwrap_or_else(|| panic!("response must be a JSON array: {clusters}"));
+    assert_eq!(cluster_list.len(), 2);
+    assert_eq!(cluster_list[0]["cluster_id"], large_cluster_id.to_string());
+    assert_eq!(cluster_list[0]["meeting_id"], "meeting-clusters");
+    assert_eq!(cluster_list[0]["total_duration_ms"], 2_500);
+    assert_eq!(cluster_list[0]["chunk_count"], 2);
+    assert!(cluster_list[0]["created_at"].is_string());
+    assert!(
+        cluster_list[0].get("representative_embedding").is_none(),
+        "biometric vectors must never be serialized"
+    );
+    assert_eq!(cluster_list[1]["cluster_id"], small_cluster_id.to_string());
+
+    let (unknown_status, unknown_clusters) = send_json(
+        &router,
+        "GET",
+        "/api/meetings/missing-meeting/unknown-clusters",
+        None,
+    )
+    .await;
+    assert_eq!(unknown_status, StatusCode::OK);
+    assert_eq!(unknown_clusters, serde_json::json!([]));
+}
+
+/// Verifies assignment returns 200 with a summary and removes the cluster from the listing.
+#[tokio::test]
+async fn cluster_assignment_endpoint_assigns_and_resolves_the_cluster() {
+    let (router, large_cluster_id, small_cluster_id) = cluster_router();
+
+    let (status, assignment) = send_json(
+        &router,
+        "POST",
+        &format!("/api/clusters/{large_cluster_id}/assign"),
+        Some(r#"{"identity_name":" Grace Hopper "}"#),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(assignment["cluster_id"], large_cluster_id.to_string());
+    assert_eq!(assignment["identity_name"], "Grace Hopper");
+    assert_eq!(assignment["identity_created"], true);
+    assert_eq!(assignment["variants_stored"], 2);
+    assert_eq!(assignment["segments_updated"], 1);
+    assert!(
+        assignment["identity_id"]
+            .as_str()
+            .and_then(|identity_id| uuid::Uuid::parse_str(identity_id).ok())
+            .is_some(),
+        "identity_id must be a UUID: {assignment}"
+    );
+
+    let (_, remaining) = send_json(
+        &router,
+        "GET",
+        "/api/meetings/meeting-clusters/unknown-clusters",
+        None,
+    )
+    .await;
+    assert_eq!(remaining.as_array().map(Vec::len), Some(1));
+    assert_eq!(remaining[0]["cluster_id"], small_cluster_id.to_string());
+
+    let (repeated_status, repeated_body) = send_json(
+        &router,
+        "POST",
+        &format!("/api/clusters/{large_cluster_id}/assign"),
+        Some(r#"{"identity_name":"Grace Hopper"}"#),
+    )
+    .await;
+    assert_eq!(repeated_status, StatusCode::CONFLICT);
+    assert!(repeated_body["error"].is_string());
+}
+
+/// Verifies malformed IDs, blank names, and unknown clusters map to client errors.
+#[tokio::test]
+async fn cluster_assignment_endpoint_rejects_invalid_requests() {
+    let (router, large_cluster_id, _) = cluster_router();
+
+    let (malformed_status, _) = send_json(
+        &router,
+        "POST",
+        "/api/clusters/not-a-uuid/assign",
+        Some(r#"{"identity_name":"Grace"}"#),
+    )
+    .await;
+    assert_eq!(malformed_status, StatusCode::BAD_REQUEST);
+
+    let (blank_status, blank_body) = send_json(
+        &router,
+        "POST",
+        &format!("/api/clusters/{large_cluster_id}/assign"),
+        Some(r#"{"identity_name":"   "}"#),
+    )
+    .await;
+    assert_eq!(blank_status, StatusCode::BAD_REQUEST);
+    assert_eq!(blank_body["error"], "identity name must not be blank");
+
+    let (missing_status, missing_body) = send_json(
+        &router,
+        "POST",
+        &format!("/api/clusters/{}/assign", uuid::Uuid::new_v4()),
+        Some(r#"{"identity_name":"Grace"}"#),
+    )
+    .await;
+    assert_eq!(missing_status, StatusCode::NOT_FOUND);
+    assert!(missing_body["error"].is_string());
 }

@@ -147,6 +147,35 @@ returns `404`, and other failures return `500`. Every error body is `{ "error": 
 renders on a blocking thread into a per-request temp directory that is deleted before responding.
 A Markdown download contains only the `.md` file, so its attachment links are not bundled.
 
+### Unknown-speaker clusters
+
+Both routes call `application::cluster_review`, the same use case as the CLI and FFI. Error
+bodies are `{ "error": "message" }`.
+
+`GET /api/meetings/{id}/unknown-clusters` returns `200` with the meeting's unresolved clusters in
+creation order:
+
+```json
+[{ "cluster_id": "uuid", "meeting_id": "meeting-1", "total_duration_ms": 2500, "chunk_count": 2, "created_at": "2026-10-27T09:15:00+00:00" }]
+```
+
+A meeting without clusters, including an unknown meeting, returns `[]`. Representative and member
+embeddings are never serialized.
+
+`POST /api/clusters/{cluster_id}/assign` accepts `{ "identity_name": "Grace Hopper" }`. A known
+identity whose name matches after trimming, ignoring case, is reused. Any other name gets a new
+identity UUID. On success it returns `200`:
+
+```json
+{ "cluster_id": "uuid", "identity_id": "uuid", "identity_name": "Grace Hopper", "identity_created": true, "variants_stored": 2, "segments_updated": 1 }
+```
+
+The call stores one voice variant per member embedding, relinks the cluster's transcript segments,
+resolves the cluster, and deletes its review clips. A non-UUID `cluster_id` or a blank name
+returns `400`, an unknown cluster `404`, an already-resolved cluster `409`, and storage failures
+`500`. No port stores display names yet, so a new identity's name is echoed in the response but
+not saved.
+
 ## Linux CLI contract
 
 `note-taker` accepts `record start|stop|status`, `meetings list`, `meetings view <meeting-id>`,

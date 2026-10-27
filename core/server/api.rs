@@ -22,7 +22,12 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use crate::{
     adapters::export::default_exporters,
     application::{
+        cluster_review::{
+            ClusterReviewError, NamedClusterAssignment, UnknownClusterSummary,
+            assign_cluster_to_named_identity, list_unknown_clusters,
+        },
         export_manager::{ExportManager, ExportWriter},
+        unknown_speaker_clusterer::ClusteringError,
         voice_identity_manager::VoiceIdentityManager,
     },
     domain::{
@@ -115,6 +120,11 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .route("/api/meetings", get(list_meetings))
         .route("/api/meetings/{meeting_id}", get(get_meeting))
         .route("/api/meetings/{meeting_id}/export", post(export_meeting))
+        .route(
+            "/api/meetings/{meeting_id}/unknown-clusters",
+            get(get_unknown_clusters),
+        )
+        .route("/api/clusters/{cluster_id}/assign", post(assign_cluster))
         .route("/api/voice-gallery", get(get_voice_gallery))
         .route("/api/voice/assign", post(assign_voice_clip))
         .route("/api/telemetry", get(get_telemetry))
@@ -188,7 +198,7 @@ struct ExportRequestOptions {
     include_metadata: Option<bool>,
 }
 
-/// JSON error body returned by the export endpoint.
+/// JSON error body returned by the export and unknown-speaker cluster endpoints.
 #[derive(Serialize)]
 struct ExportErrorBody {
     error: String,
@@ -442,6 +452,134 @@ async fn assign_voice_clip(
         .confirm_weak_match(identity_id, review_clip.derived_embedding())
         .map_err(storage_error_status)?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Lists one meeting's unresolved unknown-speaker clusters through the cluster-review use case.
+///
+/// Inputs: `meeting_id` path segment.
+/// Outputs: `200` with a JSON array of `UnknownClusterResponse` in creation order (empty for a
+/// meeting without clusters, including an unknown meeting), or `500` with `{"error": "…"}`.
+/// Side effects: Reads cluster rows under the repository lock; embeddings are never serialized.
+async fn get_unknown_clusters(
+    Path(meeting_identifier): Path<String>,
+    State(application_state): State<ServerAppState>,
+) -> Response {
+    tracing::info!(endpoint = "/api/meetings/:meeting_id/unknown-clusters", meeting_id = %meeting_identifier, "headless API request received");
+    let repositories = application_state.repositories.lock().await;
+    match list_unknown_clusters(&**repositories, &MeetingId::new(meeting_identifier)) {
+        Ok(summaries) => Json(
+            summaries
+                .iter()
+                .map(UnknownClusterResponse::from)
+                .collect::<Vec<_>>(),
+        )
+        .into_response(),
+        Err(error) => cluster_review_error_response(&error),
+    }
+}
+
+/// Assigns an unknown-speaker cluster to a named identity through the cluster-review use case.
+///
+/// Inputs: `cluster_id` path segment (a UUID; anything else is rejected with `400` by Axum) and a
+/// `{"identity_name": "…"}` body.
+/// Outputs: `200` with a `ClusterAssignmentResponse`; `400` for a blank name; `404` for an unknown
+/// cluster; `409` for an already-resolved cluster; `500` for storage failures. Errors are
+/// `{"error": "…"}`.
+/// Side effects: Under the repository and voice locks, stores voice variants, relinks transcript
+/// segments, resolves the cluster, and deletes its review clips.
+async fn assign_cluster(
+    Path(cluster_id): Path<uuid::Uuid>,
+    State(application_state): State<ServerAppState>,
+    Json(assignment_request): Json<ClusterAssignmentRequest>,
+) -> Response {
+    tracing::info!(endpoint = "/api/clusters/:cluster_id/assign", cluster_id = %cluster_id, "headless API request received");
+    let repositories = application_state.repositories.lock().await;
+    let voice_database = application_state.voice_database.lock().await;
+    match assign_cluster_to_named_identity(
+        &**repositories,
+        &**voice_database,
+        cluster_id,
+        &assignment_request.identity_name,
+    ) {
+        Ok(assignment) => Json(ClusterAssignmentResponse::from(&assignment)).into_response(),
+        Err(error) => cluster_review_error_response(&error),
+    }
+}
+
+/// Maps cluster-review failures to stable HTTP statuses with a `{"error": "…"}` body.
+fn cluster_review_error_response(error: &ClusterReviewError) -> Response {
+    let status_code = match error {
+        ClusterReviewError::BlankIdentityName => StatusCode::BAD_REQUEST,
+        ClusterReviewError::Clustering(ClusteringError::ClusterNotFound { .. }) => {
+            StatusCode::NOT_FOUND
+        }
+        ClusterReviewError::Clustering(ClusteringError::ClusterAlreadyResolved { .. }) => {
+            StatusCode::CONFLICT
+        }
+        ClusterReviewError::Clustering(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    (
+        status_code,
+        Json(ExportErrorBody {
+            error: error.to_string(),
+        }),
+    )
+        .into_response()
+}
+
+/// Request body for `POST /api/clusters/{cluster_id}/assign`.
+#[derive(Deserialize)]
+struct ClusterAssignmentRequest {
+    /// Person's name; a known identity with this name is reused, otherwise one is created.
+    identity_name: String,
+}
+
+/// Serializes one unresolved cluster without its representative embedding.
+#[derive(Serialize)]
+struct UnknownClusterResponse {
+    cluster_id: String,
+    meeting_id: String,
+    total_duration_ms: u64,
+    chunk_count: usize,
+    /// RFC 3339 UTC creation time of the cluster's first chunk.
+    created_at: String,
+}
+
+impl From<&UnknownClusterSummary> for UnknownClusterResponse {
+    fn from(summary: &UnknownClusterSummary) -> Self {
+        Self {
+            cluster_id: summary.cluster_id().to_string(),
+            meeting_id: String::from(summary.meeting_id().as_str()),
+            total_duration_ms: summary.total_duration_ms(),
+            chunk_count: summary.chunk_count(),
+            created_at: summary.created_at().to_rfc3339(),
+        }
+    }
+}
+
+/// Serializes the outcome of a cluster assignment.
+#[derive(Serialize)]
+struct ClusterAssignmentResponse {
+    cluster_id: String,
+    identity_id: String,
+    identity_name: String,
+    /// `true` when the identity had no voice variants before this assignment.
+    identity_created: bool,
+    variants_stored: usize,
+    segments_updated: usize,
+}
+
+impl From<&NamedClusterAssignment> for ClusterAssignmentResponse {
+    fn from(assignment: &NamedClusterAssignment) -> Self {
+        Self {
+            cluster_id: assignment.cluster_id().to_string(),
+            identity_id: assignment.identity_id().to_string(),
+            identity_name: String::from(assignment.identity_name()),
+            identity_created: assignment.identity_created(),
+            variants_stored: assignment.variants_stored(),
+            segments_updated: assignment.segments_updated(),
+        }
+    }
 }
 
 /// Upgrades a local client connection and streams event-bus messages until disconnect.
