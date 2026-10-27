@@ -1,4 +1,4 @@
-// Coordinates Voice Gallery state through an injectable FFI and playback boundary.
+// Coordinates Voice Gallery cluster-review state through an injectable FFI and playback boundary.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,7 +15,7 @@ final voiceGalleryControllerProvider = ChangeNotifierProvider.autoDispose
 
 /// Owns displayable Voice Gallery state while keeping widgets free of native calls.
 final class VoiceGalleryController extends ChangeNotifier {
-  /// Creates a controller that loads clips for one stable meeting identifier.
+  /// Creates a controller that loads clusters for one stable meeting identifier.
   VoiceGalleryController({
     required VoiceGalleryBridge voiceGalleryBridge,
     required this.meetingId,
@@ -23,39 +23,33 @@ final class VoiceGalleryController extends ChangeNotifier {
 
   final VoiceGalleryBridge _voiceGalleryBridge;
 
-  /// The meeting whose unresolved clips this controller presents.
+  /// The meeting whose unresolved unknown-speaker clusters this controller presents.
   final String meetingId;
 
-  List<VoiceClip> _clips = const <VoiceClip>[];
-  List<VoiceIdentity> _identities = const <VoiceIdentity>[];
+  List<UnknownSpeakerCluster> _clusters = const <UnknownSpeakerCluster>[];
   bool _isLoading = false;
   String? _errorMessage;
+  String? _statusMessage;
 
-  /// Returns immutable review-clip metadata suitable for rendering.
-  List<VoiceClip> get clips => _clips;
-
-  /// Returns known identities loaded for manual assignment controls.
-  List<VoiceIdentity> get identities => _identities;
+  /// Returns unresolved cluster metadata in creation order.
+  List<UnknownSpeakerCluster> get clusters => _clusters;
 
   /// Indicates whether an asynchronous gallery operation is active.
   bool get isLoading => _isLoading;
 
-  /// Returns a display-safe operation failure, if any.
+  /// Returns a display-safe loading failure, if any.
   String? get errorMessage => _errorMessage;
 
-  /// Loads unresolved clip metadata and selectable identities from the native boundary.
+  /// Returns feedback about the most recent assignment attempt, if any.
+  String? get statusMessage => _statusMessage;
+
+  /// Loads the meeting's unresolved clusters from the native boundary.
   Future<void> load() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final List<Object> loadedValues =
-          await Future.wait<Object>(<Future<Object>>[
-        _voiceGalleryBridge.getUnassignedClips(meetingId),
-        _voiceGalleryBridge.getVoiceIdentities(),
-      ]);
-      _clips = loadedValues[0] as List<VoiceClip>;
-      _identities = loadedValues[1] as List<VoiceIdentity>;
+      _clusters = await _voiceGalleryBridge.getUnknownClusters(meetingId);
     } on Object {
       _errorMessage = 'Unable to load Voice Gallery';
     } finally {
@@ -64,34 +58,38 @@ final class VoiceGalleryController extends ChangeNotifier {
     }
   }
 
-  /// Plays one clip through its native local file path.
-  Future<void> play(VoiceClip clip) =>
-      _voiceGalleryBridge.playLocalFile(clip.localFilePath);
-
-  /// Confirms the selected weak-match identity and refreshes the review list.
-  Future<void> confirmWeakMatch(VoiceClip clip, String identityId) async {
-    await _voiceGalleryBridge.confirmWeakMatch(
-      clipId: clip.clipId,
-      identityId: identityId,
-    );
-    await load();
+  /// Plays a cluster's sample clip when Rust supplied one.
+  Future<void> play(UnknownSpeakerCluster cluster) async {
+    final String? reviewClipPath = cluster.reviewClipPath;
+    if (reviewClipPath != null) {
+      await _voiceGalleryBridge.playLocalFile(reviewClipPath);
+    }
   }
 
-  /// Assigns a reviewed clip to an existing identity and refreshes unresolved clips.
-  Future<void> assignExistingIdentity(VoiceClip clip, String identityId) async {
-    await _voiceGalleryBridge.confirmWeakMatch(
-      clipId: clip.clipId,
-      identityId: identityId,
-    );
-    await load();
-  }
-
-  /// Creates an identity from `clip` and refreshes the unresolved review list.
-  Future<void> createNewIdentity(VoiceClip clip, String displayName) async {
-    await _voiceGalleryBridge.assignNewIdentity(
-      clipId: clip.clipId,
-      displayName: displayName,
-    );
+  /// Assigns `cluster` to the identity named `identityName` and refreshes the list.
+  ///
+  /// A blank name is rejected locally without calling Rust. A rejected assignment keeps the
+  /// current list and reports a status message.
+  Future<void> assignCluster(
+      UnknownSpeakerCluster cluster, String identityName) async {
+    final String trimmedName = identityName.trim();
+    if (trimmedName.isEmpty) {
+      _statusMessage = 'Enter a name before assigning';
+      notifyListeners();
+      return;
+    }
+    try {
+      final ClusterAssignmentResult result =
+          await _voiceGalleryBridge.assignCluster(
+        clusterId: cluster.clusterId,
+        identityName: trimmedName,
+      );
+      _statusMessage = 'Assigned to ${result.identityName}';
+    } on Object {
+      _statusMessage = 'Unable to assign the speaker cluster';
+      notifyListeners();
+      return;
+    }
     await load();
   }
 }

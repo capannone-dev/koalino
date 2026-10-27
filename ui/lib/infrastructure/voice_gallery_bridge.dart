@@ -1,224 +1,248 @@
-// Defines the Dart-native boundary for Voice Gallery metadata and local playback.
+// Defines the Dart-native boundary for unknown-speaker clusters and local review playback.
 
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:ffi/ffi.dart';
 
-/// Identifies one user-visible speaker identity without exposing biometric vectors.
-final class VoiceIdentity {
-  /// Creates immutable identity metadata returned by the application boundary.
-  const VoiceIdentity({required this.identityId, required this.displayName});
-
-  /// Stable identity UUID used by confirmation requests.
-  final String identityId;
-
-  /// Privacy-safe name shown in the Voice Gallery.
-  final String displayName;
-}
-
-/// Describes an uncertain voice-match candidate retained with a review clip.
-final class WeakMatch {
-  /// Creates immutable weak-match metadata.
-  const WeakMatch({required this.identityId, required this.confidenceScore});
-
-  /// Suggested identity UUID.
-  final String identityId;
-
-  /// Adapter-provided similarity score in the inclusive 0-to-1 range.
-  final double confidenceScore;
-}
-
-/// Describes one locally playable review clip returned as FFI JSON metadata.
-final class VoiceClip {
-  /// Creates an immutable clip list item.
-  const VoiceClip({
-    required this.clipId,
-    required this.startTimeMs,
-    required this.endTimeMs,
-    required this.localFilePath,
-    this.weakMatch,
+/// Describes one unresolved unknown-speaker cluster without biometric vectors.
+final class UnknownSpeakerCluster {
+  /// Creates immutable cluster metadata returned by the Rust boundary.
+  const UnknownSpeakerCluster({
+    required this.clusterId,
+    required this.meetingId,
+    required this.totalDurationMs,
+    required this.chunkCount,
+    this.reviewClipPath,
   });
 
-  /// Stable clip UUID.
-  final String clipId;
+  /// Stable cluster UUID sent back when assigning an identity.
+  final String clusterId;
 
-  /// Segment start relative to the meeting recording.
-  final int startTimeMs;
+  /// Meeting that owns the cluster.
+  final String meetingId;
 
-  /// Segment end relative to the meeting recording.
-  final int endTimeMs;
+  /// Summed speech duration of every chunk in the cluster.
+  final int totalDurationMs;
 
-  /// Absolute native file path. Audio bytes never cross the FFI boundary.
-  final String localFilePath;
+  /// Number of voice chunks grouped into the cluster.
+  final int chunkCount;
 
-  /// Candidate requiring user confirmation, if the diarizer found one.
-  final WeakMatch? weakMatch;
+  /// Absolute native path of the cluster's sample clip, when one is still stored. Audio bytes
+  /// never cross the FFI boundary.
+  final String? reviewClipPath;
 
-  /// Decodes the documented FFI JSON shape without accepting audio payloads.
-  factory VoiceClip.fromJson(Map<String, Object?> json) {
-    final Object? weakMatchValue = json['weak_match'];
-    final Map<String, Object?>? weakMatchJson =
-        weakMatchValue is Map ? weakMatchValue.cast<String, Object?>() : null;
-    return VoiceClip(
-      clipId: json['clip_id']! as String,
-      startTimeMs: json['start_time_ms']! as int,
-      endTimeMs: json['end_time_ms']! as int,
-      localFilePath: json['local_file_path']! as String,
-      weakMatch: weakMatchJson == null
-          ? null
-          : WeakMatch(
-              identityId: weakMatchJson['identity_id']! as String,
-              confidenceScore:
-                  (weakMatchJson['confidence_score']! as num).toDouble(),
-            ),
+  /// Decodes one element of the `note_taker_get_unknown_clusters` JSON array.
+  factory UnknownSpeakerCluster.fromJson(Map<String, Object?> json) {
+    return UnknownSpeakerCluster(
+      clusterId: json['cluster_id']! as String,
+      meetingId: json['meeting_id']! as String,
+      totalDurationMs: (json['total_duration_ms']! as num).toInt(),
+      chunkCount: (json['chunk_count']! as num).toInt(),
+      reviewClipPath: json['review_clip_path'] as String?,
     );
   }
 }
+
+/// Summarizes a completed cluster-to-identity assignment.
+final class ClusterAssignmentResult {
+  /// Creates an immutable assignment summary.
+  const ClusterAssignmentResult({
+    required this.clusterId,
+    required this.identityId,
+    required this.identityName,
+    required this.identityCreated,
+    required this.variantsStored,
+    required this.segmentsUpdated,
+  });
+
+  /// The resolved cluster.
+  final String clusterId;
+
+  /// Identity the cluster was assigned to.
+  final String identityId;
+
+  /// Display name of that identity.
+  final String identityName;
+
+  /// Whether the identity was created by this assignment.
+  final bool identityCreated;
+
+  /// Number of voice variants stored for the identity.
+  final int variantsStored;
+
+  /// Number of transcript segments re-attributed to the identity.
+  final int segmentsUpdated;
+}
+
+/// Decodes the `note_taker_get_unknown_clusters` response.
+///
+/// Returns the clusters for a JSON array; throws `StateError` carrying the Rust error for an
+/// `{"ok":false,...}` object and `FormatException` for any other shape.
+List<UnknownSpeakerCluster> decodeUnknownClusters(String responseJson) {
+  final Object? decodedResponse = jsonDecode(responseJson);
+  if (decodedResponse is List) {
+    return decodedResponse
+        .cast<Map<Object?, Object?>>()
+        .map((Map<Object?, Object?> json) =>
+            UnknownSpeakerCluster.fromJson(json.cast<String, Object?>()))
+        .toList(growable: false);
+  }
+  if (decodedResponse is Map) {
+    throw _nativeError(decodedResponse.cast<String, Object?>());
+  }
+  throw const FormatException('Cluster response must be a JSON array.');
+}
+
+/// Decodes the `note_taker_assign_cluster` response.
+///
+/// Returns the summary for `{"ok":true,...}`; throws `StateError` carrying the Rust error code
+/// and message otherwise.
+ClusterAssignmentResult decodeClusterAssignment(String responseJson) {
+  final Object? decodedResponse = jsonDecode(responseJson);
+  if (decodedResponse is! Map) {
+    throw const FormatException('Assignment response must be a JSON object.');
+  }
+  final Map<String, Object?> json = decodedResponse.cast<String, Object?>();
+  if (json['ok'] != true) {
+    throw _nativeError(json);
+  }
+  return ClusterAssignmentResult(
+    clusterId: json['cluster_id']! as String,
+    identityId: json['identity_id']! as String,
+    identityName: json['identity_name']! as String,
+    identityCreated: json['identity_created']! as bool,
+    variantsStored: (json['variants_stored']! as num).toInt(),
+    segmentsUpdated: (json['segments_updated']! as num).toInt(),
+  );
+}
+
+/// Builds the exception for a Rust `{"ok":false,"error_code","error"}` response.
+StateError _nativeError(Map<String, Object?> json) => StateError(
+    'Rust rejected the Voice Gallery request '
+    '(${json['error_code'] ?? 'unknown_error'}): ${json['error'] ?? ''}');
 
 /// Declares Voice Gallery operations available to presentation and controller code.
 abstract interface class VoiceGalleryBridge {
-  /// Loads local-file metadata for unresolved clips belonging to `meetingId`.
-  Future<List<VoiceClip>> getUnassignedClips(String meetingId);
+  /// Loads the unresolved unknown-speaker clusters belonging to `meetingId`.
+  Future<List<UnknownSpeakerCluster>> getUnknownClusters(String meetingId);
 
-  /// Lists identities that may be selected for a clip assignment.
-  Future<List<VoiceIdentity>> getVoiceIdentities();
+  /// Assigns every chunk of `clusterId` to the identity named `identityName`.
+  Future<ClusterAssignmentResult> assignCluster({
+    required String clusterId,
+    required String identityName,
+  });
 
   /// Delegates file playback to the platform audio package.
   Future<void> playLocalFile(String localFilePath);
-
-  /// Confirms a candidate identity for a weakly matched clip.
-  Future<void> confirmWeakMatch(
-      {required String clipId, required String identityId});
-
-  /// Creates and assigns a named identity from an unresolved clip.
-  Future<void> assignNewIdentity({
-    required String clipId,
-    required String displayName,
-  });
 }
 
-/// Implements Voice Gallery metadata operations with C ABI calls and native file playback.
+/// Implements Voice Gallery operations with C ABI calls and native file playback.
+///
+/// Native cluster calls read and write SQLite synchronously, so each one runs on a short-lived
+/// background isolate that opens the platform core library itself.
 final class RustVoiceGalleryBridge implements VoiceGalleryBridge {
-  /// Resolves C symbols from `dynamicLibrary` or the platform core library.
-  RustVoiceGalleryBridge(
-      {DynamicLibrary? dynamicLibrary, AudioPlayer? audioPlayer})
-      : _dynamicLibrary = dynamicLibrary ?? _openCoreLibrary(),
-        _audioPlayer = audioPlayer ?? AudioPlayer() {
-    _getUnassignedClips = _dynamicLibrary.lookupFunction<
-        _NativeGetUnassignedClips,
-        _DartGetUnassignedClips>('note_taker_get_unassigned_clips');
-    _confirmWeakMatch = _dynamicLibrary.lookupFunction<_NativeConfirmWeakMatch,
-        _DartConfirmWeakMatch>('note_taker_confirm_weak_match');
-    _assignNewIdentity = _dynamicLibrary.lookupFunction<
-        _NativeAssignNewIdentity,
-        _DartAssignNewIdentity>('note_taker_assign_new_identity');
-    _freeString =
-        _dynamicLibrary.lookupFunction<_NativeFreeString, _DartFreeString>(
-      'note_taker_free_string',
-    );
-  }
+  /// Creates a bridge that plays review clips through `audioPlayer`.
+  RustVoiceGalleryBridge({AudioPlayer? audioPlayer})
+      : _audioPlayer = audioPlayer ?? AudioPlayer();
 
-  final DynamicLibrary _dynamicLibrary;
   final AudioPlayer _audioPlayer;
-  late final _DartGetUnassignedClips _getUnassignedClips;
-  late final _DartConfirmWeakMatch _confirmWeakMatch;
-  late final _DartAssignNewIdentity _assignNewIdentity;
-  late final _DartFreeString _freeString;
 
   @override
-  Future<List<VoiceClip>> getUnassignedClips(String meetingId) async {
-    final Pointer<Utf8> nativeMeetingId = meetingId.toNativeUtf8();
-    try {
-      final Pointer<Utf8> responsePointer =
-          _getUnassignedClips(nativeMeetingId);
-      if (responsePointer == nullptr) {
-        throw StateError('Rust could not load unassigned voice clips.');
-      }
-      try {
-        final Object? decodedResponse =
-            jsonDecode(responsePointer.toDartString());
-        if (decodedResponse is! List) {
-          throw const FormatException(
-              'Voice clip response must be a JSON array.');
-        }
-        return decodedResponse
-            .cast<Map<Object?, Object?>>()
-            .map((Map<Object?, Object?> json) =>
-                VoiceClip.fromJson(json.cast<String, Object?>()))
-            .toList(growable: false);
-      } finally {
-        _freeString(responsePointer);
-      }
-    } finally {
-      calloc.free(nativeMeetingId);
-    }
+  Future<List<UnknownSpeakerCluster>> getUnknownClusters(
+      String meetingId) async {
+    return decodeUnknownClusters(await _fetchUnknownClustersJson(meetingId));
   }
 
   @override
-  Future<List<VoiceIdentity>> getVoiceIdentities() async =>
-      const <VoiceIdentity>[];
+  Future<ClusterAssignmentResult> assignCluster({
+    required String clusterId,
+    required String identityName,
+  }) async {
+    return decodeClusterAssignment(
+        await _assignClusterJson(clusterId, identityName));
+  }
 
   @override
   Future<void> playLocalFile(String localFilePath) async {
     await _audioPlayer.play(DeviceFileSource(localFilePath));
   }
+}
 
-  @override
-  Future<void> confirmWeakMatch({
-    required String clipId,
-    required String identityId,
-  }) =>
-      _sendTwoStrings(_confirmWeakMatch, clipId, identityId);
+/// Calls `note_taker_get_unknown_clusters` on a background isolate.
+///
+/// Declared at top level so the isolate closure captures only the meeting ID string.
+Future<String> _fetchUnknownClustersJson(String meetingId) =>
+    Isolate.run(() => _callNativeJson(
+          'note_taker_get_unknown_clusters',
+          <String>[meetingId],
+        ));
 
-  @override
-  Future<void> assignNewIdentity({
-    required String clipId,
-    required String displayName,
-  }) =>
-      _sendTwoStrings(_assignNewIdentity, clipId, displayName);
+/// Calls `note_taker_assign_cluster` on a background isolate.
+///
+/// Declared at top level so the isolate closure captures only the two strings.
+Future<String> _assignClusterJson(String clusterId, String identityName) =>
+    Isolate.run(() => _callNativeJson(
+          'note_taker_assign_cluster',
+          <String>[clusterId, identityName],
+        ));
 
-  /// Invokes a status-returning two-string C command and releases temporary buffers.
-  Future<void> _sendTwoStrings(
-    _DartTwoStringCommand command,
-    String firstValue,
-    String secondValue,
-  ) async {
-    final Pointer<Utf8> nativeFirstValue = firstValue.toNativeUtf8();
-    final Pointer<Utf8> nativeSecondValue = secondValue.toNativeUtf8();
+/// Invokes a one- or two-string C command that returns caller-freed JSON and copies it out.
+///
+/// Throws `StateError` when Rust returns null (the response could not be allocated).
+String _callNativeJson(String symbolName, List<String> arguments) {
+  final DynamicLibrary coreLibrary = _openCoreLibrary();
+  final _DartFreeString freeString =
+      coreLibrary.lookupFunction<_NativeFreeString, _DartFreeString>(
+          'note_taker_free_string');
+  final List<Pointer<Utf8>> nativeArguments = arguments
+      .map((String argument) => argument.toNativeUtf8())
+      .toList(growable: false);
+  try {
+    final Pointer<Utf8> responsePointer = switch (nativeArguments) {
+      [final Pointer<Utf8> onlyArgument] => coreLibrary
+          .lookupFunction<_NativeOneStringJson, _DartOneStringJson>(
+              symbolName)(onlyArgument),
+      [final Pointer<Utf8> firstArgument, final Pointer<Utf8> secondArgument] =>
+        coreLibrary.lookupFunction<_NativeTwoStringJson, _DartTwoStringJson>(
+            symbolName)(firstArgument, secondArgument),
+      _ => throw ArgumentError.value(
+          arguments.length, 'arguments', 'expected one or two arguments'),
+    };
+    if (responsePointer == nullptr) {
+      throw StateError('Rust returned no response from $symbolName.');
+    }
     try {
-      if (command(nativeFirstValue, nativeSecondValue) != _ffiSuccess) {
-        throw StateError('Rust rejected the Voice Gallery request.');
-      }
+      return responsePointer.toDartString();
     } finally {
-      calloc.free(nativeFirstValue);
-      calloc.free(nativeSecondValue);
+      freeString(responsePointer);
     }
-  }
-
-  /// Opens the platform-specific core library without exposing FFI to widgets.
-  static DynamicLibrary _openCoreLibrary() {
-    if (Platform.isAndroid || Platform.isLinux) {
-      return DynamicLibrary.open('libnote_taker_core.so');
+  } finally {
+    for (final Pointer<Utf8> nativeArgument in nativeArguments) {
+      calloc.free(nativeArgument);
     }
-    if (Platform.isWindows) {
-      return DynamicLibrary.open('note_taker_core.dll');
-    }
-    throw UnsupportedError(
-        'The Rust Voice Gallery bridge is unavailable here.');
   }
 }
 
-typedef _NativeGetUnassignedClips = Pointer<Utf8> Function(Pointer<Utf8>);
-typedef _DartGetUnassignedClips = Pointer<Utf8> Function(Pointer<Utf8>);
-typedef _NativeConfirmWeakMatch = Int32 Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef _DartConfirmWeakMatch = int Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef _NativeAssignNewIdentity = Int32 Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef _DartAssignNewIdentity = int Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef _DartTwoStringCommand = int Function(Pointer<Utf8>, Pointer<Utf8>);
+/// Opens the platform-specific core library without exposing FFI to widgets.
+DynamicLibrary _openCoreLibrary() {
+  if (Platform.isAndroid || Platform.isLinux) {
+    return DynamicLibrary.open('libnote_taker_core.so');
+  }
+  if (Platform.isWindows) {
+    return DynamicLibrary.open('note_taker_core.dll');
+  }
+  throw UnsupportedError('The Rust Voice Gallery bridge is unavailable here.');
+}
+
+typedef _NativeOneStringJson = Pointer<Utf8> Function(Pointer<Utf8>);
+typedef _DartOneStringJson = Pointer<Utf8> Function(Pointer<Utf8>);
+typedef _NativeTwoStringJson = Pointer<Utf8> Function(
+    Pointer<Utf8>, Pointer<Utf8>);
+typedef _DartTwoStringJson = Pointer<Utf8> Function(
+    Pointer<Utf8>, Pointer<Utf8>);
 typedef _NativeFreeString = Void Function(Pointer<Utf8>);
 typedef _DartFreeString = void Function(Pointer<Utf8>);
-
-const int _ffiSuccess = 0;

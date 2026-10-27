@@ -1,11 +1,11 @@
-// Renders locally playable unassigned clips and weak-match confirmation prompts.
+// Renders a meeting's unknown-speaker clusters with sample playback and name assignment.
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
 
-/// Displays review clips for one meeting using controller-owned application state.
+/// Displays unknown-speaker clusters for one meeting using controller-owned state.
 final class VoiceGalleryScreen extends StatefulWidget {
   /// Creates a Voice Gallery bound to an injected controller.
   const VoiceGalleryScreen({required this.voiceGalleryController, super.key});
@@ -17,12 +17,25 @@ final class VoiceGalleryScreen extends StatefulWidget {
   State<VoiceGalleryScreen> createState() => _VoiceGalleryScreenState();
 }
 
-/// Starts loading once and renders controller changes without native knowledge.
+/// Starts loading once, keeps one name field per cluster, and renders controller changes.
 final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
+  /// Name-field controllers keyed by cluster ID, so typed text survives rebuilds.
+  final Map<String, TextEditingController> _nameControllers =
+      <String, TextEditingController>{};
+
   @override
   void initState() {
     super.initState();
     widget.voiceGalleryController.load();
+  }
+
+  @override
+  void dispose() {
+    for (final TextEditingController nameController
+        in _nameControllers.values) {
+      nameController.dispose();
+    }
+    super.dispose();
   }
 
   @override
@@ -34,180 +47,135 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
         builder: (BuildContext context, Widget? child) {
           final VoiceGalleryController controller =
               widget.voiceGalleryController;
-          if (controller.isLoading && controller.clips.isEmpty) {
+          if (controller.isLoading && controller.clusters.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
           if (controller.errorMessage case final String errorMessage) {
             return Center(child: Text(errorMessage));
           }
-          if (controller.clips.isEmpty) {
-            return const Center(child: Text('No unassigned voice clips'));
+          _pruneNameControllers(controller.clusters);
+          final String? statusMessage = controller.statusMessage;
+          if (controller.clusters.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (statusMessage != null) Text(statusMessage),
+                  const Text('No unknown speakers to review'),
+                ],
+              ),
+            );
           }
-          return ListView.builder(
-            itemCount: controller.clips.length,
-            itemBuilder: (BuildContext context, int index) {
-              final VoiceClip clip = controller.clips[index];
-              return ListTile(
-                title: Text(_formatRange(clip)),
-                subtitle: clip.weakMatch == null
-                    ? const Text('No suggested identity')
-                    : const Text('Weak match requires review'),
-                trailing: Wrap(
-                  spacing: 8,
-                  children: <Widget>[
-                    TextButton(
-                      onPressed: () => controller.play(clip),
-                      child: const Text('Play'),
-                    ),
-                    if (clip.weakMatch != null)
-                      FilledButton(
-                        onPressed: () => _showWeakMatchDialog(context, clip),
-                        child: const Text('Review weak match'),
-                      ),
-                    OutlinedButton(
-                      onPressed: controller.identities.isEmpty
-                          ? null
-                          : () => _showExistingIdentityDialog(context, clip),
-                      child: const Text('Assign Existing Identity'),
-                    ),
-                    OutlinedButton(
-                      onPressed: () => _showNewIdentityDialog(context, clip),
-                      child: const Text('Create New Identity'),
-                    ),
-                  ],
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: <Widget>[
+              if (statusMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    statusMessage,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
                 ),
-              );
-            },
+              for (final (int index, UnknownSpeakerCluster cluster)
+                  in controller.clusters.indexed)
+                _buildClusterCard(context, controller, index, cluster),
+            ],
           );
         },
       ),
     );
   }
 
-  /// Presents the available identities in a dropdown for manual clip assignment.
-  Future<void> _showExistingIdentityDialog(
-      BuildContext context, VoiceClip clip) async {
-    String selectedIdentityId =
-        widget.voiceGalleryController.identities.first.identityId;
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) => StatefulBuilder(
-        builder: (BuildContext context, StateSetter setDialogState) =>
-            AlertDialog(
-          title: const Text('Assign Existing Identity'),
-          content: DropdownButton<String>(
-            value: selectedIdentityId,
-            isExpanded: true,
-            items: widget.voiceGalleryController.identities
-                .map(
-                  (VoiceIdentity identity) => DropdownMenuItem<String>(
-                    value: identity.identityId,
-                    child: Text(identity.displayName),
-                  ),
-                )
-                .toList(growable: false),
-            onChanged: (String? identityId) {
-              if (identityId != null) {
-                setDialogState(() => selectedIdentityId = identityId);
-              }
-            },
-          ),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-                await widget.voiceGalleryController
-                    .assignExistingIdentity(clip, selectedIdentityId);
-              },
-              child: const Text('Assign'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Shows confirmation for the application-provided weak candidate.
-  Future<void> _showWeakMatchDialog(
-      BuildContext context, VoiceClip clip) async {
-    final WeakMatch weakMatch = clip.weakMatch!;
-    final VoiceIdentity identity = widget.voiceGalleryController.identities
-        .cast<VoiceIdentity?>()
-        .firstWhere(
-          (VoiceIdentity? candidate) =>
-              candidate?.identityId == weakMatch.identityId,
-          orElse: () => VoiceIdentity(
-            identityId: weakMatch.identityId,
-            displayName: 'the suggested speaker',
-          ),
-        )!;
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text('Weak voice match'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+  /// Builds one cluster card with its summary, optional Play action, and name assignment row.
+  Widget _buildClusterCard(
+    BuildContext context,
+    VoiceGalleryController controller,
+    int index,
+    UnknownSpeakerCluster cluster,
+  ) {
+    final TextEditingController nameController = _nameControllers.putIfAbsent(
+        cluster.clusterId, TextEditingController.new);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Text('Is this ${identity.displayName}?'),
-            Text('${(weakMatch.confidenceScore * 100).round()}% confidence'),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('Unknown speaker ${index + 1}'),
+              subtitle: Text(_formatSummary(cluster)),
+              trailing: cluster.reviewClipPath == null
+                  ? null
+                  : TextButton(
+                      onPressed: () => controller.play(cluster),
+                      child: const Text('Play'),
+                    ),
+            ),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: TextField(
+                    key: ValueKey<String>('identity-name-${cluster.clusterId}'),
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Name',
+                      border: OutlineInputBorder(),
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (String typedName) =>
+                        controller.assignCluster(cluster, typedName),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  key: ValueKey<String>('assign-${cluster.clusterId}'),
+                  onPressed: controller.isLoading
+                      ? null
+                      : () => controller.assignCluster(
+                          cluster, nameController.text),
+                  child: const Text('Assign'),
+                ),
+              ],
+            ),
           ],
         ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('No'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              await widget.voiceGalleryController
-                  .confirmWeakMatch(clip, identity.identityId);
-            },
-            child: const Text('Confirm'),
-          ),
-        ],
       ),
     );
   }
 
-  /// Prompts for the display name required to create an identity from a review clip.
-  Future<void> _showNewIdentityDialog(
-      BuildContext context, VoiceClip clip) async {
-    final TextEditingController nameController = TextEditingController();
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text('Create New Identity'),
-        content: TextField(controller: nameController, autofocus: true),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final String displayName = nameController.text.trim();
-              if (displayName.isEmpty) {
-                return;
-              }
-              Navigator.pop(dialogContext);
-              await widget.voiceGalleryController
-                  .createNewIdentity(clip, displayName);
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-    nameController.dispose();
+  /// Forgets name fields whose clusters are no longer listed and disposes them after the frame,
+  /// once their `TextField`s have unmounted.
+  void _pruneNameControllers(List<UnknownSpeakerCluster> clusters) {
+    final Set<String> listedClusterIds = clusters
+        .map((UnknownSpeakerCluster cluster) => cluster.clusterId)
+        .toSet();
+    final List<TextEditingController> staleControllers =
+        <TextEditingController>[];
+    _nameControllers.removeWhere(
+        (String clusterId, TextEditingController nameController) {
+      if (listedClusterIds.contains(clusterId)) {
+        return false;
+      }
+      staleControllers.add(nameController);
+      return true;
+    });
+    if (staleControllers.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+        for (final TextEditingController staleController in staleControllers) {
+          staleController.dispose();
+        }
+      });
+    }
   }
 
-  /// Formats a segment range as seconds for a compact review list label.
-  String _formatRange(VoiceClip clip) =>
-      '${(clip.startTimeMs / 1000).toStringAsFixed(2)}s – ${(clip.endTimeMs / 1000).toStringAsFixed(2)}s';
+  /// Formats total speech time (seconds, one decimal) and chunk count, e.g. `12.5 s · 3 chunks`.
+  String _formatSummary(UnknownSpeakerCluster cluster) {
+    final int tenthsOfSecond = (cluster.totalDurationMs + 50) ~/ 100;
+    final String chunkLabel = cluster.chunkCount == 1 ? 'chunk' : 'chunks';
+    return '${tenthsOfSecond ~/ 10}.${tenthsOfSecond % 10} s · '
+        '${cluster.chunkCount} $chunkLabel';
+  }
 }
