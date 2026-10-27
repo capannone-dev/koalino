@@ -1,4 +1,4 @@
-// Renders one meeting transcript and metadata-only attachment list from Axum.
+// Renders one meeting's title, transcript, and metadata-only attachment list from Axum.
 
 import { getMeeting } from "@/lib/api";
 
@@ -7,7 +7,8 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
   const meeting = await getMeeting(meetingId);
   return (
     <section>
-      <h1>Meeting {meeting.meeting_id}</h1>
+      <h1>{meeting.title}</h1>
+      <p>Meeting {meeting.meeting_id}</p>
       <h2>Transcript</h2>
       <p>{meeting.transcript ?? "No transcript is available."}</p>
       <h2>Attachments</h2>

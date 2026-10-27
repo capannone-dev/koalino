@@ -27,14 +27,15 @@ use crate::{
             assign_cluster_to_named_identity, list_unknown_clusters,
         },
         export_manager::{ExportManager, ExportWriter},
+        meeting_crdt::MeetingCrdtService,
         unknown_speaker_clusterer::ClusteringError,
         voice_identity_manager::VoiceIdentityManager,
     },
     domain::{
         errors::{ExportError, StorageError},
         models::{
-            AggregatedStats, Attachment, ExportFormat, ExportOptions, MeetingId, SpeakerIdentity,
-            TaskMetrics, TaskType, UnassignedVoiceClip,
+            AggregatedStats, Attachment, ExportFormat, ExportOptions, MeetingId, MeetingMetadata,
+            MeetingTitle, SpeakerIdentity, TaskMetrics, TaskType, UnassignedVoiceClip,
         },
     },
     ports::{
@@ -117,7 +118,7 @@ pub enum WebSocketEvent {
 /// Side effects: Registers HTTP/WebSocket handlers; it neither binds a socket nor opens storage.
 pub fn build_router(application_state: ServerAppState) -> Router {
     Router::new()
-        .route("/api/meetings", get(list_meetings))
+        .route("/api/meetings", get(list_meetings).post(create_meeting))
         .route("/api/meetings/{meeting_id}", get(get_meeting))
         .route("/api/meetings/{meeting_id}/export", post(export_meeting))
         .route(
@@ -146,7 +147,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .with_state(application_state)
 }
 
-/// Returns display-safe metadata for every local meeting.
+/// Returns display-safe metadata, including the display title, for every local meeting.
 async fn list_meetings(
     State(application_state): State<ServerAppState>,
 ) -> Result<Json<Vec<MeetingSummary>>, StatusCode> {
@@ -155,12 +156,68 @@ async fn list_meetings(
     let meeting_ids = repositories
         .list_meeting_ids()
         .map_err(storage_error_status)?;
-    Ok(Json(
-        meeting_ids.into_iter().map(MeetingSummary::from).collect(),
+    let mut meeting_summaries = Vec::with_capacity(meeting_ids.len());
+    for meeting_id in meeting_ids {
+        if let Some(meeting_metadata) = repositories
+            .load_meeting_metadata(&meeting_id)
+            .map_err(storage_error_status)?
+        {
+            meeting_summaries.push(MeetingSummary::from(&meeting_metadata));
+        }
+    }
+    Ok(Json(meeting_summaries))
+}
+
+/// Request body for `POST /api/meetings`; an omitted title leaves the meeting untitled.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CreateMeetingRequest {
+    title: Option<String>,
+}
+
+/// Creates an empty, optionally titled meeting with a generated `meeting-<uuid>` ID.
+///
+/// Inputs: A JSON `CreateMeetingRequest`.
+/// Outputs: `201 Created` with the meeting summary, `400` for an invalid title (nothing is
+/// created), axum's `4xx` for a malformed body, or a storage error status.
+/// Side effects: Inserts the meeting (with an empty CRDT document) and its title into SQLite.
+/// The title is never logged.
+async fn create_meeting(
+    State(application_state): State<ServerAppState>,
+    Json(request): Json<CreateMeetingRequest>,
+) -> Result<(StatusCode, Json<MeetingSummary>), StatusCode> {
+    tracing::info!(
+        endpoint = "POST /api/meetings",
+        "headless API request received"
+    );
+    let title = request
+        .title
+        .as_deref()
+        .map(MeetingTitle::parse)
+        .transpose()
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    let meeting_id = MeetingId::new(format!("meeting-{}", uuid::Uuid::new_v4()));
+    let repositories = application_state.repositories.lock().await;
+    let repository: &dyn ServerRepository = &**repositories;
+    MeetingCrdtService::new(repository)
+        .create_meeting(&meeting_id)
+        .map_err(storage_error_status)?;
+    if let Some(title) = &title {
+        repository
+            .save_meeting_title(&meeting_id, title)
+            .map_err(storage_error_status)?;
+    }
+    let meeting_metadata = repository
+        .load_meeting_metadata(&meeting_id)
+        .map_err(storage_error_status)?
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(MeetingSummary::from(&meeting_metadata)),
     ))
 }
 
-/// Returns one meeting's transcript and linked metadata-only attachments.
+/// Returns one meeting's title, transcript, and linked metadata-only attachments.
 async fn get_meeting(
     Path(meeting_identifier): Path<String>,
     State(application_state): State<ServerAppState>,
@@ -168,6 +225,10 @@ async fn get_meeting(
     tracing::info!(endpoint = "/api/meetings/:meeting_id", meeting_id = %meeting_identifier, "headless API request received");
     let meeting_id = MeetingId::new(meeting_identifier);
     let repositories = application_state.repositories.lock().await;
+    let meeting_metadata = repositories
+        .load_meeting_metadata(&meeting_id)
+        .map_err(storage_error_status)?
+        .ok_or(StatusCode::NOT_FOUND)?;
     let transcript = repositories
         .load_transcript(&meeting_id)
         .map_err(storage_error_status)?;
@@ -176,6 +237,8 @@ async fn get_meeting(
         .map_err(storage_error_status)?;
     Ok(Json(MeetingDetail {
         meeting_id: String::from(meeting_id.as_str()),
+        title: meeting_metadata.display_title(),
+        created_at: meeting_metadata.created_at().to_rfc3339(),
         transcript: transcript.map(|value| String::from(value.content())),
         attachments: attachments.iter().map(AttachmentSummary::from).collect(),
     }))
@@ -633,11 +696,17 @@ fn storage_error_status(storage_error: StorageError) -> StatusCode {
 #[derive(Serialize)]
 struct MeetingSummary {
     meeting_id: String,
+    /// The stored title, or the dated fallback for an untitled meeting.
+    title: String,
+    /// RFC 3339 UTC creation time.
+    created_at: String,
 }
-impl From<MeetingId> for MeetingSummary {
-    fn from(meeting_id: MeetingId) -> Self {
+impl From<&MeetingMetadata> for MeetingSummary {
+    fn from(meeting_metadata: &MeetingMetadata) -> Self {
         Self {
-            meeting_id: String::from(meeting_id.as_str()),
+            meeting_id: String::from(meeting_metadata.meeting_id().as_str()),
+            title: meeting_metadata.display_title(),
+            created_at: meeting_metadata.created_at().to_rfc3339(),
         }
     }
 }
@@ -646,6 +715,10 @@ impl From<MeetingId> for MeetingSummary {
 #[derive(Serialize)]
 struct MeetingDetail {
     meeting_id: String,
+    /// The stored title, or the dated fallback for an untitled meeting.
+    title: String,
+    /// RFC 3339 UTC creation time.
+    created_at: String,
     transcript: Option<String>,
     attachments: Vec<AttachmentSummary>,
 }

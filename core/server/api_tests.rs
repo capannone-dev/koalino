@@ -168,6 +168,91 @@ async fn list_meetings_returns_seeded_metadata_as_json() {
     let response_json: serde_json::Value = serde_json::from_slice(&response_bytes)
         .unwrap_or_else(|error| panic!("response must be JSON: {error}"));
     assert_eq!(response_json[0]["meeting_id"], "meeting-rome");
+    let fallback_title = response_json[0]["title"]
+        .as_str()
+        .unwrap_or_else(|| panic!("an untitled meeting must have a display title"));
+    assert!(fallback_title.starts_with("Meeting "), "{response_json}");
+    assert!(
+        response_json[0]["created_at"].is_string(),
+        "{response_json}"
+    );
+}
+
+/// Verifies `POST /api/meetings` creates a titled meeting that `GET /api/meetings` and
+/// `GET /api/meetings/{id}` then return with that title.
+#[tokio::test]
+async fn created_meeting_titles_appear_in_list_and_detail() {
+    let router = seeded_router().0;
+
+    let (create_status, created_meeting) = send_json(
+        &router,
+        "POST",
+        "/api/meetings",
+        Some(r#"{"title":"  Project Sync  "}"#),
+    )
+    .await;
+    assert_eq!(create_status, StatusCode::CREATED, "{created_meeting}");
+    assert_eq!(created_meeting["title"], "Project Sync");
+    let created_meeting_id = created_meeting["meeting_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the created meeting must have an ID: {created_meeting}"))
+        .to_owned();
+    assert!(created_meeting_id.starts_with("meeting-"));
+
+    let (list_status, listed_meetings) = send_json(&router, "GET", "/api/meetings", None).await;
+    assert_eq!(list_status, StatusCode::OK);
+    let listed_meeting = listed_meetings
+        .as_array()
+        .and_then(|meetings| {
+            meetings
+                .iter()
+                .find(|meeting| meeting["meeting_id"] == created_meeting_id.as_str())
+        })
+        .unwrap_or_else(|| panic!("the created meeting must be listed: {listed_meetings}"));
+    assert_eq!(listed_meeting["title"], "Project Sync");
+
+    let (detail_status, meeting_detail) = send_json(
+        &router,
+        "GET",
+        &format!("/api/meetings/{created_meeting_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(detail_status, StatusCode::OK);
+    assert_eq!(meeting_detail["title"], "Project Sync");
+    assert_eq!(meeting_detail["transcript"], serde_json::Value::Null);
+}
+
+/// Verifies an untitled `POST /api/meetings` gets the dated fallback and invalid titles are
+/// rejected without creating a meeting.
+#[tokio::test]
+async fn meeting_creation_defaults_and_rejects_invalid_titles() {
+    let router = seeded_router().0;
+
+    let (untitled_status, untitled_meeting) =
+        send_json(&router, "POST", "/api/meetings", Some("{}")).await;
+    assert_eq!(untitled_status, StatusCode::CREATED);
+    assert!(
+        untitled_meeting["title"]
+            .as_str()
+            .is_some_and(|title| title.starts_with("Meeting ")),
+        "{untitled_meeting}"
+    );
+
+    for invalid_body in [
+        r#"{"title":"   "}"#,
+        r#"{"title":"a\u0007b"}"#,
+        r#"{"title":7}"#,
+    ] {
+        let (status, _) = send_json(&router, "POST", "/api/meetings", Some(invalid_body)).await;
+        assert!(status.is_client_error(), "{invalid_body} returned {status}");
+    }
+    let (_, listed_meetings) = send_json(&router, "GET", "/api/meetings", None).await;
+    assert_eq!(
+        listed_meetings.as_array().map(Vec::len),
+        Some(2),
+        "{listed_meetings}"
+    );
 }
 
 /// Verifies meeting detail exposes transcript and linked attachment metadata through ports.
@@ -191,6 +276,12 @@ async fn meeting_detail_returns_transcript_and_linked_attachments() {
     let response_json: serde_json::Value = serde_json::from_slice(&response_bytes)
         .unwrap_or_else(|error| panic!("response must be JSON: {error}"));
     assert_eq!(response_json["transcript"], "Discussed offline-first sync.");
+    assert!(
+        response_json["title"]
+            .as_str()
+            .is_some_and(|title| title.starts_with("Meeting ")),
+        "{response_json}"
+    );
     assert_eq!(
         response_json["attachments"][0]["file_path"],
         "/fixtures/agenda.pdf"
