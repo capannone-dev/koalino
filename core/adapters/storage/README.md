@@ -57,6 +57,7 @@ repository, through its own connection with a 5 s busy timeout:
 | --- | --- |
 | `speaker_identities` | `id` (UUID PK), `display_name` (non-blank), `created_at`, `updated_at` (RFC 3339) |
 | `voice_variants` | `id` (UUID PK), `identity_id` (FK → `speaker_identities`), `embedding` BLOB, `created_at` |
+| `external_identity_mappings` | `external_id` (PK, e.g. a Teams user ID), `identity_id` (FK → `speaker_identities`), `created_at` (Issue #33) |
 
 Saving an existing identity ID renames it. Identities list in creation order. `store_embedding`
 rejects empty or non-finite vectors and any variant whose identity was never saved.
@@ -108,3 +109,16 @@ and device identifiers, model labels, timings, coarse power estimates, and times
 no recordings, transcript text, raw audio, or embeddings. `device_load_stats` stores the latest
 non-sensitive CPU/GPU/task-count snapshot for each device. Both tables are exercised through the
 adapter's in-memory SQLite constructor in unit tests.
+
+`sqlite_external_identities.rs` (a child module of the voice store, Issue #33) implements
+`ExternalIdentityRepository` for `SqliteVoiceVectorDB`. Saving a mapping also upserts the
+identity row, and lookups join `speaker_identities`, so a rename in the voice library shows up
+for later Teams meetings. `TeamsIdentityMapper` uses it through the port's `Mutex<_>` forwarding
+impl, which the bridge pump thread needs. Only IDs and names are stored.
+
+`slide_attachment_store.rs` (`SlideAttachmentStore`, Issue #33) implements `AttachmentWorkflow`
+for Teams screen-share captures. Each PNG or JPEG (recognized by its signature) is written to
+`<slide dir>/<meeting UUID>/slide-<ms>-<attachment UUID>.<ext>`, with directories 0700 and files
+0600 on Unix, and linked to its meeting through `AttachmentRepository`. If the row is rejected
+(unknown meeting), the file is deleted again. Slide files are not encrypted, the same policy as
+manually added attachments.

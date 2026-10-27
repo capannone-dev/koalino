@@ -11,6 +11,9 @@
 //! may create its tables first. Schema creation is idempotent, so databases created before
 //! Issue #30 gain the voice tables on first open without any existing table being altered.
 //!
+//! `external_identity_mappings` (Issue #33) maps stable external-participant IDs, such as Teams
+//! user IDs, to identities; see `sqlite_external_identities.rs`.
+//!
 //! Embeddings are encrypted at rest (Issue #31) and never logged. Opening the store re-encrypts
 //! any plaintext variant written before #31 (see `sqlite_embedding_encryption`).
 
@@ -19,6 +22,10 @@ use std::{path::Path, sync::Arc, time::Duration};
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension, params};
 use uuid::Uuid;
+
+/// Maps external-participant IDs (Teams) to stored identities (Issue #33).
+#[path = "sqlite_external_identities.rs"]
+mod external_identities;
 
 use super::{
     in_memory_voice_vector_db::{cosine_similarity, validate_vector},
@@ -105,6 +112,7 @@ impl SqliteVoiceVectorDB {
                     ON voice_variants(identity_id);",
             )
             .map_err(|error| sqlite_error("unable to initialize voice store schema", error))?;
+        external_identities::initialize_external_identity_schema(&sqlite_connection)?;
         VOICE_VARIANT_EMBEDDINGS.prepare(&sqlite_connection, embedding_cipher.as_ref())?;
         tracing::info!("SQLite voice store initialized");
         Ok(Self {

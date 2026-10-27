@@ -61,6 +61,40 @@ pub trait ExternalIdentityRepository {
     ) -> Result<(), StorageError>;
 }
 
+impl<RepositoryPort> ExternalIdentityRepository for std::sync::Mutex<RepositoryPort>
+where
+    RepositoryPort: ExternalIdentityRepository,
+{
+    /// Locks the inner repository and looks up `external_id` (recovers from poisoning).
+    ///
+    /// Inputs: A provider-stable external ID.
+    /// Outputs: The inner repository's answer.
+    /// Side effects: Holds the lock for the duration of the read.
+    fn find_by_external_id(
+        &self,
+        external_id: &str,
+    ) -> Result<Option<SpeakerIdentity>, StorageError> {
+        self.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .find_by_external_id(external_id)
+    }
+
+    /// Locks the inner repository and saves the mapping (recovers from poisoning).
+    ///
+    /// Inputs: A stable external ID and its identity.
+    /// Outputs: The inner repository's answer.
+    /// Side effects: Holds the lock for the duration of the write.
+    fn save_external_mapping(
+        &self,
+        external_id: &str,
+        identity: &SpeakerIdentity,
+    ) -> Result<(), StorageError> {
+        self.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .save_external_mapping(external_id, identity)
+    }
+}
+
 /// Derives a voice signature from an isolated external-speaker audio stream.
 pub trait VoiceEmbeddingExtractor {
     /// Extracts one derived vector from bridge-provided isolated audio.
