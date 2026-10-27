@@ -1,48 +1,58 @@
-// Provides local voice-gallery presentation and explicit assignment posting to Axum.
+// Lists unknown-speaker clusters and assigns each one to a typed name through the Axum API.
 
 "use client";
 
 import { FormEvent, useState } from "react";
-import { assignVoiceClip, type VoiceGalleryResponse } from "@/lib/api";
+import { assignCluster, type UnknownCluster } from "@/lib/api";
 
-export function VoiceGallery({ gallery }: { gallery: VoiceGalleryResponse }) {
-  const [selectedIdentityId, setSelectedIdentityId] = useState(gallery.identities[0]?.identity_id ?? "");
+/** Formats total speech time (seconds, one decimal) and chunk count, e.g. `12.5 s · 3 chunks`. */
+function formatSummary(cluster: UnknownCluster): string {
+  const tenthsOfSecond = Math.floor((cluster.total_duration_ms + 50) / 100);
+  const chunkLabel = cluster.chunk_count === 1 ? "chunk" : "chunks";
+  return `${Math.floor(tenthsOfSecond / 10)}.${tenthsOfSecond % 10} s · ${cluster.chunk_count} ${chunkLabel}`;
+}
+
+export function VoiceGallery({ clusters }: { clusters: UnknownCluster[] }) {
+  const [pendingClusters, setPendingClusters] = useState(clusters);
   const [message, setMessage] = useState("");
 
-  async function submitAssignment(event: FormEvent<HTMLFormElement>) {
+  async function submitAssignment(event: FormEvent<HTMLFormElement>, cluster: UnknownCluster) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const clipId = String(formData.get("clipId") ?? "");
+    const identityName = String(new FormData(event.currentTarget).get("identityName") ?? "").trim();
+    if (!identityName) {
+      setMessage("Enter a name before assigning.");
+      return;
+    }
     try {
-      await assignVoiceClip(clipId, selectedIdentityId);
-      setMessage("Voice clip assigned.");
+      const assignment = await assignCluster(cluster.cluster_id, identityName);
+      setPendingClusters((current) => current.filter((candidate) => candidate.cluster_id !== cluster.cluster_id));
+      setMessage(`Assigned to ${assignment.identity_name}.`);
     } catch {
-      setMessage("Unable to assign the voice clip.");
+      setMessage("Unable to assign the speaker cluster.");
     }
   }
 
   return (
     <section>
       <h1>Voice gallery</h1>
-      <h2>Known identities</h2>
-      <ul>{gallery.identities.map((identity) => <li key={identity.identity_id}>{identity.display_name}</li>)}</ul>
-      <h2>Unassigned clips</h2>
-      {gallery.unassigned_clips.map((clip) => (
-        <article className="card" key={clip.clip_id}>
-          <p>Clip {clip.clip_id} ({clip.start_time_ms}–{clip.end_time_ms} ms)</p>
-          {clip.audio_url ? <audio controls src={clip.audio_url}>Audio unavailable.</audio> : <p>Audio playback is unavailable until the local server supplies a review-media URL.</p>}
-          <form onSubmit={submitAssignment}>
-            <input name="clipId" type="hidden" value={clip.clip_id} />
-            <label>Assign identity
-              <select aria-label="Assign identity" value={selectedIdentityId} onChange={(event) => setSelectedIdentityId(event.target.value)} required>
-                <option value="" disabled>Select an identity</option>
-                {gallery.identities.map((identity) => <option key={identity.identity_id} value={identity.identity_id}>{identity.display_name}</option>)}
-              </select>
-            </label>
-            <button type="submit" disabled={!selectedIdentityId}>Assign clip</button>
-          </form>
-        </article>
-      ))}
+      <h2>Unknown speakers</h2>
+      {pendingClusters.length === 0 ? <p>No unknown speakers to review.</p> : null}
+      {pendingClusters.map((cluster, index) => {
+        const speakerLabel = `Unknown speaker ${index + 1}`;
+        return (
+          <article className="card" key={cluster.cluster_id}>
+            <h3>{speakerLabel}</h3>
+            <p>{formatSummary(cluster)}</p>
+            <p>Meeting {cluster.meeting_id}</p>
+            <form onSubmit={(event) => submitAssignment(event, cluster)}>
+              <label>Name
+                <input name="identityName" type="text" aria-label={`Name for ${speakerLabel.toLowerCase()}`} autoComplete="off" />
+              </label>
+              <button type="submit">Assign</button>
+            </form>
+          </article>
+        );
+      })}
       <p aria-live="polite">{message}</p>
     </section>
   );

@@ -28,8 +28,10 @@ cloud because the local coding sandbox has no Node.js runtime.
   refreshes a telemetry update at most once every ten seconds and reconnects after disconnect.
 - `/` shows aggregate telemetry and live Axum WebSocket status messages.
 - `/meetings` lists local meetings; `/meetings/<id>` shows transcript and attachment metadata.
-- `/voice-gallery` lists unresolved clips, provides an audio-control placeholder for the local
-  review-media URL, and posts selected clip/identity UUIDs to `/api/voice/assign`.
+- `/voice-gallery` loads every meeting's unresolved unknown-speaker clusters from
+  `GET /api/meetings/{id}/unknown-clusters`. It shows each cluster's total speech time and chunk
+  count, and posts the typed name to `POST /api/clusters/{id}/assign`. An assigned cluster is
+  removed from the list.
 
 The current Axum gallery response deliberately withholds raw audio paths. The gallery renders an
 audio control only when a future API response supplies an `audio_url`; this avoids guessing or

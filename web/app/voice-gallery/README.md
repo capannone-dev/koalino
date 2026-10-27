@@ -2,5 +2,6 @@
 
 # Voice gallery route
 
-This route renders Axum gallery DTOs and delegates manual assignment to the client component. It
-never exposes raw audio or embedding data itself.
+This server route lists meetings, fetches each meeting's unresolved unknown-speaker clusters, and
+passes them to the `VoiceGallery` client component, which assigns clusters to typed names. Cluster
+DTOs carry no raw audio or embedding data.
