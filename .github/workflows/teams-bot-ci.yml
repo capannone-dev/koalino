@@ -1,0 +1,36 @@
+# Builds the C# Teams bot and runs its unit and integration tests (mocked Teams SDK, in-process
+# mock bridge server). Linux covers the portable core; Windows builds and tests the same
+# solution on the OS the Real-Time Media platform requires.
+
+name: Teams Bot CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["teams-bot/**", "core/protocol/**", ".github/workflows/teams-bot-ci.yml"]
+  pull_request:
+    paths: ["teams-bot/**", "core/protocol/**", ".github/workflows/teams-bot-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  bot:
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: teams-bot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: teams-bot/global.json
+      - name: Build (warnings are errors)
+        run: dotnet build TeamsBot.sln --configuration Release
+      - name: Test
+        run: dotnet test TeamsBot.sln --configuration Release --no-build

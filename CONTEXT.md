@@ -227,3 +227,19 @@ Issue #33 adds the Teams bot bridge. A separate bot process streams Protobuf fra
   segments, and stores screen-share frames as meeting attachments.
 - **Daemon:** starts the bridge when `NOTE_TAKER_TEAMS_BRIDGE_ENABLED` is set and a
   transcription engine is available, and stops it before the pipeline at shutdown.
+
+Issue #34 adds the bot itself in `teams-bot/`, a .NET 8 solution (C# is approved for this
+component only):
+
+- **`TeamsBot.Media`:** joins meetings through the Microsoft Graph Communications calling SDK
+  with application-hosted Real-Time Media. It runs on Windows only, and needs a public FQDN, a
+  certificate, and a media port.
+- **`TeamsBot.Core`:** platform-neutral and tested on Linux.
+  - Converts unmixed per-speaker audio to 16 kHz mono chunks tagged with Teams user IDs.
+  - Samples VBSS screen share at 1 fps into JPEG slides.
+  - Streams both with the shared `teams_bridge.proto` over a reconnecting, buffering
+    WebSocket client.
+- **Host:** an ASP.NET Core app that exposes the Graph webhook and an API-key-protected
+  `POST /api/join`.
+- **Connection:** the bot reaches the loopback-only Rust server on the same host or through an
+  SSH tunnel; plaintext `ws://` to a remote host is refused.

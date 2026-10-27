@@ -9,3 +9,8 @@ pushes and pull requests.
 `flutter analyze`) and `make flutter-test` on pinned Flutter 3.47.8 for pushes and pull
 requests that touch `ui/`, the `Makefile`, or the workflow itself. The widget tests use fake
 bridges, so no native Rust library is built or loaded.
+
+`teams-bot-ci.yml` builds the C# Teams bot (`teams-bot/TeamsBot.sln`, warnings as errors) and
+runs `dotnet test` on ubuntu-latest and windows-latest for pushes and pull requests that touch
+`teams-bot/`, the shared `core/protocol/` schema and fixtures, or the workflow itself. The tests
+mock the Teams SDK, so no Azure resources or media platform are needed.

@@ -1,0 +1,26 @@
+<!--
+  ASP.NET Core host of the Teams bot: configuration, Serilog, the Graph calling webhook
+  (/api/calling), and the control endpoint (POST /api/join). Runs on 64-bit Windows Server
+  because TeamsBot.Media's real-time media platform is Windows-only.
+-->
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <RootNamespace>TeamsBot</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <!-- Secrets come from environment variables or `dotnet user-secrets` in development. -->
+    <UserSecretsId>note-taker-teams-bot</UserSecretsId>
+    <!-- Top-level statements generate an undocumented Program class. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../TeamsBot.Core/TeamsBot.Core.csproj" />
+    <ProjectReference Include="../TeamsBot.Media/TeamsBot.Media.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Serilog.AspNetCore" />
+  </ItemGroup>
+
+</Project>

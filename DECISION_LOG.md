@@ -574,3 +574,53 @@
   - Persisting the meeting title from metadata.
   - Encrypting slide files at rest.
   - Exposing bridge status over HTTP.
+
+## 2026-10-27 — Issue #34 C# Teams bot (audio/video extraction and streaming)
+
+- User decisions:
+  1. **Media platform:** the Graph Communications calling SDK with application-hosted
+     Real-Time Media (`Microsoft.Graph.Communications.Calls.Media` 1.2.0.18736). It is the
+     only supported way to get unmixed per-speaker audio and raw VBSS frames. ACS was rejected
+     for media. Runtime is Windows Server x64 only.
+  2. **Layout:** multi-project.
+     - `TeamsBot.Core` is portable and holds all logic and tests.
+     - `TeamsBot.Media` is the SDK adapter.
+     - `TeamsBot` is the ASP.NET Core host.
+  3. **JPEG:** SkiaSharp (MIT) encodes the JPEGs.
+  4. **Dependencies approved:** Google.Protobuf with Grpc.Tools codegen from the shared proto,
+     MSAL, the Graph Communications SDK, Serilog, and xUnit + NSubstitute. The CI is a
+     Linux/Windows matrix.
+- Wire compatibility: the C# code is generated at build time from
+  `core/protocol/teams_bridge.proto`, which is linked, never copied. Tests compare the
+  serializer byte for byte with `core/protocol/fixtures/*.bin`.
+- Authentication:
+  - MSAL client credentials, behind `CachingAccessTokenProvider`.
+  - `UnauthorizedRetryHandler` re-sends a request once after a Graph `401`.
+  - Inbound callbacks are validated by the SDK's built-in provider (via `SetAuthentication`),
+    not by hand-written JWT code. The obsolete `SetAuthenticationProvider` path was dropped.
+- Recording compliance: `updateRecordingStatus(recording)` is called before any media is
+  processed. If it fails, the bot hangs up instead of recording silently.
+- Audio:
+  - The socket asks for `Pcm16K`, but `PcmConverter` still normalizes any rate or channel
+    count.
+  - Chunks end at a 600 ms silence gap or at 10 s (the Rust limit is 30 s).
+  - Offsets are measured from the moment the call is established, which is also the
+    metadata's `start_time_ms`.
+- Roster:
+  - The bot identifies participants by Azure AD object ID, falling back to
+    `teams-participant-<id>`.
+  - Metadata is re-sent on roster changes. This is safe because the Rust
+    `begin_external_meeting` resumes a meeting with the same ID.
+- Transport:
+  - Plaintext `ws://` is allowed only to loopback (CONTRIBUTING.md: never plaintext over a network).
+  - The documented cross-host path is an SSH reverse tunnel, because the Rust server binds
+    127.0.0.1.
+- Shared dependency: `Microsoft.Extensions.Logging.Abstractions` is pinned centrally at 9.0.7,
+  because `Microsoft.Skype.Bots.Media` requires ≥ 9.0.7 and a lower pin fails restore
+  (NU1605).
+- Known limitation: the protocol has no acknowledgements. A frame in flight during a
+  disconnect can be lost or duplicated. This is documented, not solved.
+- Follow-ups:
+  - Run the real-meeting test on a Windows host.
+  - Support multiple concurrent meetings.
+  - Add camera video, which is ignored by the Rust side today.

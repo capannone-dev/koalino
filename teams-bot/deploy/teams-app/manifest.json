@@ -1,0 +1,31 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.17/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.17",
+  "version": "1.0.0",
+  "id": "{{AZURE_AD_CLIENT_ID}}",
+  "developer": {
+    "name": "Note Taker",
+    "websiteUrl": "https://{{SERVICE_FQDN}}",
+    "privacyUrl": "https://{{SERVICE_FQDN}}/privacy",
+    "termsOfUseUrl": "https://{{SERVICE_FQDN}}/terms"
+  },
+  "name": { "short": "Note Taker", "full": "Note Taker meeting notes bot" },
+  "description": {
+    "short": "Takes speaker-attributed notes of your meeting.",
+    "full": "Joins the meeting, shows the recording notice, and streams audio and shared slides to your own Note Taker app for local transcription."
+  },
+  "icons": { "color": "color.png", "outline": "outline.png" },
+  "accentColor": "#3F51B5",
+  "bots": [
+    {
+      "botId": "{{AZURE_AD_CLIENT_ID}}",
+      "scopes": ["team", "groupChat"],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "supportsCalling": true,
+      "supportsVideo": true
+    }
+  ],
+  "permissions": ["identity"],
+  "validDomains": ["{{SERVICE_FQDN}}"]
+}

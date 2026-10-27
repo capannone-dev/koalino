@@ -126,3 +126,26 @@ loaded once and reused across recordings. Stop is graceful: it waits for in-flig
 
 The external meeting session runs on the same pipeline worker as local recordings but
 independently of them, so a microphone recording and a Teams meeting can run at the same time.
+
+## Teams bot (Issue #34)
+
+```text
+ Teams meeting ── Graph webhook (HTTPS, JWT) + media (TCP 8445, SRTP) ──┐
+                                                                        ▼
+ teams-bot/ (C#/.NET 8, Windows Server)
+   TeamsBot (ASP.NET Core): /api/calling, POST /api/join (X-Api-Key), /healthz, Serilog
+   TeamsBot.Media: GraphCallJoiner (Graph Communications SDK, MSAL, built-in JWT validation)
+                   GraphCallSession: roster → MSI map, unmixed audio, VBSS NV12, call end
+   TeamsBot.Core:  BotService ── updateRecordingStatus → metadata → media → flush on end
+                     ├ AudioProcessor: → 16 kHz mono, per-speaker chunks (600 ms gap / 10 s)
+                     └ VideoProcessor: 1 fps, skip unchanged, NV12 → JPEG q80 (SkiaSharp)
+                   WebSocketClient: auth → metadata (resent on reconnect) → frames;
+                     1→30 s jittered backoff; 30 s audio / 16 slide drop-oldest buffer
+   │ ws://127.0.0.1:8765 (same host or SSH tunnel), TeamsBridgeMessage frames
+   ▼
+ Rust TeamsWebSocketServer (Issue #33)
+```
+
+The core never references the Teams SDK. It talks to `ICallJoiner`/`ICallSession`, which
+`TeamsBot.Media` implements and the tests mock with NSubstitute. The serializer is checked
+against the Rust golden fixtures, so both sides share one wire format.

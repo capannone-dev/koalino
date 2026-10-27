@@ -1,0 +1,19 @@
+<!-- Explains the Teams app package template used to install the bot. -->
+
+# Teams app package
+
+`manifest.json` is the Teams app manifest template for the bot. It declares
+`supportsCalling` and `supportsVideo`, which Teams requires before a bot may join calls with
+app-hosted media.
+
+To build the package:
+
+1. Replace `{{AZURE_AD_CLIENT_ID}}` with the app registration's client ID.
+2. Replace `{{SERVICE_FQDN}}` with the bot's public DNS name.
+3. Add two icons next to the manifest: `color.png` (192×192) and `outline.png` (32×32,
+   transparent white).
+4. Zip the three files with no folder inside the archive.
+5. Upload the zip in Teams (**Apps → Manage your apps → Upload an app**), or publish it to your
+   organization from the Teams admin center.
+
+See the bot's main [README](../../README.md#5-teams-app-package) for the full setup.
