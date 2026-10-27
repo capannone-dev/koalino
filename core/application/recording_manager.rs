@@ -10,6 +10,12 @@
 //! A chunk that fails is logged and counted; the recording continues. Dropping the manager ends
 //! an active recording after draining its queue, then stops the worker. Nothing here logs
 //! transcript text, audio, or embeddings.
+//!
+//! Independently of the local recording, the worker can hold one *external* meeting session fed
+//! by the Teams bridge (`begin_external_meeting`, `process_external_chunk`,
+//! `end_external_meeting`). External chunks carry a guaranteed participant, so they skip
+//! diarization and are attributed through an `IdentityMapper`. `process_external_chunk` waits
+//! for its result, which gives the bridge pump natural backpressure.
 
 use std::{
     sync::{
@@ -21,9 +27,15 @@ use std::{
 };
 
 use crate::{
-    domain::models::MeetingId,
+    domain::{
+        errors::StorageError,
+        models::{
+            AudioRecording, ExternalMediaChunk, ExternalParticipant, MeetingId, SpeakerIdentity,
+        },
+    },
     ports::{
         ai::{DiarizationEngine, TranscriptionEngine},
+        external_bridge::IdentityMapper,
         storage::NoteRepository,
         voice::VoiceIdentityMatcher,
     },
@@ -88,6 +100,32 @@ impl RecordingSummary {
     }
 }
 
+/// An identity mapper shared with the worker thread (external meetings).
+pub type SharedIdentityMapper = Arc<dyn IdentityMapper + Send + Sync>;
+
+/// One external-bridge audio chunk to process in the open external meeting.
+pub struct ExternalChunkRequest {
+    /// The participant's isolated audio; never logged.
+    pub media_chunk: ExternalMediaChunk,
+    /// Identifies the chunk for transcription; must belong to the external meeting.
+    pub audio_recording: AudioRecording,
+    /// The chunk length in milliseconds.
+    pub duration_ms: u64,
+}
+
+/// Adapts the shared mapper to the sized `IdentityMapper` bound of `MeetingSession`.
+struct SharedMapperAdapter<'mapper>(&'mapper (dyn IdentityMapper + Send + Sync));
+
+impl IdentityMapper for SharedMapperAdapter<'_> {
+    /// Delegates to the shared mapper.
+    fn map_external_to_local(
+        &self,
+        external: ExternalParticipant,
+    ) -> Result<SpeakerIdentity, StorageError> {
+        self.0.map_external_to_local(external)
+    }
+}
+
 /// A repository query run on the worker thread, which owns the repository.
 type RepositoryTask = Box<dyn FnOnce(&dyn NoteRepository) + Send>;
 
@@ -106,6 +144,21 @@ enum WorkerCommand {
     },
     /// Runs a query against the worker's repository.
     WithRepository(RepositoryTask),
+    /// Opens (or resumes) the external meeting session.
+    BeginExternal {
+        meeting_id: MeetingId,
+        identity_mapper: SharedIdentityMapper,
+        reply: Sender<Result<(), RecordingManagerError>>,
+    },
+    /// Processes one external chunk and reports how many segments it produced.
+    ExternalChunk {
+        request: Box<ExternalChunkRequest>,
+        reply: Sender<Result<usize, RecordingManagerError>>,
+    },
+    /// Closes the external meeting session.
+    EndExternal {
+        reply: Sender<Result<RecordingSummary, RecordingManagerError>>,
+    },
 }
 
 /// Handle to the recording worker; safe to share between threads.
@@ -281,6 +334,64 @@ impl RecordingManager {
             .map_err(|_| RecordingManagerError::WorkerStopped)
     }
 
+    /// Opens the external (Teams bridge) meeting session, independent of the local recording.
+    ///
+    /// Inputs: The meeting and the mapper that resolves its participants to local identities.
+    /// Outputs: `Ok(())` (also when the same meeting is already open, e.g. after a bot
+    /// reconnect), a session error, or `WorkerStopped`.
+    /// Side effects: Blocks until the worker has opened the session; may create the meeting; ends
+    /// a previously open external meeting with a different ID.
+    pub fn begin_external_meeting(
+        &self,
+        meeting_id: MeetingId,
+        identity_mapper: SharedIdentityMapper,
+    ) -> Result<(), RecordingManagerError> {
+        let (reply, reply_receiver) = mpsc::channel();
+        self.send(WorkerCommand::BeginExternal {
+            meeting_id,
+            identity_mapper,
+            reply,
+        })?;
+        reply_receiver
+            .recv()
+            .map_err(|_| RecordingManagerError::WorkerStopped)?
+    }
+
+    /// Processes one external chunk in the open external meeting and waits for the result.
+    ///
+    /// Inputs: The chunk; its audio must already be readable by the transcription engine (the
+    /// chunk audio store) under `audio_recording`'s ID.
+    /// Outputs: The number of persisted segments, `NotRecording`, a session error (meeting
+    /// mismatch, transcription or storage failure; counted as failed), or `WorkerStopped`.
+    /// Side effects: Blocks until processed; transcribes, maps the participant (may persist an
+    /// identity), and persists segments.
+    pub fn process_external_chunk(
+        &self,
+        request: ExternalChunkRequest,
+    ) -> Result<usize, RecordingManagerError> {
+        let (reply, reply_receiver) = mpsc::channel();
+        self.send(WorkerCommand::ExternalChunk {
+            request: Box::new(request),
+            reply,
+        })?;
+        reply_receiver
+            .recv()
+            .map_err(|_| RecordingManagerError::WorkerStopped)?
+    }
+
+    /// Closes the external meeting session.
+    ///
+    /// Inputs: None.
+    /// Outputs: Its summary, `NotRecording`, or `WorkerStopped`.
+    /// Side effects: Blocks until the worker has closed the session.
+    pub fn end_external_meeting(&self) -> Result<RecordingSummary, RecordingManagerError> {
+        let (reply, reply_receiver) = mpsc::channel();
+        self.send(WorkerCommand::EndExternal { reply })?;
+        reply_receiver
+            .recv()
+            .map_err(|_| RecordingManagerError::WorkerStopped)?
+    }
+
     /// Sends one command to the worker.
     ///
     /// Inputs: The command.
@@ -328,6 +439,19 @@ struct ActiveRecording<'factory, TranscriptionPort, DiarizationPort, MatcherPort
     segment_count: usize,
 }
 
+/// The open external meeting on the worker.
+struct ActiveExternalMeeting<
+    'factory,
+    TranscriptionPort,
+    DiarizationPort,
+    MatcherPort,
+    RepositoryPort,
+> {
+    recording:
+        ActiveRecording<'factory, TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>,
+    identity_mapper: SharedIdentityMapper,
+}
+
 /// Processes commands until the channel closes, then ends any active recording.
 ///
 /// Inputs: The worker-owned factory, the command channel, and the shared counters.
@@ -344,6 +468,7 @@ fn run_worker<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>(
     RepositoryPort: NoteRepository,
 {
     let mut active_recording = None;
+    let mut active_external_meeting = None;
     for command in command_receiver {
         match command {
             WorkerCommand::Begin { meeting_id, reply } => {
@@ -384,7 +509,37 @@ fn run_worker<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>(
                 let _ = reply.send(outcome);
             }
             WorkerCommand::WithRepository(query) => query(factory.note_repository()),
+            WorkerCommand::BeginExternal {
+                meeting_id,
+                identity_mapper,
+                reply,
+            } => {
+                let outcome = begin_external_meeting(
+                    factory,
+                    &mut active_external_meeting,
+                    meeting_id,
+                    identity_mapper,
+                );
+                let _ = reply.send(outcome);
+            }
+            WorkerCommand::ExternalChunk { request, reply } => {
+                let outcome = match active_external_meeting.as_mut() {
+                    Some(external_meeting) => process_external_chunk(external_meeting, &request),
+                    None => Err(RecordingManagerError::NotRecording),
+                };
+                let _ = reply.send(outcome);
+            }
+            WorkerCommand::EndExternal { reply } => {
+                let outcome = active_external_meeting
+                    .take()
+                    .map(|external_meeting| finish_external_meeting(external_meeting.recording))
+                    .ok_or(RecordingManagerError::NotRecording);
+                let _ = reply.send(outcome);
+            }
         }
+    }
+    if let Some(external_meeting) = active_external_meeting {
+        finish_external_meeting(external_meeting.recording);
     }
     if let Some(recording) = active_recording {
         let summary = finish_recording(recording, worker_state);
@@ -453,6 +608,137 @@ fn finish_recording<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryP
         failed_chunk_count = summary.failed_chunk_count,
         segment_count = summary.segment_count,
         "Recording stopped after draining queued chunks"
+    );
+    summary
+}
+
+/// Opens the external meeting session, resuming it when the same meeting is already open.
+///
+/// Inputs: The factory, the worker's external slot, the meeting, and its identity mapper.
+/// Outputs: `Ok(())` or a session error.
+/// Side effects: May end a different open external meeting and create the meeting in storage.
+fn begin_external_meeting<
+    'factory,
+    TranscriptionPort,
+    DiarizationPort,
+    MatcherPort,
+    RepositoryPort,
+>(
+    factory: &'factory PipelineFactory<
+        TranscriptionPort,
+        DiarizationPort,
+        MatcherPort,
+        RepositoryPort,
+    >,
+    active_external_meeting: &mut Option<
+        ActiveExternalMeeting<
+            'factory,
+            TranscriptionPort,
+            DiarizationPort,
+            MatcherPort,
+            RepositoryPort,
+        >,
+    >,
+    meeting_id: MeetingId,
+    identity_mapper: SharedIdentityMapper,
+) -> Result<(), RecordingManagerError>
+where
+    TranscriptionPort: TranscriptionEngine,
+    DiarizationPort: DiarizationEngine + Sync,
+    MatcherPort: VoiceIdentityMatcher,
+    RepositoryPort: NoteRepository,
+{
+    if let Some(external_meeting) = active_external_meeting.as_mut()
+        && external_meeting.recording.meeting_id == meeting_id
+    {
+        external_meeting.identity_mapper = identity_mapper;
+        tracing::info!(meeting_id = %meeting_id.as_str(), "External meeting resumed");
+        return Ok(());
+    }
+    if let Some(previous_meeting) = active_external_meeting.take() {
+        finish_external_meeting(previous_meeting.recording);
+    }
+    let session = factory.create_session(&meeting_id)?;
+    tracing::info!(meeting_id = %meeting_id.as_str(), "External meeting started");
+    *active_external_meeting = Some(ActiveExternalMeeting {
+        recording: ActiveRecording {
+            session,
+            meeting_id,
+            processed_chunk_count: 0,
+            failed_chunk_count: 0,
+            segment_count: 0,
+        },
+        identity_mapper,
+    });
+    Ok(())
+}
+
+/// Runs one external chunk through the external session and updates its counters.
+///
+/// Inputs: The open external meeting and the chunk.
+/// Outputs: The produced segment count, or the session error (also logged and counted).
+/// Side effects: Transcribes, maps the participant, and persists segments.
+fn process_external_chunk<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>(
+    external_meeting: &mut ActiveExternalMeeting<
+        '_,
+        TranscriptionPort,
+        DiarizationPort,
+        MatcherPort,
+        RepositoryPort,
+    >,
+    request: &ExternalChunkRequest,
+) -> Result<usize, RecordingManagerError>
+where
+    TranscriptionPort: TranscriptionEngine,
+    DiarizationPort: DiarizationEngine + Sync,
+    MatcherPort: VoiceIdentityMatcher,
+    RepositoryPort: NoteRepository,
+{
+    let identity_mapper = SharedMapperAdapter(external_meeting.identity_mapper.as_ref());
+    let recording = &mut external_meeting.recording;
+    match recording.session.process_external_chunk(
+        &identity_mapper,
+        &request.media_chunk,
+        &request.audio_recording,
+        request.duration_ms,
+    ) {
+        Ok(produced_segments) => {
+            recording.processed_chunk_count += 1;
+            recording.segment_count += produced_segments.len();
+            Ok(produced_segments.len())
+        }
+        Err(error) => {
+            recording.failed_chunk_count += 1;
+            tracing::warn!(
+                meeting_id = %recording.meeting_id.as_str(),
+                error = %error,
+                "External chunk skipped after a pipeline failure"
+            );
+            Err(error.into())
+        }
+    }
+}
+
+/// Closes the external meeting and reports its summary.
+///
+/// Inputs: The external meeting's recording state.
+/// Outputs: The summary.
+/// Side effects: Drops the session; logs the counters.
+fn finish_external_meeting<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>(
+    recording: ActiveRecording<'_, TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>,
+) -> RecordingSummary {
+    let summary = RecordingSummary {
+        meeting_id: recording.meeting_id,
+        processed_chunk_count: recording.processed_chunk_count,
+        failed_chunk_count: recording.failed_chunk_count,
+        segment_count: recording.segment_count,
+    };
+    tracing::info!(
+        meeting_id = %summary.meeting_id.as_str(),
+        processed_chunk_count = summary.processed_chunk_count,
+        failed_chunk_count = summary.failed_chunk_count,
+        segment_count = summary.segment_count,
+        "External meeting ended"
     );
     summary
 }

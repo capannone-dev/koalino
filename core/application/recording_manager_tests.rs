@@ -303,3 +303,171 @@ fn processed_segments_are_persisted() {
         .unwrap_or_else(|error| panic!("segments should load: {error}"));
     assert_eq!(stored_segments.len(), 1);
 }
+
+/// Remembers external-ID mappings in memory, like the SQLite repository does on disk.
+#[derive(Default)]
+struct InMemoryExternalIdentities {
+    mappings:
+        std::sync::Mutex<std::collections::HashMap<String, crate::domain::models::SpeakerIdentity>>,
+}
+
+impl crate::ports::external_bridge::ExternalIdentityRepository for InMemoryExternalIdentities {
+    /// Returns the remembered identity for `external_id`.
+    fn find_by_external_id(
+        &self,
+        external_id: &str,
+    ) -> Result<Option<crate::domain::models::SpeakerIdentity>, crate::domain::errors::StorageError>
+    {
+        Ok(self
+            .mappings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(external_id)
+            .cloned())
+    }
+
+    /// Remembers `identity` for `external_id`.
+    fn save_external_mapping(
+        &self,
+        external_id: &str,
+        identity: &crate::domain::models::SpeakerIdentity,
+    ) -> Result<(), crate::domain::errors::StorageError> {
+        self.mappings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(external_id.to_owned(), identity.clone());
+        Ok(())
+    }
+}
+
+/// Builds a shared Teams identity mapper over in-memory mappings.
+fn shared_identity_mapper() -> crate::application::recording_manager::SharedIdentityMapper {
+    Arc::new(
+        crate::application::teams_processor::TeamsIdentityMapper::new(
+            InMemoryExternalIdentities::default(),
+        ),
+    )
+}
+
+/// Builds a 1 s external chunk from `external_id` at `timestamp_ms` for `meeting_id`.
+fn external_chunk(
+    meeting_id: &str,
+    external_id: &str,
+    timestamp_ms: u64,
+) -> crate::application::recording_manager::ExternalChunkRequest {
+    crate::application::recording_manager::ExternalChunkRequest {
+        media_chunk: crate::domain::models::ExternalMediaChunk::new(
+            crate::domain::models::ExternalParticipant::new(
+                external_id.to_owned(),
+                format!("Name of {external_id}"),
+                None,
+            ),
+            vec![0; 32_000],
+            timestamp_ms,
+        ),
+        audio_recording: AudioRecording::new(
+            RecordingId::new(format!("external-{timestamp_ms}")),
+            MeetingId::new(meeting_id),
+            DeviceId::new("device-test"),
+        ),
+        duration_ms: 1_000,
+    }
+}
+
+/// Verifies external chunks become Known segments, alongside an independent local recording.
+#[test]
+fn external_chunks_are_processed_into_known_segments() {
+    let call_count = Arc::new(AtomicUsize::new(0));
+    let manager = spawn_manager(&call_count, Duration::ZERO, None);
+    manager
+        .begin_external_meeting(MeetingId::new("teams-meeting"), shared_identity_mapper())
+        .unwrap_or_else(|error| panic!("external meeting should begin: {error}"));
+    manager
+        .begin_recording(MeetingId::new("local-meeting"))
+        .unwrap_or_else(|error| panic!("a local recording may run alongside: {error}"));
+
+    for (index, external_id) in ["teams-user-1", "teams-user-2", "teams-user-1"]
+        .into_iter()
+        .enumerate()
+    {
+        let produced_segments = manager
+            .process_external_chunk(external_chunk(
+                "teams-meeting",
+                external_id,
+                u64::try_from(index).unwrap_or(0) * 1_000,
+            ))
+            .unwrap_or_else(|error| panic!("external chunk should process: {error}"));
+        assert_eq!(produced_segments, 1);
+    }
+    let summary = manager
+        .end_external_meeting()
+        .unwrap_or_else(|error| panic!("external meeting should end: {error}"));
+    assert_eq!(summary.processed_chunk_count(), 3);
+    assert_eq!(summary.segment_count(), 3);
+    assert!(manager.is_recording(), "the local recording is unaffected");
+
+    let stored_segments = manager
+        .with_note_repository(|note_repository| {
+            note_repository.load_transcript_segments(&MeetingId::new("teams-meeting"))
+        })
+        .unwrap_or_else(|error| panic!("worker should answer: {error}"))
+        .unwrap_or_else(|error| panic!("segments should load: {error}"));
+    let speaker_ids: Vec<_> = stored_segments
+        .iter()
+        .map(|segment| segment.speaker_identity_id())
+        .collect();
+    assert!(speaker_ids.iter().all(Option::is_some), "{speaker_ids:?}");
+    assert_eq!(
+        speaker_ids[0], speaker_ids[2],
+        "the same participant maps to one identity"
+    );
+    assert_ne!(speaker_ids[0], speaker_ids[1]);
+}
+
+/// Verifies re-beginning the same meeting resumes it and a new meeting ends the previous one.
+#[test]
+fn beginning_an_external_meeting_resumes_or_replaces() {
+    let call_count = Arc::new(AtomicUsize::new(0));
+    let manager = spawn_manager(&call_count, Duration::ZERO, None);
+    let mapper = shared_identity_mapper();
+    for _reconnect in 0..2 {
+        manager
+            .begin_external_meeting(MeetingId::new("teams-a"), Arc::clone(&mapper))
+            .unwrap_or_else(|error| panic!("external meeting should begin: {error}"));
+        manager
+            .process_external_chunk(external_chunk("teams-a", "teams-user-1", 0))
+            .unwrap_or_else(|error| panic!("external chunk should process: {error}"));
+    }
+    manager
+        .begin_external_meeting(MeetingId::new("teams-b"), mapper)
+        .unwrap_or_else(|error| panic!("a new meeting should begin: {error}"));
+    let wrong_meeting =
+        manager.process_external_chunk(external_chunk("teams-a", "teams-user-1", 0));
+    assert!(matches!(
+        wrong_meeting,
+        Err(RecordingManagerError::Session(_))
+    ));
+
+    let summary = manager
+        .end_external_meeting()
+        .unwrap_or_else(|error| panic!("external meeting should end: {error}"));
+    assert_eq!(summary.meeting_id(), &MeetingId::new("teams-b"));
+    assert_eq!(summary.processed_chunk_count(), 0);
+    assert_eq!(summary.failed_chunk_count(), 1);
+}
+
+/// Verifies external chunks and ends without a meeting are rejected.
+#[test]
+fn external_commands_require_an_external_meeting() {
+    let call_count = Arc::new(AtomicUsize::new(0));
+    let manager = spawn_manager(&call_count, Duration::ZERO, None);
+    assert!(matches!(
+        manager.process_external_chunk(external_chunk("teams-a", "teams-user-1", 0)),
+        Err(RecordingManagerError::NotRecording)
+    ));
+    assert!(matches!(
+        manager.end_external_meeting(),
+        Err(RecordingManagerError::NotRecording)
+    ));
+    assert_eq!(call_count.load(Ordering::SeqCst), 0);
+}

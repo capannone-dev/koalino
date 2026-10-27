@@ -130,6 +130,14 @@ processed. A failing chunk is logged and counted while the recording continues. 
 manager drains an active recording before the worker exits. `with_note_repository` runs a query
 on the worker's repository. Transcription never runs on a UI thread or the async runtime.
 
+Separately from the local recording, the worker holds at most one *external* meeting session
+for the Teams bridge (Issue #33). `begin_external_meeting(meeting, SharedIdentityMapper)` opens
+it: it creates the meeting, resumes it when the same meeting is already open (bot reconnects),
+or ends a different one. `process_external_chunk(ExternalChunkRequest)` runs
+`MeetingSession::process_external_chunk` (transcription and identity mapping, no diarization)
+and waits for the segment count, which gives the bridge pump its backpressure.
+`end_external_meeting` closes the session and returns its summary.
+
 ## Unknown-speaker clustering
 
 `unknown_speaker_clusterer.rs` groups a meeting's weak and unmatched voices so the user labels

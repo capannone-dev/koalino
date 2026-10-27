@@ -97,3 +97,19 @@ fn loading_pcm_normalizes_samples_and_deletes_audio() {
     assert_eq!(pcm, vec![-1.0, 0.0, 0.5]);
     assert!(store.is_empty());
 }
+
+/// Verifies discarding by ID or prefix removes only the matching chunks.
+#[test]
+fn discarding_removes_only_matching_chunks() {
+    let store = ChunkAudioStore::new();
+    store.insert(&RecordingId::new("local-a-chunk-0"), vec![1]);
+    store.insert(&RecordingId::new("local-a-chunk-1"), vec![2]);
+    store.insert(&RecordingId::new("teams-chunk-0"), vec![3]);
+
+    assert!(store.discard(&RecordingId::new("teams-chunk-0")));
+    assert!(!store.discard(&RecordingId::new("teams-chunk-0")));
+    store.insert(&RecordingId::new("teams-chunk-1"), vec![4]);
+    assert_eq!(store.discard_with_prefix("local-a-"), 2);
+    assert_eq!(store.len(), 1);
+    assert!(store.load_wav(&recording("teams-chunk-1")).is_ok());
+}

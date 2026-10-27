@@ -5,7 +5,8 @@
 //! (WAV, for the OpenAI adapter) and, with `local-ai`, `RecordingPcmSource` (f32 PCM, for
 //! whisper.cpp). Entries are keyed by the chunk's `RecordingId`, removed on the first read, and
 //! wiped from memory, so raw audio (PII) never outlives its transcription. Recording controllers
-//! call `clear` on stop to discard audio of chunks that were never transcribed. Nothing here
+//! call `discard_with_prefix` on stop to discard audio of their chunks that were never
+//! transcribed, leaving other producers (the Teams bridge) untouched. Nothing here
 //! writes to disk or logs samples.
 
 use std::{
@@ -82,6 +83,42 @@ impl ChunkAudioStore {
         }
         entries.clear();
         discarded_count
+    }
+
+    /// Discards one chunk's audio, e.g. after its transcription failed before reading it.
+    ///
+    /// Inputs: The chunk's recording ID.
+    /// Outputs: Whether audio was still held for it.
+    /// Side effects: Wipes and frees that chunk's raw audio.
+    pub fn discard(&self, recording_id: &RecordingId) -> bool {
+        match self.lock_entries().remove(recording_id.as_str()) {
+            Some(mut samples) => {
+                samples.zeroize();
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Discards every unread chunk whose recording ID starts with `recording_id_prefix`.
+    ///
+    /// Inputs: The prefix shared by one producer's chunk IDs (e.g. one local recording), so
+    /// other producers sharing the store (the Teams bridge) keep their audio.
+    /// Outputs: How many chunks were discarded.
+    /// Side effects: Wipes and frees the matching raw audio.
+    pub fn discard_with_prefix(&self, recording_id_prefix: &str) -> usize {
+        let mut entries = self.lock_entries();
+        let matching_ids: Vec<String> = entries
+            .keys()
+            .filter(|recording_id| recording_id.starts_with(recording_id_prefix))
+            .cloned()
+            .collect();
+        for recording_id in &matching_ids {
+            if let Some(mut samples) = entries.remove(recording_id) {
+                samples.zeroize();
+            }
+        }
+        matching_ids.len()
     }
 
     /// Removes and returns one chunk's samples.

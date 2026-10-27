@@ -80,7 +80,8 @@ struct ActiveCapture {
 
 /// Owns the pipeline worker and the recording in progress, if any.
 pub struct RecordingController {
-    recording_manager: RecordingManager,
+    /// Shared with the Teams bridge pump, which feeds the worker's external meeting session.
+    recording_manager: Arc<RecordingManager>,
     chunk_audio_store: Arc<ChunkAudioStore>,
     chunking_mode: ChunkingMode,
     device_id: DeviceId,
@@ -103,13 +104,29 @@ impl RecordingController {
         device_id: DeviceId,
     ) -> Self {
         Self {
-            recording_manager,
+            recording_manager: Arc::new(recording_manager),
             chunk_audio_store,
             chunking_mode,
             device_id,
             active_capture: None,
             inactive_state: AudioState::Idle,
         }
+    }
+
+    /// Shares the pipeline worker with another producer (the Teams bridge pump).
+    ///
+    /// Outputs: A handle to the same worker; the worker stops once every handle is dropped.
+    /// Side effects: None.
+    pub fn shared_recording_manager(&self) -> Arc<RecordingManager> {
+        Arc::clone(&self.recording_manager)
+    }
+
+    /// Shares the audio store the worker's transcription engine reads chunks from.
+    ///
+    /// Outputs: The store; callers must key entries with IDs no local recording uses.
+    /// Side effects: None.
+    pub fn shared_chunk_audio_store(&self) -> Arc<ChunkAudioStore> {
+        Arc::clone(&self.chunk_audio_store)
     }
 
     /// Borrows the pipeline worker, e.g. to read its availability or query its repository.
@@ -287,7 +304,9 @@ impl RecordingController {
             }
         }
         let summary = self.recording_manager.end_recording();
-        let discarded_chunk_count = self.chunk_audio_store.clear();
+        let discarded_chunk_count = self
+            .chunk_audio_store
+            .discard_with_prefix(&chunk_id_prefix(capture.recording_key));
         if discarded_chunk_count > 0 {
             tracing::info!(
                 discarded_chunk_count,
@@ -344,6 +363,11 @@ impl Drop for RecordingController {
     }
 }
 
+/// Returns the prefix of every chunk ID of the recording `recording_key`.
+fn chunk_id_prefix(recording_key: Uuid) -> String {
+    format!("{recording_key}-chunk-")
+}
+
 /// Returns the fixed capture format.
 fn capture_config() -> AudioConfig {
     AudioConfig::new(CAPTURE_SAMPLE_RATE_HZ, 1)
@@ -377,8 +401,9 @@ fn submit_chunk(
     capture.timeline_sample_count = capture.timeline_sample_count.max(chunk_end_sample);
 
     let recording_id = RecordingId::new(format!(
-        "{}-chunk-{}",
-        capture.recording_key, capture.next_chunk_sequence
+        "{}{}",
+        chunk_id_prefix(capture.recording_key),
+        capture.next_chunk_sequence
     ));
     capture.next_chunk_sequence += 1;
     let audio_bytes = encode_wav_pcm16(&samples, CAPTURE_SAMPLE_RATE_HZ);

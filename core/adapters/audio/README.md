@@ -11,7 +11,7 @@ Subscribers receive adapter-neutral signed 16-bit PCM `AudioChunk` values only w
 | File | Purpose |
 | --- | --- |
 | `vad_chunker.rs` | Cuts PCM at speech pauses (`vad` feature) or every 30 s. `drain_ready_chunks` returns chunks oldest first, `finish` flushes the rest as `StreamEnded`, `time_based` selects time cuts at runtime, and `FinalizedAudioChunk::overlap_sample_count` reports the 1 s soft-max lookback. |
-| `chunk_audio_store.rs` | `ChunkAudioStore`: in-memory, delete-on-read PCM per chunk `RecordingId`. It implements the engines' audio sources (`AudioFileSource` as WAV and, with `local-ai`, `RecordingPcmSource`). Samples are wiped on read and on `clear`, so raw audio never outlives its transcription. |
+| `chunk_audio_store.rs` | `ChunkAudioStore`: in-memory, delete-on-read PCM per chunk `RecordingId`. It implements the engines' audio sources (`AudioFileSource` as WAV and, with `local-ai`, `RecordingPcmSource`). Samples are wiped on read and on `clear`, so raw audio never outlives its transcription. `discard` and `discard_with_prefix` remove one producer's chunks only (local recordings use `<uuid>-chunk-<n>`, and the Teams bridge pump uses `teams-<uuid>`, discarding each chunk after processing). |
 | `pcm_input.rs` | `PcmInput`: reads 16 kHz mono 16-bit PCM in 100 ms blocks from a WAV file (validated header, bounded allocation) or a raw stream such as stdin. |
 
 `core/bin/recording_controller.rs` composes these with `LocalRecorder` into the live-recording
