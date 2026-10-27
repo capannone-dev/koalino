@@ -375,5 +375,6 @@
   their FFI and HTTP endpoints remain.
 - The requirements file was renamed to `REQUIREMENTS.md`.
 - Web CI had failed since #19 because vitest globals were disabled and jsdom lacks
-  `ResizeObserver`. Both were fixed. The repository has no Flutter CI workflow, so Dart changes are
-  verified only where a Flutter SDK is available.
+  `ResizeObserver`. Both were fixed. A Flutter CI workflow (`flutter-ci.yml`, pinned to Flutter 3.47.8)
+  was then added. Its first runs required applying `dart format` across `ui/`, refreshing the stale
+  `pubspec.lock`, and fixing a #25 type error in `telemetry_dashboard_screen.dart`.
