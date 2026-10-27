@@ -41,6 +41,30 @@ documented nonzero status codes distinguishable from lifecycle states.
   missing engine is not fatal). On SIGINT or SIGTERM it shuts down gracefully, letting the worker
   drain.
 
+## Teams bot bridge (Issue #33)
+
+`teams_bridge_composition.rs` composes the bridge for the daemon. `TeamsBridgeConfig` reads
+`NOTE_TAKER_TEAMS_BRIDGE_ENABLED` (default `false`), `_PORT` (`8765`, always on 127.0.0.1),
+`_SECRET` (redacted from `Debug`), `_BUFFER_SECONDS` (`10`, range 1–300), and `_SLIDE_DIR`
+(default: `slides` next to the database). When the bridge is enabled and the pipeline is
+available, `start_teams_bridge_from_environment` does three things:
+
+1. Opens a voice-store connection (Teams identity mappings) and a note-repository connection
+   (slide attachments) on a blocking thread.
+2. Starts the WebSocket server.
+3. Starts the `teams-bridge-pump` thread.
+
+The pump shares the controller's `RecordingManager` and `ChunkAudioStore` and routes each event:
+
+- `MeetingStarted` → `begin_external_meeting`.
+- Audio → PCM into the store under `teams-<uuid>`, then `process_external_chunk`, waiting for
+  the result. The chunk's audio is always discarded afterwards.
+- Slides → `SlideAttachmentStore`.
+
+On shutdown the daemon stops the bridge before the controller: the server closes connections,
+the buffer is closed and drained, and the external meeting ends. A disabled, misconfigured, or
+failed bridge is logged and the daemon keeps running.
+
 `storage_composition.rs` (`open_encrypted_stores`) is shared by all three roots. It opens the
 `encryption_meta` record, unlocks and verifies the embedding key through `KeyManager`
 (`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, else the key file in `NOTE_TAKER_ENCRYPTION_KEY_DIR` or

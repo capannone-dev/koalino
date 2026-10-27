@@ -182,7 +182,7 @@ impl PipelineConfig {
 /// Inputs: The variable name (for the error), its value, and the default for `None`.
 /// Outputs: The flag, or an error for values other than true/false, 1/0, yes/no, on/off.
 /// Side effects: None.
-fn parse_flag(name: &str, value: Option<String>, default: bool) -> Result<bool> {
+pub(crate) fn parse_flag(name: &str, value: Option<String>, default: bool) -> Result<bool> {
     match value
         .map(|value| value.trim().to_ascii_lowercase())
         .as_deref()

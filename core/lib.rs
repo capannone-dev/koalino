@@ -32,6 +32,9 @@ pub mod recording_controller;
 pub mod server;
 #[path = "bin/storage_composition.rs"]
 pub mod storage_composition;
+/// Composes the Teams bot bridge (WebSocket server, buffer, and meeting pump) for the daemon.
+#[path = "bin/teams_bridge_composition.rs"]
+pub mod teams_bridge_composition;
 
 #[cfg(test)]
 mod scaffold_contract_tests {

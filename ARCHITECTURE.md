@@ -14,8 +14,9 @@
 │   └── teams_processor.rs  # Maps guaranteed external identities and auto-enrolls variants
 ├── adapters/         # IMPLEMENTATIONS (The "Plumbing")
 │   ├── ai/           # whisper_adapter.rs, openai_adapter.rs
-│   ├── network/      # libp2p_adapter.rs
+│   ├── network/      # libp2p_adapter.rs, teams_bridge/ (localhost WebSocket + Protobuf)
 │   └── storage/      # sqlite_adapter.rs, automerge_adapter.rs
+├── protocol/         # teams_bridge.proto (source of truth) + checked-in generated Rust code
 └── bin/              # ENTRY POINTS
     ├── cli.rs        # Linux CLI
     └── daemon.rs     # Headless server / FFI bridge for Flutter
@@ -102,3 +103,26 @@ loaded once and reused across recordings. Stop is graceful: it waits for in-flig
                                      2 relink transcript_segments where unknown_cluster_id = cluster
                                      3 resolve cluster + delete its review clips
 ```
+
+## Teams bot bridge (Issue #33)
+
+```text
+ Teams bot process (separate; owns the Teams SDK)
+   │ ws://127.0.0.1:8765 (loopback only, no Origin header)
+   │ 1 {"auth":"<NOTE_TAKER_TEAMS_BRIDGE_SECRET>"} → {"auth":"ok"} | close 1008
+   │ 2 binary frames: TeamsBridgeMessage { MeetingMetadata | AudioChunk | VideoFrame }
+   ▼
+ adapters::network::teams_bridge
+   TeamsWebSocketServer (tokio-tungstenite; one active bot; reconnects keep the meeting)
+     → message_decoder (16 kHz s16le, 1–30 s, metadata first; meeting UUID = v5(Teams ID))
+     → BridgeBuffer (never blocks the reader; 10 s of audio, drop oldest + warning)
+   ▼ teams-bridge-pump thread (bin::teams_bridge_composition)
+   MeetingStarted → RecordingManager.begin_external_meeting
+   Audio  → ChunkAudioStore("teams-<uuid>") + RecordingManager.process_external_chunk (waits)
+              └ MeetingSession.process_external_chunk: transcribe → TeamsIdentityMapper
+                (SqliteVoiceVectorDB external_identity_mappings) → Known segment
+   Slide  → SlideAttachmentStore → <slides>/<meeting>/slide-….png + attachments row
+```
+
+The external meeting session runs on the same pipeline worker as local recordings but
+independently of them, so a microphone recording and a Teams meeting can run at the same time.

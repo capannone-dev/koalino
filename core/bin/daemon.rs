@@ -11,19 +11,22 @@ use note_taker_core::{
     recording_controller::RecordingController,
     server::api::{ServerAppState, build_router},
     storage_composition::{EncryptedStores, open_encrypted_stores},
+    teams_bridge_composition::start_teams_bridge_from_environment,
 };
 
 /// Initializes logging, composes headless server ports, and serves the local Axum API.
 ///
 /// Inputs: Reads optional device, log, database, bind-address, encryption
 /// (`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, `NOTE_TAKER_ENCRYPTION_KEY_DIR`), and meeting-pipeline
-/// (see `pipeline_composition`) environment variables.
+/// (see `pipeline_composition`), and Teams bridge (`NOTE_TAKER_TEAMS_BRIDGE_*`, see
+/// `teams_bridge_composition`) environment variables.
 /// Outputs: A process exit status indicating whether startup or HTTP serving failed.
 /// Side effects: Unlocks the embedding encryption key, opens the note repository and the voice
 /// store on one local SQLite file, creates logging sinks, composes the meeting pipeline on a
 /// blocking thread (a missing engine is logged, not fatal), binds the configured local TCP
-/// address, and serves REST/WebSocket requests until SIGINT or SIGTERM. On shutdown it stops
-/// accepting requests and lets the pipeline worker drain before exiting.
+/// address, starts the localhost Teams bot bridge when enabled, and serves REST/WebSocket
+/// requests until SIGINT or SIGTERM. On shutdown it stops accepting requests, closes the bridge
+/// (its pump drains buffered media), and lets the pipeline worker drain before exiting.
 #[tokio::main]
 async fn main() -> Result<()> {
     let device_id = DeviceId::new(
@@ -50,7 +53,15 @@ async fn main() -> Result<()> {
         DeviceId::new("headless-server"),
         KeyManagerConfig::from_environment(),
     )?;
-    let recording_controller = compose_recording_pipeline(database_path, embedding_cipher).await;
+    let recording_controller =
+        compose_recording_pipeline(database_path.clone(), Arc::clone(&embedding_cipher)).await;
+    let teams_bridge = start_teams_bridge_from_environment(
+        &database_path,
+        DeviceId::new("headless-server"),
+        embedding_cipher,
+        recording_controller.as_ref(),
+    )
+    .await;
     let application_state = ServerAppState::new(note_repository, voice_store);
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!(address = %bind_address, "headless Axum server started");
@@ -58,6 +69,10 @@ async fn main() -> Result<()> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     tracing::info!("headless Axum server stopped accepting requests");
+    if let Some(teams_bridge) = teams_bridge {
+        // Must finish before the controller drops: the pump shares its pipeline worker.
+        teams_bridge.shutdown().await;
+    }
     if let Some(recording_controller) = recording_controller {
         // Dropping the controller stops any recording and waits for queued chunks.
         tokio::task::spawn_blocking(move || drop(recording_controller)).await?;

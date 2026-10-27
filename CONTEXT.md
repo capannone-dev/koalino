@@ -213,3 +213,17 @@ drains in-flight chunks. `core/bin/recording_controller.rs` drives capture (reco
 from the environment. The FFI composes the pipeline on the first start and gains PCM push and
 meeting-ID functions. The CLI records a WAV file or stdin in the foreground with a cross-process
 `record stop`, and the daemon composes the pipeline at start-up and shuts down gracefully.
+
+Issue #33 adds the Teams bot bridge. A separate bot process streams Protobuf frames
+(`core/protocol/teams_bridge.proto`, rust-protobuf 3.7.2, generated code checked in) over a
+`tokio-tungstenite` WebSocket bound to 127.0.0.1:
+
+- **Authentication:** an optional shared secret is sent as the first JSON text frame.
+- **Decoding:** frames become `ExternalMediaChunk` and `SlideCapture` values.
+- **Buffering:** a non-blocking, drop-oldest buffer holds `BUFFER_SECONDS` of audio.
+- **Pump:** a thread opens an external meeting session on the `RecordingManager` worker, which
+  runs independently of local recordings. It transcribes each chunk with a persistent Teams
+  identity mapping (`external_identity_mappings` in the voice store), producing `Known`
+  segments, and stores screen-share frames as meeting attachments.
+- **Daemon:** starts the bridge when `NOTE_TAKER_TEAMS_BRIDGE_ENABLED` is set and a
+  transcription engine is available, and stops it before the pipeline at shutdown.

@@ -507,3 +507,70 @@
 - Follow-ups: microphone capture adapter, diarization adapter, overlap text de-duplication,
   dispatcher telemetry for live chunks, Flutter UI for push/stop, an HTTP recording API, and
   releasing the FFI lock during stop.
+
+## 2026-10-27 — Issue #33 Teams bot ↔ Rust protocol (WebSocket + Protobuf)
+
+- User decisions:
+  1. **Protobuf library:** rust-protobuf 3.x (`protobuf = "=3.7.2"`). The `protobuf` 4.x crate
+     is Google's upb-based runtime, so the version is pinned.
+  2. **Chunks:** the bot sends 1–30 s chunks, and the core rejects longer ones instead of
+     re-chunking.
+  3. **Adapters:** both production adapters are built, a SQLite `ExternalIdentityRepository`
+     and slide storage.
+  4. **Authentication:** a first text frame `{"auth":"<secret>"}`, answered with
+     `{"auth":"ok"}`, or the connection is closed with 1008.
+- Code generation: the generated Rust code is checked in under `core/protocol/generated/`, and
+  `protobuf-codegen` is a dev-dependency used by a freshness test
+  (`NOTE_TAKER_REGENERATE_PROTOCOL=1` rewrites it). It is not a build script.
+  - The build-script version failed `make rust-lint` locally. `protobuf-codegen` adds full
+    `regex` features to the host build graph, which changes `bindgen`'s hash and forces a
+    whisper.cpp rebuild that needs cmake.
+  - Checking the code in also keeps code generation out of mobile cross-builds.
+- Wire details:
+  - Package `note_taker.teams_bridge.v1`.
+  - Audio timestamps are relative to `MeetingMetadata.start_time_ms`, and metadata must precede
+    media.
+  - Only `screen_share` frames become slides.
+  - The local meeting ID is UUIDv5 of the Teams meeting ID, so reconnects and restarts land in
+    the same meeting.
+- Security:
+  - The server binds 127.0.0.1 only.
+  - Handshakes with an `Origin` header are refused, which blocks browser-based cross-site
+    WebSocket hijacking.
+  - The secret is compared in constant time over SHA-256 digests and is never logged. The
+    `BridgeSecret` `Debug` output is redacted.
+  - Titles, e-mail addresses, and media are never logged.
+  - Messages are capped at 8 MiB.
+  - With no secret configured, start-up logs a warning.
+- Backpressure:
+  - The reader pushes into `BridgeBuffer`, which never blocks. When full, it drops the oldest
+    audio (by duration, across participants) or the oldest slide (cap 16), with a warning at
+    most every 5 s.
+  - The pump waits for each `process_external_chunk` result, so transcription speed sets the
+    pace.
+  - `MeetingBridge` (unbounded std receivers) was not used for this reason.
+- Pipeline: `RecordingManager` holds one external meeting session next to the local recording,
+  on the same worker and models.
+  - `ChunkAudioStore` gained `discard`/`discard_with_prefix`. `RecordingController::stop`
+    therefore wipes only its own chunks instead of `clear()`ing audio that a concurrent Teams
+    chunk still needs.
+  - The controller now holds the manager in an `Arc` so the pump can share it.
+- Identity: `ExternalIdentityRepository` is implemented on `SqliteVoiceVectorDB`, with a new
+  `external_identity_mappings` table joined to `speaker_identities` so renames apply.
+  `ports::external_bridge` gained a `Mutex<R>` forwarding impl because the mapper is shared
+  with the worker thread.
+- Slides: `SlideAttachmentStore` writes PNG/JPEG files (0600) under `<db dir>/slides` (or
+  `NOTE_TAKER_TEAMS_BRIDGE_SLIDE_DIR`) and links them as meeting attachments.
+  - They are not encrypted, the same policy as manual attachments.
+  - The attachment timestamp is the capture's arrival time, because `SlideCapture` carries no
+    meeting start.
+- Test support: a test-only `log_capture` installs one global subscriber that routes events to
+  the emitting thread's buffer. Scoped thread-local subscribers raced with `tracing`'s global
+  callsite-interest cache under parallel tests.
+- Follow-ups:
+  - The bot itself.
+  - A manual Python mock bot was not added, because Python is not in the approved stack; the
+    Rust mock-bot tests cover the same path.
+  - Persisting the meeting title from metadata.
+  - Encrypting slide files at rest.
+  - Exposing bridge status over HTTP.

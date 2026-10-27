@@ -1,0 +1,525 @@
+//! Composes the Teams bot bridge for the daemon: configuration, the localhost WebSocket server,
+//! the drop-oldest buffer, and the meeting pump that feeds `MeetingSession`.
+//!
+//! ```text
+//! Teams bot ──WebSocket (127.0.0.1)──▶ TeamsWebSocketServer ──decode──▶ BridgeBuffer
+//!                                                                          │ (pump thread)
+//!            MeetingStarted ─▶ RecordingManager::begin_external_meeting    ▼
+//!            Audio ─▶ ChunkAudioStore + RecordingManager::process_external_chunk (waits)
+//!            Slide ─▶ AttachmentWorkflow (SlideAttachmentStore)
+//! ```
+//!
+//! The pump runs on its own OS thread and waits for each chunk's result, so transcription speed
+//! is the only backpressure: the WebSocket reader never blocks, and when the pump falls more than
+//! `NOTE_TAKER_TEAMS_BRIDGE_BUFFER_SECONDS` behind, the buffer drops the oldest audio. Chunk audio
+//! is keyed `teams-<uuid>` in the store shared with local recordings and is always discarded after
+//! processing, so raw audio never outlives its transcription.
+//!
+//! | Variable | Values | Default |
+//! | --- | --- | --- |
+//! | `NOTE_TAKER_TEAMS_BRIDGE_ENABLED` | boolean | `false` |
+//! | `NOTE_TAKER_TEAMS_BRIDGE_PORT` | 1–65535 (always bound on 127.0.0.1) | `8765` |
+//! | `NOTE_TAKER_TEAMS_BRIDGE_SECRET` | shared secret the bot sends first (never logged) | unset |
+//! | `NOTE_TAKER_TEAMS_BRIDGE_BUFFER_SECONDS` | 1–300 | `10` |
+//! | `NOTE_TAKER_TEAMS_BRIDGE_SLIDE_DIR` | directory for slide images | `slides` next to the database |
+
+use std::{
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    sync::Arc,
+    thread::JoinHandle,
+    time::Duration,
+};
+
+use anyhow::{Context, Result, bail};
+use uuid::Uuid;
+
+use crate::{
+    adapters::{
+        audio::chunk_audio_store::ChunkAudioStore,
+        network::teams_bridge::{
+            bridge_buffer::BridgeBuffer,
+            message_decoder::{BridgeAudio, BridgeEvent, BridgeMeeting},
+            teams_websocket_server::{
+                BridgeSecret, DEFAULT_AUTHENTICATION_TIMEOUT, DEFAULT_TEAMS_BRIDGE_PORT,
+                RunningTeamsBridge, TeamsBridgeServerConfig, TeamsWebSocketServer,
+            },
+        },
+        storage::{
+            slide_attachment_store::SlideAttachmentStore, sqlite_adapter::SqliteNoteRepository,
+            sqlite_voice_vector_db::SqliteVoiceVectorDB,
+        },
+    },
+    application::{
+        recording_manager::{ExternalChunkRequest, RecordingManager, SharedIdentityMapper},
+        teams_processor::TeamsIdentityMapper,
+    },
+    domain::models::{AudioRecording, DeviceId, MeetingId, RecordingId},
+    pipeline_composition::parse_flag,
+    ports::{crypto::EmbeddingCipher, external_bridge::AttachmentWorkflow},
+    recording_controller::RecordingController,
+};
+
+#[cfg(test)]
+#[path = "teams_bridge_composition_tests.rs"]
+mod tests;
+
+/// Enables the bridge.
+pub const TEAMS_BRIDGE_ENABLED_VARIABLE: &str = "NOTE_TAKER_TEAMS_BRIDGE_ENABLED";
+/// Loopback port of the WebSocket server.
+pub const TEAMS_BRIDGE_PORT_VARIABLE: &str = "NOTE_TAKER_TEAMS_BRIDGE_PORT";
+/// Shared secret the bot must present.
+pub const TEAMS_BRIDGE_SECRET_VARIABLE: &str = "NOTE_TAKER_TEAMS_BRIDGE_SECRET";
+/// Audio the buffer holds before dropping the oldest.
+pub const TEAMS_BRIDGE_BUFFER_SECONDS_VARIABLE: &str = "NOTE_TAKER_TEAMS_BRIDGE_BUFFER_SECONDS";
+/// Directory receiving slide images.
+pub const TEAMS_BRIDGE_SLIDE_DIR_VARIABLE: &str = "NOTE_TAKER_TEAMS_BRIDGE_SLIDE_DIR";
+/// Default buffer length in seconds.
+const DEFAULT_BUFFER_SECONDS: u64 = 10;
+/// Largest accepted buffer length in seconds.
+const MAXIMUM_BUFFER_SECONDS: u64 = 300;
+/// How often the pump re-checks for shutdown while the buffer is empty.
+const PUMP_POLL_INTERVAL: Duration = Duration::from_millis(200);
+/// Prefix of the chunk-audio IDs the pump stores (local recordings use `<uuid>-chunk-<n>`).
+const TEAMS_CHUNK_ID_PREFIX: &str = "teams-";
+
+/// Bridge settings read from the environment; the secret is redacted in `Debug`.
+#[derive(Clone, Debug)]
+pub struct TeamsBridgeConfig {
+    enabled: bool,
+    port: u16,
+    shared_secret: Option<BridgeSecret>,
+    buffer_duration: Duration,
+    slide_directory: Option<PathBuf>,
+}
+
+impl TeamsBridgeConfig {
+    /// Reads the configuration from the process environment.
+    ///
+    /// Outputs: The configuration, or an error naming an invalid variable.
+    /// Side effects: Reads environment variables; never logs their values.
+    pub fn from_environment() -> Result<Self> {
+        Self::from_lookup(|name| std::env::var(name).ok())
+    }
+
+    /// Reads the configuration through `lookup`, so tests never touch the environment.
+    ///
+    /// Inputs: A function returning a variable's value, or `None` when unset. Blank values
+    /// count as unset.
+    /// Outputs: The configuration, or an error naming an invalid variable.
+    /// Side effects: None beyond `lookup`.
+    pub fn from_lookup(lookup: impl Fn(&str) -> Option<String>) -> Result<Self> {
+        let read = |name: &str| {
+            lookup(name)
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty())
+        };
+        let port = match read(TEAMS_BRIDGE_PORT_VARIABLE) {
+            None => DEFAULT_TEAMS_BRIDGE_PORT,
+            Some(value) => match value.parse::<u16>() {
+                Ok(port) if port != 0 => port,
+                _ => bail!("{TEAMS_BRIDGE_PORT_VARIABLE} must be a port between 1 and 65535"),
+            },
+        };
+        let buffer_seconds = match read(TEAMS_BRIDGE_BUFFER_SECONDS_VARIABLE) {
+            None => DEFAULT_BUFFER_SECONDS,
+            Some(value) => match value.parse::<u64>() {
+                Ok(seconds) if (1..=MAXIMUM_BUFFER_SECONDS).contains(&seconds) => seconds,
+                _ => bail!(
+                    "{TEAMS_BRIDGE_BUFFER_SECONDS_VARIABLE} must be between 1 and \
+                     {MAXIMUM_BUFFER_SECONDS} seconds"
+                ),
+            },
+        };
+        Ok(Self {
+            enabled: parse_flag(
+                TEAMS_BRIDGE_ENABLED_VARIABLE,
+                read(TEAMS_BRIDGE_ENABLED_VARIABLE),
+                false,
+            )?,
+            port,
+            shared_secret: read(TEAMS_BRIDGE_SECRET_VARIABLE).map(BridgeSecret::new),
+            buffer_duration: Duration::from_secs(buffer_seconds),
+            slide_directory: read(TEAMS_BRIDGE_SLIDE_DIR_VARIABLE).map(PathBuf::from),
+        })
+    }
+
+    /// Overrides the port (tests use 0 for an ephemeral port).
+    pub fn with_port(mut self, port: u16) -> Self {
+        self.port = port;
+        self
+    }
+
+    /// Reports whether the bridge should start.
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// Returns the loopback port.
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Reports whether the bot must authenticate with the shared secret.
+    pub fn requires_authentication(&self) -> bool {
+        self.shared_secret.is_some()
+    }
+
+    /// Returns how much audio the buffer holds before dropping the oldest.
+    pub fn buffer_duration(&self) -> Duration {
+        self.buffer_duration
+    }
+
+    /// Returns the configured slide directory, if one was set.
+    pub fn slide_directory(&self) -> Option<&Path> {
+        self.slide_directory.as_deref()
+    }
+
+    /// Builds the WebSocket server settings.
+    fn server_config(&self) -> TeamsBridgeServerConfig {
+        TeamsBridgeServerConfig {
+            port: self.port,
+            shared_secret: self.shared_secret.clone(),
+            authentication_timeout: DEFAULT_AUTHENTICATION_TIMEOUT,
+        }
+    }
+}
+
+/// Everything the pump needs to turn bridge events into meeting data.
+pub struct TeamsBridgePorts<SlideWorkflow> {
+    /// The pipeline worker; its external meeting session receives the chunks.
+    pub recording_manager: Arc<RecordingManager>,
+    /// The store the worker's transcription engine reads chunk audio from.
+    pub chunk_audio_store: Arc<ChunkAudioStore>,
+    /// Maps Teams participants to persistent local identities.
+    pub identity_mapper: SharedIdentityMapper,
+    /// Stores screen-share captures as meeting attachments.
+    pub slide_workflow: SlideWorkflow,
+    /// Recorded as the acquiring device of each chunk.
+    pub device_id: DeviceId,
+}
+
+/// Counters reported when the bridge shuts down (IDs and counts only).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct TeamsBridgeStatistics {
+    /// Meeting starts (including resumptions after reconnects).
+    pub meetings_started: usize,
+    /// Audio chunks persisted as segments.
+    pub processed_audio_chunks: usize,
+    /// Audio chunks that failed in the pipeline.
+    pub failed_audio_chunks: usize,
+    /// Slides attached to their meeting.
+    pub stored_slides: usize,
+    /// Slides that could not be stored.
+    pub failed_slides: usize,
+}
+
+/// A running bridge: server, buffer, and pump thread.
+pub struct TeamsBridgeService {
+    server: RunningTeamsBridge,
+    buffer: BridgeBuffer,
+    pump_thread: JoinHandle<TeamsBridgeStatistics>,
+}
+
+impl TeamsBridgeService {
+    /// Returns the server's bound loopback address.
+    pub fn local_addr(&self) -> SocketAddr {
+        self.server.local_addr()
+    }
+
+    /// Stops the server, lets the pump drain the buffer, and ends the external meeting.
+    ///
+    /// Outputs: The pump's counters (default counters if the pump panicked, which is logged).
+    /// Side effects: Closes bot connections (1001); processes buffered events on the pump thread
+    /// (awaited via `spawn_blocking`, so the runtime is not blocked).
+    pub async fn shutdown(self) -> TeamsBridgeStatistics {
+        self.server.shutdown().await;
+        self.buffer.close();
+        let pump_thread = self.pump_thread;
+        match tokio::task::spawn_blocking(move || pump_thread.join()).await {
+            Ok(Ok(statistics)) => statistics,
+            Ok(Err(_)) | Err(_) => {
+                tracing::error!("Teams bridge pump panicked");
+                TeamsBridgeStatistics::default()
+            }
+        }
+    }
+}
+
+/// Starts the WebSocket server and the pump thread.
+///
+/// Inputs: The configuration (its `enabled` flag is not consulted) and the pump's ports.
+/// Outputs: The running service, or an error when the port cannot be bound or the thread cannot
+/// start.
+/// Side effects: Listens on 127.0.0.1; spawns the pump thread and server tasks.
+pub async fn start_teams_bridge<SlideWorkflow>(
+    config: &TeamsBridgeConfig,
+    ports: TeamsBridgePorts<SlideWorkflow>,
+) -> Result<TeamsBridgeService>
+where
+    SlideWorkflow: AttachmentWorkflow + Send + 'static,
+{
+    let buffer = BridgeBuffer::new(config.buffer_duration());
+    let server = TeamsWebSocketServer::start(config.server_config(), buffer.clone())
+        .await
+        .context("unable to start the Teams bridge server")?;
+    let pump_buffer = buffer.clone();
+    let pump_thread = std::thread::Builder::new()
+        .name("teams-bridge-pump".to_owned())
+        .spawn(move || MeetingPump::new(ports).run(&pump_buffer))
+        .context("unable to start the Teams bridge pump")?;
+    tracing::info!(
+        local_addr = %server.local_addr(),
+        authentication_required = config.requires_authentication(),
+        buffer_seconds = config.buffer_duration().as_secs(),
+        "Teams bridge started"
+    );
+    Ok(TeamsBridgeService {
+        server,
+        buffer,
+        pump_thread,
+    })
+}
+
+/// Opens the SQLite-backed ports for the bridge next to an existing recording controller.
+///
+/// Inputs: The database path, the device ID, the verified cipher, the slide directory (default:
+/// `slides` next to the database), and the controller's shared worker and chunk audio store.
+/// Outputs: The ports, or an error naming the store that failed to open.
+/// Side effects: Opens a voice-store and a note-repository connection (blocking I/O; call it
+/// from `spawn_blocking`).
+pub fn open_teams_bridge_ports(
+    database_path: &Path,
+    device_id: DeviceId,
+    embedding_cipher: Arc<dyn EmbeddingCipher>,
+    slide_directory: Option<&Path>,
+    recording_manager: Arc<RecordingManager>,
+    chunk_audio_store: Arc<ChunkAudioStore>,
+) -> Result<TeamsBridgePorts<SlideAttachmentStore<SqliteNoteRepository>>> {
+    let voice_store = SqliteVoiceVectorDB::open(database_path, Arc::clone(&embedding_cipher))
+        .context("unable to open the voice store for Teams identities")?;
+    let attachment_repository =
+        SqliteNoteRepository::open(database_path, device_id.clone(), embedding_cipher)
+            .context("unable to open the note repository for Teams slides")?;
+    let slide_directory = slide_directory.map_or_else(
+        || {
+            database_path
+                .parent()
+                .map_or_else(PathBuf::new, Path::to_path_buf)
+                .join("slides")
+        },
+        Path::to_path_buf,
+    );
+    Ok(TeamsBridgePorts {
+        recording_manager,
+        chunk_audio_store,
+        identity_mapper: Arc::new(TeamsIdentityMapper::new(std::sync::Mutex::new(voice_store))),
+        slide_workflow: SlideAttachmentStore::new(
+            slide_directory,
+            attachment_repository,
+            device_id.clone(),
+        ),
+        device_id,
+    })
+}
+
+/// Starts the bridge when `NOTE_TAKER_TEAMS_BRIDGE_ENABLED` is set and the pipeline is ready.
+///
+/// Inputs: The database path, the verified cipher, and the recording controller (`None` when
+/// no transcription engine is configured).
+/// Outputs: The running service, or `None` when disabled or when start-up failed (logged; the
+/// daemon keeps running without the bridge).
+/// Side effects: Reads the environment; opens SQLite connections on a blocking thread; listens
+/// on 127.0.0.1.
+pub async fn start_teams_bridge_from_environment(
+    database_path: &Path,
+    device_id: DeviceId,
+    embedding_cipher: Arc<dyn EmbeddingCipher>,
+    recording_controller: Option<&RecordingController>,
+) -> Option<TeamsBridgeService> {
+    let config = match TeamsBridgeConfig::from_environment() {
+        Ok(config) => config,
+        Err(error) => {
+            tracing::warn!(error = %format!("{error:#}"), "Teams bridge disabled: invalid configuration");
+            return None;
+        }
+    };
+    if !config.enabled() {
+        return None;
+    }
+    let Some(recording_controller) = recording_controller else {
+        tracing::warn!("Teams bridge disabled: the meeting pipeline is unavailable");
+        return None;
+    };
+    let recording_manager = recording_controller.shared_recording_manager();
+    let chunk_audio_store = recording_controller.shared_chunk_audio_store();
+    let database_path = database_path.to_path_buf();
+    let slide_directory = config.slide_directory().map(Path::to_path_buf);
+    let ports = tokio::task::spawn_blocking(move || {
+        open_teams_bridge_ports(
+            &database_path,
+            device_id,
+            embedding_cipher,
+            slide_directory.as_deref(),
+            recording_manager,
+            chunk_audio_store,
+        )
+    })
+    .await;
+    let started = match ports {
+        Ok(Ok(ports)) => start_teams_bridge(&config, ports).await,
+        Ok(Err(error)) => Err(error),
+        Err(join_error) => Err(anyhow::anyhow!(
+            "opening the Teams bridge stores panicked: {join_error}"
+        )),
+    };
+    match started {
+        Ok(service) => Some(service),
+        Err(error) => {
+            tracing::warn!(error = %format!("{error:#}"), "Teams bridge unavailable");
+            None
+        }
+    }
+}
+
+/// Feeds buffered bridge events into the pipeline worker, one at a time.
+struct MeetingPump<SlideWorkflow> {
+    ports: TeamsBridgePorts<SlideWorkflow>,
+    /// The meeting the worker's external session is open for.
+    active_meeting_id: Option<MeetingId>,
+    statistics: TeamsBridgeStatistics,
+}
+
+impl<SlideWorkflow> MeetingPump<SlideWorkflow>
+where
+    SlideWorkflow: AttachmentWorkflow,
+{
+    /// Creates an idle pump.
+    fn new(ports: TeamsBridgePorts<SlideWorkflow>) -> Self {
+        Self {
+            ports,
+            active_meeting_id: None,
+            statistics: TeamsBridgeStatistics::default(),
+        }
+    }
+
+    /// Processes events until the buffer is closed and drained, then ends the external meeting.
+    ///
+    /// Outputs: The counters.
+    /// Side effects: Blocks the calling (pump) thread; see the per-event handlers.
+    fn run(mut self, buffer: &BridgeBuffer) -> TeamsBridgeStatistics {
+        loop {
+            match buffer.next_event(PUMP_POLL_INTERVAL) {
+                Some(event) => self.handle_event(event),
+                None if buffer.is_closed() => break,
+                None => {}
+            }
+        }
+        if self.active_meeting_id.is_some()
+            && let Err(error) = self.ports.recording_manager.end_external_meeting()
+        {
+            tracing::warn!(error = %error, "Teams meeting could not be ended cleanly");
+        }
+        tracing::info!(
+            meetings_started = self.statistics.meetings_started,
+            processed_audio_chunks = self.statistics.processed_audio_chunks,
+            failed_audio_chunks = self.statistics.failed_audio_chunks,
+            stored_slides = self.statistics.stored_slides,
+            failed_slides = self.statistics.failed_slides,
+            "Teams bridge pump stopped"
+        );
+        self.statistics
+    }
+
+    /// Routes one event.
+    fn handle_event(&mut self, event: BridgeEvent) {
+        match event {
+            BridgeEvent::MeetingStarted(meeting) => self.begin_meeting(&meeting),
+            BridgeEvent::Audio(audio) => self.process_audio(audio),
+            BridgeEvent::Slide(slide_capture) => {
+                match self
+                    .ports
+                    .slide_workflow
+                    .handle_slide_capture(slide_capture)
+                {
+                    Ok(()) => self.statistics.stored_slides += 1,
+                    Err(error) => {
+                        self.statistics.failed_slides += 1;
+                        tracing::warn!(error = %error, "Teams slide could not be stored");
+                    }
+                }
+            }
+            BridgeEvent::IgnoredVideo => {}
+        }
+    }
+
+    /// Opens (or resumes) the worker's external session for `meeting`.
+    ///
+    /// Side effects: May create the meeting in SQLite and end a previous external meeting.
+    fn begin_meeting(&mut self, meeting: &BridgeMeeting) {
+        match self.ports.recording_manager.begin_external_meeting(
+            meeting.meeting_id().clone(),
+            Arc::clone(&self.ports.identity_mapper),
+        ) {
+            Ok(()) => {
+                self.statistics.meetings_started += 1;
+                self.active_meeting_id = Some(meeting.meeting_id().clone());
+            }
+            Err(error) => {
+                self.active_meeting_id = None;
+                tracing::warn!(
+                    meeting_id = meeting.meeting_id().as_str(),
+                    error = %error,
+                    "Teams meeting could not be opened; its media will be dropped"
+                );
+            }
+        }
+    }
+
+    /// Transcribes one chunk in the open meeting and waits for the result.
+    ///
+    /// Side effects: Stores the chunk PCM in the shared audio store (always discarded afterwards),
+    /// runs the pipeline on the worker, and persists segments.
+    fn process_audio(&mut self, audio: BridgeAudio) {
+        let Some(meeting_id) = self
+            .active_meeting_id
+            .clone()
+            .filter(|meeting_id| meeting_id.as_str() == audio.meeting_uuid().to_string())
+        else {
+            self.statistics.failed_audio_chunks += 1;
+            tracing::warn!("Teams audio dropped: its meeting is not open");
+            return;
+        };
+        let duration_ms = audio.duration_ms();
+        let media_chunk = audio.into_media_chunk();
+        let recording_id = RecordingId::new(format!("{TEAMS_CHUNK_ID_PREFIX}{}", Uuid::new_v4()));
+        let samples = media_chunk
+            .audio_bytes()
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|sample_bytes| i16::from_le_bytes(*sample_bytes))
+            .collect();
+        self.ports.chunk_audio_store.insert(&recording_id, samples);
+        let outcome = self
+            .ports
+            .recording_manager
+            .process_external_chunk(ExternalChunkRequest {
+                media_chunk,
+                audio_recording: AudioRecording::new(
+                    recording_id.clone(),
+                    meeting_id,
+                    self.ports.device_id.clone(),
+                ),
+                duration_ms,
+            });
+        self.ports.chunk_audio_store.discard(&recording_id);
+        match outcome {
+            Ok(_segment_count) => self.statistics.processed_audio_chunks += 1,
+            Err(error) => {
+                self.statistics.failed_audio_chunks += 1;
+                tracing::warn!(error = %error, "Teams audio chunk failed in the pipeline");
+            }
+        }
+    }
+}
