@@ -1,10 +1,12 @@
 //! Orchestrates one meeting's audio chunks into persisted, speaker-attributed transcript segments.
 //!
-//! Local VAD chunks flow transcribe → diarize → match voice → align/merge → persist. External
-//! bridge chunks (e.g. Teams) skip diarization and use the guaranteed mapped identity. The session
-//! depends only on the `TranscriptionEngine`, `DiarizationEngine`, `VoiceIdentityMatcher`,
-//! `IdentityMapper`, and `NoteRepository` ports. It never logs transcript text, audio, or
-//! embeddings.
+//! Local VAD chunks flow transcribe → diarize → match voice → cluster unknown voices →
+//! align/merge → persist. External bridge chunks (e.g. Teams) skip diarization and use the
+//! guaranteed mapped identity. Weak and unmatched voices are grouped per meeting by
+//! `UnknownSpeakerClusterer`, so each cluster carries one review clip and its segments can be
+//! re-attributed together. The session depends only on the `TranscriptionEngine`,
+//! `DiarizationEngine`, `VoiceIdentityMatcher`, `IdentityMapper`, `NoteRepository`, and (for
+//! cluster assignment) `VoiceVectorDB` ports. It never logs transcript text, audio, or embeddings.
 
 use std::time::Instant;
 
@@ -22,8 +24,12 @@ use crate::{
         ai::{DiarizationEngine, SpeakerSegment, TranscriptionEngine},
         external_bridge::IdentityMapper,
         storage::NoteRepository,
-        voice::VoiceIdentityMatcher,
+        voice::{VoiceIdentityMatcher, VoiceVectorDB},
     },
+};
+
+use crate::application::unknown_speaker_clusterer::{
+    ClusterAssignment, ClusteringConfig, ClusteringError, UnknownSpeakerClusterer,
 };
 
 use super::alignment::{AlignedRegion, ChunkBounds, SpeakerRegion, align_chunk_regions};
@@ -41,6 +47,9 @@ pub enum MeetingSessionError {
     /// The chunk boundaries were inverted.
     #[error(transparent)]
     InvalidChunkBounds(#[from] ChunkBoundsError),
+    /// Assigning an identity to an unknown-speaker cluster failed.
+    #[error(transparent)]
+    Clustering(#[from] ClusteringError),
     /// The chunk's recording belongs to a different meeting than the session.
     #[error("chunk for meeting {received} was sent to the session for meeting {expected}")]
     MeetingMismatch {
@@ -128,6 +137,8 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     persisted_segments: Vec<TranscriptSegment>,
     /// Text of the last transcribed chunk, passed as context to the next transcription.
     previous_transcript_text: Option<String>,
+    /// Similarity policy used to group unknown voices into clusters.
+    clustering_config: ClusteringConfig,
 }
 
 impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
@@ -167,7 +178,47 @@ where
             note_repository,
             persisted_segments,
             previous_transcript_text: None,
+            clustering_config: ClusteringConfig::default(),
         })
+    }
+
+    /// Replaces the default unknown-speaker clustering policy (threshold 0.70).
+    ///
+    /// Inputs: `clustering_config` holds a validated similarity threshold.
+    /// Outputs: The session using that policy for subsequent chunks.
+    /// Side effects: None.
+    pub fn with_clustering_config(mut self, clustering_config: ClusteringConfig) -> Self {
+        self.clustering_config = clustering_config;
+        self
+    }
+
+    /// Assigns an identity to an unknown-speaker cluster and refreshes the in-memory timeline.
+    ///
+    /// Use this instead of calling `UnknownSpeakerClusterer` directly while a session is live:
+    /// the session rewrites the whole timeline per chunk, so it must observe the relinked segments.
+    ///
+    /// Inputs: `voice_vector_database` stores the enrolled variants; `cluster_id` must be an
+    /// unresolved cluster; `identity_id` is an existing or new identity UUID.
+    /// Outputs: The assignment summary, or a clustering/storage error (the in-memory timeline is
+    /// reloaded only after success).
+    /// Side effects: Stores voice variants, rewrites segments, resolves the cluster, deletes its
+    /// review clips, and reloads the session's segment timeline from storage.
+    pub fn assign_identity_to_cluster<VectorDatabase>(
+        &mut self,
+        voice_vector_database: &VectorDatabase,
+        cluster_id: Uuid,
+        identity_id: Uuid,
+    ) -> Result<ClusterAssignment, MeetingSessionError>
+    where
+        VectorDatabase: VoiceVectorDB,
+    {
+        let assignment =
+            UnknownSpeakerClusterer::new(&self.note_repository, self.clustering_config)
+                .assign_identity_to_cluster(voice_vector_database, cluster_id, identity_id)?;
+        self.persisted_segments = self
+            .note_repository
+            .load_transcript_segments(&self.meeting_id)?;
+        Ok(assignment)
     }
 
     /// Borrows the injected repository port, e.g. to read back persisted segments.
@@ -262,7 +313,10 @@ where
                     error = %error,
                     "External identity mapping failed; segment persisted as Unknown"
                 );
-                SpeakerAttribution::Unknown { clip_id: None }
+                SpeakerAttribution::Unknown {
+                    clip_id: None,
+                    cluster_id: None,
+                }
             }
         };
         let aligned_regions = align_chunk_regions(
@@ -359,12 +413,13 @@ where
         }
     }
 
-    /// Classifies one diarized segment and preserves a review clip when it is not a strong match.
+    /// Classifies one diarized segment and clusters it when it is not a strong match.
     ///
     /// Inputs: The source chunk and one of its diarized segments.
     /// Outputs: `Known` for strong matches, `PendingReview` for weak matches, and `Unknown` for
-    /// no match or a matcher failure.
-    /// Side effects: Queries the voice-identity port and may save an unassigned review clip.
+    /// no match or a matcher failure; the last two carry their clip and cluster IDs.
+    /// Side effects: Queries the voice-identity port, writes the unknown-speaker cluster member,
+    /// and saves a review clip when the voice founds a cluster (or clustering fails).
     fn attribute_speaker_segment(
         &self,
         vad_chunk: &VadAudioChunk,
@@ -378,21 +433,28 @@ where
                 SpeakerAttribution::Known { identity_id }
             }
             Ok(VoiceMatchResult::WeakMatch(candidate_identity_id, confidence_score)) => {
+                let (clip_id, cluster_id) = self.track_unknown_voice(
+                    vad_chunk,
+                    speaker_segment,
+                    Some(WeakVoiceMatchCandidate::new(
+                        candidate_identity_id,
+                        confidence_score,
+                    )),
+                );
                 SpeakerAttribution::PendingReview {
-                    clip_id: self.preserve_review_clip(
-                        vad_chunk,
-                        speaker_segment,
-                        Some(WeakVoiceMatchCandidate::new(
-                            candidate_identity_id,
-                            confidence_score,
-                        )),
-                    ),
+                    clip_id,
                     candidate_identity_id,
+                    cluster_id,
                 }
             }
-            Ok(VoiceMatchResult::NoMatch) => SpeakerAttribution::Unknown {
-                clip_id: self.preserve_review_clip(vad_chunk, speaker_segment, None),
-            },
+            Ok(VoiceMatchResult::NoMatch) => {
+                let (clip_id, cluster_id) =
+                    self.track_unknown_voice(vad_chunk, speaker_segment, None);
+                SpeakerAttribution::Unknown {
+                    clip_id,
+                    cluster_id,
+                }
+            }
             Err(error) => {
                 tracing::warn!(
                     meeting_id = %self.meeting_id.as_str(),
@@ -401,26 +463,85 @@ where
                     error = %error,
                     "Voice matching failed; segment persisted as Unknown"
                 );
+                let (clip_id, cluster_id) =
+                    self.track_unknown_voice(vad_chunk, speaker_segment, None);
                 SpeakerAttribution::Unknown {
-                    clip_id: self.preserve_review_clip(vad_chunk, speaker_segment, None),
+                    clip_id,
+                    cluster_id,
                 }
+            }
+        }
+    }
+
+    /// Clusters an unattributed voice and keeps one review clip per cluster.
+    ///
+    /// Inputs: The source chunk, its diarized segment, and an optional weak candidate.
+    /// Outputs: `(clip_id, cluster_id)`. A voice that founds a cluster gets a clip linked to it;
+    /// one that joins an existing cluster gets no new clip. If clustering fails, the voice falls
+    /// back to an unclustered per-chunk clip (`cluster_id` is `None`).
+    /// Side effects: Writes the cluster member (biometric embedding) and may save a review clip.
+    fn track_unknown_voice(
+        &self,
+        vad_chunk: &VadAudioChunk,
+        speaker_segment: &SpeakerSegment,
+        weak_match_candidate: Option<WeakVoiceMatchCandidate>,
+    ) -> (Option<Uuid>, Option<Uuid>) {
+        // Doubles as the cluster member ID and, for a founding member, the review clip ID.
+        let chunk_id = Uuid::new_v4();
+        let segment_duration_ms = speaker_segment
+            .end_time_ms()
+            .saturating_sub(speaker_segment.start_time_ms());
+        let clusterer = UnknownSpeakerClusterer::new(&self.note_repository, self.clustering_config);
+        match clusterer.find_or_create_cluster(
+            &self.meeting_id,
+            speaker_segment.embedding(),
+            chunk_id.to_string(),
+            segment_duration_ms,
+        ) {
+            Ok(membership) if membership.is_new_cluster() => {
+                let clip_id = self.preserve_review_clip(
+                    chunk_id,
+                    vad_chunk,
+                    speaker_segment,
+                    weak_match_candidate,
+                    Some(membership.cluster_id()),
+                );
+                (clip_id, Some(membership.cluster_id()))
+            }
+            Ok(membership) => (None, Some(membership.cluster_id())),
+            Err(error) => {
+                tracing::warn!(
+                    meeting_id = %self.meeting_id.as_str(),
+                    error = %error,
+                    "Unknown voice could not be clustered; keeping an unclustered review clip"
+                );
+                let clip_id = self.preserve_review_clip(
+                    chunk_id,
+                    vad_chunk,
+                    speaker_segment,
+                    weak_match_candidate,
+                    None,
+                );
+                (clip_id, None)
             }
         }
     }
 
     /// Saves a temporary review clip so the user can identify the speaker later.
     ///
-    /// Inputs: The source chunk, the diarized segment (times stay relative to the clip audio, as
-    /// in `DiarizationProcessor`), and an optional weak candidate.
+    /// Inputs: The clip ID to use, the source chunk, the diarized segment (times stay relative to
+    /// the clip audio, as in `DiarizationProcessor`), an optional weak candidate, and the cluster
+    /// the clip represents (if any).
     /// Outputs: The clip ID, or `None` when storage rejected it (the segment is still persisted).
     /// Side effects: Persists raw chunk audio and the derived embedding through `NoteRepository`.
     fn preserve_review_clip(
         &self,
+        clip_id: Uuid,
         vad_chunk: &VadAudioChunk,
         speaker_segment: &SpeakerSegment,
         weak_match_candidate: Option<WeakVoiceMatchCandidate>,
+        cluster_id: Option<Uuid>,
     ) -> Option<Uuid> {
-        let clip_id = Uuid::new_v4();
         let review_clip = UnassignedVoiceClip::with_review_context(
             clip_id,
             self.meeting_id.clone(),
@@ -429,7 +550,8 @@ where
             vad_chunk.audio_bytes().to_vec(),
             speaker_segment.embedding().to_vec(),
             weak_match_candidate,
-        );
+        )
+        .with_cluster_id(cluster_id);
         match self.note_repository.save_unassigned_clip(review_clip) {
             Ok(()) => {
                 tracing::warn!(meeting_id = %self.meeting_id.as_str(), clip_id = %clip_id, "Unassigned voice clip preserved for manual review");
@@ -461,7 +583,8 @@ where
                     aligned_region.end_time_ms(),
                     aligned_region.attribution().speaker_identity_id(),
                     aligned_region.text(),
-                ),
+                )
+                .with_unknown_cluster_id(aligned_region.attribution().unknown_cluster_id()),
                 attribution: aligned_region.attribution().clone(),
             })
             .collect();

@@ -29,7 +29,7 @@ use crate::{
         models::{
             Attachment, AudioConfig, DeviceId, ExportFormat, ExportOptions, MeetingId,
             MeetingMetadata, MeetingWindow, TaskMetrics, TaskType, Transcript, TranscriptSegment,
-            UnassignedVoiceClip,
+            UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
         },
     },
     ports::{
@@ -240,6 +240,68 @@ impl NoteRepository for &SqliteNoteRepository {
         meeting_id: &MeetingId,
     ) -> Result<Vec<TranscriptSegment>, StorageError> {
         (*self).load_transcript_segments(meeting_id)
+    }
+
+    /// Forwards unknown-speaker cluster persistence to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::save_unknown_speaker_cluster_chunk`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn save_unknown_speaker_cluster_chunk(
+        &self,
+        cluster: &UnknownSpeakerCluster,
+        chunk: &UnknownSpeakerChunk,
+    ) -> Result<(), StorageError> {
+        (*self).save_unknown_speaker_cluster_chunk(cluster, chunk)
+    }
+
+    /// Forwards meeting cluster retrieval to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::load_unknown_speaker_clusters`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn load_unknown_speaker_clusters(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<UnknownSpeakerCluster>, StorageError> {
+        (*self).load_unknown_speaker_clusters(meeting_id)
+    }
+
+    /// Forwards single-cluster retrieval to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::load_unknown_speaker_cluster`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn load_unknown_speaker_cluster(
+        &self,
+        cluster_id: Uuid,
+    ) -> Result<Option<UnknownSpeakerCluster>, StorageError> {
+        (*self).load_unknown_speaker_cluster(cluster_id)
+    }
+
+    /// Forwards cluster member retrieval to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::load_unknown_speaker_chunks`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn load_unknown_speaker_chunks(
+        &self,
+        cluster_id: Uuid,
+    ) -> Result<Vec<UnknownSpeakerChunk>, StorageError> {
+        (*self).load_unknown_speaker_chunks(cluster_id)
+    }
+
+    /// Forwards cluster resolution to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::resolve_unknown_speaker_cluster`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn resolve_unknown_speaker_cluster(
+        &self,
+        cluster_id: Uuid,
+        identity_id: Uuid,
+    ) -> Result<(), StorageError> {
+        (*self).resolve_unknown_speaker_cluster(cluster_id, identity_id)
     }
 }
 

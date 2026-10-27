@@ -45,6 +45,12 @@
 | #14 Attachment import UI, file picking, and meeting suggestion workflow | Ready for review | File-picker seam, JSON-only AttachmentManager FFI, Riverpod controller parsing, Material 3 ranked confirmation dialog, and fake-boundary widget tests. |
 | #25 Flutter telemetry dashboard | Ready for review | Caller-freed telemetry FFI JSON, polling controller, responsive Material 3 fl_chart dashboard, and drawer navigation. |
 
+## WP11: Unknown-speaker clustering
+
+| Issue | Status | Scope |
+| --- | --- | --- |
+| #28 Cluster unknown speaker chunks by voice similarity within meetings | Ready for review | `UnknownSpeakerCluster` domain model, cosine-similarity clusterer (0.70 default, running-mean representative), SQLite cluster tables with legacy migration, one review clip per cluster in `MeetingSession`, and cluster identity assignment that enrolls variants, relinks segments, and deletes review audio. |
+
 ## WP10: Meeting export
 
 | Issue | Status | Scope |
@@ -87,7 +93,10 @@
 ## Follow-up work
 
 - Compose `MeetingSession` in the daemon/FFI/CLI recording entry points and in `TeamsProcessor`, which still transcribes external chunks without persisting segments.
-- Persist the attribution category (pending review / unknown / unattributed) alongside `speaker_identity_id`, and relink segments when a review clip is resolved.
+- Persist the attribution category (pending review / unknown / unattributed) alongside `speaker_identity_id`. Segments are now relinked when a cluster is resolved (#28); single-clip resolution through `assign_voice_clip` still does not relink them.
+- Expose unknown-speaker cluster listing and assignment through the CLI, HTTP API, FFI, and Voice Gallery UIs (currently clip-based).
+- Encrypt cluster and clip embeddings at rest with AES-256-GCM once an approved crypto crate is chosen.
+- Tune the 0.70 clustering threshold against real diarization embeddings.
 - Replace proportional word distribution with word-level timestamps once `TranscriptionEngine` exposes them.
 - Persist meeting titles and speaker display names so exports can show them instead of meeting IDs and `Unknown speaker`.
 - Add a Dart binding and UI for `note_taker_export_meeting`.

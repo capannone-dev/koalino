@@ -2,7 +2,7 @@
 
 # Storage adapters
 
-`sqlite_adapter.rs` implements `NoteRepository` with SQLite. SQLite types remain entirely inside this adapter; application code communicates through `core/ports/storage.rs`.
+`sqlite_adapter.rs` implements `NoteRepository` with SQLite; its unknown-speaker cluster SQL lives in the child module `sqlite_unknown_speaker_clusters.rs`. SQLite types remain entirely inside this adapter; application code communicates through `core/ports/storage.rs`.
 
 ## SQLite schema
 
@@ -25,6 +25,25 @@ The `transcript_segments` table stores speaker-attributed transcript intervals: 
 returns them ordered by start time. `load_meeting_metadata` exposes the meeting's `created_at_utc`
 instant without reading transcript or CRDT payloads. Segment text follows the same at-rest policy
 as the `transcript` column.
+
+The `unknown_speaker_clusters` and `cluster_chunks` tables (in
+`sqlite_unknown_speaker_clusters.rs`, a child module of the SQLite adapter) group a meeting's
+unknown voices:
+
+| Table | Columns |
+| --- | --- |
+| `unknown_speaker_clusters` | `cluster_id` (PK), `meeting_id` (FK), `representative_embedding` BLOB (running mean), `total_duration_ms`, `created_at_utc` (RFC 3339), `resolved_identity_id` (`NULL` until assigned) |
+| `cluster_chunks` | `cluster_id` (FK), `chunk_id` (PK with `cluster_id`), `derived_embedding` BLOB, `duration_ms` |
+
+`save_unknown_speaker_cluster_chunk` upserts the cluster row and inserts the member row in one
+transaction, and rejects unknown meetings or a cluster ID owned by another meeting.
+`load_unknown_speaker_clusters` lists only unresolved clusters with at least one member, in
+creation order. `resolve_unknown_speaker_cluster` sets `resolved_identity_id` and deletes the
+cluster's `unassigned_voice_clips` rows in one transaction. `unassigned_voice_clips.cluster_id`
+and `transcript_segments.unknown_cluster_id` link clips and segments to their cluster. Databases
+created before Issue #28 gain both columns on open through `ALTER TABLE ... ADD COLUMN`.
+Embeddings are little-endian `f32` BLOBs, never logged. Like the existing clip embeddings they
+are not yet encrypted at rest (tracked follow-up).
 
 The adapter rejects writes to unknown meetings rather than silently creating orphan notes. It emits structured `tracing` events with operation, device, and meeting identifiers only—never transcript content or CRDT bytes.
 

@@ -47,3 +47,11 @@ Exporters never receive meeting IDs or repositories, so data selection stays in
 `application::export_manager` and format adapters remain pure presentation. `NoteRepository` also
 exposes `load_meeting_metadata` and `save_`/`load_transcript_segments` so exports can show
 speaker-attributed, timestamped transcripts.
+
+For Issue #28 `NoteRepository` gains default-implemented unknown-speaker cluster methods:
+`save_unknown_speaker_cluster_chunk`, `load_unknown_speaker_clusters`,
+`load_unknown_speaker_cluster`, `load_unknown_speaker_chunks`, and
+`resolve_unknown_speaker_cluster`. No new port was added. The clustering policy, including the
+cosine math, lives in `application::unknown_speaker_clusterer`, and the ports only persist its
+results. Writes default to `Unavailable`, so repositories without cluster support degrade to
+unclustered review clips.

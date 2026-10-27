@@ -4,10 +4,11 @@ use crate::domain::{
     errors::StorageError,
     models::{
         Attachment, MeetingId, MeetingMetadata, MeetingWindow, Transcript, TranscriptSegment,
-        UnassignedVoiceClip,
+        UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
     },
 };
 use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 /// Persists meeting text in an offline-capable repository.
 pub trait NoteRepository {
@@ -127,6 +128,69 @@ pub trait NoteRepository {
         _meeting_id: &MeetingId,
     ) -> Result<Vec<TranscriptSegment>, StorageError> {
         Ok(Vec::new())
+    }
+
+    /// Upserts an unknown-speaker cluster and records one new member chunk atomically.
+    ///
+    /// Inputs: `cluster` carries the updated representative embedding and totals; its meeting must
+    /// exist; `chunk` is the member being added and must not already belong to the cluster.
+    /// Outputs: Success or a storage error (unknown meeting, duplicate chunk, adapter failure).
+    /// Side effects: Writes derived biometric vectors in one transaction; adapters must not log them.
+    fn save_unknown_speaker_cluster_chunk(
+        &self,
+        _cluster: &UnknownSpeakerCluster,
+        _chunk: &UnknownSpeakerChunk,
+    ) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
+    }
+
+    /// Loads one meeting's unresolved unknown-speaker clusters that have at least one member.
+    ///
+    /// Inputs: `meeting_id` identifies the meeting.
+    /// Outputs: Clusters in creation order (empty when none exist), or a storage error.
+    /// Side effects: Reads derived biometric vectors; callers must not log them.
+    fn load_unknown_speaker_clusters(
+        &self,
+        _meeting_id: &MeetingId,
+    ) -> Result<Vec<UnknownSpeakerCluster>, StorageError> {
+        Ok(Vec::new())
+    }
+
+    /// Loads one unknown-speaker cluster by ID, whether resolved or not.
+    ///
+    /// Inputs: `cluster_id` identifies the cluster.
+    /// Outputs: The cluster, `None` when it does not exist, or a storage error.
+    /// Side effects: Reads derived biometric vectors; callers must not log them.
+    fn load_unknown_speaker_cluster(
+        &self,
+        _cluster_id: Uuid,
+    ) -> Result<Option<UnknownSpeakerCluster>, StorageError> {
+        Ok(None)
+    }
+
+    /// Loads every member chunk of one cluster, including its derived embedding.
+    ///
+    /// Inputs: `cluster_id` identifies the cluster.
+    /// Outputs: Members in insertion order (empty for an unknown cluster), or a storage error.
+    /// Side effects: Reads derived biometric vectors; callers must not log them.
+    fn load_unknown_speaker_chunks(
+        &self,
+        _cluster_id: Uuid,
+    ) -> Result<Vec<UnknownSpeakerChunk>, StorageError> {
+        Ok(Vec::new())
+    }
+
+    /// Marks a cluster resolved to an identity and deletes the review clips that represented it.
+    ///
+    /// Inputs: `cluster_id` must exist; `identity_id` is the identity the user assigned.
+    /// Outputs: Success or a storage error, including unknown-cluster rejection.
+    /// Side effects: Updates the cluster and deletes its temporary review audio in one transaction.
+    fn resolve_unknown_speaker_cluster(
+        &self,
+        _cluster_id: Uuid,
+        _identity_id: Uuid,
+    ) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
     }
 }
 

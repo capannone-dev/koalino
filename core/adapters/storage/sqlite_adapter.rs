@@ -4,12 +4,17 @@ use std::path::Path;
 
 use rusqlite::{Connection, OptionalExtension, params};
 
+/// Persists unknown-speaker clusters and their member chunks (Issue #28).
+#[path = "sqlite_unknown_speaker_clusters.rs"]
+mod unknown_speaker_clusters;
+
 use crate::{
     domain::{
         errors::StorageError,
         models::{
             AggregatedStats, Attachment, DeviceId, MeetingId, MeetingMetadata, TaskMetrics,
-            TaskType, Transcript, TranscriptSegment, UnassignedVoiceClip,
+            TaskType, Transcript, TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk,
+            UnknownSpeakerCluster,
         },
     },
     ports::{
@@ -77,6 +82,7 @@ impl SqliteNoteRepository {
                     derived_embedding BLOB NOT NULL DEFAULT X'',
                     weak_match_identity_id TEXT,
                     weak_match_confidence_score REAL,
+                    cluster_id TEXT,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
                 );
                 CREATE TABLE IF NOT EXISTS task_metrics (
@@ -111,12 +117,14 @@ impl SqliteNoteRepository {
                     end_time_ms INTEGER NOT NULL,
                     speaker_identity_id TEXT,
                     segment_text TEXT NOT NULL,
+                    unknown_cluster_id TEXT,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
                 );
                 CREATE INDEX IF NOT EXISTS transcript_segments_meeting_index
                     ON transcript_segments(meeting_id, start_time_ms);",
             )
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
+        unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
         tracing::info!(device_id = %device_id.as_str(), "SQLite meeting repository initialized");
         Ok(Self {
             connection: sqlite_connection,
@@ -337,13 +345,14 @@ impl NoteRepository for SqliteNoteRepository {
         for segment in segments {
             transaction
                 .execute(
-                    "INSERT INTO transcript_segments (meeting_id, start_time_ms, end_time_ms, speaker_identity_id, segment_text) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    "INSERT INTO transcript_segments (meeting_id, start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                     params![
                         meeting_id.as_str(),
                         sqlite_milliseconds(segment.start_time_ms())?,
                         sqlite_milliseconds(segment.end_time_ms())?,
                         segment.speaker_identity_id().map(|identity_id| identity_id.to_string()),
                         segment.text(),
+                        segment.unknown_cluster_id().map(|cluster_id| cluster_id.to_string()),
                     ],
                 )
                 .map_err(|error| sqlite_error("unable to save transcript segment", error))?;
@@ -367,7 +376,7 @@ impl NoteRepository for SqliteNoteRepository {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT start_time_ms, end_time_ms, speaker_identity_id, segment_text FROM transcript_segments WHERE meeting_id = ?1 ORDER BY start_time_ms, rowid",
+                "SELECT start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id FROM transcript_segments WHERE meeting_id = ?1 ORDER BY start_time_ms, rowid",
             )
             .map_err(|error| sqlite_error("unable to prepare transcript segment query", error))?;
         let segment_rows = statement
@@ -377,13 +386,27 @@ impl NoteRepository for SqliteNoteRepository {
                     row.get::<_, i64>(1)?,
                     row.get::<_, Option<String>>(2)?,
                     row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(4)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to load transcript segments", error))?;
         let segments = segment_rows
             .map(|row| {
-                let (start_time_ms, end_time_ms, speaker_identity_id, segment_text) = row
+                let (
+                    start_time_ms,
+                    end_time_ms,
+                    speaker_identity_id,
+                    segment_text,
+                    unknown_cluster_id,
+                ) = row
                     .map_err(|error| sqlite_error("unable to decode transcript segment", error))?;
+                let parsed_unknown_cluster_id = unknown_cluster_id
+                    .map(|cluster_id| {
+                        uuid::Uuid::parse_str(&cluster_id).map_err(|error| StorageError::Rejected {
+                            reason: format!("stored segment has an invalid cluster UUID: {error}"),
+                        })
+                    })
+                    .transpose()?;
                 let parsed_speaker_identity_id = speaker_identity_id
                     .map(|identity_id| {
                         uuid::Uuid::parse_str(&identity_id).map_err(|error| {
@@ -401,7 +424,8 @@ impl NoteRepository for SqliteNoteRepository {
                     u64::try_from(end_time_ms).unwrap_or_default(),
                     parsed_speaker_identity_id,
                     segment_text,
-                ))
+                )
+                .with_unknown_cluster_id(parsed_unknown_cluster_id))
             })
             .collect::<Result<Vec<_>, StorageError>>()?;
         self.log_operation("load_transcript_segments", meeting_id);
@@ -516,9 +540,9 @@ impl NoteRepository for SqliteNoteRepository {
     /// Side effects: Stores temporary review audio without logging its contents.
     fn save_unassigned_clip(&self, clip: UnassignedVoiceClip) -> Result<(), StorageError> {
         let inserted_row_count = self.connection.execute(
-            "INSERT INTO unassigned_voice_clips (clip_id, meeting_id, start_time_ms, end_time_ms, audio_bytes, derived_embedding, weak_match_identity_id, weak_match_confidence_score)
-             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
-            params![clip.clip_id().to_string(), clip.meeting_id().as_str(), clip.start_time_ms(), clip.end_time_ms(), clip.audio_bytes(), encode_embedding(clip.derived_embedding()), clip.weak_match_candidate().map(|candidate| candidate.identity_id().to_string()), clip.weak_match_candidate().map(|candidate| candidate.confidence_score())],
+            "INSERT INTO unassigned_voice_clips (clip_id, meeting_id, start_time_ms, end_time_ms, audio_bytes, derived_embedding, weak_match_identity_id, weak_match_confidence_score, cluster_id)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
+            params![clip.clip_id().to_string(), clip.meeting_id().as_str(), clip.start_time_ms(), clip.end_time_ms(), clip.audio_bytes(), encode_embedding(clip.derived_embedding()), clip.weak_match_candidate().map(|candidate| candidate.identity_id().to_string()), clip.weak_match_candidate().map(|candidate| candidate.confidence_score()), clip.cluster_id().map(|cluster_id| cluster_id.to_string())],
         ).map_err(|error| sqlite_error("unable to save unassigned voice clip", error))?;
         ensure_meeting_was_updated(inserted_row_count, clip.meeting_id())?;
         self.log_operation("save_unassigned_clip", clip.meeting_id());
@@ -536,7 +560,7 @@ impl NoteRepository for SqliteNoteRepository {
     ) -> Result<Vec<UnassignedVoiceClip>, StorageError> {
         self.load_crdt_document(meeting_id)?;
         let mut statement = self.connection.prepare(
-            "SELECT clip_id, start_time_ms, end_time_ms, audio_bytes, derived_embedding, weak_match_identity_id, weak_match_confidence_score FROM unassigned_voice_clips WHERE meeting_id = ?1 ORDER BY rowid",
+            "SELECT clip_id, start_time_ms, end_time_ms, audio_bytes, derived_embedding, weak_match_identity_id, weak_match_confidence_score, cluster_id FROM unassigned_voice_clips WHERE meeting_id = ?1 ORDER BY rowid",
         ).map_err(|error| sqlite_error("unable to prepare unassigned voice clip query", error))?;
         let rows = statement
             .query_map(params![meeting_id.as_str()], |row| {
@@ -548,6 +572,7 @@ impl NoteRepository for SqliteNoteRepository {
                     row.get::<_, Vec<u8>>(4)?,
                     row.get::<_, Option<String>>(5)?,
                     row.get::<_, Option<f32>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to load unassigned voice clips", error))?;
@@ -561,8 +586,16 @@ impl NoteRepository for SqliteNoteRepository {
                 serialized_embedding,
                 weak_match_identity_id,
                 weak_match_confidence_score,
+                cluster_id,
             ) =
                 row.map_err(|error| sqlite_error("unable to decode unassigned voice clip", error))?;
+            let parsed_cluster_id = cluster_id
+                .map(|cluster_id| {
+                    uuid::Uuid::parse_str(&cluster_id).map_err(|error| StorageError::Rejected {
+                        reason: format!("stored voice clip has an invalid cluster UUID: {error}"),
+                    })
+                })
+                .transpose()?;
             let parsed_clip_id =
                 uuid::Uuid::parse_str(&clip_id).map_err(|error| StorageError::Rejected {
                     reason: format!("stored unassigned voice clip has an invalid UUID: {error}"),
@@ -587,18 +620,83 @@ impl NoteRepository for SqliteNoteRepository {
                     });
                 }
             };
-            clips.push(UnassignedVoiceClip::with_review_context(
-                parsed_clip_id,
-                meeting_id.clone(),
-                start_time_ms,
-                end_time_ms,
-                audio_bytes,
-                decode_embedding(&serialized_embedding)?,
-                weak_match_candidate,
-            ));
+            clips.push(
+                UnassignedVoiceClip::with_review_context(
+                    parsed_clip_id,
+                    meeting_id.clone(),
+                    start_time_ms,
+                    end_time_ms,
+                    audio_bytes,
+                    decode_embedding(&serialized_embedding)?,
+                    weak_match_candidate,
+                )
+                .with_cluster_id(parsed_cluster_id),
+            );
         }
         self.log_operation("get_unassigned_clips", meeting_id);
         Ok(clips)
+    }
+
+    /// Upserts a cluster and inserts its new member atomically (see `unknown_speaker_clusters`).
+    ///
+    /// Inputs: Match `NoteRepository::save_unknown_speaker_cluster_chunk`.
+    /// Outputs: Success or a rejection for unknown meetings or duplicate members.
+    /// Side effects: Writes biometric BLOBs inside one SQLite transaction.
+    fn save_unknown_speaker_cluster_chunk(
+        &self,
+        cluster: &UnknownSpeakerCluster,
+        chunk: &UnknownSpeakerChunk,
+    ) -> Result<(), StorageError> {
+        self.save_cluster_chunk(cluster, chunk)
+    }
+
+    /// Loads a meeting's unresolved, non-empty clusters in creation order.
+    ///
+    /// Inputs: Match `NoteRepository::load_unknown_speaker_clusters`.
+    /// Outputs: Clusters or a portable storage error.
+    /// Side effects: Reads biometric BLOBs without logging them.
+    fn load_unknown_speaker_clusters(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<UnknownSpeakerCluster>, StorageError> {
+        self.load_clusters_for_meeting(meeting_id)
+    }
+
+    /// Loads one cluster by ID, whether resolved or not.
+    ///
+    /// Inputs: Match `NoteRepository::load_unknown_speaker_cluster`.
+    /// Outputs: The cluster, `None`, or a portable storage error.
+    /// Side effects: Reads biometric BLOBs without logging them.
+    fn load_unknown_speaker_cluster(
+        &self,
+        cluster_id: uuid::Uuid,
+    ) -> Result<Option<UnknownSpeakerCluster>, StorageError> {
+        self.load_cluster(cluster_id)
+    }
+
+    /// Loads one cluster's members with their embeddings.
+    ///
+    /// Inputs: Match `NoteRepository::load_unknown_speaker_chunks`.
+    /// Outputs: Members in insertion order or a portable storage error.
+    /// Side effects: Reads biometric BLOBs without logging them.
+    fn load_unknown_speaker_chunks(
+        &self,
+        cluster_id: uuid::Uuid,
+    ) -> Result<Vec<UnknownSpeakerChunk>, StorageError> {
+        self.load_cluster_chunks(cluster_id)
+    }
+
+    /// Resolves a cluster and deletes its review clips atomically.
+    ///
+    /// Inputs: Match `NoteRepository::resolve_unknown_speaker_cluster`.
+    /// Outputs: Success or a rejection for an unknown cluster.
+    /// Side effects: Updates the cluster row and deletes temporary review audio.
+    fn resolve_unknown_speaker_cluster(
+        &self,
+        cluster_id: uuid::Uuid,
+        identity_id: uuid::Uuid,
+    ) -> Result<(), StorageError> {
+        self.resolve_cluster(cluster_id, identity_id)
     }
 }
 

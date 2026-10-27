@@ -17,7 +17,15 @@ The models here are immutable value objects representing meeting recordings, gen
 
 `UnassignedVoiceClip` identifies temporary manual-review audio by UUID, owning meeting, and a
 millisecond range. It retains opaque audio bytes only for weak or unknown diarization results;
-callers must never log those bytes.
+callers must never log those bytes. Its optional `cluster_id` names the unknown-speaker cluster
+the clip represents.
+
+`UnknownSpeakerCluster` groups one meeting's acoustically similar unknown-voice chunks. It holds a
+running-mean representative embedding, member chunk IDs, total duration, creation time, and the
+identity assigned once resolved. `UnknownSpeakerChunk` is one member with its own embedding, kept
+so that every member can be enrolled as a voice variant. `TranscriptSegment::unknown_cluster_id`
+links a segment to its cluster so assignment can re-attribute it. All embeddings are derived
+biometric data and must never be logged.
 
 `TaskMetrics` records a completed AI task's device/model label, timings, coarse energy estimate,
 and UTC epoch timestamp without task payloads. `DeviceLoadStats` records a non-sensitive utilization

@@ -45,11 +45,25 @@
  │ 2 DiarizationEngine.diarize                 2 IdentityMapper.map_external_to_local│
  │      └ missing/error → "Unattributed"          (diarization skipped)              │
  │ 3 VoiceIdentityMatcher.match_embedding         └ error → "Unknown"                │
- │      strong → Known · weak → pending review + clip · none/error → Unknown + clip  │
+ │      strong → Known · weak → pending review · none/error → Unknown                │
+ │   3b UnknownSpeakerClusterer (weak/none/error): cosine > 0.70 joins the meeting's │
+ │      best cluster (running-mean representative), else new cluster + review clip   │
  │ 4 alignment: clamp → merge same speaker → tile VAD chunk → split words by time    │
  │ 5 NoteRepository.save_transcript_segments (whole meeting timeline)                │
  └───────────────────────────────────────────────────────────────────────────────────┘
         │
         ▼
  transcript_segments (SQLite) → ExportManager / CLI / HTTP / FFI
+```
+
+## Unknown-speaker clustering (Issue #28)
+
+```text
+ MeetingSession ──unknown voice──▶ application::UnknownSpeakerClusterer ──▶ NoteRepository
+                                     cosine vs. meeting clusters             unknown_speaker_clusters
+                                     > 0.70 join (running mean) / new        cluster_chunks
+ user assigns identity to cluster ─▶ assign_identity_to_cluster
+                                     1 VoiceVectorDB.store_embedding × members (creates identity)
+                                     2 relink transcript_segments where unknown_cluster_id = cluster
+                                     3 resolve cluster + delete its review clips
 ```

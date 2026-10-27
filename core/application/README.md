@@ -118,3 +118,44 @@ not-found, bad-request, and internal failures.
 `MeetingSession` turns each VAD chunk or external bridge chunk into speaker-attributed
 `TranscriptSegment` rows. See `pipeline/README.md` for the flow, alignment policy, and failure
 handling.
+
+## Unknown-speaker clustering
+
+`unknown_speaker_clusterer.rs` groups a meeting's weak and unmatched voices so the user labels
+each person once instead of once per chunk. It persists only through `NoteRepository` and enrolls
+identities only through `VoiceVectorDB`.
+
+```text
+unknown/pending-review chunk (embedding, chunk_id, duration)
+  │
+  ├─ validate: non-empty, finite, non-zero ─────── else InvalidEmbedding (session falls back
+  │                                                 to an unclustered review clip)
+  ├─ load unresolved, non-empty clusters of this meeting only
+  ├─ cosine(embedding, representative) per cluster (dimension mismatch → skipped)
+  ├─ best score > threshold?  yes → join; representative = (rep·n + e) / (n + 1)
+  │                           no  → new cluster, representative = e
+  └─ save_unknown_speaker_cluster_chunk (cluster upsert + member row, one transaction)
+
+assign_identity_to_cluster(cluster, identity)
+  1. reject unknown or already-resolved clusters
+  2. identity_created = identity had no variants; store every member embedding as a variant
+  3. reload segments; set speaker_identity_id where unknown_cluster_id == cluster; save
+  4. resolve_unknown_speaker_cluster: mark resolved + delete its review clips (raw audio)
+```
+
+**Threshold.** `ClusteringConfig` defaults to `DEFAULT_CLUSTER_SIMILARITY_THRESHOLD = 0.70`; a
+chunk joins only when its similarity is strictly greater. The value must be finite and in
+`(0, 1]`. Raising it splits one person across more clusters, which means more review work but
+fewer wrong merges. Lowering it merges more aggressively, risking two similar-sounding people in
+one cluster, so one label would mis-attribute the other person. 0.70 sits below the matcher's
+0.80 strong-match cutoff because within-meeting voices share a microphone and room, so
+same-speaker similarity is usually high. It is a starting point to tune against real embeddings.
+Configure it with `MeetingSession::with_clustering_config`.
+
+**Identity creation.** No port stores identities on their own: an identity exists in
+`VoiceVectorDB` once it has a variant. Assigning a fresh UUID therefore creates the identity by
+enrolling the cluster's embeddings. Display names are not persisted yet (tracked follow-up).
+
+**Partial failures.** The assignment steps are not one transaction across ports. Variants are
+stored first. If saving segments or resolving fails, a retry re-stores variants, which only adds
+duplicate acoustic variants. A cluster is never marked resolved before its segments are relinked.

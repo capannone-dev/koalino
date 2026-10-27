@@ -32,9 +32,12 @@ VadAudioChunk (recording, meeting-relative start/end, opaque audio)
   ├─2─ DiarizationEngine::diarize ───────── missing/error → whole chunk "Unattributed"
   ├─3─ VoiceIdentityMatcher per segment
   │      strong   → Known(identity)
-  │      weak     → "Unknown (pending review)" + UnassignedVoiceClip (with candidate)
-  │      none     → "Unknown" + UnassignedVoiceClip
-  │      error    → "Unknown" + UnassignedVoiceClip, log, continue
+  │      weak     → "Unknown (pending review)" (with candidate) ┐
+  │      none     → "Unknown"                                   ├─ UnknownSpeakerClusterer
+  │      error    → "Unknown", log, continue                    ┘
+  │             founds a cluster  → UnassignedVoiceClip linked to the cluster
+  │             joins a cluster   → no new clip (the cluster's clip represents it)
+  │             clustering error  → unclustered UnassignedVoiceClip, log, continue
   ├─4─ alignment::align_chunk_regions (merge text with speaker regions)
   └─5─ NoteRepository::save_transcript_segments (whole meeting timeline)
 ```
@@ -64,6 +67,16 @@ alignment reference:
 
 Without usable regions, the whole chunk becomes one `Unattributed` segment. Proportional word
 distribution is a heuristic. Word-level timestamps from the transcription port would replace it.
+
+## Unknown-speaker clusters
+
+Weak and unmatched voices are clustered per meeting by cosine similarity (threshold 0.70, see
+`../README.md`). `SpeakerAttribution::{PendingReview, Unknown}` carry the `cluster_id`, which is
+persisted as `TranscriptSegment::unknown_cluster_id`. Only the chunk that founds a cluster saves a
+review clip, so the Voice Gallery shows one clip per unknown person rather than one per chunk.
+`MeetingSession::assign_identity_to_cluster` enrolls the cluster's embeddings, relinks its
+segments, resolves the cluster, and reloads the session's in-memory timeline. Assign through the
+session while it is live; otherwise its next chunk would rewrite the stale timeline.
 
 ## Persistence and labels
 

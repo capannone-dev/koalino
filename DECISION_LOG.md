@@ -316,3 +316,33 @@
   and the segment is still persisted.
 - The external path takes `duration_ms` explicitly because `ExternalMediaChunk` carries only a
   start timestamp. It treats the bridge timestamp as meeting-relative.
+
+## 2026-10-27 — Issue #28 unknown-speaker clustering
+
+- The clustering policy, including the cosine math, lives in
+  `application/unknown_speaker_clusterer.rs`, not behind a port. The issue's
+  `UnknownSpeakerClusterer` trait was not added because there is only one implementation and the
+  logic is application policy. Persistence extends `NoteRepository` with default-implemented
+  methods, following the #26 precedent, so no new port was introduced. This is a deliberate
+  exception to the #9 rule that the application never computes similarity. That rule still
+  applies to identity matching against the voice library.
+- `find_or_create_cluster` returns `ClusterMembership { cluster_id, is_new_cluster }` rather than
+  a bare `Uuid`. The session needs `is_new_cluster` to save exactly one review clip per cluster.
+- Joining requires similarity strictly greater than the threshold, and the best-scoring
+  qualifying cluster wins. Dimension mismatches never join. Empty, non-finite, and zero-norm
+  embeddings are rejected. The representative is the running mean `(rep·n + e)/(n+1)`.
+- Segments are linked to clusters through a new nullable `transcript_segments.unknown_cluster_id`,
+  not inferred from time ranges, so assignment relinks exactly the right rows. The chunk ID is the
+  review-clip UUID generated for the voice.
+- Resolution marks the cluster resolved, keeping its row and members for provenance, and deletes
+  its review clips in the same transaction, per the raw-audio PII rule. Resolved clusters never
+  absorb new chunks.
+- Identity "creation" means enrolling the first variant in `VoiceVectorDB`, because no port
+  persists identities or display names on their own.
+- Assignment across `VoiceVectorDB` and `NoteRepository` is not atomic. Variants are stored first,
+  then segments, then resolution. A retry after a mid-way failure can duplicate variants but never
+  resolves a cluster without relinking its segments.
+- `MeetingSession::assign_identity_to_cluster` reloads the in-memory timeline after assignment,
+  because the session rewrites the whole timeline per chunk.
+- Cluster and member embeddings follow the existing clip-embedding at-rest policy, which is
+  unencrypted. AES-256-GCM needs a crypto crate, and adding one requires approval.

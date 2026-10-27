@@ -45,6 +45,10 @@ mod teams_processor_tests;
 /// Defines telemetry requirements before dispatcher and storage implementation.
 #[cfg(test)]
 mod telemetry_tests;
+/// Groups unknown voices within a meeting by cosine similarity and resolves clusters to identities.
+pub mod unknown_speaker_clusterer;
+#[cfg(test)]
+mod unknown_speaker_clusterer_tests;
 /// Classifies voice embeddings and records user-confirmed signature variants.
 pub mod voice_identity_manager;
 #[cfg(test)]

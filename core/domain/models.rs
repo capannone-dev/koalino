@@ -1881,6 +1881,8 @@ pub struct UnassignedVoiceClip {
     audio_bytes: Vec<u8>,
     derived_embedding: Vec<f32>,
     weak_match_candidate: Option<WeakVoiceMatchCandidate>,
+    /// Unknown-speaker cluster this clip represents; `None` for unclustered legacy clips.
+    cluster_id: Option<Uuid>,
 }
 
 impl UnassignedVoiceClip {
@@ -1905,6 +1907,7 @@ impl UnassignedVoiceClip {
             audio_bytes,
             derived_embedding: Vec::new(),
             weak_match_candidate: None,
+            cluster_id: None,
         }
     }
 
@@ -1931,7 +1934,18 @@ impl UnassignedVoiceClip {
             audio_bytes,
             derived_embedding,
             weak_match_candidate,
+            cluster_id: None,
         }
+    }
+
+    /// Links the clip to the unknown-speaker cluster it represents in the review workflow.
+    ///
+    /// Inputs: `cluster_id` identifies an `UnknownSpeakerCluster` of the same meeting, or `None`.
+    /// Outputs: The same clip carrying the cluster link.
+    /// Side effects: None.
+    pub fn with_cluster_id(mut self, cluster_id: Option<Uuid>) -> Self {
+        self.cluster_id = cluster_id;
+        self
     }
 
     /// Returns the UUID assigned to this temporary manual-review item.
@@ -1996,6 +2010,142 @@ impl UnassignedVoiceClip {
     pub fn weak_match_candidate(&self) -> Option<&WeakVoiceMatchCandidate> {
         self.weak_match_candidate.as_ref()
     }
+
+    /// Returns the unknown-speaker cluster this clip represents, if it was clustered.
+    ///
+    /// Inputs: None.
+    /// Outputs: The cluster UUID, or `None` for clips saved without clustering.
+    /// Side effects: None.
+    pub fn cluster_id(&self) -> Option<Uuid> {
+        self.cluster_id
+    }
+}
+
+/// Groups one meeting's unknown-voice chunks that are acoustically similar enough to be one person.
+///
+/// The representative embedding is the running mean of every member chunk embedding. It is
+/// derived biometric data and must never be logged or exposed through FFI/HTTP.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnknownSpeakerCluster {
+    cluster_id: Uuid,
+    meeting_id: MeetingId,
+    representative_embedding: Vec<f32>,
+    chunk_ids: Vec<String>,
+    total_duration_ms: u64,
+    created_at: DateTime<Utc>,
+    /// Identity the user assigned to the cluster; `None` while it awaits review.
+    resolved_identity_id: Option<Uuid>,
+}
+
+impl UnknownSpeakerCluster {
+    /// Creates a cluster value from its persisted or freshly computed parts.
+    ///
+    /// Inputs: `cluster_id` is unique; `meeting_id` owns the cluster; `representative_embedding`
+    /// is the mean of member embeddings; `chunk_ids` lists members in insertion order;
+    /// `total_duration_ms` sums member durations; `resolved_identity_id` is set once assigned.
+    /// Outputs: An immutable cluster value.
+    /// Side effects: Takes ownership of the biometric representative vector; callers must not log it.
+    pub fn new(
+        cluster_id: Uuid,
+        meeting_id: MeetingId,
+        representative_embedding: Vec<f32>,
+        chunk_ids: Vec<String>,
+        total_duration_ms: u64,
+        created_at: DateTime<Utc>,
+        resolved_identity_id: Option<Uuid>,
+    ) -> Self {
+        Self {
+            cluster_id,
+            meeting_id,
+            representative_embedding,
+            chunk_ids,
+            total_duration_ms,
+            created_at,
+            resolved_identity_id,
+        }
+    }
+
+    /// Returns the cluster UUID.
+    pub fn cluster_id(&self) -> Uuid {
+        self.cluster_id
+    }
+
+    /// Borrows the owning meeting identifier.
+    pub fn meeting_id(&self) -> &MeetingId {
+        &self.meeting_id
+    }
+
+    /// Borrows the running-mean embedding; callers must never log it.
+    pub fn representative_embedding(&self) -> &[f32] {
+        &self.representative_embedding
+    }
+
+    /// Borrows member chunk identifiers in insertion order.
+    pub fn chunk_ids(&self) -> &[String] {
+        &self.chunk_ids
+    }
+
+    /// Returns the summed duration of every member chunk in milliseconds.
+    pub fn total_duration_ms(&self) -> u64 {
+        self.total_duration_ms
+    }
+
+    /// Returns the UTC instant at which the first member chunk created the cluster.
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    /// Returns the identity assigned by the user, or `None` while unresolved.
+    pub fn resolved_identity_id(&self) -> Option<Uuid> {
+        self.resolved_identity_id
+    }
+
+    /// Reports whether the user has already assigned an identity to this cluster.
+    pub fn is_resolved(&self) -> bool {
+        self.resolved_identity_id.is_some()
+    }
+}
+
+/// One unknown-voice chunk recorded as a member of an `UnknownSpeakerCluster`.
+///
+/// Its embedding is kept so every member can be enrolled as a voice variant on assignment; it is
+/// derived biometric data, never raw audio, and must never be logged.
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnknownSpeakerChunk {
+    chunk_id: String,
+    embedding: Vec<f32>,
+    duration_ms: u64,
+}
+
+impl UnknownSpeakerChunk {
+    /// Creates a cluster member.
+    ///
+    /// Inputs: `chunk_id` is unique within the meeting (the pipeline uses the review-clip UUID);
+    /// `embedding` is the diarization-derived vector; `duration_ms` is the speaker segment length.
+    /// Outputs: An immutable member value.
+    /// Side effects: Takes ownership of the biometric vector; callers must not log it.
+    pub fn new(chunk_id: impl Into<String>, embedding: Vec<f32>, duration_ms: u64) -> Self {
+        Self {
+            chunk_id: chunk_id.into(),
+            embedding,
+            duration_ms,
+        }
+    }
+
+    /// Borrows the chunk identifier.
+    pub fn chunk_id(&self) -> &str {
+        &self.chunk_id
+    }
+
+    /// Borrows the derived embedding; callers must never log it.
+    pub fn embedding(&self) -> &[f32] {
+        &self.embedding
+    }
+
+    /// Returns the chunk duration in milliseconds.
+    pub fn duration_ms(&self) -> u64 {
+        self.duration_ms
+    }
 }
 
 impl Transcript {
@@ -2039,6 +2189,8 @@ pub struct TranscriptSegment {
     /// `None` when diarization could not attribute the interval to a known identity.
     speaker_identity_id: Option<Uuid>,
     text: String,
+    /// Unknown-speaker cluster the interval was grouped into, used to relink it on assignment.
+    unknown_cluster_id: Option<Uuid>,
 }
 
 impl TranscriptSegment {
@@ -2061,7 +2213,28 @@ impl TranscriptSegment {
             end_time_ms,
             speaker_identity_id,
             text: text.into(),
+            unknown_cluster_id: None,
         }
+    }
+
+    /// Links the segment to the unknown-speaker cluster its voice was grouped into.
+    ///
+    /// Inputs: `unknown_cluster_id` identifies a cluster of the same meeting, or `None`.
+    /// Outputs: The same segment carrying the cluster link.
+    /// Side effects: None.
+    pub fn with_unknown_cluster_id(mut self, unknown_cluster_id: Option<Uuid>) -> Self {
+        self.unknown_cluster_id = unknown_cluster_id;
+        self
+    }
+
+    /// Returns a copy attributed to `speaker_identity_id`, keeping text, timing, and cluster link.
+    ///
+    /// Inputs: `speaker_identity_id` is the identity the user assigned.
+    /// Outputs: The re-attributed segment.
+    /// Side effects: None.
+    pub fn with_speaker_identity_id(mut self, speaker_identity_id: Option<Uuid>) -> Self {
+        self.speaker_identity_id = speaker_identity_id;
+        self
     }
 
     /// Borrows the owning meeting identifier.
@@ -2087,6 +2260,11 @@ impl TranscriptSegment {
     /// Borrows the segment's transcript text.
     pub fn text(&self) -> &str {
         &self.text
+    }
+
+    /// Returns the unknown-speaker cluster this segment belongs to, if it was clustered.
+    pub fn unknown_cluster_id(&self) -> Option<Uuid> {
+        self.unknown_cluster_id
     }
 }
 

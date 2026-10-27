@@ -166,3 +166,15 @@ failure persists nothing. External bridge chunks skip diarization and use the `I
 identity. Alignment uses VAD chunk bounds as the reference: it clamps regions, merges same-speaker
 neighbours, tiles gaps at midpoints, and splits words by duration because the transcription port
 has no word timestamps. Nothing wires sessions into the daemon, CLI, or `TeamsProcessor` yet.
+
+Issue #28 clusters unknown speakers per meeting. `application/unknown_speaker_clusterer.rs`
+compares each weak or unmatched voice embedding with the meeting's unresolved clusters by cosine
+similarity. A score strictly above the configurable threshold (default 0.70) joins the best
+cluster and updates its running-mean representative; anything else founds a new cluster.
+`MeetingSession` saves one review clip per cluster, carrying `cluster_id`, and persists the link
+on every segment as `TranscriptSegment::unknown_cluster_id`. A clustering failure falls back to the
+old per-chunk clip. `assign_identity_to_cluster` enrolls every member embedding as a
+`VoiceVectorDB` variant (which is how a new identity comes into existence), re-attributes the
+cluster's segments, marks the cluster resolved, and deletes its review audio. The SQLite adapter
+stores `unknown_speaker_clusters` and `cluster_chunks` and migrates older databases with the two
+new link columns. Nothing yet exposes cluster assignment through the CLI, HTTP, or FFI.

@@ -71,15 +71,21 @@ pub enum SpeakerAttribution {
     },
     /// A weak voice match awaiting user confirmation in the Voice Gallery.
     PendingReview {
-        /// The preserved review clip, or `None` when the clip could not be stored.
+        /// The preserved review clip, or `None` when the clip could not be stored or the voice
+        /// joined an existing cluster (whose founding clip already represents it).
         clip_id: Option<Uuid>,
         /// The weak candidate suggested to the user.
         candidate_identity_id: Uuid,
+        /// The unknown-speaker cluster the voice was grouped into, if clustering succeeded.
+        cluster_id: Option<Uuid>,
     },
     /// No voice match, or identity matching/mapping failed.
     Unknown {
-        /// The preserved review clip, or `None` when no clip was (or could be) stored.
+        /// The preserved review clip, or `None` when no clip was (or could be) stored or the
+        /// voice joined an existing cluster (whose founding clip already represents it).
         clip_id: Option<Uuid>,
+        /// The unknown-speaker cluster the voice was grouped into, if clustering succeeded.
+        cluster_id: Option<Uuid>,
     },
     /// Diarization was unavailable or failed, so no speaker analysis was attempted.
     Unattributed,
@@ -109,6 +115,20 @@ impl SpeakerAttribution {
         match self {
             Self::Known { identity_id } => Some(*identity_id),
             Self::PendingReview { .. } | Self::Unknown { .. } | Self::Unattributed => None,
+        }
+    }
+
+    /// Returns the unknown-speaker cluster persisted with a transcript segment.
+    ///
+    /// Inputs: None.
+    /// Outputs: The cluster for clustered `PendingReview`/`Unknown` regions; otherwise `None`.
+    /// Side effects: None.
+    pub fn unknown_cluster_id(&self) -> Option<Uuid> {
+        match self {
+            Self::PendingReview { cluster_id, .. } | Self::Unknown { cluster_id, .. } => {
+                *cluster_id
+            }
+            Self::Known { .. } | Self::Unattributed => None,
         }
     }
 }

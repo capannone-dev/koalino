@@ -24,6 +24,7 @@ use crate::{
                 MeetingSession, MeetingSessionError, SpeakerAttribution, VadAudioChunk,
             },
         },
+        unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
         voice_identity_manager::VoiceIdentityManager,
     },
     domain::{
@@ -412,6 +413,7 @@ async fn weak_voice_match_marks_pending_review_and_saves_clip() {
         &SpeakerAttribution::PendingReview {
             clip_id: Some(saved_clips[0].clip_id()),
             candidate_identity_id: fixture.weak_candidate_id,
+            cluster_id: None,
         }
     );
     assert_eq!(
@@ -454,7 +456,8 @@ async fn no_voice_match_marks_unknown_and_saves_clip() {
     assert_eq!(
         produced_segments[0].attribution(),
         &SpeakerAttribution::Unknown {
-            clip_id: Some(saved_clips[0].clip_id())
+            clip_id: Some(saved_clips[0].clip_id()),
+            cluster_id: None,
         }
     );
     assert_eq!(produced_segments[0].attribution().label(), "Unknown");
@@ -539,7 +542,10 @@ async fn teams_mapping_failure_persists_unknown_segment() {
 
     assert_eq!(
         produced_segments[0].attribution(),
-        &SpeakerAttribution::Unknown { clip_id: None }
+        &SpeakerAttribution::Unknown {
+            clip_id: None,
+            cluster_id: None,
+        }
     );
     assert_eq!(
         fixture.session.note_repository().saved_segments.borrow()[0].text(),
@@ -918,5 +924,278 @@ async fn full_meeting_persists_three_attributed_segments_through_sqlite() {
             ),
             TranscriptSegment::new(meeting_id, 4_500, 7_500, Some(alice_id), "lets begin"),
         ]
+    );
+}
+
+/// Builds an in-memory SQLite repository containing the pipeline meeting.
+fn sqlite_repository_with_meeting(meeting_id: &MeetingId) -> SqliteNoteRepository {
+    let note_repository = SqliteNoteRepository::open_in_memory()
+        .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
+    note_repository
+        .create_meeting(meeting_id, &[])
+        .unwrap_or_else(|error| panic!("meeting should be created: {error}"));
+    note_repository
+}
+
+/// Builds a diarizer that returns one full-chunk speaker segment per scripted embedding.
+fn one_speaker_per_chunk_diarizer(
+    chunk_duration_ms: u64,
+    embeddings: Vec<Vec<f32>>,
+) -> ScriptedIntegrationDiarizer {
+    ScriptedIntegrationDiarizer {
+        scripted_results: Mutex::new(
+            embeddings
+                .into_iter()
+                .rev()
+                .map(|embedding| vec![SpeakerSegment::new(0, chunk_duration_ms, embedding)])
+                .collect(),
+        ),
+    }
+}
+
+/// Verifies two similar unknown voices share one cluster, one review clip, and the segment link.
+#[tokio::test]
+async fn similar_unknown_voices_share_one_cluster_and_one_review_clip() {
+    let meeting_id = MeetingId::new(MEETING_ID);
+    let mut session = MeetingSession::start(
+        meeting_id.clone(),
+        MockTranscriptionEngine::returning(&["first words", "second words"]),
+        Some(one_speaker_per_chunk_diarizer(
+            1_000,
+            vec![vec![0.1, 0.9], vec![0.12, 0.88]],
+        )),
+        MockVoiceIdentityMatcher {
+            known_identity_id: Uuid::new_v4(),
+            weak_candidate_id: Uuid::new_v4(),
+        },
+        sqlite_repository_with_meeting(&meeting_id),
+    )
+    .unwrap_or_else(|error| panic!("session should start: {error}"));
+
+    let mut produced_segments = Vec::new();
+    for (sequence, start_offset_ms) in [(1, 0), (2, 1_000)] {
+        produced_segments.extend(
+            session
+                .process_vad_chunk(&vad_chunk(
+                    sequence,
+                    start_offset_ms,
+                    start_offset_ms + 1_000,
+                ))
+                .await
+                .unwrap_or_else(|error| panic!("chunk {sequence} should succeed: {error}")),
+        );
+    }
+
+    let clusters =
+        UnknownSpeakerClusterer::new(session.note_repository(), ClusteringConfig::default())
+            .get_clusters_for_meeting(&meeting_id)
+            .unwrap_or_else(|error| panic!("clusters should load: {error}"));
+    assert_eq!(clusters.len(), 1);
+    let cluster_id = clusters[0].cluster_id();
+    let saved_clips = session
+        .note_repository()
+        .get_unassigned_clips(&meeting_id)
+        .unwrap_or_else(|error| panic!("clips should load: {error}"));
+    assert_eq!(
+        saved_clips.len(),
+        1,
+        "one review clip per cluster, not per chunk"
+    );
+    assert_eq!(saved_clips[0].cluster_id(), Some(cluster_id));
+    assert_eq!(
+        produced_segments
+            .iter()
+            .map(|produced| produced.attribution().clone())
+            .collect::<Vec<_>>(),
+        vec![
+            SpeakerAttribution::Unknown {
+                clip_id: Some(saved_clips[0].clip_id()),
+                cluster_id: Some(cluster_id),
+            },
+            SpeakerAttribution::Unknown {
+                clip_id: None,
+                cluster_id: Some(cluster_id),
+            },
+        ]
+    );
+    assert!(
+        session
+            .persisted_segments()
+            .iter()
+            .all(|segment| segment.unknown_cluster_id() == Some(cluster_id))
+    );
+}
+
+/// Verifies weak matches are clustered too and keep their pending-review candidate.
+#[tokio::test]
+async fn weak_voice_match_is_clustered_as_pending_review() {
+    let meeting_id = MeetingId::new(MEETING_ID);
+    let weak_candidate_id = Uuid::new_v4();
+    let mut session = MeetingSession::start(
+        meeting_id.clone(),
+        MockTranscriptionEngine::returning(&["maybe alice"]),
+        Some(one_speaker_per_chunk_diarizer(1_000, vec![vec![0.5, 0.5]])),
+        MockVoiceIdentityMatcher {
+            known_identity_id: Uuid::new_v4(),
+            weak_candidate_id,
+        },
+        sqlite_repository_with_meeting(&meeting_id),
+    )
+    .unwrap_or_else(|error| panic!("session should start: {error}"));
+
+    let produced_segments = session
+        .process_vad_chunk(&vad_chunk(1, 0, 1_000))
+        .await
+        .unwrap_or_else(|error| panic!("chunk should succeed: {error}"));
+
+    let saved_clips = session
+        .note_repository()
+        .get_unassigned_clips(&meeting_id)
+        .unwrap_or_else(|error| panic!("clips should load: {error}"));
+    assert_eq!(saved_clips.len(), 1);
+    assert!(saved_clips[0].cluster_id().is_some());
+    assert_eq!(
+        produced_segments[0].attribution(),
+        &SpeakerAttribution::PendingReview {
+            clip_id: Some(saved_clips[0].clip_id()),
+            candidate_identity_id: weak_candidate_id,
+            cluster_id: saved_clips[0].cluster_id(),
+        }
+    );
+}
+
+/// Verifies a clustering storage failure degrades to the per-chunk review clip without a cluster.
+#[tokio::test]
+async fn clustering_failure_falls_back_to_unclustered_review_clip() {
+    let mut fixture = session_fixture(
+        MockTranscriptionEngine::returning(&["first", "second"]),
+        vec![
+            Ok(vec![SpeakerSegment::new(0, 1_000, vec![0.1, 0.9])]),
+            Ok(vec![SpeakerSegment::new(0, 1_000, vec![0.1, 0.9])]),
+        ],
+    );
+
+    for (sequence, start_offset_ms) in [(1, 0), (2, 1_000)] {
+        fixture
+            .session
+            .process_vad_chunk(&vad_chunk(
+                sequence,
+                start_offset_ms,
+                start_offset_ms + 1_000,
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("chunk {sequence} should degrade: {error}"));
+    }
+
+    let saved_clips = fixture
+        .session
+        .note_repository()
+        .saved_clips
+        .borrow()
+        .clone();
+    assert_eq!(saved_clips.len(), 2);
+    assert!(saved_clips.iter().all(|clip| clip.cluster_id().is_none()));
+}
+
+/// Simulates five unknown chunks (three of one voice, two of another) and assigns one cluster.
+#[tokio::test]
+async fn five_unknown_chunks_form_two_clusters_and_assignment_attributes_three_segments() {
+    let meeting_id = MeetingId::new("meeting-clustering");
+    let voice_vector_database = InMemoryVoiceVectorDB::new();
+    let voice_a = [
+        vec![0.9, 0.1, 0.0],
+        vec![0.85, 0.15, 0.05],
+        vec![0.95, 0.05, 0.0],
+    ];
+    let voice_b = [vec![0.0, 0.2, 0.9], vec![0.05, 0.1, 0.95]];
+    let mut session = MeetingSession::start(
+        meeting_id.clone(),
+        MockTranscriptionEngine::returning(&[
+            "a one", "b one", "a two", "b two", "a three", "a again",
+        ]),
+        Some(one_speaker_per_chunk_diarizer(
+            1_000,
+            vec![
+                voice_a[0].clone(),
+                voice_b[0].clone(),
+                voice_a[1].clone(),
+                voice_b[1].clone(),
+                voice_a[2].clone(),
+                vec![0.92, 0.08, 0.0],
+            ],
+        )),
+        VoiceIdentityManager::new(&voice_vector_database),
+        sqlite_repository_with_meeting(&meeting_id),
+    )
+    .unwrap_or_else(|error| panic!("session should start: {error}"));
+    for sequence in 0..5_u32 {
+        let start_offset_ms = u64::from(sequence) * 1_000;
+        session
+            .process_vad_chunk(&vad_chunk_for(
+                "meeting-clustering",
+                sequence,
+                start_offset_ms,
+                start_offset_ms + 1_000,
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("chunk {sequence} should succeed: {error}"));
+    }
+
+    let clusters =
+        UnknownSpeakerClusterer::new(session.note_repository(), ClusteringConfig::default())
+            .get_clusters_for_meeting(&meeting_id)
+            .unwrap_or_else(|error| panic!("clusters should load: {error}"));
+    assert_eq!(clusters.len(), 2);
+    assert_eq!(clusters[0].chunk_ids().len(), 3);
+    assert_eq!(clusters[1].chunk_ids().len(), 2);
+    assert_eq!(clusters[0].total_duration_ms(), 3_000);
+    let alice_id = Uuid::new_v4();
+
+    let assignment = session
+        .assign_identity_to_cluster(&voice_vector_database, clusters[0].cluster_id(), alice_id)
+        .unwrap_or_else(|error| panic!("assignment should succeed: {error}"));
+
+    assert_eq!(assignment.segments_updated(), 3);
+    assert_eq!(assignment.variants_stored(), 3);
+    let attributed_texts = |segments: &[TranscriptSegment]| -> Vec<String> {
+        segments
+            .iter()
+            .filter(|segment| segment.speaker_identity_id() == Some(alice_id))
+            .map(|segment| segment.text().to_owned())
+            .collect()
+    };
+    let stored_segments = session
+        .note_repository()
+        .load_transcript_segments(&meeting_id)
+        .unwrap_or_else(|error| panic!("segments should load: {error}"));
+    assert_eq!(
+        attributed_texts(&stored_segments),
+        vec!["a one", "a two", "a three"]
+    );
+    assert_eq!(
+        attributed_texts(session.persisted_segments()),
+        vec!["a one", "a two", "a three"]
+    );
+
+    // A later chunk of the same voice now matches the enrolled identity, and rewriting the
+    // timeline keeps the earlier reassignment instead of restoring stale unknown segments.
+    session
+        .process_vad_chunk(&vad_chunk_for("meeting-clustering", 5, 5_000, 6_000))
+        .await
+        .unwrap_or_else(|error| panic!("follow-up chunk should succeed: {error}"));
+    let final_segments = session
+        .note_repository()
+        .load_transcript_segments(&meeting_id)
+        .unwrap_or_else(|error| panic!("segments should load: {error}"));
+    assert_eq!(
+        attributed_texts(&final_segments),
+        vec!["a one", "a two", "a three", "a again"]
+    );
+    assert_eq!(
+        UnknownSpeakerClusterer::new(session.note_repository(), ClusteringConfig::default())
+            .get_clusters_for_meeting(&meeting_id)
+            .unwrap_or_else(|error| panic!("clusters should load: {error}"))
+            .len(),
+        1
     );
 }
