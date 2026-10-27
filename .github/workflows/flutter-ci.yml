@@ -1,0 +1,33 @@
+# Verifies the Flutter client in GitHub Actions because the local sandbox lacks the Flutter SDK.
+
+name: Flutter CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["ui/**", "Makefile", ".github/workflows/flutter-ci.yml"]
+  pull_request:
+    paths: ["ui/**", "Makefile", ".github/workflows/flutter-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-flutter:
+    name: Flutter quality gates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Fetch Dart dependencies
+        working-directory: ui
+        run: flutter pub get
+      - name: Run Flutter format check and static analysis
+        run: make flutter-lint
+      - name: Run Flutter widget tests
+        run: make flutter-test
