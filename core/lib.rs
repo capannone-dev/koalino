@@ -16,9 +16,12 @@ pub mod domain;
 pub mod ffi;
 /// Contains dependency-inversion traits for external capabilities.
 pub mod ports;
+/// Opens the encrypted SQLite stores for the CLI, daemon, and FFI composition roots.
+/// Drives live recordings from raw PCM through the meeting pipeline worker.
+#[path = "bin/recording_controller.rs"]
+pub mod recording_controller;
 /// Exposes the headless Axum API composition without leaking HTTP details into application services.
 pub mod server;
-/// Opens the encrypted SQLite stores for the CLI, daemon, and FFI composition roots.
 #[path = "bin/storage_composition.rs"]
 pub mod storage_composition;
 

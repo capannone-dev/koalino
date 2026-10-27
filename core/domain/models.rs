@@ -635,6 +635,15 @@ impl AudioChunk {
     pub fn config(&self) -> AudioConfig {
         self.config
     }
+
+    /// Takes ownership of the PCM samples without copying them.
+    ///
+    /// Inputs: None.
+    /// Outputs: The interleaved signed 16-bit PCM samples.
+    /// Side effects: Consumes the chunk.
+    pub fn into_samples(self) -> Vec<i16> {
+        self.samples
+    }
 }
 
 /// Identifies a meeting across offline replicas.

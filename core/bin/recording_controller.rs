@@ -1,0 +1,397 @@
+//! Drives one live recording from raw PCM to the meeting pipeline worker.
+//!
+//! Flow per recording: caller PCM → `LocalRecorder` (lifecycle state machine; drops audio unless
+//! recording) → `VadChunker` (speech or 30 s time cuts) → `ChunkAudioStore` (the engine's audio
+//! source) plus a `VadAudioChunk` with meeting-relative offsets → `RecordingManager` (worker
+//! thread running `MeetingSession`). Stop flushes the chunker, waits for every queued chunk, and
+//! wipes any raw audio no engine consumed. The FFI and CLI share this driver, so both entry points
+//! run the same flow. Audio and transcripts are never logged.
+
+use std::sync::{Arc, mpsc::Receiver};
+
+use uuid::Uuid;
+
+use crate::{
+    adapters::audio::{
+        chunk_audio_store::{ChunkAudioStore, encode_wav_pcm16},
+        local_recorder::LocalRecorder,
+        vad_chunker::{FinalizedAudioChunk, VadChunker, VadConfig},
+    },
+    application::{
+        pipeline::meeting_session::VadAudioChunk,
+        recording_manager::{RecordingManager, RecordingManagerError, RecordingSummary},
+    },
+    domain::{
+        errors::AudioError,
+        models::{
+            AudioChunk, AudioConfig, AudioRecording, AudioState, DeviceId, MeetingId, RecordingId,
+        },
+    },
+    ports::audio::AudioCapture,
+};
+
+#[cfg(test)]
+#[path = "recording_controller_tests.rs"]
+mod tests;
+
+/// Sample rate of the fixed capture format (16 kHz mono signed PCM).
+const CAPTURE_SAMPLE_RATE_HZ: u32 = 16_000;
+
+/// Selects how live audio is cut into pipeline chunks.
+#[derive(Clone, Debug)]
+pub enum ChunkingMode {
+    /// Cut at speech pauses (needs the `vad` feature; otherwise falls back to time cuts).
+    Vad(VadConfig),
+    /// Cut every 30 seconds without speech detection.
+    TimeBased,
+}
+
+/// Reports why a recording command was rejected.
+#[derive(Debug, thiserror::Error)]
+pub enum RecordingControlError {
+    /// A recording is already capturing audio.
+    #[error("a recording is already in progress")]
+    AlreadyRecording,
+    /// No recording is active.
+    #[error("no recording is in progress")]
+    NotRecording,
+    /// The capture state machine or chunker rejected the request.
+    #[error(transparent)]
+    Audio(#[from] AudioError),
+    /// The pipeline worker rejected the request.
+    #[error(transparent)]
+    Pipeline(#[from] RecordingManagerError),
+}
+
+/// Capture state of the recording in progress.
+struct ActiveCapture {
+    meeting_id: MeetingId,
+    local_recorder: LocalRecorder,
+    audio_receiver: Receiver<AudioChunk>,
+    chunker: VadChunker,
+    /// Unique per recording, so chunk IDs never collide across recordings.
+    recording_key: Uuid,
+    next_chunk_sequence: u64,
+    /// Meeting time (ms) at which this recording's audio begins.
+    meeting_start_offset_ms: u64,
+    /// Distinct samples placed on the timeline so far (overlaps counted once).
+    timeline_sample_count: u64,
+}
+
+/// Owns the pipeline worker and the recording in progress, if any.
+pub struct RecordingController {
+    recording_manager: RecordingManager,
+    chunk_audio_store: Arc<ChunkAudioStore>,
+    chunking_mode: ChunkingMode,
+    device_id: DeviceId,
+    active_capture: Option<ActiveCapture>,
+    /// State reported while no recording is active (`Idle`, then `Stopped` after a stop).
+    inactive_state: AudioState,
+}
+
+impl RecordingController {
+    /// Creates an idle controller around a ready pipeline worker.
+    ///
+    /// Inputs: The worker, the audio store its transcription engine reads from, the chunking mode,
+    /// and the device ID recorded as the acquiring node of each chunk.
+    /// Outputs: The controller in the `Idle` state.
+    /// Side effects: None.
+    pub fn new(
+        recording_manager: RecordingManager,
+        chunk_audio_store: Arc<ChunkAudioStore>,
+        chunking_mode: ChunkingMode,
+        device_id: DeviceId,
+    ) -> Self {
+        Self {
+            recording_manager,
+            chunk_audio_store,
+            chunking_mode,
+            device_id,
+            active_capture: None,
+            inactive_state: AudioState::Idle,
+        }
+    }
+
+    /// Borrows the pipeline worker, e.g. to read its availability or query its repository.
+    pub fn recording_manager(&self) -> &RecordingManager {
+        &self.recording_manager
+    }
+
+    /// Returns the portable lifecycle state of the current or last recording.
+    pub fn state(&self) -> AudioState {
+        self.active_capture
+            .as_ref()
+            .map_or(self.inactive_state, |capture| {
+                capture.local_recorder.state()
+            })
+    }
+
+    /// Returns the meeting being recorded, if any.
+    pub fn active_meeting_id(&self) -> Option<&MeetingId> {
+        self.active_capture
+            .as_ref()
+            .map(|capture| &capture.meeting_id)
+    }
+
+    /// Starts a new recording, or resumes a paused or interrupted one.
+    ///
+    /// Inputs: `meeting_id` for a new recording (`None` generates `meeting-<uuid>`); ignored when
+    /// resuming.
+    /// Outputs: The recorded meeting, `AlreadyRecording`, or an audio/pipeline error.
+    /// Side effects: Opens a pipeline session (creating the meeting if needed) and reads the
+    /// meeting's timeline so new segments follow existing ones; blocks until the worker answers.
+    pub fn start(
+        &mut self,
+        meeting_id: Option<MeetingId>,
+    ) -> Result<MeetingId, RecordingControlError> {
+        if let Some(capture) = self.active_capture.as_mut() {
+            if capture.local_recorder.state() == AudioState::Recording {
+                return Err(RecordingControlError::AlreadyRecording);
+            }
+            capture.local_recorder.start()?;
+            tracing::info!(meeting_id = %capture.meeting_id.as_str(), "Recording resumed");
+            return Ok(capture.meeting_id.clone());
+        }
+
+        let meeting_id =
+            meeting_id.unwrap_or_else(|| MeetingId::new(format!("meeting-{}", Uuid::new_v4())));
+        let mut local_recorder = LocalRecorder::new(capture_config())?;
+        let audio_receiver = local_recorder.subscribe_audio()?;
+        let chunker = match &self.chunking_mode {
+            ChunkingMode::Vad(vad_config) => VadChunker::new(vad_config.clone())?,
+            ChunkingMode::TimeBased => VadChunker::time_based(VadConfig::english()),
+        };
+        self.recording_manager.begin_recording(meeting_id.clone())?;
+        if let Err(error) = local_recorder.start() {
+            let _ = self.recording_manager.end_recording();
+            return Err(error.into());
+        }
+        let meeting_start_offset_ms = self.meeting_timeline_end_ms(&meeting_id);
+        self.active_capture = Some(ActiveCapture {
+            meeting_id: meeting_id.clone(),
+            local_recorder,
+            audio_receiver,
+            chunker,
+            recording_key: Uuid::new_v4(),
+            next_chunk_sequence: 0,
+            meeting_start_offset_ms,
+            timeline_sample_count: 0,
+        });
+        Ok(meeting_id)
+    }
+
+    /// Feeds captured 16 kHz mono PCM into the recording.
+    ///
+    /// Inputs: Raw samples from the platform capture; they are never logged.
+    /// Outputs: How many chunks were queued for the pipeline, or `NotRecording`. Audio received
+    /// while paused or interrupted is accepted and discarded.
+    /// Side effects: Buffers audio; stores each finished chunk's PCM until the engine reads it and
+    /// queues the chunk on the worker without waiting for transcription.
+    pub fn push_pcm(&mut self, samples: Vec<i16>) -> Result<usize, RecordingControlError> {
+        let capture = self
+            .active_capture
+            .as_mut()
+            .ok_or(RecordingControlError::NotRecording)?;
+        capture
+            .local_recorder
+            .push_test_chunk(AudioChunk::new(samples, capture_config()))?;
+        for routed_chunk in capture.audio_receiver.try_iter() {
+            capture.chunker.push_pcm(routed_chunk)?;
+        }
+        let ready_chunks = capture.chunker.drain_ready_chunks();
+        let submitted_count = ready_chunks.len();
+        for finalized_chunk in ready_chunks {
+            submit_chunk(
+                capture,
+                finalized_chunk,
+                &self.chunk_audio_store,
+                &self.recording_manager,
+                &self.device_id,
+            )?;
+        }
+        Ok(submitted_count)
+    }
+
+    /// Pauses the recording; buffered audio is kept for the resumed recording.
+    ///
+    /// Inputs: None.
+    /// Outputs: `Ok(())`, `NotRecording`, or an invalid-state error.
+    /// Side effects: Later PCM is discarded until `start` resumes.
+    pub fn pause(&mut self) -> Result<(), RecordingControlError> {
+        let capture = self
+            .active_capture
+            .as_mut()
+            .ok_or(RecordingControlError::NotRecording)?;
+        capture.local_recorder.pause()?;
+        Ok(())
+    }
+
+    /// Marks the recording interrupted by the operating system and flushes buffered audio.
+    ///
+    /// Inputs: None.
+    /// Outputs: `Ok(())` once interrupted, `NotRecording`, or an invalid-state error.
+    /// Side effects: Queues the buffered audio as a chunk so nothing captured is lost; `start`
+    /// resumes the same recording.
+    pub fn handle_interruption(&mut self) -> Result<(), RecordingControlError> {
+        let capture = self
+            .active_capture
+            .as_mut()
+            .ok_or(RecordingControlError::NotRecording)?;
+        match capture.local_recorder.handle_interruption() {
+            Err(AudioError::Interrupted) | Ok(()) => {}
+            Err(error) => return Err(error.into()),
+        }
+        if let Some(flushed_chunk) = capture.chunker.finish() {
+            submit_chunk(
+                capture,
+                flushed_chunk,
+                &self.chunk_audio_store,
+                &self.recording_manager,
+                &self.device_id,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Stops the recording after every captured chunk has been processed.
+    ///
+    /// Inputs: None.
+    /// Outputs: The recording summary, `NotRecording`, or a pipeline error.
+    /// Side effects: Flushes the chunker, blocks until the worker drains its queue (call it off
+    /// the UI thread), deletes raw audio no engine consumed, and moves to `Stopped`. A later
+    /// `start` begins a new recording.
+    pub fn stop(&mut self) -> Result<RecordingSummary, RecordingControlError> {
+        let mut capture = self
+            .active_capture
+            .take()
+            .ok_or(RecordingControlError::NotRecording)?;
+        if let Err(error) = capture.local_recorder.stop() {
+            tracing::warn!(error = %error, "Recorder rejected stop; ending the recording anyway");
+        }
+        for routed_chunk in capture.audio_receiver.try_iter() {
+            if capture.chunker.push_pcm(routed_chunk).is_err() {
+                tracing::warn!("Audio received at stop had an unexpected format and was dropped");
+            }
+        }
+        let mut flushed_chunks = capture.chunker.drain_ready_chunks();
+        flushed_chunks.extend(capture.chunker.finish());
+        for finalized_chunk in flushed_chunks {
+            if let Err(error) = submit_chunk(
+                &mut capture,
+                finalized_chunk,
+                &self.chunk_audio_store,
+                &self.recording_manager,
+                &self.device_id,
+            ) {
+                tracing::warn!(error = %error, "Final audio chunk could not be queued");
+            }
+        }
+        let summary = self.recording_manager.end_recording();
+        let discarded_chunk_count = self.chunk_audio_store.clear();
+        if discarded_chunk_count > 0 {
+            tracing::info!(
+                discarded_chunk_count,
+                "Deleted raw audio of chunks that were not transcribed"
+            );
+        }
+        self.inactive_state = AudioState::Stopped;
+        Ok(summary?)
+    }
+
+    /// Finds where a meeting's existing timeline ends, so a new recording continues after it.
+    ///
+    /// Inputs: The meeting about to be recorded.
+    /// Outputs: The latest segment end in ms, or 0 for an empty or unreadable timeline.
+    /// Side effects: Reads the meeting's segments on the worker thread.
+    fn meeting_timeline_end_ms(&self, meeting_id: &MeetingId) -> u64 {
+        let queried_meeting_id = meeting_id.clone();
+        let timeline_end = self
+            .recording_manager
+            .with_note_repository(move |note_repository| {
+                note_repository
+                    .load_transcript_segments(&queried_meeting_id)
+                    .map(|segments| {
+                        segments
+                            .iter()
+                            .map(|segment| segment.end_time_ms())
+                            .max()
+                            .unwrap_or(0)
+                    })
+            });
+        match timeline_end {
+            Ok(Ok(end_ms)) => end_ms,
+            Ok(Err(error)) => {
+                tracing::warn!(error = %error, "Meeting timeline unreadable; recording from 0 ms");
+                0
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "Meeting timeline unreadable; recording from 0 ms");
+                0
+            }
+        }
+    }
+}
+
+impl Drop for RecordingController {
+    /// Stops an active recording so its audio is processed and then wiped.
+    fn drop(&mut self) {
+        if self.active_capture.is_some()
+            && let Err(error) = self.stop()
+        {
+            tracing::warn!(error = %error, "Recording could not be stopped cleanly");
+        }
+        self.chunk_audio_store.clear();
+    }
+}
+
+/// Returns the fixed capture format.
+fn capture_config() -> AudioConfig {
+    AudioConfig::new(CAPTURE_SAMPLE_RATE_HZ, 1)
+}
+
+/// Converts a sample count at the capture rate to milliseconds.
+fn samples_to_ms(sample_count: u64) -> u64 {
+    sample_count.saturating_mul(1_000) / u64::from(CAPTURE_SAMPLE_RATE_HZ)
+}
+
+/// Places one finished chunk on the meeting timeline and queues it for the pipeline.
+///
+/// Inputs: The active capture, the chunk, the engine audio store, the worker, and the device.
+/// Outputs: `Ok(())` once queued, or the worker's error.
+/// Side effects: Stores the chunk PCM under a fresh recording ID (read and deleted by the
+/// engine) and sends a WAV copy with the chunk for diarization and review clips.
+fn submit_chunk(
+    capture: &mut ActiveCapture,
+    finalized_chunk: FinalizedAudioChunk,
+    chunk_audio_store: &ChunkAudioStore,
+    recording_manager: &RecordingManager,
+    device_id: &DeviceId,
+) -> Result<(), RecordingControlError> {
+    let overlap_sample_count = finalized_chunk.overlap_sample_count() as u64;
+    let samples = finalized_chunk.into_audio_chunk().into_samples();
+    let chunk_sample_count = samples.len() as u64;
+    let chunk_start_sample = capture
+        .timeline_sample_count
+        .saturating_sub(overlap_sample_count);
+    let chunk_end_sample = chunk_start_sample + chunk_sample_count;
+    capture.timeline_sample_count = capture.timeline_sample_count.max(chunk_end_sample);
+
+    let recording_id = RecordingId::new(format!(
+        "{}-chunk-{}",
+        capture.recording_key, capture.next_chunk_sequence
+    ));
+    capture.next_chunk_sequence += 1;
+    let audio_bytes = encode_wav_pcm16(&samples, CAPTURE_SAMPLE_RATE_HZ);
+    chunk_audio_store.insert(&recording_id, samples);
+    let vad_chunk = VadAudioChunk::new(
+        AudioRecording::new(recording_id, capture.meeting_id.clone(), device_id.clone()),
+        capture.meeting_start_offset_ms + samples_to_ms(chunk_start_sample),
+        capture.meeting_start_offset_ms + samples_to_ms(chunk_end_sample),
+        audio_bytes,
+    )
+    .map_err(|_| AudioError::InvalidConfiguration {
+        reason: "chunk bounds are inverted".to_owned(),
+    })?;
+    recording_manager.submit_chunk(vad_chunk)?;
+    Ok(())
+}
