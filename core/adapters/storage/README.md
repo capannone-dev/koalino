@@ -18,6 +18,14 @@ matches, keyed by a UUID and its owning meeting. Each record includes the segmen
 millisecond offsets so a review client can seek to the relevant region without exposing audio to
 application logs.
 
+The `transcript_segments` table stores speaker-attributed transcript intervals: owning
+`meeting_id`, `start_time_ms`/`end_time_ms` offsets from the meeting start, an optional
+`speaker_identity_id` (a `SpeakerIdentity` UUID, `NULL` when unattributed), and `segment_text`.
+`save_transcript_segments` replaces a meeting's rows in one transaction; `load_transcript_segments`
+returns them ordered by start time. `load_meeting_metadata` exposes the meeting's `created_at_utc`
+instant without reading transcript or CRDT payloads. Segment text follows the same at-rest policy
+as the `transcript` column.
+
 The adapter rejects writes to unknown meetings rather than silently creating orphan notes. It emits structured `tracing` events with operation, device, and meeting identifiers only—never transcript content or CRDT bytes.
 
 The `attachments` table persists only an attachment UUID, optional confirmed meeting ID, local

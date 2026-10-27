@@ -1519,3 +1519,94 @@ impl Transcript {
         &self.content
     }
 }
+
+/// Represents one persisted, time-bounded transcript interval with optional speaker attribution.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TranscriptSegment {
+    meeting_id: MeetingId,
+    start_time_ms: u64,
+    end_time_ms: u64,
+    /// `None` when diarization could not attribute the interval to a known identity.
+    speaker_identity_id: Option<Uuid>,
+    text: String,
+}
+
+impl TranscriptSegment {
+    /// Creates a transcript segment owned by one meeting.
+    ///
+    /// Inputs: `start_time_ms`/`end_time_ms` are offsets from the meeting start (end should not
+    /// precede start); `speaker_identity_id` references a `SpeakerIdentity` when attributed.
+    /// Outputs: An immutable segment ready for persistence or export.
+    /// Side effects: None.
+    pub fn new(
+        meeting_id: MeetingId,
+        start_time_ms: u64,
+        end_time_ms: u64,
+        speaker_identity_id: Option<Uuid>,
+        text: impl Into<String>,
+    ) -> Self {
+        Self {
+            meeting_id,
+            start_time_ms,
+            end_time_ms,
+            speaker_identity_id,
+            text: text.into(),
+        }
+    }
+
+    /// Borrows the owning meeting identifier.
+    pub fn meeting_id(&self) -> &MeetingId {
+        &self.meeting_id
+    }
+
+    /// Returns the start offset from the meeting start in milliseconds.
+    pub fn start_time_ms(&self) -> u64 {
+        self.start_time_ms
+    }
+
+    /// Returns the end offset from the meeting start in milliseconds.
+    pub fn end_time_ms(&self) -> u64 {
+        self.end_time_ms
+    }
+
+    /// Returns the attributed speaker identity, if diarization produced a strong match.
+    pub fn speaker_identity_id(&self) -> Option<Uuid> {
+        self.speaker_identity_id
+    }
+
+    /// Borrows the segment's transcript text.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+}
+
+/// Describes repository-level facts about a meeting that are independent of its content.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MeetingMetadata {
+    meeting_id: MeetingId,
+    created_at: DateTime<Utc>,
+}
+
+impl MeetingMetadata {
+    /// Creates meeting metadata from persisted repository values.
+    ///
+    /// Inputs: `meeting_id` identifies the meeting; `created_at` is its UTC creation instant.
+    /// Outputs: Immutable metadata.
+    /// Side effects: None.
+    pub fn new(meeting_id: MeetingId, created_at: DateTime<Utc>) -> Self {
+        Self {
+            meeting_id,
+            created_at,
+        }
+    }
+
+    /// Borrows the meeting identifier.
+    pub fn meeting_id(&self) -> &MeetingId {
+        &self.meeting_id
+    }
+
+    /// Returns the UTC instant at which the meeting record was created.
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+}

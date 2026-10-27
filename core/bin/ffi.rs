@@ -24,8 +24,8 @@ use crate::{
     domain::{
         errors::StorageError,
         models::{
-            Attachment, AudioConfig, DeviceId, MeetingId, MeetingWindow, TaskMetrics, TaskType,
-            Transcript, UnassignedVoiceClip,
+            Attachment, AudioConfig, DeviceId, MeetingId, MeetingMetadata, MeetingWindow,
+            TaskMetrics, TaskType, Transcript, TranscriptSegment, UnassignedVoiceClip,
         },
     },
     ports::{
@@ -177,6 +177,43 @@ impl NoteRepository for &SqliteNoteRepository {
         timestamp: chrono::DateTime<chrono::Utc>,
     ) -> Result<Vec<MeetingWindow>, StorageError> {
         (*self).get_meetings_overlapping(timestamp)
+    }
+
+    /// Forwards meeting metadata retrieval to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::load_meeting_metadata`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn load_meeting_metadata(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Option<MeetingMetadata>, StorageError> {
+        (*self).load_meeting_metadata(meeting_id)
+    }
+
+    /// Forwards transcript segment persistence to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::save_transcript_segments`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn save_transcript_segments(
+        &self,
+        meeting_id: &MeetingId,
+        segments: &[TranscriptSegment],
+    ) -> Result<(), StorageError> {
+        (*self).save_transcript_segments(meeting_id, segments)
+    }
+
+    /// Forwards transcript segment retrieval to the borrowed SQLite adapter.
+    ///
+    /// Inputs: Match `NoteRepository::load_transcript_segments`.
+    /// Outputs: The adapter's portable result.
+    /// Side effects: Delegated to the SQLite adapter.
+    fn load_transcript_segments(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<TranscriptSegment>, StorageError> {
+        (*self).load_transcript_segments(meeting_id)
     }
 }
 

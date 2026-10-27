@@ -8,8 +8,8 @@ use crate::{
     domain::{
         errors::StorageError,
         models::{
-            AggregatedStats, Attachment, DeviceId, MeetingId, TaskMetrics, TaskType, Transcript,
-            UnassignedVoiceClip,
+            AggregatedStats, Attachment, DeviceId, MeetingId, MeetingMetadata, TaskMetrics,
+            TaskType, Transcript, TranscriptSegment, UnassignedVoiceClip,
         },
     },
     ports::{
@@ -104,7 +104,17 @@ impl SqliteNoteRepository {
                     original_timestamp_utc TEXT NOT NULL,
                     original_device_id TEXT NOT NULL,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
-                );",
+                );
+                CREATE TABLE IF NOT EXISTS transcript_segments (
+                    meeting_id TEXT NOT NULL,
+                    start_time_ms INTEGER NOT NULL,
+                    end_time_ms INTEGER NOT NULL,
+                    speaker_identity_id TEXT,
+                    segment_text TEXT NOT NULL,
+                    FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
+                );
+                CREATE INDEX IF NOT EXISTS transcript_segments_meeting_index
+                    ON transcript_segments(meeting_id, start_time_ms);",
             )
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
         tracing::info!(device_id = %device_id.as_str(), "SQLite meeting repository initialized");
@@ -265,6 +275,137 @@ impl NoteRepository for SqliteNoteRepository {
                     .map_err(|error| sqlite_error("unable to decode meeting identifier", error))
             })
             .collect()
+    }
+
+    /// Reads a meeting's SQLite creation timestamp as portable metadata.
+    ///
+    /// Inputs: `meeting_id` identifies a meeting record.
+    /// Outputs: Metadata, `None` for an unknown meeting, or a portable storage error.
+    /// Side effects: Reads one SQLite row without transcript or CRDT content.
+    fn load_meeting_metadata(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Option<MeetingMetadata>, StorageError> {
+        let created_at_text = self
+            .connection
+            .query_row(
+                "SELECT created_at_utc FROM meetings WHERE meeting_id = ?1",
+                params![meeting_id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| sqlite_error("unable to load meeting metadata", error))?;
+        created_at_text
+            .map(|created_at_text| {
+                parse_sqlite_timestamp(&created_at_text)
+                    .map(|created_at| MeetingMetadata::new(meeting_id.clone(), created_at))
+            })
+            .transpose()
+    }
+
+    /// Replaces a meeting's transcript segments inside one SQLite transaction.
+    ///
+    /// Inputs: `meeting_id` must exist; `segments` must all reference `meeting_id`.
+    /// Outputs: Success or an unknown-meeting/mismatched-segment/SQLite storage error.
+    /// Side effects: Deletes and inserts SQLite rows atomically; never logs segment text.
+    fn save_transcript_segments(
+        &self,
+        meeting_id: &MeetingId,
+        segments: &[TranscriptSegment],
+    ) -> Result<(), StorageError> {
+        if segments
+            .iter()
+            .any(|segment| segment.meeting_id() != meeting_id)
+        {
+            return Err(StorageError::Rejected {
+                reason: String::from("every transcript segment must belong to the target meeting"),
+            });
+        }
+        if self.load_meeting_metadata(meeting_id)?.is_none() {
+            return Err(missing_meeting_error(meeting_id));
+        }
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|error| sqlite_error("unable to begin segment transaction", error))?;
+        transaction
+            .execute(
+                "DELETE FROM transcript_segments WHERE meeting_id = ?1",
+                params![meeting_id.as_str()],
+            )
+            .map_err(|error| sqlite_error("unable to clear transcript segments", error))?;
+        for segment in segments {
+            transaction
+                .execute(
+                    "INSERT INTO transcript_segments (meeting_id, start_time_ms, end_time_ms, speaker_identity_id, segment_text) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        meeting_id.as_str(),
+                        sqlite_milliseconds(segment.start_time_ms())?,
+                        sqlite_milliseconds(segment.end_time_ms())?,
+                        segment.speaker_identity_id().map(|identity_id| identity_id.to_string()),
+                        segment.text(),
+                    ],
+                )
+                .map_err(|error| sqlite_error("unable to save transcript segment", error))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit transcript segments", error))?;
+        self.log_operation("save_transcript_segments", meeting_id);
+        Ok(())
+    }
+
+    /// Loads a meeting's transcript segments in timeline order.
+    ///
+    /// Inputs: `meeting_id` identifies a meeting record.
+    /// Outputs: Segments ordered by start time then insertion, or a portable storage error.
+    /// Side effects: Reads SQLite rows and emits a debug trace event without segment text.
+    fn load_transcript_segments(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<TranscriptSegment>, StorageError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT start_time_ms, end_time_ms, speaker_identity_id, segment_text FROM transcript_segments WHERE meeting_id = ?1 ORDER BY start_time_ms, rowid",
+            )
+            .map_err(|error| sqlite_error("unable to prepare transcript segment query", error))?;
+        let segment_rows = statement
+            .query_map(params![meeting_id.as_str()], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
+            })
+            .map_err(|error| sqlite_error("unable to load transcript segments", error))?;
+        let segments = segment_rows
+            .map(|row| {
+                let (start_time_ms, end_time_ms, speaker_identity_id, segment_text) = row
+                    .map_err(|error| sqlite_error("unable to decode transcript segment", error))?;
+                let parsed_speaker_identity_id = speaker_identity_id
+                    .map(|identity_id| {
+                        uuid::Uuid::parse_str(&identity_id).map_err(|error| {
+                            StorageError::Rejected {
+                                reason: format!(
+                                    "stored segment has an invalid speaker UUID: {error}"
+                                ),
+                            }
+                        })
+                    })
+                    .transpose()?;
+                Ok(TranscriptSegment::new(
+                    meeting_id.clone(),
+                    u64::try_from(start_time_ms).unwrap_or_default(),
+                    u64::try_from(end_time_ms).unwrap_or_default(),
+                    parsed_speaker_identity_id,
+                    segment_text,
+                ))
+            })
+            .collect::<Result<Vec<_>, StorageError>>()?;
+        self.log_operation("load_transcript_segments", meeting_id);
+        Ok(segments)
     }
 
     /// Creates a meeting row with an initial serialized Automerge document.
@@ -635,6 +776,36 @@ fn parse_task_type(task_type: &str) -> Result<TaskType, StorageError> {
     }
 }
 
+/// Parses SQLite's `CURRENT_TIMESTAMP` text (UTC, `YYYY-MM-DD HH:MM:SS`) or RFC 3339 text.
+///
+/// Inputs: `timestamp_text` is a persisted timestamp column value.
+/// Outputs: A UTC instant or a portable rejection for malformed values.
+/// Side effects: None.
+fn parse_sqlite_timestamp(
+    timestamp_text: &str,
+) -> Result<chrono::DateTime<chrono::Utc>, StorageError> {
+    chrono::NaiveDateTime::parse_from_str(timestamp_text, "%Y-%m-%d %H:%M:%S")
+        .map(|naive_timestamp| naive_timestamp.and_utc())
+        .or_else(|_| {
+            chrono::DateTime::parse_from_rfc3339(timestamp_text)
+                .map(|timestamp| timestamp.with_timezone(&chrono::Utc))
+        })
+        .map_err(|error| StorageError::Rejected {
+            reason: format!("stored meeting has an invalid creation timestamp: {error}"),
+        })
+}
+
+/// Converts an unsigned millisecond offset to SQLite's signed integer representation.
+///
+/// Inputs: `milliseconds` is a segment offset.
+/// Outputs: The same value as `i64`, or a rejection when it exceeds SQLite's range.
+/// Side effects: None.
+fn sqlite_milliseconds(milliseconds: u64) -> Result<i64, StorageError> {
+    i64::try_from(milliseconds).map_err(|_| StorageError::Rejected {
+        reason: String::from("transcript segment offset exceeds SQLite integer range"),
+    })
+}
+
 fn sqlite_error(operation: &str, error: rusqlite::Error) -> StorageError {
     StorageError::Rejected {
         reason: format!("{operation}: {error}"),
@@ -674,10 +845,97 @@ mod tests {
         adapters::storage::sqlite_adapter::SqliteNoteRepository,
         domain::{
             errors::StorageError,
-            models::{MeetingId, Transcript, UnassignedVoiceClip},
+            models::{MeetingId, Transcript, TranscriptSegment, UnassignedVoiceClip},
         },
         ports::storage::NoteRepository,
     };
+
+    /// Verifies speaker-attributed segments are stored in timeline order and replaced atomically.
+    #[test]
+    fn saves_replaces_and_loads_transcript_segments_in_order() {
+        let repository = SqliteNoteRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let meeting_id = MeetingId::new("meeting-segments");
+        repository
+            .create_meeting(&meeting_id, &[1_u8])
+            .unwrap_or_else(|error| panic!("meeting creation should succeed: {error}"));
+        let alice_identity_id = uuid::Uuid::from_u128(1);
+        let later_segment = TranscriptSegment::new(
+            meeting_id.clone(),
+            5_000,
+            9_000,
+            None,
+            "Unattributed remark.",
+        );
+        let earlier_segment = TranscriptSegment::new(
+            meeting_id.clone(),
+            0,
+            5_000,
+            Some(alice_identity_id),
+            "Opening statement.",
+        );
+
+        repository
+            .save_transcript_segments(
+                &meeting_id,
+                &[later_segment.clone(), earlier_segment.clone()],
+            )
+            .unwrap_or_else(|error| panic!("segment save should succeed: {error}"));
+        assert_eq!(
+            repository.load_transcript_segments(&meeting_id).ok(),
+            Some(vec![earlier_segment.clone(), later_segment])
+        );
+
+        repository
+            .save_transcript_segments(&meeting_id, std::slice::from_ref(&earlier_segment))
+            .unwrap_or_else(|error| panic!("segment replacement should succeed: {error}"));
+        assert_eq!(
+            repository.load_transcript_segments(&meeting_id).ok(),
+            Some(vec![earlier_segment])
+        );
+    }
+
+    /// Verifies segments cannot be attached to a meeting that was never created.
+    #[test]
+    fn rejects_transcript_segments_for_a_missing_meeting() {
+        let repository = SqliteNoteRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let missing_meeting_id = MeetingId::new("missing-segment-meeting");
+        let orphan_segment =
+            TranscriptSegment::new(missing_meeting_id.clone(), 0, 1, None, "Orphaned.");
+
+        let storage_error = repository
+            .save_transcript_segments(&missing_meeting_id, &[orphan_segment])
+            .expect_err("an unknown meeting must reject segment persistence");
+
+        assert!(matches!(storage_error, StorageError::Rejected { .. }));
+    }
+
+    /// Verifies meeting metadata exposes the creation instant and reports unknown meetings as absent.
+    #[test]
+    fn loads_meeting_metadata_with_creation_time() {
+        let repository = SqliteNoteRepository::open_in_memory()
+            .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let meeting_id = MeetingId::new("meeting-metadata");
+        let before_creation = chrono::Utc::now() - chrono::Duration::seconds(2);
+        repository
+            .create_meeting(&meeting_id, &[1_u8])
+            .unwrap_or_else(|error| panic!("meeting creation should succeed: {error}"));
+
+        let meeting_metadata = repository
+            .load_meeting_metadata(&meeting_id)
+            .unwrap_or_else(|error| panic!("metadata load should succeed: {error}"))
+            .unwrap_or_else(|| panic!("created meeting must have metadata"));
+
+        assert_eq!(meeting_metadata.meeting_id(), &meeting_id);
+        assert!(meeting_metadata.created_at() >= before_creation);
+        assert_eq!(
+            repository
+                .load_meeting_metadata(&MeetingId::new("unknown-meeting"))
+                .ok(),
+            Some(None)
+        );
+    }
 
     /// Verifies adapter initialization creates its schema and stores both transcript and CRDT bytes.
     #[test]

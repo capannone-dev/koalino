@@ -2,7 +2,10 @@
 
 use crate::domain::{
     errors::StorageError,
-    models::{Attachment, MeetingId, MeetingWindow, Transcript, UnassignedVoiceClip},
+    models::{
+        Attachment, MeetingId, MeetingMetadata, MeetingWindow, Transcript, TranscriptSegment,
+        UnassignedVoiceClip,
+    },
 };
 use chrono::{DateTime, Utc};
 
@@ -86,6 +89,43 @@ pub trait NoteRepository {
         &self,
         _timestamp: DateTime<Utc>,
     ) -> Result<Vec<MeetingWindow>, StorageError> {
+        Ok(Vec::new())
+    }
+
+    /// Loads content-independent facts about one meeting, such as its creation time.
+    ///
+    /// Inputs: `meeting_id` identifies the requested meeting.
+    /// Outputs: Metadata, `None` when the meeting does not exist, or a storage error.
+    /// Side effects: Reads local meeting metadata only; it never reads transcript or CRDT payloads.
+    fn load_meeting_metadata(
+        &self,
+        _meeting_id: &MeetingId,
+    ) -> Result<Option<MeetingMetadata>, StorageError> {
+        Ok(None)
+    }
+
+    /// Replaces every speaker-attributed transcript segment of one existing meeting.
+    ///
+    /// Inputs: `meeting_id` must exist; every element of `segments` must belong to that meeting.
+    /// Outputs: Success or a storage error, including unknown-meeting rejection.
+    /// Side effects: Transactionally deletes and rewrites the meeting's local segment rows.
+    fn save_transcript_segments(
+        &self,
+        _meeting_id: &MeetingId,
+        _segments: &[TranscriptSegment],
+    ) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
+    }
+
+    /// Loads one meeting's speaker-attributed transcript segments.
+    ///
+    /// Inputs: `meeting_id` identifies the meeting.
+    /// Outputs: Segments ordered by start time (empty when none were stored), or a storage error.
+    /// Side effects: Reads local transcript segment rows.
+    fn load_transcript_segments(
+        &self,
+        _meeting_id: &MeetingId,
+    ) -> Result<Vec<TranscriptSegment>, StorageError> {
         Ok(Vec::new())
     }
 }
