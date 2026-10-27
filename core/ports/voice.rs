@@ -17,6 +17,16 @@ pub trait VoiceIdentityMatcher {
     fn match_embedding(&self, embedding: &[f32]) -> Result<VoiceMatchResult, StorageError>;
 }
 
+/// Forwards voice matching through references so one matcher can serve many sessions.
+impl<T> VoiceIdentityMatcher for &T
+where
+    T: VoiceIdentityMatcher + ?Sized,
+{
+    fn match_embedding(&self, embedding: &[f32]) -> Result<VoiceMatchResult, StorageError> {
+        (*self).match_embedding(embedding)
+    }
+}
+
 /// Stores derived voice signatures and returns adapter-calculated similarity candidates.
 pub trait VoiceVectorDB {
     /// Lists display-safe speaker identities known to this voice storage implementation.

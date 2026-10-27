@@ -7,5 +7,9 @@
 pub mod alignment;
 /// Orchestrates one meeting's local VAD and external bridge chunks into persisted segments.
 pub mod meeting_session;
+/// Composition root that owns the pipeline ports and opens one session per recording.
+pub mod pipeline_factory;
+#[cfg(test)]
+mod pipeline_factory_tests;
 #[cfg(test)]
 mod tests;

@@ -96,3 +96,36 @@ pub trait DiarizationEngine {
     /// Side effects: An implementation may execute local or remote AI workloads.
     async fn diarize(&self, audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError>;
 }
+
+/// Forwards transcription calls through references so one engine can serve many sessions.
+impl<T> TranscriptionEngine for &T
+where
+    T: TranscriptionEngine + ?Sized,
+{
+    fn transcribe(
+        &self,
+        audio_recording: &AudioRecording,
+        transcription_context: &TranscriptionContext,
+    ) -> Result<Transcript, TranscriptionError> {
+        (*self).transcribe(audio_recording, transcription_context)
+    }
+
+    fn transcribe_external_media(
+        &self,
+        media_chunk: &ExternalMediaChunk,
+        audio_recording: &AudioRecording,
+    ) -> Result<Transcript, TranscriptionError> {
+        (*self).transcribe_external_media(media_chunk, audio_recording)
+    }
+}
+
+/// Forwards diarization calls through references so one engine can serve many sessions.
+#[async_trait::async_trait]
+impl<T> DiarizationEngine for &T
+where
+    T: DiarizationEngine + Sync + ?Sized,
+{
+    async fn diarize(&self, audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        (*self).diarize(audio_bytes).await
+    }
+}
