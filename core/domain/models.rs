@@ -382,7 +382,10 @@ impl ExportTranscriptSegment {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExportDocument {
     meeting_id: MeetingId,
+    /// The stored title, or the meeting's dated fallback title.
     title: String,
+    /// Whether `title` was chosen by a person rather than generated as a fallback.
+    has_stored_title: bool,
     started_at: DateTime<Utc>,
     transcript_segments: Vec<ExportTranscriptSegment>,
     attachments: Vec<ExportAttachment>,
@@ -408,11 +411,27 @@ impl ExportDocument {
         Self {
             meeting_id,
             title: title.into(),
+            has_stored_title: false,
             started_at,
             transcript_segments,
             attachments,
             voice_identities,
         }
+    }
+
+    /// Marks the title as person-chosen (`true`) or a generated fallback (`false`, the default).
+    ///
+    /// Inputs: Whether the meeting had a stored title.
+    /// Outputs: The document.
+    /// Side effects: None.
+    pub fn with_stored_title(mut self, has_stored_title: bool) -> Self {
+        self.has_stored_title = has_stored_title;
+        self
+    }
+
+    /// Returns whether the title was chosen by a person rather than generated as a fallback.
+    pub fn has_stored_title(&self) -> bool {
+        self.has_stored_title
     }
 
     /// Replaces attachment metadata, typically after the orchestrator staged copies.

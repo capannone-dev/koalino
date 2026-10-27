@@ -475,7 +475,10 @@ async fn export_endpoint_returns_markdown_download() {
         .await
         .unwrap_or_else(|error| panic!("response body must be readable: {error}"));
     let markdown_body = String::from_utf8_lossy(&response_bytes);
-    assert!(markdown_body.contains("# meeting-rome"));
+    assert!(
+        markdown_body.starts_with("# Meeting "),
+        "untitled meetings export under their dated fallback title: {markdown_body}"
+    );
     assert!(markdown_body.contains("Discussed offline-first sync."));
     assert!(markdown_body.contains("agenda.pdf"));
 }

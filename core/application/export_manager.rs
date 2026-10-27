@@ -268,12 +268,13 @@ where
 
         Ok(ExportDocument::new(
             meeting_id.clone(),
-            meeting_id.as_str(),
+            meeting_metadata.display_title(),
             meeting_metadata.created_at(),
             transcript_segments,
             attachments,
             referenced_identities,
-        ))
+        )
+        .with_stored_title(meeting_metadata.title().is_some()))
     }
 }
 
@@ -455,8 +456,10 @@ fn stage_attachments(
         .collect())
 }
 
-/// Generates `{date}_{meeting_id}_{timestamp}.{ext}` (single) or
+/// Generates `{date}_{label}_{timestamp}.{ext}` (single) or
 /// `meetings-export_{count}_{timestamp}.{ext}` (batch), appending `-N` until the path is unused.
+/// `label` is the sanitized stored title, or the meeting ID for untitled meetings (see
+/// `single_meeting_file_label`).
 ///
 /// Inputs: The output directory, the documents being exported, and the format.
 /// Outputs: A path that does not currently exist.
@@ -471,7 +474,7 @@ fn unique_output_path(
         [single_document] => format!(
             "{}_{}_{export_timestamp}",
             single_document.started_at().format("%Y-%m-%d"),
-            safe_file_name(single_document.meeting_id().as_str())
+            single_meeting_file_label(single_document)
         ),
         _ => format!("meetings-export_{}_{export_timestamp}", documents.len()),
     };
@@ -484,6 +487,33 @@ fn unique_output_path(
         collision_counter += 1;
     }
     candidate_path
+}
+
+/// Longest title-derived filename label, in characters, so paths stay well under OS limits.
+const MAX_TITLE_FILE_LABEL_CHARACTERS: usize = 80;
+
+/// Chooses the filename label of a single-meeting export.
+///
+/// Inputs: The export document.
+/// Outputs: The sanitized stored title (truncated to `MAX_TITLE_FILE_LABEL_CHARACTERS`) when the
+/// meeting has one with at least one ASCII letter or digit; otherwise the sanitized meeting ID.
+/// The dated fallback title is not used because the filename already starts with the date and
+/// the ID is what tells two untitled meetings apart.
+/// Side effects: None.
+fn single_meeting_file_label(document: &ExportDocument) -> String {
+    if document.has_stored_title() {
+        let title_label: String = safe_file_name(document.title())
+            .chars()
+            .take(MAX_TITLE_FILE_LABEL_CHARACTERS)
+            .collect();
+        if title_label
+            .chars()
+            .any(|character| character.is_ascii_alphanumeric())
+        {
+            return title_label;
+        }
+    }
+    safe_file_name(document.meeting_id().as_str())
 }
 
 /// Replaces characters outside `[A-Za-z0-9._-]` with `_` and strips leading dots.

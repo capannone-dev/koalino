@@ -17,8 +17,8 @@ use crate::{
     domain::{
         errors::{ExportError, StorageError},
         models::{
-            Attachment, ExportDateRange, ExportFormat, ExportOptions, MeetingId, SpeakerIdentity,
-            Transcript, TranscriptSegment, VoiceEmbedding,
+            Attachment, ExportDateRange, ExportFormat, ExportOptions, MeetingId, MeetingTitle,
+            SpeakerIdentity, Transcript, TranscriptSegment, VoiceEmbedding,
         },
     },
     ports::{
@@ -436,6 +436,95 @@ fn generated_filenames_are_sanitized_and_unique() {
     assert!(Path::new(first_export.file_path()).starts_with(&fixture.output_directory));
     assert!(first_name.starts_with(&Utc::now().format("%Y-%m-%d_team_sync_1_").to_string()));
     assert!(first_name.ends_with(".json"));
+}
+
+/// Verifies a titled meeting exports with its title as the Markdown heading, JSON title, PDF
+/// document title, and generated filename stem.
+#[test]
+fn titled_meetings_use_their_title_for_headers_and_filenames() {
+    let fixture = ExportFixture::new();
+    let meeting_id = fixture.create_meeting("meeting-3f2a", &[(0, 1_000, None, "Hi.")]);
+    fixture
+        .repository
+        .save_meeting_title(
+            &meeting_id,
+            &MeetingTitle::parse("Project Sync: Q4/plan")
+                .unwrap_or_else(|error| panic!("title must parse: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("title must persist: {error}"));
+    let manager = fixture.manager();
+
+    let markdown_export = manager
+        .export_meeting(
+            &meeting_id,
+            &ExportOptions::for_format(ExportFormat::Markdown),
+            None,
+        )
+        .unwrap_or_else(|error| panic!("Markdown export must succeed: {error}"));
+    let json_export = manager
+        .export_meeting(
+            &meeting_id,
+            &ExportOptions::for_format(ExportFormat::Json),
+            None,
+        )
+        .unwrap_or_else(|error| panic!("JSON export must succeed: {error}"));
+    let pdf_document = manager
+        .extract_meeting(&meeting_id, &ExportOptions::for_format(ExportFormat::Pdf))
+        .unwrap_or_else(|error| panic!("extraction must succeed: {error}"));
+    let written_markdown = fs::read_to_string(markdown_export.file_path())
+        .unwrap_or_else(|error| panic!("export must be readable: {error}"));
+    let markdown_name = Path::new(markdown_export.file_path())
+        .file_name()
+        .and_then(|file_name| file_name.to_str())
+        .unwrap_or_default()
+        .to_owned();
+
+    assert!(
+        written_markdown.starts_with("# Project Sync: Q4/plan\n"),
+        "{written_markdown}"
+    );
+    assert_eq!(
+        read_json(json_export.file_path())["meetings"][0]["meeting"]["title"],
+        "Project Sync: Q4/plan"
+    );
+    assert_eq!(pdf_document.title(), "Project Sync: Q4/plan");
+    assert!(
+        markdown_name.starts_with(
+            &Utc::now()
+                .format("%Y-%m-%d_Project_Sync__Q4_plan_")
+                .to_string()
+        ),
+        "{markdown_name}"
+    );
+}
+
+/// Verifies an untitled meeting exports under its dated fallback title while its filename keeps
+/// the meeting ID, which the fallback (already a date) would not distinguish.
+#[test]
+fn untitled_meetings_export_with_the_fallback_title() {
+    let fixture = ExportFixture::new();
+    let meeting_id = fixture.create_meeting("meeting-untitled", &[(0, 1_000, None, "Hi.")]);
+
+    let export_result = fixture
+        .manager()
+        .export_meeting(
+            &meeting_id,
+            &ExportOptions::for_format(ExportFormat::Markdown),
+            None,
+        )
+        .unwrap_or_else(|error| panic!("Markdown export must succeed: {error}"));
+    let written_markdown = fs::read_to_string(export_result.file_path())
+        .unwrap_or_else(|error| panic!("export must be readable: {error}"));
+
+    assert!(
+        written_markdown.starts_with(&format!("# Meeting {}", Utc::now().format("%Y-%m-%d"))),
+        "{written_markdown}"
+    );
+    assert!(
+        export_result.file_path().contains("_meeting-untitled_"),
+        "{}",
+        export_result.file_path()
+    );
 }
 
 /// Verifies an explicit destination path overrides the generated filename.
