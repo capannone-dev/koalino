@@ -1017,6 +1017,15 @@ impl RecordingId {
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
+
+    /// Borrows the identifier value, e.g. as an audio-store key.
+    ///
+    /// Inputs: None.
+    /// Outputs: The identifier text.
+    /// Side effects: None.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 /// Identifies the node that acquired data or emitted an operational event.
@@ -1360,6 +1369,15 @@ impl AudioRecording {
     /// Side effects: None.
     pub fn meeting_id(&self) -> &MeetingId {
         &self.meeting_id
+    }
+
+    /// Returns the recording (or chunk) identifier adapters use to locate its audio.
+    ///
+    /// Inputs: None.
+    /// Outputs: A borrow of the recording identifier.
+    /// Side effects: None.
+    pub fn recording_id(&self) -> &RecordingId {
+        &self.recording_id
     }
 }
 

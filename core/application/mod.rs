@@ -40,6 +40,10 @@ pub mod network_events;
 mod network_events_tests;
 /// Connects transcription, diarization, and voice identity into speaker-attributed segments.
 pub mod pipeline;
+/// Runs meeting pipeline sessions on a dedicated worker thread for live recordings.
+pub mod recording_manager;
+#[cfg(test)]
+mod recording_manager_tests;
 /// Coordinates Automerge sync messages through encrypted-network and storage ports.
 pub mod sync_manager;
 #[cfg(test)]
