@@ -466,3 +466,44 @@
   timeout, because opening can now write.
 - Follow-ups: store the key in the platform keychain (Keychain, Keystore, Secret Service), and
   support re-keying or a passphrase change.
+
+## 2026-10-27 — Issue #32 recording flow wired into the meeting pipeline
+
+- Composition root: `application/pipeline/pipeline_factory.rs` owns the ports once and opens a
+  `MeetingSession` per recording that borrows them, through new `&T` forwarding impls for
+  `TranscriptionEngine`, `DiarizationEngine`, and `VoiceIdentityMatcher`. Only existing ports are
+  used. The "clusterer" dependency is the factory's `ClusteringConfig`, because
+  `UnknownSpeakerClusterer` is created per chunk over the session's repository.
+- Threading: the ports are not `Send` (e.g. `ComputeDispatcher` holds `Box<dyn
+  TranscriptionEngine>`), so `RecordingManager` builds the factory on its worker thread from a
+  `Send` closure instead of receiving engines. Graceful shutdown follows from the FIFO channel:
+  `end_recording` is queued after every earlier chunk.
+- Audio path: engines read audio through adapter-side sources that had no production
+  implementation. `ChunkAudioStore` implements both and deletes each chunk on read. Chunk
+  offsets subtract the soft-max lookback overlap. Overlapping text across a 30 s or 120 s cut is
+  not yet de-duplicated (`deduplicate_overlap` exists but needs word timestamps to place
+  segments), so about one second of words can repeat at those cuts.
+- Approved scope decisions:
+  1. No microphone adapter: the FFI gains `note_taker_push_audio_pcm`, and the CLI reads a WAV
+     file or raw stdin (`arecord | note-taker record start --input -` covers live capture on
+     Linux). A real capture adapter needs approval for `cpal` or a Flutter audio package.
+  2. tokio's `signal` feature was enabled (existing crate) for Ctrl+C and SIGTERM.
+  3. `record stop` across processes uses `<db>.recording-active` and `<db>.recording-stop`
+     files; the earlier in-process CLI recorder state did not survive between invocations.
+  4. No diarization adapter exists, so real recordings produce `Unattributed` segments.
+- Engine selection: `auto` prefers a local model and falls back to OpenAI only when
+  `OPENAI_API_KEY` is set, with a warning that audio leaves the device. Telemetry through
+  `ComputeDispatcher` is not wired into the live path yet.
+- FFI: the pipeline is composed on the first start, not when the runtime is created, so
+  non-recording calls work without an engine. A failed composition returns the new status `4`
+  and is retried. Stop holds the runtime mutex while the last chunks are transcribed, so a
+  lock-screen state query waits during that time; moving the drain outside the lock is a
+  follow-up.
+- `vad` feature: `webrtc_vad::Vad` wraps a raw pointer and is not `Send`. A private `SendableVad`
+  newtype implements `Send` (not `Sync`), with a SAFETY note: the libfvad instance is
+  exclusively owned, freed in `Drop`, has no thread-local state, and is used only through `&mut`.
+- Daemon: it composes the pipeline at start-up and logs its availability, but no HTTP recording
+  endpoint exists yet; a missing engine is a warning, not a start-up failure.
+- Follow-ups: microphone capture adapter, diarization adapter, overlap text de-duplication,
+  dispatcher telemetry for live chunks, Flutter UI for push/stop, an HTTP recording API, and
+  releasing the FFI lock during stop.

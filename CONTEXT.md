@@ -204,3 +204,12 @@ random key file in `~/.note_taker` (`NOTE_TAKER_ENCRYPTION_KEY_DIR` overrides it
 adapters call only the `EmbeddingCipher` port. `storage_composition::open_encrypted_stores`
 verifies the key against the database's key-check value before opening the stores, and plaintext
 rows from older databases are re-encrypted on first open.
+
+Issue #32 wires `MeetingSession` into the recording flow. `PipelineFactory` is the composition
+root: it owns the pipeline ports once, creates missing meetings, and degrades without diarization
+or a matcher. `RecordingManager` runs sessions on a worker thread with FIFO commands, so stop
+drains in-flight chunks. `core/bin/recording_controller.rs` drives capture (recorder → chunker
+→ delete-on-read `ChunkAudioStore` → manager), and `pipeline_composition.rs` selects the engine
+from the environment. The FFI composes the pipeline on the first start and gains PCM push and
+meeting-ID functions. The CLI records a WAV file or stdin in the foreground with a cross-process
+`record stop`, and the daemon composes the pipeline at start-up and shuts down gracefully.

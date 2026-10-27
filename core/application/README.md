@@ -117,7 +117,18 @@ not-found, bad-request, and internal failures.
 `pipeline/` connects transcription, diarization, voice identity, and segment persistence.
 `MeetingSession` turns each VAD chunk or external bridge chunk into speaker-attributed
 `TranscriptSegment` rows. See `pipeline/README.md` for the flow, alignment policy, and failure
-handling.
+handling. `PipelineFactory` (Issue #32) is the pipeline's composition root.
+
+## Live recordings
+
+`recording_manager.rs` (Issue #32) runs pipeline sessions for live recordings on one dedicated
+worker thread. The port traits are not `Send`, so the worker builds its `PipelineFactory` from a
+`Send` builder closure and keeps it (and any loaded model) for its whole life. Callers send FIFO
+commands: `begin_recording` opens a session, `submit_chunk` queues a `VadAudioChunk` without
+waiting, and `end_recording` returns a `RecordingSummary` only after every earlier chunk is
+processed. A failing chunk is logged and counted while the recording continues. Dropping the
+manager drains an active recording before the worker exits. `with_note_repository` runs a query
+on the worker's repository. Transcription never runs on a UI thread or the async runtime.
 
 ## Unknown-speaker clustering
 

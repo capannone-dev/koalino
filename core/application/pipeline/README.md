@@ -13,7 +13,9 @@ is imported.
 | --- | --- |
 | `meeting_session.rs` | `MeetingSession`: per-recording orchestration of local VAD chunks and external bridge chunks. |
 | `alignment.rs` | Pure timestamp alignment and transcript text distribution against VAD chunk boundaries. |
+| `pipeline_factory.rs` | `PipelineFactory`: the composition root that owns the pipeline ports once and opens one session per recording. |
 | `tests.rs` | Mock-port TDD specification plus an in-memory SQLite integration test of a three-chunk meeting. |
+| `pipeline_factory_tests.rs` | Factory availability, graceful degradation, meeting creation, engine reuse, and clustering policy. |
 
 ## MeetingSession
 
@@ -22,6 +24,24 @@ meeting ID, the transcription engine chosen by compute routing, an optional diar
 voice-identity matcher, and the note repository. It loads the meeting's existing segments, because
 `save_transcript_segments` replaces a meeting's whole timeline. Later chunks are appended to that
 timeline instead of overwriting it. The previous chunk's text is passed as `TranscriptionContext`.
+
+## PipelineFactory (Issue #32)
+
+Entry points build one `PipelineFactory` at start-up and call `create_session(&meeting_id)` each
+time a recording starts. The factory owns the transcription engine, an optional diarization
+engine, an optional voice matcher, the note repository, and the clustering policy. Sessions
+borrow these through the ports' `&T` forwarding impls, so engines and loaded models are reused
+across recordings. `create_session` creates the meeting (an empty Automerge document) when it
+does not exist and otherwise appends to its existing timeline.
+
+Missing dependencies degrade instead of failing: without a diarization engine
+(`NoDiarizationEngine` is the placeholder type) segments are `Unattributed`; without a matcher,
+`OptionalVoiceMatcher` reports `NoMatch`, so diarized voices are `Unknown` and clustered.
+`availability()` reports both. The transcription engine and repository are required, so an entry
+point that has no engine fails at composition (see `core/bin/pipeline_composition.rs`).
+
+`application::recording_manager::RecordingManager` runs these sessions on a worker thread for
+live recordings; see `../README.md`.
 
 ## Local VAD chunk flow
 

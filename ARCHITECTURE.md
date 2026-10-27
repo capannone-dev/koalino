@@ -68,6 +68,27 @@
  ports::crypto::EmbeddingCipher ◀── application::crypto::VoiceEncryptor (AES-256-GCM)
 ```
 
+## Live recording flow (Issue #32)
+
+```text
+ Flutter: note_taker_push_audio_pcm      CLI: record start --input <wav|->      daemon: start-up
+             │ 16 kHz mono i16                   │ PcmInput blocks                    │
+             ▼                                   ▼                                    ▼
+ bin::recording_controller::RecordingController            bin::pipeline_composition (env)
+   LocalRecorder (Idle/Recording/Paused/Interrupted/Stopped)     selects TranscriptionEngine
+     → VadChunker (speech pauses, or 30 s; 1 s lookback)         (whisper.cpp | OpenAI)
+     → ChunkAudioStore (delete-on-read PCM, the engine's audio source)
+     → VadAudioChunk (meeting-relative offsets) ─ submit_chunk (non-blocking)
+             ▼
+ application::recording_manager::RecordingManager — worker thread, FIFO commands
+   owns PipelineFactory (engine, optional diarization, voice matcher, repository, clustering)
+   begin → create_session (creates the meeting) · chunk → MeetingSession.process_vad_chunk
+   end → drains every queued chunk → RecordingSummary; controller wipes unconsumed audio
+```
+
+The worker builds the factory itself because the ports are not `Send`; engines and models are
+loaded once and reused across recordings. Stop is graceful: it waits for in-flight chunks.
+
 ## Unknown-speaker clustering (Issue #28)
 
 ```text

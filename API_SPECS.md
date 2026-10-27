@@ -124,8 +124,23 @@ contents, EXIF data, or database-specific values.
 - `int32_t note_taker_start_recording(void)`, `note_taker_pause_recording(void)`, and
   `note_taker_stop_recording(void)` may be called from Flutter, an OS foreground service, or a
   lock-screen action thread. They serialize through the process-wide Rust mutex and return `0` on
-  accepted transitions, `1` for invalid input, `2` for state rejection, and `3` for unavailable
-  runtime state.
+  accepted transitions, `1` for invalid input, `2` for state rejection, `3` for unavailable
+  runtime state, and `4` (`FFI_PIPELINE_UNAVAILABLE`) when the meeting pipeline cannot be built
+  (no transcription engine is configured; the Rust log names the variables to set).
+- Since Issue #32 a start runs the meeting pipeline. The first start composes it (this may load a
+  model) and later recordings reuse it. Start records into a new `meeting-<uuid>`, or resumes a
+  paused or interrupted recording. A start after a stop begins a new recording. Stop flushes
+  buffered audio and returns only after every chunk is transcribed and persisted, then deletes
+  unprocessed raw audio. Call start and stop from a background isolate.
+- `int32_t note_taker_start_recording_for_meeting(const char *meeting_id)` starts a recording into
+  the given non-blank meeting, creating it when missing. A recording into an existing meeting
+  continues after its last segment.
+- `int32_t note_taker_push_audio_pcm(const int16_t *samples, size_t sample_count)` copies 16 kHz
+  mono signed 16-bit PCM from the platform capture into the active recording. It returns `0`
+  (audio is discarded while paused), `1` for a null pointer with a nonzero count, or `2` when no
+  recording is active. It never waits for transcription, and the samples are never logged.
+- `char *note_taker_get_active_meeting_id(void)` returns the recording's meeting ID (free it with
+  `note_taker_free_string`), or null when no recording is active.
 - `int32_t note_taker_handle_audio_interruption(void)` records a platform audio suspension. It
   moves an active stream to recoverable Interrupted and returns `0`; callers resume via Start.
 - `int32_t note_taker_get_current_state(void)` returns only state codes: Idle `10`, Recording

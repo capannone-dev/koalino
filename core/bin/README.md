@@ -14,6 +14,33 @@ interruption, and state-query commands take only this mutex and operate on the p
 `AudioCapture` state machine. State query codes are deliberately `10` through `15`, leaving the
 documented nonzero status codes distinguishable from lifecycle states.
 
+## Live recordings (Issue #32)
+
+- `pipeline_composition.rs` is the only module that names concrete AI adapters. `PipelineConfig`
+  reads `NOTE_TAKER_TRANSCRIPTION_PROVIDER` (`auto`, `local`, `openai`), `NOTE_TAKER_WHISPER_MODEL`,
+  `OPENAI_API_KEY` (redacted from `Debug`), `NOTE_TAKER_OPENAI_WHISPER_MODEL`,
+  `NOTE_TAKER_OPENAI_LANGUAGE`, `NOTE_TAKER_ENABLE_DIARIZATION`, and `NOTE_TAKER_VAD_ENABLED`.
+  `auto` prefers a local whisper.cpp model and uses OpenAI only when a key is set (logged, since
+  chunk audio then leaves the device). `spawn_recording_controller` builds the pipeline on the
+  worker thread, with its own SQLite connections sharing the verified cipher and the encrypted
+  voice library as matcher. No diarization adapter exists yet, so segments are `Unattributed`.
+- `recording_controller.rs` (`RecordingController`) drives one recording: PCM → `LocalRecorder`
+  (lifecycle; audio is dropped while paused) → `VadChunker` → `ChunkAudioStore` plus a
+  `VadAudioChunk` with meeting-relative offsets → `RecordingManager`. A recording into an existing
+  meeting continues after its last segment. Interruption flushes buffered audio. Stop waits for
+  every chunk and wipes raw audio that no engine consumed.
+- `ffi.rs` composes the controller on the first `note_taker_start_recording` and reuses it for
+  every later recording. A failure returns `FFI_PIPELINE_UNAVAILABLE` (`4`) and is retried on the
+  next start. `note_taker_start_recording_for_meeting`, `note_taker_push_audio_pcm`, and
+  `note_taker_get_active_meeting_id` complete the ABI (see `API_SPECS.md`). Stop blocks while the
+  last chunks are transcribed, so Flutter must call it from a background isolate.
+- `cli_recording.rs` runs `record start --input <wav|->` in the foreground until the input ends, on
+  Ctrl+C, or on `record stop`. Processes coordinate through `<db>.recording-active` (PID and
+  meeting) and `<db>.recording-stop`. A lock left by a dead process is replaced.
+- `daemon.rs` composes the pipeline at start-up on a blocking thread and logs its availability (a
+  missing engine is not fatal). On SIGINT or SIGTERM it shuts down gracefully, letting the worker
+  drain.
+
 `storage_composition.rs` (`open_encrypted_stores`) is shared by all three roots. It opens the
 `encryption_meta` record, unlocks and verifies the embedding key through `KeyManager`
 (`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, else the key file in `NOTE_TAKER_ENCRYPTION_KEY_DIR` or

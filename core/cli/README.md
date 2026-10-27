@@ -18,7 +18,8 @@ The executable intentionally fixes its tracing filter to `error`; terminal outpu
 only command results.
 
 ```text
-note-taker record start|stop|status
+note-taker record start --input <file.wav|-> [--meeting-id <id>]
+note-taker record stop|status
 note-taker meetings list
 note-taker meetings view <meeting-id>
 note-taker meetings export <meeting-id> --format <markdown|pdf|json> [--output <path>] [--no-attachments] [--no-metadata]
@@ -85,3 +86,20 @@ the Flutter FFI use. The binary composes an `ExportWriter` with every exporter f
 
 On success the CLI prints `Exported <n> meeting(s) as <format> to <path> (<bytes> bytes)`. Unknown
 meetings, empty selections, and invalid flags exit non-zero with a readable message.
+
+## Recording (Issue #32)
+
+`record start` runs in the foreground. It composes the meeting pipeline (see
+`core/bin/README.md` for the transcription variables), feeds 16 kHz mono 16-bit PCM from a WAV
+file or, with `--input -`, raw little-endian PCM from stdin, and prints a summary once every
+chunk is transcribed. A microphone can be recorded on Linux without extra dependencies:
+
+```text
+arecord -f S16_LE -r 16000 -c 1 -t raw | note-taker record start --input - --meeting-id standup
+```
+
+The recording ends when the input ends, on Ctrl+C, or when another terminal runs `record stop`.
+`record stop` waits until the recording has transcribed its remaining audio. `record status`
+prints `Recording (meeting …, pid …)` or `Idle`. Without a transcription engine, `record start`
+fails with the variables to set. The stop request is noticed between 100 ms input blocks, so a
+silent stdin pipe that delivers no data delays it.
