@@ -141,9 +141,13 @@ contents, EXIF data, or database-specific values.
   `..._for_meeting` and stores the trimmed title on the meeting. Invalid UTF-8, a blank meeting
   ID, or a blank, over-200-character, or control-character title returns `1`. Both arguments are
   ignored when resuming a paused recording.
-- `char *note_taker_get_meetings(void)` returns `[{"meeting_id","title","created_at"}]`, and
-  `char *note_taker_get_meeting(const char *meeting_id)` returns
-  `{"meeting_id","title","created_at","transcript"}` (`transcript` is null until stored). `title`
+- `char *note_taker_get_meetings(void)` returns
+  `[{"meeting_id","title","created_at","duration_ms"}]`, and
+  `char *note_taker_get_meeting(const char *meeting_id)` returns the same fields plus
+  `transcript` (the flat transcript, null until stored) and `segments`
+  (`[{"start_time_ms","end_time_ms","speaker","text"}]` in timeline order, where `speaker` is
+  the voice-store name, `Unknown speaker`, or `Unattributed`, as in exports; Issue #36).
+  `duration_ms` is the end of the latest segment (0 without segments). `title`
   is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting; `created_at`
   is RFC 3339 UTC. Errors use `{"ok":false,"error_code","error"}` with `invalid_argument`,
   `meeting_not_found`, `list_failed`, `load_failed`, or `runtime_unavailable`. Free results

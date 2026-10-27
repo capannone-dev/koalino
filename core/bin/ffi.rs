@@ -24,7 +24,9 @@ use crate::{
             ClusterReviewError, assign_cluster_to_named_identity, list_unknown_clusters,
         },
         crypto::key_manager::KeyManagerConfig,
-        export_manager::{ExportManager, ExportWriter},
+        export_manager::{
+            ExportManager, ExportWriter, UNATTRIBUTED_SPEAKER_LABEL, UNKNOWN_SPEAKER_LABEL,
+        },
         unknown_speaker_clusterer::ClusteringError,
         voice_identity_manager::VoiceIdentityManager,
     },
@@ -33,7 +35,7 @@ use crate::{
         models::{
             Attachment, AudioState, DeviceId, ExportFormat, ExportOptions, MeetingId,
             MeetingMetadata, MeetingTitle, SpeakerIdentity, TaskMetrics, TaskType,
-            UnassignedVoiceClip,
+            TranscriptSegment, UnassignedVoiceClip,
         },
     },
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
@@ -236,13 +238,23 @@ fn export_error_json(error_code: &str, message: &str) -> String {
 /// Serializes the meeting fields shared by `note_taker_get_meetings` and `note_taker_get_meeting`.
 ///
 /// Inputs: Persisted meeting metadata.
-/// Outputs: `{"meeting_id","title","created_at"}` with the display title and RFC 3339 UTC time.
+/// Inputs: Persisted meeting metadata and the meeting's transcript segments.
+/// Outputs: `{"meeting_id","title","created_at","duration_ms"}` with the display title, RFC 3339
+/// UTC time, and the latest segment end (0 without segments).
 /// Side effects: None.
-fn meeting_summary_json(meeting_metadata: &MeetingMetadata) -> serde_json::Value {
+fn meeting_summary_json(
+    meeting_metadata: &MeetingMetadata,
+    segments: &[TranscriptSegment],
+) -> serde_json::Value {
     serde_json::json!({
         "meeting_id": meeting_metadata.meeting_id().as_str(),
         "title": meeting_metadata.display_title(),
         "created_at": meeting_metadata.created_at().to_rfc3339(),
+        "duration_ms": segments
+            .iter()
+            .map(TranscriptSegment::end_time_ms)
+            .max()
+            .unwrap_or_default(),
     })
 }
 
@@ -950,10 +962,11 @@ impl FfiRuntime {
     /// Lists every local meeting with its display title as JSON.
     ///
     /// Inputs: None.
-    /// Outputs: `[{"meeting_id","title","created_at"}]` in repository order, where `title` is the
-    /// stored title or the dated fallback and `created_at` is RFC 3339 UTC; or
+    /// Outputs: `[{"meeting_id","title","created_at","duration_ms"}]` in repository order, where
+    /// `title` is the stored title or the dated fallback, `created_at` is RFC 3339 UTC, and
+    /// `duration_ms` is the latest segment end; or
     /// `{"ok":false,"error_code":"list_failed","error"}`.
-    /// Side effects: Reads SQLite meeting metadata only.
+    /// Side effects: Reads SQLite meeting metadata and segment offsets.
     fn get_meetings(&self) -> String {
         let meeting_ids = match self.note_repository.list_meeting_ids() {
             Ok(meeting_ids) => meeting_ids,
@@ -961,24 +974,32 @@ impl FfiRuntime {
         };
         let mut serialized_meetings = Vec::with_capacity(meeting_ids.len());
         for meeting_id in meeting_ids {
-            match self.note_repository.load_meeting_metadata(&meeting_id) {
-                Ok(Some(meeting_metadata)) => {
-                    serialized_meetings.push(meeting_summary_json(&meeting_metadata));
+            let meeting_metadata = match self.note_repository.load_meeting_metadata(&meeting_id) {
+                Ok(Some(meeting_metadata)) => meeting_metadata,
+                Ok(None) => continue,
+                Err(error) => return export_error_json("list_failed", &error.to_string()),
+            };
+            match self.note_repository.load_transcript_segments(&meeting_id) {
+                Ok(segments) => {
+                    serialized_meetings.push(meeting_summary_json(&meeting_metadata, &segments));
                 }
-                Ok(None) => {}
                 Err(error) => return export_error_json("list_failed", &error.to_string()),
             }
         }
         serde_json::Value::Array(serialized_meetings).to_string()
     }
 
-    /// Describes one meeting with its display title and flat transcript as JSON.
+    /// Describes one meeting with its display title, duration, segments, and flat transcript.
     ///
     /// Inputs: A non-blank `meeting_id`.
-    /// Outputs: `{"meeting_id","title","created_at","transcript"}` (`transcript` is null until
-    /// one is stored), or `{"ok":false,"error_code","error"}` where `error_code` is
-    /// `invalid_argument`, `meeting_not_found`, or `load_failed`.
-    /// Side effects: Reads SQLite.
+    /// Outputs: `{"meeting_id","title","created_at","duration_ms","transcript","segments"}`, where
+    /// `transcript` is null until a flat transcript is stored and `segments` is
+    /// `[{"start_time_ms","end_time_ms","speaker","text"}]` in timeline order (`speaker` is the
+    /// voice-store name, `Unknown speaker`, or `Unattributed`, as in exports); or
+    /// `{"ok":false,"error_code","error"}` where `error_code` is `invalid_argument`,
+    /// `meeting_not_found`, or `load_failed`.
+    /// Side effects: Reads SQLite, including speaker names from the voice store; never returns
+    /// embeddings.
     fn get_meeting(&self, meeting_id: &str) -> String {
         if meeting_id.trim().is_empty() {
             return export_error_json("invalid_argument", "meeting_id must not be empty");
@@ -1001,10 +1022,45 @@ impl FfiRuntime {
             Ok(transcript) => transcript,
             Err(error) => return export_error_json("load_failed", &error.to_string()),
         };
-        let mut meeting_json = meeting_summary_json(&meeting_metadata);
+        let segments = match self
+            .note_repository
+            .load_transcript_segments(&typed_meeting_id)
+        {
+            Ok(segments) => segments,
+            Err(error) => return export_error_json("load_failed", &error.to_string()),
+        };
+        let speaker_names: HashMap<Uuid, String> = match self
+            .voice_identity_manager
+            .vector_database()
+            .list_speaker_identities()
+        {
+            Ok(identities) => identities
+                .into_iter()
+                .map(|identity| (identity.identity_id(), identity.display_name().to_owned()))
+                .collect(),
+            Err(error) => return export_error_json("load_failed", &error.to_string()),
+        };
+        let mut meeting_json = meeting_summary_json(&meeting_metadata, &segments);
         meeting_json["transcript"] = transcript
             .map(|transcript| serde_json::Value::from(transcript.content()))
             .unwrap_or(serde_json::Value::Null);
+        meeting_json["segments"] = segments
+            .iter()
+            .map(|segment| {
+                let speaker = match segment.speaker_identity_id() {
+                    Some(identity_id) => speaker_names
+                        .get(&identity_id)
+                        .map_or(UNKNOWN_SPEAKER_LABEL, String::as_str),
+                    None => UNATTRIBUTED_SPEAKER_LABEL,
+                };
+                serde_json::json!({
+                    "start_time_ms": segment.start_time_ms(),
+                    "end_time_ms": segment.end_time_ms(),
+                    "speaker": speaker,
+                    "text": segment.text(),
+                })
+            })
+            .collect();
         meeting_json.to_string()
     }
 
@@ -1735,10 +1791,10 @@ mod ffi_contract_tests {
     use crate::{
         application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
         domain::models::{
-            DeviceId, MeetingId, MeetingTitle, TaskMetrics, TaskType, TranscriptSegment,
-            UnassignedVoiceClip,
+            DeviceId, MeetingId, MeetingTitle, SpeakerIdentity, TaskMetrics, TaskType,
+            TranscriptSegment, UnassignedVoiceClip,
         },
-        ports::{storage::NoteRepository, telemetry::MetricsRepository},
+        ports::{storage::NoteRepository, telemetry::MetricsRepository, voice::VoiceVectorDB},
     };
 
     /// Builds a runtime backed by in-memory SQLite exporting into a unique temp directory.
@@ -2272,6 +2328,7 @@ mod ffi_contract_tests {
             ffi_runtime.start_recording_titled(Some(MeetingId::new("ffi-titled")), Some(title)),
             FFI_SUCCESS
         );
+        assert_eq!(ffi_runtime.push_audio_pcm(vec![100; 32_000]), FFI_SUCCESS);
         assert_eq!(ffi_runtime.stop_recording(), FFI_SUCCESS);
         let meetings = parse_response(&ffi_runtime.get_meetings());
         let titled_meeting = parse_response(&ffi_runtime.get_meeting("ffi-titled"));
@@ -2298,8 +2355,75 @@ mod ffi_contract_tests {
         assert_eq!(titled_meeting["meeting_id"], "ffi-titled");
         assert_eq!(titled_meeting["title"], "Project Sync");
         assert_eq!(titled_meeting["transcript"], serde_json::Value::Null);
+        assert_eq!(titled_meeting["duration_ms"], 2_000);
+        assert_eq!(
+            titled_meeting["segments"],
+            serde_json::json!([{
+                "start_time_ms": 0,
+                "end_time_ms": 2_000,
+                "speaker": "Unattributed",
+                "text": "transcribed chunk",
+            }])
+        );
+        let untitled_summary = meetings
+            .as_array()
+            .and_then(|listed| {
+                listed
+                    .iter()
+                    .find(|meeting| meeting["meeting_id"] == "ffi-untitled")
+            })
+            .unwrap_or_else(|| panic!("the untitled meeting must be listed: {meetings}"));
+        assert_eq!(untitled_summary["duration_ms"], 0);
         assert_eq!(missing_meeting["ok"], false);
         assert_eq!(missing_meeting["error_code"], "meeting_not_found");
+    }
+
+    /// Verifies meeting detail segments name known speakers from the voice store and label
+    /// identities the store no longer knows as unknown.
+    #[test]
+    fn meeting_detail_segments_resolve_speaker_names() {
+        let (ffi_runtime, export_directory) = export_runtime();
+        let meeting_id = MeetingId::new("ffi-speakers");
+        let alice_identity_id = uuid::Uuid::from_u128(0xA11CE);
+        ffi_runtime
+            .note_repository
+            .create_meeting(&meeting_id, &[1])
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        ffi_runtime
+            .voice_identity_manager
+            .vector_database()
+            .save_speaker_identity(&SpeakerIdentity::new(alice_identity_id, "Alice"))
+            .unwrap_or_else(|error| panic!("fixture identity must persist: {error}"));
+        ffi_runtime
+            .note_repository
+            .save_transcript_segments(
+                &meeting_id,
+                &[
+                    TranscriptSegment::new(
+                        meeting_id.clone(),
+                        0,
+                        1_500,
+                        Some(alice_identity_id),
+                        "Hello.",
+                    ),
+                    TranscriptSegment::new(
+                        meeting_id.clone(),
+                        1_500,
+                        4_000,
+                        Some(uuid::Uuid::from_u128(0xDEAD)),
+                        "Hi.",
+                    ),
+                ],
+            )
+            .unwrap_or_else(|error| panic!("fixture segments must persist: {error}"));
+
+        let meeting_detail = parse_response(&ffi_runtime.get_meeting("ffi-speakers"));
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert_eq!(meeting_detail["duration_ms"], 4_000);
+        assert_eq!(meeting_detail["segments"][0]["speaker"], "Alice");
+        assert_eq!(meeting_detail["segments"][1]["speaker"], "Unknown speaker");
+        assert_eq!(meeting_detail["segments"][1]["text"], "Hi.");
     }
 
     /// Verifies the titled-start C arguments: null means absent, blank IDs and invalid titles are
