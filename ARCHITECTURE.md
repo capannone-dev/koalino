@@ -62,6 +62,7 @@
  MeetingSession ──unknown voice──▶ application::UnknownSpeakerClusterer ──▶ NoteRepository
                                      cosine vs. meeting clusters             unknown_speaker_clusters
                                      > 0.70 join (running mean) / new        cluster_chunks
+ CLI / HTTP / FFI ─▶ application::cluster_review  (list summaries · name → identity, Issue #29)
  user assigns identity to cluster ─▶ assign_identity_to_cluster
                                      1 VoiceVectorDB.store_embedding × members (creates identity)
                                      2 relink transcript_segments where unknown_cluster_id = cluster

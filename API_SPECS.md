@@ -202,7 +202,8 @@ not saved.
 ## Linux CLI contract
 
 `note-taker` accepts `record start|stop|status`, `meetings list`, `meetings view <meeting-id>`,
-`voice list`, `voice assign <clip-uuid> <identity-uuid>`, `telemetry`,
+`voice list`, `voice assign <clip-uuid> <identity-uuid>`, `voice list-clusters <meeting-id>`,
+`voice assign-cluster <cluster-uuid> <identity-name>`, `telemetry`,
 `meetings export <meeting-id> --format <markdown|pdf|json> [--output <path>]`, and
 `meetings export-all --format <format> [--date-range <start>:<end>]` (see `core/cli/README.md`). It calls only the
 portable `AudioCapture`, repository, and `VoiceIdentityManager` boundaries. Voice assignment

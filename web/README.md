@@ -33,6 +33,5 @@ cloud because the local coding sandbox has no Node.js runtime.
   count, and posts the typed name to `POST /api/clusters/{id}/assign`. An assigned cluster is
   removed from the list.
 
-The current Axum gallery response deliberately withholds raw audio paths. The gallery renders an
-audio control only when a future API response supplies an `audio_url`; this avoids guessing or
-exposing local filesystem paths from the browser.
+Cluster responses deliberately carry no audio paths, so the web gallery has no playback. Local
+review clips can be played from the Flutter Voice Gallery, which receives local file paths over FFI.

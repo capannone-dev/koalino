@@ -346,3 +346,34 @@
   because the session rewrites the whole timeline per chunk.
 - Cluster and member embeddings follow the existing clip-embedding at-rest policy, which is
   unencrypted. AES-256-GCM needs a crypto crate, and adding one requires approval.
+
+## 2026-10-27 — Issue #29 cluster review interfaces
+
+- The CLI, HTTP, and FFI adapters share one use case, `application::cluster_review`, so name
+  validation and name-to-identity resolution live in one place. The clusterer itself is unchanged.
+- No port persists display names, and the CLI and FFI compose `InMemoryVoiceVectorDB`. "Creates
+  the identity (if new)" is therefore implemented as: reuse an identity whose
+  `list_speaker_identities` name matches (trimmed, ignoring case), else a fresh UUID that the
+  clusterer turns into an identity by enrolling variants. The typed name is echoed in every
+  response but not stored. Persisting names needs a port change and is tracked as follow-up work.
+- Added `impl NoteRepository for &T where T: ?Sized`, mirroring `VoiceVectorDB`, so services
+  accept the HTTP server's `dyn ServerRepository`. It replaces the FFI-local
+  `&SqliteNoteRepository` impl, which had silently used the default empty `list_meeting_ids`.
+- Unknown meetings list as an empty array rather than `404`/error on every interface, matching
+  `get_clusters_for_meeting`.
+- HTTP maps a blank name to `400`, an unknown cluster to `404`, and an already-resolved cluster to
+  `409`. FFI uses the matching `error_code` values in the same `{"ok":false,...}` shape as export.
+  The issue asked for a bare JSON array from `note_taker_get_unknown_clusters`, so success is an
+  array and failure is the error object. Dart distinguishes them by JSON type.
+- The FFI listing adds an optional `review_clip_path` so Flutter keeps sample playback. It writes
+  the clip on demand and deletes the files after assignment, per the raw-audio PII rule.
+- Flutter cluster calls run in `Isolate.run` from top-level functions that reopen the core library
+  in the isolate. The closures therefore capture only strings, and SQLite work stays off the UI
+  isolate.
+- Per the issue, the Flutter and web galleries replaced the clip and weak-match UI with clusters.
+  Clips not tied to a cluster (the clustering-failure fallback) are no longer shown there, though
+  their FFI and HTTP endpoints remain.
+- The requirements file was renamed to `REQUIREMENTS.md`.
+- Web CI had failed since #19 because vitest globals were disabled and jsdom lacks
+  `ResizeObserver`. Both were fixed. The repository has no Flutter CI workflow, so Dart changes are
+  verified only where a Flutter SDK is available.

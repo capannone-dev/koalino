@@ -178,3 +178,15 @@ old per-chunk clip. `assign_identity_to_cluster` enrolls every member embedding 
 cluster's segments, marks the cluster resolved, and deletes its review audio. The SQLite adapter
 stores `unknown_speaker_clusters` and `cluster_chunks` and migrates older databases with the two
 new link columns. Nothing yet exposes cluster assignment through the CLI, HTTP, or FFI.
+
+Issue #29 exposes cluster review to users. `application/cluster_review.rs` is the single use case
+for the CLI (`voice list-clusters`, `voice assign-cluster`), HTTP
+(`GET /api/meetings/{id}/unknown-clusters`, `POST /api/clusters/{id}/assign`), and FFI
+(`note_taker_get_unknown_clusters`, `note_taker_assign_cluster`). It calls the clusterer's
+`get_clusters_for_meeting` and `assign_identity_to_cluster` unchanged. Listing returns
+embedding-free summaries. Assignment rejects blank names, reuses an identity whose name matches
+(trimmed, ignoring case), and otherwise creates a new identity UUID. No port persists display names
+yet, so a new identity's name is returned but not stored. The FFI listing materializes each
+cluster's review clip for playback and deletes those files after assignment. The Flutter and web
+Voice Galleries now show cluster cards with a name field and an Assign button instead of individual
+clips. `NoteRepository` gained a `&T` forwarding impl so services accept the server's `dyn` port.

@@ -159,3 +159,22 @@ enrolling the cluster's embeddings. Display names are not persisted yet (tracked
 **Partial failures.** The assignment steps are not one transaction across ports. Variants are
 stored first. If saving segments or resolving fails, a retry re-stores variants, which only adds
 duplicate acoustic variants. A cluster is never marked resolved before its segments are relinked.
+
+## Cluster review
+
+`cluster_review.rs` is the one use case behind the CLI (`voice list-clusters`,
+`voice assign-cluster`), HTTP (`GET /api/meetings/{id}/unknown-clusters`,
+`POST /api/clusters/{id}/assign`), and FFI (`note_taker_get_unknown_clusters`,
+`note_taker_assign_cluster`) commands. Those driving adapters only parse and format.
+
+- `list_unknown_clusters` calls `get_clusters_for_meeting`. It returns `UnknownClusterSummary`
+  values (ID, meeting, total duration, chunk count, creation time) and drops the biometric
+  representative vector.
+- `assign_cluster_to_named_identity` trims the name and rejects a blank one before writing
+  anything. A name matching an identity from `VoiceVectorDB::list_speaker_identities` (trimmed,
+  ignoring case) reuses that identity. Any other name gets a fresh UUID. It then calls
+  `assign_identity_to_cluster` and returns a `NamedClusterAssignment`.
+
+Both functions accept unsized (`dyn`) ports, as the HTTP server holds them, through the
+`&T` forwarding impls of `NoteRepository` and `VoiceVectorDB`. Because display names are not
+persisted, a freshly created identity's name lasts only as long as the response.
