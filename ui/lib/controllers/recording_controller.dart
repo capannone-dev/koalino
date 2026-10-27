@@ -28,6 +28,7 @@ final class RecordingController extends ChangeNotifier {
   final RecordingBridge _recordingBridge;
   RecordingUiState _state = RecordingUiState.idle;
   String? _errorMessage;
+  String? _activeTitle;
 
   /// Returns the state that presentation widgets should render.
   ///
@@ -43,23 +44,32 @@ final class RecordingController extends ChangeNotifier {
   /// Side effects: None.
   String? get errorMessage => _errorMessage;
 
-  /// Requests that the Rust core start a recording session.
+  /// Returns the title of the recording in progress, or `null` when untitled or not recording.
+  String? get activeTitle => _activeTitle;
+
+  /// Requests that the Rust core start a recording session, optionally titled.
   ///
-  /// Inputs: None; duplicate requests while a request is pending or active are ignored.
+  /// Inputs: `title` is user text; it is trimmed, and a blank title becomes `null` so Rust
+  /// applies its dated fallback. Duplicate requests while one is pending or active are ignored.
   /// Outputs: Completes once the bridge reports whether the lifecycle command succeeded.
   /// Side effects: Invokes the FFI bridge, updates UI state, and notifies listening widgets.
-  Future<void> startRecording() async {
+  Future<void> startRecording({String? title}) async {
     if (_state != RecordingUiState.idle) {
       return;
     }
 
+    final String? trimmedTitle = title?.trim();
+    final String? requestedTitle =
+        trimmedTitle == null || trimmedTitle.isEmpty ? null : trimmedTitle;
     _state = RecordingUiState.starting;
     _errorMessage = null;
     notifyListeners();
 
-    final bool didStart = await _recordingBridge.startRecording();
+    final bool didStart =
+        await _recordingBridge.startRecordingWithTitle(requestedTitle);
     if (didStart) {
       _state = RecordingUiState.recording;
+      _activeTitle = requestedTitle;
     } else {
       _state = RecordingUiState.idle;
       _errorMessage = 'Unable to start recording';

@@ -14,6 +14,15 @@ abstract interface class RecordingBridge {
   /// Side effects: May transition a Rust-owned audio session to recording.
   Future<bool> startRecording();
 
+  /// Requests a recording start with an optional meeting title through the Rust core.
+  ///
+  /// Inputs: `title` is the meeting title, or `null` (or blank) for an untitled meeting, which
+  /// Rust shows as `Meeting YYYY-MM-DD HH:MM UTC`.
+  /// Outputs: `true` when Rust accepted the request; otherwise `false`, including for a title
+  /// Rust rejects (over 200 characters or containing control characters).
+  /// Side effects: May start a Rust-owned recording into a new meeting and store its title.
+  Future<bool> startRecordingWithTitle(String? title);
+
   /// Sets the Rust tracing filter without exposing Rust logging types to Flutter.
   ///
   /// Inputs: `filterDirective` must be a valid, non-empty tracing filter directive.
@@ -35,6 +44,10 @@ final class RustRecordingBridge implements RecordingBridge {
         .lookupFunction<_NativeStartRecording, _DartStartRecording>(
       'note_taker_start_recording',
     );
+    _startRecordingWithTitle = _dynamicLibrary.lookupFunction<
+        _NativeStartRecordingWithTitle, _DartStartRecordingWithTitle>(
+      'note_taker_start_recording_with_title',
+    );
     _setLogLevel =
         _dynamicLibrary.lookupFunction<_NativeSetLogLevel, _DartSetLogLevel>(
       'note_taker_set_log_level',
@@ -43,6 +56,7 @@ final class RustRecordingBridge implements RecordingBridge {
 
   final DynamicLibrary _dynamicLibrary;
   late final _DartStartRecording _startRecording;
+  late final _DartStartRecordingWithTitle _startRecordingWithTitle;
   late final _DartSetLogLevel _setLogLevel;
 
   /// Requests a recording lifecycle transition through the C ABI.
@@ -52,6 +66,27 @@ final class RustRecordingBridge implements RecordingBridge {
   /// Side effects: Invokes `note_taker_start_recording` in the loaded Rust library.
   @override
   Future<bool> startRecording() async => _startRecording() == _ffiSuccess;
+
+  /// Requests a titled recording start through the C ABI.
+  ///
+  /// Inputs: `title` is trimmed; a null or blank title is sent as a null pointer, because Rust
+  /// rejects an empty string. The meeting ID is always null, so Rust generates one.
+  /// Outputs: `true` only for the Rust success status code.
+  /// Side effects: Allocates a temporary UTF-8 buffer and invokes
+  /// `note_taker_start_recording_with_title`, which may load a model on first use.
+  @override
+  Future<bool> startRecordingWithTitle(String? title) async {
+    final String? trimmedTitle = title?.trim();
+    if (trimmedTitle == null || trimmedTitle.isEmpty) {
+      return _startRecordingWithTitle(nullptr, nullptr) == _ffiSuccess;
+    }
+    final Pointer<Utf8> nativeTitle = trimmedTitle.toNativeUtf8();
+    try {
+      return _startRecordingWithTitle(nullptr, nativeTitle) == _ffiSuccess;
+    } finally {
+      calloc.free(nativeTitle);
+    }
+  }
 
   /// Requests a tracing filter change through the C ABI.
   ///
@@ -94,6 +129,14 @@ typedef _NativeStartRecording = Int32 Function();
 
 /// Represents the Dart callable form of `note_taker_start_recording`.
 typedef _DartStartRecording = int Function();
+
+/// Represents `int32_t note_taker_start_recording_with_title(const char *, const char *)`.
+typedef _NativeStartRecordingWithTitle = Int32 Function(
+    Pointer<Utf8> meetingId, Pointer<Utf8> title);
+
+/// Represents the Dart callable form of `note_taker_start_recording_with_title`.
+typedef _DartStartRecordingWithTitle = int Function(
+    Pointer<Utf8> meetingId, Pointer<Utf8> title);
 
 /// Represents `int32_t note_taker_set_log_level(const char *)` in the Rust C ABI.
 typedef _NativeSetLogLevel = Int32 Function(Pointer<Utf8> filterDirective);
