@@ -22,9 +22,10 @@ use crate::{
         recording_manager::{RecordingManager, RecordingManagerError, RecordingSummary},
     },
     domain::{
-        errors::AudioError,
+        errors::{AudioError, StorageError},
         models::{
-            AudioChunk, AudioConfig, AudioRecording, AudioState, DeviceId, MeetingId, RecordingId,
+            AudioChunk, AudioConfig, AudioRecording, AudioState, DeviceId, MeetingId, MeetingTitle,
+            RecordingId,
         },
     },
     ports::audio::AudioCapture,
@@ -61,6 +62,9 @@ pub enum RecordingControlError {
     /// The pipeline worker rejected the request.
     #[error(transparent)]
     Pipeline(#[from] RecordingManagerError),
+    /// The meeting title could not be stored.
+    #[error("unable to store the meeting title: {0}")]
+    Storage(#[from] StorageError),
 }
 
 /// Capture state of the recording in progress.
@@ -150,16 +154,33 @@ impl RecordingController {
             .map(|capture| &capture.meeting_id)
     }
 
-    /// Starts a new recording, or resumes a paused or interrupted one.
+    /// Starts a new untitled recording, or resumes a paused or interrupted one.
     ///
     /// Inputs: `meeting_id` for a new recording (`None` generates `meeting-<uuid>`); ignored when
     /// resuming.
-    /// Outputs: The recorded meeting, `AlreadyRecording`, or an audio/pipeline error.
-    /// Side effects: Opens a pipeline session (creating the meeting if needed) and reads the
-    /// meeting's timeline so new segments follow existing ones; blocks until the worker answers.
+    /// Outputs: See `start_titled`.
+    /// Side effects: See `start_titled`; an existing meeting keeps its title.
     pub fn start(
         &mut self,
         meeting_id: Option<MeetingId>,
+    ) -> Result<MeetingId, RecordingControlError> {
+        self.start_titled(meeting_id, None)
+    }
+
+    /// Starts a new recording with an optional title, or resumes a paused or interrupted one.
+    ///
+    /// Inputs: `meeting_id` for a new recording (`None` generates `meeting-<uuid>`) and `title`
+    /// (`None` keeps the meeting's current title, which for a new meeting means untitled); both
+    /// are ignored when resuming.
+    /// Outputs: The recorded meeting, `AlreadyRecording`, or an audio/pipeline/storage error.
+    /// Side effects: Opens a pipeline session (creating the meeting if needed), stores `title` on
+    /// the meeting (replacing an earlier one), and reads the meeting's timeline so new segments
+    /// follow existing ones; blocks until the worker answers. A failed title write ends the
+    /// session again.
+    pub fn start_titled(
+        &mut self,
+        meeting_id: Option<MeetingId>,
+        title: Option<MeetingTitle>,
     ) -> Result<MeetingId, RecordingControlError> {
         if let Some(capture) = self.active_capture.as_mut() {
             if capture.local_recorder.state() == AudioState::Recording {
@@ -179,6 +200,12 @@ impl RecordingController {
             ChunkingMode::TimeBased => VadChunker::time_based(VadConfig::english()),
         };
         self.recording_manager.begin_recording(meeting_id.clone())?;
+        if let Some(title) = title
+            && let Err(error) = self.save_meeting_title(&meeting_id, title)
+        {
+            let _ = self.recording_manager.end_recording();
+            return Err(error);
+        }
         if let Err(error) = local_recorder.start() {
             let _ = self.recording_manager.end_recording();
             return Err(error.into());
@@ -315,6 +342,24 @@ impl RecordingController {
         }
         self.inactive_state = AudioState::Stopped;
         Ok(summary?)
+    }
+
+    /// Stores `title` on an existing meeting through the worker's repository.
+    ///
+    /// Inputs: A meeting the worker has already created and its validated title.
+    /// Outputs: `Ok(())`, a storage error, or `WorkerStopped`.
+    /// Side effects: Writes the title on the worker thread; the title is never logged.
+    fn save_meeting_title(
+        &self,
+        meeting_id: &MeetingId,
+        title: MeetingTitle,
+    ) -> Result<(), RecordingControlError> {
+        let titled_meeting_id = meeting_id.clone();
+        self.recording_manager
+            .with_note_repository(move |note_repository| {
+                note_repository.save_meeting_title(&titled_meeting_id, &title)
+            })??;
+        Ok(())
     }
 
     /// Finds where a meeting's existing timeline ends, so a new recording continues after it.

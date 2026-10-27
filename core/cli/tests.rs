@@ -10,8 +10,8 @@ use clap::Parser;
 use uuid::Uuid;
 
 use super::{
-    Cli, CliCommand, CliService, CoreCliService, MeetingArgs, MeetingCommand, RecordArgs,
-    RecordCommand, RecordingControl, VoiceArgs, VoiceCommand, dispatch,
+    Cli, CliCommand, CliService, CoreCliService, MeetingArgs, MeetingCommand, MeetingListRow,
+    RecordArgs, RecordCommand, RecordingControl, VoiceArgs, VoiceCommand, dispatch,
 };
 use crate::{
     adapters::{
@@ -23,7 +23,9 @@ use crate::{
     },
     application::export_manager::ExportWriter,
     application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
-    domain::models::{DeviceId, ExportFormat, ExportOptions, MeetingId, TranscriptSegment},
+    domain::models::{
+        DeviceId, ExportFormat, ExportOptions, MeetingId, MeetingTitle, TranscriptSegment,
+    },
     ports::storage::NoteRepository,
 };
 
@@ -41,15 +43,20 @@ struct MockCliService {
     /// `(cluster_id, identity_name)` pairs passed to `assign_cluster`.
     assigned_clusters: RefCell<Vec<(Uuid, String)>>,
     export_requests: RefCell<Vec<RecordedExportRequest>>,
-    /// `(meeting_id, input)` pairs passed to `start_recording`.
-    recording_requests: Vec<(Option<String>, PathBuf)>,
+    /// `(meeting_id, title, input)` triples passed to `start_recording`.
+    recording_requests: Vec<(Option<String>, Option<String>, PathBuf)>,
 }
 
 /// Rejects every recording command; for service tests that never record.
 struct NoRecordingControl;
 
 impl RecordingControl for NoRecordingControl {
-    fn record(&mut self, _meeting_id: Option<MeetingId>, _input: &Path) -> Result<String, String> {
+    fn record(
+        &mut self,
+        _meeting_id: Option<MeetingId>,
+        _title: Option<MeetingTitle>,
+        _input: &Path,
+    ) -> Result<String, String> {
         Err(String::from("recording is not available in this test"))
     }
     fn request_stop(&mut self) -> Result<String, String> {
@@ -64,10 +71,14 @@ impl CliService for MockCliService {
     fn start_recording(
         &mut self,
         meeting_id: Option<&str>,
+        title: Option<&str>,
         input: &Path,
     ) -> Result<String, String> {
-        self.recording_requests
-            .push((meeting_id.map(str::to_owned), input.to_path_buf()));
+        self.recording_requests.push((
+            meeting_id.map(str::to_owned),
+            title.map(str::to_owned),
+            input.to_path_buf(),
+        ));
         Ok(String::from("recording started"))
     }
     fn stop_recording(&mut self) -> Result<String, String> {
@@ -76,12 +87,13 @@ impl CliService for MockCliService {
     fn recording_status(&self) -> Result<String, String> {
         Ok(String::from("idle"))
     }
-    fn list_meetings(&self) -> Result<Vec<(String, String, String)>, String> {
-        Ok(vec![(
-            String::from("meeting-rome"),
-            String::from("2026-10-25"),
-            String::from("unknown"),
-        )])
+    fn list_meetings(&self) -> Result<Vec<MeetingListRow>, String> {
+        Ok(vec![MeetingListRow {
+            meeting_id: String::from("meeting-rome"),
+            title: String::from("Rome offsite"),
+            created_at: String::from("2026-10-25 09:00 UTC"),
+            duration: String::from("unknown"),
+        }])
     }
     fn view_meeting(&self, _meeting_id: &str) -> Result<String, String> {
         Ok(String::new())
@@ -144,13 +156,21 @@ fn parses_record_start_command() {
         "standup.wav",
         "--meeting-id",
         "standup",
+        "--title",
+        "Daily standup",
     ])
     .unwrap_or_else(|error| panic!("record start must parse: {error}"));
     match parsed_cli.command {
         CliCommand::Record(RecordArgs {
-            command: RecordCommand::Start { meeting_id, input },
+            command:
+                RecordCommand::Start {
+                    meeting_id,
+                    title,
+                    input,
+                },
         }) => {
             assert_eq!(meeting_id.as_deref(), Some("standup"));
+            assert_eq!(title.as_deref(), Some("Daily standup"));
             assert_eq!(input, PathBuf::from("standup.wav"));
         }
         other => panic!("unexpected command: {other:?}"),
@@ -163,21 +183,57 @@ fn record_start_requires_an_input() {
     assert!(Cli::try_parse_from(["note-taker", "record", "start"]).is_err());
 }
 
-/// Verifies `record start` forwards its meeting and input to the service.
+/// Verifies `record start` forwards its meeting, optional title, and input to the service.
 #[test]
-fn dispatches_record_start_with_meeting_and_input() {
+fn dispatches_record_start_with_meeting_title_and_input() {
     let mut cli_service = MockCliService::default();
-    let parsed_cli = Cli::try_parse_from(["note-taker", "record", "start", "--input", "-"])
-        .unwrap_or_else(|error| panic!("record start must parse: {error}"));
+    for arguments in [
+        vec!["note-taker", "record", "start", "--input", "-"],
+        vec![
+            "note-taker",
+            "record",
+            "start",
+            "--title",
+            "Test",
+            "--input",
+            "-",
+        ],
+    ] {
+        let parsed_cli = Cli::try_parse_from(arguments)
+            .unwrap_or_else(|error| panic!("record start must parse: {error}"));
+        let output = dispatch(parsed_cli.command, &mut cli_service)
+            .unwrap_or_else(|error| panic!("record start must dispatch: {error}"));
+        assert_eq!(output, "recording started");
+    }
 
-    let output = dispatch(parsed_cli.command, &mut cli_service)
-        .unwrap_or_else(|error| panic!("record start must dispatch: {error}"));
-
-    assert_eq!(output, "recording started");
     assert_eq!(
         cli_service.recording_requests,
-        vec![(None, PathBuf::from("-"))]
+        vec![
+            (None, None, PathBuf::from("-")),
+            (None, Some(String::from("Test")), PathBuf::from("-")),
+        ]
     );
+}
+
+/// Verifies the core service rejects an invalid title before any recording starts.
+#[test]
+fn core_service_rejects_an_invalid_recording_title() {
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    let mut cli_service = CoreCliService::new(
+        NoRecordingControl,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    );
+
+    let error = cli_service
+        .start_recording(None, Some("  "), Path::new("-"))
+        .expect_err("a blank title must be rejected");
+
+    assert_eq!(error, "--title: meeting title must not be blank");
 }
 
 /// Verifies the CLI requires both stable UUID arguments when manually resolving a voice clip.
@@ -226,8 +282,8 @@ fn meetings_list_formats_mocked_service_rows_as_a_table() {
     )
     .unwrap_or_else(|error| panic!("meeting list must dispatch: {error}"));
 
-    assert!(output.contains("ID | Date | Duration"));
-    assert!(output.contains("meeting-rome | 2026-10-25 | unknown"));
+    assert!(output.contains("ID | Title | Date | Duration"));
+    assert!(output.contains("meeting-rome | Rome offsite | 2026-10-25 09:00 UTC | unknown"));
 }
 
 /// Verifies voice assignment maps parsed UUIDs directly to the injected application service.
@@ -284,6 +340,97 @@ fn meetings_list_reads_an_in_memory_sqlite_fixture_without_cli_sql() {
     .unwrap_or_else(|error| panic!("meeting list must dispatch: {error}"));
 
     assert!(output.contains("meeting-in-memory"));
+}
+
+/// Verifies `meetings list` shows stored titles, dated fallbacks, creation dates, and durations,
+/// and `meetings view` puts the title above everything else.
+#[test]
+fn core_service_lists_and_views_meeting_titles() {
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    let titled_meeting_id = MeetingId::new("meeting-titled");
+    let untitled_meeting_id = MeetingId::new("meeting-untitled");
+    for meeting_id in [&titled_meeting_id, &untitled_meeting_id] {
+        repository
+            .create_meeting(meeting_id, &[1])
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+    }
+    repository
+        .save_meeting_title(
+            &titled_meeting_id,
+            &MeetingTitle::parse("Project Sync")
+                .unwrap_or_else(|error| panic!("title must parse: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("title must persist: {error}"));
+    repository
+        .save_transcript_segments(
+            &titled_meeting_id,
+            &[TranscriptSegment::new(
+                titled_meeting_id.clone(),
+                0,
+                65_000,
+                None,
+                "Kick-off.",
+            )],
+        )
+        .unwrap_or_else(|error| panic!("segments must persist: {error}"));
+    let created_date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let mut cli_service = CoreCliService::new(
+        NoRecordingControl,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    );
+
+    let list_output = dispatch(
+        CliCommand::Meetings(MeetingArgs {
+            command: MeetingCommand::List,
+        }),
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("meeting list must dispatch: {error}"));
+    let rows: Vec<Vec<&str>> = list_output
+        .lines()
+        .skip(1)
+        .map(|line| line.split(" | ").collect())
+        .collect();
+    let titled_row = rows
+        .iter()
+        .find(|row| row[0] == "meeting-titled")
+        .unwrap_or_else(|| panic!("titled meeting must be listed: {list_output}"));
+    let untitled_row = rows
+        .iter()
+        .find(|row| row[0] == "meeting-untitled")
+        .unwrap_or_else(|| panic!("untitled meeting must be listed: {list_output}"));
+    assert_eq!(titled_row[1], "Project Sync");
+    assert!(titled_row[2].starts_with(&created_date), "{list_output}");
+    assert_eq!(titled_row[3], "1:05");
+    assert!(
+        untitled_row[1].starts_with(&format!("Meeting {created_date}")),
+        "{list_output}"
+    );
+    assert_eq!(untitled_row[3], "0:00");
+
+    let view_output = dispatch(
+        CliCommand::Meetings(MeetingArgs {
+            command: MeetingCommand::View {
+                meeting_id: String::from("meeting-titled"),
+            },
+        }),
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("meeting view must dispatch: {error}"));
+    let mut view_lines = view_output.lines();
+    assert_eq!(view_lines.next(), Some("Project Sync"));
+    assert_eq!(view_lines.next(), Some("============"));
+    assert_eq!(view_lines.next(), Some("Meeting: meeting-titled"));
+
+    let missing_error = cli_service
+        .view_meeting("meeting-missing")
+        .expect_err("an unknown meeting must be reported");
+    assert_eq!(missing_error, "meeting meeting-missing does not exist");
 }
 
 /// Parses `meetings export` arguments through the shared clap definition.

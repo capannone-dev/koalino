@@ -23,8 +23,11 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    adapters::audio::pcm_input::PcmInput, application::recording_manager::RecordingSummary,
-    cli::RecordingControl, domain::models::MeetingId, recording_controller::RecordingController,
+    adapters::audio::pcm_input::PcmInput,
+    application::recording_manager::RecordingSummary,
+    cli::RecordingControl,
+    domain::models::{MeetingId, MeetingTitle},
+    recording_controller::RecordingController,
 };
 
 #[cfg(test)]
@@ -327,12 +330,17 @@ impl PipelineRecordingControl {
 impl RecordingControl for PipelineRecordingControl {
     /// Records `input` into a meeting in the foreground.
     ///
-    /// Inputs: The meeting (`None` generates `meeting-<uuid>`) and a WAV path or `-` for raw
-    /// stdin PCM.
+    /// Inputs: The meeting (`None` generates `meeting-<uuid>`), an optional title (`None` keeps
+    /// the meeting's current title), and a WAV path or `-` for raw stdin PCM.
     /// Outputs: A summary once every chunk is transcribed, or a readable error.
-    /// Side effects: Holds the active file, composes the pipeline, persists segments, and prints
-    /// progress to stderr (never audio or transcript text).
-    fn record(&mut self, meeting_id: Option<MeetingId>, input: &Path) -> Result<String, String> {
+    /// Side effects: Holds the active file, composes the pipeline, stores the title, persists
+    /// segments, and prints progress to stderr (never audio or transcript text).
+    fn record(
+        &mut self,
+        meeting_id: Option<MeetingId>,
+        title: Option<MeetingTitle>,
+        input: &Path,
+    ) -> Result<String, String> {
         let mut pcm_input = open_input(input)?;
         let meeting_id =
             meeting_id.unwrap_or_else(|| MeetingId::new(format!("meeting-{}", Uuid::new_v4())));
@@ -341,21 +349,25 @@ impl RecordingControl for PipelineRecordingControl {
             .acquire(&meeting_id)
             .map_err(|error| error.to_string())?;
         let mut controller = (self.controller_builder)().map_err(|error| format!("{error:#}"))?;
+        let title_label = title
+            .as_ref()
+            .map(|title| format!(" \"{}\"", title.as_str()))
+            .unwrap_or_default();
         controller
-            .start(Some(meeting_id.clone()))
+            .start_titled(Some(meeting_id.clone()), title)
             .map_err(|error| error.to_string())?;
         if self.handles_ctrl_c {
             self.install_ctrl_c_handler();
         }
         eprintln!(
-            "Recording into meeting {}. Press Ctrl+C or run `note-taker record stop` to finish.",
+            "Recording into meeting {}{title_label}. Press Ctrl+C or run `note-taker record stop` to finish.",
             meeting_id.as_str()
         );
         let capture_result = self.capture_until_stopped(&mut controller, &mut pcm_input);
         eprintln!("Waiting for the remaining audio to be transcribed…");
         let summary = controller.stop().map_err(|error| error.to_string())?;
         capture_result?;
-        Ok(format_summary(&summary))
+        Ok(format_summary(&summary, &title_label))
     }
 
     /// Stops the recording running in another process (or terminal).
@@ -401,9 +413,13 @@ fn open_input(input: &Path) -> Result<PcmInput, String> {
 }
 
 /// Formats a recording summary for the terminal.
-fn format_summary(summary: &RecordingSummary) -> String {
+///
+/// Inputs: The summary and a ` "<title>"` label (empty for an untitled start).
+/// Outputs: One summary line.
+/// Side effects: None.
+fn format_summary(summary: &RecordingSummary, title_label: &str) -> String {
     format!(
-        "recording of meeting {} finished: {} chunks transcribed, {} failed, {} segments saved",
+        "recording of meeting {}{title_label} finished: {} chunks transcribed, {} failed, {} segments saved",
         summary.meeting_id().as_str(),
         summary.processed_chunk_count(),
         summary.failed_chunk_count(),

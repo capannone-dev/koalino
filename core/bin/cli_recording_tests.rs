@@ -9,18 +9,24 @@ use std::{
     time::Duration,
 };
 
+use clap::Parser;
 use uuid::Uuid;
 
 use crate::{
     adapters::{
         audio::chunk_audio_store::{ChunkAudioStore, encode_wav_pcm16},
-        storage::sqlite_adapter::SqliteNoteRepository,
+        export::default_exporters,
+        storage::{
+            in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
+        },
     },
     application::{
-        crypto::voice_encryptor::ephemeral_cipher, pipeline::pipeline_factory::PipelineFactory,
-        recording_manager::RecordingManager,
+        crypto::voice_encryptor::ephemeral_cipher, export_manager::ExportWriter,
+        pipeline::pipeline_factory::PipelineFactory, recording_manager::RecordingManager,
     },
-    cli::RecordingControl,
+    cli::{
+        Cli, CliCommand, CoreCliService, MeetingArgs, MeetingCommand, RecordingControl, dispatch,
+    },
     domain::{
         errors::TranscriptionError,
         models::{AudioRecording, DeviceId, MeetingId, Transcript, TranscriptionContext},
@@ -182,7 +188,7 @@ fn recording_a_wav_file_transcribes_every_chunk() {
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
     let output = control
-        .record(Some(MeetingId::new("wav-meeting")), &wav_path)
+        .record(Some(MeetingId::new("wav-meeting")), None, &wav_path)
         .unwrap_or_else(|error| panic!("recording must succeed: {error}"));
 
     assert!(output.contains("wav-meeting"), "{output}");
@@ -201,7 +207,7 @@ fn an_interrupt_stops_the_recording_gracefully() {
     let mut control = recording_control(control_files.clone(), Arc::clone(&interrupt_requested));
 
     let output = control
-        .record(Some(MeetingId::new("interrupted")), &wav_path)
+        .record(Some(MeetingId::new("interrupted")), None, &wav_path)
         .unwrap_or_else(|error| panic!("recording must stop cleanly: {error}"));
 
     assert!(output.contains("0 chunks transcribed"), "{output}");
@@ -216,7 +222,7 @@ fn a_missing_input_is_reported() {
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
     let error = control
-        .record(None, &directory.join("missing.wav"))
+        .record(None, None, &directory.join("missing.wav"))
         .err()
         .unwrap_or_else(|| panic!("a missing file must fail"));
 
@@ -236,10 +242,89 @@ fn a_second_recording_is_refused() {
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
     let error = control
-        .record(None, &wav_path)
+        .record(None, None, &wav_path)
         .err()
         .unwrap_or_else(|| panic!("a concurrent recording must fail"));
 
     assert!(error.contains("already"), "{error}");
     let _ = fs::remove_dir_all(&directory);
+}
+
+/// Opens a file-backed repository, as the CLI binary and its recording worker each do.
+fn open_file_repository(database_path: &Path) -> anyhow::Result<SqliteNoteRepository> {
+    Ok(SqliteNoteRepository::open(
+        database_path,
+        DeviceId::new("cli-test"),
+        ephemeral_cipher(),
+    )?)
+}
+
+/// Verifies `record start --title "Test"` creates a meeting with that title, which
+/// `meetings list` then shows next to its generated ID.
+#[test]
+fn record_start_with_a_title_creates_a_titled_meeting() {
+    let (_, directory) = control_files_in_temp_directory();
+    let database_path = directory.join("notes.sqlite3");
+    let wav_path = write_wav(&directory, 1);
+    let worker_database_path = database_path.clone();
+    let recording_control = PipelineRecordingControl::new(
+        RecordingControlFiles::for_database(&database_path),
+        Box::new(move || {
+            let worker_database_path = worker_database_path.clone();
+            let recording_manager = RecordingManager::spawn(move || -> anyhow::Result<_> {
+                Ok(PipelineFactory::new(
+                    FixedTranscriptionEngine,
+                    open_file_repository(&worker_database_path)?,
+                ))
+            })?;
+            Ok(RecordingController::new(
+                recording_manager,
+                Arc::new(ChunkAudioStore::new()),
+                ChunkingMode::TimeBased,
+                DeviceId::new("cli-test"),
+            ))
+        }),
+    )
+    .with_interrupt_flag(Arc::new(AtomicBool::new(false)));
+    let repository = open_file_repository(&database_path)
+        .unwrap_or_else(|error| panic!("repository must open: {error}"));
+    let mut cli_service = CoreCliService::new(
+        recording_control,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), directory.clone()),
+    );
+    let wav_argument = wav_path.to_string_lossy().into_owned();
+    let parsed_cli = Cli::try_parse_from([
+        "note-taker",
+        "record",
+        "start",
+        "--title",
+        "Test",
+        "--input",
+        &wav_argument,
+    ])
+    .unwrap_or_else(|error| panic!("record start must parse: {error}"));
+
+    let record_output = dispatch(parsed_cli.command, &mut cli_service)
+        .unwrap_or_else(|error| panic!("recording must succeed: {error}"));
+    let list_output = dispatch(
+        CliCommand::Meetings(MeetingArgs {
+            command: MeetingCommand::List,
+        }),
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("meeting list must succeed: {error}"));
+    drop(cli_service);
+    let _ = fs::remove_dir_all(&directory);
+
+    assert!(record_output.contains("\"Test\""), "{record_output}");
+    let meeting_rows: Vec<Vec<&str>> = list_output
+        .lines()
+        .skip(1)
+        .map(|line| line.split(" | ").collect())
+        .collect();
+    assert_eq!(meeting_rows.len(), 1, "{list_output}");
+    assert!(meeting_rows[0][0].starts_with("meeting-"), "{list_output}");
+    assert_eq!(meeting_rows[0][1], "Test");
 }

@@ -16,8 +16,8 @@ use crate::{
     domain::{
         errors::TranscriptionError,
         models::{
-            AudioRecording, AudioState, DeviceId, MeetingId, Transcript, TranscriptSegment,
-            TranscriptionContext,
+            AudioRecording, AudioState, DeviceId, MeetingId, MeetingTitle, Transcript,
+            TranscriptSegment, TranscriptionContext,
         },
     },
     ports::ai::TranscriptionEngine,
@@ -289,4 +289,69 @@ fn interruption_flushes_buffered_audio() {
         .map(|segment| (segment.start_time_ms(), segment.end_time_ms()))
         .collect();
     assert_eq!(bounds, vec![(0, 3_000), (3_000, 4_000)]);
+}
+
+/// Loads a meeting's stored title through the worker-owned repository.
+fn stored_title(controller: &RecordingController, meeting_id: &MeetingId) -> Option<String> {
+    let meeting_id = meeting_id.clone();
+    controller
+        .recording_manager()
+        .with_note_repository(move |note_repository| {
+            note_repository.load_meeting_metadata(&meeting_id)
+        })
+        .unwrap_or_else(|error| panic!("worker should answer: {error}"))
+        .unwrap_or_else(|error| panic!("metadata should load: {error}"))
+        .and_then(|metadata| metadata.title().map(|title| title.as_str().to_owned()))
+}
+
+/// Parses a fixture title.
+fn title(title_text: &str) -> MeetingTitle {
+    MeetingTitle::parse(title_text).unwrap_or_else(|error| panic!("title must parse: {error}"))
+}
+
+/// Verifies a titled start stores the title on the new meeting, an untitled start of an existing
+/// meeting keeps it, and a titled start of an existing meeting replaces it.
+#[test]
+fn a_titled_start_stores_the_meeting_title() {
+    let (mut controller, _chunk_audio_store) = controller_with(true, |_| {});
+    let meeting_id = controller
+        .start_titled(None, Some(title("Project Sync")))
+        .unwrap_or_else(|error| panic!("recording should start: {error}"));
+    assert_eq!(
+        stored_title(&controller, &meeting_id).as_deref(),
+        Some("Project Sync")
+    );
+    controller
+        .stop()
+        .unwrap_or_else(|error| panic!("recording should stop: {error}"));
+
+    controller
+        .start(Some(meeting_id.clone()))
+        .unwrap_or_else(|error| panic!("recording should restart: {error}"));
+    controller
+        .stop()
+        .unwrap_or_else(|error| panic!("recording should stop: {error}"));
+    assert_eq!(
+        stored_title(&controller, &meeting_id).as_deref(),
+        Some("Project Sync")
+    );
+
+    controller
+        .start_titled(Some(meeting_id.clone()), Some(title("Renamed Sync")))
+        .unwrap_or_else(|error| panic!("recording should restart: {error}"));
+    assert_eq!(
+        stored_title(&controller, &meeting_id).as_deref(),
+        Some("Renamed Sync")
+    );
+}
+
+/// Verifies an untitled start leaves the meeting untitled (it reads with the dated fallback).
+#[test]
+fn an_untitled_start_leaves_the_meeting_untitled() {
+    let (mut controller, _chunk_audio_store) = controller_with(true, |_| {});
+    let meeting_id = controller
+        .start(None)
+        .unwrap_or_else(|error| panic!("recording should start: {error}"));
+
+    assert_eq!(stored_title(&controller, &meeting_id), None);
 }
