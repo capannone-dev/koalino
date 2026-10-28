@@ -15,6 +15,27 @@ the next acknowledgement when required. After a locally persisted edit, `notify_
 broadcasts a fresh encrypted `SyncMessage`. The manager uses only `P2pNetwork` and
 `NoteRepository`, so its tests use mocks and never open sockets or SQLite files.
 
+`meeting_crdt.rs` owns the meeting document schema. The root map holds `note_text` and, since
+Issue #39, an optional `title` scalar string. `create_titled_meeting` and `set_meeting_title` write
+the CRDT first and then the SQLite `meetings.title` column, which is only a local projection kept
+for fast list and detail reads. Every merged peer change (`apply_sync_message`,
+`merge_remote_document`) projects the winning title back into SQLite.
+
+- **Conflicts:** `title` is an Automerge register, not `Text`. Concurrent renames resolve to the
+  operation with the highest Lamport counter, with ties broken by actor ID, so every peer
+  converges on the same whole title. A rename made after seeing another always wins.
+  Character-level `Text` merging was rejected because two concurrent renames would interleave into
+  a title nobody typed.
+- **Legacy documents:** a document without `title` syncs unchanged. Its meeting stays untitled and
+  shows the dated `display_title()` fallback, which is never written into the CRDT, because as a
+  real value it could beat a peer's real title.
+- **SQLite-only titles:** a title stored only in SQLite (Issue #35) is copied into a document with
+  no `title` key the first time a sync message is generated.
+- **Invalid peer values:** a value that is not a valid `MeetingTitle` is ignored. It is never
+  projected and never fails the sync.
+- **Cost:** a rename is one `put`; a no-op rename adds no change. Tests measure about 250 bytes for
+  the change-carrying message and 720 bytes for a whole fresh handshake.
+
 `file_sync_manager.rs` handles attachment references after CRDT persistence, records
 meeting-scoped serving authorization, and makes a best-effort content-addressed fetch only when a
 peer advertises the SHA-256 hash. It never imports libp2p or waits in the CRDT apply path. Explicit

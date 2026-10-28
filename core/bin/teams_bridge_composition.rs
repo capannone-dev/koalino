@@ -51,6 +51,7 @@ use crate::{
         },
     },
     application::{
+        meeting_crdt::MeetingCrdtService,
         recording_manager::{ExternalChunkRequest, RecordingManager, SharedIdentityMapper},
         teams_processor::TeamsIdentityMapper,
     },
@@ -482,8 +483,9 @@ where
     ///
     /// A title already stored (from an earlier metadata frame or set locally) is kept, so
     /// re-sent metadata never overwrites it. An empty or invalid Teams title is ignored.
-    /// Side effects: Reads and may write meeting metadata on the worker thread; never logs the
-    /// title. Failures are logged and do not affect media processing.
+    /// Side effects: Reads meeting metadata and may write the title into the CRDT document and its
+    /// SQLite projection (Issue #39) on the worker thread; never logs the title. Failures are
+    /// logged and do not affect media processing.
     fn store_title_if_untitled(&self, meeting: &BridgeMeeting) {
         let Ok(teams_title) = MeetingTitle::parse(meeting.title()) else {
             return;
@@ -495,7 +497,8 @@ where
             .with_note_repository(move |note_repository| {
                 match note_repository.load_meeting_metadata(&meeting_id)? {
                     Some(metadata) if metadata.title().is_none() => {
-                        note_repository.save_meeting_title(&meeting_id, &teams_title)
+                        MeetingCrdtService::new(note_repository)
+                            .set_meeting_title(&meeting_id, &teams_title)
                     }
                     _ => Ok(()),
                 }

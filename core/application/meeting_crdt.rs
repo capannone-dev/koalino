@@ -1,4 +1,15 @@
 //! Coordinates Automerge meeting documents through the domain-neutral storage port.
+//!
+//! Document schema (root map):
+//! - `note_text`: scalar string, the meeting's free-form notes.
+//! - `title` (Issue #39): optional scalar string holding a valid `MeetingTitle`. It is a
+//!   multi-value register: concurrent renames resolve to Automerge's deterministic winner (the
+//!   operation with the highest Lamport counter, ties broken by actor ID), and a rename made after
+//!   seeing another always wins. Documents written before Issue #39 have no `title` key and remain
+//!   valid; their meetings show the dated display fallback, which is never written to the CRDT.
+//!
+//! SQLite's `meetings.title` column is a local projection of the CRDT title, refreshed on every
+//! local rename and every merged peer change, so list and detail reads never parse CRDT bytes.
 
 use automerge::{
     AutoCommit, ROOT, ReadDoc, ScalarValue, Value,
@@ -7,9 +18,15 @@ use automerge::{
 };
 
 use crate::{
-    domain::{errors::StorageError, models::MeetingId},
+    domain::{
+        errors::StorageError,
+        models::{MeetingId, MeetingTitle},
+    },
     ports::storage::NoteRepository,
 };
+
+/// Root-map key of the replicated meeting title (Issue #39).
+pub const TITLE_KEY: &str = "title";
 
 /// Coordinates meeting note changes using Automerge while keeping CRDT types out of port contracts.
 pub struct MeetingCrdtService<RepositoryPort> {
@@ -38,6 +55,63 @@ where
         let mut new_document = AutoCommit::new();
         self.note_repository
             .create_meeting(meeting_id, &new_document.save())
+    }
+
+    /// Creates a meeting whose first CRDT change already carries its title, so the title reaches
+    /// peers with the meeting itself.
+    ///
+    /// Inputs: `meeting_id` must be a new, stable, unique meeting identifier; `title` is validated
+    /// user content and is never logged.
+    /// Outputs: Success or a portable storage error (for example a duplicate meeting).
+    /// Side effects: Persists a new Automerge document, then writes the SQLite title projection.
+    pub fn create_titled_meeting(
+        &self,
+        meeting_id: &MeetingId,
+        title: &MeetingTitle,
+    ) -> Result<(), StorageError> {
+        let mut new_document = AutoCommit::new();
+        new_document
+            .put(ROOT, TITLE_KEY, title.as_str())
+            .map_err(|error| crdt_error("unable to set the meeting title", error))?;
+        self.note_repository
+            .create_meeting(meeting_id, &new_document.save())?;
+        self.note_repository.save_meeting_title(meeting_id, title)
+    }
+
+    /// Sets (or renames) a meeting's replicated title.
+    ///
+    /// Inputs: `meeting_id` must exist; `title` is validated user content and is never logged.
+    /// Outputs: Success or a portable storage error, including corrupt-document rejection.
+    /// Side effects: Adds one Automerge `put` to the stored document, unless the document already
+    /// holds this title (so a repeated rename costs no sync bytes), then refreshes the SQLite
+    /// projection. Callers broadcast the change through `SyncManager::notify_local_change`.
+    pub fn set_meeting_title(
+        &self,
+        meeting_id: &MeetingId,
+        title: &MeetingTitle,
+    ) -> Result<(), StorageError> {
+        let stored_document = self.note_repository.load_crdt_document(meeting_id)?;
+        let mut automerge_document = load_document(&stored_document)?;
+        if read_document_title(meeting_id, &automerge_document)?.as_ref() != Some(title) {
+            automerge_document
+                .put(ROOT, TITLE_KEY, title.as_str())
+                .map_err(|error| crdt_error("unable to set the meeting title", error))?;
+            self.note_repository
+                .save_crdt_document(meeting_id, &automerge_document.save())?;
+        }
+        self.project_title(meeting_id, title)
+    }
+
+    /// Loads the replicated title from a meeting's CRDT document.
+    ///
+    /// Inputs: `meeting_id` must identify a stored meeting document.
+    /// Outputs: The title; `None` when the document has no title (pre-#39 or never titled) or
+    /// holds a value that is not a valid `MeetingTitle`; or a storage error.
+    /// Side effects: Reads and deserializes the stored CRDT document; an invalid title logs a
+    /// warning without its text.
+    pub fn load_title(&self, meeting_id: &MeetingId) -> Result<Option<MeetingTitle>, StorageError> {
+        let stored_document = self.note_repository.load_crdt_document(meeting_id)?;
+        read_document_title(meeting_id, &load_document(&stored_document)?)
     }
 
     /// Replaces the root note text in an existing meeting's Automerge document.
@@ -76,7 +150,8 @@ where
             .merge(&mut received_document)
             .map_err(|error| crdt_error("unable to merge remote CRDT document", error))?;
         self.note_repository
-            .save_crdt_document(meeting_id, &local_document.save())
+            .save_crdt_document(meeting_id, &local_document.save())?;
+        self.project_document_title(meeting_id, &local_document)
     }
 
     /// Generates one Automerge sync message for the current local meeting document.
@@ -84,6 +159,8 @@ where
     /// Inputs: `meeting_id` selects a stored document; `sync_state` tracks protocol state for one peer.
     /// Outputs: An optional Automerge message or a portable storage error.
     /// Side effects: Reads and deserializes persisted meeting state; updates the supplied sync state.
+    /// Migrates a title stored only in SQLite (Issue #35, before titles were replicated) into a
+    /// document that has no `title` key, persisting that one change before syncing.
     pub fn generate_sync_message(
         &self,
         meeting_id: &MeetingId,
@@ -91,6 +168,7 @@ where
     ) -> Result<Option<sync::Message>, StorageError> {
         let stored_document = self.note_repository.load_crdt_document(meeting_id)?;
         let mut automerge_document = load_document(&stored_document)?;
+        self.copy_sqlite_only_title_into(meeting_id, &mut automerge_document)?;
         Ok(automerge_document.sync().generate_sync_message(sync_state))
     }
 
@@ -113,7 +191,8 @@ where
             .receive_sync_message(sync_state, sync_message)
             .map_err(|error| crdt_error("unable to apply remote sync message", error))?;
         self.note_repository
-            .save_crdt_document(meeting_id, &automerge_document.save())
+            .save_crdt_document(meeting_id, &automerge_document.save())?;
+        self.project_document_title(meeting_id, &automerge_document)
     }
 
     /// Loads the root note text from an existing meeting document.
@@ -140,6 +219,118 @@ where
             None => Ok(None),
         }
     }
+
+    /// Refreshes the SQLite title projection from a just-merged document.
+    ///
+    /// Inputs: `meeting_id` exists; `merged_document` is its persisted CRDT state.
+    /// Outputs: Success or a storage error.
+    /// Side effects: Writes the SQLite title when the document holds a valid title that differs
+    /// from it. An absent or invalid CRDT title leaves SQLite untouched, so an untitled meeting
+    /// keeps its dated display fallback and a peer cannot inject an invalid title.
+    fn project_document_title(
+        &self,
+        meeting_id: &MeetingId,
+        merged_document: &AutoCommit,
+    ) -> Result<(), StorageError> {
+        match read_document_title(meeting_id, merged_document)? {
+            Some(replicated_title) => self.project_title(meeting_id, &replicated_title),
+            None => Ok(()),
+        }
+    }
+
+    /// Writes `title` to the SQLite projection when it differs from the stored one.
+    ///
+    /// Inputs: `meeting_id` exists; `title` is the CRDT's current title.
+    /// Outputs: Success or a storage error. Repositories that do not store titles
+    /// (`Unavailable`) are skipped, because the CRDT stays the source of truth.
+    /// Side effects: Reads meeting metadata and may update one SQLite row.
+    fn project_title(
+        &self,
+        meeting_id: &MeetingId,
+        title: &MeetingTitle,
+    ) -> Result<(), StorageError> {
+        let projected_title = self
+            .note_repository
+            .load_meeting_metadata(meeting_id)?
+            .and_then(|metadata| metadata.title().cloned());
+        if projected_title.as_ref() == Some(title) {
+            return Ok(());
+        }
+        match self.note_repository.save_meeting_title(meeting_id, title) {
+            Err(StorageError::Unavailable) => Ok(()),
+            projection_result => projection_result,
+        }
+    }
+
+    /// Copies a title that exists only in SQLite into a document without a `title` key.
+    ///
+    /// Inputs: `meeting_id` exists; `automerge_document` is its freshly loaded CRDT state.
+    /// Outputs: Success or a storage error.
+    /// Side effects: When the document has no `title` key and SQLite holds a title, adds one
+    /// `put` and persists the document. A document that already has a title (even an invalid
+    /// one) is left alone, so a stale local value never overrides a replicated rename. The dated
+    /// fallback is never copied: as a real CRDT value it could win against a peer's real title.
+    fn copy_sqlite_only_title_into(
+        &self,
+        meeting_id: &MeetingId,
+        automerge_document: &mut AutoCommit,
+    ) -> Result<(), StorageError> {
+        let document_has_title = automerge_document
+            .get(ROOT, TITLE_KEY)
+            .map_err(|error| crdt_error("unable to read the meeting title", error))?
+            .is_some();
+        if document_has_title {
+            return Ok(());
+        }
+        let Some(sqlite_only_title) = self
+            .note_repository
+            .load_meeting_metadata(meeting_id)?
+            .and_then(|metadata| metadata.title().cloned())
+        else {
+            return Ok(());
+        };
+        automerge_document
+            .put(ROOT, TITLE_KEY, sqlite_only_title.as_str())
+            .map_err(|error| crdt_error("unable to migrate the meeting title", error))?;
+        self.note_repository
+            .save_crdt_document(meeting_id, &automerge_document.save())?;
+        tracing::info!(
+            meeting_id = %meeting_id.as_str(),
+            "Copied a SQLite-only meeting title into the CRDT document"
+        );
+        Ok(())
+    }
+}
+
+/// Reads the winning `title` value of a meeting document.
+///
+/// Inputs: `meeting_id` is used only for diagnostics; `automerge_document` is the loaded CRDT.
+/// Outputs: The valid title, `None` when absent or invalid, or an Automerge read error.
+/// Side effects: Logs a warning (never the value) when the stored title is not a valid string.
+fn read_document_title(
+    meeting_id: &MeetingId,
+    automerge_document: &AutoCommit,
+) -> Result<Option<MeetingTitle>, StorageError> {
+    let stored_value = automerge_document
+        .get(ROOT, TITLE_KEY)
+        .map_err(|error| crdt_error("unable to read the meeting title", error))?;
+    let Some((stored_value, _)) = stored_value else {
+        return Ok(None);
+    };
+    let parsed_title = match &stored_value {
+        Value::Scalar(scalar_value) => match scalar_value.as_ref() {
+            ScalarValue::Str(title_text) => MeetingTitle::parse(title_text).ok(),
+            _ => None,
+        },
+        Value::Object(_) => None,
+    };
+    if parsed_title.is_none() {
+        tracing::warn!(
+            meeting_id = %meeting_id.as_str(),
+            "Ignoring an invalid meeting title in the CRDT document"
+        );
+    }
+    Ok(parsed_title)
 }
 
 /// Deserializes opaque repository bytes into an Automerge document.

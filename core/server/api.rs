@@ -199,14 +199,12 @@ async fn create_meeting(
     let meeting_id = MeetingId::new(format!("meeting-{}", uuid::Uuid::new_v4()));
     let repositories = application_state.repositories.lock().await;
     let repository: &dyn ServerRepository = &**repositories;
-    MeetingCrdtService::new(repository)
-        .create_meeting(&meeting_id)
-        .map_err(storage_error_status)?;
-    if let Some(title) = &title {
-        repository
-            .save_meeting_title(&meeting_id, title)
-            .map_err(storage_error_status)?;
+    let crdt_service = MeetingCrdtService::new(repository);
+    match &title {
+        Some(title) => crdt_service.create_titled_meeting(&meeting_id, title),
+        None => crdt_service.create_meeting(&meeting_id),
     }
+    .map_err(storage_error_status)?;
     let meeting_metadata = repository
         .load_meeting_metadata(&meeting_id)
         .map_err(storage_error_status)?

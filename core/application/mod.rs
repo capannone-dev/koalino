@@ -34,6 +34,8 @@ mod file_sync_manager_tests;
 pub mod meeting_crdt;
 /// Coordinates recording transcription and transcript persistence.
 pub mod meeting_recorder;
+#[cfg(test)]
+mod meeting_title_sync_tests;
 /// Applies adapter-neutral encrypted-network events to application state.
 pub mod network_events;
 #[cfg(test)]

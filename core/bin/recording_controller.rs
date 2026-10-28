@@ -18,6 +18,7 @@ use crate::{
         vad_chunker::{FinalizedAudioChunk, VadChunker, VadConfig},
     },
     application::{
+        meeting_crdt::MeetingCrdtService,
         pipeline::meeting_session::VadAudioChunk,
         recording_manager::{RecordingManager, RecordingManagerError, RecordingSummary},
     },
@@ -348,7 +349,8 @@ impl RecordingController {
     ///
     /// Inputs: A meeting the worker has already created and its validated title.
     /// Outputs: `Ok(())`, a storage error, or `WorkerStopped`.
-    /// Side effects: Writes the title on the worker thread; the title is never logged.
+    /// Side effects: Writes the title into the meeting's CRDT document (so it replicates, Issue
+    /// #39) and its SQLite projection on the worker thread; the title is never logged.
     fn save_meeting_title(
         &self,
         meeting_id: &MeetingId,
@@ -357,7 +359,8 @@ impl RecordingController {
         let titled_meeting_id = meeting_id.clone();
         self.recording_manager
             .with_note_repository(move |note_repository| {
-                note_repository.save_meeting_title(&titled_meeting_id, &title)
+                MeetingCrdtService::new(note_repository)
+                    .set_meeting_title(&titled_meeting_id, &title)
             })??;
         Ok(())
     }

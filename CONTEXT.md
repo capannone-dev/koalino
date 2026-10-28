@@ -251,7 +251,7 @@ Issue #35 adds meeting titles:
   back to `Meeting YYYY-MM-DD HH:MM UTC`. The fallback is computed on read, never stored.
 - **Storage:** titles live in a nullable `meetings.title` column. Older databases gain it on
   open, and their meetings stay untitled. `NoteRepository::save_meeting_title` writes it. Titles
-  are local metadata, not CRDT content, and are never logged.
+  are never logged. Since Issue #39 the column is a projection of the replicated CRDT title.
 - **Entry points:**
   - CLI: `record start --title` (through `RecordingController::start_titled`), and
     `meetings list`/`view` show titles.
@@ -273,3 +273,20 @@ Issue #36 brings meeting titles to Flutter:
 - **Navigation:** an adaptive `HomeShell` replaces the drawer, using `NavigationBar` on phones
   and `NavigationRail` from 840 px. The meeting list becomes list-detail at that width.
 - **Gap:** Flutter still neither captures audio nor stops recordings.
+
+Issue #39 replicates meeting titles through the Automerge meeting document:
+
+- **Schema:** an optional root `title` scalar string, next to `note_text`.
+  `MeetingCrdtService::create_titled_meeting` and `set_meeting_title` write it, then the SQLite
+  `meetings.title` projection. A rename to the current title records no change.
+- **Sync:** `apply_sync_message` and `merge_remote_document` project the winning title into SQLite.
+  `generate_sync_message` first copies a SQLite-only (pre-#39) title into a document that has no
+  `title` key.
+- **Conflicts:** the title is a register. Concurrent renames converge on Automerge's winner: the
+  highest Lamport counter, then actor ID. A causally later rename wins.
+- **Migration:** documents without `title` still sync. Their meetings show the dated display
+  fallback, which is never written into the CRDT. Invalid or non-string peer titles are ignored.
+- **Writers:** `POST /api/meetings`, titled recording starts, and the Teams bridge use the service,
+  so their titles replicate.
+- **Gap:** nothing composes `SyncManager` in the daemon, FFI, or CLI yet. Replication is verified
+  between two in-memory peers exchanging real sync messages, not between devices.

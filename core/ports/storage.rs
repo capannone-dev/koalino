@@ -110,7 +110,9 @@ pub trait NoteRepository {
     /// Inputs: `meeting_id` must exist; `title` is validated user content and must not be logged.
     /// Outputs: Success, an unknown-meeting rejection, or `Unavailable` for repositories that do
     /// not store titles.
-    /// Side effects: Writes local meeting metadata; the title is not part of the CRDT document.
+    /// Side effects: Writes local meeting metadata only. This column is the local projection of
+    /// the replicated CRDT title (Issue #39): callers that want the title to reach peers use
+    /// `MeetingCrdtService::set_meeting_title`, which writes both.
     fn save_meeting_title(
         &self,
         _meeting_id: &MeetingId,

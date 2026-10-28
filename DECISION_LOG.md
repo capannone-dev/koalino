@@ -680,3 +680,36 @@
   - Bindings were exercised from a Dart script against the real `cdylib`.
   - No GUI run: there is no emulator, `cmake`/`ninja` are missing for `flutter build linux`,
     and no transcription engine is configured.
+
+## 2026-10-28 — Issue #39 Meeting title CRDT sync
+
+- Location: the issue pointed at `core/adapters/sync/`, which does not exist. The meeting
+  document schema lives in `application/meeting_crdt.rs`, so the change and its README section
+  are there.
+- Type: a scalar string register, not Automerge `Text`. Text would merge two concurrent renames
+  character by character into a title nobody typed. A register picks one whole title
+  deterministically: the highest Lamport counter, then actor ID. A causally later rename always
+  wins. This is not wall-clock LWW: when renames are concurrent, the winner is arbitrary but
+  identical on every peer.
+- Source of truth: the CRDT. SQLite `meetings.title` stays as a projection so list and detail
+  reads never load CRDT bytes. Writes go CRDT first, then SQLite. A failed projection is repaired
+  by the next merge or rename.
+- Migration:
+  - The dated fallback stays computed on read and is never written into the CRDT. A stored
+    fallback would be a real register value that could beat a peer's real title.
+  - SQLite-only titles from #35 are copied into documents without a `title` key when a sync
+    message is generated. A document that already has a key, even an invalid one, is never
+    overwritten from SQLite.
+- Validation: peer values that fail `MeetingTitle::parse`, or are not strings, are ignored and
+  logged without their text. They never fail the sync, because the rest of the document must
+  still merge.
+- Repositories returning `Unavailable` for `save_meeting_title` (test doubles) skip the
+  projection instead of failing sync.
+- Performance: a rename is one `put`, and an unchanged title adds nothing. Measured: about 254
+  bytes for the change message and 720 bytes for a full fresh handshake on a document with 20 KB
+  of notes. The test budget is 1 KiB. The issue's < 1 s propagation target depends on the network
+  runtime, which is not composed yet, so it is not measured.
+- Follow-ups:
+  - Compose `SyncManager` in the daemon/FFI.
+  - The #38 rename command should call `set_meeting_title`.
+
