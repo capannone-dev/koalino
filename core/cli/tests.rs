@@ -45,7 +45,7 @@ struct MockCliService {
     assigned_clusters: RefCell<Vec<(Uuid, String)>>,
     export_requests: RefCell<Vec<RecordedExportRequest>>,
     /// `(meeting_id, title, input)` triples passed to `start_recording`.
-    recording_requests: Vec<(Option<String>, Option<String>, PathBuf)>,
+    recording_requests: Vec<(Option<String>, Option<String>, Option<PathBuf>)>,
     /// `(meeting_id, new_title)` pairs passed to `rename_meeting`.
     rename_requests: Vec<(String, String)>,
     /// Directives passed to `request_log_level`.
@@ -60,7 +60,7 @@ impl RecordingControl for NoRecordingControl {
         &mut self,
         _meeting_id: Option<MeetingId>,
         _title: Option<MeetingTitle>,
-        _input: &Path,
+        _input: Option<&Path>,
     ) -> Result<String, String> {
         Err(String::from("recording is not available in this test"))
     }
@@ -77,12 +77,12 @@ impl CliService for MockCliService {
         &mut self,
         meeting_id: Option<&str>,
         title: Option<&str>,
-        input: &Path,
+        input: Option<&Path>,
     ) -> Result<String, String> {
         self.recording_requests.push((
             meeting_id.map(str::to_owned),
             title.map(str::to_owned),
-            input.to_path_buf(),
+            input.map(Path::to_path_buf),
         ));
         Ok(String::from("recording started"))
     }
@@ -185,16 +185,23 @@ fn parses_record_start_command() {
         }) => {
             assert_eq!(meeting_id.as_deref(), Some("standup"));
             assert_eq!(title.as_deref(), Some("Daily standup"));
-            assert_eq!(input, PathBuf::from("standup.wav"));
+            assert_eq!(input, Some(PathBuf::from("standup.wav")));
         }
         other => panic!("unexpected command: {other:?}"),
     }
 }
 
-/// Verifies `record start` requires an input until a microphone adapter exists.
+/// Verifies `record start` without `--input` records the microphone (Issue #45).
 #[test]
-fn record_start_requires_an_input() {
-    assert!(Cli::try_parse_from(["note-taker", "record", "start"]).is_err());
+fn record_start_defaults_to_the_microphone() {
+    let parsed_cli = Cli::try_parse_from(["note-taker", "record", "start"])
+        .unwrap_or_else(|error| panic!("record start must parse: {error}"));
+    match parsed_cli.command {
+        CliCommand::Record(RecordArgs {
+            command: RecordCommand::Start { input, .. },
+        }) => assert_eq!(input, None),
+        other => panic!("unexpected command: {other:?}"),
+    }
 }
 
 /// Verifies `record start` forwards its meeting, optional title, and input to the service.
@@ -223,8 +230,8 @@ fn dispatches_record_start_with_meeting_title_and_input() {
     assert_eq!(
         cli_service.recording_requests,
         vec![
-            (None, None, PathBuf::from("-")),
-            (None, Some(String::from("Test")), PathBuf::from("-")),
+            (None, None, Some(PathBuf::from("-"))),
+            (None, Some(String::from("Test")), Some(PathBuf::from("-"))),
         ]
     );
 }
@@ -244,7 +251,7 @@ fn core_service_rejects_an_invalid_recording_title() {
     );
 
     let error = cli_service
-        .start_recording(None, Some("  "), Path::new("-"))
+        .start_recording(None, Some("  "), Some(Path::new("-")))
         .expect_err("a blank title must be rejected");
 
     assert_eq!(error, "--title: meeting title must not be blank");

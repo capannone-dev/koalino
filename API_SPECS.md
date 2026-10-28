@@ -138,7 +138,10 @@ contents, EXIF data, or database-specific values.
   lock-screen action thread. They serialize through the process-wide Rust mutex and return `0` on
   accepted transitions, `1` for invalid input, `2` for state rejection, `3` for unavailable
   runtime state, and `4` (`FFI_PIPELINE_UNAVAILABLE`) when the meeting pipeline cannot be built
-  (no transcription engine is configured; the Rust log names the variables to set).
+  (no transcription engine is configured; the Rust log names the variables to set). Builds with
+  the `microphone` feature record the default microphone: a start or resume returns `7`
+  (`FFI_MICROPHONE_UNAVAILABLE`) and records nothing when it cannot be opened (no input device,
+  or access denied); pause, interruption, and stop turn it off (Issue #45).
 - Since Issue #32 a start runs the meeting pipeline. The first start composes it (this may load a
   model) and later recordings reuse it. Start records into a new `meeting-<uuid>`, or resumes a
   paused or interrupted recording. A start after a stop begins a new recording. Stop flushes
@@ -297,7 +300,8 @@ returns `400`, an unknown cluster `404`, an already-resolved cluster `409`, and 
 
 ## Linux CLI contract
 
-`note-taker` accepts `record start --input <file.wav|-> [--meeting-id <id>] [--title <title>]`,
+`note-taker` accepts `record start [--input <file.wav|->] [--meeting-id <id>] [--title <title>]`
+(without `--input`, the default microphone in builds with the `microphone` feature),
 `record stop` (asks the running `record start` on the same database to finish and waits until
 its audio is transcribed), `record status`, `meetings list` (ID, title,
 date, duration), `meetings view <meeting-id>` (title first),

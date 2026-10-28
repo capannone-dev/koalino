@@ -4,9 +4,12 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, atomic::AtomicBool},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use clap::Parser;
@@ -14,7 +17,10 @@ use uuid::Uuid;
 
 use crate::{
     adapters::{
-        audio::chunk_audio_store::{ChunkAudioStore, encode_wav_pcm16},
+        audio::{
+            chunk_audio_store::{ChunkAudioStore, encode_wav_pcm16},
+            fake_microphone::FakeMicrophone,
+        },
         export::default_exporters,
         storage::{
             in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
@@ -188,7 +194,7 @@ fn recording_a_wav_file_transcribes_every_chunk() {
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
     let output = control
-        .record(Some(MeetingId::new("wav-meeting")), None, &wav_path)
+        .record(Some(MeetingId::new("wav-meeting")), None, Some(&wav_path))
         .unwrap_or_else(|error| panic!("recording must succeed: {error}"));
 
     assert!(output.contains("wav-meeting"), "{output}");
@@ -207,7 +213,7 @@ fn an_interrupt_stops_the_recording_gracefully() {
     let mut control = recording_control(control_files.clone(), Arc::clone(&interrupt_requested));
 
     let output = control
-        .record(Some(MeetingId::new("interrupted")), None, &wav_path)
+        .record(Some(MeetingId::new("interrupted")), None, Some(&wav_path))
         .unwrap_or_else(|error| panic!("recording must stop cleanly: {error}"));
 
     assert!(output.contains("0 chunks transcribed"), "{output}");
@@ -222,7 +228,7 @@ fn a_missing_input_is_reported() {
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
     let error = control
-        .record(None, None, &directory.join("missing.wav"))
+        .record(None, None, Some(&directory.join("missing.wav")))
         .err()
         .unwrap_or_else(|| panic!("a missing file must fail"));
 
@@ -242,7 +248,7 @@ fn a_second_recording_is_refused() {
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
     let error = control
-        .record(None, None, &wav_path)
+        .record(None, None, Some(&wav_path))
         .err()
         .unwrap_or_else(|| panic!("a concurrent recording must fail"));
 
@@ -327,4 +333,63 @@ fn record_start_with_a_title_creates_a_titled_meeting() {
     assert_eq!(meeting_rows.len(), 1, "{list_output}");
     assert!(meeting_rows[0][0].starts_with("meeting-"), "{list_output}");
     assert_eq!(meeting_rows[0][1], "Test");
+}
+
+/// Verifies `record start` without `--input` records the microphone until stopped, including
+/// the audio still queued when the stop arrives.
+#[test]
+fn recording_without_an_input_captures_the_microphone() {
+    let (control_files, directory) = control_files_in_temp_directory();
+    let interrupt_requested = Arc::new(AtomicBool::new(false));
+    let microphone = FakeMicrophone::working();
+    let mut control = recording_control(control_files.clone(), Arc::clone(&interrupt_requested))
+        .with_microphone_source(Arc::new(microphone.clone()));
+    let speaker = microphone.clone();
+    let speaker_interrupt = Arc::clone(&interrupt_requested);
+    let speaker_thread = thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while speaker.counts().0 == 0 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(5));
+        }
+        speaker.speak(vec![50; 32_000]);
+        speaker_interrupt.store(true, Ordering::SeqCst);
+    });
+
+    let output = control.record(Some(MeetingId::new("mic-meeting")), None, None);
+    let _ = speaker_thread.join();
+    let _ = fs::remove_dir_all(&directory);
+
+    let output = output.unwrap_or_else(|error| panic!("recording must succeed: {error}"));
+    assert!(output.contains("1 chunks transcribed"), "{output}");
+    assert_eq!(microphone.counts(), (1, 1));
+    assert!(control_files.active_recording().is_none());
+}
+
+/// Verifies a build without microphone support asks for `--input`.
+#[test]
+fn recording_without_an_input_or_a_microphone_is_reported() {
+    let (control_files, directory) = control_files_in_temp_directory();
+    let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
+
+    let error = control.record(None, None, None).err();
+    let _ = fs::remove_dir_all(&directory);
+
+    let error = error.unwrap_or_else(|| panic!("recording must fail without an input"));
+    assert!(error.contains("--input"), "{error}");
+    assert!(control_files.active_recording().is_none());
+}
+
+/// Verifies a microphone that cannot open fails before any lock or pipeline is created.
+#[test]
+fn a_microphone_that_cannot_open_is_reported() {
+    let (control_files, directory) = control_files_in_temp_directory();
+    let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)))
+        .with_microphone_source(Arc::new(FakeMicrophone::failing()));
+
+    let error = control.record(None, None, None).err();
+    let _ = fs::remove_dir_all(&directory);
+
+    let error = error.unwrap_or_else(|| panic!("recording must fail without a microphone"));
+    assert!(error.contains("microphone"), "{error}");
+    assert!(control_files.active_recording().is_none());
 }

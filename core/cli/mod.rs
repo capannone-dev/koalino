@@ -111,8 +111,9 @@ pub enum RecordCommand {
         title: Option<String>,
         /// A 16 kHz mono 16-bit PCM WAV file, or `-` for raw little-endian PCM on stdin (e.g.
         /// `arecord -f S16_LE -r 16000 -c 1 -t raw | note-taker record start --input -`).
+        /// Without it, the default microphone is recorded (builds with the `microphone` feature).
         #[arg(long)]
-        input: PathBuf,
+        input: Option<PathBuf>,
     },
     /// Asks the running `record start` to finish and waits until its audio is transcribed.
     Stop,
@@ -304,14 +305,14 @@ pub trait RecordingControl {
     /// Records `input` into a meeting and returns a summary once all audio is transcribed.
     ///
     /// Inputs: The meeting (`None` generates one), an optional title stored on it before audio
-    /// is captured, and the input path (`-` for stdin).
+    /// is captured, and the input path (`-` for stdin; `None` for the default microphone).
     /// Outputs: A terminal-safe summary, or a readable error.
     /// Side effects: Blocks for the whole recording; persists the title and transcript segments.
     fn record(
         &mut self,
         meeting_id: Option<MeetingId>,
         title: Option<MeetingTitle>,
-        input: &Path,
+        input: Option<&Path>,
     ) -> Result<String, String>;
     /// Asks a running recording (in any process) to stop, and waits until it has.
     fn request_stop(&mut self) -> Result<String, String>;
@@ -321,12 +322,13 @@ pub trait RecordingControl {
 
 /// Provides the narrow service surface driven by parsed CLI commands.
 pub trait CliService {
-    /// Records `input` into a meeting, optionally titled, in the foreground.
+    /// Records `input` (`None`: the microphone) into a meeting, optionally titled, in the
+    /// foreground.
     fn start_recording(
         &mut self,
         meeting_id: Option<&str>,
         title: Option<&str>,
-        input: &Path,
+        input: Option<&Path>,
     ) -> Result<String, String>;
     /// Stops recording.
     fn stop_recording(&mut self) -> Result<String, String>;
@@ -376,7 +378,9 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
                     title,
                     input,
                 },
-        }) => cli_service.start_recording(meeting_id.as_deref(), title.as_deref(), &input),
+        }) => {
+            cli_service.start_recording(meeting_id.as_deref(), title.as_deref(), input.as_deref())
+        }
         CliCommand::Record(RecordArgs {
             command: RecordCommand::Stop,
         }) => cli_service.stop_recording(),
@@ -611,7 +615,7 @@ where
         &mut self,
         meeting_id: Option<&str>,
         title: Option<&str>,
-        input: &Path,
+        input: Option<&Path>,
     ) -> Result<String, String> {
         let meeting_id = match meeting_id.map(str::trim) {
             Some("") => return Err(String::from("--meeting-id must not be blank")),

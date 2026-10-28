@@ -6,10 +6,13 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
+    thread,
+    time::Duration,
 };
 
 use crate::{
     adapters::{
+        audio::live_microphone::LiveMicrophone,
         export::{default_export_directory, default_exporters},
         media::local_file_metadata::LocalFileMetadataExtractor,
         observability::{LoggingConfiguration, LoggingRuntime, initialize_logging},
@@ -45,6 +48,7 @@ use crate::{
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
     ports::{
+        audio::MicrophoneSource,
         media::MetadataExtractor,
         storage::{AttachmentRepository, NoteRepository},
         telemetry::MetricsRepository,
@@ -72,6 +76,10 @@ pub const FFI_MEETING_NOT_FOUND: c_int = 5;
 /// access (for example a dismissed unlock prompt). The app shows the error with Retry; there is
 /// no key-file fallback.
 pub const FFI_KEYCHAIN_UNAVAILABLE: c_int = 6;
+/// Indicates that the microphone could not be opened when a recording started or resumed: no
+/// input device, microphone access denied (Android permission, Windows privacy setting), or an
+/// unsupported format. The recording is not started (Issue #45).
+pub const FFI_MICROPHONE_UNAVAILABLE: c_int = 7;
 /// Returns the portable Idle state from `note_taker_get_current_state`.
 pub const FFI_AUDIO_STATE_IDLE: c_int = 10;
 /// Returns the portable Recording state from `note_taker_get_current_state`.
@@ -226,7 +234,20 @@ struct FfiRuntime {
     /// The P2P pairing and sync task, when enabled and started (Issue #43). Shared so a command
     /// can wait for the task without holding the runtime lock.
     p2p: Option<Arc<P2pHandle>>,
+    /// Where recordings capture audio from; `None` when the host pushes PCM itself
+    /// (`note_taker_push_audio_pcm`) or the build has no `microphone` feature (Issue #45).
+    microphone_source: Option<Arc<dyn MicrophoneSource>>,
+    /// The microphone while a recording captures from it.
+    live_microphone: Option<LiveMicrophone>,
+    /// Whether a drain ticker is running for the open microphone.
+    microphone_ticker_running: bool,
+    /// Starts the thread that drains the microphone into the recording (a no-op in tests,
+    /// which drain by hand).
+    spawn_microphone_ticker: fn(),
 }
+
+/// How often the ticker moves microphone audio into the recording.
+const MICROPHONE_DRAIN_INTERVAL: Duration = Duration::from_millis(100);
 
 /// Options accepted by `note_taker_export_meeting`; omitted fields use defaults.
 #[derive(Default, serde::Deserialize)]
@@ -379,6 +400,8 @@ impl FfiRuntime {
             ExportWriter::new(default_exporters(), export_directory),
         );
         runtime.p2p = p2p;
+        runtime.microphone_source = default_microphone_source();
+        runtime.spawn_microphone_ticker = spawn_global_microphone_ticker;
         Ok(runtime)
     }
 
@@ -406,6 +429,10 @@ impl FfiRuntime {
             pending_attachment_imports: HashMap::new(),
             export_writer,
             p2p: None,
+            microphone_source: None,
+            live_microphone: None,
+            microphone_ticker_running: false,
+            spawn_microphone_ticker: || {},
         }
     }
 
@@ -475,6 +502,17 @@ impl FfiRuntime {
         recording_controller_builder: RecordingControllerBuilder,
     ) -> Self {
         self.recording_controller_builder = recording_controller_builder;
+        self
+    }
+
+    /// Records from `microphone_source` instead of PCM pushed by the host.
+    ///
+    /// Inputs: The source opened on each start or resume.
+    /// Outputs: The runtime using it.
+    /// Side effects: None.
+    #[cfg(test)]
+    fn with_microphone_source(mut self, microphone_source: Arc<dyn MicrophoneSource>) -> Self {
+        self.microphone_source = Some(microphone_source);
         self
     }
 
@@ -998,11 +1036,86 @@ impl FfiRuntime {
         meeting_id: Option<MeetingId>,
         title: Option<MeetingTitle>,
     ) -> c_int {
-        match self.recording_controller() {
+        let opened_microphone = match self.open_microphone() {
+            Ok(opened_microphone) => opened_microphone,
+            Err(status) => return status,
+        };
+        let status = match self.recording_controller() {
             Ok(recording_controller) => {
                 recording_status(recording_controller.start_titled(meeting_id, title))
             }
             Err(status) => status,
+        };
+        if status != FFI_SUCCESS && opened_microphone {
+            if let Some(microphone) = self.live_microphone.take() {
+                // Nothing is recording, so the captured audio is discarded.
+                drop(microphone.close());
+            }
+        } else if self.live_microphone.is_some() && !self.microphone_ticker_running {
+            self.microphone_ticker_running = true;
+            (self.spawn_microphone_ticker)();
+        }
+        status
+    }
+
+    /// Opens the microphone for a start or resume, unless the host pushes PCM or it is open.
+    ///
+    /// Outputs: Whether this call opened it, or `FFI_MICROPHONE_UNAVAILABLE`.
+    /// Side effects: Turns the microphone on.
+    fn open_microphone(&mut self) -> Result<bool, c_int> {
+        let Some(microphone_source) = &self.microphone_source else {
+            return Ok(false);
+        };
+        if self.live_microphone.is_some() {
+            return Ok(false);
+        }
+        match LiveMicrophone::open(microphone_source.as_ref()) {
+            Ok(microphone) => {
+                self.live_microphone = Some(microphone);
+                Ok(true)
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "Unable to open the microphone");
+                Err(FFI_MICROPHONE_UNAVAILABLE)
+            }
+        }
+    }
+
+    /// Moves the microphone's queued audio into the recording; the ticker calls it.
+    ///
+    /// Outputs: Whether a microphone is still open (the ticker stops when it is not).
+    /// Side effects: Pushes PCM into the recorder, which may queue chunks for transcription.
+    fn drain_microphone(&mut self) -> bool {
+        let Some(microphone) = &self.live_microphone else {
+            self.microphone_ticker_running = false;
+            return false;
+        };
+        let blocks = microphone.drain();
+        self.push_microphone_blocks(blocks);
+        true
+    }
+
+    /// Turns the microphone off and moves the audio still queued into the recording.
+    ///
+    /// Side effects: Closes the stream (waiting for its thread) and pushes the tail.
+    fn close_microphone(&mut self) {
+        if let Some(microphone) = self.live_microphone.take() {
+            let tail = microphone.close();
+            self.push_microphone_blocks(tail);
+        }
+    }
+
+    /// Pushes microphone blocks into the active recording.
+    ///
+    /// Side effects: As `RecordingController::push_pcm`; failures are logged, never the audio.
+    fn push_microphone_blocks(&mut self, blocks: Vec<Vec<i16>>) {
+        let Some(recording_controller) = self.recording_controller.as_mut() else {
+            return;
+        };
+        for block in blocks {
+            if let Err(error) = recording_controller.push_pcm(block) {
+                tracing::warn!(error = %error, "Microphone audio was not accepted");
+            }
         }
     }
 
@@ -1155,6 +1268,7 @@ impl FfiRuntime {
     /// Outputs: A C status indicating whether an active recording accepted the pause.
     /// Side effects: Later PCM is discarded until a start resumes the recording.
     fn pause_recording(&mut self) -> c_int {
+        self.close_microphone();
         match self.recording_controller.as_mut() {
             Some(recording_controller) => recording_status(recording_controller.pause()),
             None => FFI_OPERATION_REJECTED,
@@ -1168,6 +1282,7 @@ impl FfiRuntime {
     /// Side effects: Blocks (holding the runtime lock) until queued chunks finish, persists
     /// their segments, and deletes unprocessed raw audio. A later start is a new recording.
     fn stop_recording(&mut self) -> c_int {
+        self.close_microphone();
         match self.recording_controller.as_mut() {
             Some(recording_controller) => recording_status(recording_controller.stop()),
             None => FFI_OPERATION_REJECTED,
@@ -1180,6 +1295,7 @@ impl FfiRuntime {
     /// Outputs: Success after a recording enters Interrupted; rejection for inactive states.
     /// Side effects: Queues buffered audio for transcription; a start resumes the recording.
     fn handle_audio_interruption(&mut self) -> c_int {
+        self.close_microphone();
         match self.recording_controller.as_mut() {
             Some(recording_controller) => {
                 recording_status(recording_controller.handle_interruption())
@@ -2124,6 +2240,47 @@ pub unsafe extern "C" fn note_taker_free_string(value: *mut c_char) {
         }
     }
 }
+
+/// The platform's default microphone, when built with the `microphone` feature.
+fn default_microphone_source() -> Option<Arc<dyn MicrophoneSource>> {
+    #[cfg(feature = "microphone")]
+    {
+        Some(Arc::new(
+            crate::adapters::audio::cpal_microphone::CpalMicrophone::new(),
+        ))
+    }
+    #[cfg(not(feature = "microphone"))]
+    {
+        None
+    }
+}
+
+/// Starts the thread that drains the global runtime's microphone every 100 ms.
+///
+/// It takes the runtime lock only to drain, and never holds anything while waiting for it, so
+/// a stop (which holds the lock while transcribing) cannot deadlock with it. It ends once no
+/// microphone is open.
+/// Side effects: Spawns the `microphone-drain` thread.
+fn spawn_global_microphone_ticker() {
+    let spawned = thread::Builder::new()
+        .name(String::from("microphone-drain"))
+        .spawn(|| {
+            loop {
+                thread::sleep(MICROPHONE_DRAIN_INTERVAL);
+                let still_open = with_runtime(|runtime| c_int::from(runtime.drain_microphone()));
+                if still_open != 1 {
+                    break;
+                }
+            }
+        });
+    if spawned.is_err() {
+        tracing::error!("Unable to start the microphone drain thread");
+    }
+}
+
+#[cfg(test)]
+#[path = "ffi_microphone_tests.rs"]
+mod ffi_microphone_tests;
 
 #[cfg(test)]
 mod ffi_contract_tests {

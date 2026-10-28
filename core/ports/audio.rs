@@ -1,6 +1,6 @@
 //! Declares audio-capture capabilities without coupling use cases to OS audio APIs or P2P transport.
 
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{Receiver, Sender};
 
 use crate::domain::{
     errors::AudioError,
@@ -60,4 +60,27 @@ pub trait AudioCapture {
     /// Outputs: A receiver of portable audio states or a subscription error.
     /// Side effects: Registers a new consumer that receives future state transitions.
     fn subscribe_states(&mut self) -> Result<Receiver<AudioState>, AudioError>;
+}
+
+/// Opens a microphone and delivers its audio as 16 kHz mono PCM16 blocks (Issue #45).
+///
+/// The `cpal` adapter implements it for the platform's default input device; tests use fakes.
+pub trait MicrophoneSource: Send + Sync {
+    /// Starts capture from the default input device.
+    ///
+    /// Inputs: The channel that receives each converted block, in order.
+    /// Outputs: The open stream, or `AudioError::Unavailable` when there is no device, access is
+    /// denied, or its format is unsupported.
+    /// Side effects: Turns the microphone on (the platform's recording indicator shows) until
+    /// the stream is closed.
+    fn open(&self, frames: Sender<Vec<i16>>) -> Result<Box<dyn MicrophoneStream>, AudioError>;
+}
+
+/// An open microphone stream.
+pub trait MicrophoneStream: Send {
+    /// Stops capture.
+    ///
+    /// Outputs: Returns once no further block will be sent.
+    /// Side effects: Turns the microphone off and drops the sending side of the channel.
+    fn close(self: Box<Self>);
 }

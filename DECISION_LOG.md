@@ -1032,3 +1032,25 @@ The owner decided:
   unwrap it either.
 - The lock covers only the UI, so recording and sync are not interrupted. Future
   notification and lock-screen recording controls (#47) need no app unlock.
+
+## 2026-10-28 — #45 microphone capture: `cpal` in the Rust core (owner chose option 1)
+
+- Capture happens in Rust with `cpal` 0.18 behind a `microphone` Cargo feature:
+  - ALSA on Linux (through PipeWire/PulseAudio's ALSA plugin);
+  - WASAPI on Windows;
+  - AAudio on Android.
+
+  Not chosen: the Flutter `record` plugin. On Linux it shells out to `parecord`, `pactl`, and `ffmpeg`, its audio crosses Dart isolates, and the CLI and daemon would gain nothing.
+- The default input device opens in its own format. `PcmResampler` (in-house) downmixes it and
+  low-pass filters it (windowed sinc, cutoff 7.2 kHz). Linear interpolation then brings it to the
+  16 kHz mono PCM16 the recorder expects. No resampling crate was added.
+- A dedicated thread owns each `cpal` stream, because streams are not `Send` on every platform.
+  Frames reach the recorder through a channel.
+- FFI:
+  - start opens the microphone first (status 7 if it cannot) and then the recording;
+  - pause, interruption, and stop close it and push the tail, so stop flushes the last audio;
+  - a ticker thread drains frames under the runtime lock, so stop (which holds that lock while
+    transcribing) never waits on a thread that waits on the lock.
+- CLI: `record start` without `--input` records from the microphone.
+- Android asks for `RECORD_AUDIO` through our own Kotlin channel (no permission plugin).
+- Trade-off accepted: no Android hardware echo cancellation or noise suppression.

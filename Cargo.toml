@@ -17,6 +17,9 @@ default = []
 # Enables the adapter-local whisper.cpp binding for explicitly opted-in local inference.
 local-ai = ["dep:whisper-rs"]
 vad = ["dep:webrtc-vad"]
+# Captures the default microphone with cpal (ALSA on Linux, WASAPI on Windows, AAudio on Android;
+# Issue #45). Linux builds need the ALSA development package (`libasound2-dev`).
+microphone = ["dep:cpal"]
 
 [[bin]]
 name = "cli"
@@ -69,6 +72,8 @@ tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "jso
 uuid = { version = "1.18.1", features = ["v4", "v5"] }
 # Wipes encryption keys and passphrases from memory when dropped.
 zeroize = "1.8.1"
+# Cross-platform microphone capture for the `microphone` feature (approved by the owner, #45).
+cpal = { version = "0.18.2", optional = true }
 # 0.16.0 provides native binding compatibility and requires the crate's Rust 1.88 MSRV.
 whisper-rs = { version = "=0.16.0", optional = true }
 # Provides feature-gated 16 kHz speech classification for the VAD adapter and its contract tests.

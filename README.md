@@ -60,6 +60,7 @@ export NOTE_TAKER_ENCRYPTION_PASSPHRASE='…'   # or rely on the platform keycha
 target/debug/daemon                           # HTTP/WebSocket API on 127.0.0.1:8080
 target/debug/cli meetings list
 target/debug/cli record start --title "Weekly sync" --input meeting.wav
+target/debug/cli record start --title "Standup"   # the microphone (--features microphone)
 target/debug/cli log-level debug              # a running daemon applies it within 2 s
 ```
 

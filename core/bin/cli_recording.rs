@@ -1,8 +1,9 @@
 //! Runs CLI recordings in the foreground and coordinates `record stop` across processes.
 //!
-//! `record start` reads PCM from a WAV file or stdin (`PcmInput`), feeds it to a
-//! `RecordingController`, and finishes when the input ends, on Ctrl+C, or when another process
-//! runs `record stop`. Processes coordinate through two files next to the database:
+//! `record start` reads PCM from a WAV file or stdin (`PcmInput`), or from the default
+//! microphone when no input is given (Issue #45), feeds it to a `RecordingController`, and
+//! finishes when the input ends, on Ctrl+C, or when another process runs `record stop`. The
+//! audio the microphone still holds at a stop is transcribed too. Processes coordinate through two files next to the database:
 //! `<db>.recording-active` (held by the recording process; contains its PID and meeting ID)
 //! and `<db>.recording-stop` (created by `record stop`). `record stop` returns once the
 //! recording process has transcribed its remaining audio and released the active file. A lock
@@ -23,10 +24,11 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
-    adapters::audio::pcm_input::PcmInput,
+    adapters::audio::{live_microphone::LiveMicrophone, pcm_input::PcmInput},
     application::recording_manager::RecordingSummary,
     cli::RecordingControl,
     domain::models::{MeetingId, MeetingTitle},
+    ports::audio::MicrophoneSource,
     recording_controller::RecordingController,
 };
 
@@ -38,6 +40,16 @@ mod tests;
 const DEFAULT_STOP_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 /// How often `record stop` checks whether the recording has finished.
 const DEFAULT_STOP_POLL_INTERVAL: Duration = Duration::from_millis(200);
+/// How long a microphone recording waits for audio before checking for a stop again.
+const MICROPHONE_WAIT: Duration = Duration::from_millis(100);
+
+/// Where a recording's audio comes from.
+enum AudioInput {
+    /// A WAV file or raw stdin PCM.
+    Pcm(PcmInput),
+    /// The default microphone.
+    Microphone(LiveMicrophone),
+}
 
 /// Builds the recording controller when a recording starts.
 pub type ControllerBuilder = Box<dyn Fn() -> anyhow::Result<RecordingController>>;
@@ -232,6 +244,8 @@ pub struct PipelineRecordingControl {
     interrupt_requested: Arc<AtomicBool>,
     /// Whether `record` installs a Ctrl+C handler that sets `interrupt_requested`.
     handles_ctrl_c: bool,
+    /// The microphone used when no input is given; `None` without the `microphone` feature.
+    microphone_source: Option<Arc<dyn MicrophoneSource>>,
     stop_poll_interval: Duration,
     stop_timeout: Duration,
 }
@@ -252,9 +266,20 @@ impl PipelineRecordingControl {
             controller_builder,
             interrupt_requested: Arc::new(AtomicBool::new(false)),
             handles_ctrl_c: true,
+            microphone_source: None,
             stop_poll_interval: DEFAULT_STOP_POLL_INTERVAL,
             stop_timeout: DEFAULT_STOP_TIMEOUT,
         }
+    }
+
+    /// Records from `microphone_source` when `record` gets no input.
+    ///
+    /// Inputs: The microphone source.
+    /// Outputs: The control using it.
+    /// Side effects: None; the microphone opens only when a recording starts.
+    pub fn with_microphone_source(mut self, microphone_source: Arc<dyn MicrophoneSource>) -> Self {
+        self.microphone_source = Some(microphone_source);
+        self
     }
 
     /// Uses an externally controlled interrupt flag instead of a Ctrl+C handler.
@@ -272,20 +297,73 @@ impl PipelineRecordingControl {
         self
     }
 
+    /// Whether Ctrl+C or `record stop` asked the recording to finish.
+    fn stop_requested(&self) -> bool {
+        self.interrupt_requested.load(Ordering::SeqCst) || self.control_files.stop_requested()
+    }
+
+    /// Opens the `--input` file or stdin, or the microphone when there is none.
+    ///
+    /// Inputs: The `--input` path, if any.
+    /// Outputs: The opened input, or an error naming what could not be opened.
+    /// Side effects: Opens the file or turns the microphone on.
+    fn open_audio_input(&self, input: Option<&Path>) -> Result<AudioInput, String> {
+        if let Some(input) = input {
+            return open_input(input).map(AudioInput::Pcm);
+        }
+        let Some(microphone_source) = &self.microphone_source else {
+            return Err(String::from(
+                "this build cannot record the microphone; pass --input with a WAV file or - for stdin",
+            ));
+        };
+        LiveMicrophone::open(microphone_source.as_ref())
+            .map(AudioInput::Microphone)
+            .map_err(|error| format!("unable to open the microphone: {error}"))
+    }
+
     /// Feeds the input to the controller until it ends or a stop is requested.
     ///
     /// Inputs: The started controller and the opened input.
     /// Outputs: `Ok(())`, or the first input or pipeline error.
-    /// Side effects: Pushes PCM; chunks are transcribed in the background.
+    /// Side effects: Pushes PCM; chunks are transcribed in the background. A microphone is
+    /// closed before returning, and the audio it still held is pushed.
     fn capture_until_stopped(
+        &self,
+        controller: &mut RecordingController,
+        audio_input: AudioInput,
+    ) -> Result<(), String> {
+        match audio_input {
+            AudioInput::Pcm(mut pcm_input) => self.capture_pcm(controller, &mut pcm_input),
+            AudioInput::Microphone(microphone) => self.capture_microphone(controller, microphone),
+        }
+    }
+
+    /// Records the microphone until a stop is requested, then pushes its queued tail.
+    ///
+    /// Side effects: Pushes PCM; closes the microphone.
+    fn capture_microphone(
+        &self,
+        controller: &mut RecordingController,
+        microphone: LiveMicrophone,
+    ) -> Result<(), String> {
+        let mut capture_result = Ok(());
+        while !self.stop_requested() && capture_result.is_ok() {
+            capture_result = push_blocks(controller, microphone.wait_for_frames(MICROPHONE_WAIT));
+        }
+        let tail = microphone.close();
+        capture_result.and(push_blocks(controller, tail))
+    }
+
+    /// Feeds a file or stdin until it ends or a stop is requested.
+    ///
+    /// Side effects: Reads the input and pushes PCM.
+    fn capture_pcm(
         &self,
         controller: &mut RecordingController,
         pcm_input: &mut PcmInput,
     ) -> Result<(), String> {
         loop {
-            if self.interrupt_requested.load(Ordering::SeqCst)
-                || self.control_files.stop_requested()
-            {
+            if self.stop_requested() {
                 return Ok(());
             }
             match pcm_input.read_block() {
@@ -331,7 +409,8 @@ impl RecordingControl for PipelineRecordingControl {
     /// Records `input` into a meeting in the foreground.
     ///
     /// Inputs: The meeting (`None` generates `meeting-<uuid>`), an optional title (`None` keeps
-    /// the meeting's current title), and a WAV path or `-` for raw stdin PCM.
+    /// the meeting's current title), and a WAV path or `-` for raw stdin PCM (`None`: the
+    /// default microphone).
     /// Outputs: A summary once every chunk is transcribed, or a readable error.
     /// Side effects: Holds the active file, composes the pipeline, stores the title, persists
     /// segments, and prints progress to stderr (never audio or transcript text).
@@ -339,9 +418,9 @@ impl RecordingControl for PipelineRecordingControl {
         &mut self,
         meeting_id: Option<MeetingId>,
         title: Option<MeetingTitle>,
-        input: &Path,
+        input: Option<&Path>,
     ) -> Result<String, String> {
-        let mut pcm_input = open_input(input)?;
+        let audio_input = self.open_audio_input(input)?;
         let meeting_id =
             meeting_id.unwrap_or_else(|| MeetingId::new(format!("meeting-{}", Uuid::new_v4())));
         let _lock = self
@@ -363,7 +442,7 @@ impl RecordingControl for PipelineRecordingControl {
             "Recording into meeting {}{title_label}. Press Ctrl+C or run `note-taker record stop` to finish.",
             meeting_id.as_str()
         );
-        let capture_result = self.capture_until_stopped(&mut controller, &mut pcm_input);
+        let capture_result = self.capture_until_stopped(&mut controller, audio_input);
         eprintln!("Waiting for the remaining audio to be transcribed…");
         let summary = controller.stop().map_err(|error| error.to_string())?;
         capture_result?;
@@ -396,6 +475,16 @@ impl RecordingControl for PipelineRecordingControl {
             None => String::from("Idle"),
         })
     }
+}
+
+/// Pushes microphone blocks into the recording, stopping at the first pipeline error.
+fn push_blocks(controller: &mut RecordingController, blocks: Vec<Vec<i16>>) -> Result<(), String> {
+    for block in blocks {
+        controller
+            .push_pcm(block)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 /// Opens a WAV file, or stdin for `-`.

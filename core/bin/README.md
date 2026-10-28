@@ -41,11 +41,17 @@ documented nonzero status codes distinguishable from lifecycle states.
   next start. `note_taker_start_recording_for_meeting`,
   `note_taker_start_recording_with_title` (Issue #35), `note_taker_push_audio_pcm`, and
   `note_taker_get_active_meeting_id` complete the ABI (see `API_SPECS.md`).
+  With the `microphone` feature, start and resume open the default microphone first and return
+  `FFI_MICROPHONE_UNAVAILABLE` (`7`) without starting when it cannot open; pause, interruption,
+  and stop close it and push its queued tail. A `microphone-drain` thread moves captured audio
+  into the recording every 100 ms, taking the runtime lock only to drain (Issue #45).
   `RecordingController::start_titled` stores the title through the worker's repository once the
   session is open. Stop blocks while the
   last chunks are transcribed, so Flutter must call it from a background isolate.
-- `cli_recording.rs` runs `record start --input <wav|-> [--title <title>]` in the foreground until the input ends, on
-  Ctrl+C, or on `record stop`. Processes coordinate through `<db>.recording-active` (PID and
+- `cli_recording.rs` runs `record start [--input <wav|->] [--title <title>]` in the foreground until the input ends, on
+  Ctrl+C, or on `record stop`. Without `--input` it records the default microphone (builds with
+  the `microphone` feature; others ask for `--input`), and a stop transcribes the audio the
+  microphone still held. Processes coordinate through `<db>.recording-active` (PID and
   meeting) and `<db>.recording-stop`. A lock left by a dead process is replaced.
 - `daemon.rs` composes the pipeline at start-up on a blocking thread and logs its availability (a
   missing engine is not fatal). On SIGINT or SIGTERM it shuts down gracefully, letting the worker

@@ -68,6 +68,10 @@ fn main() -> Result<()> {
             )
         }),
     );
+    #[cfg(feature = "microphone")]
+    let recording_control = recording_control.with_microphone_source(Arc::new(
+        note_taker_core::adapters::audio::cpal_microphone::CpalMicrophone::new(),
+    ));
     let export_writer = ExportWriter::new(default_exporters(), default_export_directory());
     let mut cli_service =
         CoreCliService::new(recording_control, repository, voice_store, export_writer)
