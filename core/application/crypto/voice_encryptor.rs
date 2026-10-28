@@ -173,6 +173,16 @@ impl EmbeddingCipher for VoiceEncryptor {
     fn open_embedding(&self, context: &str, sealed: &[u8]) -> Result<Vec<f32>, CryptoError> {
         open_embedding_with(&self.cipher, sealed, context.as_bytes())
     }
+
+    /// Seals `secret` for the record named by `context`.
+    fn seal_secret(&self, context: &str, secret: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        seal_bytes(&self.cipher, secret, context.as_bytes())
+    }
+
+    /// Opens a secret sealed for the record named by `context`.
+    fn open_secret(&self, context: &str, sealed: &[u8]) -> Result<Zeroizing<Vec<u8>>, CryptoError> {
+        open_bytes(&self.cipher, sealed, context.as_bytes())
+    }
 }
 
 /// Returns a shareable cipher with a random, never-stored key for in-memory stores.

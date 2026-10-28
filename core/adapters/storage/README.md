@@ -58,6 +58,13 @@ The `attachments` table persists only an attachment UUID, optional confirmed mee
 path, MIME type, original UTC timestamp, and source-device metadata. It never stores attachment
 bytes. `AttachmentRepository` checks referenced meetings before accepting a confirmed link.
 
+`sqlite_peer_store.rs` implements `NodeIdentityStore` (Issue #43) on the same SQLite file. The
+singleton table `p2p_node_identity(singleton, sealed_identity)` holds this node's libp2p keypair,
+sealed with `EmbeddingCipher::seal_secret` under the context `p2p_node_identity`. The candidate
+is written with `INSERT OR IGNORE` and the stored row is read back, so processes starting together
+agree on one identity. If the stored row can't be opened (wrong key), that's an error: replacing
+it would orphan every paired device.
+
 `sqlite_voice_vector_db.rs` implements `VoiceVectorDB` on the same SQLite file as the note
 repository, through its own connection with a 5 s busy timeout:
 

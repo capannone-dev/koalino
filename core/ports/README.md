@@ -21,7 +21,11 @@ candidate scores through the port. It also persists `SpeakerIdentity` names
 `list_speaker_identities`); `delete_identity` removes a name together with its variants. A
 persistent adapter may reject variants for identities that were never saved.
 
-`EmbeddingCipher` (`crypto.rs`) seals and opens embeddings for a named row context. Storage
+`NodeIdentityStore` (`peer_trust.rs`) keeps this node's encoded P2P identity. Implementations seal it
+at rest and keep the first stored value, so concurrent first starts agree (Issue #43).
+
+`EmbeddingCipher` (`crypto.rs`) seals and opens embeddings for a named row context. It also seals
+arbitrary secrets (`seal_secret`/`open_secret`), such as the P2P node key. Storage
 adapters call it for every embedding BLOB and never see keys or cipher types. The implementation
 is `application::crypto::VoiceEncryptor`. `EncryptionMetadataRepository` stores the single
 non-secret record (key source, Argon2id salt and parameters, key-check value) that

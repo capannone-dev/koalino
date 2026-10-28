@@ -223,3 +223,41 @@ fn sealing_and_opening_one_thousand_embeddings_takes_under_one_second() {
         "1000 seal/open round trips took {elapsed:?}"
     );
 }
+
+/// Arbitrary secrets (such as the P2P node key) round-trip and never appear in the sealed bytes.
+#[test]
+fn sealing_a_secret_round_trips_and_hides_the_plaintext() {
+    let encryptor = VoiceEncryptor::new(&EncryptionKey::from_bytes(test_key(7)));
+    let secret = b"ed25519-node-secret-material-32b".to_vec();
+
+    let sealed = encryptor
+        .seal_secret("p2p_node_identity", &secret)
+        .unwrap_or_else(|error| panic!("secret must seal: {error}"));
+    let opened = encryptor
+        .open_secret("p2p_node_identity", &sealed)
+        .unwrap_or_else(|error| panic!("secret must open: {error}"));
+
+    assert_eq!(opened.as_slice(), secret.as_slice());
+    assert!(!sealed.windows(secret.len()).any(|window| window == secret));
+}
+
+/// A secret sealed for one context cannot be opened as another, nor with another key.
+#[test]
+fn opening_a_secret_requires_its_context_and_key() {
+    let encryptor = VoiceEncryptor::new(&EncryptionKey::from_bytes(test_key(7)));
+    let other_encryptor = VoiceEncryptor::new(&EncryptionKey::from_bytes(test_key(8)));
+    let sealed = encryptor
+        .seal_secret("p2p_node_identity", b"secret")
+        .unwrap_or_else(|error| panic!("secret must seal: {error}"));
+
+    assert_eq!(
+        encryptor.open_secret("voice_variants:x", &sealed).err(),
+        Some(CryptoError::AuthenticationFailed)
+    );
+    assert_eq!(
+        other_encryptor
+            .open_secret("p2p_node_identity", &sealed)
+            .err(),
+        Some(CryptoError::AuthenticationFailed)
+    );
+}

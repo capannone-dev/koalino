@@ -150,8 +150,12 @@ use crate::{
         self, FileTransferRequestPayload, FileTransferResponsePayload,
     },
     domain::{errors::NetworkError, models::DeviceId},
-    ports::network::{NetworkEvent, P2pNetwork, PeerDiscovery},
+    ports::{
+        network::{NetworkEvent, P2pNetwork, PeerDiscovery},
+        peer_trust::NodeIdentityStore,
+    },
 };
+use zeroize::Zeroizing;
 
 /// Aggregates the decentralized discovery behaviours carried by the libp2p swarm.
 #[derive(NetworkBehaviour)]
@@ -212,6 +216,59 @@ impl From<request_response::Event<FileTransferRequestPayload, FileTransferRespon
     }
 }
 
+/// This node's long-lived libp2p identity (an Ed25519 keypair).
+///
+/// Paired devices are remembered by peer ID, so the identity must survive restarts: it is kept,
+/// sealed with the database key, through `NodeIdentityStore`. `Debug` never prints key material
+/// or the peer ID.
+pub struct NodeIdentity(libp2p::identity::Keypair);
+
+impl NodeIdentity {
+    /// Loads this node's identity from `store`, creating and storing one on first use.
+    ///
+    /// Inputs: The store for the node's database.
+    /// Outputs: The identity, or `SecurityPolicy` when the store fails or holds bytes that are not
+    /// an encoded keypair (never replaced, because a new identity would break every pairing).
+    /// Side effects: Generates a keypair from operating-system randomness; may write one row.
+    pub fn load_or_create(store: &impl NodeIdentityStore) -> Result<Self, NetworkError> {
+        let candidate_keypair = libp2p::identity::Keypair::generate_ed25519();
+        let encoded_candidate =
+            Zeroizing::new(candidate_keypair.to_protobuf_encoding().map_err(|error| {
+                NetworkError::SecurityPolicy {
+                    reason: format!("cannot encode the node identity: {error}"),
+                }
+            })?);
+        let stored_identity = store
+            .load_or_insert_node_identity(&encoded_candidate)
+            .map_err(|error| NetworkError::SecurityPolicy {
+                reason: format!("cannot load the node identity: {error}"),
+            })?;
+        libp2p::identity::Keypair::from_protobuf_encoding(&stored_identity)
+            .map(Self)
+            .map_err(|_| NetworkError::SecurityPolicy {
+                reason: "the stored node identity is not a valid keypair".to_owned(),
+            })
+    }
+
+    /// Generates an identity that is never stored, for tests and throwaway nodes.
+    ///
+    /// Side effects: Reads operating-system randomness.
+    pub fn ephemeral() -> Self {
+        Self(libp2p::identity::Keypair::generate_ed25519())
+    }
+
+    /// Returns this node's peer ID in the portable form used by the network port.
+    pub fn peer_device_id(&self) -> DeviceId {
+        Libp2pNetworkAdapter::device_id_from_peer_id(self.0.public().to_peer_id())
+    }
+}
+
+impl std::fmt::Debug for NodeIdentity {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("NodeIdentity([redacted])")
+    }
+}
+
 /// Owns a local-only libp2p swarm and translates its events at the hexagonal boundary.
 pub struct Libp2pNetworkAdapter {
     swarm: Swarm<NoteTakerBehaviour>,
@@ -224,11 +281,11 @@ pub struct Libp2pNetworkAdapter {
 impl Libp2pNetworkAdapter {
     /// Constructs a swarm using libp2p's Noise encrypted TCP transport, Yamux, and mDNS.
     ///
-    /// Inputs: None; libp2p generates an ephemeral Ed25519 identity for this process.
+    /// Inputs: `node_identity`, normally from `NodeIdentity::load_or_create`.
     /// Outputs: A configured adapter or a portable security-policy error if mDNS cannot initialize.
     /// Side effects: Allocates libp2p state. It neither listens on a TCP address nor sends data.
-    pub fn new() -> Result<Self, NetworkError> {
-        let local_identity_keypair = libp2p::identity::Keypair::generate_ed25519();
+    pub fn new(node_identity: NodeIdentity) -> Result<Self, NetworkError> {
+        let local_identity_keypair = node_identity.0;
         let local_peer_id = local_identity_keypair.public().to_peer_id();
         let swarm = SwarmBuilder::with_existing_identity(local_identity_keypair)
             .with_tokio()
@@ -444,13 +501,19 @@ impl Libp2pNetworkAdapter {
     /// Side effects: Allocates an in-memory encrypted transport and no operating-system sockets.
     #[cfg(test)]
     fn new_for_memory_transport() -> Result<Self, NetworkError> {
+        Self::new_for_memory_transport_with(NodeIdentity::ephemeral())
+    }
+
+    /// Like `new_for_memory_transport`, with a given identity.
+    #[cfg(test)]
+    fn new_for_memory_transport_with(node_identity: NodeIdentity) -> Result<Self, NetworkError> {
         use libp2p::{
             Transport,
             core::{transport::MemoryTransport, upgrade},
             swarm::Config,
         };
 
-        let local_identity_keypair = libp2p::identity::Keypair::generate_ed25519();
+        let local_identity_keypair = node_identity.0;
         let local_peer_id = local_identity_keypair.public().to_peer_id();
         let noise_configuration = noise::Config::new(&local_identity_keypair).map_err(|error| {
             NetworkError::SecurityPolicy {
@@ -635,8 +698,53 @@ mod tests {
 
     use libp2p::Multiaddr;
 
-    use super::Libp2pNetworkAdapter;
-    use crate::ports::network::{NetworkEvent, P2pNetwork};
+    use super::{Libp2pNetworkAdapter, NodeIdentity};
+    use crate::{
+        adapters::storage::sqlite_peer_store::SqlitePeerStore,
+        application::crypto::voice_encryptor::ephemeral_cipher,
+        domain::errors::StorageError,
+        ports::{
+            network::{NetworkEvent, P2pNetwork},
+            peer_trust::NodeIdentityStore,
+        },
+    };
+
+    /// Loading the identity twice from one store yields the same peer ID, and an adapter built
+    /// from it uses that ID, so paired devices recognise this node after a restart.
+    #[test]
+    fn a_stored_node_identity_keeps_the_peer_id_stable() {
+        let store = SqlitePeerStore::open_in_memory(ephemeral_cipher())
+            .unwrap_or_else(|error| panic!("peer store must open: {error}"));
+
+        let first_identity = NodeIdentity::load_or_create(&store)
+            .unwrap_or_else(|error| panic!("identity must be created: {error}"));
+        let second_identity = NodeIdentity::load_or_create(&store)
+            .unwrap_or_else(|error| panic!("identity must be loaded: {error}"));
+        let first_peer = first_identity.peer_device_id();
+        let adapter = Libp2pNetworkAdapter::new_for_memory_transport_with(first_identity)
+            .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+
+        assert_eq!(first_peer, second_identity.peer_device_id());
+        assert_eq!(adapter.local_device_id(), first_peer);
+        assert!(!format!("{second_identity:?}").contains(first_peer.as_str()));
+    }
+
+    /// A stored value that is not a libp2p keypair is reported, never silently replaced.
+    #[test]
+    fn an_undecodable_stored_identity_is_an_error() {
+        /// Always returns bytes that are not a protobuf-encoded keypair.
+        struct CorruptIdentityStore;
+        impl NodeIdentityStore for CorruptIdentityStore {
+            fn load_or_insert_node_identity(
+                &self,
+                _candidate: &[u8],
+            ) -> Result<zeroize::Zeroizing<Vec<u8>>, StorageError> {
+                Ok(zeroize::Zeroizing::new(b"not a keypair".to_vec()))
+            }
+        }
+
+        assert!(NodeIdentity::load_or_create(&CorruptIdentityStore).is_err());
+    }
 
     /// Proves that one swarm's opaque sync payload reaches a second swarm as a portable event.
     ///

@@ -2,6 +2,11 @@
 
 # Network adapters
 
+`NodeIdentity` (in `libp2p_adapter.rs`) is the node's Ed25519 keypair. `load_or_create` keeps it
+in a `NodeIdentityStore`, so the peer ID, and therefore every pairing, survives restarts.
+`Libp2pNetworkAdapter::new` takes one. `NodeIdentity::ephemeral()` exists only for tests and
+throwaway nodes.
+
 `libp2p_adapter.rs` builds the decentralized local-network transport: TCP secured with Noise,
 connections multiplexed with Yamux, and mDNS events for local peer discovery. Its private
 `/note-taker/sync-message/1` request-response behaviour frames bounded opaque `SyncMessage`

@@ -16,6 +16,8 @@ pub mod file_transfer;
 pub mod media;
 /// Declares contracts for encrypted P2P transport and discovery.
 pub mod network;
+/// Declares persistence for this node's P2P identity and its trusted peers.
+pub mod peer_trust;
 /// Declares contracts for transcript and voice-vector persistence.
 pub mod storage;
 /// Declares persistence for AI performance and device-load telemetry.

@@ -18,6 +18,10 @@ mod sqlite_embedding_encryption;
 pub mod sqlite_encryption_metadata;
 #[cfg(test)]
 mod sqlite_external_identities_tests;
+/// Persists the sealed P2P node identity and the trusted-peer allowlist in SQLite.
+pub mod sqlite_peer_store;
+#[cfg(test)]
+mod sqlite_peer_store_tests;
 /// Implements the voice-vector port with SQLite-persisted speaker names and voice variants.
 pub mod sqlite_voice_vector_db;
 #[cfg(test)]

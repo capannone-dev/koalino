@@ -12,7 +12,7 @@ use zeroize::Zeroizing;
 
 use crate::domain::errors::{CryptoError, StorageError};
 
-/// Encrypts and authenticates derived voice embeddings for storage.
+/// Encrypts and authenticates derived voice embeddings, and other at-rest secrets, for storage.
 pub trait EmbeddingCipher: Send + Sync {
     /// Encrypts `embedding` and binds it to `context`.
     ///
@@ -28,6 +28,22 @@ pub trait EmbeddingCipher: Send + Sync {
     /// Outputs: The original embedding, or `MalformedCiphertext` / `AuthenticationFailed`.
     /// Side effects: None.
     fn open_embedding(&self, context: &str, sealed: &[u8]) -> Result<Vec<f32>, CryptoError>;
+
+    /// Encrypts an arbitrary secret (such as the P2P node key) and binds it to `context`.
+    ///
+    /// Inputs: `context` names the owning record (for example `p2p_node_identity`); `secret` is
+    /// key material that is never logged.
+    /// Outputs: A self-describing sealed value, or `EncryptionFailed`.
+    /// Side effects: Draws a fresh random nonce from the operating system.
+    fn seal_secret(&self, context: &str, secret: &[u8]) -> Result<Vec<u8>, CryptoError>;
+
+    /// Verifies and decrypts a value produced by `seal_secret`.
+    ///
+    /// Inputs: The same `context` used when sealing and the stored bytes.
+    /// Outputs: The secret in memory that is wiped on drop, or `MalformedCiphertext` /
+    /// `AuthenticationFailed` (wrong key, wrong context, or tampering).
+    /// Side effects: None.
+    fn open_secret(&self, context: &str, sealed: &[u8]) -> Result<Zeroizing<Vec<u8>>, CryptoError>;
 }
 
 /// Tunes Argon2id passphrase key derivation.
