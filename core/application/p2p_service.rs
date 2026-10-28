@@ -252,6 +252,27 @@ where
         }
     }
 
+    /// Applies allowlist changes made outside this task, such as the CLI's `devices revoke`.
+    ///
+    /// The task calls this about once a second, with `poll_local_changes`. A device removed from
+    /// the stored allowlist is dropped from the transport's gate and disconnected; the status
+    /// snapshot is refreshed when anything changed.
+    /// Side effects: Reads the allowlist; may revoke or admit peers in the transport. Failures are
+    /// logged and retried on the next call.
+    pub fn poll_trust_changes(&mut self) {
+        match self.pairing_manager.reconcile_trusted_peers() {
+            Ok(false) => {}
+            Ok(true) => {
+                if let Err(error) = self.refresh_trusted_devices() {
+                    tracing::warn!(error = %error, "paired devices could not be listed");
+                }
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "allowlist changes could not be applied");
+            }
+        }
+    }
+
     /// Handles everything the transport queued since the last call.
     ///
     /// Side effects: Applies sync messages (persisting merged documents and creating meetings),

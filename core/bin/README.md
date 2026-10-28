@@ -96,7 +96,8 @@ HTTP runtime.
   (non-blocking, callable from any thread), `snapshot` (status plus listen addresses), and
   `shutdown` (blocking, so callers run it in `spawn_blocking`).
 - **Loop:** the task wakes on swarm events, on commands, on scheduled sync retries, on a
-  1-second tick that calls `poll_local_changes`, and on a 10-second tick that redials every
+  1-second tick that calls `poll_local_changes` and `poll_trust_changes` (so a `cli devices
+  revoke` on the same database takes effect without a restart), and on a 10-second tick that redials every
   paired device that is not connected. A transcript saved by the pipeline therefore reaches
   connected devices about a second later, and a device that comes back online within about
   10 seconds.

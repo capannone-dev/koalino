@@ -16,7 +16,7 @@ use crate::{
         storage::{sqlite_adapter::SqliteNoteRepository, sqlite_peer_store::SqlitePeerStore},
     },
     application::{
-        crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor, ephemeral_cipher},
+        crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
         meeting_crdt::MeetingCrdtService,
         meeting_document::AutomergeMeetingDocumentCodec,
         p2p_service::{P2pCommand, P2pCommandOutcome, P2pService},
@@ -27,7 +27,10 @@ use crate::{
         models::{DeviceId, MeetingId, MeetingTitle, Transcript},
         peer_trust::DeviceName,
     },
-    ports::{peer_trust::PairingTransport, storage::NoteRepository},
+    ports::{
+        peer_trust::{PairingTransport, TrustedPeerStore},
+        storage::NoteRepository,
+    },
 };
 
 /// A service over the production adapter and stores.
@@ -62,8 +65,9 @@ fn service_with_database(name: &str, adapter: Libp2pNetworkAdapter) -> (Service,
     )
     .and_then(|repository| repository.with_document_codec(Arc::new(AutomergeMeetingDocumentCodec)))
     .unwrap_or_else(|error| panic!("repository must open: {error}"));
-    let trust_store = SqlitePeerStore::open_in_memory(ephemeral_cipher())
-        .unwrap_or_else(|error| panic!("peer store must open: {error}"));
+    // The allowlist shares the database file, as in production, so a second connection can
+    // change it the way the CLI does.
+    let trust_store = trust_store_connection(&database_path);
     let device_name =
         DeviceName::parse(name).unwrap_or_else(|error| panic!("valid device name: {error}"));
     let mut service = P2pService::new(
@@ -75,6 +79,15 @@ fn service_with_database(name: &str, adapter: Libp2pNetworkAdapter) -> (Service,
         .start()
         .unwrap_or_else(|error| panic!("service must start: {error}"));
     (service, database_path)
+}
+
+/// Opens another connection to a service's allowlist, as the CLI's `devices` commands do.
+fn trust_store_connection(database_path: &PathBuf) -> SqlitePeerStore {
+    SqlitePeerStore::open(
+        database_path,
+        Arc::new(VoiceEncryptor::new(&EncryptionKey::from_bytes([3; 32]))),
+    )
+    .unwrap_or_else(|error| panic!("peer store must open: {error}"))
 }
 
 /// Drives both swarms and both services until `condition` holds (5 s limit).
@@ -484,4 +497,64 @@ async fn a_device_coming_online_later_gets_meetings_from_whoever_is_online() {
         stored_title(&phone, &meeting_id).as_deref(),
         Some("Phone was off")
     );
+}
+
+/// A device removed from the allowlist by another process (the CLI's `devices revoke`) is dropped
+/// by the running service on its next trust poll: it leaves the paired devices and is
+/// disconnected, without a restart.
+#[tokio::test]
+async fn a_revocation_made_by_another_process_takes_effect_on_the_next_poll() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9377"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let (mut laptop, laptop_database) = service_with_database("Laptop", laptop_adapter);
+    let mut phone = service("Phone", phone_adapter);
+    let laptop_id = laptop.transport().local_peer_id();
+    let phone_id = phone.transport().local_peer_id();
+    run(&mut phone, P2pCommand::MakePairable);
+    laptop
+        .transport_mut()
+        .allow_pairing_dial(&phone_id)
+        .and_then(|()| laptop.transport_mut().dial_memory(phone_address))
+        .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+    drive(&mut laptop, &mut phone, |laptop, _| {
+        laptop.transport().is_connected_to(&phone_id)
+    })
+    .await;
+    run(&mut laptop, P2pCommand::StartPairing(phone_id.clone()));
+    drive(&mut laptop, &mut phone, |_, phone| {
+        !phone.status().incoming_requests.is_empty()
+    })
+    .await;
+    run(&mut laptop, P2pCommand::ConfirmCode(phone_id.clone()));
+    run(&mut phone, P2pCommand::AcceptIncoming(laptop_id));
+    drive(&mut laptop, &mut phone, |laptop, _| {
+        !laptop.status().trusted_devices.is_empty()
+    })
+    .await;
+    laptop.poll_trust_changes();
+    assert_eq!(
+        laptop.status().trusted_devices.len(),
+        1,
+        "nothing changed yet"
+    );
+
+    let was_trusted = trust_store_connection(&laptop_database)
+        .revoke_peer(&phone_id)
+        .unwrap_or_else(|error| panic!("revoke must succeed: {error}"));
+    laptop.poll_trust_changes();
+
+    assert!(was_trusted);
+    assert!(laptop.status().trusted_devices.is_empty());
+    drive(&mut laptop, &mut phone, |laptop, _| {
+        !laptop.transport().is_connected_to(&phone_id)
+    })
+    .await;
 }

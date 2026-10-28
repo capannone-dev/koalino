@@ -409,7 +409,10 @@ async fn run_service(
         tokio::select! {
             _ = &mut stop => break,
             () = sleep_until_retry(next_retry_at) => {}
-            _ = change_poll.tick() => service.poll_local_changes(),
+            _ = change_poll.tick() => {
+                service.poll_local_changes();
+                service.poll_trust_changes();
+            }
             _ = paired_peer_redial.tick() => service.transport_mut().redial_paired_peers(),
             swarm_result = service.transport_mut().drive_next_swarm_event() => {
                 if let Err(error) = swarm_result {

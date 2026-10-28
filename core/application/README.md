@@ -100,6 +100,11 @@ writes from any connection or process: the recording pipeline, HTTP, the CLI, an
 sees documents merged from one peer, which it forwards to the others, so a device connected only
 through another still gets changes at once.
 
+`poll_trust_changes`, on the same tick, calls `PairingManager::reconcile_trusted_peers`. The
+stored allowlist is authoritative: a device another process removed from it (the CLI's `devices
+revoke`) is dropped from the transport's gate and disconnected, a stored device not yet admitted
+is admitted, and the status snapshot is refreshed when anything changed.
+
 `MeetingCrdtService::apply_sync_message` saves only when a message added changes. Without that, a
 handshake between converged devices would advance the revision and the two devices would echo each
 other every second. A device that comes online later gets every meeting from whichever device it

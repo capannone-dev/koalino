@@ -16,7 +16,10 @@
 //! screens show different codes and the owner declines. Every trust decision is persisted in the
 //! `TrustedPeerStore` before the transport admits the peer.
 
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use crate::{
     domain::{
@@ -119,6 +122,9 @@ pub struct PairingManager<Transport, Store> {
     outgoing: HashMap<DeviceId, OutgoingPairing>,
     /// Requests awaiting the owner's answer, by peer.
     incoming: HashMap<DeviceId, DeviceName>,
+    /// Peers this manager admitted into the transport's gate, compared with the store by
+    /// `reconcile_trusted_peers`.
+    admitted_peers: HashSet<DeviceId>,
 }
 
 impl<Transport, Store> PairingManager<Transport, Store>
@@ -143,6 +149,7 @@ where
             clock,
             outgoing: HashMap::new(),
             incoming: HashMap::new(),
+            admitted_peers: HashSet::new(),
         }
     }
 
@@ -152,8 +159,52 @@ where
     /// Side effects: Reads the allowlist and updates the transport's gate.
     pub fn load_trusted_peers(&mut self) -> Result<(), PairingError> {
         for peer in self.store.trusted_peers()? {
-            self.transport.trust_peer(peer.peer_id())?;
+            self.admit(peer.peer_id())?;
         }
+        Ok(())
+    }
+
+    /// Brings the transport's gate in line with the stored allowlist.
+    ///
+    /// Other processes sharing the database (the CLI's `devices revoke`) change the allowlist
+    /// without going through this manager; the P2P task calls this about once a second so such a
+    /// change takes effect without a restart.
+    /// Outputs: Whether any peer was admitted or dropped, or a storage or network error (peers
+    /// handled before the error keep their new state; the next call retries the rest).
+    /// Side effects: Reads the allowlist; revokes peers no longer stored (closing their
+    /// connections) and admits stored peers not yet admitted.
+    pub fn reconcile_trusted_peers(&mut self) -> Result<bool, PairingError> {
+        let stored_peers: HashSet<DeviceId> = self
+            .store
+            .trusted_peers()?
+            .into_iter()
+            .map(|peer| peer.peer_id().clone())
+            .collect();
+        let dropped_peers: Vec<DeviceId> = self
+            .admitted_peers
+            .difference(&stored_peers)
+            .cloned()
+            .collect();
+        let added_peers: Vec<DeviceId> = stored_peers
+            .difference(&self.admitted_peers)
+            .cloned()
+            .collect();
+        for peer_id in &dropped_peers {
+            self.transport.revoke_peer(peer_id)?;
+            self.admitted_peers.remove(peer_id);
+        }
+        for peer_id in &added_peers {
+            self.admit(peer_id)?;
+        }
+        Ok(!dropped_peers.is_empty() || !added_peers.is_empty())
+    }
+
+    /// Admits one peer into the transport's gate and remembers it.
+    ///
+    /// Side effects: Updates the transport's gate.
+    fn admit(&mut self, peer_id: &DeviceId) -> Result<(), PairingError> {
+        self.transport.trust_peer(peer_id)?;
+        self.admitted_peers.insert(peer_id.clone());
         Ok(())
     }
 
@@ -305,6 +356,7 @@ where
     pub fn revoke(&mut self, peer_id: &DeviceId) -> Result<bool, PairingError> {
         let was_trusted = self.store.revoke_peer(peer_id)?;
         self.transport.revoke_peer(peer_id)?;
+        self.admitted_peers.remove(peer_id);
         Ok(was_trusted)
     }
 
@@ -385,7 +437,7 @@ where
             device_name.clone(),
             (self.clock)(),
         ))?;
-        self.transport.trust_peer(peer_id)?;
+        self.admit(peer_id)?;
         Ok(PairingUpdate::Paired {
             peer_id: peer_id.clone(),
             device_name,

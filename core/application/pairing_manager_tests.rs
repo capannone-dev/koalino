@@ -383,6 +383,45 @@ fn stored_peers_are_loaded_and_revocation_removes_them_everywhere() {
     assert!(pairing.transport().trusted.is_empty());
 }
 
+/// Another process sharing the database (the CLI's `devices revoke`) edits the allowlist directly;
+/// reconciling brings the transport's gate back in line with the store and reports what changed.
+#[test]
+fn reconciling_applies_allowlist_changes_made_by_other_processes() {
+    let mut pairing = manager();
+    let phone = DeviceId::new("peer-phone");
+    let tablet = DeviceId::new("peer-tablet");
+    pairing
+        .store()
+        .trust_peer(&TrustedPeer::new(phone.clone(), name("Phone"), 1))
+        .unwrap_or_else(|error| panic!("peer must be stored: {error}"));
+    pairing
+        .load_trusted_peers()
+        .unwrap_or_else(|error| panic!("peers must load: {error}"));
+    let unchanged = pairing
+        .reconcile_trusted_peers()
+        .unwrap_or_else(|error| panic!("reconcile must succeed: {error}"));
+    assert!(!unchanged, "nothing changed yet");
+
+    pairing
+        .store()
+        .revoke_peer(&phone)
+        .unwrap_or_else(|error| panic!("peer must be revoked: {error}"));
+    pairing
+        .store()
+        .trust_peer(&TrustedPeer::new(tablet.clone(), name("Tablet"), 2))
+        .unwrap_or_else(|error| panic!("peer must be stored: {error}"));
+    let changed = pairing
+        .reconcile_trusted_peers()
+        .unwrap_or_else(|error| panic!("reconcile must succeed: {error}"));
+
+    assert!(changed);
+    assert_eq!(pairing.transport().trusted, vec![tablet]);
+    let again = pairing
+        .reconcile_trusted_peers()
+        .unwrap_or_else(|error| panic!("reconcile must succeed: {error}"));
+    assert!(!again, "a second pass finds nothing to do");
+}
+
 /// Making this device pairable opens the transport's window for the requested duration.
 #[test]
 fn making_the_device_pairable_opens_the_window() {
