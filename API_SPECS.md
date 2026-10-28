@@ -47,6 +47,18 @@ code receive that interface and never access Rust structs.
 Neither function accepts raw audio, voice embeddings, P2P credentials, Rust ownership pointers,
 or serialized domain structures.
 
+### Telemetry C ABI
+
+Each function returns caller-freed UTF-8 JSON (release it with `note_taker_free_string`), or null
+when the runtime is unavailable or the argument is invalid. The shapes match the HTTP telemetry
+routes below.
+
+- `char *note_taker_get_devices(void)` returns the device array (the `devices` value of
+  `GET /api/devices`).
+- `char *note_taker_get_telemetry_summary(void)` returns the `GET /api/telemetry/summary` object.
+- `char *note_taker_get_device_telemetry(const char *device_id)` returns the
+  `GET /api/telemetry/devices/{device_id}` object for the last 24 hours.
+
 ### Meeting export C ABI
 
 `char *note_taker_export_meeting(const char *meeting_id, const char *format, const char *options_json)`
@@ -191,6 +203,22 @@ is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting. 
 its summary. An invalid title returns `400` (Issue #35). `GET /api/voice-gallery` returns
 speaker labels and unresolved review-clip identifiers/timing only; voice vectors and raw audio are
 never serialized. `GET /api/telemetry` returns aggregate task count, duration, and latency.
+
+### Telemetry
+
+All telemetry responses carry privacy-safe metrics only: task kinds, durations, latencies, and
+power estimates, never task content. A storage failure returns `500`.
+
+- `GET /api/telemetry` returns `{ "task_count": 3, "total_duration_ms": 4200, "average_latency_ms": 85 }`.
+- `GET /api/telemetry/summary` returns
+  `{ "total_transcription_time_ms": 4200, "average_latency_ms": 85, "total_tasks": 3, "power_estimate_mwh": 1.5 }`.
+- `GET /api/devices` returns the devices seen in telemetry:
+  `{ "devices": [{ "device_id": "device-…", "supports_vad": true, "supported_models": ["whisper-base"], "last_seen": 1761642300000 }] }`
+  (`last_seen` in epoch milliseconds).
+- `GET /api/telemetry/devices/{device_id}` returns that device's metrics from the last 24 hours:
+  `{ "device_id": "device-…", "metrics": [{ "task_type": "transcription", "duration_ms": 1400, "latency_ms": 80, "power_mwh": 0.5, "recorded_at": 1761642300000 }] }`.
+  `task_type` is `transcription`, `cloud_transcription`, `file_transfer`, or `diarization`. A
+  device with no metrics in that window returns `404`.
 
 `GET /ws` upgrades to a WebSocket and sends tagged JSON text events: `meeting_started` with an
 opaque `meeting_id`, `sync_status_changed` with a safe status string, or `new_unassigned_clip`
