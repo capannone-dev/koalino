@@ -2,6 +2,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PrimaryNav } from "@/components/primary-nav";
 import "./styles.css";
 
 export const metadata: Metadata = {
@@ -15,12 +16,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <header className="mx-auto flex max-w-7xl items-center justify-between p-4">
           <Link href="/">Note Taker</Link>
-          <nav aria-label="Primary navigation" className="flex gap-4">
-            <Link href="/dashboard">Dashboard</Link>
-            <Link href="/meetings">Meetings</Link>
-            <Link href="/voice-gallery">Voice gallery</Link>
-            <Link href="/settings">Settings</Link>
-          </nav>
+          <PrimaryNav />
         </header>
         <main className="mx-auto max-w-7xl p-4">{children}</main>
       </body>

@@ -1,6 +1,5 @@
 // Defines typed REST and WebSocket clients for the documented local Axum API.
 
-export type Telemetry = { task_count: number; total_duration_ms: number; average_latency_ms: number };
 export type Device = { device_id: string; supports_vad: boolean; supported_models: string[]; last_seen: number };
 export type Metric = { task_type: "transcription" | "cloud_transcription" | "file_transfer" | "diarization"; duration_ms: number; latency_ms: number; power_mwh: number; recorded_at: number };
 export type DeviceTelemetry = { device_id: string; metrics: Metric[] };
@@ -22,7 +21,6 @@ async function apiGet<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export const getTelemetry = () => apiGet<Telemetry>("/api/telemetry");
 export const getDevices = () => apiGet<{ devices: Device[] }>("/api/devices");
 export const getDeviceTelemetry = (deviceId: string) => apiGet<DeviceTelemetry>(`/api/telemetry/devices/${encodeURIComponent(deviceId)}`);
 export const getTelemetrySummary = () => apiGet<TelemetrySummary>("/api/telemetry/summary");

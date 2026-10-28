@@ -20,5 +20,8 @@ elsewhere, such as `info,note_taker_core=debug`, shows as "Custom") and **Export
 downloads the file through `fetchLogExport` and saves it with a temporary link. Failures map to
 plain messages; server text is never shown.
 
+`primary-nav.tsx` renders the header links (Meetings, Voice gallery, Settings).
+`telemetry-entry.tsx` is the Settings card linking to `/settings/telemetry` (Issue #53).
+
 `telemetry-dashboard.tsx` owns the responsive Recharts visualizations and bounded WebSocket refresh
 loop. It receives typed local API DTOs only and never reads SQLite or media files.

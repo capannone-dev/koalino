@@ -23,17 +23,18 @@ checks on every change under `web/`, so they are verified even where Node.js is 
 
 ## Pages
 
-- `/dashboard` is the responsive telemetry dashboard. It renders device health, summary cards,
+- `/settings/telemetry` (Settings → Telemetry; Issue #53) is the responsive telemetry dashboard.
+  `/dashboard`, its old address, redirects there. It renders device health, summary cards,
   duration, latency, task mix, and power charts from the local Axum API. Its WebSocket client
   refreshes a telemetry update at most once every ten seconds and reconnects after disconnect.
-- `/` shows aggregate telemetry and live Axum WebSocket status messages.
+- `/` shows live Axum WebSocket status messages.
 - `/meetings` lists local meetings; `/meetings/<id>` shows transcript and attachment metadata.
   Both can rename a meeting (see below).
 - `/voice-gallery` loads every meeting's unresolved unknown-speaker clusters from
   `GET /api/meetings/{id}/unknown-clusters`. It shows each cluster's total speech time and chunk
   count, and posts the typed name to `POST /api/clusters/{id}/assign`. An assigned cluster is
   removed from the list.
-- `/settings` (Issue #46) shows the daemon's log level, changes it until the daemon restarts,
+- `/settings` (Issue #46) links to Telemetry, shows the daemon's log level, changes it until the daemon restarts,
   and downloads the newest week of logs (`app/settings/README.md`).
 
 Cluster responses deliberately carry no audio paths, so the web gallery has no playback. Local

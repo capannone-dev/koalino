@@ -1,15 +1,11 @@
-// Renders the dashboard home from the Axum telemetry endpoint and live event client.
+// Renders the server home: live Axum WebSocket status. Telemetry is under Settings (Issue #53).
 
 import { LiveStatus } from "@/components/live-status";
-import { TelemetryCard } from "@/components/telemetry-card";
-import { getTelemetry } from "@/lib/api";
 
-export default async function DashboardPage() {
-  const telemetry = await getTelemetry();
+export default function HomePage() {
   return (
-    <section>
-      <h1>Server dashboard</h1>
-      <TelemetryCard telemetry={telemetry} />
+    <section className="space-y-2">
+      <h1 className="text-2xl font-bold sm:text-3xl">Note Taker server</h1>
       <LiveStatus />
     </section>
   );

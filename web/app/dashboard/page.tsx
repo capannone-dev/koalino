@@ -1,10 +1,7 @@
-// Composes initial telemetry dashboard data from documented local Axum endpoints.
+// Sends old `/dashboard` bookmarks to the telemetry dashboard's new home under Settings (Issue #53).
 
-import { TelemetryDashboard } from "@/components/telemetry-dashboard";
-import { getDeviceTelemetry, getDevices, getTelemetrySummary } from "@/lib/api";
+import { redirect } from "next/navigation";
 
-export default async function DashboardPage() {
-  const devicesResponse = await getDevices();
-  const series = await Promise.all(devicesResponse.devices.map(async (device) => getDeviceTelemetry(device.device_id).catch(() => ({ device_id: device.device_id, metrics: [] }))));
-  return <TelemetryDashboard initialData={{ devices: devicesResponse.devices, summary: await getTelemetrySummary(), series }} />;
+export default function DashboardRedirect() {
+  redirect("/settings/telemetry");
 }

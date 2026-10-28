@@ -1,7 +1,6 @@
-<!-- Documents the responsive telemetry dashboard App Router route. -->
+<!-- Documents the legacy /dashboard route. -->
 
-# Telemetry dashboard route
+# Legacy dashboard route
 
-`page.tsx` loads initial privacy-safe telemetry from the local Axum daemon. Interactive chart
-refresh, WebSocket reconnecting, and responsive rendering live in the reusable
-`TelemetryDashboard` component so this route remains a server-side composition boundary.
+The telemetry dashboard moved to `/settings/telemetry` (Issue #53). `page.tsx` only redirects
+there, so existing bookmarks keep working.

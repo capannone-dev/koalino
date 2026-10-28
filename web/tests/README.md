@@ -27,3 +27,5 @@ Settings tests (Issue #46):
 - `log-settings.test.tsx` covers the selector (offered and custom levels), applying a level, a
   failed change keeping the old one, the disabled selector without a server, and Export logs
   (download and no logs yet).
+- `settings-navigation.test.tsx` (Issue #53) checks that the header has no telemetry entry and
+  that Settings links to `/settings/telemetry`.
