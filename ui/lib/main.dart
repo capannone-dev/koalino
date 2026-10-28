@@ -120,8 +120,6 @@ final class NoteTakerApp extends StatelessWidget {
           RecordingScreen(recordingController: recordingController),
       meetingsScreenBuilder: (BuildContext context) =>
           const _MeetingsDestination(),
-      telemetryScreenBuilder: (BuildContext context) =>
-          const _TelemetryDestination(),
       devicesScreenBuilder: (BuildContext context) =>
           const _DevicesDestination(),
       settingsScreenBuilder: (BuildContext context) =>
@@ -230,7 +228,7 @@ final class _VoiceGalleryDestinationState
       VoiceGalleryScreen(voiceGalleryController: _controller);
 }
 
-/// Owns a telemetry controller, so its polling timer stops when the destination is left.
+/// Owns a telemetry controller, so its polling timer stops when the Settings page is closed.
 final class _TelemetryDestination extends StatefulWidget {
   const _TelemetryDestination();
 
@@ -292,6 +290,8 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
   Widget build(BuildContext context) => SettingsScreen(
         logSettingsController: _logSettingsController,
         appLockController: widget.appLockController,
+        telemetryScreenBuilder: (BuildContext context) =>
+            const _TelemetryDestination(),
       );
 }
 

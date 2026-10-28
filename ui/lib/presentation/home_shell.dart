@@ -4,8 +4,8 @@
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 
-/// Hosts the Record, Meetings, Telemetry, and Devices destinations, plus Settings when given a
-/// builder (the app always gives one; Issue #46).
+/// Hosts the Record, Meetings, and Devices destinations, plus Settings when given a builder
+/// (the app always gives one; Issue #46). Telemetry is a page of Settings (Issue #53).
 ///
 /// Phones get a bottom `NavigationBar`; windows at least `twoPaneBreakpoint` wide get a
 /// `NavigationRail`. Only the selected destination is built, so hidden screens neither poll
@@ -13,7 +13,7 @@ import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 final class HomeShell extends StatefulWidget {
   /// Creates the shell from one builder per destination.
   ///
-  /// Inputs: Builders for the recording, meeting list, telemetry, and devices screens, and
+  /// Inputs: Builders for the recording, meeting list, and devices screens, and
   /// optionally the settings screen, supplied by the composition root (tests pass
   /// placeholders).
   /// Outputs: The navigation shell, starting on Record.
@@ -21,7 +21,6 @@ final class HomeShell extends StatefulWidget {
   const HomeShell({
     required this.recordingScreenBuilder,
     required this.meetingsScreenBuilder,
-    required this.telemetryScreenBuilder,
     required this.devicesScreenBuilder,
     this.settingsScreenBuilder,
     super.key,
@@ -29,7 +28,6 @@ final class HomeShell extends StatefulWidget {
 
   final WidgetBuilder recordingScreenBuilder;
   final WidgetBuilder meetingsScreenBuilder;
-  final WidgetBuilder telemetryScreenBuilder;
   final WidgetBuilder devicesScreenBuilder;
   final WidgetBuilder? settingsScreenBuilder;
 
@@ -50,11 +48,6 @@ final class _HomeShellState extends State<HomeShell> {
       icon: Icons.event_note_outlined,
       selectedIcon: Icons.event_note,
       label: 'Meetings'
-    ),
-    (
-      icon: Icons.insights_outlined,
-      selectedIcon: Icons.insights,
-      label: 'Telemetry'
     ),
     (
       icon: Icons.devices_outlined,
@@ -91,9 +84,8 @@ final class _HomeShellState extends State<HomeShell> {
       child: Builder(
         builder: switch (_selectedIndex) {
           1 => widget.meetingsScreenBuilder,
-          2 => widget.telemetryScreenBuilder,
-          3 => widget.devicesScreenBuilder,
-          4 => widget.settingsScreenBuilder ?? widget.recordingScreenBuilder,
+          2 => widget.devicesScreenBuilder,
+          3 => widget.settingsScreenBuilder ?? widget.recordingScreenBuilder,
           _ => widget.recordingScreenBuilder,
         },
       ),

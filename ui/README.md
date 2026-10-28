@@ -8,11 +8,12 @@ small Dart bridge interfaces, allowing widget tests to use deterministic fakes.
 
 ## Navigation
 
-`HomeShell` hosts the Record, Meetings, and Telemetry destinations. Windows narrower than 840 px
+`HomeShell` hosts the Record, Meetings, Devices, and Settings destinations; Telemetry is a page
+of Settings (Issue #53). Windows narrower than 840 px
 (phones) use a Material 3 `NavigationBar`, and wider ones (desktops, tablets in landscape) use a
-`NavigationRail`. Only the selected destination is built. Meetings and Telemetry each own their
-controller and dispose it when left, so the telemetry timer stops and the meeting list reloads
-on every visit. The app-lifetime `RecordingController` keeps an active recording across
+`NavigationRail`. Only the selected destination is built. Meetings and the Telemetry page each own
+their controller and dispose it when left, so the telemetry timer stops and the meeting list
+reloads on every visit. The app-lifetime `RecordingController` keeps an active recording across
 destinations. This replaces the earlier drawer, whose push used a context above the navigator.
 
 ## Recording controls
@@ -110,7 +111,8 @@ older clip FFI symbols remain exported, but the Dart bridge no longer binds them
 
 ## Telemetry dashboard
 
-The Telemetry destination opens a responsive Material 3 telemetry dashboard for mobile and desktop. It polls
+Settings → Telemetry opens a responsive Material 3 telemetry dashboard for mobile and desktop. The
+pipeline records one row per transcribed chunk (Issue #53). The dashboard polls
 caller-freed Rust JSON every ten seconds and uses `fl_chart` for privacy-safe duration, latency,
 task-mix, and power views; no audio, transcript, biometric, or credential content crosses FFI.
 

@@ -9,7 +9,7 @@ of Rust types, dynamic-library handles, or native status codes.
 for Rust-ranked meeting suggestions. It depends only on `AttachmentController` and requires an
 explicit user selection before the controller calls Rust to persist a link.
 
-`HomeShell` switches between the Record, Meetings, and Telemetry destinations, with a bottom
+`HomeShell` switches between the Record, Meetings, Devices, and Settings destinations, with a bottom
 `NavigationBar` below 840 px and a `NavigationRail` above it. `RecordingScreen` adds an optional,
 width-capped meeting title field. `MeetingListScreen` renders titles above their date and
 duration, and pushes `MeetingDetailScreen` on phones or shows `MeetingDetailView` beside the list
@@ -44,10 +44,11 @@ readers), so an active recording and every screen keep their state. It forwards 
 hidden and shown to `AppLockController`.
 
 `settings_screen.dart` (`SettingsScreen`) is on every platform (Issue #46). Its diagnostics hold
-the Log level selector (Error to Trace, Info by default; the core keeps the choice across
+a Telemetry entry, which pushes the telemetry dashboard as a page (Issue #53; it used to be a
+destination), the Log level selector (Error to Trace, Info by default; the core keeps the choice across
 restarts) and Export logs (Share logs on Android), which saves or shares the last seven days of
 logs. On Android it also holds the App lock switch, which explains why it is unavailable without
-a screen lock or before Android 10. `HomeShell` shows Settings as a fifth destination when given
+a screen lock or before Android 10. `HomeShell` shows Settings as the fourth destination when given
 a builder, which the app always gives.
 
 The meeting detail's app bar has Name speakers (`NameSpeakersButton`), which opens the voice

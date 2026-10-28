@@ -1,6 +1,6 @@
 // The Settings destination, on every platform (Issue #46). Android adds the App lock switch; every
-// platform has Diagnostics: the log level and exporting the logs (saved through a dialog on
-// desktops, shared through the share sheet on Android).
+// platform has Diagnostics: the Telemetry page (Issue #53), the log level and exporting the logs
+// (saved through a dialog on desktops, shared through the share sheet on Android).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
@@ -14,17 +14,20 @@ final class SettingsScreen extends StatelessWidget {
   /// Creates the screen.
   ///
   /// Inputs: The log settings controller, already loaded by the composition root, and the
-  /// app-lock controller where the platform has App lock (Android), already initialized.
+  /// app-lock controller where the platform has App lock (Android), already initialized, and
+  /// the Telemetry page, which adds a Telemetry entry that opens it.
   /// Outputs: A Material 3 settings list.
-  /// Side effects: None; the controls ask their controllers.
+  /// Side effects: None; the controls ask their controllers, and Telemetry pushes its page.
   const SettingsScreen({
     required this.logSettingsController,
     this.appLockController,
+    this.telemetryScreenBuilder,
     super.key,
   });
 
   final LogSettingsController logSettingsController;
   final AppLockController? appLockController;
+  final WidgetBuilder? telemetryScreenBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -69,10 +72,21 @@ final class SettingsScreen extends StatelessWidget {
     ];
   }
 
-  /// The log level selector and the export action.
+  /// The Telemetry entry, the log level selector and the export action.
   List<Widget> _diagnosticsTiles(BuildContext context) {
     final LogSettingsController logs = logSettingsController;
+    final WidgetBuilder? telemetryScreen = telemetryScreenBuilder;
     return <Widget>[
+      if (telemetryScreen != null)
+        ListTile(
+          leading: const Icon(Icons.insights_outlined),
+          title: const Text('Telemetry'),
+          subtitle: const Text('How long transcription takes on each device, '
+              'and its estimated energy use.'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context)
+              .push(MaterialPageRoute<void>(builder: telemetryScreen)),
+        ),
       ListTile(
         leading: const Icon(Icons.tune),
         title: const Text('Log level'),

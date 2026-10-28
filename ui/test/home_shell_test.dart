@@ -19,8 +19,6 @@ Future<void> pumpHomeShell(WidgetTester tester, Size size,
             const Text('Recording screen'),
         meetingsScreenBuilder: (BuildContext context) =>
             const Text('Meetings screen'),
-        telemetryScreenBuilder: (BuildContext context) =>
-            const Text('Telemetry screen'),
         devicesScreenBuilder: (BuildContext context) =>
             const Text('Devices screen'),
         settingsScreenBuilder: withSettings
@@ -72,9 +70,24 @@ void main() {
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
 
-    await tester.tap(find.text('Telemetry'));
+    await tester.tap(find.text('Devices'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Telemetry screen'), findsOneWidget);
+    expect(find.text('Devices screen'), findsOneWidget);
+  });
+
+  testWidgets('Telemetry is not a destination; it lives in Settings',
+      (WidgetTester tester) async {
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1280, 800),
+    ]) {
+      await pumpHomeShell(tester, size, withSettings: true);
+
+      expect(find.text('Telemetry'), findsNothing);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Settings screen'), findsOneWidget);
+    }
   });
 }

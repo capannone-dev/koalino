@@ -242,6 +242,35 @@ void main() {
       expect(find.text('No logs to export yet'), findsOneWidget);
     });
 
+    testWidgets('Telemetry opens as a page of Settings',
+        (WidgetTester tester) async {
+      final LogSettingsController controller =
+          desktopController(FakeLogBridge());
+      await controller.load();
+      await tester.pumpWidget(MaterialApp(
+          home: SettingsScreen(
+        logSettingsController: controller,
+        telemetryScreenBuilder: (BuildContext context) =>
+            const Scaffold(body: Text('Telemetry page')),
+      )));
+
+      await tester.tap(find.text('Telemetry'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Telemetry page'), findsOneWidget);
+    });
+
+    testWidgets('without a telemetry page there is no Telemetry entry',
+        (WidgetTester tester) async {
+      final LogSettingsController controller =
+          desktopController(FakeLogBridge());
+      await controller.load();
+      await tester.pumpWidget(
+          MaterialApp(home: SettingsScreen(logSettingsController: controller)));
+
+      expect(find.text('Telemetry'), findsNothing);
+    });
+
     testWidgets('on Android the action shares the logs',
         (WidgetTester tester) async {
       final LogSettingsController controller = LogSettingsController(
