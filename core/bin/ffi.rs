@@ -1387,14 +1387,29 @@ pub unsafe extern "C" fn note_taker_provide_encryption_key(
     key: *const u8,
     key_length: usize,
 ) -> c_int {
-    if key.is_null() || key_length != 32 {
+    if key.is_null() {
         return FFI_INVALID_ARGUMENT;
     }
     // SAFETY: non-null and valid for `key_length` reads per the caller contract.
-    let key_bytes = unsafe { std::slice::from_raw_parts(key, key_length) };
+    store_host_encryption_key(unsafe { std::slice::from_raw_parts(key, key_length) })
+}
+
+/// Length of the host-provided database key, in bytes (AES-256).
+pub(crate) const HOST_ENCRYPTION_KEY_LENGTH: usize = 32;
+
+/// Keeps the host's database key for the next runtime start; shared by the C entry point and
+/// the Android JNI method (`ffi_android.rs`).
+///
+/// Inputs: The key bytes; the caller wipes its own copy afterwards.
+/// Outputs: `0` when stored, `1` when the key is not 32 bytes, `3` if the key slot is poisoned.
+/// Side effects: Copies the key into a zeroizing buffer, wiping any key it replaces.
+pub(crate) fn store_host_encryption_key(key: &[u8]) -> c_int {
+    if key.len() != HOST_ENCRYPTION_KEY_LENGTH {
+        return FFI_INVALID_ARGUMENT;
+    }
     match HOST_ENCRYPTION_KEY.lock() {
         Ok(mut guard) => {
-            *guard = Some(zeroize::Zeroizing::new(key_bytes.to_vec()));
+            *guard = Some(zeroize::Zeroizing::new(key.to_vec()));
             FFI_SUCCESS
         }
         Err(_) => FFI_RUNTIME_UNAVAILABLE,
@@ -2988,9 +3003,13 @@ mod ffi_contract_tests {
         assert_eq!(super::store_open_status(&other), FFI_OPERATION_REJECTED);
     }
 
+    /// Serializes the tests that write the process-wide host key, so read-backs see their own.
+    static HOST_KEY_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     /// `note_taker_provide_encryption_key` accepts exactly 32 bytes and refuses anything else.
     #[test]
     fn provide_encryption_key_checks_its_input() {
+        let _serialized = HOST_KEY_TEST_LOCK.lock();
         let short_key = [1_u8; 16];
         let key = [2_u8; 32];
 
@@ -3006,6 +3025,19 @@ mod ffi_contract_tests {
         assert_eq!(null_status, FFI_INVALID_ARGUMENT);
         assert_eq!(short_status, FFI_INVALID_ARGUMENT);
         assert_eq!(key_status, FFI_SUCCESS);
+    }
+
+    /// The store behind both the C and the JNI entry points keeps exactly the bytes it is given
+    /// and refuses any other length.
+    #[test]
+    fn storing_a_host_key_keeps_exactly_32_bytes() {
+        let _serialized = HOST_KEY_TEST_LOCK.lock();
+        let short_status = super::store_host_encryption_key(&[4_u8; 31]);
+        let key_status = super::store_host_encryption_key(&[5_u8; 32]);
+
+        assert_eq!(short_status, FFI_INVALID_ARGUMENT);
+        assert_eq!(key_status, FFI_SUCCESS);
+        assert_eq!(super::provided_encryption_key(), Some(vec![5_u8; 32]));
     }
 
     /// The host's key is used when provided; Android without one gets an unavailable keychain

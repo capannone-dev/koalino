@@ -21,6 +21,10 @@ pub mod domain;
 /// Exposes the C-compatible Flutter bridge without leaking Rust domain types across FFI.
 #[path = "bin/ffi.rs"]
 pub mod ffi;
+/// JNI entry points the Android app's Kotlin code calls (the Keystore key hand-over).
+#[cfg(target_os = "android")]
+#[path = "bin/ffi_android.rs"]
+pub mod ffi_android;
 /// Turns the Flutter Devices screen's JSON requests into P2P commands.
 #[path = "bin/ffi_p2p.rs"]
 pub mod ffi_p2p;

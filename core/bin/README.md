@@ -113,11 +113,17 @@ Otherwise the runtime opens lazily, on the first native call. The app calls
 `note_taker_start_runtime` right after configuring, on a background isolate, so the database and
 P2P sync start with the app instead of when the owner first opens a screen that needs them.
 
-The keyring crate has no Android backend, so on Android the app unwraps the key from the Android
-Keystore and passes it to `note_taker_provide_encryption_key(key, 32)` before starting the
-runtime (0 accepted, 1 null or not 32 bytes). The core keeps it in a zeroizing buffer and serves
-it through `HostProvidedKeychain`; without it, Android start-up fails with status 6 instead of
-writing a key file. Desktops ignore the call unless it was made, and use the platform keychain.
+The keyring crate has no Android backend, so on Android Kotlin unwraps the key from the Android
+Keystore and passes it to Rust over JNI before Dart starts the runtime: `ffi_android.rs` exports
+`Java_com_example_note_1taker_1ui_NativeCore_provideEncryptionKey` (Android builds only, with the
+`jni` crate). The key never enters the Dart heap. Other hosts can use the C entry point
+`note_taker_provide_encryption_key(key, 32)`. Both return 0 when stored and 1 for a null key or
+another length, and share `store_host_encryption_key`, which keeps the key in a zeroizing buffer
+served through `HostProvidedKeychain`. Without a key, Android start-up fails with status 6
+instead of writing a key file. Desktops use the platform keychain unless a key was provided.
+
+`System.loadLibrary("note_taker_core")` in Kotlin returns the library instance Dart's
+`DynamicLibrary.open` already loaded, so both see the same statics (verified on the S23).
 
 Unpaired devices on the LAN can see the node's peer ID through mDNS. They can connect only while
 the owner keeps a pairing window open, and even then they cannot sync.
