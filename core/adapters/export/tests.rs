@@ -4,6 +4,7 @@
 //! repository. File-writing tests use unique directories under the OS temp dir.
 
 use std::{
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -25,11 +26,11 @@ use crate::{
 };
 
 /// Owns a unique temporary directory and removes it when the test finishes.
-struct TestDirectory(PathBuf);
+pub(super) struct TestDirectory(PathBuf);
 
 impl TestDirectory {
     /// Creates a fresh directory whose name includes `label` for easier debugging.
-    fn new(label: &str) -> Self {
+    pub(super) fn new(label: &str) -> Self {
         let directory_path =
             std::env::temp_dir().join(format!("note-taker-export-{label}-{}", Uuid::new_v4()));
         fs::create_dir_all(&directory_path)
@@ -38,7 +39,7 @@ impl TestDirectory {
     }
 
     /// Borrows the directory path.
-    fn path(&self) -> &Path {
+    pub(super) fn path(&self) -> &Path {
         &self.0
     }
 }
@@ -50,7 +51,7 @@ impl Drop for TestDirectory {
 }
 
 /// Returns the fixed fixture start instant.
-fn fixture_start() -> chrono::DateTime<Utc> {
+pub(super) fn fixture_start() -> chrono::DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 10, 27, 9, 0, 0)
         .single()
         .unwrap_or_else(|| panic!("fixed fixture timestamp must be valid"))
@@ -130,17 +131,190 @@ fn load_pdf(pdf_path: &Path) -> lopdf::Document {
         .unwrap_or_else(|error| panic!("generated PDF must parse with lopdf: {error}"))
 }
 
-/// Extracts each page's text; index 0 is page 1.
-fn page_texts(pdf_document: &lopdf::Document) -> Vec<String> {
+/// One `BT … ET` text object as a viewer would copy it: its decoded text and the resource names
+/// of every font it selects.
+pub(super) struct ExtractedTextObject {
+    pub(super) text: String,
+    pub(super) font_names: BTreeSet<Vec<u8>>,
+}
+
+/// Extracts each page's text, one line per text object; index 0 is page 1.
+///
+/// Unlike `lopdf::Document::extract_text`, this decodes embedded (Type0/Identity-H) fonts through
+/// their `ToUnicode` maps, which is exactly what makes text copyable and searchable in viewers.
+pub(super) fn page_texts(pdf_document: &lopdf::Document) -> Vec<String> {
     pdf_document
         .get_pages()
-        .keys()
-        .map(|page_number| {
-            pdf_document
-                .extract_text(&[*page_number])
-                .unwrap_or_default()
+        .values()
+        .map(|page_id| {
+            page_text_objects(pdf_document, *page_id)
+                .into_iter()
+                .map(|text_object| text_object.text + "\n")
+                .collect()
         })
         .collect()
+}
+
+/// Decodes every text object drawn on the page `page_id`.
+pub(super) fn page_text_objects(
+    pdf_document: &lopdf::Document,
+    page_id: lopdf::ObjectId,
+) -> Vec<ExtractedTextObject> {
+    let unicode_maps = page_font_dictionaries(pdf_document, page_id)
+        .into_iter()
+        .map(|(font_name, font_dictionary)| {
+            (font_name, to_unicode_map(pdf_document, font_dictionary))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let page_content = pdf_document
+        .get_and_decode_page_content(page_id)
+        .unwrap_or_else(|error| panic!("page content must decode: {error}"));
+    let mut text_objects = Vec::new();
+    let mut current_object = ExtractedTextObject {
+        text: String::new(),
+        font_names: BTreeSet::new(),
+    };
+    let mut active_font_name: Option<Vec<u8>> = None;
+    for operation in page_content.operations {
+        match operation.operator.as_str() {
+            "Tf" => {
+                active_font_name = operation
+                    .operands
+                    .first()
+                    .and_then(|operand| operand.as_name().ok())
+                    .map(<[u8]>::to_vec);
+                if let Some(font_name) = &active_font_name {
+                    current_object.font_names.insert(font_name.clone());
+                }
+            }
+            "Tj" => {
+                if let Some(Object::String(shown_bytes, _)) = operation.operands.first() {
+                    let unicode_map = active_font_name
+                        .as_ref()
+                        .and_then(|font_name| unicode_maps.get(font_name))
+                        .and_then(Option::as_ref);
+                    current_object
+                        .text
+                        .push_str(&decode_shown_text(shown_bytes, unicode_map));
+                }
+            }
+            "ET" => text_objects.push(std::mem::replace(
+                &mut current_object,
+                ExtractedTextObject {
+                    text: String::new(),
+                    font_names: BTreeSet::new(),
+                },
+            )),
+            _ => {}
+        }
+    }
+    text_objects
+}
+
+/// Resolves the page's font resources by name. printpdf stores the `/Font` resource dictionary as
+/// an indirect reference, which `lopdf::Document::get_page_fonts` does not follow.
+fn page_font_dictionaries(
+    pdf_document: &lopdf::Document,
+    page_id: lopdf::ObjectId,
+) -> BTreeMap<Vec<u8>, &lopdf::Dictionary> {
+    fn resolve_dictionary<'document>(
+        pdf_document: &'document lopdf::Document,
+        pdf_object: &'document Object,
+    ) -> Option<&'document lopdf::Dictionary> {
+        pdf_document
+            .dereference(pdf_object)
+            .and_then(|(_, resolved_object)| resolved_object.as_dict())
+            .ok()
+    }
+    let font_resources = pdf_document
+        .get_dictionary(page_id)
+        .ok()
+        .and_then(|page_dictionary| page_dictionary.get(b"Resources").ok())
+        .and_then(|resources_object| resolve_dictionary(pdf_document, resources_object))
+        .and_then(|resources| resources.get(b"Font").ok())
+        .and_then(|fonts_object| resolve_dictionary(pdf_document, fonts_object));
+    font_resources
+        .map(|font_resources| {
+            font_resources
+                .iter()
+                .filter_map(|(font_name, font_object)| {
+                    resolve_dictionary(pdf_document, font_object)
+                        .map(|font_dictionary| (font_name.clone(), font_dictionary))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Decodes a `Tj` operand: two-byte glyph IDs through `unicode_map` for embedded fonts, WinAnsi
+/// bytes for the built-in fonts. Unmapped glyphs decode as U+FFFD.
+fn decode_shown_text(shown_bytes: &[u8], unicode_map: Option<&BTreeMap<u16, String>>) -> String {
+    match unicode_map {
+        Some(unicode_map) => shown_bytes
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|glyph_bytes| {
+                unicode_map
+                    .get(&u16::from_be_bytes(*glyph_bytes))
+                    .cloned()
+                    .unwrap_or_else(|| String::from('\u{FFFD}'))
+            })
+            .collect(),
+        None => lopdf::Document::decode_text(Some("WinAnsiEncoding"), shown_bytes),
+    }
+}
+
+/// Parses the `bfchar` entries of a font's `ToUnicode` CMap, or returns `None` for fonts without
+/// one (the built-in fonts).
+fn to_unicode_map(
+    pdf_document: &lopdf::Document,
+    font_dictionary: &lopdf::Dictionary,
+) -> Option<BTreeMap<u16, String>> {
+    let to_unicode_reference = font_dictionary.get(b"ToUnicode").ok()?;
+    let (_, to_unicode_object) = pdf_document.dereference(to_unicode_reference).ok()?;
+    let to_unicode_stream = to_unicode_object.as_stream().ok()?;
+    let cmap_bytes = to_unicode_stream
+        .decompressed_content()
+        .unwrap_or_else(|_| to_unicode_stream.content.clone());
+    let mut unicode_map = BTreeMap::new();
+    let mut inside_bfchar_block = false;
+    for cmap_line in String::from_utf8_lossy(&cmap_bytes).lines() {
+        let cmap_line = cmap_line.trim();
+        if cmap_line.ends_with("beginbfchar") {
+            inside_bfchar_block = true;
+        } else if cmap_line == "endbfchar" {
+            inside_bfchar_block = false;
+        } else if inside_bfchar_block {
+            let hex_fields = cmap_line
+                .split(['<', '>'])
+                .map(str::trim)
+                .filter(|field| !field.is_empty())
+                .collect::<Vec<_>>();
+            if let [glyph_hex, unicode_hex] = hex_fields.as_slice()
+                && let Ok(glyph_id) = u16::from_str_radix(glyph_hex, 16)
+            {
+                unicode_map.insert(glyph_id, decode_utf16_hex(unicode_hex));
+            }
+        }
+    }
+    Some(unicode_map)
+}
+
+/// Decodes a CMap destination such as `00E9` or `D83CDF89` (UTF-16BE); anything else, including
+/// a bare five-digit code point, decodes as U+FFFD because viewers cannot read it either.
+fn decode_utf16_hex(unicode_hex: &str) -> String {
+    if unicode_hex.is_empty() || !unicode_hex.len().is_multiple_of(4) {
+        return String::from('\u{FFFD}');
+    }
+    let code_units = (0..unicode_hex.len())
+        .step_by(4)
+        .map(|offset| u16::from_str_radix(&unicode_hex[offset..offset + 4], 16))
+        .collect::<Result<Vec<_>, _>>();
+    code_units
+        .ok()
+        .and_then(|code_units| String::from_utf16(&code_units).ok())
+        .unwrap_or_else(|| String::from('\u{FFFD}'))
 }
 
 /// Exports one document as PDF into `directory` and returns the parsed result.
