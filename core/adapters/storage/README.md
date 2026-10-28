@@ -52,6 +52,27 @@ and `transcript_segments.unknown_cluster_id` link clips and segments to their cl
 created before Issue #28 gain both columns on open through `ALTER TABLE ... ADD COLUMN`.
 Embeddings are encrypted at rest (see below) and never logged.
 
+## Meeting document as the source of truth (Issue #43)
+
+When the composition roots open the repository with `with_document_codec` (via
+`storage_composition::open_note_repository`), the meeting's Automerge document is authoritative for
+its origin (`created_at`, `acquisition_device_id`), transcript, and segments. SQLite rows are an
+index derived from it:
+
+- `create_meeting`, `save_transcript`, and `save_transcript_segments` update the document and the
+  rows in one transaction.
+- `create_meeting` keeps the origin a peer's document already carries; a new local meeting gets this
+  device and the current whole-second instant. A document that does not parse is rejected and no row
+  is written.
+- `save_crdt_document` (a merged document from a peer) projects it onto the index in the same
+  transaction. Fields the document does not hold yet leave their rows untouched.
+- Unknown-speaker clusters, chunk embeddings, and review clips stay local and are not in the document.
+
+Databases from before this change are migrated once: every meeting's existing rows are written into
+its document, and the `storage_migrations` table (`name` PK) records
+`meeting_documents_v1` so later opens skip the scan. `sqlite_meeting_document_tests.rs` specifies
+this behaviour. Without a codec (test fixtures only) the adapter stores documents as opaque bytes.
+
 The adapter rejects writes to unknown meetings rather than silently creating orphan notes. It emits structured `tracing` events with operation, device, and meeting identifiers only—never transcript content or CRDT bytes.
 
 The `attachments` table persists only an attachment UUID, optional confirmed meeting ID, local

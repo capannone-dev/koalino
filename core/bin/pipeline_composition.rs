@@ -30,9 +30,7 @@ use crate::{
             OpenAiWhisperConfig, OpenAiWhisperTranscriptionEngine, ReqwestOpenAiHttpClient,
         },
         audio::{chunk_audio_store::ChunkAudioStore, vad_chunker::VadConfig},
-        storage::{
-            sqlite_adapter::SqliteNoteRepository, sqlite_voice_vector_db::SqliteVoiceVectorDB,
-        },
+        storage::sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
     application::{
         pipeline::pipeline_factory::{NoDiarizationEngine, PipelineFactory},
@@ -45,6 +43,7 @@ use crate::{
     },
     ports::{ai::TranscriptionEngine, crypto::EmbeddingCipher},
     recording_controller::{ChunkingMode, RecordingController},
+    storage_composition::open_note_repository,
 };
 
 #[cfg(test)]
@@ -401,7 +400,7 @@ pub fn spawn_recording_controller(
     let worker_device_id = device_id.clone();
     let recording_manager = RecordingManager::spawn(move || -> Result<_> {
         let transcription_engine = select_transcription_engine(&config, &engine_audio_store)?;
-        let note_repository = SqliteNoteRepository::open(
+        let note_repository = open_note_repository(
             &worker_database_path,
             worker_device_id,
             Arc::clone(&embedding_cipher),

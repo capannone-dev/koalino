@@ -32,6 +32,7 @@ use crate::{
     },
     ports::{
         crypto::EmbeddingCipher,
+        meeting_document::{MeetingDocumentCodec, MeetingOrigin, MeetingProjection},
         storage::{AttachmentRepository, NoteRepository},
         telemetry::MetricsRepository,
     },
@@ -41,12 +42,18 @@ use crate::{
 /// process such as the daemon) to the same database file.
 const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// Names the one-time copy of pre-#43 rows into meeting documents in `storage_migrations`.
+const DOCUMENT_MIGRATION_NAME: &str = "meeting_documents_v1";
+
 /// Persists meeting records locally without exposing SQLite types beyond the adapter boundary.
 pub struct SqliteNoteRepository {
     connection: Connection,
     device_id: DeviceId,
     /// Seals and opens clip and cluster embeddings.
     embedding_cipher: Arc<dyn EmbeddingCipher>,
+    /// When set, the meeting document is the source of truth and the transcript and segment
+    /// rows are its index (Issue #43). Production composition always sets it.
+    document_codec: Option<Arc<dyn MeetingDocumentCodec>>,
 }
 
 impl SqliteNoteRepository {
@@ -180,7 +187,122 @@ impl SqliteNoteRepository {
             connection: sqlite_connection,
             device_id,
             embedding_cipher,
+            document_codec: None,
         })
+    }
+
+    /// Makes the meeting document the source of truth for origin, transcript, and segments.
+    ///
+    /// Inputs: The document codec (`application::meeting_document::AutomergeMeetingDocumentCodec`).
+    /// Outputs: The repository, or a storage error when migrating legacy rows fails.
+    /// Side effects: Copies transcript, segment, and origin rows that predate Issue #43 into their
+    /// meeting documents once, in one transaction, so later document saves cannot wipe them.
+    pub fn with_document_codec(
+        mut self,
+        document_codec: Arc<dyn MeetingDocumentCodec>,
+    ) -> Result<Self, StorageError> {
+        self.document_codec = Some(document_codec);
+        self.migrate_rows_into_documents()?;
+        Ok(self)
+    }
+
+    /// Returns the device that recorded `meeting_id`, or `None` for an unknown meeting.
+    ///
+    /// Side effects: Reads one row.
+    pub fn acquisition_device_id(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Option<DeviceId>, StorageError> {
+        self.connection
+            .query_row(
+                "SELECT acquisition_device_id FROM meetings WHERE meeting_id = ?1",
+                params![meeting_id.as_str()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map(|device_id| device_id.map(DeviceId::new))
+            .map_err(|error| sqlite_error("unable to load the acquisition device", error))
+    }
+
+    /// Copies index rows that their documents lack into those documents.
+    ///
+    /// Side effects: Rewrites the documents of legacy meetings in one transaction; logs the count.
+    fn migrate_rows_into_documents(&self) -> Result<(), StorageError> {
+        let Some(document_codec) = self.document_codec.as_deref() else {
+            return Ok(());
+        };
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|error| sqlite_error("unable to begin document migration", error))?;
+        transaction
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS storage_migrations (name TEXT PRIMARY KEY NOT NULL);",
+            )
+            .map_err(|error| sqlite_error("unable to prepare the migration record", error))?;
+        let already_migrated: bool = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM storage_migrations WHERE name = ?1)",
+                params![DOCUMENT_MIGRATION_NAME],
+                |row| row.get(0),
+            )
+            .map_err(|error| sqlite_error("unable to read the migration record", error))?;
+        if already_migrated {
+            return Ok(());
+        }
+        let mut migrated_meetings = 0_usize;
+        for meeting_id in self.list_meeting_ids()? {
+            let original_document = read_document(&transaction, &meeting_id)?;
+            let projection = document_codec.project(&meeting_id, &original_document)?;
+            let mut document = original_document.clone();
+            if projection.origin.is_none() {
+                let created_at = self
+                    .load_meeting_metadata(&meeting_id)?
+                    .map(|metadata| metadata.created_at())
+                    .unwrap_or_else(chrono::Utc::now);
+                let acquisition_device_id = self
+                    .acquisition_device_id(&meeting_id)?
+                    .unwrap_or_else(|| self.device_id.clone());
+                document = document_codec.with_origin(
+                    &document,
+                    &MeetingOrigin {
+                        created_at,
+                        acquisition_device_id,
+                    },
+                )?;
+            }
+            if projection.transcript.is_none()
+                && let Some(transcript) = self.load_transcript(&meeting_id)?
+            {
+                document = document_codec.with_transcript(&document, transcript.content())?;
+            }
+            if projection.segments.is_none() {
+                let segments = self.load_transcript_segments(&meeting_id)?;
+                if !segments.is_empty() {
+                    document = document_codec.with_segments(&document, &segments)?;
+                }
+            }
+            if document != original_document {
+                write_document(&transaction, &meeting_id, &document)?;
+                migrated_meetings += 1;
+            }
+        }
+        transaction
+            .execute(
+                "INSERT INTO storage_migrations (name) VALUES (?1)",
+                params![DOCUMENT_MIGRATION_NAME],
+            )
+            .map_err(|error| sqlite_error("unable to record the document migration", error))?;
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit document migration", error))?;
+        if migrated_meetings > 0 {
+            tracing::info!(
+                migrated_meetings,
+                "Copied legacy meeting rows into CRDT documents"
+            );
+        }
+        Ok(())
     }
 
     /// Emits structured operation metadata without exposing note text or CRDT bytes.
@@ -422,27 +544,12 @@ impl NoteRepository for SqliteNoteRepository {
             .connection
             .unchecked_transaction()
             .map_err(|error| sqlite_error("unable to begin segment transaction", error))?;
-        transaction
-            .execute(
-                "DELETE FROM transcript_segments WHERE meeting_id = ?1",
-                params![meeting_id.as_str()],
-            )
-            .map_err(|error| sqlite_error("unable to clear transcript segments", error))?;
-        for segment in segments {
-            transaction
-                .execute(
-                    "INSERT INTO transcript_segments (meeting_id, start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                    params![
-                        meeting_id.as_str(),
-                        sqlite_milliseconds(segment.start_time_ms())?,
-                        sqlite_milliseconds(segment.end_time_ms())?,
-                        segment.speaker_identity_id().map(|identity_id| identity_id.to_string()),
-                        segment.text(),
-                        segment.unknown_cluster_id().map(|cluster_id| cluster_id.to_string()),
-                    ],
-                )
-                .map_err(|error| sqlite_error("unable to save transcript segment", error))?;
+        if let Some(document_codec) = self.document_codec.as_deref() {
+            let document = document_codec
+                .with_segments(&read_document(&transaction, meeting_id)?, segments)?;
+            write_document(&transaction, meeting_id, &document)?;
         }
+        write_segment_rows(&transaction, meeting_id, segments)?;
         transaction
             .commit()
             .map_err(|error| sqlite_error("unable to commit transcript segments", error))?;
@@ -528,12 +635,51 @@ impl NoteRepository for SqliteNoteRepository {
         meeting_id: &MeetingId,
         initial_crdt_document: &[u8],
     ) -> Result<(), StorageError> {
-        self.connection
+        let Some(document_codec) = self.document_codec.as_deref() else {
+            self.connection
+                .execute(
+                    "INSERT INTO meetings (meeting_id, acquisition_device_id, automerge_document) VALUES (?1, ?2, ?3)",
+                    params![meeting_id.as_str(), self.device_id.as_str(), initial_crdt_document],
+                )
+                .map_err(|error| sqlite_error("unable to create meeting", error))?;
+            self.log_operation("create_meeting", meeting_id);
+            return Ok(());
+        };
+        // A document from a peer already names its origin; a new local meeting gets this device.
+        let origin = match document_codec
+            .project(meeting_id, initial_crdt_document)?
+            .origin
+        {
+            Some(peer_origin) => peer_origin,
+            None => MeetingOrigin {
+                created_at: whole_seconds(chrono::Utc::now()),
+                acquisition_device_id: self.device_id.clone(),
+            },
+        };
+        let document = document_codec.with_origin(initial_crdt_document, &origin)?;
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|error| sqlite_error("unable to begin meeting creation", error))?;
+        transaction
             .execute(
-                "INSERT INTO meetings (meeting_id, acquisition_device_id, automerge_document) VALUES (?1, ?2, ?3)",
-                params![meeting_id.as_str(), self.device_id.as_str(), initial_crdt_document],
+                "INSERT INTO meetings (meeting_id, created_at_utc, acquisition_device_id, automerge_document) VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    meeting_id.as_str(),
+                    sqlite_timestamp_text(origin.created_at),
+                    origin.acquisition_device_id.as_str(),
+                    document
+                ],
             )
             .map_err(|error| sqlite_error("unable to create meeting", error))?;
+        apply_projection(
+            &transaction,
+            meeting_id,
+            &document_codec.project(meeting_id, &document)?,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit meeting creation", error))?;
         self.log_operation("create_meeting", meeting_id);
         Ok(())
     }
@@ -544,6 +690,29 @@ impl NoteRepository for SqliteNoteRepository {
     /// Outputs: Success or an unknown-meeting/SQLite storage error.
     /// Side effects: Updates one SQLite row and emits a debug trace event without the transcript content.
     fn save_transcript(&self, transcript: &Transcript) -> Result<(), StorageError> {
+        if let Some(document_codec) = self.document_codec.as_deref() {
+            let meeting_id = transcript.meeting_id();
+            let transaction = self
+                .connection
+                .unchecked_transaction()
+                .map_err(|error| sqlite_error("unable to begin transcript transaction", error))?;
+            let document = document_codec.with_transcript(
+                &read_document(&transaction, meeting_id)?,
+                transcript.content(),
+            )?;
+            write_document(&transaction, meeting_id, &document)?;
+            transaction
+                .execute(
+                    "UPDATE meetings SET transcript = ?1 WHERE meeting_id = ?2",
+                    params![transcript.content(), meeting_id.as_str()],
+                )
+                .map_err(|error| sqlite_error("unable to save transcript", error))?;
+            transaction
+                .commit()
+                .map_err(|error| sqlite_error("unable to commit transcript", error))?;
+            self.log_operation("save_transcript", meeting_id);
+            return Ok(());
+        }
         let updated_row_count = self
             .connection
             .execute(
@@ -587,14 +756,22 @@ impl NoteRepository for SqliteNoteRepository {
         meeting_id: &MeetingId,
         crdt_document: &[u8],
     ) -> Result<(), StorageError> {
-        let updated_row_count = self
+        let transaction = self
             .connection
-            .execute(
-                "UPDATE meetings SET automerge_document = ?1 WHERE meeting_id = ?2",
-                params![crdt_document, meeting_id.as_str()],
-            )
-            .map_err(|error| sqlite_error("unable to save CRDT document", error))?;
-        ensure_meeting_was_updated(updated_row_count, meeting_id)?;
+            .unchecked_transaction()
+            .map_err(|error| sqlite_error("unable to begin document transaction", error))?;
+        write_document(&transaction, meeting_id, crdt_document)?;
+        // The document may carry a peer's changes; the index follows it.
+        if let Some(document_codec) = self.document_codec.as_deref() {
+            apply_projection(
+                &transaction,
+                meeting_id,
+                &document_codec.project(meeting_id, crdt_document)?,
+            )?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit CRDT document", error))?;
         self.log_operation("save_crdt_document", meeting_id);
         Ok(())
     }
@@ -958,6 +1135,102 @@ fn parse_task_type(task_type: &str) -> Result<TaskType, StorageError> {
             reason: String::from("stored task metric has an unknown task type"),
         }),
     }
+}
+
+/// Reads a meeting's serialized document.
+///
+/// Outputs: The document bytes, or a rejection for an unknown meeting. Side effects: None.
+fn read_document(connection: &Connection, meeting_id: &MeetingId) -> Result<Vec<u8>, StorageError> {
+    connection
+        .query_row(
+            "SELECT automerge_document FROM meetings WHERE meeting_id = ?1",
+            params![meeting_id.as_str()],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| sqlite_error("unable to load CRDT document", error))?
+        .ok_or_else(|| missing_meeting_error(meeting_id))
+}
+
+/// Replaces a meeting's serialized document.
+///
+/// Outputs: Success, or a rejection for an unknown meeting. Side effects: Updates one row.
+fn write_document(
+    connection: &Connection,
+    meeting_id: &MeetingId,
+    document: &[u8],
+) -> Result<(), StorageError> {
+    let updated_row_count = connection
+        .execute(
+            "UPDATE meetings SET automerge_document = ?1 WHERE meeting_id = ?2",
+            params![document, meeting_id.as_str()],
+        )
+        .map_err(|error| sqlite_error("unable to save CRDT document", error))?;
+    ensure_meeting_was_updated(updated_row_count, meeting_id)
+}
+
+/// Replaces a meeting's segment rows with `segments`.
+///
+/// Side effects: Deletes and inserts rows; callers provide the transaction.
+fn write_segment_rows(
+    connection: &Connection,
+    meeting_id: &MeetingId,
+    segments: &[TranscriptSegment],
+) -> Result<(), StorageError> {
+    connection
+        .execute(
+            "DELETE FROM transcript_segments WHERE meeting_id = ?1",
+            params![meeting_id.as_str()],
+        )
+        .map_err(|error| sqlite_error("unable to clear transcript segments", error))?;
+    for segment in segments {
+        connection
+            .execute(
+                "INSERT INTO transcript_segments (meeting_id, start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    meeting_id.as_str(),
+                    sqlite_milliseconds(segment.start_time_ms())?,
+                    sqlite_milliseconds(segment.end_time_ms())?,
+                    segment.speaker_identity_id().map(|identity_id| identity_id.to_string()),
+                    segment.text(),
+                    segment.unknown_cluster_id().map(|cluster_id| cluster_id.to_string()),
+                ],
+            )
+            .map_err(|error| sqlite_error("unable to save transcript segment", error))?;
+    }
+    Ok(())
+}
+
+/// Rewrites the index fields the document holds; fields it lacks keep their rows.
+///
+/// Side effects: Updates the transcript column and segment rows; callers provide the transaction.
+fn apply_projection(
+    connection: &Connection,
+    meeting_id: &MeetingId,
+    projection: &MeetingProjection,
+) -> Result<(), StorageError> {
+    if let Some(transcript) = &projection.transcript {
+        connection
+            .execute(
+                "UPDATE meetings SET transcript = ?1 WHERE meeting_id = ?2",
+                params![transcript, meeting_id.as_str()],
+            )
+            .map_err(|error| sqlite_error("unable to project the transcript", error))?;
+    }
+    if let Some(segments) = &projection.segments {
+        write_segment_rows(connection, meeting_id, segments)?;
+    }
+    Ok(())
+}
+
+/// Drops sub-second precision, which the `created_at_utc` column does not keep.
+fn whole_seconds(instant: chrono::DateTime<chrono::Utc>) -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::from_timestamp(instant.timestamp(), 0).unwrap_or(instant)
+}
+
+/// Formats an instant like SQLite's `CURRENT_TIMESTAMP`, so meetings keep sorting by that column.
+fn sqlite_timestamp_text(instant: chrono::DateTime<chrono::Utc>) -> String {
+    instant.format("%Y-%m-%d %H:%M:%S").to_string()
 }
 
 /// Parses SQLite's `CURRENT_TIMESTAMP` text (UTC, `YYYY-MM-DD HH:MM:SS`) or RFC 3339 text.

@@ -1036,7 +1036,7 @@ fn assigned_cluster_names_are_listed_after_a_restart() {
             UnknownSpeakerClusterer::new(&first_run.repository, ClusteringConfig::default());
         first_run
             .repository
-            .create_meeting(&meeting_id, &[1])
+            .create_meeting(&meeting_id, &[])
             .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
         let cluster_id = clusterer
             .find_or_create_cluster(&meeting_id, &[1.0, 0.0], String::from("c1"), 1_000)

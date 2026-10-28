@@ -18,6 +18,8 @@ mod sqlite_embedding_encryption;
 pub mod sqlite_encryption_metadata;
 #[cfg(test)]
 mod sqlite_external_identities_tests;
+#[cfg(test)]
+mod sqlite_meeting_document_tests;
 /// Persists the sealed P2P node identity and the trusted-peer allowlist in SQLite.
 pub mod sqlite_peer_store;
 #[cfg(test)]

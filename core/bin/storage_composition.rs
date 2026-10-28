@@ -20,7 +20,10 @@ use crate::{
             sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
     },
-    application::crypto::key_manager::{KeyManager, KeyManagerConfig},
+    application::{
+        crypto::key_manager::{KeyManager, KeyManagerConfig},
+        meeting_document::AutomergeMeetingDocumentCodec,
+    },
     domain::models::DeviceId,
     ports::crypto::EmbeddingCipher,
 };
@@ -63,8 +66,7 @@ pub fn open_encrypted_stores(
             .context("unable to unlock the voice embedding encryption key")?,
     );
     let note_repository =
-        SqliteNoteRepository::open(database_path, device_id, Arc::clone(&embedding_cipher))
-            .context("unable to open the note repository")?;
+        open_note_repository(database_path, device_id, Arc::clone(&embedding_cipher))?;
     let voice_store = SqliteVoiceVectorDB::open(database_path, Arc::clone(&embedding_cipher))
         .context("unable to open the voice store")?;
     Ok(EncryptedStores {
@@ -92,4 +94,22 @@ pub(crate) fn key_file_config_for_tests(key_directory: &Path) -> KeyManagerConfi
         }
         _ => None,
     })
+}
+
+/// Opens the note repository with the meeting document as the source of truth (Issue #43).
+///
+/// Inputs: The database path, this device's ID, and the verified cipher.
+/// Outputs: The repository, or an error naming the step that failed.
+/// Side effects: Opens a SQLite connection; on the first open after upgrading, copies legacy
+/// transcript and segment rows into their meeting documents.
+pub fn open_note_repository(
+    database_path: &Path,
+    device_id: DeviceId,
+    embedding_cipher: Arc<dyn EmbeddingCipher>,
+) -> Result<SqliteNoteRepository> {
+    SqliteNoteRepository::open(database_path, device_id, embedding_cipher)
+        .and_then(|repository| {
+            repository.with_document_codec(Arc::new(AutomergeMeetingDocumentCodec))
+        })
+        .context("unable to open the note repository")
 }

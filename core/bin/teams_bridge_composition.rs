@@ -59,6 +59,7 @@ use crate::{
     pipeline_composition::parse_flag,
     ports::{crypto::EmbeddingCipher, external_bridge::AttachmentWorkflow},
     recording_controller::RecordingController,
+    storage_composition::open_note_repository,
 };
 
 #[cfg(test)]
@@ -300,7 +301,7 @@ pub fn open_teams_bridge_ports(
     let voice_store = SqliteVoiceVectorDB::open(database_path, Arc::clone(&embedding_cipher))
         .context("unable to open the voice store for Teams identities")?;
     let attachment_repository =
-        SqliteNoteRepository::open(database_path, device_id.clone(), embedding_cipher)
+        open_note_repository(database_path, device_id.clone(), embedding_cipher)
             .context("unable to open the note repository for Teams slides")?;
     let slide_directory = slide_directory.map_or_else(
         || {

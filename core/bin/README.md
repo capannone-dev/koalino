@@ -81,6 +81,9 @@ failed bridge is logged and the daemon keeps running.
 `PlatformKeychain`, migrating or falling back to the key file in `NOTE_TAKER_ENCRYPTION_KEY_DIR`
 or `~/.note_taker`; `NOTE_TAKER_KEYCHAIN_ENABLED=false` skips the keychain), and only then opens `SqliteNoteRepository` and `SqliteVoiceVectorDB` with one
 shared cipher. A wrong key stops start-up with a readable error before any embedding is read.
+`open_note_repository` is the one place that opens `SqliteNoteRepository` for production: it
+attaches `AutomergeMeetingDocumentCodec`, so every root (daemon, pipeline worker, Teams bridge)
+keeps the SQLite index in step with the meeting document.
 
 `daemon.rs` composes the headless Axum server from the encrypted `SqliteNoteRepository` and
 `SqliteVoiceVectorDB`, passing them only through `ServerAppState`. HTTP route handlers never use SQLite

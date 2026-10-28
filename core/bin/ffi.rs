@@ -2070,7 +2070,7 @@ mod ffi_contract_tests {
     fn seed_cluster(ffi_runtime: &FfiRuntime, meeting_id: &MeetingId) -> (uuid::Uuid, uuid::Uuid) {
         ffi_runtime
             .note_repository
-            .create_meeting(meeting_id, &[1])
+            .create_meeting(meeting_id, &[])
             .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
         let clusterer =
             UnknownSpeakerClusterer::new(&ffi_runtime.note_repository, ClusteringConfig::default());
@@ -2454,7 +2454,7 @@ mod ffi_contract_tests {
                 });
         ffi_runtime
             .note_repository
-            .create_meeting(&MeetingId::new("ffi-untitled"), &[1])
+            .create_meeting(&MeetingId::new("ffi-untitled"), &[])
             .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
         let title = MeetingTitle::parse("Project Sync")
             .unwrap_or_else(|error| panic!("title must parse: {error}"));
