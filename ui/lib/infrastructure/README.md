@@ -38,6 +38,12 @@ both native strings, and maps non-zero statuses to `MeetingRenameException` thro
 uses `MicrophonePermission.kt` on `note_taker/microphone` (`RECORD_AUDIO`); desktops have no
 runtime prompt, and a Windows privacy refusal surfaces as status 7 (Issue #45).
 
+`whisper_model.dart` picks the model passed to the core, so a fresh install transcribes offline:
+`<data directory>/models/ggml-base.bin` when the owner put one there, otherwise the bundle's
+`data/models/ggml-base.bin` beside the executable (Linux, Windows). On Android, `WhisperModel.kt`
+(channel `note_taker/whisper_model`) copies the APK's model into the data directory on first
+start, or when an update ships a model of a different size.
+
 `app_configuration.dart` runs first: `configureCore` passes the application-support directory
 (`<support>/note_taker`), the device name (the host name; "Android device" on Android), and
 `models/ggml-base.bin` when present to `note_taker_configure` on a background isolate. Every

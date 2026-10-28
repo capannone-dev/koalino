@@ -9,6 +9,9 @@ without loading a native Rust library or accessing Rust implementation types.
 paperclip action opens the picker, JSON candidates render in rank order with confidence scores,
 and Select forwards the exact opaque attachment and meeting IDs to Rust.
 
+`whisper_model_test.dart` covers where the app finds its Whisper model: the data directory
+first, then the bundle's `data/models` on desktops; Android installs the APK's copy.
+
 Meeting-title tests (Issue #36):
 
 - `recording_screen_test.dart` covers the title field, its hint, sending a trimmed title or

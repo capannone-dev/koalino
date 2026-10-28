@@ -7,15 +7,13 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:note_taker_ui/infrastructure/whisper_model.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Peer addresses compiled in with `--dart-define=NOTE_TAKER_P2P_PEERS=<a>,<b>`, for development
 /// builds that must reach devices mDNS cannot see (such as VMs behind an `adb reverse` tunnel).
 /// Empty in normal builds; addresses are not secrets.
 const String p2pPeersDefine = String.fromEnvironment('NOTE_TAKER_P2P_PEERS');
-
-/// File name of the Whisper model the app looks for in `<data directory>/models`.
-const String whisperModelFileName = 'ggml-base.bin';
 
 /// Builds the JSON for `note_taker_configure`.
 ///
@@ -77,16 +75,21 @@ Future<String> appKeyDirectory() async =>
 /// Inputs: None; the data directory is the platform's application-support directory.
 /// Outputs: Completes with Rust's status: 0 on success, 1 for invalid settings, 2 when the core
 /// was already configured or started.
-/// Side effects: Creates `<support>/note_taker` and stores the settings in the native process.
+/// Side effects: Creates `<support>/note_taker`, finds or installs the Whisper model (see
+/// `whisper_model.dart`), and stores the settings in the native process.
 Future<int> configureCore() async {
   final Directory dataDirectory = await appDataDirectory();
   await dataDirectory.create(recursive: true);
-  final File model = File(
-      '${dataDirectory.path}${Platform.pathSeparator}models${Platform.pathSeparator}$whisperModelFileName');
+  final String? whisperModelPath = await resolveWhisperModelPath(
+    dataDirectory: dataDirectory.path,
+    executablePath: Platform.resolvedExecutable,
+    isAndroid: Platform.isAndroid,
+    installAndroidModel: installAndroidWhisperModel,
+  );
   final String configurationJson = appConfigurationJson(
     dataDirectory: dataDirectory.path,
     deviceName: defaultDeviceName(),
-    whisperModelPath: await model.exists() ? model.path : null,
+    whisperModelPath: whisperModelPath,
     p2pPeersDefine: p2pPeersDefine,
   );
   return Isolate.run(() {

@@ -116,6 +116,17 @@ else()
   message(WARNING "Rust core not staged; run tools/cross/build-flutter-native.sh linux")
 endif()
 
+# Bundle the Whisper model staged by tools/cross/build-flutter-native.sh into data/models, where
+# the app finds it beside the executable, so a fresh install transcribes offline (Issue #45).
+# Without it the app runs but recordings report that no transcription engine is configured.
+set(NOTE_TAKER_WHISPER_MODEL "${CMAKE_CURRENT_SOURCE_DIR}/../native/models/ggml-base.bin")
+if(EXISTS "${NOTE_TAKER_WHISPER_MODEL}")
+  install(FILES "${NOTE_TAKER_WHISPER_MODEL}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/models"
+    COMPONENT Runtime)
+else()
+  message(WARNING "Whisper model not staged; run tools/cross/build-flutter-native.sh linux")
+endif()
+
 # Copy the native assets provided by the hook/build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

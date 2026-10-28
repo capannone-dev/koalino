@@ -2,7 +2,8 @@
 // mDNS discovery receives other devices' announcements (Issue #43), and hands the database key
 // from the Android Keystore to the Rust core over JNI when Dart asks on `note_taker/key_vault`.
 // It also serves the app lock (`AppLock`) on `note_taker/app_lock` and the microphone permission
-// (`MicrophonePermission`) on `note_taker/microphone`.
+// (`MicrophonePermission`) on `note_taker/microphone`, and installs the shipped Whisper model
+// (`WhisperModel`) on `note_taker/whisper_model`.
 package com.example.note_taker_ui
 
 import android.content.Context
@@ -40,6 +41,8 @@ class MainActivity : FlutterActivity() {
         microphonePermission = microphone
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/microphone")
             .setMethodCallHandler(microphone)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/whisper_model")
+            .setMethodCallHandler(WhisperModel(assets))
         val mainThread = Handler(Looper.getMainLooper())
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/key_vault")
             .setMethodCallHandler { call, result ->

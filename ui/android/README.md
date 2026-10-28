@@ -34,6 +34,14 @@ background thread and passes it straight to Rust with `NativeCore.provideEncrypt
 failure answers `keystore_unavailable` and a refused key or missing JNI method `key_rejected`;
 the app shows both as the keychain error with Retry.
 
+## Whisper model
+
+The APK ships `ggml-base.bin` as an uncompressed asset (`assets/models/`, staged by
+`tools/cross/build-flutter-native.sh android` into `ui/native/android-assets`, added as an asset
+source in `app/build.gradle.kts`). whisper.cpp needs a file path, so `WhisperModel.kt` copies it
+into the app's data directory through a temporary file on first start. The APK is about 218 MB;
+Play Store distribution would need an asset pack instead.
+
 ## Microphone
 
 The Rust core records the microphone itself (`cpal` on AAudio, Issue #45), so the app declares

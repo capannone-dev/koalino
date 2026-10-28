@@ -29,6 +29,14 @@ android {
         versionName = flutter.versionName
     }
 
+    // The Whisper model staged by tools/cross/fetch-model.sh ships as an APK asset (Issue #45:
+    // the app must transcribe out of the box). It is stored uncompressed so WhisperModel.kt can
+    // read its length and copy it quickly; it compresses poorly anyway.
+    sourceSets["main"].assets.srcDir("../../native/android-assets")
+    androidResources {
+        noCompress += "bin"
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
