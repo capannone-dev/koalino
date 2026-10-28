@@ -9,6 +9,13 @@ refused) and shows "Unable to open the microphone" for status 7 (Issue #45). It 
 through `RecordingNotifier` and follows pause, resume, and stop made from the Android notification
 without calling the bridge again (Issue #47).
 
+`MeetingExportController` runs one export at a time (Issue #48). On desktops it asks for a path
+first (cancelling exports nothing; with no dialog available, such as Linux without zenity, the
+core writes to its default export folder) and reports "Exported to <path>". On phones the core writes a
+private file, the picker saves its bytes, and the private file is deleted whatever happens;
+Markdown leaves attachments out there, because the picker saves a single file.
+`suggestedExportFileName` turns the title into a safe file name with the format's extension.
+
 `AttachmentController` owns selected-file workflow state and decodes the Rust-owned JSON array of
 meeting candidates. It receives both a picker and `AttachmentBridge` interface, preserving
 widget-test injection and ensuring no complex Rust struct crosses FFI.

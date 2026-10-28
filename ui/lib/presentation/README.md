@@ -50,3 +50,6 @@ destination only when given a builder (Android for now; Issue #46 adds more sett
 The meeting detail's app bar has Name speakers (`NameSpeakersButton`), which opens the voice
 gallery (`voice_gallery_screen.dart`) for that meeting and reloads the meeting on return so the
 transcript shows the new names. The desktop two-pane layout shows it once a meeting is selected.
+
+Beside it, Export (`ExportMeetingButton`, Issue #48) offers Markdown, PDF, and JSON, shows a
+spinner while exporting, and reports the result in a snack bar.

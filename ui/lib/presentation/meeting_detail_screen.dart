@@ -2,7 +2,9 @@
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
+import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
@@ -17,9 +19,9 @@ const double _maxReadableWidth = 840;
 final class MeetingDetailScreen extends StatefulWidget {
   /// Creates a screen that selects and renders `meetingId` through `controller`.
   ///
-  /// Inputs: The shared meeting controller, the meeting to show, and optional builders for
-  /// the attachment import screen and the meeting's speakers (each action is hidden without
-  /// its builder).
+  /// Inputs: The shared meeting controller, the meeting to show, optional builders for the
+  /// attachment import screen and the meeting's speakers, and the export controller (each
+  /// action is hidden without its builder or controller).
   /// Outputs: A Material 3 detail screen.
   /// Side effects: Loads the meeting through the controller after the first frame, unless the
   /// caller already selected it (the list does, so the route never shows another meeting).
@@ -28,6 +30,7 @@ final class MeetingDetailScreen extends StatefulWidget {
     required this.meetingId,
     this.attachmentScreenBuilder,
     this.speakersScreenBuilder,
+    this.exportController,
     super.key,
   });
 
@@ -35,6 +38,7 @@ final class MeetingDetailScreen extends StatefulWidget {
   final String meetingId;
   final WidgetBuilder? attachmentScreenBuilder;
   final MeetingScreenBuilder? speakersScreenBuilder;
+  final MeetingExportController? exportController;
 
   @override
   State<MeetingDetailScreen> createState() => _MeetingDetailScreenState();
@@ -68,6 +72,13 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
               meetingId: widget.meetingId,
               speakersScreenBuilder: builder,
             ),
+          if (widget.exportController
+              case final MeetingExportController exportController)
+            ExportMeetingButton(
+              meetingController: widget.controller,
+              exportController: exportController,
+              meetingId: widget.meetingId,
+            ),
           if (widget.attachmentScreenBuilder case final WidgetBuilder builder)
             AttachFileButton(attachmentScreenBuilder: builder),
         ],
@@ -92,6 +103,63 @@ final class AttachFileButton extends StatelessWidget {
       onPressed: () => Navigator.of(context)
           .push(MaterialPageRoute<void>(builder: attachmentScreenBuilder)),
     );
+  }
+}
+
+/// Exports the meeting from its app bar: a menu of formats, then a snack bar with the result
+/// (Issue #48).
+final class ExportMeetingButton extends StatelessWidget {
+  /// Creates the action for `meetingId`.
+  ///
+  /// Inputs: The meeting controller (for the displayed title), the export controller, and the
+  /// meeting.
+  /// Outputs: A menu button, disabled while an export runs.
+  /// Side effects: Runs the export, which may show a save dialog, then shows a snack bar
+  /// (nothing when the owner cancels the dialog).
+  const ExportMeetingButton({
+    required this.meetingController,
+    required this.exportController,
+    required this.meetingId,
+    super.key,
+  });
+
+  final MeetingListController meetingController;
+  final MeetingExportController exportController;
+  final String meetingId;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: exportController,
+      builder: (BuildContext context, Widget? child) =>
+          PopupMenuButton<MeetingExportFormat>(
+        tooltip: 'Export',
+        enabled: !exportController.isExporting,
+        icon: exportController.isExporting
+            ? const SizedBox.square(
+                dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.file_download_outlined),
+        onSelected: (MeetingExportFormat format) => _export(context, format),
+        itemBuilder: (BuildContext context) =>
+            <PopupMenuEntry<MeetingExportFormat>>[
+          for (final MeetingExportFormat format in MeetingExportFormat.values)
+            PopupMenuItem<MeetingExportFormat>(
+                value: format, child: Text(format.label)),
+        ],
+      ),
+    );
+  }
+
+  /// Runs the export and reports its result.
+  Future<void> _export(BuildContext context, MeetingExportFormat format) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final String title =
+        meetingController.selectedMeeting?.summary.title ?? 'meeting';
+    final String? message = await exportController.exportMeeting(
+        meetingId: meetingId, title: title, format: format);
+    if (message != null) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 }
 

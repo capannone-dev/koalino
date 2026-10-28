@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
@@ -20,20 +21,22 @@ const double _listPaneWidth = 360;
 final class MeetingListScreen extends StatefulWidget {
   /// Creates a screen observing `controller`.
   ///
-  /// Inputs: The meeting controller and optional builders for the attachment import screen
-  /// and a meeting's speakers, passed on to the detail.
+  /// Inputs: The meeting controller, optional builders for the attachment import screen and a
+  /// meeting's speakers, and the export controller, passed on to the detail.
   /// Outputs: A Material 3 meeting list screen.
   /// Side effects: Loads the meetings when first inserted.
   const MeetingListScreen({
     required this.controller,
     this.attachmentScreenBuilder,
     this.speakersScreenBuilder,
+    this.exportController,
     super.key,
   });
 
   final MeetingListController controller;
   final WidgetBuilder? attachmentScreenBuilder;
   final MeetingScreenBuilder? speakersScreenBuilder;
+  final MeetingExportController? exportController;
 
   @override
   State<MeetingListScreen> createState() => _MeetingListScreenState();
@@ -59,6 +62,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         meetingId: meeting.meetingId,
         attachmentScreenBuilder: widget.attachmentScreenBuilder,
         speakersScreenBuilder: widget.speakersScreenBuilder,
+        exportController: widget.exportController,
       ),
     ));
   }
@@ -96,6 +100,23 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                           controller: widget.controller,
                           meetingId: meetingId,
                           speakersScreenBuilder: builder,
+                        ),
+                      _ => const SizedBox.shrink(),
+                    },
+                  ),
+              if (isTwoPane)
+                if (widget.exportController
+                    case final MeetingExportController exportController)
+                  AnimatedBuilder(
+                    animation: widget.controller,
+                    builder: (BuildContext context, Widget? child) =>
+                        switch (widget.controller.selectedMeetingId) {
+                      final String meetingId
+                          when widget.controller.selectedMeeting != null =>
+                        ExportMeetingButton(
+                          meetingController: widget.controller,
+                          exportController: exportController,
+                          meetingId: meetingId,
                         ),
                       _ => const SizedBox.shrink(),
                     },

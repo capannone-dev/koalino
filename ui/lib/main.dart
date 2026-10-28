@@ -22,6 +22,8 @@ import 'package:note_taker_ui/infrastructure/attachment_bridge.dart';
 import 'package:note_taker_ui/infrastructure/host_key.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
+import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
+import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recording_notifier.dart';
@@ -166,10 +168,15 @@ final class _MeetingsDestination extends StatefulWidget {
 final class _MeetingsDestinationState extends State<_MeetingsDestination> {
   final MeetingListController _controller =
       MeetingListController(meetingBridge: const RustMeetingBridge());
+  final MeetingExportController _exportController = MeetingExportController(
+    exportBridge: const RustExportBridge(),
+    exportSaver: const FilePickerExportSaver(),
+  );
 
   @override
   void dispose() {
     _controller.dispose();
+    _exportController.dispose();
     super.dispose();
   }
 
@@ -177,6 +184,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
   Widget build(BuildContext context) {
     return MeetingListScreen(
       controller: _controller,
+      exportController: _exportController,
       attachmentScreenBuilder: (BuildContext context) => AttachmentImportScreen(
         attachmentController: AttachmentController(
           attachmentBridge: RustAttachmentBridge(),

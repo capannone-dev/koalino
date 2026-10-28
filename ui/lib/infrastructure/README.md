@@ -47,6 +47,12 @@ changes made from its notification (Issue #47); desktops use `NoRecordingNotifie
 (channel `note_taker/whisper_model`) copies the APK's model into the data directory on first
 start, or when an update ships a model of a different size.
 
+`export_bridge.dart` exports a meeting through `note_taker_export_meeting` on a background
+isolate and decodes the core's JSON answer into `MeetingExportSuccess` or `MeetingExportFailure`
+(Issue #48). Formats are Markdown, PDF, and JSON. `FilePickerExportSaver` shows the save dialog:
+on desktops it only picks a path (starting in Downloads) and the core writes there; on Android
+and iOS the system document picker receives the bytes.
+
 `app_configuration.dart` runs first: `configureCore` passes the application-support directory
 (`<support>/note_taker`), the device name (the host name; "Android device" on Android), and
 `models/ggml-base.bin` when present to `note_taker_configure` on a background isolate. Every
