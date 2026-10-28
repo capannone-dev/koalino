@@ -82,7 +82,7 @@
              ▼                                   ▼                                    ▼
  bin::recording_controller::RecordingController            bin::pipeline_composition (env)
    LocalRecorder (Idle/Recording/Paused/Interrupted/Stopped)     selects TranscriptionEngine
-     → VadChunker (speech pauses, or 30 s; 1 s lookback)         (whisper.cpp | OpenAI)
+     → VadChunker (speech pauses; ≤ 15 s, cut at a quiet frame)  (whisper.cpp | OpenAI)
      → ChunkAudioStore (delete-on-read PCM, the engine's audio source)
      → VadAudioChunk (meeting-relative offsets) ─ submit_chunk (non-blocking)
              ▼

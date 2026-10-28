@@ -1,7 +1,7 @@
 //! Drives one live recording from raw PCM to the meeting pipeline worker.
 //!
 //! Flow per recording: caller PCM → `LocalRecorder` (lifecycle state machine; drops audio unless
-//! recording) → `VadChunker` (speech or 30 s time cuts) → `ChunkAudioStore` (the engine's audio
+//! recording) → `VadChunker` (speech pauses, at most 15 s) → `ChunkAudioStore` (the engine's audio
 //! source) plus a `VadAudioChunk` with meeting-relative offsets → `RecordingManager` (worker
 //! thread running `MeetingSession`). Stop flushes the chunker, waits for every queued chunk, and
 //! wipes any raw audio no engine consumed. The FFI and CLI share this driver, so both entry points
@@ -44,7 +44,7 @@ const CAPTURE_SAMPLE_RATE_HZ: u32 = 16_000;
 pub enum ChunkingMode {
     /// Cut at speech pauses (needs the `vad` feature; otherwise falls back to time cuts).
     Vad(VadConfig),
-    /// Cut every 30 seconds without speech detection.
+    /// Cut near every 15 seconds without speech detection.
     TimeBased,
 }
 
@@ -243,16 +243,17 @@ impl RecordingController {
         for routed_chunk in capture.audio_receiver.try_iter() {
             capture.chunker.push_pcm(routed_chunk)?;
         }
-        let ready_chunks = capture.chunker.drain_ready_chunks();
-        let submitted_count = ready_chunks.len();
-        for finalized_chunk in ready_chunks {
-            submit_chunk(
+        let mut submitted_count = 0;
+        for finalized_chunk in capture.chunker.drain_ready_chunks() {
+            if submit_chunk(
                 capture,
                 finalized_chunk,
                 &self.chunk_audio_store,
                 &self.recording_manager,
                 &self.device_id,
-            )?;
+            )? {
+                submitted_count += 1;
+            }
         }
         Ok(submitted_count)
     }
@@ -426,27 +427,37 @@ fn samples_to_ms(sample_count: u64) -> u64 {
     sample_count.saturating_mul(1_000) / u64::from(CAPTURE_SAMPLE_RATE_HZ)
 }
 
-/// Places one finished chunk on the meeting timeline and queues it for the pipeline.
+/// Places one finished chunk on the meeting timeline and queues it for the pipeline, unless it
+/// holds no speech.
 ///
 /// Inputs: The active capture, the chunk, the engine audio store, the worker, and the device.
-/// Outputs: `Ok(())` once queued, or the worker's error.
-/// Side effects: Stores the chunk PCM under a fresh recording ID (read and deleted by the
-/// engine) and sends a WAV copy with the chunk for diarization and review clips.
+/// Outputs: `Ok(true)` once queued, `Ok(false)` for a chunk without speech (Whisper would invent
+/// text for it; Issue #51), or the worker's error.
+/// Side effects: Advances the meeting timeline either way. A queued chunk's PCM is stored under
+/// a fresh recording ID (read and deleted by the engine) and a WAV copy is sent with it for
+/// diarization and review clips; a skipped chunk's audio is dropped.
 fn submit_chunk(
     capture: &mut ActiveCapture,
     finalized_chunk: FinalizedAudioChunk,
     chunk_audio_store: &ChunkAudioStore,
     recording_manager: &RecordingManager,
     device_id: &DeviceId,
-) -> Result<(), RecordingControlError> {
-    let overlap_sample_count = finalized_chunk.overlap_sample_count() as u64;
+) -> Result<bool, RecordingControlError> {
+    let contains_speech = finalized_chunk.contains_speech();
     let samples = finalized_chunk.into_audio_chunk().into_samples();
-    let chunk_sample_count = samples.len() as u64;
-    let chunk_start_sample = capture
-        .timeline_sample_count
-        .saturating_sub(overlap_sample_count);
-    let chunk_end_sample = chunk_start_sample + chunk_sample_count;
-    capture.timeline_sample_count = capture.timeline_sample_count.max(chunk_end_sample);
+    // Chunks are contiguous: each starts where the previous one ended.
+    let chunk_start_sample = capture.timeline_sample_count;
+    let chunk_end_sample = chunk_start_sample + samples.len() as u64;
+    capture.timeline_sample_count = chunk_end_sample;
+    if !contains_speech {
+        tracing::debug!(
+            meeting_id = %capture.meeting_id.as_str(),
+            chunk_start_ms = samples_to_ms(chunk_start_sample),
+            chunk_end_ms = samples_to_ms(chunk_end_sample),
+            "Chunk without speech skipped"
+        );
+        return Ok(false);
+    }
 
     let recording_id = RecordingId::new(format!(
         "{}{}",
@@ -466,5 +477,5 @@ fn submit_chunk(
         reason: "chunk bounds are inverted".to_owned(),
     })?;
     recording_manager.submit_chunk(vad_chunk)?;
-    Ok(())
+    Ok(true)
 }

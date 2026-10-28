@@ -91,7 +91,7 @@ repository.
 | `OPENAI_API_KEY` | unset | Enables cloud transcription. Audio leaves the device only when this is set |
 | `NOTE_TAKER_OPENAI_WHISPER_MODEL` | `whisper-1` | OpenAI transcription model |
 | `NOTE_TAKER_OPENAI_LANGUAGE` | unset (auto) | Language hint for the OpenAI API |
-| `NOTE_TAKER_VAD_ENABLED` | `true` | Voice-activity chunking. `false` cuts every 30 s |
+| `NOTE_TAKER_VAD_ENABLED` | `true` | Voice-activity chunking. `false` cuts near every 15 s |
 | `NOTE_TAKER_ENABLE_DIARIZATION` | `false` | Speaker diarization. No real engine exists yet (#44) |
 | `NOTE_TAKER_REVIEW_CLIP_DIR` | `voice_review_clips` | Temporary clips of unknown voices, kept until resolved |
 | `NOTE_TAKER_EXPORT_DIR` | `~/Documents/NoteTaker/exports` | Export destination |

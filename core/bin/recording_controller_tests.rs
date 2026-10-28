@@ -23,6 +23,9 @@ use crate::{
     ports::ai::TranscriptionEngine,
 };
 
+#[cfg(feature = "vad")]
+use crate::adapters::audio::vad_chunker::VadConfig;
+
 use super::{ChunkingMode, RecordingControlError, RecordingController};
 
 /// Samples per second of the fixed capture format.
@@ -60,6 +63,15 @@ fn controller_with(
     reads_audio: bool,
     prepare_repository: impl FnOnce(&SqliteNoteRepository) + Send + 'static,
 ) -> (RecordingController, Arc<ChunkAudioStore>) {
+    controller_chunking(reads_audio, ChunkingMode::TimeBased, prepare_repository)
+}
+
+/// Builds a controller like `controller_with`, cutting chunks with `chunking_mode`.
+fn controller_chunking(
+    reads_audio: bool,
+    chunking_mode: ChunkingMode,
+    prepare_repository: impl FnOnce(&SqliteNoteRepository) + Send + 'static,
+) -> (RecordingController, Arc<ChunkAudioStore>) {
     let chunk_audio_store = Arc::new(ChunkAudioStore::new());
     let engine_store = Arc::clone(&chunk_audio_store);
     let recording_manager = RecordingManager::spawn(move || -> Result<_, String> {
@@ -78,7 +90,7 @@ fn controller_with(
     let controller = RecordingController::new(
         recording_manager,
         Arc::clone(&chunk_audio_store),
-        ChunkingMode::TimeBased,
+        chunking_mode,
         DeviceId::new("device-test"),
     );
     (controller, chunk_audio_store)
@@ -104,8 +116,8 @@ fn stored_segments(
         .unwrap_or_else(|error| panic!("segments should load: {error}"))
 }
 
-/// Verifies 31 s of audio yields a 30 s chunk while recording and a flushed tail on stop, both
-/// placed on the meeting timeline (the tail starts 1 s early because of the lookback overlap).
+/// Verifies 16 s of audio yields a 15 s chunk while recording and a flushed tail on stop, both
+/// placed on the meeting timeline back to back (no audio is transcribed twice; Issue #51).
 #[test]
 fn recording_audio_produces_meeting_timed_segments() {
     let (mut controller, chunk_audio_store) = controller_with(true, |_| {});
@@ -116,7 +128,7 @@ fn recording_audio_produces_meeting_timed_segments() {
     assert_eq!(controller.state(), AudioState::Recording);
 
     let submitted = controller
-        .push_pcm(pcm_seconds(31))
+        .push_pcm(pcm_seconds(16))
         .unwrap_or_else(|error| panic!("PCM should be accepted: {error}"));
     assert_eq!(submitted, 1);
     let summary = controller
@@ -132,8 +144,8 @@ fn recording_audio_produces_meeting_timed_segments() {
         .iter()
         .map(|segment| (segment.start_time_ms(), segment.end_time_ms()))
         .collect();
-    assert_eq!(bounds, vec![(0, 30_000), (29_000, 31_000)]);
-    assert_eq!(segments[0].text(), "chunk of 30000 ms");
+    assert_eq!(bounds, vec![(0, 15_000), (15_000, 16_000)]);
+    assert_eq!(segments[0].text(), "chunk of 15000 ms");
 }
 
 /// Verifies audio pushed while paused is discarded and start resumes the same meeting.
@@ -242,6 +254,28 @@ fn lifecycle_misuse_is_rejected() {
     );
 }
 
+/// Verifies chunks without speech are not transcribed but still advance the timeline, so the
+/// speech after them keeps its place (Issue #51).
+#[test]
+#[cfg(feature = "vad")]
+fn chunks_without_speech_are_skipped_but_keep_the_timeline() {
+    let (mut controller, chunk_audio_store) =
+        controller_chunking(true, ChunkingMode::Vad(VadConfig::english()), |_| {});
+    let meeting_id = controller
+        .start(Some(MeetingId::new("meeting-silence")))
+        .unwrap_or_else(|error| panic!("recording should start: {error}"));
+    controller
+        .push_pcm(vec![0; 4 * SAMPLES_PER_SECOND])
+        .unwrap_or_else(|error| panic!("PCM should be accepted: {error}"));
+    let summary = controller
+        .stop()
+        .unwrap_or_else(|error| panic!("recording should stop: {error}"));
+
+    assert_eq!(summary.processed_chunk_count(), 0);
+    assert!(chunk_audio_store.is_empty());
+    assert!(stored_segments(&controller, &meeting_id).is_empty());
+}
+
 /// Verifies stop deletes raw audio of chunks the engine never read (failed transcriptions).
 #[test]
 fn stop_deletes_audio_left_by_failed_chunks() {
@@ -250,7 +284,7 @@ fn stop_deletes_audio_left_by_failed_chunks() {
         .start(Some(MeetingId::new("meeting-failing")))
         .unwrap_or_else(|error| panic!("recording should start: {error}"));
     controller
-        .push_pcm(pcm_seconds(31))
+        .push_pcm(pcm_seconds(16))
         .unwrap_or_else(|error| panic!("PCM should be accepted: {error}"));
     let summary = controller
         .stop()

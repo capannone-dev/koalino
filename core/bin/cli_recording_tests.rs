@@ -190,7 +190,7 @@ fn request_stop_waits_for_the_recording_to_finish() {
 #[test]
 fn recording_a_wav_file_transcribes_every_chunk() {
     let (control_files, directory) = control_files_in_temp_directory();
-    let wav_path = write_wav(&directory, 31);
+    let wav_path = write_wav(&directory, 16);
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
     let output = control

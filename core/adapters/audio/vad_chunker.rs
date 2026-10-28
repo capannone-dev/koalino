@@ -1,4 +1,11 @@
 //! Buffers 16 kHz mono PCM into VAD-sized frames and finalizes raw PCM chunks.
+//!
+//! Chunks are short so the live transcript keeps up (Issue #52). With VAD a pause ends a chunk
+//! once it holds at least three seconds, and nothing runs past fifteen. Without VAD every chunk
+//! is cut near fifteen seconds. A forced cut lands at the end of the quietest 30 ms frame of the
+//! last three seconds, usually the gap between two words, and the audio after it starts the next
+//! chunk. Every sample therefore goes to exactly one chunk: a former one-second overlap made
+//! Whisper transcribe the words at a boundary twice (Issue #51).
 
 use crate::domain::{
     errors::AudioError,
@@ -11,9 +18,14 @@ use webrtc_vad::{SampleRate, Vad, VadMode};
 /// WebRTC VAD accepts 10/20/30 ms frames; this adapter standardizes on 30 ms at 16 kHz.
 pub const VAD_FRAME_SAMPLES: usize = 480;
 const PCM_SAMPLE_RATE_HZ: usize = 16_000;
-const SOFT_MAX_MS: u64 = 120_000;
-const FALLBACK_MAX_MS: u64 = 30_000;
-const LOOKBACK_MS: u64 = 1_000;
+/// Longest chunk in either mode; it bounds how far the live transcript lags behind speech.
+const MAX_CHUNK_MS: u64 = 15_000;
+/// Shortest chunk a pause may end, so short phrases are not transcribed without context.
+const MIN_PAUSE_CUT_MS: u64 = 3_000;
+/// How far back from the cap a forced cut looks for the quietest frame.
+const QUIET_SEARCH_MS: u64 = 3_000;
+/// Voiced frames (300 ms) a VAD-classified chunk needs to count as speech.
+const MIN_SPEECH_FRAMES: usize = 10;
 
 /// Explains why a raw PCM chunk became available for downstream processing.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -33,8 +45,8 @@ pub enum ChunkCutType {
 pub struct FinalizedAudioChunk {
     audio_chunk: AudioChunk,
     cut_type: ChunkCutType,
-    /// Leading samples repeated from the previous chunk's end (soft-max lookback).
-    overlap_sample_count: usize,
+    /// False only when VAD classified the chunk and heard (almost) no speech in it.
+    contains_speech: bool,
 }
 
 impl FinalizedAudioChunk {
@@ -50,20 +62,21 @@ impl FinalizedAudioChunk {
     /// Borrows the chunk's raw 16 kHz mono PCM; callers must never log it.
     ///
     /// Inputs: None.
-    /// Outputs: The PCM chunk, including any leading overlap.
+    /// Outputs: The PCM chunk; it starts where the previous chunk ended.
     /// Side effects: None.
     pub fn audio_chunk(&self) -> &AudioChunk {
         &self.audio_chunk
     }
 
-    /// Returns how many leading samples repeat the end of the previous chunk.
+    /// Reports whether the chunk is worth transcribing.
     ///
     /// Inputs: None.
-    /// Outputs: The overlap length in samples (0 unless the previous chunk was soft-max forced),
-    /// which callers subtract when placing the chunk on the meeting timeline.
+    /// Outputs: `false` when VAD heard less than 300 ms of speech in it; Whisper invents text
+    /// such as `[BLANK_AUDIO]` or whole sentences for silence. Always `true` for time-based
+    /// chunks, which nothing classified.
     /// Side effects: None.
-    pub fn overlap_sample_count(&self) -> usize {
-        self.overlap_sample_count
+    pub fn contains_speech(&self) -> bool {
+        self.contains_speech
     }
 
     /// Takes ownership of the chunk's raw PCM.
@@ -142,13 +155,13 @@ unsafe impl Send for SendableVad {}
 pub struct VadChunker {
     configuration: VadConfig,
     pending_samples: Vec<i16>,
+    /// The current chunk's whole frames; after a forced cut it starts with the audio that
+    /// followed the cut.
     active_samples: Vec<i16>,
-    lookback_samples: Vec<i16>,
-    /// Lookback samples prepended to the current active chunk.
-    active_overlap_samples: usize,
+    /// Whether VAD classified each frame of `active_samples` as voice.
+    active_voice_flags: Vec<bool>,
     processed_frames: usize,
     silence_duration_ms: u64,
-    samples_since_soft_max: usize,
     state: ChunkingState,
     using_time_fallback: bool,
     ready_chunks: Vec<FinalizedAudioChunk>,
@@ -164,12 +177,12 @@ impl VadChunker {
     /// Side effects: Emits a warning and selects bounded 30-second time chunking if VAD is disabled.
     pub fn new(configuration: VadConfig) -> Result<Self, AudioError> {
         #[cfg(not(feature = "vad"))]
-        tracing::warn!("VAD is disabled; falling back to 30-second time-based chunking");
+        tracing::warn!("VAD is disabled; falling back to 15-second time-based chunking");
 
         Ok(Self::with_mode(configuration, !cfg!(feature = "vad")))
     }
 
-    /// Creates a chunker that always cuts every 30 seconds, without speech detection.
+    /// Creates a chunker that cuts near every 15 seconds, without speech detection.
     ///
     /// Inputs: `configuration` (its pause threshold is unused in this mode).
     /// Outputs: An empty time-based chunker.
@@ -188,11 +201,9 @@ impl VadChunker {
             configuration,
             pending_samples: Vec::new(),
             active_samples: Vec::new(),
-            lookback_samples: Vec::new(),
-            active_overlap_samples: 0,
+            active_voice_flags: Vec::new(),
             processed_frames: 0,
             silence_duration_ms: 0,
-            samples_since_soft_max: 0,
             state: ChunkingState::Idle,
             using_time_fallback,
             ready_chunks: Vec::new(),
@@ -239,13 +250,14 @@ impl VadChunker {
         }
         tracing::warn!("Audio interrupted while VAD chunk was active");
         self.state = ChunkingState::Finalize;
+        let contains_speech = self.take_speech_verdict();
         Ok(FinalizedAudioChunk {
             audio_chunk: AudioChunk::new(
                 std::mem::take(&mut self.active_samples),
                 AudioConfig::new(16_000, 1),
             ),
             cut_type: ChunkCutType::Interrupted,
-            overlap_sample_count: std::mem::take(&mut self.active_overlap_samples),
+            contains_speech,
         })
     }
 
@@ -254,15 +266,12 @@ impl VadChunker {
     /// Inputs: None.
     /// Outputs: A `StreamEnded` chunk with the active and unframed samples, or `None` when nothing
     /// was buffered. Chunks already finalized stay available through `drain_ready_chunks`.
-    /// Side effects: Clears every internal buffer, including the lookback, so the chunker restarts
-    /// empty.
+    /// Side effects: Clears every internal buffer, so the chunker restarts empty.
     pub fn finish(&mut self) -> Option<FinalizedAudioChunk> {
         self.active_samples.append(&mut self.pending_samples);
-        self.lookback_samples.clear();
         self.silence_duration_ms = 0;
-        self.samples_since_soft_max = 0;
         self.state = ChunkingState::Idle;
-        let overlap_sample_count = std::mem::take(&mut self.active_overlap_samples);
+        let contains_speech = self.take_speech_verdict();
         if self.active_samples.is_empty() {
             return None;
         }
@@ -272,7 +281,7 @@ impl VadChunker {
                 AudioConfig::new(16_000, 1),
             ),
             cut_type: ChunkCutType::StreamEnded,
-            overlap_sample_count,
+            contains_speech,
         })
     }
 
@@ -308,55 +317,71 @@ impl VadChunker {
         self.begin_listening_if_needed();
         self.active_samples.extend_from_slice(&frame);
         self.processed_frames += 1;
-        self.samples_since_soft_max += frame.len();
 
-        if self.reached_time_limit() {
-            self.finalize(ChunkCutType::SoftMaxForced);
-            self.samples_since_soft_max = 0;
+        if samples_to_ms(self.active_samples.len()) >= MAX_CHUNK_MS {
+            // Classified like any other frame, so the chunk's speech verdict covers it.
+            let is_voice = self.using_time_fallback || self.is_voice_frame(&frame) != Some(false);
+            self.active_voice_flags.push(is_voice);
+            self.cut_at_quietest_recent_frame();
             return;
         }
 
         if self.using_time_fallback {
+            self.active_voice_flags.push(true);
             return;
         }
 
         match self.is_voice_frame(&frame) {
             Some(true) => {
+                self.active_voice_flags.push(true);
                 self.silence_duration_ms = 0;
                 self.state = ChunkingState::Listening;
             }
-            Some(false) => self.record_silence(),
-            None => self.enable_time_fallback(),
+            Some(false) => {
+                self.active_voice_flags.push(false);
+                self.record_silence();
+            }
+            None => {
+                self.active_voice_flags.push(true);
+                self.enable_time_fallback();
+            }
         }
     }
 
-    /// Starts a new active chunk, prepending preserved soft-max overlap when available.
+    /// Starts a new active chunk after a finalized one.
     fn begin_listening_if_needed(&mut self) {
         if matches!(self.state, ChunkingState::Idle | ChunkingState::Finalize) {
-            self.active_overlap_samples = self.lookback_samples.len();
-            self.active_samples.append(&mut self.lookback_samples);
             self.silence_duration_ms = 0;
             self.state = ChunkingState::Listening;
         }
     }
 
-    /// Records one silent frame and finalizes after the language-specific pause duration.
+    /// Records one silent frame and finalizes after the language-specific pause duration, once
+    /// the chunk is long enough to stand alone.
     fn record_silence(&mut self) {
         self.state = ChunkingState::PauseDetected;
         self.silence_duration_ms += frame_duration_ms();
-        if self.silence_duration_ms >= self.configuration.pause_threshold_ms {
+        if self.silence_duration_ms >= self.configuration.pause_threshold_ms
+            && samples_to_ms(self.active_samples.len()) >= MIN_PAUSE_CUT_MS
+        {
             self.finalize(ChunkCutType::VadPause);
         }
     }
 
-    /// Indicates whether the active mode has reached its bounded time limit.
-    fn reached_time_limit(&self) -> bool {
-        let maximum_duration_ms = if self.using_time_fallback {
-            FALLBACK_MAX_MS
-        } else {
-            SOFT_MAX_MS
-        };
-        samples_to_ms(self.samples_since_soft_max) >= maximum_duration_ms
+    /// Ends the chunk at the quietest frame of its last `QUIET_SEARCH_MS`; the audio after that
+    /// frame stays as the start of the next chunk.
+    fn cut_at_quietest_recent_frame(&mut self) {
+        let cut_sample = quietest_frame_end(&self.active_samples);
+        let following_samples = self.active_samples.split_off(cut_sample);
+        let following_voice_flags = self
+            .active_voice_flags
+            .split_off(cut_sample / VAD_FRAME_SAMPLES);
+        self.finalize(ChunkCutType::SoftMaxForced);
+        self.active_samples = following_samples;
+        self.active_voice_flags = following_voice_flags;
+        if !self.active_samples.is_empty() {
+            self.state = ChunkingState::Listening;
+        }
     }
 
     /// Classifies every complete frame through the feature-gated WebRTC VAD implementation.
@@ -376,34 +401,42 @@ impl VadChunker {
     /// Permanently switches to bounded time chunking after VAD becomes unavailable.
     fn enable_time_fallback(&mut self) {
         if !self.using_time_fallback {
-            tracing::warn!("VAD failed; falling back to 30-second time-based chunking");
+            tracing::warn!("VAD failed; falling back to 15-second time-based chunking");
             self.using_time_fallback = true;
-            self.samples_since_soft_max = self.active_samples.len();
         }
     }
 
-    /// Queues active PCM and retains a one-second overlap after soft-max boundaries.
+    /// Queues the active PCM as a finished chunk.
     fn finalize(&mut self, cut_type: ChunkCutType) {
         if self.active_samples.is_empty() {
             return;
         }
 
+        let contains_speech = self.take_speech_verdict();
         let finalized_samples = std::mem::take(&mut self.active_samples);
-        if cut_type == ChunkCutType::SoftMaxForced {
-            let lookback_start = finalized_samples
-                .len()
-                .saturating_sub(milliseconds_to_samples(LOOKBACK_MS));
-            self.lookback_samples = finalized_samples[lookback_start..].to_vec();
-        } else {
-            self.lookback_samples.clear();
-        }
         self.ready_chunks.push(FinalizedAudioChunk {
             audio_chunk: AudioChunk::new(finalized_samples, AudioConfig::new(16_000, 1)),
             cut_type,
-            overlap_sample_count: std::mem::take(&mut self.active_overlap_samples),
+            contains_speech,
         });
         self.silence_duration_ms = 0;
         self.state = ChunkingState::Finalize;
+    }
+}
+
+impl VadChunker {
+    /// Decides whether the active chunk holds speech and resets the frame flags.
+    ///
+    /// Outputs: `true` in time-based mode, or when VAD heard at least `MIN_SPEECH_FRAMES`.
+    /// Side effects: Clears the active chunk's voice flags.
+    fn take_speech_verdict(&mut self) -> bool {
+        let voiced_frames = self
+            .active_voice_flags
+            .iter()
+            .filter(|is_voice| **is_voice)
+            .count();
+        self.active_voice_flags.clear();
+        self.using_time_fallback || voiced_frames >= MIN_SPEECH_FRAMES
     }
 }
 
@@ -426,6 +459,35 @@ fn samples_to_ms(samples: usize) -> u64 {
 /// Converts a duration at the fixed stream rate to PCM samples.
 fn milliseconds_to_samples(milliseconds: u64) -> usize {
     (milliseconds.saturating_mul(PCM_SAMPLE_RATE_HZ as u64) / 1_000) as usize
+}
+
+/// Finds where a forced cut should end a chunk.
+///
+/// Inputs: The chunk's samples, a whole number of VAD frames counted from its start.
+/// Outputs: The sample index just after the frame with the least energy among the last
+/// `QUIET_SEARCH_MS`; ties go to the latest frame, so steady audio is cut at the cap.
+/// Side effects: None; reads samples without retaining or logging them.
+fn quietest_frame_end(samples: &[i16]) -> usize {
+    let frame_count = samples.len() / VAD_FRAME_SAMPLES;
+    let searched_frames = (milliseconds_to_samples(QUIET_SEARCH_MS) / VAD_FRAME_SAMPLES).max(1);
+    let first_frame = frame_count.saturating_sub(searched_frames);
+    let mut quietest: Option<(u64, usize)> = None;
+    for frame_index in first_frame..frame_count {
+        let frame_start = frame_index * VAD_FRAME_SAMPLES;
+        let energy: u64 = samples[frame_start..frame_start + VAD_FRAME_SAMPLES]
+            .iter()
+            .map(|sample| {
+                let magnitude = u64::from(sample.unsigned_abs());
+                magnitude * magnitude
+            })
+            .sum();
+        if quietest.is_none_or(|(lowest_energy, _)| energy <= lowest_energy) {
+            quietest = Some((energy, frame_index));
+        }
+    }
+    quietest.map_or(samples.len(), |(_, frame_index)| {
+        (frame_index + 1) * VAD_FRAME_SAMPLES
+    })
 }
 
 /// Returns the configured 30 ms VAD frame duration.

@@ -15,7 +15,7 @@
 //! | `OPENAI_API_KEY` | OpenAI key (never logged) | unset |
 //! | `NOTE_TAKER_OPENAI_WHISPER_MODEL`, `NOTE_TAKER_OPENAI_LANGUAGE` | OpenAI model and language | `whisper-1`, auto |
 //! | `NOTE_TAKER_ENABLE_DIARIZATION` | boolean | `false` |
-//! | `NOTE_TAKER_VAD_ENABLED` | boolean; `false` cuts every 30 s | `true` |
+//! | `NOTE_TAKER_VAD_ENABLED` | boolean; `false` cuts near every 15 s | `true` |
 
 use std::{
     path::{Path, PathBuf},
