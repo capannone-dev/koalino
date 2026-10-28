@@ -6,8 +6,15 @@
 //! thread running `MeetingSession`). Stop flushes the chunker, waits for every queued chunk, and
 //! wipes any raw audio no engine consumed. The FFI and CLI share this driver, so both entry points
 //! run the same flow. Audio and transcripts are never logged.
+//!
+//! With `with_screen_share`, each recording also runs a `ScreenShareWatcher` thread that attaches
+//! new slides of a running screen share to the recorded meeting at the current meeting time
+//! (Issue #49), only while audio is being captured.
 
-use std::sync::{Arc, mpsc::Receiver};
+use std::{
+    sync::{Arc, mpsc::Receiver},
+    time::Duration,
+};
 
 use uuid::Uuid;
 
@@ -21,6 +28,7 @@ use crate::{
         meeting_crdt::MeetingCrdtService,
         pipeline::meeting_session::VadAudioChunk,
         recording_manager::{RecordingManager, RecordingManagerError, RecordingSummary},
+        screen_share_monitor::ScreenShareMonitor,
     },
     domain::{
         errors::{AudioError, StorageError},
@@ -30,6 +38,7 @@ use crate::{
         },
     },
     ports::audio::AudioCapture,
+    screen_share_watcher::{RecordingClock, ScreenShareWatcher},
 };
 
 #[cfg(test)]
@@ -81,6 +90,31 @@ struct ActiveCapture {
     meeting_start_offset_ms: u64,
     /// Distinct samples placed on the timeline so far (overlaps counted once).
     timeline_sample_count: u64,
+    /// Samples captured so far, including those still buffered in the chunker.
+    captured_sample_count: u64,
+    /// Meeting time and capture state read by the screen-share watcher.
+    recording_clock: Arc<RecordingClock>,
+    /// Samples the shared screen during this recording; `None` without screen capture.
+    screen_share_watcher: Option<ScreenShareWatcher>,
+}
+
+impl ActiveCapture {
+    /// Publishes the current meeting time and capture state to the screen-share watcher.
+    ///
+    /// Side effects: Updates the shared clock.
+    fn publish_clock(&self) {
+        self.recording_clock.publish(
+            self.meeting_start_offset_ms + samples_to_ms(self.captured_sample_count),
+            self.local_recorder.state() == AudioState::Recording,
+        );
+    }
+}
+
+/// Local screen-share capture configured for every recording (Issue #49).
+struct ScreenShareSetup {
+    /// Between recordings; `None` while a watcher owns it, or after a watcher failed.
+    idle_monitor: Option<ScreenShareMonitor>,
+    sample_interval: Duration,
 }
 
 /// Owns the pipeline worker and the recording in progress, if any.
@@ -93,6 +127,8 @@ pub struct RecordingController {
     active_capture: Option<ActiveCapture>,
     /// State reported while no recording is active (`Idle`, then `Stopped` after a stop).
     inactive_state: AudioState,
+    /// `None` when the composition configured no screen capture.
+    screen_share: Option<ScreenShareSetup>,
 }
 
 impl RecordingController {
@@ -115,7 +151,25 @@ impl RecordingController {
             device_id,
             active_capture: None,
             inactive_state: AudioState::Idle,
+            screen_share: None,
         }
+    }
+
+    /// Captures new slides of a running screen share during every recording (Issue #49).
+    ///
+    /// Inputs: The monitor (with the conferencing app's detector, a capturer and the slide store)
+    /// and the time between samples (2 s in production).
+    /// Outputs: The controller. Side effects: None until a recording starts.
+    pub fn with_screen_share(
+        mut self,
+        monitor: ScreenShareMonitor,
+        sample_interval: Duration,
+    ) -> Self {
+        self.screen_share = Some(ScreenShareSetup {
+            idle_monitor: Some(monitor),
+            sample_interval,
+        });
+        self
     }
 
     /// Shares the pipeline worker with another producer (the Teams bridge pump).
@@ -188,6 +242,7 @@ impl RecordingController {
                 return Err(RecordingControlError::AlreadyRecording);
             }
             capture.local_recorder.start()?;
+            capture.publish_clock();
             tracing::info!(meeting_id = %capture.meeting_id.as_str(), "Recording resumed");
             return Ok(capture.meeting_id.clone());
         }
@@ -212,6 +267,9 @@ impl RecordingController {
             return Err(error.into());
         }
         let meeting_start_offset_ms = self.meeting_timeline_end_ms(&meeting_id);
+        let recording_clock = Arc::new(RecordingClock::default());
+        recording_clock.publish(meeting_start_offset_ms, true);
+        let screen_share_watcher = self.start_screen_share_watcher(&meeting_id, &recording_clock);
         self.active_capture = Some(ActiveCapture {
             meeting_id: meeting_id.clone(),
             local_recorder,
@@ -221,6 +279,9 @@ impl RecordingController {
             next_chunk_sequence: 0,
             meeting_start_offset_ms,
             timeline_sample_count: 0,
+            captured_sample_count: 0,
+            recording_clock,
+            screen_share_watcher,
         });
         Ok(meeting_id)
     }
@@ -241,8 +302,10 @@ impl RecordingController {
             .local_recorder
             .push_test_chunk(AudioChunk::new(samples, capture_config()))?;
         for routed_chunk in capture.audio_receiver.try_iter() {
+            capture.captured_sample_count += routed_chunk.samples().len() as u64;
             capture.chunker.push_pcm(routed_chunk)?;
         }
+        capture.publish_clock();
         let mut submitted_count = 0;
         for finalized_chunk in capture.chunker.drain_ready_chunks() {
             if submit_chunk(
@@ -269,6 +332,7 @@ impl RecordingController {
             .as_mut()
             .ok_or(RecordingControlError::NotRecording)?;
         capture.local_recorder.pause()?;
+        capture.publish_clock();
         Ok(())
     }
 
@@ -287,6 +351,7 @@ impl RecordingController {
             Err(AudioError::Interrupted) | Ok(()) => {}
             Err(error) => return Err(error.into()),
         }
+        capture.publish_clock();
         if let Some(flushed_chunk) = capture.chunker.finish() {
             submit_chunk(
                 capture,
@@ -311,6 +376,12 @@ impl RecordingController {
             .active_capture
             .take()
             .ok_or(RecordingControlError::NotRecording)?;
+        // No slide may be captured once Stop was pressed.
+        if let Some(watcher) = capture.screen_share_watcher.take()
+            && let Some(screen_share) = self.screen_share.as_mut()
+        {
+            screen_share.idle_monitor = watcher.stop();
+        }
         if let Err(error) = capture.local_recorder.stop() {
             tracing::warn!(error = %error, "Recorder rejected stop; ending the recording anyway");
         }
@@ -344,6 +415,33 @@ impl RecordingController {
         }
         self.inactive_state = AudioState::Stopped;
         Ok(summary?)
+    }
+
+    /// Starts screen-share sampling for a new recording, when configured.
+    ///
+    /// Inputs: The recorded meeting and the recording's clock.
+    /// Outputs: The running watcher, or `None` without screen capture or when its thread cannot
+    /// start (the recording then continues without it).
+    /// Side effects: Hands the idle monitor to a new watcher thread.
+    fn start_screen_share_watcher(
+        &mut self,
+        meeting_id: &MeetingId,
+        recording_clock: &Arc<RecordingClock>,
+    ) -> Option<ScreenShareWatcher> {
+        let screen_share = self.screen_share.as_mut()?;
+        let monitor = screen_share.idle_monitor.take()?;
+        match ScreenShareWatcher::start(
+            monitor,
+            meeting_id.clone(),
+            Arc::clone(recording_clock),
+            screen_share.sample_interval,
+        ) {
+            Ok(watcher) => Some(watcher),
+            Err(error) => {
+                tracing::warn!(error = %error, "Screen-share watcher could not start; recording without it");
+                None
+            }
+        }
     }
 
     /// Stores `title` on an existing meeting through the worker's repository.

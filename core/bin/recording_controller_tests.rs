@@ -2,7 +2,13 @@
 //! with meeting-relative offsets, pause/resume, graceful stop, and raw-audio cleanup. The
 //! transcription engine is a mock reading from the real `ChunkAudioStore`; storage is in-memory.
 
-use std::sync::Arc;
+use std::{
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+    time::{Duration, Instant},
+};
 
 use crate::{
     adapters::{
@@ -12,15 +18,21 @@ use crate::{
     application::{
         crypto::voice_encryptor::ephemeral_cipher, meeting_crdt::MeetingCrdtService,
         pipeline::pipeline_factory::PipelineFactory, recording_manager::RecordingManager,
+        screen_share_monitor::ScreenShareMonitor,
     },
     domain::{
-        errors::TranscriptionError,
+        errors::{ScreenShareError, StorageError, TranscriptionError},
         models::{
             AudioRecording, AudioState, DeviceId, MeetingId, MeetingTitle, Transcript,
             TranscriptSegment, TranscriptionContext,
         },
     },
-    ports::ai::TranscriptionEngine,
+    ports::{
+        ai::TranscriptionEngine,
+        screen_share::{
+            ActiveScreenShare, MeetingSlideSink, ScreenCapturer, ScreenFrame, ScreenShareDetector,
+        },
+    },
 };
 
 #[cfg(feature = "vad")]
@@ -388,4 +400,138 @@ fn an_untitled_start_leaves_the_meeting_untitled() {
         .unwrap_or_else(|error| panic!("recording should start: {error}"));
 
     assert_eq!(stored_title(&controller, &meeting_id), None);
+}
+
+/// Shared switches and records of the fake screen-share ports (Issue #49).
+#[derive(Clone, Default)]
+struct ScreenShareProbe {
+    /// Whether the fake conferencing app is sharing.
+    is_sharing: Arc<AtomicBool>,
+    capture_count: Arc<AtomicUsize>,
+    /// `(meeting ID, meeting time)` of every attached slide.
+    slides: Arc<Mutex<Vec<(String, u64)>>>,
+}
+
+impl ScreenShareProbe {
+    fn capture_count(&self) -> usize {
+        self.capture_count.load(Ordering::SeqCst)
+    }
+
+    fn slides(&self) -> Vec<(String, u64)> {
+        self.slides
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone()
+    }
+
+    /// Waits up to two seconds for a slide count, since the watcher runs on its own thread.
+    fn wait_for_slides(&self, slide_count: usize) -> Vec<(String, u64)> {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while self.slides().len() < slide_count && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        self.slides()
+    }
+}
+
+impl ScreenShareDetector for ScreenShareProbe {
+    fn active_share(&self) -> Result<Option<ActiveScreenShare>, ScreenShareError> {
+        Ok(self
+            .is_sharing
+            .load(Ordering::SeqCst)
+            .then(|| ActiveScreenShare::new("fake-app")))
+    }
+}
+
+impl ScreenCapturer for ScreenShareProbe {
+    fn capture_frame(&self, _share: &ActiveScreenShare) -> Result<ScreenFrame, ScreenShareError> {
+        self.capture_count.fetch_add(1, Ordering::SeqCst);
+        ScreenFrame::new(32, 18, vec![200; 32 * 18], b"\x89PNG".to_vec())
+    }
+}
+
+impl MeetingSlideSink for ScreenShareProbe {
+    fn attach_slide(
+        &self,
+        meeting_id: &MeetingId,
+        _encoded_image: &[u8],
+        meeting_time_ms: u64,
+    ) -> Result<(), StorageError> {
+        self.slides
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .push((meeting_id.as_str().to_owned(), meeting_time_ms));
+        Ok(())
+    }
+}
+
+/// Builds a time-based controller that samples the fake screen share every 5 ms.
+fn controller_with_screen_share() -> (RecordingController, ScreenShareProbe) {
+    let probe = ScreenShareProbe::default();
+    let (controller, _) = controller_with(true, |_| {});
+    let monitor = ScreenShareMonitor::new(
+        Box::new(probe.clone()),
+        Box::new(probe.clone()),
+        Box::new(probe.clone()),
+    );
+    (
+        controller.with_screen_share(monitor, Duration::from_millis(5)),
+        probe,
+    )
+}
+
+/// Verifies a shared slide is attached to the meeting being recorded at the current meeting time.
+#[test]
+fn a_shared_slide_is_attached_to_the_active_meeting_at_the_meeting_time() {
+    let (mut controller, probe) = controller_with_screen_share();
+    let meeting_id = controller
+        .start(Some(MeetingId::new("meeting-share")))
+        .unwrap_or_else(|error| panic!("start should succeed: {error}"));
+    controller
+        .push_pcm(pcm_seconds(4))
+        .unwrap_or_else(|error| panic!("PCM should be accepted: {error}"));
+
+    probe.is_sharing.store(true, Ordering::SeqCst);
+    let slides = probe.wait_for_slides(1);
+    controller
+        .stop()
+        .unwrap_or_else(|error| panic!("stop should succeed: {error}"));
+
+    assert_eq!(slides, vec![(meeting_id.as_str().to_owned(), 4_000)]);
+}
+
+/// Verifies nothing is captured while paused or after stop, and a later recording captures again.
+#[test]
+fn the_screen_is_captured_only_while_recording() {
+    let (mut controller, probe) = controller_with_screen_share();
+    probe.is_sharing.store(true, Ordering::SeqCst);
+    controller
+        .start(Some(MeetingId::new("meeting-first")))
+        .unwrap_or_else(|error| panic!("start should succeed: {error}"));
+    probe.wait_for_slides(1);
+
+    controller
+        .pause()
+        .unwrap_or_else(|error| panic!("pause should succeed: {error}"));
+    std::thread::sleep(Duration::from_millis(20));
+    let captures_when_paused = probe.capture_count();
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(probe.capture_count(), captures_when_paused, "paused");
+
+    controller
+        .stop()
+        .unwrap_or_else(|error| panic!("stop should succeed: {error}"));
+    let captures_when_stopped = probe.capture_count();
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(probe.capture_count(), captures_when_stopped, "stopped");
+
+    controller
+        .start(Some(MeetingId::new("meeting-second")))
+        .unwrap_or_else(|error| panic!("start should succeed: {error}"));
+    let slides = probe.wait_for_slides(2);
+    controller
+        .stop()
+        .unwrap_or_else(|error| panic!("stop should succeed: {error}"));
+    let meetings: Vec<&str> = slides.iter().map(|(meeting, _)| meeting.as_str()).collect();
+    assert_eq!(meetings, vec!["meeting-first", "meeting-second"]);
 }

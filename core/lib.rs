@@ -47,6 +47,9 @@ pub mod protocol;
 /// Drives live recordings from raw PCM through the meeting pipeline worker.
 #[path = "bin/recording_controller.rs"]
 pub mod recording_controller;
+/// Samples local screen shares beside a recording, on its own thread (Issue #49).
+#[path = "bin/screen_share_watcher.rs"]
+pub mod screen_share_watcher;
 /// Exposes the headless Axum API composition without leaking HTTP details into application services.
 pub mod server;
 #[path = "bin/storage_composition.rs"]

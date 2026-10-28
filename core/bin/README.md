@@ -39,6 +39,20 @@ documented nonzero status codes distinguishable from lifecycle states.
   `VadAudioChunk` with meeting-relative offsets → `RecordingManager`. A recording into an existing
   meeting continues after its last segment. Interruption flushes buffered audio. Stop waits for
   every chunk and wipes raw audio that no engine consumed.
+  `with_screen_share(monitor, interval)` (Issue #49) gives every recording a
+  `ScreenShareWatcher`.
+- `screen_share_watcher.rs` runs `ScreenShareMonitor::sample` on its own `screen-share-watcher`
+  thread at that interval, so frames never touch the audio path:
+  - it attaches new slides to the recorded meeting at the meeting time the controller publishes
+    through `RecordingClock`;
+  - it captures nothing while paused or interrupted, and stops before Stop flushes the audio;
+  - it hands the monitor back for the next recording;
+  - failures are logged without screen contents.
+
+  No composition enables it yet, because no conferencing-app `ScreenShareDetector` exists.
+  `NoScreenShareDetector` and `NoScreenCapturer` (`adapters/media`) stand in for one. An app
+  adapter plugs in through `ScreenShareMonitor::new(detector, capturer, SlideAttachmentStore)`,
+  sampled every 2 s.
 - `ffi.rs` composes the controller on the first `note_taker_start_recording` and reuses it for
   every later recording. A failure returns `FFI_PIPELINE_UNAVAILABLE` (`4`) and is retried on the
   next start. `note_taker_start_recording_for_meeting`,
