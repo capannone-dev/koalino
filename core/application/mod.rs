@@ -74,6 +74,14 @@ mod recording_manager_tests;
 pub mod repository_sync_manager;
 #[cfg(test)]
 mod repository_sync_manager_tests;
+/// Samples the shared screen while recording and stores new slides on the meeting (Issue #49).
+pub mod screen_share_monitor;
+#[cfg(test)]
+mod screen_share_monitor_tests;
+/// Decides which screen frames are new slides (Issue #49).
+pub mod slide_change_detector;
+#[cfg(test)]
+mod slide_change_detector_tests;
 /// Coordinates Automerge sync messages through encrypted-network and storage ports.
 pub mod sync_manager;
 #[cfg(test)]

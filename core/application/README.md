@@ -197,6 +197,34 @@ diarization/weak-match/manual-confirmation path and enrolls a new embedding vari
 `SlideCapture` values route only through `AttachmentWorkflow`, preserving an adapter boundary for
 the attachment manager and keeping image bytes out of logs.
 
+## Local screen-share slides (Issue #49)
+
+`ScreenShareMonitor::sample` runs one sampling step for the meeting being recorded. When the
+`ScreenShareDetector` reports a share, it captures a frame, and `SlideChangeDetector` decides
+whether the frame is a new slide. New slides go to the `MeetingSlideSink` with the meeting time.
+Without a share nothing is captured. A share that ends, or one from another app, starts over. A
+slide that could not be stored is saved at a later stable sample.
+
+`SlideChangeDetector` follows lecture-video slide extraction: block-based differencing on a
+downscaled grayscale frame. It is based on these sources:
+
+- [KAIST](https://koasas.kaist.ac.kr/handle/10203/203934)
+- [arXiv 2411.04859](https://arxiv.org/pdf/2411.04859)
+- the research comment on #49
+
+Each frame's luma is area-averaged into a 32×18 grid. A cell has changed when it moves by at
+least 8 levels, and two frames differ when at least 6 cells (about 1 %) changed. A frame is saved
+once it is stable (it matches the previous sample) and differs from the last saved slide. The
+heuristic therefore:
+
+- skips transitions, animations and videos;
+- ignores a moving cursor and compression noise;
+- treats a new bullet line as a new slide;
+- saves a slide again when the speaker goes back to it.
+
+Only the grids are kept, never the frames. The constants are starting points to tune on real
+shares.
+
 ## Meeting export workflow
 
 `export_manager.rs` orchestrates Markdown, PDF, and JSON exports. It talks only to ports:

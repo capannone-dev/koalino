@@ -62,6 +62,13 @@ media and slide values, never a provider SDK. `IdentityMapper` maps the stable
 `AttachmentWorkflow` keep isolated-audio enrollment and slide routing behind independently mocked
 ports.
 
+`screen_share.rs` (Issue #49) declares local screen-share capture outside a meeting bridge.
+`ScreenShareDetector` reports whether a conferencing app is sharing (`ActiveScreenShare`, labelled
+by app). No operating system reliably reports another app's share, so the detector is implemented
+per conferencing app. `ScreenCapturer` grabs a `ScreenFrame`: luma values for comparison plus a
+PNG or JPEG for storage, checked so the luma length matches the dimensions. `MeetingSlideSink`
+attaches a slide to a meeting at a meeting time. Frames are screen contents and are never logged.
+
 `export.rs` defines `MeetingExporter`, the renderer contract for meeting exports. Its
 `export_meeting`/`export_meetings` methods receive fully extracted `ExportDocument` values plus
 `ExportOptions` and a destination path, and return an `ExportResult` or a portable `ExportError`.

@@ -1,9 +1,11 @@
-//! Stores Teams screen-share captures as image files and links them to their meeting.
+//! Stores screen-share captures as image files and links them to their meeting.
 //!
-//! Implements the `AttachmentWorkflow` port: each `SlideCapture` is written to
-//! `<slide_directory>/<meeting UUID>/slide-<timestamp ms>-<attachment UUID>.<png|jpg>` (directory
+//! Implements the `AttachmentWorkflow` port (Teams bridge captures) and the `MeetingSlideSink`
+//! port (local screen shares, Issue #49): each slide is written to
+//! `<slide_directory>/<meeting ID>/slide-<timestamp ms>-<attachment UUID>.<png|jpg>` (directory
 //! 0700, file 0600 on Unix) and recorded through the `AttachmentRepository` as an attachment of
-//! the meeting, so it appears next to manually added attachments. Only PNG and JPEG images,
+//! the meeting, so it appears next to manually added attachments. Meeting IDs that are not plain
+//! folder names are rejected, so no file lands outside the slide directory. Only PNG and JPEG images,
 //! recognized by their signature, are accepted. If the attachment row cannot be saved (for
 //! example, the meeting does not exist), the file is deleted again. Image bytes are never logged.
 
@@ -21,7 +23,10 @@ use crate::{
         errors::StorageError,
         models::{Attachment, DeviceId, MeetingId, SlideCapture},
     },
-    ports::{external_bridge::AttachmentWorkflow, storage::AttachmentRepository},
+    ports::{
+        external_bridge::AttachmentWorkflow, screen_share::MeetingSlideSink,
+        storage::AttachmentRepository,
+    },
 };
 
 /// PNG file signature.
@@ -76,19 +81,65 @@ where
     /// Side effects: Creates directories and one file; writes one attachment row; removes the
     /// file again when the row cannot be saved; logs IDs only.
     fn handle_slide_capture(&self, slide_capture: SlideCapture) -> Result<(), StorageError> {
-        let (mime_type, extension) = detect_image_format(slide_capture.image_bytes())?;
+        self.store_slide(
+            &MeetingId::new(slide_capture.meeting_id().to_string()),
+            slide_capture.image_bytes(),
+            slide_capture.timestamp_ms(),
+        )
+    }
+}
+
+impl<RepositoryPort> MeetingSlideSink for SlideAttachmentStore<RepositoryPort>
+where
+    RepositoryPort: AttachmentRepository,
+{
+    /// Saves a local screen-share slide (Issue #49) as a private image file of its meeting.
+    ///
+    /// Inputs: A recorded meeting (it must exist; its ID must be a plain folder name such as
+    /// `meeting-<uuid>`), a PNG or JPEG image, and the meeting time it was shown at.
+    /// Outputs: As `handle_slide_capture`; an unsafe meeting ID is rejected before any write.
+    /// Side effects: As `handle_slide_capture`.
+    fn attach_slide(
+        &self,
+        meeting_id: &MeetingId,
+        encoded_image: &[u8],
+        meeting_time_ms: u64,
+    ) -> Result<(), StorageError> {
+        self.store_slide(meeting_id, encoded_image, meeting_time_ms)
+    }
+}
+
+impl<RepositoryPort> SlideAttachmentStore<RepositoryPort>
+where
+    RepositoryPort: AttachmentRepository,
+{
+    /// Writes one slide under `<slide_directory>/<meeting ID>/` and links it to the meeting.
+    ///
+    /// Inputs: The meeting, the image bytes, and the timestamp used in the file name.
+    /// Outputs: Success, or a rejection for an unsafe meeting ID, an unsupported image format, a
+    /// file-system failure, or an attachment row that cannot be saved.
+    /// Side effects: Creates directories and one file; writes one attachment row; removes the
+    /// file again when the row cannot be saved; logs IDs only.
+    fn store_slide(
+        &self,
+        meeting_id: &MeetingId,
+        image_bytes: &[u8],
+        timestamp_ms: u64,
+    ) -> Result<(), StorageError> {
+        if !is_plain_folder_name(meeting_id.as_str()) {
+            return Err(StorageError::Rejected {
+                reason: String::from("meeting ID is not a valid slide folder name"),
+            });
+        }
+        let (mime_type, extension) = detect_image_format(image_bytes)?;
         let attachment_id = Uuid::new_v4();
-        let meeting_directory = self
-            .slide_directory
-            .join(slide_capture.meeting_id().to_string());
+        let meeting_directory = self.slide_directory.join(meeting_id.as_str());
         create_private_directory(&meeting_directory)?;
         let slide_path = meeting_directory.join(format!(
-            "slide-{:010}-{attachment_id}.{extension}",
-            slide_capture.timestamp_ms()
+            "slide-{timestamp_ms:010}-{attachment_id}.{extension}"
         ));
-        write_private_file(&slide_path, slide_capture.image_bytes())?;
+        write_private_file(&slide_path, image_bytes)?;
 
-        let meeting_id = MeetingId::new(slide_capture.meeting_id().to_string());
         let attachment = Attachment::new(
             attachment_id,
             Some(meeting_id.clone()),
@@ -106,11 +157,21 @@ where
         tracing::info!(
             meeting_id = %meeting_id.as_str(),
             %attachment_id,
-            timestamp_ms = slide_capture.timestamp_ms(),
+            timestamp_ms,
             "Slide capture attached to meeting"
         );
         Ok(())
     }
+}
+
+/// Tells whether a meeting ID can name a folder without reaching outside the slide directory.
+///
+/// Outputs: `true` for a non-empty ID of ASCII letters, digits, `-` and `_` only.
+fn is_plain_folder_name(meeting_id: &str) -> bool {
+    !meeting_id.is_empty()
+        && meeting_id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
 }
 
 /// Recognizes PNG and JPEG images by their signature.

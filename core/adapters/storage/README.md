@@ -167,3 +167,8 @@ for Teams screen-share captures. Each PNG or JPEG (recognized by its signature) 
 0600 on Unix, and linked to its meeting through `AttachmentRepository`. If the row is rejected
 (unknown meeting), the file is deleted again. Slide files are not encrypted, the same policy as
 manually added attachments.
+It also implements `MeetingSlideSink` for local screen shares (Issue #49), which use a recorded
+meeting's ID (`meeting-<uuid>`) as the folder name and the meeting time in milliseconds as
+`<ms>`. A meeting ID that is not a plain folder name (anything besides ASCII letters, digits,
+`-` and `_`) is rejected before anything is written, so no file can land outside the slide
+directory.

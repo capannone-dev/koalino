@@ -20,6 +20,8 @@ pub mod meeting_document;
 pub mod network;
 /// Declares persistence for this node's P2P identity and its trusted peers.
 pub mod peer_trust;
+/// Declares local screen-share detection, capture and slide storage contracts.
+pub mod screen_share;
 /// Declares contracts for transcript and voice-vector persistence.
 pub mod storage;
 /// Declares persistence for AI performance and device-load telemetry.

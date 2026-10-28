@@ -274,3 +274,28 @@ pub enum CryptoError {
         reason: String,
     },
 }
+
+/// Describes why local screen-share detection or capture could not complete (Issue #49).
+///
+/// Messages never contain screen contents.
+#[derive(Debug, thiserror::Error)]
+pub enum ScreenShareError {
+    /// No adapter can detect or capture screen shares on this device.
+    #[error("screen-share capture is unavailable on this device")]
+    Unavailable,
+    /// The adapter returned a frame that violates the frame contract.
+    #[error("screen frame is invalid: {reason}")]
+    InvalidFrame {
+        /// A reason that contains no screen contents.
+        reason: String,
+    },
+    /// The adapter could not detect a share or grab the screen.
+    #[error("screen capture failed: {reason}")]
+    CaptureFailed {
+        /// A reason that contains no screen contents.
+        reason: String,
+    },
+    /// The slide could not be stored on the meeting.
+    #[error(transparent)]
+    Storage(#[from] StorageError),
+}

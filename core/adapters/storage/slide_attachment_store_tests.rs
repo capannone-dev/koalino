@@ -12,7 +12,10 @@ use crate::{
     },
     application::{crypto::voice_encryptor::ephemeral_cipher, meeting_crdt::MeetingCrdtService},
     domain::models::{DeviceId, MeetingId, SlideCapture},
-    ports::{external_bridge::AttachmentWorkflow, storage::AttachmentRepository},
+    ports::{
+        external_bridge::AttachmentWorkflow, screen_share::MeetingSlideSink,
+        storage::AttachmentRepository,
+    },
 };
 
 /// A minimal PNG signature followed by filler bytes.
@@ -141,4 +144,64 @@ fn capture_for_an_unknown_meeting_is_rejected_without_leaving_a_file() {
         .map(|entries| entries.count())
         .unwrap_or(0);
     assert_eq!(leftover_files, 0);
+}
+
+/// Opens an in-memory repository holding the meeting `meeting_id`.
+fn repository_with_named_meeting(meeting_id: &MeetingId) -> SqliteNoteRepository {
+    let repository = SqliteNoteRepository::open_in_memory(ephemeral_cipher())
+        .unwrap_or_else(|error| panic!("repository should open: {error}"));
+    MeetingCrdtService::new(&repository)
+        .create_meeting(meeting_id)
+        .unwrap_or_else(|error| panic!("meeting should be created: {error}"));
+    repository
+}
+
+/// Verifies a local screen-share slide (Issue #49) is linked to a recorded `meeting-<uuid>`
+/// meeting, under a folder named after it, with its meeting time in the file name.
+#[test]
+fn local_slide_is_attached_to_a_recorded_meeting() {
+    let slide_directory = TemporaryDirectory::new();
+    let meeting_id = MeetingId::new(format!("meeting-{}", Uuid::new_v4()));
+    let store = SlideAttachmentStore::new(
+        slide_directory.0.clone(),
+        repository_with_named_meeting(&meeting_id),
+        DeviceId::new("device-test"),
+    );
+
+    store
+        .attach_slide(&meeting_id, PNG_BYTES, 6_000)
+        .unwrap_or_else(|error| panic!("slide should be stored: {error}"));
+
+    let attachments = store
+        .attachment_repository()
+        .get_attachments_for_meeting(&meeting_id)
+        .unwrap_or_else(|error| panic!("attachments should load: {error}"));
+    assert_eq!(attachments.len(), 1);
+    let saved_path = Path::new(attachments[0].file_path());
+    assert_eq!(
+        saved_path.parent(),
+        Some(slide_directory.0.join(meeting_id.as_str()).as_path())
+    );
+    let file_name = saved_path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    assert!(file_name.starts_with("slide-0000006000-"), "{file_name}");
+}
+
+/// Verifies a meeting ID that is not a plain folder name cannot place a file elsewhere.
+#[test]
+fn meeting_ids_that_are_not_plain_folder_names_are_rejected() {
+    let slide_directory = TemporaryDirectory::new();
+    let store = SlideAttachmentStore::new(
+        slide_directory.0.clone(),
+        repository_with_meeting(Uuid::new_v4()),
+        DeviceId::new("device-test"),
+    );
+
+    for unsafe_id in ["../outside", "a/b", "", ".", "..", "with space"] {
+        let outcome = store.attach_slide(&MeetingId::new(unsafe_id), PNG_BYTES, 1);
+        assert!(outcome.is_err(), "{unsafe_id:?} should be rejected");
+    }
+    assert!(!slide_directory.0.exists(), "no folder may be created");
 }
