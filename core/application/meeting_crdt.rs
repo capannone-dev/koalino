@@ -57,6 +57,40 @@ where
             .create_meeting(meeting_id, &new_document.save())
     }
 
+    /// Borrows the injected repository.
+    pub fn repository(&self) -> &RepositoryPort {
+        &self.note_repository
+    }
+
+    /// Reports whether `meeting_id` exists locally.
+    ///
+    /// Outputs: `true` when the repository holds its metadata, or a storage error.
+    /// Side effects: Reads local meeting metadata only.
+    pub fn meeting_exists(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        Ok(self
+            .note_repository
+            .load_meeting_metadata(meeting_id)?
+            .is_some())
+    }
+
+    /// Creates a meeting that so far existed only on a paired device, from that device's document.
+    ///
+    /// Inputs: `meeting_id` must not exist locally; `peer_document` is a valid serialized
+    /// Automerge document built by sync from an authenticated, paired peer.
+    /// Outputs: Success, or a storage error (including a document that does not parse).
+    /// Side effects: Persists the document (the repository projects its origin and transcript),
+    /// then writes the SQLite title projection when the document holds a valid title.
+    pub fn create_meeting_from_peer_document(
+        &self,
+        meeting_id: &MeetingId,
+        peer_document: &[u8],
+    ) -> Result<(), StorageError> {
+        let received_document = load_document(peer_document)?;
+        self.note_repository
+            .create_meeting(meeting_id, peer_document)?;
+        self.project_document_title(meeting_id, &received_document)
+    }
+
     /// Creates a meeting whose first CRDT change already carries its title, so the title reaches
     /// peers with the meeting itself.
     ///

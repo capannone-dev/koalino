@@ -43,6 +43,25 @@ the next acknowledgement when required. After a locally persisted edit, `notify_
 broadcasts a fresh encrypted `SyncMessage`. The manager uses only `P2pNetwork` and
 `NoteRepository`, so its tests use mocks and never open sockets or SQLite files.
 
+`repository_sync_manager.rs` (`RepositorySyncManager`, Issue #43) syncs every meeting with paired
+devices. It replaces the single-meeting `SyncManager` for the daemon's P2P task:
+
+- **On connect:** a handshake starts for each local meeting, with one `sync::State` per (peer,
+  meeting).
+- **Unknown meetings:** a message about a meeting this device lacks is answered from an empty
+  in-memory document. When the peer's changes arrive, `MeetingCrdtService::create_meeting_from_peer_document`
+  creates the meeting, so the repository keeps the peer's origin and projects its transcript,
+  segments, and title.
+- **Memory bound:** at most `MAX_PENDING_REMOTE_MEETINGS` unknown meetings are held at once.
+  Beyond that a message is refused, so even a misbehaving paired device cannot grow memory without
+  limit.
+- **Local changes:** `notify_local_change(meeting_id)` sends a local write, or a new local meeting,
+  to every connected peer.
+- **Disconnect:** an expired peer's state is dropped.
+
+`repository_sync_manager_tests.rs` runs two document-backed SQLite repositories over a linked
+in-process network.
+
 `meeting_crdt.rs` owns the meeting document schema. The root map holds `note_text` and, since
 Issue #39, an optional `title` scalar string. `create_titled_meeting` and `set_meeting_title` write
 the CRDT first and then the SQLite `meetings.title` column, which is only a local projection kept

@@ -58,6 +58,10 @@ pub mod pipeline;
 pub mod recording_manager;
 #[cfg(test)]
 mod recording_manager_tests;
+/// Synchronizes every meeting of the repository with paired devices (Issue #43).
+pub mod repository_sync_manager;
+#[cfg(test)]
+mod repository_sync_manager_tests;
 /// Coordinates Automerge sync messages through encrypted-network and storage ports.
 pub mod sync_manager;
 #[cfg(test)]
