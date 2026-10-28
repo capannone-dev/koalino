@@ -1,6 +1,7 @@
 // Hosts the Flutter UI, holds a Wi-Fi multicast lock while the app is visible so the Rust core's
-// mDNS discovery receives other devices' announcements (Issue #43), and serves the database key
-// from the Android Keystore over the `note_taker/key_vault` channel.
+// mDNS discovery receives other devices' announcements (Issue #43), and hands the database key
+// from the Android Keystore to the Rust core over JNI when Dart asks on `note_taker/key_vault`.
+// It also serves the app lock (`AppLock`) on `note_taker/app_lock`.
 package com.example.note_taker_ui
 
 import android.content.Context
@@ -20,13 +21,21 @@ class MainActivity : FlutterActivity() {
     /** Runs Keystore work off the main thread. */
     private val keyVaultExecutor = Executors.newSingleThreadExecutor()
 
-    /** Registers `loadEncryptionKey(keyDirectory)`, which answers the 32-byte key or an error. */
+    /**
+     * Registers the app-lock channel and `provideEncryptionKey(keyDirectory)`: unwraps the key, passes it to Rust through
+     * `NativeCore`, wipes it, and answers null, so the key never reaches Dart. Failures answer
+     * `keystore_unavailable` or `key_rejected`.
+     */
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        val appLock = AppLock(this)
+        appLock.applyRecentsPreview()
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/app_lock")
+            .setMethodCallHandler(appLock)
         val mainThread = Handler(Looper.getMainLooper())
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/key_vault")
             .setMethodCallHandler { call, result ->
-                if (call.method != "loadEncryptionKey") {
+                if (call.method != "provideEncryptionKey") {
                     result.notImplemented()
                     return@setMethodCallHandler
                 }
@@ -38,15 +47,27 @@ class MainActivity : FlutterActivity() {
                 keyVaultExecutor.execute {
                     try {
                         val key = EncryptionKeyVault(File(keyDirectory)).loadOrCreateKey()
-                        mainThread.post {
-                            // The codec copies the bytes when `success` runs; then wipe ours.
-                            result.success(key)
+                        val status = try {
+                            NativeCore.provideEncryptionKey(key)
+                        } finally {
                             key.fill(0)
+                        }
+                        mainThread.post {
+                            if (status == 0) {
+                                result.success(null)
+                            } else {
+                                result.error("key_rejected", "the core refused the key: $status", null)
+                            }
                         }
                     } catch (error: Exception) {
                         // The message names the failing step only, never key material.
                         mainThread.post {
                             result.error("keystore_unavailable", error.message, null)
+                        }
+                    } catch (error: LinkageError) {
+                        // The JNI library or method is missing; answer instead of hanging Dart.
+                        mainThread.post {
+                            result.error("key_rejected", error.message, null)
                         }
                     }
                 }

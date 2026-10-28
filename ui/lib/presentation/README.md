@@ -36,3 +36,17 @@ the system setting, including changes while it runs. Screens take colours from t
 which may wait on a keychain unlock prompt. On a keychain or storage failure it explains the
 problem and offers Retry and Quit, instead of the app. There is no key-file fallback
 (`DECISION_LOG.md`).
+
+`app_lock_gate.dart` (`AppLockGate`, Android) wraps the navigator through `MaterialApp.builder`,
+so pushed screens and dialogs are covered too. While locked it shows "Note Taker is locked" with
+Unlock; the app's widgets stay mounted but hidden (not painted, tapped, or read by screen
+readers), so an active recording and every screen keep their state. It forwards the app being
+hidden and shown to `AppLockController`.
+
+`settings_screen.dart` (`SettingsScreen`) holds the App lock switch, which explains why it is
+unavailable without a screen lock or before Android 10. `HomeShell` shows Settings as a fifth
+destination only when given a builder (Android for now; Issue #46 adds more settings).
+
+The meeting detail's app bar has Name speakers (`NameSpeakersButton`), which opens the voice
+gallery (`voice_gallery_screen.dart`) for that meeting and reloads the meeting on return so the
+transcript shows the new names. The desktop two-pane layout shows it once a meeting is selected.

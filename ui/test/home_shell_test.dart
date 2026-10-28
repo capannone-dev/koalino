@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
 
-/// Pumps the shell at `size` (logical pixels) with placeholder destination screens.
-Future<void> pumpHomeShell(WidgetTester tester, Size size) async {
+/// Pumps the shell at `size` (logical pixels) with placeholder destination screens, and a
+/// Settings placeholder when `withSettings` is true.
+Future<void> pumpHomeShell(WidgetTester tester, Size size,
+    {bool withSettings = false}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
@@ -21,6 +23,9 @@ Future<void> pumpHomeShell(WidgetTester tester, Size size) async {
             const Text('Telemetry screen'),
         devicesScreenBuilder: (BuildContext context) =>
             const Text('Devices screen'),
+        settingsScreenBuilder: withSettings
+            ? (BuildContext context) => const Text('Settings screen')
+            : null,
       ),
     ),
   );
@@ -28,6 +33,18 @@ Future<void> pumpHomeShell(WidgetTester tester, Size size) async {
 
 /// Verifies phones use a bottom navigation bar and desktops a navigation rail.
 void main() {
+  testWidgets('Settings is a destination only when the app has settings',
+      (WidgetTester tester) async {
+    await pumpHomeShell(tester, const Size(390, 844));
+    expect(find.text('Settings'), findsNothing);
+
+    await pumpHomeShell(tester, const Size(390, 844), withSettings: true);
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Settings screen'), findsOneWidget);
+  });
+
   testWidgets('a phone switches destinations with a bottom navigation bar',
       (WidgetTester tester) async {
     await pumpHomeShell(tester, const Size(390, 844));

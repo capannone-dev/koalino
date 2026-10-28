@@ -1,7 +1,6 @@
-// Specifies how the app hands the Android Keystore's database key to Rust before starting the
-// core, and that a Keystore failure becomes the keychain error (status 6), never a key file.
-
-import 'dart:isolate';
+// Specifies how the app has Kotlin hand the Android Keystore's database key to Rust over JNI
+// before starting the core, and that a failure becomes the keychain error (status 6), never a
+// key file. The key itself never reaches Dart.
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -16,11 +15,7 @@ void main() {
       final List<String> calls = <String>[];
 
       final int status = await startCoreWithHostKey(
-        loadHostKey: null,
-        provideKey: (TransferableTypedData key) async {
-          calls.add('provide');
-          return 0;
-        },
+        provideHostKey: null,
         startCore: () async {
           calls.add('start');
           return 0;
@@ -31,42 +26,19 @@ void main() {
       expect(calls, <String>['start']);
     });
 
-    test('hands the key to Rust, wipes the Dart copy, then starts', () async {
-      final Uint8List loadedKey = Uint8List.fromList(List<int>.filled(32, 7));
-      Uint8List? receivedKey;
+    test('has the host hand the key over before starting', () async {
+      final List<String> calls = <String>[];
 
       final int status = await startCoreWithHostKey(
-        loadHostKey: () async => loadedKey,
-        provideKey: (TransferableTypedData key) async {
-          receivedKey = key.materialize().asUint8List();
+        provideHostKey: () async => calls.add('provide'),
+        startCore: () async {
+          calls.add('start');
           return 0;
         },
-        startCore: () async => receivedKey == null ? 99 : 0,
       );
 
       expect(status, 0);
-      expect(receivedKey, List<int>.filled(32, 7));
-      expect(loadedKey, List<int>.filled(32, 0),
-          reason: 'the loaded copy is zero-filled');
-    });
-
-    test('a read-only key from the platform channel is still handed over',
-        () async {
-      final Uint8List channelKey =
-          Uint8List.fromList(List<int>.filled(32, 4)).asUnmodifiableView();
-      Uint8List? receivedKey;
-
-      final int status = await startCoreWithHostKey(
-        loadHostKey: () async => channelKey,
-        provideKey: (TransferableTypedData key) async {
-          receivedKey = key.materialize().asUint8List();
-          return 0;
-        },
-        startCore: () async => 0,
-      );
-
-      expect(status, 0);
-      expect(receivedKey, List<int>.filled(32, 4));
+      expect(calls, <String>['provide', 'start']);
     });
 
     test('a Keystore failure is the keychain error and does not start',
@@ -74,9 +46,8 @@ void main() {
       bool started = false;
 
       final int status = await startCoreWithHostKey(
-        loadHostKey: () async =>
+        provideHostKey: () async =>
             throw PlatformException(code: 'keystore_unavailable'),
-        provideKey: (TransferableTypedData key) async => 0,
         startCore: () async {
           started = true;
           return 0;
@@ -89,8 +60,8 @@ void main() {
 
     test('a key Rust refuses is the keychain error', () async {
       final int status = await startCoreWithHostKey(
-        loadHostKey: () async => Uint8List(32),
-        provideKey: (TransferableTypedData key) async => 1,
+        provideHostKey: () async =>
+            throw PlatformException(code: 'key_rejected'),
         startCore: () async => 0,
       );
 
@@ -98,25 +69,23 @@ void main() {
     });
   });
 
-  test('AndroidKeyVault asks the Kotlin vault for the key of a directory',
+  test('AndroidKeyVault asks Kotlin to hand over the key of a directory',
       () async {
     const MethodChannel channel = MethodChannel(keyVaultChannelName);
     MethodCall? received;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (MethodCall call) async {
       received = call;
-      return Uint8List.fromList(List<int>.filled(32, 5));
+      return null;
     });
     addTearDown(() => TestDefaultBinaryMessengerBinding
         .instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, null));
 
-    final Uint8List key =
-        await const AndroidKeyVault().loadEncryptionKey('/data/app/keys');
+    await const AndroidKeyVault().provideEncryptionKey('/data/app/keys');
 
-    expect(received?.method, 'loadEncryptionKey');
+    expect(received?.method, 'provideEncryptionKey');
     expect(received?.arguments,
         <String, Object?>{'keyDirectory': '/data/app/keys'});
-    expect(key, List<int>.filled(32, 5));
   });
 }

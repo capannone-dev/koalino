@@ -1012,3 +1012,23 @@ The owner decided:
 - **Android uses the Android Keystore.** The random key is wrapped by a non-exportable,
   hardware-backed Keystore AES-GCM key, through a small Kotlin bridge with Android SDK APIs only
   (no new library). If the Keystore fails, the app shows the error with Retry, not a key file.
+
+## 2026-10-28 — Android key hand-over over JNI; app lock
+
+- The owner approved the `jni` crate. Kotlin now passes the Keystore-unwrapped database key to
+  Rust through `NativeCore.provideEncryptionKey` (`core/bin/ffi_android.rs`). Before, the key
+  crossed a Flutter platform channel, whose read-only buffer left an unwipeable copy in the Dart
+  heap. `jni` 0.22.4 was already in the Android build through hickory's mDNS, so no new code
+  ships. It is an Android-only dependency.
+- The owner asked for an optional banking-style app lock on Android, toggled in Settings. It is a
+  UI gate over the framework `BiometricPrompt` (strong biometrics or the device credential, no
+  AndroidX library). It locks at start-up and after 30 s out of sight, and it fails closed if
+  the setting cannot be read. Changing the setting needs a successful prompt. The recent-apps
+  preview is hidden while the lock is on.
+- Not chosen: binding the Keystore wrapping key to user authentication. That would make the
+  lock cryptographic at a cold start, but Android permanently invalidates such keys when the
+  screen lock is removed (and, for biometric keys, when a fingerprint is enrolled), which would
+  make the local database unreadable. A later background start without UI (#47) could not
+  unwrap it either.
+- The lock covers only the UI, so recording and sync are not interrupted. Future
+  notification and lock-screen recording controls (#47) need no app unlock.

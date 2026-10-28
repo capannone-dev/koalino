@@ -35,10 +35,10 @@ both native strings, and maps non-zero statuses to `MeetingRenameException` thro
 `app_configuration.dart` runs first: `configureCore` passes the application-support directory
 (`<support>/note_taker`), the device name (the host name; "Android device" on Android), and
 `models/ggml-base.bin` when present to `note_taker_configure` on a background isolate. Every
-platform uses its keychain. On Android, `host_key.dart` first fetches the key from the Keystore
-vault (`AndroidKeyVault`, channel `note_taker/key_vault`) and moves it with
-`TransferableTypedData` to an isolate that calls `note_taker_provide_encryption_key`, then wipes
-its native copy; `startCoreWithHostKey` reports any failure as status 6.
+platform uses its keychain. On Android, `host_key.dart` first asks Kotlin
+(`AndroidKeyVault.provideEncryptionKey`, channel `note_taker/key_vault`) to unwrap the Keystore
+key and hand it to Rust over JNI; no key bytes cross the channel. `startCoreWithHostKey` reports
+any failure as status 6.
 `appConfigurationJson` builds the JSON and is unit-tested; it also passes peer addresses compiled
 in with `--dart-define=NOTE_TAKER_P2P_PEERS`. After `runApp`, `startCore` calls
 `note_taker_start_runtime` on an isolate, so sync starts with the app. `CoreStartupController`
@@ -49,3 +49,8 @@ refused.
 Rust's `error_code`), the pure decoders `decodeP2pStatus` and `decodeP2pCommandResult`, and
 `p2pCommandJson`. `RustP2pBridge` calls `note_taker_p2p_status` and `note_taker_p2p_command` on
 background isolates; a command blocks its isolate until the P2P task answers (Issue #43).
+
+`app_lock_bridge.dart` defines `AppLockStatus` (supported, device secure, enabled) and the
+`AppLockBridge` interface. `AndroidAppLockBridge` calls Kotlin's `AppLock` on the
+`note_taker/app_lock` channel: `status`, `authenticate` (the system prompt; false when
+cancelled), and `setEnabled`. There is no desktop implementation.

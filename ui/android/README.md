@@ -28,9 +28,21 @@ because file_picker 8 still compiles against 34 while its AndroidX dependencies 
 Keystore key `note_taker_database_key_wrapper`, in StrongBox when the phone has one and in the TEE
 otherwise. On first use it creates a random key, or wraps the plain `encryption.key` left by
 earlier builds, checks the wrapped file unwraps to the same key, and only then deletes the plain
-file. `MainActivity` serves it on the `note_taker/key_vault` method channel from a background
-thread; any failure is reported as `keystore_unavailable`, which the app shows as the keychain
-error with Retry. Verified on the Galaxy S23 (StrongBox; the migrated database opened).
+file. When Dart asks on the `note_taker/key_vault` channel, `MainActivity` unwraps it on a
+background thread and passes it straight to Rust with `NativeCore.provideEncryptionKey` (JNI,
+`core/bin/ffi_android.rs`), then zero-fills its copy; the key never reaches Dart. A Keystore
+failure answers `keystore_unavailable` and a refused key or missing JNI method `key_rejected`;
+the app shows both as the keychain error with Retry.
+
+## App lock
+
+`AppLock.kt` serves `note_taker/app_lock`: the setting (SharedPreferences
+`note_taker_app_lock`), whether a screen lock is set, and the framework `BiometricPrompt`, which
+allows strong biometrics or the screen lock's PIN, pattern, or password (Android 10 and later; no
+AndroidX library). While the lock is on, the recent-apps screen shows no preview of the app
+(Android 13 and later); screenshots stay allowed. When to lock is decided in Dart
+(`AppLockController`). The lock covers only the UI: the Rust core, recording, and sync keep
+running, and future lock-screen recording controls (#47) work without unlocking the app. Verified on the Galaxy S23 (StrongBox; the migrated database opened).
 
 For a development build that must reach devices mDNS cannot see, such as VMs through
 `adb reverse`, compile peer addresses in:

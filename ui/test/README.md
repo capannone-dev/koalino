@@ -55,6 +55,14 @@ and that the app follows a light and a dark system setting.
 `core_startup_test.dart` covers the status mapping, the waiting message, the keychain
 explanation with Retry, and Quit.
 
-`host_key_test.dart` covers `startCoreWithHostKey`: the desktop path without a host key, the key
-handed over before start-up, a vault failure or refused key reported as status 6 without starting
-the core, a read-only channel buffer, and the `note_taker/key_vault` method-channel request.
+`host_key_test.dart` covers `startCoreWithHostKey`: the desktop path without a host key, the
+hand-over before start-up, a Keystore failure or refused key reported as status 6 without
+starting the core, and the `note_taker/key_vault` method-channel request.
+
+`app_lock_controller_test.dart` covers locking at start-up (on, off, no screen lock, a failing
+status), unlocking (success, cancel, a double tap, one automatic prompt per lock), the 30 s grace
+period, the prompt's PIN screen not relocking, and changing the setting.
+`app_lock_screen_test.dart` covers the gate (nothing shows while checking, the automatic prompt,
+Unlock after a cancel, app state kept across a lock, pushed routes covered, the lifecycle) and
+the Settings switch. `fake_app_lock_bridge.dart` holds the scripted bridge.
+`meeting_list_screen_test.dart` also covers Name speakers on phones and desktops.

@@ -4,22 +4,28 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui' show AppExitType;
 
+import 'package:audioplayers/audioplayers.dart';
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/core_startup_controller.dart';
 import 'package:note_taker_ui/controllers/attachment_controller.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
+import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_configuration.dart';
+import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/attachment_bridge.dart';
 import 'package:note_taker_ui/infrastructure/host_key.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 import 'package:note_taker_ui/infrastructure/telemetry_bridge.dart';
+import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
+import 'package:note_taker_ui/presentation/app_lock_gate.dart';
 import 'package:note_taker_ui/presentation/app_theme.dart';
 import 'package:note_taker_ui/presentation/attachment_import_screen.dart';
 import 'package:note_taker_ui/presentation/core_startup_gate.dart';
@@ -27,7 +33,9 @@ import 'package:note_taker_ui/presentation/devices_screen.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 import 'package:note_taker_ui/presentation/recording_screen.dart';
+import 'package:note_taker_ui/presentation/settings_screen.dart';
 import 'package:note_taker_ui/presentation/telemetry_dashboard_screen.dart';
+import 'package:note_taker_ui/presentation/voice_gallery_screen.dart';
 
 /// Configures the Rust core, then starts the Material 3 application over the Rust bridges.
 ///
@@ -45,21 +53,26 @@ Future<void> main() async {
     recordingBridge: RustRecordingBridge(),
   );
   final CoreStartupController coreStartupController = CoreStartupController(
-    // Android keeps the key in the Keystore and hands it over first; desktops reach their
-    // keychain from Rust.
+    // Android keeps the key in the Keystore and Kotlin hands it to Rust over JNI first;
+    // desktops reach their keychain from Rust.
     startCore: () => startCoreWithHostKey(
-      loadHostKey: Platform.isAndroid
-          ? () async =>
-              const AndroidKeyVault().loadEncryptionKey(await appKeyDirectory())
+      provideHostKey: Platform.isAndroid
+          ? () async => const AndroidKeyVault()
+              .provideEncryptionKey(await appKeyDirectory())
           : null,
-      provideKey: provideEncryptionKeyToCore,
       startCore: startCore,
     ),
   );
+  // Android only: the lock covers the UI; the core starts underneath it either way.
+  final AppLockController? appLockController = Platform.isAndroid
+      ? AppLockController(appLockBridge: const AndroidAppLockBridge())
+      : null;
   runApp(NoteTakerApp(
     recordingController: recordingController,
     coreStartupController: coreStartupController,
+    appLockController: appLockController,
   ));
+  unawaited(appLockController?.initialize());
   // Starts after the first frame, so the waiting message shows during a keychain prompt.
   unawaited(coreStartupController.start());
 }
@@ -71,16 +84,20 @@ final class NoteTakerApp extends StatelessWidget {
   /// Inputs: `recordingController` is retained by the app for its lifetime, so an active
   /// recording survives switching destinations. `coreStartupController`, when given, holds the
   /// screens back until the Rust core is open (tests that fake every bridge omit it).
+  /// `appLockController`, when given (Android), covers every screen while the app is locked
+  /// and adds the Settings destination with its switch.
   /// Outputs: A configured Material application.
   /// Side effects: None.
   const NoteTakerApp({
     required this.recordingController,
     this.coreStartupController,
+    this.appLockController,
     super.key,
   });
 
   final RecordingController recordingController;
   final CoreStartupController? coreStartupController;
+  final AppLockController? appLockController;
 
   /// Builds the root Material 3 application.
   ///
@@ -98,14 +115,25 @@ final class NoteTakerApp extends StatelessWidget {
           const _TelemetryDestination(),
       devicesScreenBuilder: (BuildContext context) =>
           const _DevicesDestination(),
+      settingsScreenBuilder: switch (appLockController) {
+        final AppLockController appLock => (BuildContext context) =>
+            SettingsScreen(appLockController: appLock),
+        null => null,
+      },
     );
     final CoreStartupController? startup = coreStartupController;
+    final AppLockController? appLock = appLockController;
     return MaterialApp(
       title: 'Note Taker',
       theme: noteTakerTheme(Brightness.light),
       darkTheme: noteTakerTheme(Brightness.dark),
       // Follows the system's light or dark setting, including changes while the app runs.
       themeMode: ThemeMode.system,
+      // Wraps the navigator, so pushed screens and dialogs are covered as well.
+      builder: appLock == null
+          ? null
+          : (BuildContext context, Widget? navigator) =>
+              AppLockGate(controller: appLock, child: navigator!),
       home: startup == null
           ? shell
           : CoreStartupGate(controller: startup, onQuit: _quit, child: shell),
@@ -151,8 +179,43 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
           attachmentFilePicker: PlatformAttachmentFilePicker(),
         ),
       ),
+      speakersScreenBuilder: (BuildContext context, String meetingId) =>
+          _VoiceGalleryDestination(meetingId: meetingId),
     );
   }
+}
+
+/// Owns a voice gallery controller for one meeting while its speakers screen is shown.
+final class _VoiceGalleryDestination extends StatefulWidget {
+  const _VoiceGalleryDestination({required this.meetingId});
+
+  final String meetingId;
+
+  @override
+  State<_VoiceGalleryDestination> createState() =>
+      _VoiceGalleryDestinationState();
+}
+
+/// Creates and disposes the screen's controller and its review-clip player, so leaving the
+/// screen stops playback and releases the platform player.
+final class _VoiceGalleryDestinationState
+    extends State<_VoiceGalleryDestination> {
+  final AudioPlayer _reviewClipPlayer = AudioPlayer();
+  late final VoiceGalleryController _controller = VoiceGalleryController(
+    voiceGalleryBridge: RustVoiceGalleryBridge(audioPlayer: _reviewClipPlayer),
+    meetingId: widget.meetingId,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    unawaited(_reviewClipPlayer.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      VoiceGalleryScreen(voiceGalleryController: _controller);
 }
 
 /// Owns a telemetry controller, so its polling timer stops when the destination is left.

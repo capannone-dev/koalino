@@ -30,3 +30,10 @@ destination is shown. `discoverable` is true for the five-minute pairing window,
 `CoreStartupController` runs `startCore` and maps Rust's status to `ready`, `keychainUnavailable`
 (status 6), or `failed`. A throwing start, such as a missing library, also counts as `failed`.
 `start` can be called again to retry.
+
+`AppLockController` (Android) decides when the app lock covers the app: at start-up and after
+the app was out of sight for `lockAfterBackground` (30 s), while the setting is on and the device
+has a screen lock. A failure to read the setting keeps the app locked. The prompt is shown once
+per lock automatically, and again from Unlock. The app being hidden by the prompt's own PIN
+screen does not lock it again. Turning the setting on or off needs a successful prompt first.
+Only the UI is locked: the Rust core, recording, and sync keep running.
