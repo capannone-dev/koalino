@@ -192,6 +192,9 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
             let segment_text = transcript_segment
                 .to_str_lossy()
                 .map_err(|_| TranscriptionError::Unavailable)?;
+            if is_non_speech_marker(&segment_text) {
+                continue;
+            }
             transcript_content.push_str(&segment_text);
         }
 
@@ -200,4 +203,29 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
             transcript_content.trim(),
         ))
     }
+}
+
+/// Recognizes a segment that is only one of whisper.cpp's non-speech markers (Issue #51).
+///
+/// Inputs: One segment's text.
+/// Outputs: `true` for a lone bracketed, parenthesized or starred tag such as `[BLANK_AUDIO]`,
+/// `(silence)` or `*applause*`, which would otherwise end up in the transcript; `false` for
+/// anything with words outside such a tag, and for empty text.
+/// Side effects: None.
+pub fn is_non_speech_marker(segment_text: &str) -> bool {
+    let trimmed = segment_text.trim();
+    let mut characters = trimmed.chars();
+    let (Some(opening), Some(closing)) = (characters.next(), characters.next_back()) else {
+        return false;
+    };
+    let inner = characters.as_str();
+    let expected_closing = match opening {
+        '[' => ']',
+        '(' => ')',
+        '*' => '*',
+        _ => return false,
+    };
+    closing == expected_closing
+        && !inner.contains([opening, expected_closing])
+        && !inner.trim().is_empty()
 }

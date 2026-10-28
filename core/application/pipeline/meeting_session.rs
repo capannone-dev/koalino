@@ -137,8 +137,6 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     note_repository: RepositoryPort,
     /// Full timeline mirrored in memory because the repository replaces segments per meeting.
     persisted_segments: Vec<TranscriptSegment>,
-    /// Text of the last transcribed chunk, passed as context to the next transcription.
-    previous_transcript_text: Option<String>,
     /// Similarity policy used to group unknown voices into clusters.
     clustering_config: ClusteringConfig,
     /// Saves a telemetry row per completed transcription and diarization; `None` records none.
@@ -181,7 +179,6 @@ where
             voice_identity_matcher,
             note_repository,
             persisted_segments,
-            previous_transcript_text: None,
             clustering_config: ClusteringConfig::default(),
             task_metrics: None,
         })
@@ -236,6 +233,11 @@ where
         Ok(assignment)
     }
 
+    /// Borrows the injected transcription port.
+    pub fn transcription_engine(&self) -> &TranscriptionPort {
+        &self.transcription_engine
+    }
+
     /// Borrows the injected repository port, e.g. to read back persisted segments.
     pub fn note_repository(&self) -> &RepositoryPort {
         &self.note_repository
@@ -263,8 +265,9 @@ where
         self.ensure_session_meeting(vad_chunk.audio_recording().meeting_id())?;
         let processing_started_at = Instant::now();
         let chunk_bounds = vad_chunk.chunk_bounds();
-        let transcription_context =
-            TranscriptionContext::new(self.previous_transcript_text.clone());
+        // No previous text as a prompt: Whisper then repeated or completed the previous chunk's
+        // last words (Issue #51). The configured language keeps chunks consistent instead.
+        let transcription_context = TranscriptionContext::new(None);
         let transcript = self
             .transcription_engine
             .transcribe(vad_chunk.audio_recording(), &transcription_context)
@@ -277,7 +280,6 @@ where
         let aligned_regions =
             align_chunk_regions(chunk_bounds, speaker_regions, transcript.content());
         let attributed_segments = self.persist_aligned_regions(aligned_regions)?;
-        self.previous_transcript_text = Some(transcript.content().to_owned());
         tracing::info!(
             meeting_id = %self.meeting_id.as_str(),
             chunk_start_ms = chunk_bounds.start_offset_ms(),

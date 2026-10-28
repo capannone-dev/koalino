@@ -49,6 +49,8 @@ const MEETING_ID: &str = "meeting-pipeline";
 struct MockTranscriptionEngine {
     scripted_texts: RefCell<Vec<&'static str>>,
     fails: bool,
+    /// The previous text each `transcribe` call received, in call order.
+    received_previous_texts: RefCell<Vec<Option<String>>>,
 }
 
 impl MockTranscriptionEngine {
@@ -57,6 +59,7 @@ impl MockTranscriptionEngine {
         Self {
             scripted_texts: RefCell::new(scripted_texts.iter().rev().copied().collect()),
             fails: false,
+            received_previous_texts: RefCell::new(Vec::new()),
         }
     }
 
@@ -65,6 +68,7 @@ impl MockTranscriptionEngine {
         Self {
             scripted_texts: RefCell::new(Vec::new()),
             fails: true,
+            received_previous_texts: RefCell::new(Vec::new()),
         }
     }
 
@@ -87,8 +91,11 @@ impl TranscriptionEngine for MockTranscriptionEngine {
     fn transcribe(
         &self,
         audio_recording: &AudioRecording,
-        _transcription_context: &TranscriptionContext,
+        transcription_context: &TranscriptionContext,
     ) -> Result<Transcript, TranscriptionError> {
+        self.received_previous_texts
+            .borrow_mut()
+            .push(transcription_context.previous_text().map(str::to_owned));
         self.next_transcript(audio_recording.meeting_id())
     }
 
@@ -1205,5 +1212,37 @@ async fn five_unknown_chunks_form_two_clusters_and_assignment_attributes_three_s
             .unwrap_or_else(|error| panic!("clusters should load: {error}"))
             .len(),
         1
+    );
+}
+
+/// Verifies chunks are transcribed without the previous chunk's text as a prompt: with it,
+/// Whisper repeated or completed the previous chunk's last words (Issue #51).
+#[tokio::test]
+async fn chunks_are_transcribed_without_the_previous_chunks_text() {
+    let mut session: MockSession = MeetingSession::start(
+        MeetingId::new(MEETING_ID),
+        MockTranscriptionEngine::returning(&["first chunk", "second chunk"]),
+        None,
+        MockVoiceIdentityMatcher {
+            known_identity_id: Uuid::new_v4(),
+            weak_candidate_id: Uuid::new_v4(),
+        },
+        MockNoteRepository::default(),
+    )
+    .unwrap_or_else(|error| panic!("session should start: {error}"));
+
+    for (sequence, start_ms) in [(1, 0), (2, 3_000)] {
+        session
+            .process_vad_chunk(&vad_chunk(sequence, start_ms, start_ms + 3_000))
+            .await
+            .unwrap_or_else(|error| panic!("chunk should process: {error}"));
+    }
+
+    assert_eq!(
+        *session
+            .transcription_engine()
+            .received_previous_texts
+            .borrow(),
+        vec![None, None]
     );
 }

@@ -9,6 +9,7 @@ use crate::{
 
 use super::local_whisper_cpp::{
     LocalWhisperCppConfig, LocalWhisperCppTranscriptionEngine, RecordingPcmSource,
+    is_non_speech_marker,
 };
 
 /// Supplies a short, valid 16 kHz mono PCM buffer without persisting or logging raw audio.
@@ -80,4 +81,27 @@ fn whisper_cpp_adapter_receives_context_previous_text_and_sets_initial_prompt() 
         adapter_source.contains("set_initial_prompt"),
         "local Whisper adapter must map previous_text to whisper.cpp initial_prompt"
     );
+}
+
+/// Verifies whisper.cpp's non-speech markers are recognized, so they never reach the transcript
+/// (Issue #51), while real text, even with brackets inside, is kept.
+#[test]
+fn non_speech_markers_are_recognized() {
+    for marker in [
+        "[BLANK_AUDIO]",
+        " [Music] ",
+        "(silence)",
+        "[ Silence ]",
+        "*applause*",
+    ] {
+        assert!(is_non_speech_marker(marker), "{marker}");
+    }
+    for text in [
+        "Hello team.",
+        "[Laughs] that was funny",
+        "We said (quietly) hello.",
+        "",
+    ] {
+        assert!(!is_non_speech_marker(text), "{text}");
+    }
 }

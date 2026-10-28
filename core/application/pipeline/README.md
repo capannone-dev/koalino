@@ -25,7 +25,9 @@ is imported.
 meeting ID, the transcription engine chosen by compute routing, an optional diarization engine, the
 voice-identity matcher, and the note repository. It loads the meeting's existing segments, because
 `save_transcript_segments` replaces a meeting's whole timeline. Later chunks are appended to that
-timeline instead of overwriting it. The previous chunk's text is passed as `TranscriptionContext`.
+timeline instead of overwriting it. Each chunk is transcribed with an empty `TranscriptionContext`:
+passing the previous chunk's text as Whisper's prompt made it repeat or complete that chunk's last
+words (Issue #51; measured on jfk.wav and an Italian clip).
 
 ## PipelineFactory (Issue #32)
 
