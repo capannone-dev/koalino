@@ -75,7 +75,43 @@ HTTP runtime.
   connected devices about a second later, and a device that comes back online within about
   10 seconds.
 - **Daemon:** `daemon.rs` starts the task after the pipeline. A disabled or failed task is logged
-  and is not fatal. The task is stopped after the Teams bridge at shutdown.
+  and is not fatal. The task is stopped after the Teams bridge at shutdown. Dropping a handle
+  without `shutdown` only signals the task to stop.
+- **Flutter app:** `ffi.rs` starts the same task when its runtime opens, unless P2P is disabled.
+  A task that fails to start is logged, and the rest of the app keeps working.
+  - `note_taker_p2p_status` returns the `GET /api/p2p/status` JSON.
+  - `note_taker_p2p_command` takes one JSON command and answers `{"ok":...}`. The commands are
+    `make_pairable`, `start_pairing`, `confirm_code`, `cancel_pairing`, `accept_request`,
+    `reject_request` and `revoke`; `ffi_p2p.rs` has the table.
+  - A command waits for the task without holding the runtime lock.
+
+## App configuration (`note_taker_configure`)
+
+A desktop process inherits its environment; an Android app has none, and its working directory is
+read-only. The app therefore calls `note_taker_configure` once, before anything else, with JSON:
+
+| Field | Required | Becomes |
+| --- | --- | --- |
+| `data_directory` | yes | The database, `keys/`, `logs/`, `voice_review_clips/` and `exports/` inside it |
+| `device_name` | no | `NOTE_TAKER_DEVICE_NAME` |
+| `whisper_model_path` | no | `NOTE_TAKER_WHISPER_MODEL` |
+| `keychain_enabled` | no | `NOTE_TAKER_KEYCHAIN_ENABLED` |
+| `p2p_enabled` | no | `NOTE_TAKER_P2P_ENABLED` |
+| `p2p_peers` | no | `NOTE_TAKER_P2P_PEERS` |
+| `export_directory` | no | `NOTE_TAKER_EXPORT_DIR` |
+
+`ffi_settings.rs` validates the JSON: the paths must be absolute, the name must not be blank, and
+unknown fields are refused. It stores the values under the variable names the composition roots
+already read. The runtime reads every setting through `app_setting`: the configured value first,
+then the environment, so desktop development with environment variables still works. The process
+environment is never modified.
+
+The call is refused with `2` once the runtime has started, because the runtime would already
+have opened its stores elsewhere.
+
+On Android, `keychain_enabled` is false, because the keyring crate has no Android backend. The
+key file then lives in `keys/` in the app-private directory, which only the app can read. Keeping
+it in the Android Keystore instead is a follow-up.
 
 Unpaired devices on the LAN can see the node's peer ID through mDNS. They can connect only while
 the owner keeps a pairing window open, and even then they cannot sync.

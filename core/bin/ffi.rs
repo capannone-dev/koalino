@@ -2,11 +2,10 @@
 
 use std::{
     collections::HashMap,
-    env,
     ffi::{CStr, CString, c_char, c_int},
     fs,
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use crate::{
@@ -28,10 +27,11 @@ use crate::{
             ExportManager, ExportWriter, UNATTRIBUTED_SPEAKER_LABEL, UNKNOWN_SPEAKER_LABEL,
         },
         meeting_rename::{MeetingRenameError, rename_meeting},
+        p2p_service::P2pControl,
         unknown_speaker_clusterer::ClusteringError,
         voice_identity_manager::VoiceIdentityManager,
     },
-    device_identity::device_id_from_environment,
+    device_identity::{DEVICE_ID_VARIABLE, resolve_device_id},
     domain::{
         errors::ExportError,
         models::{
@@ -40,6 +40,9 @@ use crate::{
             UnassignedVoiceClip,
         },
     },
+    ffi_p2p::{p2p_command_json, p2p_status_json},
+    ffi_settings::{APP_SETTINGS, ConfiguredSettings, SettingsError, app_setting},
+    p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
     ports::{
         media::MetadataExtractor,
@@ -216,6 +219,9 @@ struct FfiRuntime {
     loaded_review_clips: HashMap<Uuid, UnassignedVoiceClip>,
     pending_attachment_imports: HashMap<Uuid, PendingAttachmentImport>,
     export_writer: ExportWriter,
+    /// The P2P pairing and sync task, when enabled and started (Issue #43). Shared so a command
+    /// can wait for the task without holding the runtime lock.
+    p2p: Option<Arc<P2pHandle>>,
 }
 
 /// Options accepted by `note_taker_export_meeting`; omitted fields use defaults.
@@ -299,13 +305,32 @@ impl FfiRuntime {
     /// else the platform keychain or key file) and opens the note repository and the voice store on the same SQLite
     /// file. The meeting pipeline is composed later, on the first recording start.
     fn new() -> Result<Self, c_int> {
-        let database_path = env::var("NOTE_TAKER_DATABASE_PATH")
+        Self::from_settings(&app_setting)
+    }
+
+    /// Opens the runtime from `setting`, which resolves `NOTE_TAKER_*` names.
+    ///
+    /// Inputs: `setting` returns a variable's value: in production the app's configuration over
+    /// the environment (`app_setting`), in tests a fixed map.
+    /// Outputs: A ready runtime, or `FFI_OPERATION_REJECTED` when the device ID, the key, or the
+    /// stores cannot be opened.
+    /// Side effects: Creates the database's directory and the review-clip directory, unlocks the
+    /// key, opens the stores, and starts the P2P task unless `NOTE_TAKER_P2P_ENABLED=false`. A P2P
+    /// task that fails to start is logged and left out, as in the daemon: notes still work.
+    fn from_settings(setting: &dyn Fn(&str) -> Option<String>) -> Result<Self, c_int> {
+        let database_path = setting("NOTE_TAKER_DATABASE_PATH")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
-        let device_id = device_id_from_environment(&database_path).map_err(|error| {
-            tracing::error!(error = %format!("{error:#}"), "unable to resolve the device ID");
-            FFI_OPERATION_REJECTED
-        })?;
+            .unwrap_or_else(|| PathBuf::from("note_taker.sqlite3"));
+        if let Some(database_directory) = database_path.parent()
+            && !database_directory.as_os_str().is_empty()
+        {
+            fs::create_dir_all(database_directory).map_err(|_| FFI_OPERATION_REJECTED)?;
+        }
+        let device_id =
+            resolve_device_id(setting(DEVICE_ID_VARIABLE), &database_path).map_err(|error| {
+                tracing::error!(error = %format!("{error:#}"), "unable to resolve the device ID");
+                FFI_OPERATION_REJECTED
+            })?;
         let EncryptedStores {
             note_repository,
             voice_store,
@@ -313,31 +338,43 @@ impl FfiRuntime {
         } = open_encrypted_stores(
             &database_path,
             device_id.clone(),
-            KeyManagerConfig::from_environment(),
+            KeyManagerConfig::from_lookup(setting),
         )
         .map_err(|error| {
             tracing::error!(error = %format!("{error:#}"), "unable to open encrypted stores");
             FFI_OPERATION_REJECTED
         })?;
-        let review_clip_directory = env::var("NOTE_TAKER_REVIEW_CLIP_DIR")
+        let review_clip_directory = setting("NOTE_TAKER_REVIEW_CLIP_DIR")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("voice_review_clips"));
+            .unwrap_or_else(|| PathBuf::from("voice_review_clips"));
         fs::create_dir_all(&review_clip_directory).map_err(|_| FFI_OPERATION_REJECTED)?;
+        let export_directory = setting("NOTE_TAKER_EXPORT_DIR")
+            .filter(|directory| !directory.trim().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(default_export_directory);
+        let p2p = start_p2p(setting, &database_path, &device_id, &embedding_cipher);
+        let pipeline_config = PipelineConfig::from_lookup(setting);
+        let pipeline_database_path = database_path.clone();
         let recording_controller_builder: RecordingControllerBuilder = Box::new(move || {
             spawn_recording_controller(
-                &database_path,
+                &pipeline_database_path,
                 device_id.clone(),
                 std::sync::Arc::clone(&embedding_cipher),
-                PipelineConfig::from_environment()?,
+                match &pipeline_config {
+                    Ok(pipeline_config) => pipeline_config.clone(),
+                    Err(error) => return Err(anyhow::anyhow!("{error:#}")),
+                },
             )
         });
-        Ok(Self::from_parts(
+        let mut runtime = Self::from_parts(
             recording_controller_builder,
             note_repository,
             voice_store,
             review_clip_directory,
-            ExportWriter::new(default_exporters(), default_export_directory()),
-        ))
+            ExportWriter::new(default_exporters(), export_directory),
+        );
+        runtime.p2p = p2p;
+        Ok(runtime)
     }
 
     /// Assembles runtime state from already-opened adapters.
@@ -363,6 +400,7 @@ impl FfiRuntime {
             loaded_review_clips: HashMap::new(),
             pending_attachment_imports: HashMap::new(),
             export_writer,
+            p2p: None,
         }
     }
 
@@ -1182,9 +1220,9 @@ impl FfiRuntime {
 
         if self.logging_runtime.is_none() {
             let device_id = self.note_repository.device_id().clone();
-            let log_directory = env::var("NOTE_TAKER_LOG_DIR")
+            let log_directory = app_setting("NOTE_TAKER_LOG_DIR")
                 .map(PathBuf::from)
-                .unwrap_or_else(|_| PathBuf::from("logs"));
+                .unwrap_or_else(|| PathBuf::from("logs"));
             let logging_configuration =
                 LoggingConfiguration::new(device_id, log_directory).with_filter(filter_directive);
             let logging_runtime = match initialize_logging(logging_configuration) {
@@ -1243,6 +1281,137 @@ fn attachment_mime_type(file_path: &str) -> &'static str {
         Some("png") => "image/png",
         _ => "application/octet-stream",
     }
+}
+
+/// Starts the P2P task from the runtime's settings, or returns `None`.
+///
+/// Inputs: The settings lookup, the database the task opens its own connections to, this
+/// device's ID, and the verified embedding cipher (it seals the node identity).
+/// Outputs: The running task, or `None` when P2P is disabled, misconfigured, or fails to start.
+/// Side effects: Spawns the `note-taker-p2p` thread and binds the listen address. A failure is
+/// logged without the configured values.
+fn start_p2p(
+    setting: &dyn Fn(&str) -> Option<String>,
+    database_path: &Path,
+    device_id: &crate::domain::models::DeviceId,
+    embedding_cipher: &Arc<dyn crate::ports::crypto::EmbeddingCipher>,
+) -> Option<Arc<P2pHandle>> {
+    let config = match P2pConfig::from_lookup(setting) {
+        Ok(Some(config)) => config,
+        Ok(None) => return None,
+        Err(error) => {
+            tracing::warn!(error = %format!("{error:#}"), "P2P sync is misconfigured and stays off");
+            return None;
+        }
+    };
+    match spawn_p2p_task(
+        database_path,
+        device_id.clone(),
+        Arc::clone(embedding_cipher),
+        config,
+    ) {
+        Ok(handle) => Some(Arc::new(handle)),
+        Err(error) => {
+            tracing::warn!(error = %format!("{error:#}"), "P2P sync could not start");
+            None
+        }
+    }
+}
+
+/// Returns the runtime's P2P task without holding the runtime lock afterwards.
+///
+/// Outputs: `Ok(None)` when P2P is off, or `Err` when the runtime cannot start.
+/// Side effects: Opens the runtime on first use.
+fn runtime_p2p() -> Result<Option<Arc<P2pHandle>>, c_int> {
+    let runtime_mutex = FFI_RUNTIME.get_or_init(|| Mutex::new(None));
+    let mut runtime_guard = runtime_mutex.lock().map_err(|_| FFI_RUNTIME_UNAVAILABLE)?;
+    if runtime_guard.is_none() {
+        *runtime_guard = Some(FfiRuntime::new()?);
+    }
+    Ok(runtime_guard
+        .as_ref()
+        .and_then(|runtime| runtime.p2p.clone()))
+}
+
+/// Applies the app's settings; call once, before any other function.
+///
+/// Inputs: `configuration_json` is a NUL-terminated UTF-8 JSON object:
+/// `{"data_directory": "<absolute app-private directory>", "device_name"?, "whisper_model_path"?,
+/// "keychain_enabled"?, "p2p_enabled"?, "p2p_peers"?: [...], "export_directory"?}`. The database,
+/// keys, logs, review clips, and (by default) exports go in `data_directory`.
+/// Outputs: `FFI_SUCCESS` (0); `FFI_INVALID_ARGUMENT` (1) for a null pointer, invalid JSON, an
+/// unknown field, or a relative path; `FFI_OPERATION_REJECTED` (2) when the app is already
+/// configured or another call already started the runtime with the environment's settings.
+/// Side effects: Stores the settings for the process lifetime. Values are never logged.
+///
+/// # Safety
+/// `configuration_json` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_configure(configuration_json: *const c_char) -> c_int {
+    let Some(configuration_json) = (unsafe { ffi_string(configuration_json) }) else {
+        return FFI_INVALID_ARGUMENT;
+    };
+    let settings = match ConfiguredSettings::from_json(configuration_json) {
+        Ok(settings) => settings,
+        Err(_) => return FFI_INVALID_ARGUMENT,
+    };
+    let runtime_mutex = FFI_RUNTIME.get_or_init(|| Mutex::new(None));
+    let Ok(runtime_guard) = runtime_mutex.lock() else {
+        return FFI_RUNTIME_UNAVAILABLE;
+    };
+    if runtime_guard.is_some() {
+        return FFI_OPERATION_REJECTED;
+    }
+    match APP_SETTINGS.configure(settings) {
+        Ok(()) => FFI_SUCCESS,
+        Err(SettingsError::AlreadyConfigured | SettingsError::Invalid(_)) => FFI_OPERATION_REJECTED,
+    }
+}
+
+/// Returns the P2P status for the Devices screen as caller-freed JSON.
+///
+/// Inputs: None.
+/// Outputs: An owned JSON string (free with `note_taker_free_string`): the same object as
+/// `GET /api/p2p/status`, `{"enabled":false}` when P2P is off, or
+/// `{"ok":false,"error_code":"runtime_unavailable",...}`. Null only if allocation fails.
+/// Side effects: Opens the runtime (and so starts P2P) on first use.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_p2p_status() -> *mut c_char {
+    let response_json = match runtime_p2p() {
+        Ok(p2p) => p2p_status_json(p2p.as_deref().map(|handle| handle as &dyn P2pControl)),
+        Err(_) => export_error_json("runtime_unavailable", "the native runtime is unavailable"),
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Runs one Devices-screen command (pair, confirm, accept, reject, revoke...) as JSON.
+///
+/// Inputs: `request_json` is a NUL-terminated UTF-8 object tagged by `command`; see `ffi_p2p`.
+/// Outputs: An owned JSON answer (free with `note_taker_free_string`): `{"ok":true,...}` or
+/// `{"ok":false,"error_code",...}` with `invalid_request`, `invalid_peer_id`, `unavailable`,
+/// `refused`, or `runtime_unavailable`. Null only if allocation fails.
+/// Side effects: Those of the command. Blocks until the P2P task answers, without holding the
+/// runtime lock, so recording and other calls continue meanwhile.
+///
+/// # Safety
+/// `request_json` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_p2p_command(request_json: *const c_char) -> *mut c_char {
+    let response_json = match unsafe { ffi_string(request_json) } {
+        None => export_error_json("invalid_request", "the request must be a UTF-8 C string"),
+        Some(request_json) => match runtime_p2p() {
+            Ok(p2p) => p2p_command_json(
+                p2p.as_deref().map(|handle| handle as &dyn P2pControl),
+                request_json,
+            ),
+            Err(_) => export_error_json("runtime_unavailable", "the native runtime is unavailable"),
+        },
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
 }
 
 /// Holds the process-local runtime without exposing it to Dart or other native consumers.
@@ -2628,5 +2797,62 @@ mod ffi_contract_tests {
                 .unwrap_or_else(|error| panic!("{raw_value:?} must stay valid JSON: {error}"));
             assert_eq!(parsed["value"], raw_value);
         }
+    }
+
+    /// Builds a runtime the way `note_taker_configure` does, over files in a fresh directory.
+    fn configured_runtime(p2p_enabled: bool) -> FfiRuntime {
+        let data_directory =
+            std::env::temp_dir().join(format!("note-taker-ffi-settings-{}", uuid::Uuid::new_v4()));
+        let settings = crate::ffi_settings::ConfiguredSettings::from_json(&format!(
+            r#"{{"data_directory":"{}","device_name":"Test phone","keychain_enabled":false,"p2p_enabled":{p2p_enabled}}}"#,
+            data_directory.display()
+        ))
+        .unwrap_or_else(|error| panic!("settings must parse: {error}"));
+        let lookup = move |name: &str| {
+            settings.lookup(name, |name| {
+                (name == "NOTE_TAKER_P2P_LISTEN").then(|| "/ip4/127.0.0.1/tcp/0".to_owned())
+            })
+        };
+        FfiRuntime::from_settings(&lookup)
+            .unwrap_or_else(|status| panic!("configured runtime must open: status {status}"))
+    }
+
+    /// A configured runtime keeps its database in the data directory and starts P2P under the
+    /// configured device name; with P2P disabled it starts none.
+    #[test]
+    fn a_configured_runtime_starts_p2p_under_its_device_name() {
+        let with_p2p = configured_runtime(true);
+        let without_p2p = configured_runtime(false);
+        let status = parse_response(&crate::ffi_p2p::p2p_status_json(
+            with_p2p
+                .p2p
+                .as_deref()
+                .map(|handle| handle as &dyn crate::application::p2p_service::P2pControl),
+        ));
+        if let Some(handle) = &with_p2p.p2p {
+            handle.shutdown();
+        }
+
+        assert_eq!(status["enabled"], true, "{status}");
+        assert_eq!(status["device_name"], "Test phone");
+        assert!(without_p2p.p2p.is_none());
+    }
+
+    /// `note_taker_configure` refuses a null pointer and invalid JSON without storing anything.
+    #[test]
+    fn configure_refuses_invalid_input() {
+        let invalid_json = std::ffi::CString::new(r#"{"data_directory":"relative"}"#)
+            .unwrap_or_else(|error| panic!("fixture must be a C string: {error}"));
+
+        // SAFETY: null is accepted by contract, and `invalid_json` is a valid C string.
+        let (null_status, invalid_status) = unsafe {
+            (
+                super::note_taker_configure(std::ptr::null()),
+                super::note_taker_configure(invalid_json.as_ptr()),
+            )
+        };
+
+        assert_eq!(null_status, FFI_INVALID_ARGUMENT);
+        assert_eq!(invalid_status, FFI_INVALID_ARGUMENT);
     }
 }

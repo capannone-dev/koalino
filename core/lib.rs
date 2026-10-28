@@ -21,6 +21,12 @@ pub mod domain;
 /// Exposes the C-compatible Flutter bridge without leaking Rust domain types across FFI.
 #[path = "bin/ffi.rs"]
 pub mod ffi;
+/// Turns the Flutter Devices screen's JSON requests into P2P commands.
+#[path = "bin/ffi_p2p.rs"]
+pub mod ffi_p2p;
+/// Holds the settings the Flutter app passes to `note_taker_configure`, over the environment.
+#[path = "bin/ffi_settings.rs"]
+pub mod ffi_settings;
 /// Composes and runs the daemon's P2P pairing and sync task (Issue #43).
 #[path = "bin/p2p_composition.rs"]
 pub mod p2p_composition;

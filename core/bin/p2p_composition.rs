@@ -234,6 +234,21 @@ impl P2pHandle {
     }
 }
 
+impl Drop for P2pHandle {
+    /// Tells the task to stop without waiting for its thread, so dropping a handle (for example a
+    /// test's FFI runtime) never blocks and never leaves the task running. `shutdown` waits.
+    fn drop(&mut self) {
+        if let Some(stop) = self
+            .stop
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()
+        {
+            let _ = stop.send(());
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl P2pControl for P2pHandle {
     fn snapshot(&self) -> P2pSnapshot {
