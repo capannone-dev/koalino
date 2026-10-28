@@ -3,7 +3,7 @@
 # Dashboard components
 
 Components render API DTOs from `web/lib/api.ts`. Client components are limited to WebSocket status,
-the cluster-assignment form, meeting renaming, and the log settings; they do not access databases or Rust implementation details.
+the cluster-assignment form, meeting renaming, the log settings, and the Devices panel; they do not access databases or Rust implementation details.
 
 `voice-gallery.tsx` renders one card per unknown-speaker cluster with a name field and an
 **Assign** button. A blank name is rejected without a request. A successful assignment removes the
@@ -20,8 +20,15 @@ elsewhere, such as `info,note_taker_core=debug`, shows as "Custom") and **Export
 downloads the file through `fetchLogExport` and saves it with a temporary link. Failures map to
 plain messages; server text is never shown.
 
-`primary-nav.tsx` renders the header links (Meetings, Voice gallery, Settings).
+`primary-nav.tsx` renders the header links (Meetings, Voice gallery, Devices, Settings).
 `telemetry-entry.tsx` is the Settings card linking to `/settings/telemetry` (Issue #53).
 
 `telemetry-dashboard.tsx` owns the responsive Recharts visualizations and bounded WebSocket refresh
 loop. It receives typed local API DTOs only and never reads SQLite or media files.
+
+`devices-panel.tsx` (Issue #43) is the Devices page body. It polls the P2P status every two
+seconds and offers the same steps and wording as the Flutter Devices screen: Make discoverable
+(shown as discoverable for the daemon's five-minute pairing window), Pair with a nearby device,
+the six-digit code to compare with **Codes match** or **Cancel pairing**, **Accept** or
+**Reject** for requests, and **Remove** for a paired device after an inline confirmation. Failures
+map to plain messages; server text is never shown.

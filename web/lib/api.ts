@@ -13,7 +13,7 @@ export type VoiceGalleryResponse = { identities: VoiceIdentity[]; unassigned_cli
 export type UnknownCluster = { cluster_id: string; meeting_id: string; total_duration_ms: number; chunk_count: number; created_at: string };
 export type ClusterAssignment = { cluster_id: string; identity_id: string; identity_name: string; identity_created: boolean; variants_stored: number; segments_updated: number };
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8080";
+export const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8080";
 
 async function apiGet<T>(path: string): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, { cache: "no-store" });

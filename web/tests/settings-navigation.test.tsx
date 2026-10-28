@@ -13,6 +13,7 @@ test("the primary navigation has no telemetry dashboard entry", () => {
   expect(links).toEqual([
     ["Meetings", "/meetings"],
     ["Voice gallery", "/voice-gallery"],
+    ["Devices", "/devices"],
     ["Settings", "/settings"]
   ]);
 });

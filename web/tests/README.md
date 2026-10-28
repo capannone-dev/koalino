@@ -29,3 +29,12 @@ Settings tests (Issue #46):
   (download and no logs yet).
 - `settings-navigation.test.tsx` (Issue #53) checks that the header has no telemetry entry and
   that Settings links to `/settings/telemetry`.
+
+Devices tests (Issue #43):
+
+- `p2p-api.test.ts` covers the status read, every pairing route with its method, peer ID
+  encoding, the failure kind per status, and an unreachable daemon.
+- `devices-panel.test.tsx` covers sync off, an unreachable server, the empty sections, Make
+  discoverable, pairing with a nearby device and comparing the code, Codes match and its result,
+  waiting for the other device, accepting and rejecting a request, removing a device after
+  confirmation, a refused step's message, and the two-second refresh.

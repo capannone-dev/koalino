@@ -7,6 +7,7 @@ import Link from "next/link";
 const primaryPages = [
   { href: "/meetings", label: "Meetings" },
   { href: "/voice-gallery", label: "Voice gallery" },
+  { href: "/devices", label: "Devices" },
   { href: "/settings", label: "Settings" }
 ] as const;
 
