@@ -47,7 +47,11 @@ keyring-core = "1.0.1"
 libp2p = { version = "0.56.0", features = ["macros", "mdns", "noise", "request-response", "tcp", "tokio", "yamux"] }
 # Teams bridge wire format (Issue #33): rust-protobuf 3.x runtime for the generated messages.
 protobuf = "=3.7.2"
-printpdf = { version = "0.7.0", features = ["embedded_images"] }
+# `font_subsetting` (Issue #37) embeds only the glyphs a PDF uses, which keeps exports with large
+# Unicode/CJK fonts small; it pulls in `allsorts`. `owned_ttf_parser` is the same font parser
+# printpdf already uses, made direct to check glyph coverage and measure text widths.
+printpdf = { version = "0.7.0", features = ["embedded_images", "font_subsetting"] }
+owned_ttf_parser = "=0.19.0"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }
