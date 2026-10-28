@@ -1157,3 +1157,20 @@ the comment on #49.
 - **Slides reuse `SlideAttachmentStore`.** The store keeps the Teams files' layout and
   permissions and rejects meeting IDs that are not plain folder names. Slide files are not
   encrypted, the same policy as other attachments.
+
+## 2026-10-28 — #54 Photos and attachments: `camera` plugin, private copies, meeting time
+
+- **Camera: the `camera` plugin plus `camera_windows`**, approved by the owner. It covers
+  Android, iOS and Windows; Linux has no implementation, so Linux attaches files only. The app
+  opens the back camera without audio and attaches each shot at once, deleting the plugin's
+  temporary file whether or not the attach succeeds.
+- **Attachments are copied, not referenced.** Picked files may be cache copies the system
+  clears (Android) or temporary camera files, so `AttachmentFileStore` copies each into
+  `<data>/attachments/<meeting>/<uuid>-<sanitized name>` (0700/0600 on Unix). Only pictures and
+  common document types up to 100 MiB are accepted. They are not encrypted at rest, the same
+  policy as slides; notes and voice embeddings remain the encrypted data.
+- **Placement by meeting time.** An attachment taken while recording carries the recording's
+  meeting time (`attachments.meeting_time_ms`) and is shown before the first transcript segment
+  starting after it; one added afterwards has none and goes at the end. Slides use the same field.
+- **One flow replaces the old import screen.** "Take photos" and "Attach files" (multi-select)
+  are on the Record screen and the meeting detail; the single-file import screen was removed.
