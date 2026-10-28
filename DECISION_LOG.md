@@ -879,3 +879,67 @@
   port. The CORS preflight allows `PATCH`. A headless Firefox screenshot showed the pencil sitting
   at the far edge of the page on desktop; the heading's `flex-1` was removed so it sits beside the
   title.
+
+## 2026-10-28 — v1.0 audit and remediation
+
+Rule applied when requirements conflicted: Security > Privacy > Reliability > Performance >
+Convenience.
+
+- **Crypto benchmark flake (db67162):** core CI on `main` was failing the 1 s embedding-encryption
+  budget at 1.03–1.08 s, because debug builds run AES-GCM unoptimized. `aes`, `aes-gcm`, `ghash`,
+  `polyval`, and `ctr` are compiled at `opt-level = 3` in the dev profile, and the benchmark takes the
+  best of three batches. The budget itself was kept.
+- **Whisper language (200b9f9):** whisper.cpp defaults to English, which would transcribe Italian
+  meetings as English (4.2). `NOTE_TAKER_WHISPER_LANGUAGE` defaults to `auto` and accepts 2–3
+  lowercase letters. Anything else fails at start-up, naming the variable, rather than being ignored.
+- **Device ID (f90c17c):** the daemon hardcoded `headless-server`, so every server shared one
+  acquisition-device ID (3.3) and one log `device_id` (6.3). Every entry point now resolves
+  `NOTE_TAKER_DEVICE_ID`. Failing that, it uses `device-<uuid>`, created once with `create_new`
+  in `<db>.device-id`, so concurrent first starts agree. A blank or control-character file is an
+  error, not silently replaced, because replacing it would change the device's identity.
+- **Log format (652dd75):** the default `tracing` JSON nested fields under `fields` and had no
+  `device_id`. `StructuredJsonFormat` emits exactly the 6.3 shape. The redaction is a denylist of
+  field-name fragments (embedding, passphrase, key material, token, title, transcript, PCM, …)
+  rather than an allowlist: an allowlist would drop most debugging context, and a missed new field
+  is still caught by a fragment such as `key` or `secret` in its name. Titles and transcripts
+  count as user content and are redacted too.
+- **Runtime log level for headless nodes (638a940):** the daemon has no UI, so 6.1's "CLI flags
+  without restarting" is met by `cli log-level <directive>`. It writes `<db>.log-level` atomically
+  (temp file plus rename), and the daemon polls it every 2 s. This uses the same control-file
+  pattern as `record stop`, instead of opening an admin HTTP route, which would widen the
+  network surface. A stale file from before start-up is ignored.
+- **CLI log sinks (c5f9698):** the CLI defaulted to `error` so its stdout JSON would not mix with
+  command output, but that also left the log file with errors only, against 6.1/6.2. A per-layer
+  stdout filter now keeps stdout at `error` while the file records `info`, and `--log-level` sets
+  both.
+- **FFI JSON escaping (2bcd140):** hand-built JSON escaped only quotes and backslashes, so a control
+  character in a title or path produced invalid JSON for Dart. Escaping now goes through
+  `serde_json`.
+- **Web error boundary (8e58ac7):** an unreachable daemon showed Next.js's generic error. The
+  route-level `error.tsx` shows a recoverable "Try again" page and never echoes the error text,
+  which could describe internals.
+- **Flutter FFI off the UI isolate (f29a811, 1c94237):** recording lifecycle, attachment, and
+  telemetry calls ran synchronously on the UI isolate. They read SQLite, and the first call can
+  run Argon2id, which violates CONTRIBUTING.md section 9. Every bridge now uses `Isolate.run` and looks up
+  symbols inside the worker. Pause, resume, and stop were added at the same time, because the
+  screen could only start a recording.
+- **Cross-site requests to the daemon (6c9e11a):** the API trusts loopback callers and has no user
+  authentication. CORS does not cover WebSocket handshakes, and DNS rebinding defeats CORS. A
+  middleware therefore refuses a present `Origin` other than the dashboard's, and a `Host` that is
+  a DNS name other than `localhost`. IP literals stay allowed, because rebinding cannot produce
+  them and LAN access by IP keeps working. Real per-user authentication for non-loopback
+  deployments remains future work. The Teams bridge already refused browser `Origin`s.
+- **Next.js security upgrade (208a030):** next 15.2.4 had 36 advisories, including an
+  unauthenticated RCE. It moves to 15.5.28, the latest 15.x, which has no advisories in the GitHub
+  database, instead of the breaking 16.x that `npm audit fix --force` proposes. The postcss copy
+  bundled in Next still has advisories, but it runs only at build time on this repository's own
+  CSS, so that risk is accepted.
+- **Rust advisories (149d613):** with no `cargo-audit` available, all 537 locked crates were
+  checked against the GitHub advisory API. `time` was patched with a semver update. `yamux 0.12`
+  and `hickory 0.25` (libp2p mDNS) are unreachable until the swarm is composed, so a libp2p
+  upgrade is now a prerequisite of #43. `lopdf 0.31` (via printpdf) parses PDFs only in tests.
+- **Not fixed in the audit (too large or need approval):** P2P composition with peer pairing (#43),
+  diarization (#44), Flutter microphone capture (#45), Settings with log export (#46),
+  Android background controls (#47), Flutter export (#48), local screen-share capture (#49). Peer
+  authorization is listed with #43 as a hard prerequisite: composing the swarm without it would
+  let any LAN node that speaks the protocol read meetings and voice embeddings.

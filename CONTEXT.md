@@ -366,3 +366,19 @@ Issue #42 adds meeting renaming to the web dashboard:
 - **Client:** `renameMeeting` in `web/lib/api.ts` maps statuses to `MeetingRenameError` kinds. The
   UI never shows the server's error text.
 - **Gaps:** the modal was exercised in jsdom only, not driven in a real browser.
+
+The v1.0 audit (2026-10-28, `AUDIT_V1.md`) leaves the system in this state:
+
+- **Works end to end:** recording through the CLI (WAV or stdin PCM), the daemon, and the FFI;
+  VAD chunking; whisper.cpp or OpenAI transcription with language auto-detection; meetings,
+  titles, and rename across CLI, HTTP, FFI, Flutter, and web; the voice gallery and unknown-cluster
+  review; export (Markdown, Unicode PDF, JSON); telemetry; the Teams bridge; encrypted
+  embeddings; and structured, redacted JSON logs whose level can be changed at runtime.
+- **Implemented but not composed:** the libp2p swarm, `SyncManager`, `FileSyncManager`, and
+  manifest broadcast are exercised only by tests. Composing them needs peer pairing first (#43).
+- **Missing:** a real diarization engine (#44), Flutter microphone capture (#45), Flutter Settings and
+  log export (#46), Android background/lock-screen controls (#47), Flutter export (#48), and local
+  screen-share capture (#49).
+- **Conventions added:** every Flutter bridge calls FFI only through `Isolate.run`. Per-database
+  control files beside the DB (`.device-id`, `.log-level`, `.recording-stop`) coordinate CLI and
+  daemon processes without network routes.

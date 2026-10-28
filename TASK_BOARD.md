@@ -104,21 +104,29 @@
 | Automerge Sync Manager | Ready for review | Versioned sync envelopes, discovery handshakes, remote merge-and-persist flow, local encrypted broadcast requests, and mocked-port TDD for valid, local-change, and malformed-message paths. |
 | Issue #21 attachment file transfer | Ready for review | Separate file-transfer behaviour, SHA-256 CAS, explicit chunk frames, mocked manager tests, and encrypted memory-transport verification. |
 
-## Follow-up work
+## v1.0 remaining work (audit, 2026-10-28)
 
-- Compose `MeetingSession` in the daemon/FFI/CLI recording entry points and in `TeamsProcessor`, which still transcribes external chunks without persisting segments.
-- Persist the attribution category (pending review / unknown / unattributed) alongside `speaker_identity_id`. Segments are now relinked when a cluster is resolved (#28); single-clip resolution through `assign_voice_clip` still does not relink them.
-- Decide how the Voice Galleries should surface unclustered fallback clips, now that they show only clusters.
-- Store the embedding key in the mobile keystores (iOS Keychain, Android Keystore); desktop keychains were added in #40. Support re-keying or changing the passphrase.
-- Run the #40 keychain checks on macOS (Keychain Access) and Windows (Credential Manager) hosts.
-- Tune the 0.70 clustering threshold against real diarization embeddings.
-- Replace proportional word distribution with word-level timestamps once `TranscriptionEngine` exposes them.
-- Resolve segment speakers through the persisted voice-store names (#30), so exports can show them instead of `Unknown speaker`. (Meeting titles were added in #35.)
-- Compose `SyncManager` in the daemon/FFI with the libp2p adapter and call `notify_local_change` after local CRDT writes, including title changes.
-- PDF export (#37): color emoji, weight-400 instancing for variable fallback fonts, and a check of the macOS/Windows system font paths on those hosts.
-- Capture microphone PCM in Flutter and feed `note_taker_push_audio_pcm`, and add stop/pause controls; the recording screen still only starts recordings.
-- Add a Dart binding and UI for `note_taker_export_meeting`.
+Prioritized by the audit's rule: Security > Privacy > Reliability > Performance > Convenience. See
+`AUDIT_V1.md` for the requirement-by-requirement matrix.
 
-- Define validation and IDs suitable for CRDT replication before storage adapters are introduced.
-- Add mock port implementations and expanded error-path tests under WP6.
-- Implement AI adapters only in their assigned work packages.
+| Priority | Issue | Work | Requirement |
+| --- | --- | --- | --- |
+| P0 | #43 | Compose libp2p sync (`SyncManager`, `FileSyncManager`, manifests) in the daemon and FFI, **with peer pairing/allowlist** before any exchange; call `notify_local_change` after local CRDT writes, including title changes | 3.3, 3.4, 4.1 |
+| P0 | #44 | Real diarization adapter (Pyannote/SpeechBrain behind a Cargo feature); retune the 0.70 clustering threshold on its embeddings | 3.2 |
+| P0 | #45 | Flutter microphone capture feeding `note_taker_push_audio_pcm` (plugin needs approval) | 3.1 |
+| P1 | #46 | Flutter Settings: runtime log level and Share/Export Logs | 6.1, 6.2 |
+| P1 | #47 | Android foreground service and lock-screen/notification Start/Pause/Stop | 2.1 |
+| P1 | — | Embedding key in the mobile keystores (Android Keystore, iOS Keychain); re-keying and passphrase change | 4.1 |
+| P1 | — | Run the #40 keychain checks on macOS and Windows hosts | 4.1 |
+| P2 | #48 | Flutter export binding and UI for `note_taker_export_meeting` | 3.3.1 |
+| P2 | #49 | Local screen-share detection and slide screenshots outside Teams | 3.1 |
+| P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
+| P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |
+| P3 | — | Decide how the Voice Galleries surface unclustered fallback clips | 3.2 |
+| P3 | — | Word-level timestamps instead of proportional word distribution | 3.1 |
+| P3 | — | PDF export: color emoji, weight-400 instancing of variable fallback fonts, macOS/Windows font paths | 3.3.1 |
+
+Done during the audit: core CI benchmark flake, Whisper language default, persistent device ID,
+the structured JSON log format with redaction, the CLI `--log-level` flag and `log-level` command,
+the CLI file log at INFO, JSON escaping in the FFI, the web error boundary, Flutter pause/resume/stop,
+and keeping every Flutter FFI call off the UI isolate (see `DECISION_LOG.md`, "v1.0 audit").
