@@ -62,6 +62,8 @@ target/debug/cli meetings list
 target/debug/cli record start --title "Weekly sync" --input meeting.wav
 target/debug/cli record start --title "Standup"   # the microphone (--features microphone)
 target/debug/cli log-level debug              # a running daemon applies it within 2 s
+target/debug/cli devices list                 # devices this database syncs with
+target/debug/cli devices revoke "My phone"    # a running daemon stops syncing with it within 1 s
 ```
 
 The full CLI, HTTP, WebSocket, and C ABI contracts are in [API_SPECS.md](API_SPECS.md).

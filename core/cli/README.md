@@ -37,10 +37,21 @@ note-taker voice list
 note-taker voice assign <clip-uuid> <identity-uuid>
 note-taker voice list-clusters <meeting-id>
 note-taker voice assign-cluster <cluster-uuid> <identity-name>
+note-taker devices list
+note-taker devices revoke <peer-id|name>
 note-taker telemetry
 note-taker log-level <error|warn|info|debug|trace|directive>
 note-taker [--log-level <level>] <command> ...
 ```
+
+`devices list` (Issue #43) prints `Peer ID | Name | Paired` for the devices this database syncs
+with (pairing time in UTC), or `No paired devices.`. `devices revoke` removes one, selected by its
+exact peer ID or by its name in any case; a name shared by several devices, or one that matches
+nothing, is refused with exit status 1. Both open the allowlist table in the shared database (only
+`devices` does, so other commands never create the P2P tables). A daemon running on the same
+database compares its gate with that table every second, so it drops and disconnects a revoked
+device without a restart. Pairing itself needs the code comparison on a running device, so it is
+done from a Devices screen (app or web), not the CLI.
 
 `record start --title` stores a title on the meeting (Issue #35). Without it, a new meeting is
 untitled and an existing one keeps its title. Blank titles, titles longer than 200 characters,

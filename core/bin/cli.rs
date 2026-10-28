@@ -8,9 +8,10 @@ use note_taker_core::{
     adapters::{
         export::{default_export_directory, default_exporters},
         observability::{LogLevelControlFile, LoggingConfiguration, initialize_logging},
+        storage::sqlite_peer_store::SqlitePeerStore,
     },
     application::{crypto::key_manager::KeyManagerConfig, export_manager::ExportWriter},
-    cli::{Cli, CoreCliService, dispatch},
+    cli::{Cli, CliCommand, CoreCliService, dispatch},
     cli_recording::{PipelineRecordingControl, RecordingControlFiles},
     device_identity::device_id_from_environment,
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
@@ -27,7 +28,8 @@ use note_taker_core::{
 /// Side effects: Creates logging resources, unlocks the embedding encryption key, opens the note
 /// repository and the voice store (speaker names and voice variants) on the shared local SQLite
 /// database, and may run a foreground recording through the meeting pipeline or invoke a
-/// repository/voice application service according to the parsed command.
+/// repository/voice application service according to the parsed command. `devices` commands
+/// also open the paired-device allowlist on the same database.
 fn main() -> Result<()> {
     // Parsed first so `--help`, `--version`, and usage errors never open the database, and so
     // `--log-level` applies to this command's own logging.
@@ -56,6 +58,14 @@ fn main() -> Result<()> {
         store_device_id.clone(),
         KeyManagerConfig::from_environment(),
     )?;
+    // Only `devices` touches the allowlist, so other commands never create the P2P tables.
+    let trusted_peer_store = match parsed_cli.command {
+        CliCommand::Devices(_) => Some(SqlitePeerStore::open(
+            &database_path,
+            Arc::clone(&embedding_cipher),
+        )?),
+        _ => None,
+    };
     let recording_database_path = database_path.clone();
     let recording_control = PipelineRecordingControl::new(
         RecordingControlFiles::for_database(&database_path),
@@ -76,6 +86,9 @@ fn main() -> Result<()> {
     let mut cli_service =
         CoreCliService::new(recording_control, repository, voice_store, export_writer)
             .with_log_level_control(LogLevelControlFile::for_database(&database_path));
+    if let Some(trusted_peer_store) = trusted_peer_store {
+        cli_service = cli_service.with_trusted_peer_store(Box::new(trusted_peer_store));
+    }
     let command_output =
         dispatch(parsed_cli.command, &mut cli_service).map_err(anyhow::Error::msg)?;
     println!("{command_output}");

@@ -348,7 +348,9 @@ its audio is transcribed), `record status`, `meetings list` (ID, title,
 date, duration), `meetings view <meeting-id>` (title first),
 `meetings rename <meeting-id> <new-title>` (prints `Renamed meeting <id>: "<old>" -> "<new>"`),
 `voice list`, `voice assign <clip-uuid> <identity-uuid>`, `voice list-clusters <meeting-id>`,
-`voice assign-cluster <cluster-uuid> <identity-name>`, `telemetry`,
+`voice assign-cluster <cluster-uuid> <identity-name>`, `devices list` (peer ID, name, pairing
+time), `devices revoke <peer-id|name>` (removes the device from the allowlist in the shared
+database; a running daemon on it drops and disconnects the device within a second), `telemetry`,
 `log-level <directive>` (writes `<database>.log-level`; a running daemon on the same database
 applies it within 2 seconds without restarting), the global `--log-level <level>` flag (this
 command's own logging; by default the log file records `info` and stdout only `error`),

@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use chrono::{NaiveDate, NaiveTime};
+use chrono::{DateTime, NaiveDate, NaiveTime};
 use clap::{Args, Parser, Subcommand};
 use uuid::Uuid;
 
@@ -19,11 +19,15 @@ use crate::{
         meeting_rename::rename_meeting,
         voice_identity_manager::VoiceIdentityManager,
     },
-    domain::models::{
-        ExportDateRange, ExportFormat, ExportOptions, ExportResult, MeetingId, MeetingMetadata,
-        MeetingTitle,
+    domain::{
+        models::{
+            ExportDateRange, ExportFormat, ExportOptions, ExportResult, MeetingId, MeetingMetadata,
+            MeetingTitle,
+        },
+        peer_trust::TrustedPeer,
     },
     ports::{
+        peer_trust::TrustedPeerStore,
         storage::{AttachmentRepository, NoteRepository},
         telemetry::MetricsRepository,
         voice::VoiceVectorDB,
@@ -86,6 +90,8 @@ pub enum CliCommand {
     Meetings(MeetingArgs),
     /// Lists or resolves voice review items.
     Voice(VoiceArgs),
+    /// Lists or removes the devices paired for sync.
+    Devices(DevicesArgs),
     /// Displays aggregate privacy-safe telemetry.
     Telemetry,
     /// Changes a running daemon's log level without restarting it (applied within seconds).
@@ -287,6 +293,38 @@ pub struct VoiceArgs {
     pub command: VoiceCommand,
 }
 
+/// Defines paired-device actions.
+#[derive(Debug, Subcommand)]
+pub enum DevicesCommand {
+    /// Lists the devices this database syncs with.
+    List,
+    /// Removes a paired device; a running daemon on this database stops syncing with it within a
+    /// second. Pair again from a Devices screen to resume.
+    Revoke {
+        /// The device's peer ID, or its name when no other paired device shares it.
+        device: String,
+    },
+}
+
+/// Holds a nested paired-device action for clap.
+#[derive(Debug, Args)]
+pub struct DevicesArgs {
+    /// Selects the paired-device action.
+    #[command(subcommand)]
+    pub command: DevicesCommand,
+}
+
+/// One terminal-safe row of `devices list`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PairedDeviceRow {
+    /// The device's libp2p peer ID.
+    pub peer_id: String,
+    /// The name the device announced when it paired.
+    pub device_name: String,
+    /// The UTC pairing time, formatted `YYYY-MM-DD HH:MM UTC`.
+    pub paired_at: String,
+}
+
 /// One terminal-safe row of `meetings list`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MeetingListRow {
@@ -353,6 +391,10 @@ pub trait CliService {
     fn telemetry(&self) -> Result<String, String>;
     /// Asks a running daemon on the same database to switch to `filter_directive`.
     fn request_log_level(&mut self, filter_directive: &str) -> Result<String, String>;
+    /// Loads the paired devices, oldest pairing first.
+    fn list_paired_devices(&self) -> Result<Vec<PairedDeviceRow>, String>;
+    /// Removes the paired device whose peer ID, or unique name, is `device`, and describes it.
+    fn revoke_device(&mut self, device: &str) -> Result<String, String>;
     /// Exports one meeting through the shared export manager.
     fn export_meeting(
         &self,
@@ -444,6 +486,12 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
                     identity_name,
                 },
         }) => cli_service.assign_cluster(cluster_id, &identity_name),
+        CliCommand::Devices(DevicesArgs {
+            command: DevicesCommand::List,
+        }) => Ok(format_device_table(cli_service.list_paired_devices()?)),
+        CliCommand::Devices(DevicesArgs {
+            command: DevicesCommand::Revoke { device },
+        }) => cli_service.revoke_device(&device),
         CliCommand::Telemetry => cli_service.telemetry(),
         CliCommand::LogLevel { directive } => cli_service.request_log_level(&directive),
     }
@@ -460,6 +508,62 @@ fn format_meeting_table(meetings: Vec<MeetingListRow>) -> String {
         }))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Formats paired-device rows, or a sentence when there are none.
+fn format_device_table(devices: Vec<PairedDeviceRow>) -> String {
+    if devices.is_empty() {
+        return String::from("No paired devices.");
+    }
+    std::iter::once(String::from("Peer ID | Name | Paired"))
+        .chain(devices.into_iter().map(|device| {
+            format!(
+                "{} | {} | {}",
+                device.peer_id, device.device_name, device.paired_at
+            )
+        }))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Formats a pairing time (Unix milliseconds) as `YYYY-MM-DD HH:MM UTC`, or `unknown` when it
+/// is out of range.
+fn format_paired_at(paired_at_ms: u64) -> String {
+    i64::try_from(paired_at_ms)
+        .ok()
+        .and_then(DateTime::from_timestamp_millis)
+        .map_or_else(
+            || String::from("unknown"),
+            |paired_at| paired_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+        )
+}
+
+/// Finds the one paired device `device` names: an exact peer ID first, otherwise a name
+/// compared without regard to case.
+///
+/// Inputs: The allowlist and the selector typed by the owner.
+/// Outputs: The device, or a readable error when none or several match.
+/// Side effects: None.
+fn select_paired_device(peers: Vec<TrustedPeer>, device: &str) -> Result<TrustedPeer, String> {
+    if let Some(peer) = peers.iter().find(|peer| peer.peer_id().as_str() == device) {
+        return Ok(peer.clone());
+    }
+    let wanted_name = device.to_lowercase();
+    let mut named: Vec<TrustedPeer> = peers
+        .into_iter()
+        .filter(|peer| peer.device_name().as_str().to_lowercase() == wanted_name)
+        .collect();
+    match named.len() {
+        0 => Err(format!(
+            "No paired device has the peer ID or name \"{device}\"."
+        )),
+        1 => named
+            .pop()
+            .ok_or_else(|| String::from("the paired device disappeared")),
+        count => Err(format!(
+            "{count} paired devices are named \"{device}\"; use the peer ID from `devices list`."
+        )),
+    }
 }
 
 /// Formats a UTC creation time for terminal output.
@@ -549,6 +653,8 @@ pub struct CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort> {
     recording_control: RecordingPort,
     /// Where `log-level` writes the daemon's requested verbosity; `None` disables the command.
     log_level_control: Option<LogLevelControlFile>,
+    /// The allowlist of paired devices on the shared database; `None` disables `devices`.
+    trusted_peer_store: Option<Box<dyn TrustedPeerStore>>,
     repository: RepositoryPort,
     voice_identity_manager: VoiceIdentityManager<VectorDatabasePort>,
     export_writer: ExportWriter,
@@ -574,6 +680,7 @@ where
         Self {
             recording_control,
             log_level_control: None,
+            trusted_peer_store: None,
             repository,
             voice_identity_manager: VoiceIdentityManager::new(vector_database),
             export_writer,
@@ -586,6 +693,25 @@ where
     pub fn with_log_level_control(mut self, log_level_control: LogLevelControlFile) -> Self {
         self.log_level_control = Some(log_level_control);
         self
+    }
+
+    /// Enables `devices` with the allowlist stored in the shared database.
+    ///
+    /// Inputs: The database's `TrustedPeerStore` (the same table a daemon's P2P task reads).
+    /// Outputs: The service. Side effects: None.
+    pub fn with_trusted_peer_store(
+        mut self,
+        trusted_peer_store: Box<dyn TrustedPeerStore>,
+    ) -> Self {
+        self.trusted_peer_store = Some(trusted_peer_store);
+        self
+    }
+
+    /// Borrows the allowlist, or explains that device commands are not available.
+    fn trusted_peer_store(&self) -> Result<&dyn TrustedPeerStore, String> {
+        self.trusted_peer_store
+            .as_deref()
+            .ok_or_else(|| String::from("managing paired devices is not available here"))
     }
 
     /// Builds an export manager over this service's ports for one command.
@@ -790,6 +916,35 @@ where
             "Requested log level \"{}\"; a running daemon on this database applies it within {} seconds.",
             filter_directive.trim(),
             crate::adapters::observability::LOG_LEVEL_POLL_INTERVAL.as_secs()
+        ))
+    }
+    fn list_paired_devices(&self) -> Result<Vec<PairedDeviceRow>, String> {
+        let peers = self
+            .trusted_peer_store()?
+            .trusted_peers()
+            .map_err(|error| error.to_string())?;
+        Ok(peers
+            .into_iter()
+            .map(|peer| PairedDeviceRow {
+                peer_id: peer.peer_id().as_str().to_owned(),
+                device_name: peer.device_name().as_str().to_owned(),
+                paired_at: format_paired_at(peer.paired_at_ms()),
+            })
+            .collect())
+    }
+    fn revoke_device(&mut self, device: &str) -> Result<String, String> {
+        let trusted_peer_store = self.trusted_peer_store()?;
+        let peers = trusted_peer_store
+            .trusted_peers()
+            .map_err(|error| error.to_string())?;
+        let peer = select_paired_device(peers, device.trim())?;
+        trusted_peer_store
+            .revoke_peer(peer.peer_id())
+            .map_err(|error| error.to_string())?;
+        Ok(format!(
+            "Removed {} ({}). A running daemon on this database stops syncing with it within a second.",
+            peer.device_name().as_str(),
+            peer.peer_id().as_str()
         ))
     }
     fn telemetry(&self) -> Result<String, String> {

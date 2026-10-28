@@ -11,7 +11,8 @@ use uuid::Uuid;
 
 use super::{
     Cli, CliCommand, CliService, CoreCliService, MeetingArgs, MeetingCommand, MeetingListRow,
-    RecordArgs, RecordCommand, RecordingControl, VoiceArgs, VoiceCommand, dispatch,
+    PairedDeviceRow, RecordArgs, RecordCommand, RecordingControl, VoiceArgs, VoiceCommand,
+    dispatch,
 };
 use crate::{
     adapters::{
@@ -19,7 +20,7 @@ use crate::{
         observability::LogLevelControlFile,
         storage::{
             in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
-            sqlite_voice_vector_db::SqliteVoiceVectorDB,
+            sqlite_peer_store::SqlitePeerStore, sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
     },
     application::export_manager::ExportWriter,
@@ -27,7 +28,8 @@ use crate::{
     domain::models::{
         DeviceId, ExportFormat, ExportOptions, MeetingId, MeetingTitle, TranscriptSegment,
     },
-    ports::storage::NoteRepository,
+    domain::peer_trust::{DeviceName, TrustedPeer},
+    ports::{peer_trust::TrustedPeerStore, storage::NoteRepository},
 };
 
 /// One recorded export call: optional meeting ID (`None` for export-all), options, and output.
@@ -50,6 +52,10 @@ struct MockCliService {
     rename_requests: Vec<(String, String)>,
     /// Directives passed to `request_log_level`.
     log_level_requests: Vec<String>,
+    /// Rows returned by `list_paired_devices`.
+    paired_device_rows: Vec<PairedDeviceRow>,
+    /// Selectors passed to `revoke_device`.
+    revoked_devices: Vec<String>,
 }
 
 /// Rejects every recording command; for service tests that never record.
@@ -135,6 +141,13 @@ impl CliService for MockCliService {
     fn request_log_level(&mut self, filter_directive: &str) -> Result<String, String> {
         self.log_level_requests.push(filter_directive.to_owned());
         Ok(String::from("log level requested"))
+    }
+    fn list_paired_devices(&self) -> Result<Vec<PairedDeviceRow>, String> {
+        Ok(self.paired_device_rows.clone())
+    }
+    fn revoke_device(&mut self, device: &str) -> Result<String, String> {
+        self.revoked_devices.push(device.to_owned());
+        Ok(String::from("device removed"))
     }
     fn export_meeting(
         &self,
@@ -1160,4 +1173,153 @@ fn explicit_log_level_applies_to_file_and_stdout() {
 
     assert_eq!(log_filters.file_filter, "debug");
     assert_eq!(log_filters.stdout_filter, "debug");
+}
+
+/// Verifies `devices list` prints one row per paired device, or a sentence when there are none.
+#[test]
+fn devices_list_prints_the_paired_devices() {
+    let parse = || {
+        Cli::try_parse_from(["note-taker", "devices", "list"])
+            .unwrap_or_else(|error| panic!("devices list must parse: {error}"))
+            .command
+    };
+    let mut cli_service = MockCliService {
+        paired_device_rows: vec![PairedDeviceRow {
+            peer_id: String::from("12D3KooWPhone"),
+            device_name: String::from("Phone"),
+            paired_at: String::from("2026-10-28 12:00 UTC"),
+        }],
+        ..MockCliService::default()
+    };
+
+    let listed = dispatch(parse(), &mut cli_service);
+    let empty = dispatch(parse(), &mut MockCliService::default());
+
+    assert_eq!(
+        listed,
+        Ok(String::from(
+            "Peer ID | Name | Paired\n12D3KooWPhone | Phone | 2026-10-28 12:00 UTC"
+        ))
+    );
+    assert_eq!(empty, Ok(String::from("No paired devices.")));
+}
+
+/// Verifies `devices revoke <peer ID or name>` is dispatched to the service.
+#[test]
+fn devices_revoke_is_dispatched_with_its_selector() {
+    let parsed_cli = Cli::try_parse_from(["note-taker", "devices", "revoke", "Phone"])
+        .unwrap_or_else(|error| panic!("devices revoke must parse: {error}"));
+    let mut cli_service = MockCliService::default();
+
+    let output = dispatch(parsed_cli.command, &mut cli_service);
+
+    assert_eq!(output, Ok(String::from("device removed")));
+    assert_eq!(cli_service.revoked_devices, ["Phone"]);
+    assert!(Cli::try_parse_from(["note-taker", "devices", "revoke"]).is_err());
+}
+
+/// Builds a core service whose allowlist holds the given `(peer ID, name, paired at ms)` peers.
+fn core_service_with_paired_devices(
+    peers: &[(&str, &str, u64)],
+) -> CoreCliService<NoRecordingControl, SqliteNoteRepository, InMemoryVoiceVectorDB> {
+    let trust_store = SqlitePeerStore::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("peer store must open: {error}"));
+    for (peer_id, device_name, paired_at_ms) in peers {
+        let device_name = DeviceName::parse(device_name)
+            .unwrap_or_else(|error| panic!("valid device name: {error}"));
+        trust_store
+            .trust_peer(&TrustedPeer::new(
+                DeviceId::new(*peer_id),
+                device_name,
+                *paired_at_ms,
+            ))
+            .unwrap_or_else(|error| panic!("peer must be stored: {error}"));
+    }
+    in_memory_core_service().with_trusted_peer_store(Box::new(trust_store))
+}
+
+/// Verifies the core service lists the allowlist with UTC pairing times.
+#[test]
+fn core_service_lists_paired_devices() {
+    let cli_service = core_service_with_paired_devices(&[
+        ("12D3KooWPhone", "Phone", 1_793_188_800_000),
+        ("12D3KooWLaptop", "Laptop", 1_793_192_400_000),
+    ]);
+
+    let rows = cli_service.list_paired_devices();
+
+    assert_eq!(
+        rows,
+        Ok(vec![
+            PairedDeviceRow {
+                peer_id: String::from("12D3KooWPhone"),
+                device_name: String::from("Phone"),
+                paired_at: String::from("2026-10-28 12:00 UTC"),
+            },
+            PairedDeviceRow {
+                peer_id: String::from("12D3KooWLaptop"),
+                device_name: String::from("Laptop"),
+                paired_at: String::from("2026-10-28 13:00 UTC"),
+            },
+        ])
+    );
+}
+
+/// Verifies a device is removed by peer ID or by its unique name (any case), and that an unknown
+/// selector changes nothing.
+#[test]
+fn core_service_revokes_by_peer_id_or_unique_name() {
+    let mut cli_service = core_service_with_paired_devices(&[
+        ("12D3KooWPhone", "Phone", 1),
+        ("12D3KooWLaptop", "Laptop", 2),
+    ]);
+
+    let by_name = cli_service.revoke_device("phone");
+    let by_peer_id = cli_service.revoke_device("12D3KooWLaptop");
+    let unknown = cli_service.revoke_device("Tablet");
+
+    assert!(by_name.is_ok_and(|message| message.starts_with("Removed Phone (12D3KooWPhone).")));
+    assert!(
+        by_peer_id.is_ok_and(|message| message.starts_with("Removed Laptop (12D3KooWLaptop)."))
+    );
+    assert_eq!(
+        unknown,
+        Err(String::from(
+            "No paired device has the peer ID or name \"Tablet\"."
+        ))
+    );
+    assert_eq!(cli_service.list_paired_devices(), Ok(Vec::new()));
+}
+
+/// Verifies a name shared by several devices is refused, so the wrong device is never removed.
+#[test]
+fn core_service_refuses_an_ambiguous_name() {
+    let mut cli_service = core_service_with_paired_devices(&[
+        ("12D3KooWPhoneA", "Phone", 1),
+        ("12D3KooWPhoneB", "Phone", 2),
+    ]);
+
+    let outcome = cli_service.revoke_device("Phone");
+
+    assert_eq!(
+        outcome,
+        Err(String::from(
+            "2 paired devices are named \"Phone\"; use the peer ID from `devices list`."
+        ))
+    );
+    assert_eq!(
+        cli_service.list_paired_devices().map(|rows| rows.len()),
+        Ok(2)
+    );
+}
+
+/// Verifies a service composed without the allowlist reports that instead of panicking.
+#[test]
+fn core_service_without_an_allowlist_rejects_device_commands() {
+    let mut cli_service = in_memory_core_service();
+
+    assert!(cli_service.list_paired_devices().is_err());
+    assert!(cli_service.revoke_device("Phone").is_err());
 }
