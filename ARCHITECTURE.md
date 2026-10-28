@@ -98,6 +98,7 @@ loaded once and reused across recordings. Stop is graceful: it waits for in-flig
                                      cosine vs. meeting clusters             unknown_speaker_clusters
                                      > 0.70 join (running mean) / new        cluster_chunks
  CLI / HTTP / FFI ─▶ application::cluster_review  (list summaries · name → identity, Issue #29)
+ CLI / HTTP / FFI ─▶ application::meeting_rename  (MeetingTitle::parse → exists? → MeetingCrdtService::set_meeting_title, Issue #38)
  user assigns identity to cluster ─▶ assign_identity_to_cluster
                                      0 VoiceVectorDB.save_speaker_identity (persist name, #30)
                                      1 VoiceVectorDB.store_embedding × members

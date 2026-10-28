@@ -1179,6 +1179,46 @@ mod tests {
         assert!(matches!(storage_error, StorageError::Rejected { .. }));
     }
 
+    /// Verifies re-titling one meeting (the rename primitive of Issue #38) changes only that
+    /// meeting's title, leaving its creation time and every other meeting untouched.
+    #[test]
+    fn retitling_one_meeting_leaves_other_meetings_unchanged() {
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let renamed_meeting_id = MeetingId::new("meeting-renamed");
+        let other_meeting_id = MeetingId::new("meeting-other");
+        for meeting_id in [&renamed_meeting_id, &other_meeting_id] {
+            repository
+                .create_meeting(meeting_id, &[1_u8])
+                .unwrap_or_else(|error| panic!("meeting creation should succeed: {error}"));
+            repository
+                .save_meeting_title(meeting_id, &meeting_title("Before"))
+                .unwrap_or_else(|error| panic!("title save should succeed: {error}"));
+        }
+        let load_metadata = |meeting_id: &MeetingId| {
+            repository
+                .load_meeting_metadata(meeting_id)
+                .unwrap_or_else(|error| panic!("metadata load should succeed: {error}"))
+                .unwrap_or_else(|| panic!("created meeting must have metadata"))
+        };
+        let renamed_before = load_metadata(&renamed_meeting_id);
+        let other_before = load_metadata(&other_meeting_id);
+
+        repository
+            .save_meeting_title(&renamed_meeting_id, &meeting_title("After"))
+            .unwrap_or_else(|error| panic!("rename should succeed: {error}"));
+
+        let renamed_after = load_metadata(&renamed_meeting_id);
+        assert_eq!(
+            renamed_after.title().map(|title| title.as_str()),
+            Some("After")
+        );
+        assert_eq!(renamed_after.created_at(), renamed_before.created_at());
+        assert_eq!(load_metadata(&other_meeting_id), other_before);
+    }
+
     /// Verifies a database created before Issue #35 gains the `title` column on open, its
     /// meetings read as untitled with a dated display fallback, and they can then be titled.
     #[test]

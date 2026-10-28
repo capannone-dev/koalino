@@ -206,6 +206,19 @@ identity before its first variant, without renaming identities that already exis
 stored first. If saving segments or resolving fails, a retry re-stores variants, which only adds
 duplicate acoustic variants. A cluster is never marked resolved before its segments are relinked.
 
+## Meeting rename
+
+`meeting_rename.rs` (Issue #38) is the one use case behind `meetings rename` (CLI),
+`PATCH /api/meetings/{id}` (HTTP), and `note_taker_rename_meeting` (FFI).
+
+- `rename_meeting` validates the text with `MeetingTitle::parse` before any I/O, so an invalid
+  title never touches storage.
+- It loads the meeting's metadata (an unknown meeting is `MeetingNotFound`), then writes the title
+  through `MeetingCrdtService::set_meeting_title`: the replicated Automerge title first (Issue
+  #39), then the SQLite projection. Peers receive the rename on their next sync.
+- It returns `MeetingRename` with the previous display title (the dated fallback when the meeting
+  was untitled) and the new title, so adapters can confirm the change. Titles are never logged.
+
 ## Cluster review
 
 `cluster_review.rs` is the one use case behind the CLI (`voice list-clusters`,
