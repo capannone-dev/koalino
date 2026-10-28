@@ -164,6 +164,18 @@ identity row, and lookups join `speaker_identities`, so a rename in the voice li
 for later Teams meetings. `TeamsIdentityMapper` uses it through the port's `Mutex<_>` forwarding
 impl, which the bridge pump thread needs. Only IDs and names are stored.
 
+`attachment_file_store.rs` (`AttachmentFileStore`, Issue #54) copies picked files and camera
+photos to `<attachment dir>/<meeting ID>/<attachment UUID>-<name>`, then links each copy to its
+meeting through `AttachmentRepository`, with a meeting time when given.
+- **Permissions:** folders are 0700 and files 0600 on Unix.
+- **Names:** reduced to ASCII letters, digits, `.`, `-` and `_`, and at most 80 characters.
+- **Accepted:** only pictures and common document types, up to 100 MiB.
+- **Sources** are left for the caller.
+- **Cleanup:** a copy whose row is rejected is removed again.
+
+`private_files.rs` holds what both attachment stores share: the meeting-ID folder-name check and
+private, never-overwriting file creation.
+
 `slide_attachment_store.rs` (`SlideAttachmentStore`, Issue #33) implements `AttachmentWorkflow`
 for Teams screen-share captures. Each PNG or JPEG (recognized by its signature) is written to
 `<slide dir>/<meeting UUID>/slide-<ms>-<attachment UUID>.<ext>`, with directories 0700 and files

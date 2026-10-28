@@ -1,11 +1,18 @@
 //! Exposes local persistence adapters that implement storage ports.
 
+/// Copies picked files and camera photos privately into a meeting's attachment folder.
+pub mod attachment_file_store;
+#[cfg(test)]
+mod attachment_file_store_tests;
+
 #[cfg(test)]
 mod embedding_encryption_tests;
 /// Implements verified SHA-256 content-addressed attachment persistence.
 pub mod file_storage_adapter;
 /// Implements a lightweight in-memory cosine-similarity database for tests and local development.
 pub mod in_memory_voice_vector_db;
+/// Creates private attachment folders and files shared by the attachment stores.
+mod private_files;
 /// Stores Teams screen-share captures as image files linked to their meeting.
 pub mod slide_attachment_store;
 #[cfg(test)]

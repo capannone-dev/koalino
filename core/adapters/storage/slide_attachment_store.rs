@@ -9,16 +9,15 @@
 //! recognized by their signature, are accepted. If the attachment row cannot be saved (for
 //! example, the meeting does not exist), the file is deleted again. Image bytes are never logged.
 
-use std::{
-    fs::{DirBuilder, File, OpenOptions},
-    io::Write,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{
+    adapters::storage::private_files::{
+        create_private_directory, is_plain_folder_name, write_private_file,
+    },
     domain::{
         errors::StorageError,
         models::{Attachment, DeviceId, MeetingId, SlideCapture},
@@ -140,7 +139,7 @@ where
         let slide_path = meeting_directory.join(format!(
             "slide-{timestamp_ms:010}-{attachment_id}.{extension}"
         ));
-        write_private_file(&slide_path, image_bytes)?;
+        write_private_file(&slide_path, &mut &image_bytes[..])?;
 
         let attachment = Attachment::new(
             attachment_id,
@@ -167,16 +166,6 @@ where
     }
 }
 
-/// Tells whether a meeting ID can name a folder without reaching outside the slide directory.
-///
-/// Outputs: `true` for a non-empty ID of ASCII letters, digits, `-` and `_` only.
-fn is_plain_folder_name(meeting_id: &str) -> bool {
-    !meeting_id.is_empty()
-        && meeting_id
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
-}
-
 /// Recognizes PNG and JPEG images by their signature.
 ///
 /// Outputs: The MIME type and file extension, or a rejection for any other format.
@@ -189,37 +178,5 @@ fn detect_image_format(image_bytes: &[u8]) -> Result<(&'static str, &'static str
         Err(StorageError::Rejected {
             reason: String::from("slide capture is not a PNG or JPEG image"),
         })
-    }
-}
-
-/// Creates `directory` (and parents) readable only by the user on Unix.
-fn create_private_directory(directory: &Path) -> Result<(), StorageError> {
-    let mut directory_builder = DirBuilder::new();
-    directory_builder.recursive(true);
-    #[cfg(unix)]
-    std::os::unix::fs::DirBuilderExt::mode(&mut directory_builder, 0o700);
-    directory_builder
-        .create(directory)
-        .map_err(|error| file_error("unable to create the slide directory", &error))
-}
-
-/// Writes a new file readable only by the user on Unix; never overwrites.
-fn write_private_file(path: &Path, contents: &[u8]) -> Result<(), StorageError> {
-    let mut open_options = OpenOptions::new();
-    open_options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut open_options, 0o600);
-    let mut file: File = open_options
-        .open(path)
-        .map_err(|error| file_error("unable to create the slide file", &error))?;
-    file.write_all(contents)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| file_error("unable to write the slide file", &error))
-}
-
-/// Builds a storage rejection for a file-system failure.
-fn file_error(operation: &str, error: &std::io::Error) -> StorageError {
-    StorageError::Rejected {
-        reason: format!("{operation}: {error}"),
     }
 }
