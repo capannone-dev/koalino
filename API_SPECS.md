@@ -222,7 +222,10 @@ power estimates, never task content. A storage failure returns `500`.
 
 `GET /ws` upgrades to a WebSocket and sends tagged JSON text events: `meeting_started` with an
 opaque `meeting_id`, `sync_status_changed` with a safe status string, or `new_unassigned_clip`
-with opaque meeting/clip IDs. The router allows browser CORS only from `http://localhost:3000`.
+with opaque meeting/clip IDs. The router allows browser CORS only from `http://localhost:3000`. Every route, `/ws` included, also refuses with `403` any
+request whose `Origin` is present and is not `http://localhost:3000` (CORS does not cover WebSocket
+handshakes), or whose `Host` is a DNS name other than `localhost` (DNS rebinding); IP-literal hosts
+and requests without these headers (CLI, scripts) are served. See `core/server/request_guard.rs`.
 
 `POST /api/voice/assign` accepts JSON `{ "clip_id": "uuid", "identity_id": "uuid" }` and
 returns `204` after the existing voice identity service writes a derived signature variant. Invalid

@@ -7,3 +7,7 @@
 pub mod api;
 #[cfg(test)]
 mod api_tests;
+/// Refuses DNS-rebinding hosts and foreign browser origins before any route runs.
+pub mod request_guard;
+#[cfg(test)]
+mod request_guard_tests;

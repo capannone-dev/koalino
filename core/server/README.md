@@ -11,7 +11,10 @@ in-process request service so CI does not require a fixed network port.
 
 `daemon` binds `NOTE_TAKER_BIND_ADDRESS` (default `127.0.0.1:8080`) and opens
 `NOTE_TAKER_DATABASE_PATH` (default `note_taker.sqlite3`). Keep the default loopback bind unless a
-separately authenticated reverse proxy is configured. CORS permits only `http://localhost:3000`.
+separately authenticated reverse proxy is configured. CORS permits only `http://localhost:3000`. Every route, `/ws` included, also refuses with `403` any
+request whose `Origin` is present and is not `http://localhost:3000` (CORS does not cover WebSocket
+handshakes), or whose `Host` is a DNS name other than `localhost` (DNS rebinding); IP-literal hosts
+and requests without these headers (CLI, scripts) are served. See `core/server/request_guard.rs`.
 
 ## HTTP contract
 

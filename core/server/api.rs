@@ -12,6 +12,7 @@ use axum::{
         ws::{Message, WebSocket},
     },
     http::{HeaderValue, StatusCode, header},
+    middleware,
     response::{IntoResponse, Response},
     routing::{get, post},
 };
@@ -19,6 +20,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, broadcast};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
+use super::request_guard::{DASHBOARD_ORIGIN, reject_cross_site_requests};
 use crate::{
     adapters::export::default_exporters,
     application::{
@@ -140,9 +142,12 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         )
         .route("/api/telemetry/summary", get(get_telemetry_summary))
         .route("/ws", get(web_socket_upgrade))
+        // Innermost of the three layers, so CORS still answers preflights for allowed origins
+        // and refusals are traced.
+        .layer(middleware::from_fn(reject_cross_site_requests))
         .layer(
             CorsLayer::new()
-                .allow_origin(HeaderValue::from_static("http://localhost:3000"))
+                .allow_origin(HeaderValue::from_static(DASHBOARD_ORIGIN))
                 .allow_methods([
                     axum::http::Method::GET,
                     axum::http::Method::POST,

@@ -32,6 +32,11 @@ use crate::{
     server::api::{ServerAppState, WebSocketEvent, build_router},
 };
 
+/// Exposes the seeded router to the request-guard tests.
+pub(super) fn seeded_router_for_guard_tests() -> axum::Router {
+    seeded_router().0
+}
+
 /// Builds a router backed by an isolated SQLite database seeded with one complete meeting.
 ///
 /// Inputs: None.
