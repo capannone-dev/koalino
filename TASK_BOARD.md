@@ -111,7 +111,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 
 | Priority | Issue | Work | Requirement |
 | --- | --- | --- | --- |
-| P0 | #43 | Compose libp2p sync (`SyncManager`, `FileSyncManager`, manifests) in the daemon and FFI, **with peer pairing/allowlist** before any exchange; call `notify_local_change` after local CRDT writes, including title changes | 3.3, 3.4, 4.1 |
+| P0 | #43 | **In progress**. Done: libp2p 0.57.1, persistent sealed identity, allowlist store, connection gate, pairing protocol, `PairingManager`. Blocked on the owner's data-model decision (transcripts are not in the CRDT document). Remaining: multi-meeting sync, daemon/FFI composition, `/api/p2p` routes, Devices UI (web, Flutter, CLI), manifests | 3.3, 3.4, 4.1 |
 | P0 | #44 | Real diarization adapter (Pyannote/SpeechBrain behind a Cargo feature); retune the 0.70 clustering threshold on its embeddings | 3.2 |
 | P0 | #45 | Flutter microphone capture feeding `note_taker_push_audio_pcm` (plugin needs approval) | 3.1 |
 | P1 | #46 | Flutter Settings: runtime log level and Share/Export Logs | 6.1, 6.2 |
