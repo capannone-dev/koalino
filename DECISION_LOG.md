@@ -1131,3 +1131,29 @@ and a 90 s Italian clip.
 - **Live transcript by polling.** The app polls the active meeting's segments every 2 s
   (existing FFI) instead of adding a push channel. Chunks arrive every few seconds, so polling
   is enough and adds no new FFI surface.
+
+## 2026-10-28 — #49 Screen-share slides: per-app detection, grid-diff heuristic
+
+The owner asked for the harness only, with no new app supported yet. The full research is in
+the comment on #49.
+- **Detection is a port, per conferencing app.**
+  - Windows: Graphics Capture can't be queried for other processes' captures.
+  - Wayland: PipeWire screencast nodes don't reliably name the app or monitor.
+  - X11: no signal at all.
+  - macOS: no supported API.
+
+  So `ScreenShareDetector` is for an app adapter to implement, and there is no OS-level guess.
+  Until one exists, `NoScreenShareDetector` means nothing is ever captured.
+- **New-slide heuristic: block-based frame differencing, as in lecture-video slide extraction.**
+  - Luma is area-averaged into a 32×18 grid. Frames differ when at least 6 cells move by at
+    least 8 levels.
+  - A frame is saved once it is stable and differs from the last saved slide.
+  - Per-pixel differences are too noisy, and a 64-bit dHash misses a new bullet line.
+  - The constants are starting points, to tune on real shares.
+- **A watcher thread per recording, sampling every 2 s.**
+  - Frame capture stays off the audio path.
+  - It runs only while audio is captured, so pausing also pauses screen capture.
+  - Slides carry the meeting time, so they sit at the right point of the transcript.
+- **Slides reuse `SlideAttachmentStore`.** The store keeps the Teams files' layout and
+  permissions and rejects meeting IDs that are not plain folder names. Slide files are not
+  encrypted, the same policy as other attachments.

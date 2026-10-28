@@ -122,7 +122,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P0 | #51 | No repeated words at chunk boundaries: no overlap, quiet-point cuts, silent chunks skipped, no previous-text prompt, VAD in app builds; done | 3.1 |
 | P1 | #52 | Live transcript on the Record screen, chunk by chunk (chunks at most 15 s); per-speaker colours wait for #44; done | 3.1 |
 | P1 | #53 | Telemetry recorded per transcribed chunk; Telemetry moved into Settings (app and web); done | 6 |
-| P2 | #49 | Local screen-share detection and slide screenshots outside Teams | 3.1 |
+| P2 | #49 | Local screen-share slides outside Teams: harness done (detector/capturer/sink ports, no-op adapters, slide-change heuristic, per-recording watcher); a conferencing-app adapter waits for the owner's choice of app | 3.1 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |
 | P3 | — | Decide how the Voice Galleries surface unclustered fallback clips | 3.2 |
