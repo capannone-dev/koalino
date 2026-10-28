@@ -33,7 +33,7 @@ use crate::{
     ports::{
         crypto::EmbeddingCipher,
         meeting_document::{MeetingDocumentCodec, MeetingOrigin, MeetingProjection},
-        storage::{AttachmentRepository, NoteRepository},
+        storage::{AttachmentRepository, DocumentChanges, NoteRepository},
         telemetry::MetricsRepository,
     },
 };
@@ -174,6 +174,7 @@ impl SqliteNoteRepository {
             )
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
         add_meeting_title_column(&sqlite_connection)?;
+        add_document_revision_column(&sqlite_connection)?;
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
         for embedding_column in [
             &CLIP_EMBEDDINGS,
@@ -638,7 +639,9 @@ impl NoteRepository for SqliteNoteRepository {
         let Some(document_codec) = self.document_codec.as_deref() else {
             self.connection
                 .execute(
-                    "INSERT INTO meetings (meeting_id, acquisition_device_id, automerge_document) VALUES (?1, ?2, ?3)",
+                    &format!(
+                        "INSERT INTO meetings (meeting_id, acquisition_device_id, automerge_document, document_revision) VALUES (?1, ?2, ?3, {NEXT_DOCUMENT_REVISION_SQL})"
+                    ),
                     params![meeting_id.as_str(), self.device_id.as_str(), initial_crdt_document],
                 )
                 .map_err(|error| sqlite_error("unable to create meeting", error))?;
@@ -663,7 +666,9 @@ impl NoteRepository for SqliteNoteRepository {
             .map_err(|error| sqlite_error("unable to begin meeting creation", error))?;
         transaction
             .execute(
-                "INSERT INTO meetings (meeting_id, created_at_utc, acquisition_device_id, automerge_document) VALUES (?1, ?2, ?3, ?4)",
+                &format!(
+                    "INSERT INTO meetings (meeting_id, created_at_utc, acquisition_device_id, automerge_document, document_revision) VALUES (?1, ?2, ?3, ?4, {NEXT_DOCUMENT_REVISION_SQL})"
+                ),
                 params![
                     meeting_id.as_str(),
                     sqlite_timestamp_text(origin.created_at),
@@ -751,6 +756,33 @@ impl NoteRepository for SqliteNoteRepository {
     /// Inputs: `meeting_id` must exist; `crdt_document` contains serialized CRDT state.
     /// Outputs: Success or an unknown-meeting/SQLite storage error.
     /// Side effects: Updates one SQLite row and emits a debug trace event without CRDT bytes.
+    fn document_changes_since(&self, after_revision: u64) -> Result<DocumentChanges, StorageError> {
+        let after_revision = i64::try_from(after_revision).unwrap_or(i64::MAX);
+        let mut statement = self
+            .connection
+            .prepare_cached(
+                "SELECT meeting_id, document_revision FROM meetings WHERE document_revision > ?1 ORDER BY document_revision",
+            )
+            .map_err(|error| sqlite_error("unable to list document changes", error))?;
+        let changed_rows = statement
+            .query_map(params![after_revision], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(|error| sqlite_error("unable to list document changes", error))?
+            .collect::<Result<Vec<(String, i64)>, _>>()
+            .map_err(|error| sqlite_error("unable to read document changes", error))?;
+        let latest_revision = changed_rows
+            .last()
+            .map_or(after_revision, |(_, revision)| *revision);
+        Ok(DocumentChanges {
+            meeting_ids: changed_rows
+                .into_iter()
+                .map(|(meeting_id, _)| MeetingId::new(meeting_id))
+                .collect(),
+            latest_revision: u64::try_from(latest_revision).unwrap_or(0),
+        })
+    }
+
     fn save_crdt_document(
         &self,
         meeting_id: &MeetingId,
@@ -1162,7 +1194,9 @@ fn write_document(
 ) -> Result<(), StorageError> {
     let updated_row_count = connection
         .execute(
-            "UPDATE meetings SET automerge_document = ?1 WHERE meeting_id = ?2",
+            &format!(
+                "UPDATE meetings SET automerge_document = ?1, document_revision = {NEXT_DOCUMENT_REVISION_SQL} WHERE meeting_id = ?2"
+            ),
             params![document, meeting_id.as_str()],
         )
         .map_err(|error| sqlite_error("unable to save CRDT document", error))?;
@@ -1301,6 +1335,40 @@ fn add_meeting_title_column(sqlite_connection: &Connection) -> Result<(), Storag
     }
     Ok(())
 }
+
+/// Adds the `document_revision` column (Issue #43) to databases created before it, with its index.
+///
+/// Outputs: Success (also when the column exists) or a storage error.
+/// Side effects: May run one `ALTER TABLE`; existing rows start at revision 0.
+fn add_document_revision_column(sqlite_connection: &Connection) -> Result<(), StorageError> {
+    let revision_column_count: i64 = sqlite_connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('meetings') WHERE name = 'document_revision'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| sqlite_error("unable to inspect meetings schema", error))?;
+    if revision_column_count == 0 {
+        sqlite_connection
+            .execute(
+                "ALTER TABLE meetings ADD COLUMN document_revision INTEGER NOT NULL DEFAULT 0",
+                [],
+            )
+            .map_err(|error| sqlite_error("unable to add the document revision column", error))?;
+    }
+    sqlite_connection
+        .execute(
+            "CREATE INDEX IF NOT EXISTS meetings_document_revision_index ON meetings(document_revision)",
+            [],
+        )
+        .map_err(|error| sqlite_error("unable to index document revisions", error))?;
+    Ok(())
+}
+
+/// SQL for the revision a document write takes: one past the newest stored. SQLite serializes
+/// writers, so concurrent connections never take the same revision.
+const NEXT_DOCUMENT_REVISION_SQL: &str =
+    "(SELECT COALESCE(MAX(document_revision), 0) + 1 FROM meetings)";
 
 /// Ensures an SQL update affected exactly one existing meeting row.
 ///

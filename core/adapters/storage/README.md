@@ -73,6 +73,11 @@ its document, and the `storage_migrations` table (`name` PK) records
 `meeting_documents_v1` so later opens skip the scan. `sqlite_meeting_document_tests.rs` specifies
 this behaviour. Without a codec (test fixtures only) the adapter stores documents as opaque bytes.
 
+Every document write also sets `meetings.document_revision` to one past the newest stored revision
+(indexed; older databases gain the column on open). `document_changes_since(revision)` lists the
+meetings written after a revision by any connection or process. The daemon's P2P task uses it to
+send new transcripts to connected devices about a second after they are saved.
+
 The adapter rejects writes to unknown meetings rather than silently creating orphan notes. It emits structured `tracing` events with operation, device, and meeting identifiers only—never transcript content or CRDT bytes.
 
 The `attachments` table persists only an attachment UUID, optional confirmed meeting ID, local

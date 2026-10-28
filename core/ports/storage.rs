@@ -12,6 +12,19 @@ use uuid::Uuid;
 
 /// Persists meeting text in an offline-capable repository.
 pub trait NoteRepository {
+    /// Lists the meetings whose document was written after `after_revision`, by any connection.
+    ///
+    /// Inputs: The `latest_revision` of an earlier call, or 0.
+    /// Outputs: The changed meetings and the newest revision now stored, or a storage error.
+    /// Repositories without revisions report no changes.
+    /// Side effects: Reads meeting metadata only; never document bytes.
+    fn document_changes_since(&self, after_revision: u64) -> Result<DocumentChanges, StorageError> {
+        Ok(DocumentChanges {
+            meeting_ids: Vec::new(),
+            latest_revision: after_revision,
+        })
+    }
+
     /// Lists stable identifiers for every locally known meeting.
     ///
     /// Inputs: None.
@@ -237,6 +250,15 @@ pub trait AttachmentRepository {
     fn get_unlinked_attachments(&self) -> Result<Vec<Attachment>, StorageError>;
 }
 
+/// Meetings whose documents changed since a revision (Issue #43).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DocumentChanges {
+    /// The changed meetings, oldest change first.
+    pub meeting_ids: Vec<MeetingId>,
+    /// The newest revision stored; pass it to the next call.
+    pub latest_revision: u64,
+}
+
 /// Forwards every repository call through a shared reference so application services can borrow
 /// one adapter (or an unsized `dyn` port object) without taking ownership of it.
 impl<T> NoteRepository for &T
@@ -245,6 +267,10 @@ where
 {
     fn list_meeting_ids(&self) -> Result<Vec<MeetingId>, StorageError> {
         (*self).list_meeting_ids()
+    }
+
+    fn document_changes_since(&self, after_revision: u64) -> Result<DocumentChanges, StorageError> {
+        (*self).document_changes_since(after_revision)
     }
 
     fn create_meeting(

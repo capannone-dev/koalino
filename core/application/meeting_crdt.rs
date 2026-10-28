@@ -211,7 +211,10 @@ where
     /// Inputs: `meeting_id` identifies an existing document; `sync_state` is per-peer protocol state;
     /// `sync_message` is decoded from an authenticated peer's envelope.
     /// Outputs: Success or a portable storage error when data cannot be merged or persisted.
-    /// Side effects: Reads, updates, serializes, and persists the local Automerge document.
+    /// Side effects: Reads and updates the local Automerge document, and persists it only when the
+    /// message added changes. A message with nothing new (a handshake between devices already in
+    /// sync) writes nothing, so it does not advance the document revision that the P2P task
+    /// watches, and devices never echo each other.
     pub fn apply_sync_message(
         &self,
         meeting_id: &MeetingId,
@@ -220,10 +223,14 @@ where
     ) -> Result<(), StorageError> {
         let stored_document = self.note_repository.load_crdt_document(meeting_id)?;
         let mut automerge_document = load_document(&stored_document)?;
+        let heads_before = automerge_document.get_heads();
         automerge_document
             .sync()
             .receive_sync_message(sync_state, sync_message)
             .map_err(|error| crdt_error("unable to apply remote sync message", error))?;
+        if automerge_document.get_heads() == heads_before {
+            return Ok(());
+        }
         self.note_repository
             .save_crdt_document(meeting_id, &automerge_document.save())?;
         self.project_document_title(meeting_id, &automerge_document)

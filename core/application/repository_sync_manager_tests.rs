@@ -455,3 +455,32 @@ fn failed_deliveries_to_connected_peers_are_collected_once() {
     assert_eq!(manager.take_failed_peers(), vec![laptop]);
     assert!(manager.take_failed_peers().is_empty());
 }
+
+/// Once two devices have converged, another full handshake writes nothing, so the revision the
+/// P2P task watches stays put and the devices never echo each other.
+#[test]
+fn a_handshake_with_nothing_new_writes_nothing() {
+    let (mut laptop, mut phone) = linked_devices("laptop", "phone");
+    laptop.record_meeting(&MeetingId::new("meeting-standup"), "Standup");
+    laptop.discover(&phone);
+    phone.discover(&laptop);
+    run_until_quiet(&mut laptop, &mut phone);
+    let revision = |device: &Device| {
+        device
+            .repository()
+            .document_changes_since(0)
+            .unwrap_or_else(|error| panic!("changes must list: {error}"))
+            .latest_revision
+    };
+    let (laptop_before, phone_before) = (revision(&laptop), revision(&phone));
+
+    let phone_id = phone.device_id.clone();
+    laptop
+        .manager
+        .restart_peer(&mut laptop.network, phone_id)
+        .unwrap_or_else(|error| panic!("restart must succeed: {error}"));
+    run_until_quiet(&mut laptop, &mut phone);
+
+    assert_eq!(revision(&laptop), laptop_before);
+    assert_eq!(revision(&phone), phone_before);
+}

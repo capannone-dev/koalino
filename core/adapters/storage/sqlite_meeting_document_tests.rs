@@ -196,3 +196,38 @@ fn a_corrupt_peer_document_creates_no_meeting() {
     assert!(creation.is_err());
     assert!(repository.load_crdt_document(&meeting()).is_err());
 }
+
+/// Every document write advances the meeting's revision, so the P2P task can find writes made by
+/// any connection or process (the recording pipeline, the CLI, the app) and send them at once.
+#[test]
+fn document_writes_from_any_connection_are_listed_by_revision() {
+    let database_path = scratch_database("revisions.sqlite3");
+    let p2p_view = device_repository(&database_path, "device-laptop");
+    let start = p2p_view
+        .document_changes_since(0)
+        .unwrap_or_else(|error| panic!("changes must list: {error}"));
+    assert!(start.meeting_ids.is_empty());
+
+    // The recording pipeline writes through its own connection to the same file.
+    let pipeline = device_repository(&database_path, "device-laptop");
+    record_meeting(&pipeline);
+    let after_recording = p2p_view
+        .document_changes_since(start.latest_revision)
+        .unwrap_or_else(|error| panic!("changes must list: {error}"));
+    let unchanged = p2p_view
+        .document_changes_since(after_recording.latest_revision)
+        .unwrap_or_else(|error| panic!("changes must list: {error}"));
+    let other_meeting = MeetingId::new("meeting-milan");
+    pipeline
+        .create_meeting(&other_meeting, &AutoCommit::new().save())
+        .unwrap_or_else(|error| panic!("meeting must be created: {error}"));
+    let after_second_meeting = p2p_view
+        .document_changes_since(after_recording.latest_revision)
+        .unwrap_or_else(|error| panic!("changes must list: {error}"));
+
+    assert_eq!(after_recording.meeting_ids, vec![meeting()]);
+    assert!(after_recording.latest_revision > start.latest_revision);
+    assert!(unchanged.meeting_ids.is_empty());
+    assert_eq!(unchanged.latest_revision, after_recording.latest_revision);
+    assert_eq!(after_second_meeting.meeting_ids, vec![other_meeting]);
+}
