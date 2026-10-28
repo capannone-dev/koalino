@@ -2,15 +2,18 @@
 // state, such as an active recording) and the App lock switch in Settings.
 
 import 'dart:async';
+import 'dart:io';
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
+import 'package:note_taker_ui/controllers/log_settings_controller.dart';
 import 'package:note_taker_ui/presentation/app_lock_gate.dart';
 import 'package:note_taker_ui/presentation/settings_screen.dart';
 
 import 'fake_app_lock_bridge.dart';
+import 'fake_log_bridge.dart';
 
 /// Counts taps, standing in for app state that must survive a lock.
 final class _Counter extends StatefulWidget {
@@ -183,8 +186,15 @@ void main() {
       final AppLockController controller =
           AppLockController(appLockBridge: bridge);
       await controller.initialize();
-      await tester.pumpWidget(
-          MaterialApp(home: SettingsScreen(appLockController: controller)));
+      final LogSettingsController logSettings = LogSettingsController(
+        logBridge: FakeLogBridge(),
+        exportSaver: FakeDesktopSaver(),
+        sharedDirectory: () async => Directory.systemTemp,
+      );
+      await tester.pumpWidget(MaterialApp(
+          home: SettingsScreen(
+              appLockController: controller,
+              logSettingsController: logSettings)));
       return controller;
     }
 

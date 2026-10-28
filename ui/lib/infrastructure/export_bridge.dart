@@ -157,7 +157,10 @@ abstract interface class ExportSaver {
 
 /// The save dialogs of `file_picker`.
 final class FilePickerExportSaver implements ExportSaver {
-  const FilePickerExportSaver();
+  /// Creates the saver; `dialogTitle` names the dialog (the meeting export's by default).
+  const FilePickerExportSaver({this.dialogTitle = 'Export meeting'});
+
+  final String dialogTitle;
 
   @override
   bool get savesBytes => Platform.isAndroid || Platform.isIOS;
@@ -169,7 +172,7 @@ final class FilePickerExportSaver implements ExportSaver {
   @override
   Future<String?> chooseSavePath(String suggestedFileName) async =>
       FilePicker.platform.saveFile(
-          dialogTitle: 'Export meeting',
+          dialogTitle: dialogTitle,
           fileName: suggestedFileName,
           initialDirectory: await _downloadsDirectoryPath(),
           lockParentWindow: true);
@@ -177,7 +180,7 @@ final class FilePickerExportSaver implements ExportSaver {
   @override
   Future<bool> saveBytes(String suggestedFileName, Uint8List bytes) async =>
       await FilePicker.platform.saveFile(
-          dialogTitle: 'Export meeting',
+          dialogTitle: dialogTitle,
           fileName: suggestedFileName,
           bytes: bytes) !=
       null;

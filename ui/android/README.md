@@ -122,3 +122,14 @@ Every action must query state after its command, because a concurrent Flutter ac
 mutex first. If Android kills the process, do not infer a persisted Recording state: start a fresh
 native runtime and reconcile with durable application metadata before exposing controls. The Rust
 state machine intentionally does not retain raw audio or background-service tokens.
+
+## Sharing logs (Issue #46)
+
+`SharedFiles.kt` answers `shareFile(path, mimeType)` on `note_taker/share`: it opens the system
+share sheet (`ACTION_SEND` with a read grant) for one file in the app's `cache/shared` folder,
+where Settings' Share logs writes the export. `SharedFileProvider` serves that folder read-only
+as `content://<applicationId>.shared/<name>`. It is not exported, so only the app picked in the
+sheet can read the shared file, and a path outside the folder (including through `..` or a
+link) is refused. It is our own small provider instead of androidx's `FileProvider`, so no
+library was added. Verified on the S23: the sheet showed the file's name (read through the
+grant), and `adb shell content query` was refused.

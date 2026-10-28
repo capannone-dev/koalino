@@ -49,6 +49,13 @@
             android:name=".RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone"/>
+        <!-- Serves exported logs in cache/shared to the app picked in the share sheet
+             (SharedFiles.kt, Issue #46); reachable only through a share's URI grant. -->
+        <provider
+            android:name=".SharedFileProvider"
+            android:authorities="${applicationId}.shared"
+            android:exported="false"
+            android:grantUriPermissions="true"/>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

@@ -4,8 +4,8 @@
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 
-/// Hosts the Record, Meetings, Telemetry, and Devices destinations, plus Settings when the
-/// platform has settings to show (Android's App lock for now).
+/// Hosts the Record, Meetings, Telemetry, and Devices destinations, plus Settings when given a
+/// builder (the app always gives one; Issue #46).
 ///
 /// Phones get a bottom `NavigationBar`; windows at least `twoPaneBreakpoint` wide get a
 /// `NavigationRail`. Only the selected destination is built, so hidden screens neither poll

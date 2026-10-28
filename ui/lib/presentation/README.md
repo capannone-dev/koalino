@@ -43,9 +43,12 @@ Unlock; the app's widgets stay mounted but hidden (not painted, tapped, or read 
 readers), so an active recording and every screen keep their state. It forwards the app being
 hidden and shown to `AppLockController`.
 
-`settings_screen.dart` (`SettingsScreen`) holds the App lock switch, which explains why it is
-unavailable without a screen lock or before Android 10. `HomeShell` shows Settings as a fifth
-destination only when given a builder (Android for now; Issue #46 adds more settings).
+`settings_screen.dart` (`SettingsScreen`) is on every platform (Issue #46). Its diagnostics hold
+the Log level selector (Error to Trace, Info by default; the core keeps the choice across
+restarts) and Export logs (Share logs on Android), which saves or shares the last seven days of
+logs. On Android it also holds the App lock switch, which explains why it is unavailable without
+a screen lock or before Android 10. `HomeShell` shows Settings as a fifth destination when given
+a builder, which the app always gives.
 
 The meeting detail's app bar has Name speakers (`NameSpeakersButton`), which opens the voice
 gallery (`voice_gallery_screen.dart`) for that meeting and reloads the meeting on return so the

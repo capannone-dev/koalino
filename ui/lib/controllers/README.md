@@ -16,6 +16,11 @@ private file, the picker saves its bytes, and the private file is deleted whatev
 Markdown leaves attachments out there, because the picker saves a single file.
 `suggestedExportFileName` turns the title into a safe file name with the format's extension.
 
+`LogSettingsController` holds Settings' diagnostics (Issue #46): it loads the core's level,
+changes it (keeping the old one and explaining when the core refuses), and exports the logs. On
+desktops the save dialog picks the path; on Android the core writes into `cache/shared`, after
+the previous export there is deleted, and the share sheet opens.
+
 `AttachmentController` owns selected-file workflow state and decodes the Rust-owned JSON array of
 meeting candidates. It receives both a picker and `AttachmentBridge` interface, preserving
 widget-test injection and ensuring no complex Rust struct crosses FFI.

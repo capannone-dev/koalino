@@ -8,10 +8,12 @@ import 'package:audioplayers/audioplayers.dart';
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/core_startup_controller.dart';
 import 'package:note_taker_ui/controllers/attachment_controller.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
+import 'package:note_taker_ui/controllers/log_settings_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
@@ -20,6 +22,7 @@ import 'package:note_taker_ui/infrastructure/app_configuration.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/attachment_bridge.dart';
 import 'package:note_taker_ui/infrastructure/host_key.dart';
+import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
@@ -91,7 +94,7 @@ final class NoteTakerApp extends StatelessWidget {
   /// recording survives switching destinations. `coreStartupController`, when given, holds the
   /// screens back until the Rust core is open (tests that fake every bridge omit it).
   /// `appLockController`, when given (Android), covers every screen while the app is locked
-  /// and adds the Settings destination with its switch.
+  /// and adds the App lock switch to Settings.
   /// Outputs: A configured Material application.
   /// Side effects: None.
   const NoteTakerApp({
@@ -121,11 +124,8 @@ final class NoteTakerApp extends StatelessWidget {
           const _TelemetryDestination(),
       devicesScreenBuilder: (BuildContext context) =>
           const _DevicesDestination(),
-      settingsScreenBuilder: switch (appLockController) {
-        final AppLockController appLock => (BuildContext context) =>
-            SettingsScreen(appLockController: appLock),
-        null => null,
-      },
+      settingsScreenBuilder: (BuildContext context) =>
+          _SettingsDestination(appLockController: appLockController),
     );
     final CoreStartupController? startup = coreStartupController;
     final AppLockController? appLock = appLockController;
@@ -252,6 +252,47 @@ final class _TelemetryDestinationState extends State<_TelemetryDestination> {
   @override
   Widget build(BuildContext context) =>
       TelemetryDashboardScreen(controller: _controller);
+}
+
+/// Owns the log settings controller while Settings is shown.
+final class _SettingsDestination extends StatefulWidget {
+  const _SettingsDestination({required this.appLockController});
+
+  /// Android's app lock, or `null` on platforms without it.
+  final AppLockController? appLockController;
+
+  @override
+  State<_SettingsDestination> createState() => _SettingsDestinationState();
+}
+
+/// Creates the controller, reads the stored level, and disposes it when Settings is left.
+final class _SettingsDestinationState extends State<_SettingsDestination> {
+  final LogSettingsController _logSettingsController = LogSettingsController(
+    logBridge: const RustLogBridge(),
+    exportSaver: const FilePickerExportSaver(dialogTitle: 'Export logs'),
+    // Android shares from `cache/shared`, the folder `SharedFiles.kt` serves.
+    logSharer: Platform.isAndroid ? const AndroidLogSharer() : null,
+    sharedDirectory: () async =>
+        Directory('${(await getTemporaryDirectory()).path}/shared'),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_logSettingsController.load());
+  }
+
+  @override
+  void dispose() {
+    _logSettingsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SettingsScreen(
+        logSettingsController: _logSettingsController,
+        appLockController: widget.appLockController,
+      );
 }
 
 /// Owns a devices controller and polls only while the Devices destination is shown.

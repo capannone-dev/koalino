@@ -5,7 +5,8 @@
 // (`MicrophonePermission`) on `note_taker/microphone`, and installs the shipped Whisper model
 // (`WhisperModel`) on `note_taker/whisper_model`, and drives the recording foreground service
 // (`RecordingService`) on `note_taker/recording_service`, reporting its notification's actions
-// back to Dart.
+// back to Dart. Exported logs are shared through the share sheet on `note_taker/share`
+// (`SharedFiles`, Issue #46).
 package com.example.note_taker_ui
 
 import android.content.Context
@@ -43,6 +44,8 @@ class MainActivity : FlutterActivity() {
         microphonePermission = microphone
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/microphone")
             .setMethodCallHandler(microphone)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/share")
+            .setMethodCallHandler(SharedFiles(this))
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/whisper_model")
             .setMethodCallHandler(WhisperModel(assets))
         val recordingChannel =

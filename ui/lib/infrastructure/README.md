@@ -53,6 +53,12 @@ isolate and decodes the core's JSON answer into `MeetingExportSuccess` or `Meeti
 on desktops it only picks a path (starting in Downloads) and the core writes there; on Android
 and iOS the system document picker receives the bytes.
 
+`log_bridge.dart` reaches the core's log level and log export (`note_taker_get_log_level`,
+`note_taker_set_log_level`, `note_taker_export_logs`) on background isolates (Issue #46).
+`LogLevel` lists the five levels Settings offers. `AndroidLogSharer` hands an exported file to
+the share sheet on `note_taker/share` (`SharedFiles.kt`). `FilePickerExportSaver` takes the
+dialog's title, so the log export says "Export logs".
+
 `app_configuration.dart` runs first: `configureCore` passes the application-support directory
 (`<support>/note_taker`), the device name (the host name; "Android device" on Android), and
 `models/ggml-base.bin` when present to `note_taker_configure` on a background isolate. Every

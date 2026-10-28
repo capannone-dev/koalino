@@ -77,3 +77,9 @@ the Settings switch. `fake_app_lock_bridge.dart` holds the scripted bridge.
 `meeting_export_test.dart` covers export (Issue #48): decoding the core's answer, safe file
 names, the desktop save path, cancel, and the default-folder fallback, the phone save with the
 private file removed (also on cancel), the failure messages, and the Export menu.
+
+`log_settings_test.dart` covers Settings' diagnostics (Issue #46): the levels, loading and
+changing the level (and a refusal), the desktop export, cancel, and its messages, the Android
+share from the shared folder (an earlier export removed, a failing sheet), decoding the core's
+answer, and the screen with and without App lock. `fake_log_bridge.dart` holds the scripted
+bridge, sharer, and save dialog, which `app_lock_screen_test.dart` also uses.
