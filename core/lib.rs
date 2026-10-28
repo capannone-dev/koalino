@@ -21,6 +21,9 @@ pub mod domain;
 /// Exposes the C-compatible Flutter bridge without leaking Rust domain types across FFI.
 #[path = "bin/ffi.rs"]
 pub mod ffi;
+/// Composes and runs the daemon's P2P pairing and sync task (Issue #43).
+#[path = "bin/p2p_composition.rs"]
+pub mod p2p_composition;
 /// Composes the live meeting pipeline from environment configuration.
 #[path = "bin/pipeline_composition.rs"]
 pub mod pipeline_composition;

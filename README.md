@@ -76,6 +76,9 @@ repository.
 | `NOTE_TAKER_LOG_DIR` | `logs` | Daily rolling JSON log files (`app_log.YYYY-MM-DD`) |
 | `RUST_LOG` | `info` (daemon) | Initial daemon log filter. CLI: `--log-level` |
 | `NOTE_TAKER_BIND_ADDRESS` | `127.0.0.1:8080` | Daemon HTTP/WebSocket address |
+| `NOTE_TAKER_P2P_ENABLED` | `true` | Daemon pairing and sync with your other devices. `false` turns it off |
+| `NOTE_TAKER_P2P_LISTEN` | `/ip4/0.0.0.0/tcp/0` | libp2p listen multiaddress (port 0 picks a free port). Only paired devices can connect, except during pairing |
+| `NOTE_TAKER_DEVICE_NAME` | the host name | Name shown to your other devices during pairing |
 | `NOTE_TAKER_TRANSCRIPTION_PROVIDER` | `auto` | `auto`, `local` (whisper.cpp), or `openai` |
 | `NOTE_TAKER_WHISPER_MODEL` | unset | Path to the local GGML model (`local-ai` builds) |
 | `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` | Language detection, or a code such as `it` or `en` |

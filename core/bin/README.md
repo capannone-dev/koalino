@@ -51,6 +51,28 @@ documented nonzero status codes distinguishable from lifecycle states.
   missing engine is not fatal). On SIGINT or SIGTERM it shuts down gracefully, letting the worker
   drain.
 
+## P2P pairing and sync (Issue #43)
+
+`p2p_composition.rs` runs the daemon's P2P task on its own `note-taker-p2p` thread, with a
+single-threaded Tokio runtime. libp2p's event loop and document merges therefore never run on the
+HTTP runtime.
+
+- **Configuration:** `P2pConfig::from_lookup` reads three variables:
+  - `NOTE_TAKER_P2P_ENABLED` (default `true`);
+  - `NOTE_TAKER_P2P_LISTEN` (default `/ip4/0.0.0.0/tcp/0`);
+  - `NOTE_TAKER_DEVICE_NAME` (default: the host name, else "Note Taker device").
+- **Start-up:** `spawn_p2p_task` opens the task's own connections: a document-backed note
+  repository and `SqlitePeerStore`. It then loads the sealed node identity, starts listening,
+  restores the paired devices, and returns only once all of that worked.
+- **Handle:** `P2pHandle` offers `command` (awaits a `P2pCommand` outcome), `notify_local_change`
+  (non-blocking, callable from any thread), `snapshot` (status plus listen addresses), and
+  `shutdown` (blocking, so callers run it in `spawn_blocking`).
+- **Daemon:** `daemon.rs` starts the task after the pipeline. A disabled or failed task is logged
+  and is not fatal. The task is stopped after the Teams bridge at shutdown.
+
+Unpaired devices on the LAN can see the node's peer ID through mDNS. They can connect only while
+the owner keeps a pairing window open, and even then they cannot sync.
+
 ## Teams bot bridge (Issue #33)
 
 `teams_bridge_composition.rs` composes the bridge for the daemon. `TeamsBridgeConfig` reads

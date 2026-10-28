@@ -353,6 +353,38 @@ impl Libp2pNetworkAdapter {
         })
     }
 
+    /// Starts listening for encrypted TCP connections on `listen_address`.
+    ///
+    /// Inputs: A multiaddress such as `/ip4/0.0.0.0/tcp/0` (port 0 picks a free port).
+    /// Outputs: Success once the listener is registered, or `SecurityPolicy` for an address that
+    /// does not parse or cannot be bound.
+    /// Side effects: Binds a TCP socket when the swarm next runs. Every connection on it is
+    /// authenticated with Noise and admitted only by the connection gate.
+    pub fn listen_on(&mut self, listen_address: &str) -> Result<(), NetworkError> {
+        let parsed_address: libp2p::Multiaddr =
+            listen_address
+                .parse()
+                .map_err(|error| NetworkError::SecurityPolicy {
+                    reason: format!("invalid P2P listen address: {error}"),
+                })?;
+        self.swarm
+            .listen_on(parsed_address)
+            .map(|_| ())
+            .map_err(|error| NetworkError::SecurityPolicy {
+                reason: format!("cannot listen for P2P connections: {error}"),
+            })
+    }
+
+    /// Lists the addresses this node currently listens on, as multiaddress text.
+    ///
+    /// Side effects: None.
+    pub fn listen_addresses(&self) -> Vec<String> {
+        self.swarm
+            .listeners()
+            .map(|listen_address| listen_address.to_string())
+            .collect()
+    }
+
     /// Allows `peer_device_id` to connect and sync, as after a confirmed pairing.
     ///
     /// Inputs: A peer ID in the adapter's portable form. Outputs: Success, or `SecurityPolicy`
@@ -1610,6 +1642,43 @@ mod tests {
                 .poll_event()
                 .unwrap_or_else(|error| panic!("event queue should be readable: {error}"))
                 .is_none()
+        );
+    }
+
+    /// A TCP listen address that is not a multiaddress is refused without listening.
+    #[tokio::test]
+    async fn an_invalid_listen_address_is_refused() {
+        let mut adapter = Libp2pNetworkAdapter::new(NodeIdentity::ephemeral())
+            .unwrap_or_else(|error| panic!("adapter must initialize: {error}"));
+
+        assert!(adapter.listen_on("0.0.0.0:4001").is_err());
+        assert!(adapter.listen_addresses().is_empty());
+    }
+
+    /// Listening on a loopback TCP address reports the bound address once the swarm has run.
+    #[tokio::test]
+    async fn a_tcp_listener_reports_its_bound_address() {
+        let mut adapter = Libp2pNetworkAdapter::new(NodeIdentity::ephemeral())
+            .unwrap_or_else(|error| panic!("adapter must initialize: {error}"));
+
+        adapter
+            .listen_on("/ip4/127.0.0.1/tcp/0")
+            .unwrap_or_else(|error| panic!("listening must start: {error}"));
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while adapter.listen_addresses().is_empty() {
+                adapter
+                    .drive_next_swarm_event()
+                    .await
+                    .unwrap_or_else(|error| panic!("swarm must run: {error}"));
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("no listen address before timeout"));
+
+        let addresses = adapter.listen_addresses();
+        assert!(
+            addresses[0].starts_with("/ip4/127.0.0.1/tcp/"),
+            "unexpected address {addresses:?}"
         );
     }
 }
