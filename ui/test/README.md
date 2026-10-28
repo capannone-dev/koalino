@@ -48,3 +48,6 @@ Devices (Issue #43):
   Codes match, the waiting state, the confirmed removal, make discoverable, and sync off.
 
 `fake_p2p_bridge.dart` holds the scripted bridge and the `busyStatus` and `emptyStatus` fixtures.
+
+`app_theme_test.dart` checks that both themes come from the same seed with the right brightness,
+and that the app follows a light and a dark system setting.

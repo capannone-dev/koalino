@@ -26,3 +26,8 @@ outgoing pairings with their six-digit codes in large type (read out digit by di
 readers), paired devices with a confirmed Remove, and nearby devices with Pair. A disabled P2P
 task shows "Device sync is off". `HomeShell` lists it as the fourth destination, Devices
 (Issue #43).
+
+`app_theme.dart` builds the light and dark Material 3 themes from one indigo seed with
+`noteTakerTheme(brightness)`. `NoteTakerApp` sets both and `ThemeMode.system`, so the app follows
+the system setting, including changes while it runs. Screens take colours from the theme's
+`colorScheme`, so both themes keep their contrast.

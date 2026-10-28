@@ -15,6 +15,7 @@ import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 import 'package:note_taker_ui/infrastructure/telemetry_bridge.dart';
+import 'package:note_taker_ui/presentation/app_theme.dart';
 import 'package:note_taker_ui/presentation/attachment_import_screen.dart';
 import 'package:note_taker_ui/presentation/devices_screen.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
@@ -41,7 +42,7 @@ Future<void> main() async {
   unawaited(startCore());
 }
 
-/// Configures the application-wide Material 3 theme and the adaptive navigation shell.
+/// Configures the application-wide Material 3 light and dark themes and the adaptive navigation shell.
 final class NoteTakerApp extends StatelessWidget {
   /// Creates the root app with a controller supplied by the composition root.
   ///
@@ -62,7 +63,10 @@ final class NoteTakerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Note Taker',
-      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
+      theme: noteTakerTheme(Brightness.light),
+      darkTheme: noteTakerTheme(Brightness.dark),
+      // Follows the system's light or dark setting, including changes while the app runs.
+      themeMode: ThemeMode.system,
       home: HomeShell(
         recordingScreenBuilder: (BuildContext context) =>
             RecordingScreen(recordingController: recordingController),
