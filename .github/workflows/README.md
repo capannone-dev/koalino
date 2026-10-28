@@ -2,8 +2,10 @@
 
 # Workflows
 
-`web-ci.yml` verifies the standalone Next.js dashboard with a pinned Node release on relevant
-pushes and pull requests.
+`web-ci.yml` verifies the standalone Next.js dashboard with Node 22 on relevant pushes and pull
+requests: `npm ci` from the lockfile (with npm caching), `npm run lint`, the Vitest component and
+API client tests with the verbose reporter (so each test is listed in the log), and
+`npm run build`. A newer push to the same branch cancels an older run.
 
 `flutter-ci.yml` runs `make flutter-lint` (`dart format --set-exit-if-changed` plus
 `flutter analyze`) and `make flutter-test` on pinned Flutter 3.47.8 for pushes and pull

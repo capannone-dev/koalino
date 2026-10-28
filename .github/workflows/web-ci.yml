@@ -1,4 +1,4 @@
-# Verifies the Node-based dashboard in GitHub Actions because the local sandbox lacks Node.js.
+# Verifies the Node-based dashboard (lint, component tests, build) in GitHub Actions on every relevant change.
 
 name: Web CI
 
@@ -8,6 +8,10 @@ on:
     paths: ["web/**", ".github/workflows/web-ci.yml"]
   pull_request:
     paths: ["web/**", ".github/workflows/web-ci.yml"]
+
+concurrency:
+  group: web-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify-web:
@@ -20,8 +24,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # `npm ci` installs exactly what package-lock.json pins and fails if the lockfile is stale.
       - name: Install web dependencies
-        run: npm install
-      - run: npm run lint
-      - run: npm run test
-      - run: npm run build
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      # The verbose reporter lists every test by name, so the run log shows which UI behaviors
+      # (for example the meeting rename dialog) were checked.
+      - name: Component and API client tests
+        run: npm run test -- --reporter=verbose
+      - name: Production build
+        run: npm run build
