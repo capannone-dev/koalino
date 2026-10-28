@@ -24,7 +24,7 @@ use std::{
     path::Path,
     sync::{Arc, Mutex, PoisonError},
     thread::JoinHandle,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -62,6 +62,11 @@ const FALLBACK_DEVICE_NAME: &str = "Note Taker device";
 
 /// Longest host name used as a default device name, matching `DeviceName`'s limit.
 const MAX_DEFAULT_NAME_CHARACTERS: usize = 64;
+
+/// How often the task looks for meetings written locally (by any connection or process) and
+/// sends them to connected devices, so a new transcript reaches them about a second after it
+/// is saved.
+const LOCAL_CHANGE_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Commands that may wait for the task before senders see back-pressure.
 const COMMAND_QUEUE_CAPACITY: usize = 64;
@@ -348,6 +353,8 @@ async fn run_service(
     mut command_receiver: mpsc::Receiver<P2pRequest>,
     mut stop: oneshot::Receiver<()>,
 ) {
+    let mut change_poll = tokio::time::interval(LOCAL_CHANGE_POLL_INTERVAL);
+    change_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         service.process_pending_events();
         let snapshot = snapshot_of(service);
@@ -362,6 +369,7 @@ async fn run_service(
         tokio::select! {
             _ = &mut stop => break,
             () = sleep_until_retry(next_retry_at) => {}
+            _ = change_poll.tick() => service.poll_local_changes(),
             swarm_result = service.transport_mut().drive_next_swarm_event() => {
                 if let Err(error) = swarm_result {
                     tracing::error!(error = %error, "the P2P swarm stopped");

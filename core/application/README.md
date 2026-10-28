@@ -90,6 +90,17 @@ Two cases need a restart around pairing:
   initiator has not confirmed. `next_retry_at` tells the task loop when to wake. Failures in
   between collapse into that one restart.
 
+`poll_local_changes`, run by the task about once a second, sends every meeting written since the
+last call to the connected peers. It reads `NoteRepository::document_changes_since`, so it sees
+writes from any connection or process: the recording pipeline, HTTP, the CLI, and the app. It also
+sees documents merged from one peer, which it forwards to the others, so a device connected only
+through another still gets changes at once.
+
+`MeetingCrdtService::apply_sync_message` saves only when a message added changes. Without that, a
+handshake between converged devices would advance the revision and the two devices would echo each
+other every second. A device that comes online later gets every meeting from whichever device it
+reaches, through the connect-time handshake.
+
 Errors about one event or peer are logged and processing continues. `p2p_service_tests.rs` pairs
 two services over real memory-transport swarms and checks that a meeting, then a rename, reach the
 other device.

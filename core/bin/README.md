@@ -67,6 +67,9 @@ HTTP runtime.
 - **Handle:** `P2pHandle` offers `command` (awaits a `P2pCommand` outcome), `notify_local_change`
   (non-blocking, callable from any thread), `snapshot` (status plus listen addresses), and
   `shutdown` (blocking, so callers run it in `spawn_blocking`).
+- **Loop:** the task wakes on swarm events, on commands, on scheduled sync retries, and on a
+  1-second tick that calls `poll_local_changes`. A transcript saved by the pipeline therefore
+  reaches connected devices about a second later.
 - **Daemon:** `daemon.rs` starts the task after the pipeline. A disabled or failed task is logged
   and is not fatal. The task is stopped after the Teams bridge at shutdown.
 

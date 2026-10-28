@@ -162,6 +162,8 @@ pub struct P2pService<Transport, Store, Repository> {
     retry_delay: Duration,
     /// Peers whose sync restarts at the given instant.
     scheduled_restarts: HashMap<DeviceId, Instant>,
+    /// The newest document revision already sent to connected peers.
+    last_seen_revision: u64,
 }
 
 impl<Transport, Store, Repository> P2pService<Transport, Store, Repository>
@@ -184,6 +186,7 @@ where
             recent_updates: VecDeque::new(),
             retry_delay: DEFAULT_RETRY_DELAY,
             scheduled_restarts: HashMap::new(),
+            last_seen_revision: 0,
         }
     }
 
@@ -206,7 +209,47 @@ where
     /// Side effects: Reads the allowlist and updates the transport's connection gate.
     pub fn start(&mut self) -> Result<(), P2pServiceError> {
         self.pairing_manager.load_trusted_peers()?;
-        self.refresh_trusted_devices()
+        self.refresh_trusted_devices()?;
+        // Earlier writes reach each peer through the handshake when it connects.
+        self.last_seen_revision = self
+            .sync_manager
+            .repository()
+            .document_changes_since(0)
+            .map_err(RepositorySyncManagerError::from)?
+            .latest_revision;
+        Ok(())
+    }
+
+    /// Sends every meeting written since the last call to the connected peers.
+    ///
+    /// The task calls this about once a second. It finds writes from any connection or process:
+    /// the recording pipeline saving a transcript, the HTTP API, the CLI, the app. It also finds
+    /// documents this task merged from one peer, so they are forwarded to the other connected
+    /// peers. A merge that adds nothing writes nothing, so devices never echo each other.
+    ///
+    /// Side effects: Reads document revisions and sends sync messages. Failures are logged and
+    /// retried on the next call, or at the peer's next connection.
+    pub fn poll_local_changes(&mut self) {
+        let changes = match self
+            .sync_manager
+            .repository()
+            .document_changes_since(self.last_seen_revision)
+        {
+            Ok(changes) => changes,
+            Err(error) => {
+                tracing::warn!(error = %error, "local changes could not be listed");
+                return;
+            }
+        };
+        self.last_seen_revision = changes.latest_revision;
+        for meeting_id in changes.meeting_ids {
+            if let Err(error) = self
+                .sync_manager
+                .notify_local_change(self.pairing_manager.transport_mut(), &meeting_id)
+            {
+                tracing::warn!(error = %error, "a local change could not be sent");
+            }
+        }
     }
 
     /// Handles everything the transport queued since the last call.

@@ -35,6 +35,22 @@ type Service = P2pService<Libp2pNetworkAdapter, SqlitePeerStore, SqliteNoteRepos
 
 /// Builds a service named `name` over `adapter`, with a fresh document-backed repository.
 fn service(name: &str, adapter: Libp2pNetworkAdapter) -> Service {
+    service_with_database(name, adapter).0
+}
+
+/// Opens another connection to a service's database, as the recording pipeline does.
+fn pipeline_connection(database_path: &PathBuf, name: &str) -> SqliteNoteRepository {
+    SqliteNoteRepository::open(
+        database_path,
+        DeviceId::new(name),
+        Arc::new(VoiceEncryptor::new(&EncryptionKey::from_bytes([3; 32]))),
+    )
+    .and_then(|repository| repository.with_document_codec(Arc::new(AutomergeMeetingDocumentCodec)))
+    .unwrap_or_else(|error| panic!("pipeline connection must open: {error}"))
+}
+
+/// Builds a service like `service` and also returns its database path.
+fn service_with_database(name: &str, adapter: Libp2pNetworkAdapter) -> (Service, PathBuf) {
     let directory = std::env::temp_dir().join(format!("p2p-service-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&directory)
         .unwrap_or_else(|error| panic!("scratch directory must be created: {error}"));
@@ -58,7 +74,7 @@ fn service(name: &str, adapter: Libp2pNetworkAdapter) -> Service {
     service
         .start()
         .unwrap_or_else(|error| panic!("service must start: {error}"));
-    service
+    (service, database_path)
 }
 
 /// Drives both swarms and both services until `condition` holds (5 s limit).
@@ -69,6 +85,8 @@ async fn drive(
 ) {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
+            laptop.poll_local_changes();
+            phone.poll_local_changes();
             laptop.process_pending_events();
             phone.process_pending_events();
             if condition(laptop, phone) {
@@ -290,5 +308,180 @@ async fn messages_dropped_before_mutual_trust_are_sent_again() {
     assert_eq!(
         stored_title(&laptop, &meeting_id).as_deref(),
         Some("Phone call")
+    );
+}
+
+/// Connects `dialer` to `listener` as already-paired devices, listening on `memory_address`.
+fn link(dialer: &mut Service, listener: &mut Service, memory_address: &str) {
+    let address: Multiaddr = memory_address
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    let dialer_id = dialer.transport().local_peer_id();
+    let listener_id = listener.transport().local_peer_id();
+    listener
+        .transport_mut()
+        .listen_on_memory(address.clone())
+        .and_then(|()| listener.transport_mut().trust_peer(&dialer_id))
+        .and_then(|()| dialer.transport_mut().trust_peer(&listener_id))
+        .and_then(|()| dialer.transport_mut().dial_memory(address))
+        .unwrap_or_else(|error| panic!("devices must link: {error}"));
+}
+
+/// Drives every service, as each daemon's loop would, until `condition` holds (5 s limit).
+async fn drive_all(
+    services: &mut [&mut Service],
+    mut condition: impl FnMut(&[&mut Service]) -> bool,
+) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            for service in services.iter_mut() {
+                service.poll_local_changes();
+                service.process_pending_events();
+            }
+            if condition(services) {
+                return;
+            }
+            for service in services.iter_mut() {
+                let _ = tokio::time::timeout(
+                    Duration::from_millis(5),
+                    service.transport_mut().drive_next_swarm_event(),
+                )
+                .await;
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("condition not reached before timeout"));
+}
+
+/// Reads the transcript of `meeting_id` on `service`'s device.
+fn stored_transcript(service: &Service, meeting_id: &MeetingId) -> Option<String> {
+    service
+        .repository()
+        .load_transcript(meeting_id)
+        .ok()
+        .flatten()
+        .map(|transcript| transcript.content().to_owned())
+}
+
+/// A transcript the recording pipeline saves through its own connection reaches the connected
+/// phone right away, without a reconnect.
+#[tokio::test]
+async fn a_transcript_saved_by_the_pipeline_reaches_a_connected_device_at_once() {
+    let (mut laptop, laptop_database) = service_with_database(
+        "Laptop",
+        Libp2pNetworkAdapter::new_for_memory_transport()
+            .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}")),
+    );
+    let mut phone = service(
+        "Phone",
+        Libp2pNetworkAdapter::new_for_memory_transport()
+            .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}")),
+    );
+    link(&mut laptop, &mut phone, "/memory/9371");
+    let phone_id = phone.transport().local_peer_id();
+    drive_all(&mut [&mut laptop, &mut phone], |services| {
+        services[0].transport().is_connected_to(&phone_id)
+    })
+    .await;
+
+    let meeting_id = MeetingId::new("meeting-live");
+    let pipeline = pipeline_connection(&laptop_database, "Laptop");
+    MeetingCrdtService::new(&pipeline)
+        .create_titled_meeting(&meeting_id, &title("Live recording"))
+        .and_then(|()| pipeline.save_transcript(&Transcript::new(meeting_id.clone(), "Ciao")))
+        .unwrap_or_else(|error| panic!("pipeline must save: {error}"));
+    drive_all(&mut [&mut laptop, &mut phone], |services| {
+        stored_transcript(services[1], &meeting_id).is_some()
+    })
+    .await;
+    pipeline
+        .save_transcript(&Transcript::new(meeting_id.clone(), "Ciao a tutti"))
+        .unwrap_or_else(|error| panic!("pipeline must save: {error}"));
+    drive_all(&mut [&mut laptop, &mut phone], |services| {
+        stored_transcript(services[1], &meeting_id).as_deref() == Some("Ciao a tutti")
+    })
+    .await;
+
+    assert_eq!(
+        stored_title(&phone, &meeting_id).as_deref(),
+        Some("Live recording")
+    );
+}
+
+/// A device connected only to a middle device still gets a new transcript at once: the middle
+/// device forwards what it receives.
+#[tokio::test]
+async fn changes_are_forwarded_to_devices_connected_only_through_another() {
+    let adapter = || {
+        Libp2pNetworkAdapter::new_for_memory_transport()
+            .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"))
+    };
+    let (mut laptop, laptop_database) = service_with_database("Laptop", adapter());
+    let mut desktop = service("Desktop", adapter());
+    let mut phone = service("Phone", adapter());
+    link(&mut laptop, &mut desktop, "/memory/9372");
+    link(&mut phone, &mut desktop, "/memory/9373");
+    let desktop_id = desktop.transport().local_peer_id();
+    drive_all(&mut [&mut laptop, &mut desktop, &mut phone], |services| {
+        services[0].transport().is_connected_to(&desktop_id)
+            && services[2].transport().is_connected_to(&desktop_id)
+    })
+    .await;
+
+    let meeting_id = MeetingId::new("meeting-relayed");
+    let pipeline = pipeline_connection(&laptop_database, "Laptop");
+    MeetingCrdtService::new(&pipeline)
+        .create_titled_meeting(&meeting_id, &title("Relayed"))
+        .and_then(|()| pipeline.save_transcript(&Transcript::new(meeting_id.clone(), "Ciao")))
+        .unwrap_or_else(|error| panic!("pipeline must save: {error}"));
+    drive_all(&mut [&mut laptop, &mut desktop, &mut phone], |services| {
+        stored_transcript(services[2], &meeting_id).is_some()
+    })
+    .await;
+
+    assert_eq!(
+        stored_title(&phone, &meeting_id).as_deref(),
+        Some("Relayed")
+    );
+}
+
+/// A device that was offline while a meeting was recorded gets it when it comes online, from a
+/// device that is online, even though the recorder itself is offline by then.
+#[tokio::test]
+async fn a_device_coming_online_later_gets_meetings_from_whoever_is_online() {
+    let adapter = || {
+        Libp2pNetworkAdapter::new_for_memory_transport()
+            .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"))
+    };
+    let (mut laptop, laptop_database) = service_with_database("Laptop", adapter());
+    let mut desktop = service("Desktop", adapter());
+    link(&mut laptop, &mut desktop, "/memory/9374");
+    let meeting_id = MeetingId::new("meeting-while-phone-offline");
+    let pipeline = pipeline_connection(&laptop_database, "Laptop");
+    MeetingCrdtService::new(&pipeline)
+        .create_titled_meeting(&meeting_id, &title("Phone was off"))
+        .and_then(|()| pipeline.save_transcript(&Transcript::new(meeting_id.clone(), "Ciao")))
+        .unwrap_or_else(|error| panic!("pipeline must save: {error}"));
+    drive_all(&mut [&mut laptop, &mut desktop], |services| {
+        stored_transcript(services[1], &meeting_id).is_some()
+    })
+    .await;
+    // The laptop goes offline; then the phone comes online and reaches only the desktop.
+    drop(laptop);
+    let mut phone = service("Phone", adapter());
+    link(&mut phone, &mut desktop, "/memory/9375");
+    drive_all(&mut [&mut desktop, &mut phone], |services| {
+        stored_transcript(services[1], &meeting_id).is_some()
+    })
+    .await;
+
+    assert_eq!(
+        stored_transcript(&phone, &meeting_id).as_deref(),
+        Some("Ciao")
+    );
+    assert_eq!(
+        stored_title(&phone, &meeting_id).as_deref(),
+        Some("Phone was off")
     );
 }
