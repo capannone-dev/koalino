@@ -8,7 +8,7 @@ use note_taker_core::{
         LOG_LEVEL_POLL_INTERVAL, LogLevelControlFile, LogLevelWatcher, LoggingConfiguration,
         LoggingRuntime, initialize_logging,
     },
-    application::crypto::key_manager::KeyManagerConfig,
+    application::{crypto::key_manager::KeyManagerConfig, p2p_service::P2pControl},
     device_identity::device_id_from_environment,
     domain::models::DeviceId,
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
@@ -83,7 +83,11 @@ async fn main() -> Result<()> {
         recording_controller.as_ref(),
     )
     .await;
-    let application_state = ServerAppState::new(note_repository, voice_store);
+    let mut application_state = ServerAppState::new(note_repository, voice_store);
+    if let Some(p2p_task) = &p2p_task {
+        application_state =
+            application_state.with_p2p_control(Arc::clone(p2p_task) as Arc<dyn P2pControl>);
+    }
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!(address = %bind_address, "headless Axum server started");
     axum::serve(listener, build_router(application_state))
@@ -191,7 +195,7 @@ async fn start_p2p_task(
     database_path: PathBuf,
     device_id: DeviceId,
     embedding_cipher: Arc<dyn note_taker_core::ports::crypto::EmbeddingCipher>,
-) -> Option<P2pHandle> {
+) -> Option<Arc<P2pHandle>> {
     let config = match P2pConfig::from_environment() {
         Ok(Some(config)) => config,
         Ok(None) => {
@@ -208,7 +212,7 @@ async fn start_p2p_task(
     })
     .await;
     match started {
-        Ok(Ok(p2p_task)) => Some(p2p_task),
+        Ok(Ok(p2p_task)) => Some(Arc::new(p2p_task)),
         Ok(Err(error)) => {
             tracing::warn!(error = %format!("{error:#}"), "P2P sync unavailable");
             None

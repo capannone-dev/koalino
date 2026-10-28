@@ -102,6 +102,39 @@ pub struct P2pStatus {
     pub recent_updates: Vec<PairingUpdate>,
 }
 
+/// What the Devices screens show, plus the node's listen addresses.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct P2pSnapshot {
+    /// Pairing and paired-device state.
+    pub status: P2pStatus,
+    /// Addresses the node listens on, as multiaddress text.
+    pub listen_addresses: Vec<String>,
+}
+
+/// Why a driving adapter's P2P request failed.
+#[derive(Debug, thiserror::Error)]
+pub enum P2pControlError {
+    /// The service refused the command, for example for a pairing that is not in progress.
+    #[error("{0}")]
+    Refused(String),
+    /// The P2P task is not running.
+    #[error("P2P sync is not running")]
+    Stopped,
+}
+
+/// Lets driving adapters, such as the HTTP routes, reach the running P2P task.
+#[async_trait::async_trait]
+pub trait P2pControl: Send + Sync {
+    /// Returns the latest snapshot. Side effects: None.
+    fn snapshot(&self) -> P2pSnapshot;
+
+    /// Runs `command` on the P2P task and returns its outcome.
+    ///
+    /// Outputs: The outcome, `Refused` when the command failed, or `Stopped`.
+    /// Side effects: Those of the command.
+    async fn command(&self, command: P2pCommand) -> Result<P2pCommandOutcome, P2pControlError>;
+}
+
 /// Pairing plus whole-repository sync over one shared transport.
 pub struct P2pService<Transport, Store, Repository> {
     /// Owns the transport and the allowlist.

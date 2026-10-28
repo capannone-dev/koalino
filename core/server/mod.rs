@@ -7,6 +7,10 @@
 pub mod api;
 #[cfg(test)]
 mod api_tests;
+/// Serves the `/api/p2p/*` pairing and device routes (Issue #43).
+pub mod p2p_routes;
+#[cfg(test)]
+mod p2p_routes_tests;
 /// Refuses DNS-rebinding hosts and foreign browser origins before any route runs.
 pub mod request_guard;
 #[cfg(test)]

@@ -37,6 +37,19 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
 - `POST /api/voice/assign` accepts `{"clip_id":"uuid","identity_id":"uuid"}` and returns `204`
   after `VoiceIdentityManager` stores a derived signature variant. It validates both UUIDs and
   never serializes the clip's temporary raw audio or embedding.
+- `/api/p2p/*` (Issue #43, `p2p_routes.rs`) drives the daemon's P2P task through the
+  `P2pControl` port, which `ServerAppState::with_p2p_control` attaches:
+  - `GET /api/p2p/status` returns this device (`local_peer_id`, `device_name`,
+    `listen_addresses`), `trusted_devices`, `nearby_devices`, `incoming_requests` and
+    `outgoing_pairings` with their six-digit `code`, and `recent_updates` tagged by `kind`.
+    Without P2P it returns `{"enabled":false}`.
+  - `POST /api/p2p/pairable`, `POST /api/p2p/pairings` (`{"peer_id"}`, returns `{"code"}`),
+    `POST /api/p2p/pairings/{peer_id}/confirm|cancel`, and
+    `POST /api/p2p/requests/{peer_id}/accept|reject` carry out the pairing steps.
+  - `DELETE /api/p2p/devices/{peer_id}` revokes a device (`404` when it was not paired). CORS
+    allows `DELETE`.
+  - Errors: a malformed peer ID returns `400` without reaching the task; a refused command `409`
+    with `{"error"}`; disabled or stopped P2P `503`.
 - `GET /api/telemetry` returns `task_count`, `total_duration_ms`, and `average_latency_ms`.
 - `GET /api/devices` returns telemetry-observed devices with `device_id`, feature-gated
   `supports_vad`, observed `supported_models`, and epoch-millisecond `last_seen`. Device data is

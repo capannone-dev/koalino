@@ -36,7 +36,9 @@ use crate::{
         storage::{sqlite_adapter::SqliteNoteRepository, sqlite_peer_store::SqlitePeerStore},
     },
     application::{
-        p2p_service::{P2pCommand, P2pCommandOutcome, P2pService, P2pStatus},
+        p2p_service::{
+            P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError, P2pService, P2pSnapshot,
+        },
         pairing_manager::PairingManager,
         repository_sync_manager::RepositorySyncManager,
     },
@@ -136,15 +138,6 @@ fn default_device_name(host_name: Option<&str>) -> Result<DeviceName> {
     }
 }
 
-/// What the Devices screens show, plus the task's listen addresses.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct P2pSnapshot {
-    /// Pairing and paired-device state.
-    pub status: P2pStatus,
-    /// Addresses the node listens on, as multiaddress text.
-    pub listen_addresses: Vec<String>,
-}
-
 /// One command and where to send its outcome (errors as text, without peer payloads).
 type P2pRequest = (
     P2pCommand,
@@ -169,15 +162,7 @@ impl P2pHandle {
     /// Outputs: The outcome, or an error when the command failed or the task has stopped.
     /// Side effects: Those of the command, carried out on the P2P thread.
     pub async fn command(&self, command: P2pCommand) -> Result<P2pCommandOutcome> {
-        let (reply_sender, reply_receiver) = oneshot::channel();
-        self.commands
-            .send((command, reply_sender))
-            .await
-            .map_err(|_| anyhow!("the P2P task has stopped"))?;
-        reply_receiver
-            .await
-            .map_err(|_| anyhow!("the P2P task stopped before answering"))?
-            .map_err(|reason| anyhow!(reason))
+        Ok(P2pControl::command(self, command).await?)
     }
 
     /// Reports that `meeting_id` was written locally, without waiting; callable from any thread.
@@ -223,6 +208,25 @@ impl P2pHandle {
         {
             tracing::error!("the P2P task panicked");
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl P2pControl for P2pHandle {
+    fn snapshot(&self) -> P2pSnapshot {
+        P2pHandle::snapshot(self)
+    }
+
+    async fn command(&self, command: P2pCommand) -> Result<P2pCommandOutcome, P2pControlError> {
+        let (reply_sender, reply_receiver) = oneshot::channel();
+        self.commands
+            .send((command, reply_sender))
+            .await
+            .map_err(|_| P2pControlError::Stopped)?;
+        reply_receiver
+            .await
+            .map_err(|_| P2pControlError::Stopped)?
+            .map_err(P2pControlError::Refused)
     }
 }
 

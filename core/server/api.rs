@@ -31,6 +31,7 @@ use crate::{
         export_manager::{ExportManager, ExportWriter},
         meeting_crdt::MeetingCrdtService,
         meeting_rename::{MeetingRenameError, rename_meeting},
+        p2p_service::P2pControl,
         unknown_speaker_clusterer::ClusteringError,
         voice_identity_manager::VoiceIdentityManager,
     },
@@ -65,6 +66,8 @@ pub struct ServerAppState {
     repositories: Arc<Mutex<Box<dyn ServerRepository>>>,
     voice_database: Arc<Mutex<Box<dyn VoiceVectorDB + Send>>>,
     event_publisher: broadcast::Sender<WebSocketEvent>,
+    /// The running P2P task, when P2P is enabled (Issue #43).
+    p2p_control: Option<Arc<dyn P2pControl>>,
 }
 
 impl ServerAppState {
@@ -87,6 +90,7 @@ impl ServerAppState {
             repositories: Arc::new(Mutex::new(Box::new(repositories))),
             voice_database: Arc::new(Mutex::new(Box::new(voice_database))),
             event_publisher,
+            p2p_control: None,
         }
     }
 
@@ -97,6 +101,19 @@ impl ServerAppState {
     /// Side effects: Delivers to current WebSocket receiver queues.
     pub fn publish_event(&self, event: WebSocketEvent) {
         let _ = self.event_publisher.send(event);
+    }
+
+    /// Attaches the running P2P task, which the `/api/p2p/*` routes drive.
+    ///
+    /// Side effects: None; without it those routes report P2P as disabled.
+    pub fn with_p2p_control(mut self, p2p_control: Arc<dyn P2pControl>) -> Self {
+        self.p2p_control = Some(p2p_control);
+        self
+    }
+
+    /// The attached P2P task, if any.
+    pub(super) fn p2p_control(&self) -> Option<Arc<dyn P2pControl>> {
+        self.p2p_control.clone()
     }
 }
 
@@ -142,6 +159,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         )
         .route("/api/telemetry/summary", get(get_telemetry_summary))
         .route("/ws", get(web_socket_upgrade))
+        .merge(super::p2p_routes::routes())
         // Innermost of the three layers, so CORS still answers preflights for allowed origins
         // and refusals are traced.
         .layer(middleware::from_fn(reject_cross_site_requests))
@@ -152,6 +170,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
                     axum::http::Method::GET,
                     axum::http::Method::POST,
                     axum::http::Method::PATCH,
+                    axum::http::Method::DELETE,
                 ])
                 .allow_headers([header::CONTENT_TYPE])
                 .expose_headers([header::CONTENT_DISPOSITION]),
