@@ -11,7 +11,14 @@ use rusqlite::Connection;
 use super::sqlite_peer_store::SqlitePeerStore;
 use crate::{
     application::crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
-    ports::{crypto::EmbeddingCipher, peer_trust::NodeIdentityStore},
+    domain::{
+        models::DeviceId,
+        peer_trust::{DeviceName, TrustedPeer},
+    },
+    ports::{
+        crypto::EmbeddingCipher,
+        peer_trust::{NodeIdentityStore, TrustedPeerStore},
+    },
 };
 
 /// A uniquely named directory under the system temp dir, removed on drop.
@@ -131,4 +138,76 @@ fn a_wrong_key_is_an_error_not_a_new_identity() {
             .load_or_insert_node_identity(b"replacement")
             .is_err()
     );
+}
+
+/// Builds a trusted-peer record with a valid name.
+fn trusted_peer(peer_id: &str, name: &str, paired_at_ms: u64) -> TrustedPeer {
+    TrustedPeer::new(
+        DeviceId::new(peer_id),
+        DeviceName::parse(name).unwrap_or_else(|error| panic!("valid name: {error}")),
+        paired_at_ms,
+    )
+}
+
+/// Trusted peers are listed in pairing order, and pairing again updates the name and time.
+#[test]
+fn trusting_lists_peers_and_re_pairing_updates_them() {
+    let store = SqlitePeerStore::open_in_memory(fixed_cipher())
+        .unwrap_or_else(|error| panic!("peer store must open: {error}"));
+
+    for peer in [
+        trusted_peer("peer-phone", "Phone", 2_000),
+        trusted_peer("peer-laptop", "Laptop", 1_000),
+        trusted_peer("peer-phone", "Work phone", 3_000),
+    ] {
+        store
+            .trust_peer(&peer)
+            .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+    }
+    let peers = store
+        .trusted_peers()
+        .unwrap_or_else(|error| panic!("peers must list: {error}"));
+
+    assert_eq!(
+        peers,
+        vec![
+            trusted_peer("peer-laptop", "Laptop", 1_000),
+            trusted_peer("peer-phone", "Work phone", 3_000),
+        ]
+    );
+    assert!(
+        store
+            .is_trusted(&DeviceId::new("peer-phone"))
+            .unwrap_or_else(|error| panic!("trust must be queryable: {error}"))
+    );
+    assert!(
+        !store
+            .is_trusted(&DeviceId::new("peer-stranger"))
+            .unwrap_or_else(|error| panic!("trust must be queryable: {error}"))
+    );
+}
+
+/// Revoking removes the peer, reports whether it existed, and persists across reopening.
+#[test]
+fn revoking_a_peer_removes_it_persistently() {
+    let scratch = ScratchDirectory::new();
+    let store = open_store(&scratch.database_path());
+    store
+        .trust_peer(&trusted_peer("peer-phone", "Phone", 1))
+        .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+
+    let revoked = store
+        .revoke_peer(&DeviceId::new("peer-phone"))
+        .unwrap_or_else(|error| panic!("revoke must succeed: {error}"));
+    let revoked_again = store
+        .revoke_peer(&DeviceId::new("peer-phone"))
+        .unwrap_or_else(|error| panic!("revoke must succeed: {error}"));
+    drop(store);
+    let reopened_peers = open_store(&scratch.database_path())
+        .trusted_peers()
+        .unwrap_or_else(|error| panic!("peers must list: {error}"));
+
+    assert!(revoked);
+    assert!(!revoked_again);
+    assert!(reopened_peers.is_empty());
 }

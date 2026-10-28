@@ -64,6 +64,10 @@ sealed with `EmbeddingCipher::seal_secret` under the context `p2p_node_identity`
 is written with `INSERT OR IGNORE` and the stored row is read back, so processes starting together
 agree on one identity. If the stored row can't be opened (wrong key), that's an error: replacing
 it would orphan every paired device.
+It also implements `TrustedPeerStore`. The table
+`p2p_trusted_peers(peer_id PRIMARY KEY, device_name, paired_at_ms)` is the sync allowlist. Pairing
+again upserts the name and time, and revoking deletes the row. Peer IDs and names are not
+secret, so these rows are not sealed.
 
 `sqlite_voice_vector_db.rs` implements `VoiceVectorDB` on the same SQLite file as the note
 repository, through its own connection with a 5 s busy timeout:

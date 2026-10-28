@@ -122,6 +122,23 @@ pub enum MeetingTitleError {
     ControlCharacter,
 }
 
+/// Describes why user-supplied text is not a valid paired-device name.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum DeviceNameError {
+    /// The name is empty or contains only whitespace.
+    #[error("device name must not be blank")]
+    Blank,
+    /// The trimmed name is longer than the allowed number of characters.
+    #[error("device name must be at most {max_characters} characters")]
+    TooLong {
+        /// The maximum number of Unicode scalar values.
+        max_characters: usize,
+    },
+    /// The name contains a control character such as a newline or terminal escape.
+    #[error("device name must not contain control characters")]
+    ControlCharacter,
+}
+
 /// Describes a meeting export that could not be selected, rendered, or written.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ExportError {
