@@ -87,6 +87,16 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     COMPONENT Runtime)
 endif()
 
+# Install the Rust core DLL staged by tools/cross/build-flutter-native.sh beside the executable;
+# Dart opens it by name. Without it the app starts but every native call reports an error.
+set(NOTE_TAKER_CORE_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/../native/windows/note_taker_core.dll")
+if(EXISTS "${NOTE_TAKER_CORE_LIBRARY}")
+  install(FILES "${NOTE_TAKER_CORE_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+else()
+  message(WARNING "Rust core not staged; run tools/cross/build-flutter-native.sh windows")
+endif()
+
 # Copy the native assets provided by the hook/build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

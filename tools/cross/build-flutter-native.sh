@@ -3,7 +3,9 @@
 # where the Flutter app's builds pick it up:
 #   linux   -> ui/native/linux/libnote_taker_core.so (installed into the bundle's lib/ by CMake)
 #   android -> ui/android/app/src/main/jniLibs/arm64-v8a/ (with the NDK's libc++_shared.so)
-# Both staging directories are gitignored. Usage: build-flutter-native.sh linux|android ...
+#   windows -> ui/native/windows/note_taker_core.dll (installed beside the runner by CMake;
+#              release only: a debug DLL exports more than Windows' 65,535-symbol limit)
+# The staging directories are gitignored. Usage: build-flutter-native.sh linux|android|windows ...
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 # shellcheck source=env.sh
@@ -24,8 +26,13 @@ for platform in "$@"; do
       cp "$CARGO_TARGET_DIR/aarch64-linux-android/release/libnote_taker_core.so" "$jni/"
       cp "$NDK_BIN/../sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$jni/"
       ;;
+    windows)
+      cargo zigbuild --release --features local-ai --lib --target x86_64-pc-windows-gnu
+      mkdir -p ui/native/windows
+      cp "$CARGO_TARGET_DIR/x86_64-pc-windows-gnu/release/note_taker_core.dll" ui/native/windows/
+      ;;
     *)
-      echo "usage: $0 linux|android ..." >&2
+      echo "usage: $0 linux|android|windows ..." >&2
       exit 2
       ;;
   esac
