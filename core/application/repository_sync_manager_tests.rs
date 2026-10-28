@@ -100,12 +100,13 @@ impl P2pNetwork for ScriptedNetwork {
 }
 
 /// A device's sync manager over its own repository.
-type DeviceManager = RepositorySyncManager<SqliteNoteRepository, LinkedNetwork>;
+type DeviceManager = RepositorySyncManager<SqliteNoteRepository>;
 
-/// One simulated device: its sync manager (which owns the repository) and its inbox.
+/// One simulated device: its sync manager (which owns the repository), network, and inbox.
 struct Device {
     device_id: DeviceId,
     manager: DeviceManager,
+    network: LinkedNetwork,
     inbox: Inbox,
 }
 
@@ -198,7 +199,8 @@ fn linked_devices(first_name: &str, second_name: &str) -> (Device, Device) {
             peer_inbox: Rc::clone(peer_inbox),
         };
         Device {
-            manager: RepositorySyncManager::new(device_repository(name), network),
+            manager: RepositorySyncManager::new(device_repository(name)),
+            network,
             device_id: DeviceId::new(name),
             inbox: Rc::clone(own_inbox),
         }
@@ -218,7 +220,7 @@ fn run_until_quiet(first: &mut Device, second: &mut Device) {
         for device in [&mut *first, &mut *second] {
             device
                 .manager
-                .process_next_network_event()
+                .process_next_network_event(&mut device.network)
                 .unwrap_or_else(|error| panic!("sync step must succeed: {error}"));
         }
     }
@@ -315,7 +317,7 @@ fn a_local_change_after_connecting_reaches_the_connected_peer() {
         .unwrap_or_else(|error| panic!("rename must succeed: {error}"));
     laptop
         .manager
-        .notify_local_change(&meeting_id)
+        .notify_local_change(&mut laptop.network, &meeting_id)
         .unwrap_or_else(|error| panic!("change notification must succeed: {error}"));
     run_until_quiet(&mut laptop, &mut phone);
 
@@ -337,7 +339,7 @@ fn a_meeting_recorded_after_connecting_reaches_the_connected_peer() {
     laptop.record_meeting(&meeting_id, "Late call");
     laptop
         .manager
-        .notify_local_change(&meeting_id)
+        .notify_local_change(&mut laptop.network, &meeting_id)
         .unwrap_or_else(|error| panic!("change notification must succeed: {error}"));
     run_until_quiet(&mut laptop, &mut phone);
 
@@ -373,14 +375,15 @@ fn unknown_meetings_beyond_the_pending_bound_are_refused() {
             }
         })
         .collect();
-    let mut manager = RepositorySyncManager::new(repository, ScriptedNetwork { events });
+    let mut manager = RepositorySyncManager::new(repository);
+    let mut network = ScriptedNetwork { events };
 
     for _ in 0..MAX_PENDING_REMOTE_MEETINGS {
         manager
-            .process_next_network_event()
+            .process_next_network_event(&mut network)
             .unwrap_or_else(|error| panic!("a handshake within the bound must succeed: {error}"));
     }
-    let over_bound = manager.process_next_network_event();
+    let over_bound = manager.process_next_network_event(&mut network);
 
     assert!(matches!(
         over_bound,

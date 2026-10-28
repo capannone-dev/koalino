@@ -58,6 +58,9 @@ devices. It replaces the single-meeting `SyncManager` for the daemon's P2P task:
 - **Local changes:** `notify_local_change(meeting_id)` sends a local write, or a new local meeting,
   to every connected peer.
 - **Disconnect:** an expired peer's state is dropped.
+- **Shared adapter:** the manager borrows the network on each call rather than owning it, so the
+  P2P task can share one adapter with `PairingManager`. `peer_connected` starts syncing with a
+  device as soon as its pairing completes.
 
 `repository_sync_manager_tests.rs` runs two document-backed SQLite repositories over a linked
 in-process network.
