@@ -32,6 +32,10 @@ pub mod file_sync_manager;
 mod file_sync_manager_tests;
 /// Coordinates Automerge meeting documents through storage ports.
 pub mod meeting_crdt;
+/// Implements the meeting-document schema: origin, transcript, and segments (Issue #43).
+pub mod meeting_document;
+#[cfg(test)]
+mod meeting_document_tests;
 /// Coordinates recording transcription and transcript persistence.
 pub mod meeting_recorder;
 /// Renames a meeting after validating the new title, for the CLI, HTTP, and FFI adapters.

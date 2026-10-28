@@ -21,6 +21,10 @@ candidate scores through the port. It also persists `SpeakerIdentity` names
 `list_speaker_identities`); `delete_identity` removes a name together with its variants. A
 persistent adapter may reject variants for identities that were never saved.
 
+`MeetingDocumentCodec` (`meeting_document.rs`) reads and edits serialized meeting documents for
+storage adapters, so they keep the SQLite index in step with the document inside their own
+transactions without linking the CRDT library.
+
 `NodeIdentityStore` (`peer_trust.rs`) keeps this node's encoded P2P identity. Implementations seal it
 at rest and keep the first stored value, so concurrent first starts agree (Issue #43).
 `TrustedPeerStore` in the same file holds the allowlist of paired devices: `trust_peer` (an upsert),

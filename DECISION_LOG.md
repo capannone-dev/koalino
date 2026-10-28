@@ -969,3 +969,30 @@ The owner decided the following after the v1.0 audit:
   - `pyannote-rs` and `speakrs`: maintenance and maturity risk;
   - a Python sidecar: a new runtime, and no Android support;
   - cloud diarization: audio would leave the device.
+
+## 2026-10-28 — #43 sync data model: the Automerge document is the source of truth (owner chose A)
+
+- **Contents:** the meeting's Automerge document holds everything that syncs:
+  - the title and notes, as before;
+  - the origin (`created_at`, acquisition device);
+  - the transcript text;
+  - the transcript segments, a map keyed by `<start_ms>-<end_ms>`, with per-field values so that
+    a speaker relink on one device merges with edits on another.
+- **SQLite index:** the `transcript` column and the `transcript_segments` table become an index
+  derived from the document.
+- **Rejected:** B, append-only record replication, which would mean a second protocol to secure.
+- **Mechanism:** a `MeetingDocumentCodec` port, implemented by
+  `application::meeting_document`, is injected into `SqliteNoteRepository`, the same pattern as
+  `EmbeddingCipher`.
+  - **Local writes:** `save_transcript` and `save_transcript_segments` edit the document and the
+    index in one SQLite transaction, so they can't diverge after a crash. Callers are unchanged.
+  - **Every document save,** including after a remote merge, re-derives the index from the
+    fields the document contains.
+- **Migration:** legacy meetings whose rows predate this change are copied into their document
+  once, at open time, before any projection could wipe them.
+- **What stays local:**
+  - unknown-speaker clusters, chunk embeddings, and review clips (biometric review data on the
+    recording device);
+  - attachments' file bytes (`FileSyncManager`).
+- **Voice library:** replicated separately later. Embeddings must never sit unsealed in a
+  document BLOB.

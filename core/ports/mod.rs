@@ -14,6 +14,8 @@ pub mod external_bridge;
 pub mod file_transfer;
 /// Declares attachment metadata extraction contracts.
 pub mod media;
+/// Declares how meeting data is read from and written into the meeting's CRDT document.
+pub mod meeting_document;
 /// Declares contracts for encrypted P2P transport and discovery.
 pub mod network;
 /// Declares persistence for this node's P2P identity and its trusted peers.

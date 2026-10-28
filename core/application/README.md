@@ -8,6 +8,18 @@ Application services implement workflows such as recording processing and comput
 an application-visible reachability view. It has no dependency on libp2p identities, swarm events,
 or socket APIs.
 
+`meeting_document.rs` (Issue #43) implements `MeetingDocumentCodec`, the schema that makes the
+Automerge document the source of truth for everything that syncs:
+
+- **`origin`:** a map, written once.
+- **`transcript`:** a string.
+- **`segments`:** a map keyed by `<start_ms:012>-<end_ms:012>[-n]`. Each segment's fields are
+  separate CRDT registers, so a speaker relink on one device and a text fix on another both
+  survive a merge.
+- **`with_segments`:** writes only the fields that changed and deletes segments that are gone.
+- **`project`:** skips malformed peer entries with a warning, and a field the document lacks
+  projects as `None`.
+
 `pairing_manager.rs` (Issue #43) pairs the owner's devices by numeric comparison:
 
 - **Pairable device:** `make_pairable` opens its pairing window.
