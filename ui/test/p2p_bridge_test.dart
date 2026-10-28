@@ -124,5 +124,22 @@ void main() {
         'device_name': 'laptop',
       });
     });
+
+    test('build-time peer addresses are passed as a list, blanks dropped', () {
+      final Map<String, Object?> configuration =
+          jsonDecode(appConfigurationJson(
+        dataDirectory: '/data/note_taker',
+        deviceName: 'Android device',
+        whisperModelPath: null,
+        isAndroid: false,
+        p2pPeersDefine:
+            ' /ip4/127.0.0.1/tcp/14001/p2p/12D3KooWA ,,/ip4/10.0.0.2/tcp/4001/p2p/12D3KooWB',
+      )) as Map<String, Object?>;
+
+      expect(configuration['p2p_peers'], <String>[
+        '/ip4/127.0.0.1/tcp/14001/p2p/12D3KooWA',
+        '/ip4/10.0.0.2/tcp/4001/p2p/12D3KooWB',
+      ]);
+    });
   });
 }

@@ -46,3 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Rust core libraries staged by tools/cross/build-flutter-native.sh.
+/native/
+/android/app/src/main/jniLibs/

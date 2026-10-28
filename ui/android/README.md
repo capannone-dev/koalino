@@ -7,6 +7,24 @@ Flutter owns this standard Gradle and Android embedding scaffold. Application lo
 wiring required for background recording and lock-screen controls without placing Android service
 code in the Rust core.
 
+## Native libraries and device sync
+
+`tools/cross/build-flutter-native.sh android` builds the Rust core for `arm64-v8a` and copies it
+into `app/src/main/jniLibs/arm64-v8a/` with the NDK's `libc++_shared.so`, which whisper.cpp links
+against; Gradle packages both. The directory is gitignored.
+
+The manifest requests `INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`, and
+`CHANGE_WIFI_MULTICAST_STATE` for libp2p and mDNS. `MainActivity` holds a Wi-Fi multicast lock
+while the app is visible, because Android drops mDNS packets otherwise; background sync is
+Issue #47.
+
+The root `build.gradle.kts` raises plugin libraries' `compileSdk` to 36 after they are evaluated,
+because file_picker 8 still compiles against 34 while its AndroidX dependencies require 36.
+
+For a development build that must reach devices mDNS cannot see, such as VMs through
+`adb reverse`, compile peer addresses in:
+`flutter build apk --dart-define=NOTE_TAKER_P2P_PEERS=/ip4/127.0.0.1/tcp/14001/p2p/<peer id>`.
+
 ## Lifecycle contract
 
 The Rust library owns one process-wide recorder behind a `OnceLock<Mutex<...>>`. Any Android UI,

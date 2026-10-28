@@ -1,5 +1,7 @@
 // Starts the Flutter client with presentation state connected only to the Rust FFI bridges.
 
+import 'dart:async';
+
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/attachment_controller.dart';
@@ -25,7 +27,8 @@ import 'package:note_taker_ui/presentation/telemetry_dashboard_screen.dart';
 /// Inputs: The platform's application-support directory, from `configureCore`.
 /// Outputs: None; Flutter owns the process event loop after this function returns.
 /// Side effects: Creates the app's data directory, opens the Rust shared library, stores its
-/// settings before any other native call, and renders the application window.
+/// settings before any other native call, renders the application window, then opens the
+/// runtime (database and device sync) in the background.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // A non-zero status leaves the core on its defaults; the screens then report their own errors.
@@ -34,6 +37,8 @@ Future<void> main() async {
     recordingBridge: RustRecordingBridge(),
   );
   runApp(NoteTakerApp(recordingController: recordingController));
+  // Starts sync without delaying the first frame; a failure surfaces on the screens.
+  unawaited(startCore());
 }
 
 /// Configures the application-wide Material 3 theme and the adaptive navigation shell.

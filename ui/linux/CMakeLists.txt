@@ -106,6 +106,16 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     COMPONENT Runtime)
 endforeach(bundled_library)
 
+# Bundle the Rust core library staged by tools/cross/build-flutter-native.sh; Dart opens it by
+# name from lib/. Without it the app starts but every native call reports an error.
+set(NOTE_TAKER_CORE_LIBRARY "${CMAKE_CURRENT_SOURCE_DIR}/../native/linux/libnote_taker_core.so")
+if(EXISTS "${NOTE_TAKER_CORE_LIBRARY}")
+  install(FILES "${NOTE_TAKER_CORE_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+else()
+  message(WARNING "Rust core not staged; run tools/cross/build-flutter-native.sh linux")
+endif()
+
 # Copy the native assets provided by the hook/build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"

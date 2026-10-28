@@ -15,6 +15,14 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+// Plugins such as file_picker 8 still compile against API 34, while their AndroidX dependencies
+// now require 36. Raising only compileSdk (not targetSdk) changes no runtime behaviour.
+subprojects {
+    // After evaluation, so it overrides the value the plugin's own build script sets.
+    afterEvaluate {
+        extensions.findByType<com.android.build.gradle.LibraryExtension>()?.compileSdk = 36
+    }
+}
 subprojects {
     project.evaluationDependsOn(":app")
 }
