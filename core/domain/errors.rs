@@ -237,7 +237,7 @@ pub enum CryptoError {
         reason: String,
     },
     /// The platform keychain does not exist on this machine (for example headless Linux without a
-    /// Secret Service); the key manager falls back to the key file.
+    /// Secret Service). Unlocking fails with it; there is no key-file fallback.
     #[error("platform keychain unavailable: {reason}")]
     KeychainUnavailable {
         /// A reason from the platform that contains no key material.

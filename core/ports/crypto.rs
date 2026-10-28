@@ -176,7 +176,7 @@ pub trait EncryptionMetadataRepository {
 /// Implementations are the macOS Keychain, the Windows Credential Manager, and the Secret Service
 /// on Linux (`adapters::keychain`), or an in-memory double in tests. Errors distinguish a store
 /// that does not exist on this machine (`KeychainUnavailable`) from one that refused or failed an
-/// operation (`Keychain`); the key manager falls back to the key file in both cases.
+/// operation (`Keychain`); the key manager reports both, without a key-file fallback.
 pub trait KeychainStore: Send + Sync {
     /// Reads the stored key bytes.
     ///

@@ -147,8 +147,9 @@ failed bridge is logged and the daemon keeps running.
 `storage_composition.rs` (`open_encrypted_stores`) is shared by all three roots. It opens the
 `encryption_meta` record, unlocks and verifies the embedding key through `KeyManager`
 (`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, else the random key in the platform keychain via
-`PlatformKeychain`, migrating or falling back to the key file in `NOTE_TAKER_ENCRYPTION_KEY_DIR`
-or `~/.note_taker`; `NOTE_TAKER_KEYCHAIN_ENABLED=false` skips the keychain), and only then opens `SqliteNoteRepository` and `SqliteVoiceVectorDB` with one
+`PlatformKeychain`, migrating an old key file from `NOTE_TAKER_ENCRYPTION_KEY_DIR` or
+`~/.note_taker`; an unreachable keychain stops start-up with an error;
+`NOTE_TAKER_KEYCHAIN_ENABLED=false` uses the key file instead), and only then opens `SqliteNoteRepository` and `SqliteVoiceVectorDB` with one
 shared cipher. A wrong key stops start-up with a readable error before any embedding is read.
 `open_note_repository` is the one place that opens `SqliteNoteRepository` for production: it
 attaches `AutomergeMeetingDocumentCodec`, so every root (daemon, pipeline worker, Teams bridge)

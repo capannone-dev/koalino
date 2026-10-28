@@ -11,8 +11,8 @@
 //!   environment.
 //! - **Random key** (no passphrase): a random 256-bit key is generated once. It lives in the
 //!   platform keychain (`KeychainStore`, Issue #40) when one is injected and
-//!   `NOTE_TAKER_KEYCHAIN_ENABLED` is not false. Otherwise, or when the keychain is unavailable
-//!   or fails, it lives in `encryption.key` (owner-only permissions) inside
+//!   `NOTE_TAKER_KEYCHAIN_ENABLED` is not false. Only when the keychain is disabled that way does
+//!   it live in `encryption.key` (owner-only permissions) inside
 //!   `NOTE_TAKER_ENCRYPTION_KEY_DIR`, or `~/.note_taker` by default. The key file protects a
 //!   database file that leaks on its own, but not against an attacker who can read the user's
 //!   files; the keychain additionally keeps the key off the data disk and behind the OS login.
@@ -22,12 +22,13 @@
 //! - Entry present: it is used. A leftover key file with the same key (an interrupted migration)
 //!   is deleted; a key file with a different key is kept and tried as well.
 //! - Entry absent, key file present: the file's key is migrated. It is written to the keychain,
-//!   read back, and the file is deleted only when the read-back matches; otherwise the file is
-//!   kept and used.
-//! - Entry absent, no key file: a new database gets a fresh key in the keychain (or in the file if
-//!   the keychain cannot store it); an encrypted database fails with `KeyMissing`.
-//! - Keychain unavailable or failing: the key file is used as before, with a logged warning
-//!   (unavailable) or error (access failure).
+//!   read back, and the file is deleted only when the read-back matches; otherwise unlocking
+//!   fails and the file is kept for a later attempt.
+//! - Entry absent, no key file: a new database gets a fresh key in the keychain; an encrypted
+//!   database fails with `KeyMissing`.
+//! - Keychain unavailable or failing: unlocking fails with `KeychainUnavailable` or `Keychain`.
+//!   There is no silent fallback to a key file (owner decision, see `DECISION_LOG.md`), so the
+//!   caller reports the error or offers a retry.
 //!
 //! Every unlock verifies the database's key-check value, so a wrong passphrase or a replaced key
 //! file is reported before any embedding is read or migrated. The returned `VoiceEncryptor`
@@ -342,12 +343,13 @@ impl KeyManager {
         self.keychain.as_deref()
     }
 
-    /// Resolves the random key through the keychain, migrating or falling back to the key file.
+    /// Resolves the random key through the keychain, migrating an old key file into it.
     ///
     /// Inputs: Whether a missing key may be generated.
-    /// Outputs: The key(s) to try, or `Keychain` (corrupt entry), `KeyMissing`, or `KeyFile`.
-    /// Side effects: Reads and may write the keychain; may create, read, or delete the key file.
-    /// Logs every fallback and migration outcome without key material.
+    /// Outputs: The key(s) to try, or `KeychainUnavailable` / `Keychain` (unreachable, failing,
+    /// or corrupt entry), `KeyMissing`, or `KeyFile`.
+    /// Side effects: Reads and may write the keychain; may read or delete a key file, and creates
+    /// one only when the keychain is disabled. Logs failures and migrations without key material.
     fn random_keys(&self, need: RandomKeyNeed) -> Result<RandomKeys, CryptoError> {
         let Some(keychain) = self.active_keychain() else {
             return self.key_file_key(need).map(RandomKeys::single);
@@ -361,14 +363,8 @@ impl KeyManager {
                 .key_without_keychain_entry(keychain, need)
                 .map(RandomKeys::single),
             Err(keychain_error) => {
-                log_keychain_failure(keychain, &keychain_error, "using the key file instead");
-                if need == RandomKeyNeed::MustExist && !self.key_file_exists() {
-                    return Err(self.key_missing(&format!(
-                        "{} could not be read ({keychain_error})",
-                        keychain.location()
-                    )));
-                }
-                self.key_file_key(need).map(RandomKeys::single)
+                log_keychain_failure(keychain, &keychain_error, "the database cannot be unlocked");
+                Err(keychain_error)
             }
         }
     }
@@ -376,9 +372,9 @@ impl KeyManager {
     /// Resolves the key when the keychain is reachable but has no entry.
     ///
     /// Inputs: The keychain and whether a missing key may be generated.
-    /// Outputs: The migrated or new key, or `KeyMissing` / `KeyFile` errors.
+    /// Outputs: The migrated or new key, or `KeyMissing` / `KeyFile` / keychain errors.
     /// Side effects: Migrates an existing key file (see `migrate_key_file`), or stores a new key
-    /// in the keychain, falling back to a new key file when the keychain cannot keep it.
+    /// in the keychain. Never writes a key file.
     fn key_without_keychain_entry(
         &self,
         keychain: &dyn KeychainStore,
@@ -402,12 +398,8 @@ impl KeyManager {
                 Ok(stored_key)
             }
             Err(keychain_error) => {
-                log_keychain_failure(
-                    keychain,
-                    &keychain_error,
-                    "storing the new key in the key file instead",
-                );
-                load_or_create_key_file(&key_file_path?)
+                log_keychain_failure(keychain, &keychain_error, "the new key was not stored");
+                Err(keychain_error)
             }
         }
     }
@@ -460,13 +452,6 @@ impl KeyManager {
         }
     }
 
-    /// Reports whether the key file exists.
-    fn key_file_exists(&self) -> bool {
-        self.config
-            .key_file_path()
-            .is_ok_and(|key_file_path| key_file_path.exists())
-    }
-
     /// Builds the `KeyMissing` error naming the keychain state and the key file.
     ///
     /// Inputs: What happened to the keychain entry.
@@ -516,8 +501,8 @@ fn verify_random_keys(
 /// Copies the key file's key into the keychain and deletes the file once the copy is verified.
 ///
 /// Inputs: The keychain and the existing key file.
-/// Outputs: The file's key (also when migration fails), or a `KeyFile` error for an unreadable or
-/// invalid file, in which case nothing is migrated.
+/// Outputs: The file's key once the keychain holds it, a `KeyFile` error for an unreadable or
+/// invalid file, or a keychain error when the copy fails, so the file is not used instead.
 /// Side effects: Writes and reads back the keychain entry; deletes the file only when the
 /// read-back equals the file. Any failure keeps the file and logs an error.
 fn migrate_key_file(
@@ -534,17 +519,28 @@ fn migrate_key_file(
             );
             delete_migrated_key_file(key_file_path);
         }
-        Ok(_) => tracing::error!(
-            keychain = keychain.location(),
-            path = %key_file_path.display(),
-            "Encryption key migration failed: the keychain returned a different key; keeping the key file"
-        ),
-        Err(keychain_error) => tracing::error!(
-            keychain = keychain.location(),
-            path = %key_file_path.display(),
-            error = %keychain_error,
-            "Encryption key migration to the platform keychain failed; keeping the key file"
-        ),
+        Ok(_) => {
+            tracing::error!(
+                keychain = keychain.location(),
+                path = %key_file_path.display(),
+                "Encryption key migration failed: the keychain returned a different key; keeping the key file"
+            );
+            return Err(CryptoError::Keychain {
+                reason: format!(
+                    "{} returned a different key than the one written; the key file was kept",
+                    keychain.location()
+                ),
+            });
+        }
+        Err(keychain_error) => {
+            tracing::error!(
+                keychain = keychain.location(),
+                path = %key_file_path.display(),
+                error = %keychain_error,
+                "Encryption key migration to the platform keychain failed; keeping the key file"
+            );
+            return Err(keychain_error);
+        }
     }
     Ok(file_key)
 }

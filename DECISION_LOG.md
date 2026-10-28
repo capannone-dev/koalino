@@ -996,3 +996,19 @@ The owner decided the following after the v1.0 audit:
   - attachments' file bytes (`FileSyncManager`).
 - **Voice library:** replicated separately later. Embeddings must never sit unsealed in a
   document BLOB.
+
+## Encryption key storage: no silent key-file fallback (2026-10-28)
+
+The owner decided:
+
+- **No silent fallback.** When the keychain is enabled and can't be reached, or refuses to store
+  or read the key, the core no longer falls back to a key file:
+  - the daemon and the CLI exit with an error;
+  - the Flutter app shows the error with Retry.
+- **Explicit opt-out stays.** `NOTE_TAKER_KEYCHAIN_ENABLED=false` without a passphrase still
+  uses a key file, but only because someone chose it.
+- **Migration stays.** An existing key file is still migrated into a working keychain and then
+  deleted.
+- **Android uses the Android Keystore.** The random key is wrapped by a non-exportable,
+  hardware-backed Keystore AES-GCM key, through a small Kotlin bridge with Android SDK APIs only
+  (no new library). If the Keystore fails, the app shows the error with Retry, not a key file.

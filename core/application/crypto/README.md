@@ -56,7 +56,7 @@ There are two sources. A **passphrase**, or a **random key** that lives in the p
 | --- | --- | --- |
 | `NOTE_TAKER_ENCRYPTION_PASSPHRASE` | unset | Derive the key from the passphrase. The keychain and key file are never used, and the passphrase is never stored. |
 | `NOTE_TAKER_KEYCHAIN_ENABLED` | `true` | `false`, `0`, `no`, or `off` (any case) forces the key file. Any other value keeps the keychain. |
-| `NOTE_TAKER_ENCRYPTION_KEY_DIR` | `~/.note_taker` | Directory of the fallback key file and of the old key file to migrate. |
+| `NOTE_TAKER_ENCRYPTION_KEY_DIR` | `~/.note_taker` | Directory of the key file (keychain disabled) and of an old key file to migrate. |
 
 Keychain entries (implemented in `core/adapters/keychain/`):
 
@@ -65,12 +65,13 @@ Keychain entries (implemented in `core/adapters/keychain/`):
 | macOS | Keychain Services | Generic password, service `note-taker`, account `encryption-key` |
 | Windows | Credential Manager | Generic credential, target name `note-taker:encryption-key` |
 | Linux / BSD | Secret Service (D-Bus) | Attributes `service=note-taker`, `username=encryption-key` |
-| iOS, Android | none yet | Always falls back to the key file; set `NOTE_TAKER_ENCRYPTION_KEY_DIR` to the app's private directory |
+| Android | Android Keystore (planned, see `DECISION_LOG.md`) | Until then the Flutter app sets `keychain_enabled: false`, so the key file lives in the app's private directory |
+| iOS | none yet | Set `NOTE_TAKER_KEYCHAIN_ENABLED=false` and `NOTE_TAKER_ENCRYPTION_KEY_DIR` to the app's private directory |
 
 The entry is per user, not per database: every database on the machine that uses a random key
 shares it, just as they shared `~/.note_taker/encryption.key`.
 
-### Resolution, migration, and fallback
+### Resolution and migration
 
 Without a passphrase, `KeyManager` resolves the random key on every unlock:
 
@@ -81,23 +82,24 @@ keychain entry present ───────────▶ use it
                             different → keep the file and try both against the key check
 keychain entry absent
    ├ key file present ─▶ migrate: store in keychain, read back, compare
-   │                       equal → delete the file      otherwise → keep the file, log an error
-   ├ new database ──────▶ generate into the keychain (read back); if that fails → new key file
+   │                       equal → delete the file      otherwise → keep the file, Keychain error
+   ├ new database ──────▶ generate into the keychain (read back); if that fails → Keychain error
    └ encrypted database ▶ KeyMissing (names the keychain entry and the key file path)
-keychain unavailable or failing ─▶ key file, logging a warning (no store on this machine, e.g.
-                                   headless Linux) or an error (locked or access denied)
+keychain unavailable or failing ─▶ KeychainUnavailable (no store on this machine, e.g. headless
+                                   Linux) or Keychain (locked, cancelled, or access denied)
 ```
 
 - **Migration** happens automatically on the first start with the keychain enabled. The key
   file is deleted only after the keychain returns exactly the same 32 bytes. On any failure the
-  file stays, so the database still opens, and the migration is retried on the next start. The
+  file stays and unlocking fails, so the next start, with a working keychain, retries it. The
   deleted file is unlinked, not overwritten. On SSDs and copy-on-write file systems, overwriting
   would not reliably erase the old blocks anyway.
-- **Fallback** keeps the app working offline and on headless servers. The key then lives in the
-  key file with the original file-mode protections. If the keychain becomes available later, the
-  file is migrated then.
-- **Conflict**: a database created while the keychain was locked gets a key file. If the
-  keychain already held another key, both are kept. The key file is never deleted while it
+- **No fallback** (owner decision, `DECISION_LOG.md`): when the keychain is enabled but locked,
+  cancelled, denied, or missing, unlocking fails. The daemon and the CLI exit with the error; the
+  Flutter app shows it with Retry. Headless servers without a keychain set a passphrase, or
+  disable the keychain explicitly to use a key file.
+- **Conflict**: a key file left from an older version can differ from the keychain entry. Both
+  are kept. The key file is never deleted while it
   differs from the keychain entry, and unlocking tries both.
 - **Corrupt entry**: an entry that is not 32 bytes is a `Keychain` error. It is never replaced
   automatically, because it may belong to existing databases.

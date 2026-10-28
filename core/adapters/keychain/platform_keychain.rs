@@ -12,7 +12,7 @@
 //!
 //! The `keyring` crate initializes the platform store once per process. A machine without one
 //! (headless Linux with no session bus or no Secret Service daemon, or an unsupported platform)
-//! yields `KeychainUnavailable`, and the key manager falls back to the key file. Error messages
+//! yields `KeychainUnavailable`, which stops unlocking (no key-file fallback). Error messages
 //! are built from the error kind and the platform's reason, never from returned secret bytes.
 
 use std::collections::HashMap;

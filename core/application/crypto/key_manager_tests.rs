@@ -520,47 +520,61 @@ fn a_migrated_key_file_is_deleted() {
     );
 }
 
-/// The keychain refuses the write → the old file is preserved and still unlocks the database.
+/// Unlocks through `keychain` and returns the keychain error, failing the test on success or on
+/// any other error.
+fn keychain_error(
+    key_directory: &TemporaryKeyDirectory,
+    keychain: &Arc<MockKeychain>,
+    metadata: &InMemoryMetadata,
+) -> CryptoError {
+    match keychain_manager(key_directory, keychain).unlock(metadata) {
+        Err(error @ (CryptoError::Keychain { .. } | CryptoError::KeychainUnavailable { .. })) => {
+            error
+        }
+        Err(other) => panic!("expected a keychain error, got {other}"),
+        Ok(_) => panic!("expected a keychain error, got an encryptor"),
+    }
+}
+
+/// The keychain refuses the migration write → unlocking fails and the old file is left untouched,
+/// so a later start with a working keychain can still migrate it.
 #[test]
-fn a_failed_migration_preserves_the_key_file() {
+fn a_failed_migration_is_an_error_and_preserves_the_key_file() {
     let key_directory = TemporaryKeyDirectory::new();
     let metadata = InMemoryMetadata::default();
-    let before_migration = unlock(config(&key_directory, None), &metadata);
+    unlock(config(&key_directory, None), &metadata);
     let file_key = key_file_bytes(&key_directory);
     let keychain = Arc::new(MockKeychain {
         store_failure: Some(access_denied()),
         ..MockKeychain::default()
     });
 
-    let outcome = keychain_unlock(&key_directory, &keychain, &metadata);
+    let error = keychain_error(&key_directory, &keychain, &metadata);
 
+    assert!(error.to_string().contains("access denied"), "{error}");
     assert_eq!(key_file_bytes(&key_directory), file_key);
-    assert_same_key(&before_migration, &outcome);
 }
 
-/// The keychain accepts the write but returns different bytes → the file is preserved.
+/// The keychain accepts the write but returns different bytes → unlocking fails, file kept.
 #[test]
-fn a_migration_whose_read_back_differs_preserves_the_key_file() {
+fn a_migration_whose_read_back_differs_is_an_error_and_preserves_the_key_file() {
     let key_directory = TemporaryKeyDirectory::new();
     let metadata = InMemoryMetadata::default();
-    let before_migration = unlock(config(&key_directory, None), &metadata);
+    unlock(config(&key_directory, None), &metadata);
+    let file_key = key_file_bytes(&key_directory);
     let keychain = Arc::new(MockKeychain {
         corrupts_writes: true,
         ..MockKeychain::default()
     });
 
-    let outcome = keychain_unlock(&key_directory, &keychain, &metadata);
+    keychain_error(&key_directory, &keychain, &metadata);
 
-    assert!(
-        key_directory.key_file().exists(),
-        "unverified migration must keep the file"
-    );
-    assert_same_key(&before_migration, &outcome);
+    assert_eq!(key_file_bytes(&key_directory), file_key);
 }
 
-/// Keychain unavailable (headless Linux) on a new database → file-based storage is used.
+/// Keychain unavailable (headless Linux) on a new database → an error; no key file is written.
 #[test]
-fn an_unavailable_keychain_falls_back_to_a_key_file() {
+fn an_unavailable_keychain_is_an_error_and_writes_no_key_file() {
     let key_directory = TemporaryKeyDirectory::new();
     let metadata = InMemoryMetadata::default();
     let keychain = Arc::new(MockKeychain {
@@ -568,34 +582,43 @@ fn an_unavailable_keychain_falls_back_to_a_key_file() {
         ..MockKeychain::default()
     });
 
-    let first_launch = keychain_unlock(&key_directory, &keychain, &metadata);
-    let second_launch = keychain_unlock(&key_directory, &keychain, &metadata);
+    let error = keychain_error(&key_directory, &keychain, &metadata);
 
-    assert_eq!(key_file_bytes(&key_directory).len(), 32);
-    assert_eq!(keychain.store_calls.load(Ordering::SeqCst), 0);
-    assert_same_key(&first_launch, &second_launch);
+    assert!(
+        matches!(error, CryptoError::KeychainUnavailable { .. }),
+        "{error}"
+    );
+    assert!(
+        !key_directory.key_file().exists(),
+        "no key file may be written"
+    );
+    assert!(
+        metadata.stored.borrow().is_none(),
+        "the database stays unencrypted-new"
+    );
 }
 
-/// Keychain access denied on an existing key-file database → the file still unlocks it.
+/// Keychain access denied on an existing key-file database → an error, even though the file
+/// could unlock it; the file is kept.
 #[test]
-fn a_failing_keychain_falls_back_to_the_existing_key_file() {
+fn a_failing_keychain_is_an_error_even_with_a_key_file() {
     let key_directory = TemporaryKeyDirectory::new();
     let metadata = InMemoryMetadata::default();
-    let before = unlock(config(&key_directory, None), &metadata);
+    unlock(config(&key_directory, None), &metadata);
     let keychain = Arc::new(MockKeychain {
         load_failure: Some(access_denied()),
         ..MockKeychain::default()
     });
 
-    let outcome = keychain_unlock(&key_directory, &keychain, &metadata);
+    let error = keychain_error(&key_directory, &keychain, &metadata);
 
+    assert!(matches!(error, CryptoError::Keychain { .. }), "{error}");
     assert!(key_directory.key_file().exists());
-    assert_same_key(&before, &outcome);
 }
 
-/// The keychain cannot store a newly generated key → it is written to the key file instead.
+/// The keychain cannot store a newly generated key → an error; no key file is written.
 #[test]
-fn a_new_key_the_keychain_cannot_store_falls_back_to_a_key_file() {
+fn a_new_key_the_keychain_cannot_store_is_an_error() {
     let key_directory = TemporaryKeyDirectory::new();
     let metadata = InMemoryMetadata::default();
     let keychain = Arc::new(MockKeychain {
@@ -603,11 +626,12 @@ fn a_new_key_the_keychain_cannot_store_falls_back_to_a_key_file() {
         ..MockKeychain::default()
     });
 
-    let first_launch = keychain_unlock(&key_directory, &keychain, &metadata);
-    let second_launch = keychain_unlock(&key_directory, &keychain, &metadata);
+    keychain_error(&key_directory, &keychain, &metadata);
 
-    assert_eq!(key_file_bytes(&key_directory).len(), 32);
-    assert_same_key(&first_launch, &second_launch);
+    assert!(
+        !key_directory.key_file().exists(),
+        "no key file may be written"
+    );
 }
 
 /// `NOTE_TAKER_KEYCHAIN_ENABLED=false` → the keychain is never touched.
@@ -698,9 +722,9 @@ fn a_key_missing_from_keychain_and_file_is_a_clear_error() {
     );
 }
 
-/// Unavailable keychain and no key file for an encrypted database → `KeyMissing`, not a new key.
+/// Unavailable keychain for an encrypted database → the keychain error, not a new key.
 #[test]
-fn a_key_missing_while_the_keychain_is_unavailable_is_a_clear_error() {
+fn an_unavailable_keychain_for_an_encrypted_database_is_a_clear_error() {
     let key_directory = TemporaryKeyDirectory::new();
     let metadata = InMemoryMetadata::default();
     keychain_unlock(
@@ -713,14 +737,12 @@ fn a_key_missing_while_the_keychain_is_unavailable_is_a_clear_error() {
         ..MockKeychain::default()
     });
 
-    let outcome = keychain_manager(&key_directory, &unavailable).unlock(&metadata);
+    let error = keychain_error(&key_directory, &unavailable, &metadata);
 
-    let Err(error @ CryptoError::KeyMissing { .. }) = outcome else {
-        panic!(
-            "expected KeyMissing, got {:?}",
-            outcome.map(|_| "an encryptor")
-        );
-    };
+    assert!(
+        matches!(error, CryptoError::KeychainUnavailable { .. }),
+        "{error}"
+    );
     assert!(error.to_string().contains("no Secret Service"), "{error}");
     assert!(
         !key_directory.key_file().exists(),
