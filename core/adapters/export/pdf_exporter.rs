@@ -4,15 +4,23 @@
 //! Rendering is two-pass: pass one wraps text, decodes images, and assigns every item to a page so
 //! the contents page and `Page N of M` footers know real page numbers; pass two draws the pages.
 //! Image attachments are drawn inline; other staged attachments are embedded as PDF file
-//! attachments (the viewer's attachments panel). Text uses the built-in Helvetica faces, which only
-//! cover WinAnsi (Latin-1-like) characters; other characters are rendered as `?`.
+//! attachments (the viewer's attachments panel).
+//!
+//! Text is drawn with embedded Unicode TrueType fonts chosen per character by `pdf_fonts` (bundled
+//! DejaVu Sans, then CJK/emoji fallback fonts), and wrapped by measured glyph widths. printpdf
+//! subsets each font to the glyphs used. A final lopdf pass fixes what printpdf gets wrong or leaves
+//! out: `ToUnicode` maps rebuilt from the subset fonts (so text copies back exactly), a UTF-16
+//! document title, and file attachments.
 
 use std::{fs, path::Path};
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use printpdf::{
     BuiltinFont, Image, ImageTransform, IndirectFontRef, Mm, PdfDocument, PdfDocumentReference,
+    TextMatrix,
     image_crate::{self, DynamicImage, GenericImageView},
-    lopdf::{self, Dictionary, Object, Stream, StringFormat},
+    lopdf::{self, Dictionary, Object, ObjectId, Stream, StringFormat},
 };
 
 use crate::{
@@ -26,7 +34,11 @@ use crate::{
     ports::export::MeetingExporter,
 };
 
-use super::{ensure_documents_present, write_export_artifact};
+use super::{
+    ensure_documents_present,
+    pdf_fonts::{self, EmbeddedFonts, FontSlot, LoadedFont, PdfFontConfig, TextFonts},
+    write_export_artifact,
+};
 
 /// A4 page width.
 const PAGE_WIDTH_MM: f32 = 210.0;
@@ -35,7 +47,7 @@ const PAGE_HEIGHT_MM: f32 = 297.0;
 /// Left edge of all body content.
 const LEFT_MARGIN_MM: f32 = 25.0;
 /// Printable width between the left and right margins.
-const TEXT_WIDTH_MM: f32 = 160.0;
+pub(crate) const TEXT_WIDTH_MM: f32 = 160.0;
 /// Baseline of the first line on every page.
 const CONTENT_TOP_MM: f32 = 272.0;
 /// Lowest baseline allowed for body content; the footer sits below it.
@@ -43,9 +55,7 @@ const CONTENT_BOTTOM_MM: f32 = 25.0;
 /// Baseline of the `Page N of M` footer.
 const FOOTER_BASELINE_MM: f32 = 12.0;
 /// Millimetres per typographic point.
-const MM_PER_POINT: f32 = 0.3528;
-/// Conservative average Helvetica glyph width as a fraction of the font size, used for wrapping.
-const AVERAGE_GLYPH_WIDTH_EM: f32 = 0.52;
+pub(crate) const MM_PER_POINT: f32 = 0.3528;
 /// Largest height an inline image may occupy.
 const MAX_IMAGE_HEIGHT_MM: f32 = 150.0;
 /// Resolution used to derive an image's natural size before fitting it to the page.
@@ -54,7 +64,7 @@ const IMAGE_NATURAL_DPI: f32 = 150.0;
 const CONTENTS_ENTRIES_PER_PAGE: usize = 30;
 
 /// Body text size.
-const BODY_FONT_SIZE: f32 = 10.0;
+pub(crate) const BODY_FONT_SIZE: f32 = 10.0;
 /// Section heading size.
 const SECTION_FONT_SIZE: f32 = 14.0;
 /// Meeting heading size inside a batch.
@@ -75,7 +85,8 @@ impl MeetingExporter for PdfMeetingExporter {
     /// Inputs: Non-empty `documents` whose attachments were staged by the orchestrator, export
     /// `options`, and the destination path.
     /// Outputs: The written artifact summary or an `ExportError`.
-    /// Side effects: Reads staged attachment files; creates the destination directory and file.
+    /// Side effects: Reads staged attachment files and, when the text needs them, fallback font
+    /// files (see `PdfFontConfig::from_environment`); creates the destination directory and file.
     /// Unreadable or undecodable attachments are noted in the PDF rather than failing the export.
     fn export_meetings(
         &self,
@@ -84,14 +95,14 @@ impl MeetingExporter for PdfMeetingExporter {
         output_path: &Path,
     ) -> Result<ExportResult, ExportError> {
         ensure_documents_present(documents.len())?;
-        let pdf_bytes = render_pdf(documents, options)?;
+        let pdf_bytes = render_pdf(documents, options, &PdfFontConfig::from_environment())?;
         write_export_artifact(output_path, &pdf_bytes, ExportFormat::Pdf, documents.len())
     }
 }
 
-/// Selects one of the two built-in faces.
-#[derive(Clone, Copy)]
-enum FontWeight {
+/// Selects one of the two primary faces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum FontWeight {
     Regular,
     Bold,
 }
@@ -128,7 +139,9 @@ struct ContentsEntry {
 }
 
 /// Accumulates body pages while tracking the current vertical position.
-struct BodyLayout {
+struct BodyLayout<'fonts> {
+    /// Fonts used to measure text while wrapping.
+    text_fonts: &'fonts TextFonts,
     /// Page number of the first body page (after the title and contents pages).
     first_page_number: usize,
     pages: Vec<Vec<PlacedItem>>,
@@ -138,10 +151,11 @@ struct BodyLayout {
     contents_entries: Vec<ContentsEntry>,
 }
 
-impl BodyLayout {
+impl<'fonts> BodyLayout<'fonts> {
     /// Starts an empty layout whose first page will be `first_page_number`.
-    fn new(first_page_number: usize) -> Self {
+    fn new(first_page_number: usize, text_fonts: &'fonts TextFonts) -> Self {
         Self {
+            text_fonts,
             first_page_number,
             pages: vec![Vec::new()],
             cursor_mm: CONTENT_TOP_MM,
@@ -186,7 +200,7 @@ impl BodyLayout {
     /// Wraps `text` and places each line, breaking pages as needed.
     fn push_paragraph(&mut self, text: &str, font_size: f32, weight: FontWeight) {
         let line_height_mm = line_height(font_size);
-        for wrapped_line in wrap_text(text, font_size) {
+        for wrapped_line in wrap_text(text, font_size, weight, self.text_fonts) {
             self.ensure_space(line_height_mm);
             self.place(PlacedItem::Text {
                 baseline_mm: self.cursor_mm,
@@ -241,18 +255,21 @@ impl BodyLayout {
 
 /// Lays out and draws the complete PDF.
 ///
-/// Inputs: Non-empty `documents` and export `options`.
+/// Inputs: Non-empty `documents`, export `options`, and where to find fonts.
 /// Outputs: Serialized PDF bytes or `ExportError::Rendering`.
-/// Side effects: Reads staged attachment files.
-fn render_pdf(
+/// Side effects: Reads staged attachment files and, only when the text needs them, fallback font
+/// files. Logs (without content) how many characters no font could draw.
+pub(crate) fn render_pdf(
     documents: &[ExportDocument],
     options: &ExportOptions,
+    font_config: &PdfFontConfig,
 ) -> Result<Vec<u8>, ExportError> {
+    let text_fonts = TextFonts::load(font_config);
     let is_batch = documents.len() > 1;
     let contents_page_count = estimated_contents_entries(documents, is_batch)
         .div_ceil(CONTENTS_ENTRIES_PER_PAGE)
         .max(1);
-    let mut body_layout = BodyLayout::new(2 + contents_page_count);
+    let mut body_layout = BodyLayout::new(2 + contents_page_count, &text_fonts);
     for (document_index, document) in documents.iter().enumerate() {
         if document_index > 0 {
             body_layout.break_page();
@@ -260,44 +277,57 @@ fn render_pdf(
         layout_meeting(&mut body_layout, document, is_batch);
     }
     let total_pages = 1 + contents_page_count + body_layout.pages.len();
+    // All text is laid out (and so measured) before any font is registered, which is what tells
+    // us which fallback fonts are needed at all.
+    let title_page_items = layout_title_page(documents, options, &text_fonts);
+    let contents_pages = body_layout
+        .contents_entries
+        .chunks(CONTENTS_ENTRIES_PER_PAGE)
+        .chain(std::iter::once::<&[ContentsEntry]>(&[]))
+        .take(contents_page_count)
+        .enumerate()
+        .map(|(contents_page_offset, contents_chunk)| {
+            layout_contents_page(contents_chunk, contents_page_offset == 0, &text_fonts)
+        })
+        .collect::<Vec<_>>();
 
     let document_title = match documents {
         [single_document] => single_document.title(),
         _ => "Meeting export",
     };
     let (pdf_document, title_page_index, title_layer_index) = PdfDocument::new(
-        sanitize_for_builtin_font(document_title),
+        document_title,
         Mm(PAGE_WIDTH_MM),
         Mm(PAGE_HEIGHT_MM),
         "Title page",
     );
-    let fonts = PdfFonts {
-        regular: builtin_font(&pdf_document, BuiltinFont::Helvetica)?,
-        bold: builtin_font(&pdf_document, BuiltinFont::HelveticaBold)?,
+    let pdf_fonts = register_fonts(&pdf_document, &text_fonts)?;
+    let page_fonts = PageFonts {
+        text_fonts: &text_fonts,
+        pdf_fonts: &pdf_fonts,
     };
 
-    let title_page_items = layout_title_page(documents, options);
     let title_layer = pdf_document
         .get_page(title_page_index)
         .get_layer(title_layer_index);
-    draw_page(&title_layer, &title_page_items, &[], &fonts, 1, total_pages);
+    draw_page(
+        &title_layer,
+        &title_page_items,
+        &[],
+        &page_fonts,
+        1,
+        total_pages,
+    );
 
-    for (contents_page_offset, contents_chunk) in body_layout
-        .contents_entries
-        .chunks(CONTENTS_ENTRIES_PER_PAGE)
-        .chain(std::iter::once::<&[ContentsEntry]>(&[]))
-        .take(contents_page_count)
-        .enumerate()
-    {
+    for (contents_page_offset, contents_items) in contents_pages.iter().enumerate() {
         let (page_index, layer_index) =
             pdf_document.add_page(Mm(PAGE_WIDTH_MM), Mm(PAGE_HEIGHT_MM), "Contents");
         let contents_layer = pdf_document.get_page(page_index).get_layer(layer_index);
-        let contents_items = layout_contents_page(contents_chunk, contents_page_offset == 0);
         draw_page(
             &contents_layer,
-            &contents_items,
+            contents_items,
             &[],
-            &fonts,
+            &page_fonts,
             2 + contents_page_offset,
             total_pages,
         );
@@ -311,20 +341,33 @@ fn render_pdf(
             &body_layer,
             body_page_items,
             &body_layout.images,
-            &fonts,
+            &page_fonts,
             body_layout.first_page_number + body_page_offset,
             total_pages,
         );
     }
 
+    let embedded_fonts = text_fonts.embedded();
+    let uncovered_character_count =
+        embedded_fonts.map_or(0, EmbeddedFonts::uncovered_character_count);
+    if uncovered_character_count > 0 {
+        tracing::warn!(
+            uncovered_character_count,
+            "PDF export drew characters that no available font covers as U+FFFD"
+        );
+    }
     let pdf_bytes = pdf_document
         .save_to_bytes()
         .map_err(|error| rendering_error("unable to serialize meeting PDF", &error))?;
-    if body_layout.embedded_attachments.is_empty() {
-        Ok(pdf_bytes)
-    } else {
-        embed_attachments(&pdf_bytes, &body_layout.embedded_attachments)
-    }
+    finalize_pdf(
+        pdf_bytes,
+        &body_layout.embedded_attachments,
+        document_title,
+        embedded_fonts
+            .filter(|embedded_fonts| embedded_fonts.needs_unicode_map_rebuild())
+            .map(EmbeddedFonts::drawn_characters)
+            .as_ref(),
+    )
 }
 
 /// Counts contents entries before layout so the number of contents pages is known up front.
@@ -513,8 +556,12 @@ pub(crate) fn flatten_onto_white(decoded_image: DynamicImage) -> DynamicImage {
 }
 
 /// Lays out the title page: meeting metadata for one meeting, or a meeting list for a batch.
-fn layout_title_page(documents: &[ExportDocument], options: &ExportOptions) -> Vec<PlacedItem> {
-    let mut title_layout = BodyLayout::new(1);
+fn layout_title_page(
+    documents: &[ExportDocument],
+    options: &ExportOptions,
+    text_fonts: &TextFonts,
+) -> Vec<PlacedItem> {
+    let mut title_layout = BodyLayout::new(1, text_fonts);
     title_layout.cursor_mm = 230.0;
     match documents {
         [single_document] => {
@@ -575,8 +622,12 @@ fn layout_title_page(documents: &[ExportDocument], options: &ExportOptions) -> V
 }
 
 /// Lays out one contents page from its entries.
-fn layout_contents_page(entries: &[ContentsEntry], is_first_page: bool) -> Vec<PlacedItem> {
-    let mut contents_layout = BodyLayout::new(2);
+fn layout_contents_page(
+    entries: &[ContentsEntry],
+    is_first_page: bool,
+    text_fonts: &TextFonts,
+) -> Vec<PlacedItem> {
+    let mut contents_layout = BodyLayout::new(2, text_fonts);
     if is_first_page {
         contents_layout.push_paragraph("Contents", 20.0, FontWeight::Bold);
         contents_layout.push_gap(6.0);
@@ -591,10 +642,64 @@ fn layout_contents_page(entries: &[ContentsEntry], is_first_page: bool) -> Vec<P
     contents_layout.pages.into_iter().next().unwrap_or_default()
 }
 
-/// The two font handles used for drawing.
+/// The registered font handles used for drawing.
 struct PdfFonts {
     regular: IndirectFontRef,
     bold: IndirectFontRef,
+    /// Handles of the fallback fonts that are used, keyed by their `FontSlot::Fallback` index.
+    fallbacks: BTreeMap<usize, IndirectFontRef>,
+}
+
+impl PdfFonts {
+    /// Returns the handle that draws `font_slot`, if that font was registered.
+    fn reference(&self, font_slot: FontSlot) -> Option<&IndirectFontRef> {
+        match font_slot {
+            FontSlot::Primary(FontWeight::Regular) => Some(&self.regular),
+            FontSlot::Primary(FontWeight::Bold) => Some(&self.bold),
+            FontSlot::Fallback(fallback_index) => self.fallbacks.get(&fallback_index),
+        }
+    }
+}
+
+/// Everything `draw_page` needs to turn text into font runs.
+struct PageFonts<'fonts> {
+    text_fonts: &'fonts TextFonts,
+    pdf_fonts: &'fonts PdfFonts,
+}
+
+/// Registers the fonts the laid-out text uses with the document.
+///
+/// Inputs: The document and the fonts used during layout.
+/// Outputs: Handles for both primary faces and every used fallback font, or
+/// `ExportError::Rendering` when printpdf rejects a font that already parsed.
+/// Side effects: Adds font resources to `pdf_document`; printpdf subsets them on save.
+fn register_fonts(
+    pdf_document: &PdfDocumentReference,
+    text_fonts: &TextFonts,
+) -> Result<PdfFonts, ExportError> {
+    let Some(embedded_fonts) = text_fonts.embedded() else {
+        return Ok(PdfFonts {
+            regular: builtin_font(pdf_document, BuiltinFont::Helvetica)?,
+            bold: builtin_font(pdf_document, BuiltinFont::HelveticaBold)?,
+            fallbacks: BTreeMap::new(),
+        });
+    };
+    let embed_font = |loaded_font: &LoadedFont| {
+        pdf_document
+            .add_external_font(loaded_font.font_bytes())
+            .map_err(|error| rendering_error("unable to embed PDF font", &error))
+    };
+    Ok(PdfFonts {
+        regular: embed_font(embedded_fonts.primary(FontWeight::Regular))?,
+        bold: embed_font(embedded_fonts.primary(FontWeight::Bold))?,
+        fallbacks: embedded_fonts
+            .used_fallback_fonts()
+            .into_iter()
+            .map(|(fallback_index, fallback_font)| {
+                embed_font(fallback_font).map(|font_reference| (fallback_index, font_reference))
+            })
+            .collect::<Result<_, _>>()?,
+    })
 }
 
 /// Draws placed items and the page footer onto one layer.
@@ -602,7 +707,7 @@ fn draw_page(
     layer: &printpdf::PdfLayerReference,
     items: &[PlacedItem],
     images: &[DynamicImage],
-    fonts: &PdfFonts,
+    page_fonts: &PageFonts<'_>,
     page_number: usize,
     total_pages: usize,
 ) {
@@ -613,19 +718,13 @@ fn draw_page(
                 text,
                 font_size,
                 weight,
-            } => {
-                let font = match weight {
-                    FontWeight::Regular => &fonts.regular,
-                    FontWeight::Bold => &fonts.bold,
-                };
-                layer.use_text(
-                    sanitize_for_builtin_font(text),
-                    *font_size,
-                    Mm(LEFT_MARGIN_MM),
-                    Mm(*baseline_mm),
-                    font,
-                );
-            }
+            } => draw_text_line(
+                layer,
+                text,
+                (*font_size, *weight),
+                (LEFT_MARGIN_MM, *baseline_mm),
+                page_fonts,
+            ),
             PlacedItem::Image {
                 top_mm,
                 image_index,
@@ -652,26 +751,185 @@ fn draw_page(
             }
         }
     }
-    layer.use_text(
-        format!("Page {page_number} of {total_pages}"),
-        9.0,
-        Mm(PAGE_WIDTH_MM - LEFT_MARGIN_MM - 25.0),
-        Mm(FOOTER_BASELINE_MM),
-        &fonts.regular,
+    draw_text_line(
+        layer,
+        &format!("Page {page_number} of {total_pages}"),
+        (9.0, FontWeight::Regular),
+        (PAGE_WIDTH_MM - LEFT_MARGIN_MM - 25.0, FOOTER_BASELINE_MM),
+        page_fonts,
     );
+}
+
+/// Draws one line as a single text object, switching fonts between runs.
+///
+/// Inputs: The layer, the line, its `(size in points, weight)`, the `(left, baseline)` position
+/// in millimetres, and the fonts.
+/// Outputs: None.
+/// Side effects: Appends text operators to `layer`.
+fn draw_text_line(
+    layer: &printpdf::PdfLayerReference,
+    text: &str,
+    (font_size, weight): (f32, FontWeight),
+    (left_mm, baseline_mm): (f32, f32),
+    page_fonts: &PageFonts<'_>,
+) {
+    layer.begin_text_section();
+    let mut run_left_mm = left_mm;
+    for text_run in page_fonts.text_fonts.runs(text, weight) {
+        if let Some(font_reference) = page_fonts.pdf_fonts.reference(text_run.font_slot) {
+            layer.set_font(font_reference, font_size);
+            layer.set_text_matrix(TextMatrix::Translate(
+                Mm(run_left_mm).into(),
+                Mm(baseline_mm).into(),
+            ));
+            if text_run.glyph_ids.is_empty() {
+                layer.write_text(text_run.text, font_reference);
+            } else {
+                // Embedded fonts: emit the glyph IDs directly. `write_text` would look them up
+                // again and clone the whole font (hundreds of KB) on every call.
+                let glyph_bytes = text_run
+                    .glyph_ids
+                    .iter()
+                    .flat_map(|glyph_id| glyph_id.to_be_bytes())
+                    .collect();
+                layer.add_operation(lopdf::content::Operation::new(
+                    "Tj",
+                    vec![Object::String(glyph_bytes, StringFormat::Hexadecimal)],
+                ));
+            }
+        }
+        run_left_mm += text_run.width_em * font_size * MM_PER_POINT;
+    }
+    layer.end_text_section();
+}
+
+/// Applies the lopdf post-processing pass when the document needs it.
+///
+/// Inputs: printpdf's bytes, attachments to embed, the document title, and the characters drawn
+/// with embedded fonts when their `ToUnicode` maps need rebuilding (`None` otherwise, including in
+/// built-in font mode).
+/// Outputs: The bytes unchanged when nothing applies, otherwise the re-serialized PDF, or
+/// `ExportError::Rendering`.
+/// Side effects: None.
+fn finalize_pdf(
+    pdf_bytes: Vec<u8>,
+    embedded_attachments: &[EmbeddedAttachment],
+    document_title: &str,
+    drawn_characters: Option<&BTreeSet<char>>,
+) -> Result<Vec<u8>, ExportError> {
+    if embedded_attachments.is_empty() && document_title.is_ascii() && drawn_characters.is_none() {
+        return Ok(pdf_bytes);
+    }
+    let mut pdf_document = lopdf::Document::load_mem(&pdf_bytes)
+        .map_err(|error| rendering_error("unable to reopen PDF for post-processing", &error))?;
+    if !embedded_attachments.is_empty() {
+        embed_attachments(&mut pdf_document, embedded_attachments)?;
+    }
+    if !document_title.is_ascii() {
+        set_unicode_title(&mut pdf_document, document_title);
+    }
+    if let Some(drawn_characters) = drawn_characters {
+        rebuild_unicode_maps(&mut pdf_document, drawn_characters);
+    }
+    let mut finalized_pdf_bytes = Vec::new();
+    pdf_document
+        .save_to(&mut finalized_pdf_bytes)
+        .map_err(|error| rendering_error("unable to serialize post-processed PDF", &error))?;
+    Ok(finalized_pdf_bytes)
+}
+
+/// Stores `document_title` in the `Info` dictionary as a UTF-16 text string; printpdf writes raw
+/// UTF-8 bytes, which viewers decode as PDFDocEncoding mojibake.
+///
+/// Inputs: The reopened document and the title.
+/// Outputs: None; a document without an `Info` dictionary is left unchanged.
+/// Side effects: Mutates `pdf_document`.
+fn set_unicode_title(pdf_document: &mut lopdf::Document, document_title: &str) {
+    let Ok(info_id) = pdf_document
+        .trailer
+        .get(b"Info")
+        .and_then(Object::as_reference)
+    else {
+        return;
+    };
+    if let Ok(info_dictionary) = pdf_document.get_dictionary_mut(info_id) {
+        info_dictionary.set(
+            "Title",
+            Object::String(utf16_text_string(document_title), StringFormat::Hexadecimal),
+        );
+    }
+}
+
+/// Replaces printpdf's `ToUnicode` map of every embedded font with one rebuilt from the embedded
+/// (subset) font program, which is what makes copied and searched text match what was written.
+///
+/// printpdf's map has two defects: it writes code points above U+FFFF bare (`<1f389>`) instead
+/// of as UTF-16 surrogate pairs, so emoji copy as garbage; and where several code points share a
+/// glyph it keeps the lowest one, so CJK `目` (U+76EE) copies as the Kangxi radical `⽬` (U+2F6C).
+///
+/// Inputs: The reopened document and every character drawn with embedded fonts.
+/// Outputs: None; a font whose program cannot be read keeps printpdf's map.
+/// Side effects: Mutates the `ToUnicode` streams of the Type0 fonts.
+fn rebuild_unicode_maps(pdf_document: &mut lopdf::Document, drawn_characters: &BTreeSet<char>) {
+    let rebuilt_maps = pdf_document
+        .objects
+        .values()
+        .filter_map(|pdf_object| pdf_object.as_dict().ok())
+        .filter(|dictionary| {
+            dictionary.get(b"Subtype").and_then(Object::as_name).ok() == Some(b"Type0".as_slice())
+        })
+        .filter_map(|type0_font| {
+            let to_unicode_id = type0_font
+                .get(b"ToUnicode")
+                .and_then(Object::as_reference)
+                .ok()?;
+            let font_program = type0_font_program(pdf_document, type0_font)?;
+            let unicode_cmap = pdf_fonts::unicode_cmap(&font_program, drawn_characters)?;
+            Some((to_unicode_id, unicode_cmap))
+        })
+        .collect::<Vec<(ObjectId, String)>>();
+    for (to_unicode_id, unicode_cmap) in rebuilt_maps {
+        if let Ok(Object::Stream(to_unicode_stream)) = pdf_document.get_object_mut(to_unicode_id) {
+            to_unicode_stream.set_plain_content(unicode_cmap.into_bytes());
+        }
+    }
+}
+
+/// Returns the embedded TrueType program (`FontFile2`) behind a Type0 font dictionary.
+fn type0_font_program(pdf_document: &lopdf::Document, type0_font: &Dictionary) -> Option<Vec<u8>> {
+    let resolve = |pdf_object: &Object| {
+        pdf_document
+            .dereference(pdf_object)
+            .ok()
+            .map(|(_, resolved_object)| resolved_object.clone())
+    };
+    let descendant_fonts = resolve(type0_font.get(b"DescendantFonts").ok()?)?;
+    let descendant_font = resolve(descendant_fonts.as_array().ok()?.first()?)?;
+    let font_descriptor = resolve(
+        descendant_font
+            .as_dict()
+            .ok()?
+            .get(b"FontDescriptor")
+            .ok()?,
+    )?;
+    let font_file = resolve(font_descriptor.as_dict().ok()?.get(b"FontFile2").ok()?)?;
+    let font_stream = font_file.as_stream().ok()?;
+    Some(
+        font_stream
+            .decompressed_content()
+            .unwrap_or_else(|_| font_stream.content.clone()),
+    )
 }
 
 /// Adds staged non-image attachments to the PDF's `EmbeddedFiles` name tree.
 ///
-/// Inputs: Serialized `pdf_bytes` from printpdf and the attachments to embed.
-/// Outputs: Re-serialized PDF bytes or `ExportError::Rendering`.
-/// Side effects: None.
+/// Inputs: The reopened document and the attachments to embed.
+/// Outputs: `ExportError::Rendering` when the document has no catalog.
+/// Side effects: Mutates `pdf_document`.
 fn embed_attachments(
-    pdf_bytes: &[u8],
+    pdf_document: &mut lopdf::Document,
     embedded_attachments: &[EmbeddedAttachment],
-) -> Result<Vec<u8>, ExportError> {
-    let mut pdf_document = lopdf::Document::load_mem(pdf_bytes)
-        .map_err(|error| rendering_error("unable to reopen PDF for attachments", &error))?;
+) -> Result<(), ExportError> {
     let mut named_file_specifications = Vec::new();
     for (attachment_index, embedded_attachment) in embedded_attachments.iter().enumerate() {
         let mut stream_parameters = Dictionary::new();
@@ -740,12 +998,7 @@ fn embed_attachments(
         .map_err(|error| rendering_error("PDF has no catalog", &error))?;
     catalog.set("Names", Object::Dictionary(names_dictionary));
     catalog.set("PageMode", Object::Name(b"UseAttachments".to_vec()));
-
-    let mut embedded_pdf_bytes = Vec::new();
-    pdf_document
-        .save_to(&mut embedded_pdf_bytes)
-        .map_err(|error| rendering_error("unable to serialize PDF attachments", &error))?;
-    Ok(embedded_pdf_bytes)
+    Ok(())
 }
 
 /// Registers one built-in font with the document.
@@ -763,40 +1016,62 @@ fn line_height(font_size: f32) -> f32 {
     font_size * MM_PER_POINT * 1.4
 }
 
-/// Greedily word-wraps `text` to the printable width at `font_size`, splitting overlong words.
+/// Greedily word-wraps `text` to the printable width by measured glyph advances, breaking words
+/// wider than a line (including CJK runs, which have no spaces) between characters.
 ///
-/// Inputs: Arbitrary text and a font size in points.
-/// Outputs: At least one line (possibly empty); embedded newlines start new lines.
-/// Side effects: None.
-fn wrap_text(text: &str, font_size: f32) -> Vec<String> {
-    let maximum_characters =
-        ((TEXT_WIDTH_MM / (font_size * MM_PER_POINT * AVERAGE_GLYPH_WIDTH_EM)) as usize).max(8);
+/// Inputs: Arbitrary text, a font size in points, the weight, and the fonts it is drawn with.
+/// Outputs: At least one line (possibly empty); embedded newlines start new lines. Concatenating
+/// the lines of a space-free paragraph gives back the paragraph.
+/// Side effects: May load fallback fonts (see `TextFonts::runs`).
+pub(crate) fn wrap_text(
+    text: &str,
+    font_size: f32,
+    weight: FontWeight,
+    text_fonts: &TextFonts,
+) -> Vec<String> {
+    let space_width_mm = text_fonts.text_width_mm(" ", font_size, weight);
     let mut wrapped_lines = Vec::new();
     for source_line in text.lines() {
         let mut current_line = String::new();
+        let mut current_width_mm = 0.0_f32;
         for word in source_line.split_whitespace() {
-            let mut remaining_word = word;
-            while remaining_word.chars().count() > maximum_characters {
+            let word_width_mm = text_fonts.text_width_mm(word, font_size, weight);
+            let separator_width_mm = if current_line.is_empty() {
+                0.0
+            } else {
+                space_width_mm
+            };
+            if current_width_mm + separator_width_mm + word_width_mm <= TEXT_WIDTH_MM {
                 if !current_line.is_empty() {
-                    wrapped_lines.push(std::mem::take(&mut current_line));
+                    current_line.push(' ');
                 }
-                let split_index = remaining_word
-                    .char_indices()
-                    .nth(maximum_characters)
-                    .map_or(remaining_word.len(), |(byte_index, _)| byte_index);
-                wrapped_lines.push(String::from(&remaining_word[..split_index]));
-                remaining_word = &remaining_word[split_index..];
-            }
-            let separator_length = usize::from(!current_line.is_empty());
-            if current_line.chars().count() + separator_length + remaining_word.chars().count()
-                > maximum_characters
-            {
-                wrapped_lines.push(std::mem::take(&mut current_line));
+                current_line.push_str(word);
+                current_width_mm += separator_width_mm + word_width_mm;
+                continue;
             }
             if !current_line.is_empty() {
-                current_line.push(' ');
+                wrapped_lines.push(std::mem::take(&mut current_line));
+                current_width_mm = 0.0;
             }
-            current_line.push_str(remaining_word);
+            if word_width_mm <= TEXT_WIDTH_MM {
+                current_line.push_str(word);
+                current_width_mm = word_width_mm;
+                continue;
+            }
+            for character in word.chars() {
+                let character_width_mm = text_fonts.text_width_mm(
+                    character.encode_utf8(&mut [0_u8; 4]),
+                    font_size,
+                    weight,
+                );
+                if current_width_mm + character_width_mm > TEXT_WIDTH_MM && !current_line.is_empty()
+                {
+                    wrapped_lines.push(std::mem::take(&mut current_line));
+                    current_width_mm = 0.0;
+                }
+                current_line.push(character);
+                current_width_mm += character_width_mm;
+            }
         }
         wrapped_lines.push(current_line);
     }
@@ -804,27 +1079,6 @@ fn wrap_text(text: &str, font_size: f32) -> Vec<String> {
         wrapped_lines.push(String::new());
     }
     wrapped_lines
-}
-
-/// Replaces characters the WinAnsi-encoded built-in fonts cannot draw with `?`.
-///
-/// lopdf silently drops unencodable characters, which would hide missing text; substituting a
-/// visible marker keeps the loss obvious to readers.
-fn sanitize_for_builtin_font(text: &str) -> String {
-    text.chars()
-        .map(|character| {
-            if character == '\t' {
-                ' '
-            } else if character.is_control()
-                || lopdf::Document::encode_text(Some("WinAnsiEncoding"), &character.to_string())
-                    .is_empty()
-            {
-                '?'
-            } else {
-                character
-            }
-        })
-        .collect()
 }
 
 /// Replaces non-printable-ASCII characters with `_` for PDF byte-string keys.

@@ -24,7 +24,11 @@ pub mod json_exporter;
 pub mod markdown_exporter;
 /// Renders paginated meeting PDFs and embeds attachments.
 pub mod pdf_exporter;
+/// Selects, loads, and measures the Unicode fonts embedded in meeting PDFs.
+pub mod pdf_fonts;
 
+#[cfg(test)]
+mod pdf_unicode_tests;
 #[cfg(test)]
 mod tests;
 
