@@ -80,3 +80,18 @@ webrtc-vad = { version = "=0.4.0", optional = true }
 # with it the native whisper.cpp build, is unchanged.
 protobuf-codegen = "=3.7.2"
 tower = { version = "0.5.2", features = ["util"] }
+
+# AES-256-GCM is compiled optimized even in dev and test builds. Unoptimized AES and GHASH run
+# several times slower than shipped code, so the voice-encryption budget test measured debug
+# codegen rather than real cost, and failed on loaded CI runners. Only these crates are affected,
+# and the whisper.cpp build is unchanged.
+[profile.dev.package.aes]
+opt-level = 3
+[profile.dev.package.aes-gcm]
+opt-level = 3
+[profile.dev.package.ghash]
+opt-level = 3
+[profile.dev.package.polyval]
+opt-level = 3
+[profile.dev.package.ctr]
+opt-level = 3
