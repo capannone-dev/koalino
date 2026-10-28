@@ -1274,6 +1274,144 @@ mod tests {
         assert!(responder.answer_pairing(&initiator_id, None).is_err());
     }
 
+    /// Full pairing through `PairingManager` on two real swarms: after both owners confirm, each
+    /// side has persisted the other, and sync payloads flow in both directions.
+    #[tokio::test]
+    async fn two_managers_pair_end_to_end_and_then_sync() {
+        use crate::application::pairing_manager::{PairingManager, PairingUpdate};
+
+        type Manager = PairingManager<Libp2pNetworkAdapter, SqlitePeerStore>;
+
+        /// Drives both managers' swarms until `condition` holds (5 s limit).
+        async fn drive(
+            laptop: &mut Manager,
+            phone: &mut Manager,
+            mut condition: impl FnMut(&mut Manager, &mut Manager) -> bool,
+        ) {
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while !condition(laptop, phone) {
+                    tokio::select! {
+                        result = laptop.transport_mut().drive_next_swarm_event() => {
+                            result.unwrap_or_else(|error| panic!("laptop swarm: {error}"));
+                        }
+                        result = phone.transport_mut().drive_next_swarm_event() => {
+                            result.unwrap_or_else(|error| panic!("phone swarm: {error}"));
+                        }
+                    }
+                }
+            })
+            .await
+            .unwrap_or_else(|_| panic!("condition not reached before timeout"));
+        }
+
+        let (laptop_adapter, phone_adapter, phone_address) = listening_pair("/memory/9331");
+        let store = || {
+            SqlitePeerStore::open_in_memory(ephemeral_cipher())
+                .unwrap_or_else(|error| panic!("peer store must open: {error}"))
+        };
+        let mut laptop: Manager = PairingManager::new(
+            laptop_adapter,
+            store(),
+            device_name("Laptop"),
+            Box::new(|| 1),
+        );
+        let mut phone: Manager =
+            PairingManager::new(phone_adapter, store(), device_name("Phone"), Box::new(|| 2));
+        let laptop_id = laptop.transport().local_device_id();
+        let phone_id = phone.transport().local_device_id();
+
+        // The owner makes the phone pairable; the laptop connects (mDNS would supply the address).
+        phone.make_pairable(Duration::from_secs(60));
+        laptop
+            .transport_mut()
+            .allow_pairing_dial(&phone_id)
+            .unwrap_or_else(|error| panic!("dial must be allowed: {error}"));
+        laptop
+            .transport_mut()
+            .dial_memory(phone_address)
+            .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+        drive(&mut laptop, &mut phone, |laptop, _| {
+            laptop.transport().is_connected_to(&phone_id)
+        })
+        .await;
+        let laptop_code = laptop
+            .start_pairing(&phone_id)
+            .unwrap_or_else(|error| panic!("pairing must start: {error}"));
+
+        let mut phone_updates = Vec::new();
+        drive(&mut laptop, &mut phone, |_, phone| {
+            phone_updates.extend(
+                phone
+                    .process_events()
+                    .unwrap_or_else(|error| panic!("phone events: {error}")),
+            );
+            !phone_updates.is_empty()
+        })
+        .await;
+        let Some(PairingUpdate::IncomingRequest {
+            code: phone_code, ..
+        }) = phone_updates.first()
+        else {
+            panic!("the phone must show the request: {phone_updates:?}");
+        };
+        assert_eq!(
+            phone_code, &laptop_code,
+            "both screens must show the same code"
+        );
+
+        // The owner sees matching codes and confirms on both devices.
+        laptop
+            .confirm_code(&phone_id)
+            .unwrap_or_else(|error| panic!("laptop confirm: {error}"));
+        phone
+            .accept_incoming(&laptop_id)
+            .unwrap_or_else(|error| panic!("phone accept: {error}"));
+        let mut laptop_updates = Vec::new();
+        drive(&mut laptop, &mut phone, |laptop, _| {
+            laptop_updates.extend(
+                laptop
+                    .process_events()
+                    .unwrap_or_else(|error| panic!("laptop events: {error}")),
+            );
+            !laptop_updates.is_empty()
+        })
+        .await;
+
+        assert_eq!(
+            laptop_updates,
+            vec![PairingUpdate::Paired {
+                peer_id: phone_id.clone(),
+                device_name: device_name("Phone"),
+            }]
+        );
+        let laptop_trusted = laptop
+            .trusted_devices()
+            .unwrap_or_else(|error| panic!("laptop allowlist: {error}"));
+        let phone_trusted = phone
+            .trusted_devices()
+            .unwrap_or_else(|error| panic!("phone allowlist: {error}"));
+        assert_eq!(laptop_trusted.len(), 1);
+        assert_eq!(laptop_trusted[0].peer_id(), &phone_id);
+        assert_eq!(phone_trusted.len(), 1);
+        assert_eq!(phone_trusted[0].device_name(), &device_name("Laptop"));
+
+        // Paired: a sync payload from the laptop now reaches the phone.
+        laptop
+            .transport_mut()
+            .send_encrypted(&phone_id, b"first-sync")
+            .unwrap_or_else(|error| panic!("paired send must be queued: {error}"));
+        let mut delivered = false;
+        drive(&mut laptop, &mut phone, |_, phone| {
+            delivered |= matches!(
+                phone.transport_mut().poll_event(),
+                Ok(Some(NetworkEvent::MessageReceived { .. }))
+            );
+            delivered
+        })
+        .await;
+        assert!(delivered);
+    }
+
     /// Loading the identity twice from one store yields the same peer ID, and an adapter built
     /// from it uses that ID, so paired devices recognise this node after a restart.
     #[test]

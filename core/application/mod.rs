@@ -44,6 +44,10 @@ mod meeting_title_sync_tests;
 pub mod network_events;
 #[cfg(test)]
 mod network_events_tests;
+/// Orchestrates numeric-comparison pairing and the trusted-peer allowlist (Issue #43).
+pub mod pairing_manager;
+#[cfg(test)]
+mod pairing_manager_tests;
 /// Connects transcription, diarization, and voice identity into speaker-attributed segments.
 pub mod pipeline;
 /// Runs meeting pipeline sessions on a dedicated worker thread for live recordings.

@@ -8,6 +8,22 @@ Application services implement workflows such as recording processing and comput
 an application-visible reachability view. It has no dependency on libp2p identities, swarm events,
 or socket APIs.
 
+`pairing_manager.rs` (Issue #43) pairs the owner's devices by numeric comparison:
+
+- **Pairable device:** `make_pairable` opens its pairing window.
+- **Initiating device:** `start_pairing` returns the shared `PairingCode`. After an
+  `IncomingRequest` reaches the other device, the initiator trusts that device only once both of
+  these have happened, in either order:
+  - its owner calls `confirm_code`;
+  - the other device's acceptance arrives.
+- **Responding device:** `accept_incoming` trusts the initiator at once and answers;
+  `reject_incoming` declines.
+- **Every trust decision:** persisted in `TrustedPeerStore` before the transport admits the peer.
+- **Ending pairing:** happens only once any answer has been sent.
+- **Unsolicited acceptances:** ignored.
+- **Other operations:** `load_trusted_peers` restores the allowlist at startup, and `revoke`
+  removes a device from both the store and the transport.
+
 `sync_manager.rs` drives the Automerge sync handshake for one meeting document. On discovery it
 generates a peer-specific handshake; on a received envelope it validates the protocol, applies the
 message through `MeetingCrdtService`, saves the merged document through `NoteRepository`, and sends

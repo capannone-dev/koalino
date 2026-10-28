@@ -1,0 +1,360 @@
+//! Orchestrates pairing between the owner's devices and keeps the allowlist in step (Issue #43).
+//!
+//! Pairing uses numeric comparison:
+//!
+//! 1. **Pairable device:** the owner makes one device pairable (`make_pairable`).
+//! 2. **Initiating device:** on another device the owner picks it from `nearby_devices` and calls
+//!    `start_pairing`. Both devices then show the same `PairingCode`.
+//! 3. **Responding device:** gets an `IncomingRequest`. If the codes match, the owner calls
+//!    `accept_incoming`, which trusts the initiator at once and answers.
+//! 4. **Initiating device again:** trusts the responder only when **both** of these have happened,
+//!    in either order:
+//!    - the owner confirmed the matching code there (`confirm_code`);
+//!    - the responder accepted.
+//!
+//! An attacker advertising itself as the intended device has a different peer ID, so the two
+//! screens show different codes and the owner declines. Every trust decision is persisted in the
+//! `TrustedPeerStore` before the transport admits the peer.
+
+use std::{collections::HashMap, time::Duration};
+
+use crate::{
+    domain::{
+        errors::{NetworkError, StorageError},
+        models::DeviceId,
+        peer_trust::{DeviceName, PairingCode, TrustedPeer},
+    },
+    ports::peer_trust::{PairingEvent, PairingTransport, TrustedPeerStore},
+};
+
+/// Why a pairing operation failed.
+#[derive(Debug, thiserror::Error)]
+pub enum PairingError {
+    /// No pairing with that peer is in progress (it finished, failed, or never started).
+    #[error("no pairing with this device is in progress")]
+    UnknownPairing,
+    /// The transport refused the operation.
+    #[error(transparent)]
+    Network(#[from] NetworkError),
+    /// The allowlist could not be read or written.
+    #[error(transparent)]
+    Storage(#[from] StorageError),
+}
+
+/// What the owner should see after a pairing step.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PairingUpdate {
+    /// Another device asks to pair; show its name and the code, and ask to accept or reject.
+    IncomingRequest {
+        /// The requesting device.
+        peer_id: DeviceId,
+        /// Its announced name.
+        device_name: DeviceName,
+        /// The code this device shows; it must equal the one on the requesting device.
+        code: PairingCode,
+    },
+    /// The local confirmation is recorded; the other device has not accepted yet.
+    AwaitingRemote {
+        /// The device being paired.
+        peer_id: DeviceId,
+    },
+    /// The device is now trusted and will sync.
+    Paired {
+        /// The newly trusted device.
+        peer_id: DeviceId,
+        /// Its name.
+        device_name: DeviceName,
+    },
+    /// The other device's owner declined.
+    Rejected {
+        /// The device that declined.
+        peer_id: DeviceId,
+    },
+    /// The request could not be delivered, or nobody answered in time.
+    Failed {
+        /// The unreachable device.
+        peer_id: DeviceId,
+    },
+}
+
+/// A pairing this device started.
+struct OutgoingPairing {
+    /// Whether the owner confirmed the matching code here.
+    locally_confirmed: bool,
+    /// The remote name, once the other device accepted.
+    accepted_as: Option<DeviceName>,
+}
+
+/// Coordinates pairing between a transport and the persisted allowlist.
+pub struct PairingManager<Transport, Store> {
+    transport: Transport,
+    store: Store,
+    /// This device's name, announced to peers.
+    local_name: DeviceName,
+    /// Returns the current time in milliseconds since the Unix epoch.
+    clock: Box<dyn Fn() -> u64 + Send + Sync>,
+    /// Pairings this device started, by peer.
+    outgoing: HashMap<DeviceId, OutgoingPairing>,
+    /// Requests awaiting the owner's answer, by peer.
+    incoming: HashMap<DeviceId, DeviceName>,
+}
+
+impl<Transport, Store> PairingManager<Transport, Store>
+where
+    Transport: PairingTransport,
+    Store: TrustedPeerStore,
+{
+    /// Creates a manager with no pairing in progress.
+    ///
+    /// Inputs: The transport, the allowlist, this device's name, and a millisecond clock.
+    /// Outputs: The manager. Side effects: None.
+    pub fn new(
+        transport: Transport,
+        store: Store,
+        local_name: DeviceName,
+        clock: Box<dyn Fn() -> u64 + Send + Sync>,
+    ) -> Self {
+        Self {
+            transport,
+            store,
+            local_name,
+            clock,
+            outgoing: HashMap::new(),
+            incoming: HashMap::new(),
+        }
+    }
+
+    /// Admits every stored trusted peer into the transport; call once at startup.
+    ///
+    /// Outputs: Success, or a storage or network error.
+    /// Side effects: Reads the allowlist and updates the transport's gate.
+    pub fn load_trusted_peers(&mut self) -> Result<(), PairingError> {
+        for peer in self.store.trusted_peers()? {
+            self.transport.trust_peer(peer.peer_id())?;
+        }
+        Ok(())
+    }
+
+    /// Lets unpaired devices reach this one for `duration`, so they can request pairing.
+    ///
+    /// Side effects: Opens the transport's pairing window.
+    pub fn make_pairable(&mut self, duration: Duration) {
+        self.transport.open_pairing_window(duration);
+    }
+
+    /// Lists unpaired devices visible on the local network.
+    pub fn nearby_devices(&self) -> Vec<DeviceId> {
+        self.transport.nearby_unpaired_peers()
+    }
+
+    /// Lists the paired devices, oldest first.
+    ///
+    /// Outputs: The allowlist, or a storage error. Side effects: None.
+    pub fn trusted_devices(&self) -> Result<Vec<TrustedPeer>, PairingError> {
+        Ok(self.store.trusted_peers()?)
+    }
+
+    /// Asks `peer_id` to pair and returns the code both devices will show.
+    ///
+    /// Inputs: A device from `nearby_devices`.
+    /// Outputs: The code to display, or a network error.
+    /// Side effects: Sends a pairing request; restarts a pairing already in progress with it.
+    pub fn start_pairing(&mut self, peer_id: &DeviceId) -> Result<PairingCode, PairingError> {
+        self.transport.request_pairing(peer_id, &self.local_name)?;
+        self.outgoing.insert(
+            peer_id.clone(),
+            OutgoingPairing {
+                locally_confirmed: false,
+                accepted_as: None,
+            },
+        );
+        Ok(self.code_with(peer_id))
+    }
+
+    /// Records the owner's confirmation that the codes match for a pairing this device started.
+    ///
+    /// Outputs: `Paired` when the other device already accepted, otherwise `AwaitingRemote`; or
+    /// `UnknownPairing`.
+    /// Side effects: May persist and admit the peer.
+    pub fn confirm_code(&mut self, peer_id: &DeviceId) -> Result<PairingUpdate, PairingError> {
+        let pairing = self
+            .outgoing
+            .get_mut(peer_id)
+            .ok_or(PairingError::UnknownPairing)?;
+        pairing.locally_confirmed = true;
+        match pairing.accepted_as.clone() {
+            Some(device_name) => {
+                self.outgoing.remove(peer_id);
+                let update = self.complete(peer_id, device_name)?;
+                self.end_pairing_when_idle();
+                Ok(update)
+            }
+            None => Ok(PairingUpdate::AwaitingRemote {
+                peer_id: peer_id.clone(),
+            }),
+        }
+    }
+
+    /// Abandons a pairing this device started, or declines an incoming one.
+    ///
+    /// Side effects: Answers a pending incoming request with a rejection; ends pairing when
+    /// nothing else is in progress.
+    pub fn cancel(&mut self, peer_id: &DeviceId) -> Result<(), PairingError> {
+        self.outgoing.remove(peer_id);
+        if self.incoming.remove(peer_id).is_some() {
+            self.transport.answer_pairing(peer_id, None)?;
+        }
+        self.end_pairing_when_idle();
+        Ok(())
+    }
+
+    /// Accepts an incoming request after the owner saw matching codes.
+    ///
+    /// Outputs: `Paired`, or `UnknownPairing` when no request from that peer is pending.
+    /// Side effects: Persists and admits the peer, then answers with this device's name.
+    pub fn accept_incoming(&mut self, peer_id: &DeviceId) -> Result<PairingUpdate, PairingError> {
+        let device_name = self
+            .incoming
+            .remove(peer_id)
+            .ok_or(PairingError::UnknownPairing)?;
+        let update = self.complete(peer_id, device_name)?;
+        self.transport
+            .answer_pairing(peer_id, Some(&self.local_name))?;
+        // Only after answering: ending pairing drops the transport's held answer channels.
+        self.end_pairing_when_idle();
+        Ok(update)
+    }
+
+    /// Declines an incoming request.
+    ///
+    /// Outputs: Success, or `UnknownPairing`. Side effects: Answers with a rejection.
+    pub fn reject_incoming(&mut self, peer_id: &DeviceId) -> Result<(), PairingError> {
+        self.incoming
+            .remove(peer_id)
+            .ok_or(PairingError::UnknownPairing)?;
+        self.transport.answer_pairing(peer_id, None)?;
+        self.end_pairing_when_idle();
+        Ok(())
+    }
+
+    /// Unpairs `peer_id`: removes it from the allowlist and disconnects it.
+    ///
+    /// Outputs: Whether it was paired, or an error.
+    /// Side effects: Deletes the allowlist row and updates the transport.
+    pub fn revoke(&mut self, peer_id: &DeviceId) -> Result<bool, PairingError> {
+        let was_trusted = self.store.revoke_peer(peer_id)?;
+        self.transport.revoke_peer(peer_id)?;
+        Ok(was_trusted)
+    }
+
+    /// Drains the transport's pairing events and returns what the owner should see.
+    ///
+    /// Outputs: One update per meaningful event; answers to requests this device never sent are
+    /// ignored. Side effects: May persist and admit a peer whose pairing completes.
+    pub fn process_events(&mut self) -> Result<Vec<PairingUpdate>, PairingError> {
+        let mut updates = Vec::new();
+        while let Some(event) = self.transport.poll_pairing_event() {
+            if let Some(update) = self.handle_event(event)? {
+                updates.push(update);
+            }
+        }
+        Ok(updates)
+    }
+
+    /// Applies one pairing event.
+    fn handle_event(&mut self, event: PairingEvent) -> Result<Option<PairingUpdate>, PairingError> {
+        match event {
+            PairingEvent::Requested {
+                peer_id,
+                device_name,
+            } => {
+                let code = self.code_with(&peer_id);
+                self.incoming.insert(peer_id.clone(), device_name.clone());
+                Ok(Some(PairingUpdate::IncomingRequest {
+                    peer_id,
+                    device_name,
+                    code,
+                }))
+            }
+            PairingEvent::Answered {
+                peer_id,
+                accepted_as: Some(device_name),
+            } => {
+                let Some(pairing) = self.outgoing.get_mut(&peer_id) else {
+                    tracing::warn!("ignored a pairing acceptance this device did not request");
+                    return Ok(None);
+                };
+                if pairing.locally_confirmed {
+                    self.outgoing.remove(&peer_id);
+                    let update = self.complete(&peer_id, device_name)?;
+                    self.end_pairing_when_idle();
+                    Ok(Some(update))
+                } else {
+                    pairing.accepted_as = Some(device_name);
+                    Ok(None)
+                }
+            }
+            PairingEvent::Answered {
+                peer_id,
+                accepted_as: None,
+            } => Ok(self
+                .finish_unsuccessfully(&peer_id)
+                .then_some(PairingUpdate::Rejected { peer_id })),
+            PairingEvent::Failed { peer_id } => Ok(self
+                .finish_unsuccessfully(&peer_id)
+                .then_some(PairingUpdate::Failed { peer_id })),
+        }
+    }
+
+    /// Forgets an outgoing pairing that ended without success; returns whether it existed.
+    fn finish_unsuccessfully(&mut self, peer_id: &DeviceId) -> bool {
+        let existed = self.outgoing.remove(peer_id).is_some();
+        self.end_pairing_when_idle();
+        existed
+    }
+
+    /// Persists and admits `peer_id`. Callers end pairing afterwards, once any answer is sent.
+    fn complete(
+        &mut self,
+        peer_id: &DeviceId,
+        device_name: DeviceName,
+    ) -> Result<PairingUpdate, PairingError> {
+        self.store.trust_peer(&TrustedPeer::new(
+            peer_id.clone(),
+            device_name.clone(),
+            (self.clock)(),
+        ))?;
+        self.transport.trust_peer(peer_id)?;
+        Ok(PairingUpdate::Paired {
+            peer_id: peer_id.clone(),
+            device_name,
+        })
+    }
+
+    /// Closes the pairing window once no pairing is in progress.
+    fn end_pairing_when_idle(&mut self) {
+        if self.outgoing.is_empty() && self.incoming.is_empty() {
+            self.transport.end_pairing();
+        }
+    }
+
+    /// The code shown for a pairing between this device and `peer_id`.
+    fn code_with(&self, peer_id: &DeviceId) -> PairingCode {
+        PairingCode::for_peers(&self.transport.local_peer_id(), peer_id)
+    }
+
+    /// Borrows the transport (for composition and tests).
+    pub fn transport(&self) -> &Transport {
+        &self.transport
+    }
+
+    /// Mutably borrows the transport, e.g. to drive its event loop.
+    pub fn transport_mut(&mut self) -> &mut Transport {
+        &mut self.transport
+    }
+
+    /// Borrows the allowlist store.
+    pub fn store(&self) -> &Store {
+        &self.store
+    }
+}
