@@ -214,8 +214,13 @@ characters (such as newlines), the same rules as `POST /api/meetings`. Responses
 - A malformed body (missing `title`, non-string `title`, unknown field) gets axum's `4xx`.
 - `500` with `{ "error": "unable to rename the meeting" }` for storage failures.
 
-CORS allows `PATCH` from `http://localhost:3000`. The rename is local metadata and is not
-replicated to peers.
+CORS allows `PATCH` from `http://localhost:3000`. The rename is written through the meeting's
+Automerge document (Issue #39), so it replicates to peers on the next sync.
+
+The web client's `renameMeeting` (`web/lib/api.ts`, Issue #42) throws `MeetingRenameError` with
+`kind` `invalid_title` (400), `not_found` (404), `server` (5xx), `unexpected` (any other status,
+such as axum's 422 for a malformed body), or `network` (no response). The dashboard shows its own
+messages and never displays the server's `error` text.
 
 ### Meeting export
 

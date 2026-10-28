@@ -354,3 +354,15 @@ Issue #41 adds meeting renaming to Flutter:
   place and reloads the list when the meeting is gone.
 - **Gaps:** a successful rename was not run through the real library (creating a meeting needs a
   transcription engine), and there was no GUI run on a device.
+
+Issue #42 adds meeting renaming to the web dashboard:
+
+- **Entry points:** a "⋯" actions menu (also opened by right-click) on each `/meetings` row, and a
+  pencil beside the `/meetings/<id>` heading. Both open `web/components/rename-meeting-dialog.tsx`.
+  The server pages pass their fetched titles to the client components `MeetingList` and
+  `MeetingTitleHeader`, which update in place from the `PATCH` response.
+- **Validation:** `web/lib/meeting-title.ts` duplicates `MeetingTitle::parse`, as Flutter's
+  `meeting_title_validation.dart` does. Keep all three in sync if the Rust rules change.
+- **Client:** `renameMeeting` in `web/lib/api.ts` maps statuses to `MeetingRenameError` kinds. The
+  UI never shows the server's error text.
+- **Gaps:** the modal was exercised in jsdom only, not driven in a real browser.

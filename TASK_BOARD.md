@@ -88,6 +88,7 @@
 | --- | --- | --- |
 | #19 Next.js dashboard and voice assignment | Ready for review | App Router dashboard, typed Axum REST/WebSocket client, cloud Node CI, and application-backed voice assignment endpoint. |
 | #24 Telemetry dashboard with device metrics and time-series charts | Ready for review | Privacy-safe device, series, and summary API endpoints; responsive Recharts dashboard; coalesced live refresh; and cloud UI verification. |
+| #42 Web meeting rename | Ready for review | `renameMeeting` client for `PATCH /api/meetings/{id}` with typed `MeetingRenameError` kinds (400 invalid title, 404 not found, 5xx server, other, network); `validateMeetingTitle` mirroring `MeetingTitle::parse` (code-point length); shared accessible rename modal (pre-filled and selected, Enter/Escape, focus trap and return, per-failure messages, bottom sheet on phones); "⋯" actions menu and right-click on `/meetings` rows; pencil beside the `/meetings/<id>` heading; in-place updates. `web-ci.yml` now uses `npm ci` with caching and a verbose test reporter. Verified locally: 53 Vitest tests, lint, `next build`, `make rust-lint`/`rust-test`, the client against a scratch daemon (200/400/404/network, CORS preflight), and SSR pages screenshotted in headless Firefox at phone and desktop widths. Not verified: driving the modal in a real browser (no browser automation available). |
 
 ## WP6: P2P Network Layer
 
@@ -115,7 +116,6 @@
 - Resolve segment speakers through the persisted voice-store names (#30), so exports can show them instead of `Unknown speaker`. (Meeting titles were added in #35.)
 - Compose `SyncManager` in the daemon/FFI with the libp2p adapter and call `notify_local_change` after local CRDT writes, including title changes.
 - PDF export (#37): color emoji, weight-400 instancing for variable fallback fonts, and a check of the macOS/Windows system font paths on those hosts.
-- Add a web UI for meeting rename (`PATCH /api/meetings/{id}`); the Flutter UI was added in #41.
 - Capture microphone PCM in Flutter and feed `note_taker_push_audio_pcm`, and add stop/pause controls; the recording screen still only starts recordings.
 - Add a Dart binding and UI for `note_taker_export_meeting`.
 

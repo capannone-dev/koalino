@@ -850,3 +850,29 @@
 - Verification: a Dart script against the real `cdylib` confirmed statuses 5 and 1 through the
   isolate. A successful rename was not exercised natively, because creating a meeting requires a
   transcription engine; the Rust FFI tests from #38 cover it.
+
+## 2026-10-28 — Issue #42 Web meeting rename
+
+- Node.js: the issue authorized skipping local `npm install`/`npm test`, but Node 26 and the
+  installed `node_modules` were available, so the tests, lint, and `next build` ran locally too.
+  CI remains the authoritative check (Node 22).
+- Mocks: `vi.mock` and a stubbed `fetch` (the existing pattern) instead of `msw`, which would be a
+  new dependency.
+- Modal: a hand-built `role="dialog"` overlay with a focus trap rather than `<dialog>.showModal()`,
+  which jsdom does not implement. No UI library was added.
+- List actions: both a visible "⋯" button (touch and keyboard users cannot right-click) and a
+  right-click menu, since the issue allowed either.
+- Errors: `MeetingRenameError.kind` mirrors Flutter's `MeetingRenameFailure`. Messages are the
+  dashboard's own, because the server's text can describe internals. Axum's 422 for a malformed body
+  maps to `unexpected`, and a failed `fetch` (daemon down or CORS) maps to `network`.
+- Validation and unchanged titles behave as in Flutter (#41). Length counts code points
+  (`Array.from`), as Rust counts `char`s.
+- CI: `web-ci.yml` already ran lint, tests, and build. It now uses `npm ci` with npm caching, names
+  each step, lists tests with the verbose reporter, and cancels superseded runs.
+- Docs: `API_SPECS.md` said renames were "not replicated to peers", which #38/#39 made stale; it
+  was corrected.
+- Verification: the bundled client against a scratch daemon returned 200 (trimmed, emoji kept),
+  400 for blank, too-long, and tab titles, 404 for an unknown meeting, and `network` for a closed
+  port. The CORS preflight allows `PATCH`. A headless Firefox screenshot showed the pencil sitting
+  at the far edge of the page on desktop; the heading's `flex-1` was removed so it sits beside the
+  title.
