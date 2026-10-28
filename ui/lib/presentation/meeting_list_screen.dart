@@ -20,18 +20,20 @@ const double _listPaneWidth = 360;
 final class MeetingListScreen extends StatefulWidget {
   /// Creates a screen observing `controller`.
   ///
-  /// Inputs: The meeting controller and an optional builder for the attachment import screen,
-  /// passed on to the detail.
+  /// Inputs: The meeting controller and optional builders for the attachment import screen
+  /// and a meeting's speakers, passed on to the detail.
   /// Outputs: A Material 3 meeting list screen.
   /// Side effects: Loads the meetings when first inserted.
   const MeetingListScreen({
     required this.controller,
     this.attachmentScreenBuilder,
+    this.speakersScreenBuilder,
     super.key,
   });
 
   final MeetingListController controller;
   final WidgetBuilder? attachmentScreenBuilder;
+  final MeetingScreenBuilder? speakersScreenBuilder;
 
   @override
   State<MeetingListScreen> createState() => _MeetingListScreenState();
@@ -56,6 +58,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         controller: widget.controller,
         meetingId: meeting.meetingId,
         attachmentScreenBuilder: widget.attachmentScreenBuilder,
+        speakersScreenBuilder: widget.speakersScreenBuilder,
       ),
     ));
   }
@@ -80,6 +83,23 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                 icon: const Icon(Icons.refresh),
                 onPressed: widget.controller.loadMeetings,
               ),
+              if (isTwoPane)
+                if (widget.speakersScreenBuilder
+                    case final MeetingScreenBuilder builder)
+                  AnimatedBuilder(
+                    animation: widget.controller,
+                    builder: (BuildContext context, Widget? child) =>
+                        switch (widget.controller.selectedMeetingId) {
+                      final String meetingId
+                          when widget.controller.selectedMeeting != null =>
+                        NameSpeakersButton(
+                          controller: widget.controller,
+                          meetingId: meetingId,
+                          speakersScreenBuilder: builder,
+                        ),
+                      _ => const SizedBox.shrink(),
+                    },
+                  ),
               if (isTwoPane)
                 if (widget.attachmentScreenBuilder
                     case final WidgetBuilder builder)

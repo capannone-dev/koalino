@@ -17,7 +17,8 @@ import 'fake_meeting_bridge.dart';
 /// Pumps the meeting list at `size` (logical pixels) around `meetingBridge`.
 Future<void> pumpMeetingList(
     WidgetTester tester, FakeMeetingBridge meetingBridge,
-    {Size size = const Size(390, 844)}) async {
+    {Size size = const Size(390, 844),
+    MeetingScreenBuilder? speakersScreenBuilder}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
@@ -25,6 +26,7 @@ Future<void> pumpMeetingList(
     MaterialApp(
       home: MeetingListScreen(
         controller: MeetingListController(meetingBridge: meetingBridge),
+        speakersScreenBuilder: speakersScreenBuilder,
       ),
     ),
   );
@@ -78,6 +80,75 @@ void main() {
     expect(find.byType(MeetingDetailScreen), findsOneWidget);
     expect(meetingBridge.requestedMeetings, <String>['meeting-titled']);
     expect(find.text('Hello team.'), findsOneWidget);
+  });
+
+  group('Name speakers', () {
+    /// Stands in for the voice gallery, naming the meeting it was opened for.
+    Widget fakeSpeakersScreen(BuildContext context, String meetingId) =>
+        Scaffold(appBar: AppBar(), body: Text('Speakers of $meetingId'));
+
+    /// A bridge with one meeting and its detail.
+    FakeMeetingBridge oneMeetingBridge() => FakeMeetingBridge(
+          meetings: <MeetingSummary>[titledMeeting],
+          details: <String, MeetingDetail>{
+            'meeting-titled': titledMeetingDetail
+          },
+        );
+
+    testWidgets('a phone opens the speakers of the shown meeting',
+        (WidgetTester tester) async {
+      await pumpMeetingList(tester, oneMeetingBridge(),
+          speakersScreenBuilder: fakeSpeakersScreen);
+      await tester.tap(find.text('Project Sync'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Name speakers'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Speakers of meeting-titled'), findsOneWidget);
+    });
+
+    testWidgets('coming back reloads the meeting, so new names show',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge meetingBridge = oneMeetingBridge();
+      await pumpMeetingList(tester, meetingBridge,
+          speakersScreenBuilder: fakeSpeakersScreen);
+      await tester.tap(find.text('Project Sync'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Name speakers'));
+      await tester.pumpAndSettle();
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      expect(meetingBridge.requestedMeetings,
+          <String>['meeting-titled', 'meeting-titled']);
+      expect(find.text('Hello team.'), findsOneWidget);
+    });
+
+    testWidgets('a desktop window offers it once a meeting is selected',
+        (WidgetTester tester) async {
+      await pumpMeetingList(tester, oneMeetingBridge(),
+          size: const Size(1280, 800),
+          speakersScreenBuilder: fakeSpeakersScreen);
+      expect(find.byTooltip('Name speakers'), findsNothing);
+
+      await tester.tap(find.text('Project Sync'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Name speakers'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Speakers of meeting-titled'), findsOneWidget);
+    });
+
+    testWidgets('is hidden without a speakers screen',
+        (WidgetTester tester) async {
+      await pumpMeetingList(tester, oneMeetingBridge());
+      await tester.tap(find.text('Project Sync'));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Name speakers'), findsNothing);
+    });
   });
 
   testWidgets('a desktop window shows the list and the detail side by side',

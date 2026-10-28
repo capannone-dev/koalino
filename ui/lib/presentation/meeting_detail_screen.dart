@@ -6,6 +6,10 @@ import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
+/// Builds a screen about one meeting, such as the voice gallery for its unknown speakers.
+typedef MeetingScreenBuilder = Widget Function(
+    BuildContext context, String meetingId);
+
 /// Widest the detail content grows, in logical pixels, so transcript lines stay readable.
 const double _maxReadableWidth = 840;
 
@@ -13,8 +17,9 @@ const double _maxReadableWidth = 840;
 final class MeetingDetailScreen extends StatefulWidget {
   /// Creates a screen that selects and renders `meetingId` through `controller`.
   ///
-  /// Inputs: The shared meeting controller, the meeting to show, and an optional builder for
-  /// the attachment import screen (the paperclip action is hidden without one).
+  /// Inputs: The shared meeting controller, the meeting to show, and optional builders for
+  /// the attachment import screen and the meeting's speakers (each action is hidden without
+  /// its builder).
   /// Outputs: A Material 3 detail screen.
   /// Side effects: Loads the meeting through the controller after the first frame, unless the
   /// caller already selected it (the list does, so the route never shows another meeting).
@@ -22,12 +27,14 @@ final class MeetingDetailScreen extends StatefulWidget {
     required this.controller,
     required this.meetingId,
     this.attachmentScreenBuilder,
+    this.speakersScreenBuilder,
     super.key,
   });
 
   final MeetingListController controller;
   final String meetingId;
   final WidgetBuilder? attachmentScreenBuilder;
+  final MeetingScreenBuilder? speakersScreenBuilder;
 
   @override
   State<MeetingDetailScreen> createState() => _MeetingDetailScreenState();
@@ -54,6 +61,13 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
       appBar: AppBar(
         title: const Text('Meeting'),
         actions: <Widget>[
+          if (widget.speakersScreenBuilder
+              case final MeetingScreenBuilder builder)
+            NameSpeakersButton(
+              controller: widget.controller,
+              meetingId: widget.meetingId,
+              speakersScreenBuilder: builder,
+            ),
           if (widget.attachmentScreenBuilder case final WidgetBuilder builder)
             AttachFileButton(attachmentScreenBuilder: builder),
         ],
@@ -77,6 +91,40 @@ final class AttachFileButton extends StatelessWidget {
       icon: const Icon(Icons.attach_file),
       onPressed: () => Navigator.of(context)
           .push(MaterialPageRoute<void>(builder: attachmentScreenBuilder)),
+    );
+  }
+}
+
+/// Opens the meeting's speakers (the voice gallery) from its app bar.
+final class NameSpeakersButton extends StatelessWidget {
+  /// Creates the action for `meetingId`.
+  ///
+  /// Inputs: The meeting controller, the meeting, and the builder of its speakers screen.
+  /// Outputs: An icon button.
+  /// Side effects: On return from the speakers screen, reloads the meeting through the
+  /// controller, so the transcript shows the names just assigned.
+  const NameSpeakersButton({
+    required this.controller,
+    required this.meetingId,
+    required this.speakersScreenBuilder,
+    super.key,
+  });
+
+  final MeetingListController controller;
+  final String meetingId;
+  final MeetingScreenBuilder speakersScreenBuilder;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Name speakers',
+      icon: const Icon(Icons.record_voice_over_outlined),
+      onPressed: () async {
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (BuildContext context) =>
+                speakersScreenBuilder(context, meetingId)));
+        await controller.selectMeeting(meetingId);
+      },
     );
   }
 }
