@@ -1,6 +1,6 @@
-//! Encrypts voice embeddings at rest and manages the key that protects them (Issue #31).
+//! Encrypts voice embeddings at rest and manages the key that protects them (Issues #31, #40).
 
-/// Resolves the database encryption key from a passphrase or a local random key file.
+/// Resolves the database encryption key from a passphrase, the platform keychain, or a key file.
 pub mod key_manager;
 #[cfg(test)]
 mod key_manager_tests;

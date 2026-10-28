@@ -1,4 +1,5 @@
-//! Resolves the database encryption key from a passphrase or a local random key file.
+//! Resolves the database encryption key from a passphrase, the platform keychain, or a local
+//! random key file.
 //!
 //! Key sources, chosen once per database and recorded in its encryption metadata:
 //!
@@ -8,11 +9,25 @@
 //!   Nothing secret touches the disk, but a forgotten passphrase makes the embeddings
 //!   unrecoverable, and the passphrase is visible to anything that can read the process
 //!   environment.
-//! - **Key file** (no passphrase): a random 256-bit key is generated once and stored in
-//!   `encryption.key` (owner-only permissions) inside `NOTE_TAKER_ENCRYPTION_KEY_DIR`, or
-//!   `~/.note_taker` by default. This needs no user interaction and protects a database file
-//!   that leaks on its own (backups, sync folders, copies), but not against an attacker who can
-//!   read the user's files, because the key sits on the same disk.
+//! - **Random key** (no passphrase): a random 256-bit key is generated once. It lives in the
+//!   platform keychain (`KeychainStore`, Issue #40) when one is injected and
+//!   `NOTE_TAKER_KEYCHAIN_ENABLED` is not false. Otherwise, or when the keychain is unavailable
+//!   or fails, it lives in `encryption.key` (owner-only permissions) inside
+//!   `NOTE_TAKER_ENCRYPTION_KEY_DIR`, or `~/.note_taker` by default. The key file protects a
+//!   database file that leaks on its own, but not against an attacker who can read the user's
+//!   files; the keychain additionally keeps the key off the data disk and behind the OS login.
+//!
+//! Keychain resolution, when the keychain is active:
+//!
+//! - Entry present: it is used. A leftover key file with the same key (an interrupted migration)
+//!   is deleted; a key file with a different key is kept and tried as well.
+//! - Entry absent, key file present: the file's key is migrated. It is written to the keychain,
+//!   read back, and the file is deleted only when the read-back matches; otherwise the file is
+//!   kept and used.
+//! - Entry absent, no key file: a new database gets a fresh key in the keychain (or in the file if
+//!   the keychain cannot store it); an encrypted database fails with `KeyMissing`.
+//! - Keychain unavailable or failing: the key file is used as before, with a logged warning
+//!   (unavailable) or error (access failure).
 //!
 //! Every unlock verifies the database's key-check value, so a wrong passphrase or a replaced key
 //! file is reported before any embedding is read or migrated. The returned `VoiceEncryptor`
@@ -23,6 +38,7 @@ use std::{
     fs::{self, OpenOptions},
     io::{ErrorKind, Write},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use aes_gcm::aead::{OsRng, rand_core::RngCore};
@@ -34,7 +50,7 @@ use crate::{
     domain::errors::{CryptoError, StorageError},
     ports::crypto::{
         EncryptionKeySource, EncryptionMetadata, EncryptionMetadataRepository,
-        KeyDerivationParameters,
+        KeyDerivationParameters, KeychainStore,
     },
 };
 
@@ -42,6 +58,9 @@ use crate::{
 pub const PASSPHRASE_VARIABLE: &str = "NOTE_TAKER_ENCRYPTION_PASSPHRASE";
 /// Environment variable overriding the directory that holds the random key file.
 pub const KEY_DIRECTORY_VARIABLE: &str = "NOTE_TAKER_ENCRYPTION_KEY_DIR";
+/// Environment variable that disables the platform keychain when set to false, 0, no, or off
+/// (any case); unset or any other value leaves it enabled.
+pub const KEYCHAIN_ENABLED_VARIABLE: &str = "NOTE_TAKER_KEYCHAIN_ENABLED";
 /// File name of the random key inside the key directory.
 pub const KEY_FILE_NAME: &str = "encryption.key";
 /// Directory created under the home directory when no override is configured.
@@ -53,6 +72,7 @@ const SALT_LENGTH: usize = 16;
 pub struct KeyManagerConfig {
     passphrase: Option<Zeroizing<String>>,
     key_directory: Option<PathBuf>,
+    keychain_enabled: bool,
     derivation_parameters: KeyDerivationParameters,
 }
 
@@ -61,6 +81,7 @@ impl KeyManagerConfig {
     ///
     /// Inputs: A variable lookup; a blank passphrase counts as unset. The key directory is
     /// `NOTE_TAKER_ENCRYPTION_KEY_DIR`, else `$HOME/.note_taker`, else `%USERPROFILE%\.note_taker`.
+    /// The keychain is enabled unless `NOTE_TAKER_KEYCHAIN_ENABLED` is false, 0, no, or off.
     /// Outputs: The configuration with default (OWASP) Argon2id parameters.
     /// Side effects: None beyond calling `lookup`.
     pub fn from_lookup(lookup: impl Fn(&str) -> Option<String>) -> Self {
@@ -79,6 +100,8 @@ impl KeyManagerConfig {
                 .filter(non_blank)
                 .map(Zeroizing::new),
             key_directory,
+            keychain_enabled: !lookup(KEYCHAIN_ENABLED_VARIABLE)
+                .is_some_and(|value| disables_keychain(&value)),
             derivation_parameters: KeyDerivationParameters::default(),
         }
     }
@@ -105,6 +128,12 @@ impl KeyManagerConfig {
     /// Reports whether a passphrase is configured.
     pub fn uses_passphrase(&self) -> bool {
         self.passphrase.is_some()
+    }
+
+    /// Reports whether the platform keychain may hold the random key. Passphrase mode never uses
+    /// it, whatever this returns.
+    pub fn keychain_enabled(&self) -> bool {
+        self.keychain_enabled
     }
 
     /// Returns the directory that holds (or will hold) the random key file, if one is known.
@@ -144,14 +173,43 @@ impl fmt::Debug for KeyManagerConfig {
                 &self.passphrase.as_ref().map(|_| "<redacted>"),
             )
             .field("key_directory", &self.key_directory)
+            .field("keychain_enabled", &self.keychain_enabled)
             .field("derivation_parameters", &self.derivation_parameters)
             .finish()
+    }
+}
+
+/// Whether resolving the random key may create one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RandomKeyNeed {
+    /// The database has no metadata yet, so a missing key is generated.
+    CreateIfMissing,
+    /// The database is already encrypted, so a missing key is an error.
+    MustExist,
+}
+
+/// The random key to use, plus a conflicting key-file key to try if it does not match.
+struct RandomKeys {
+    /// The keychain key, or the key file's key when the keychain is not used.
+    preferred: EncryptionKey,
+    /// A key file whose key differs from the keychain entry; kept, never deleted.
+    conflicting_key_file: Option<EncryptionKey>,
+}
+
+impl RandomKeys {
+    /// Wraps a single key with no alternative.
+    fn single(preferred: EncryptionKey) -> Self {
+        Self {
+            preferred,
+            conflicting_key_file: None,
+        }
     }
 }
 
 /// Unlocks a database's encryption key according to a `KeyManagerConfig`.
 pub struct KeyManager {
     config: KeyManagerConfig,
+    keychain: Option<Arc<dyn KeychainStore>>,
 }
 
 impl KeyManager {
@@ -161,7 +219,21 @@ impl KeyManager {
     /// Outputs: The manager.
     /// Side effects: None.
     pub fn new(config: KeyManagerConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            keychain: None,
+        }
+    }
+
+    /// Adds the platform keychain as the preferred home of the random key.
+    ///
+    /// Inputs: The keychain store. It is ignored in passphrase mode and when the configuration
+    /// disables the keychain.
+    /// Outputs: The updated manager.
+    /// Side effects: None until `unlock`.
+    pub fn with_keychain(mut self, keychain: Arc<dyn KeychainStore>) -> Self {
+        self.keychain = Some(keychain);
+        self
     }
 
     /// Returns the encryptor for the database behind `metadata_repository`.
@@ -170,8 +242,10 @@ impl KeyManager {
     /// Outputs: An encryptor holding the verified key, or `KeySourceMismatch`, `WrongKey`,
     /// `KeyFile`, `KeyDerivation`, or `Metadata` errors.
     /// Side effects: On a database's first unlock, generates the salt (passphrase) or reads or
-    /// creates the key file (no passphrase), then stores the metadata record. Later unlocks only
-    /// read. Never logs key material.
+    /// creates the random key (keychain or key file), then stores the metadata record. Without a
+    /// passphrase, any unlock may migrate the key file into the keychain and delete it, or delete
+    /// a leftover key file that matches the keychain. Logs keychain fallbacks; never logs key
+    /// material.
     pub fn unlock<MetadataStore>(
         &self,
         metadata_repository: &MetadataStore,
@@ -211,14 +285,18 @@ impl KeyManager {
     /// Rebuilds the key recorded in `metadata` and verifies it.
     ///
     /// Inputs: The stored metadata.
-    /// Outputs: The encryptor, or a mismatch, key-file, derivation, or wrong-key error.
-    /// Side effects: Reads the key file or runs Argon2id.
+    /// Outputs: The encryptor, or a mismatch, key-file, keychain, missing-key, derivation, or
+    /// wrong-key error.
+    /// Side effects: Reads the keychain or key file (see `random_keys`) or runs Argon2id.
     fn unlock_existing(
         &self,
         metadata: &EncryptionMetadata,
     ) -> Result<VoiceEncryptor, CryptoError> {
         let key = match (metadata.key_source(), &self.config.passphrase) {
-            (EncryptionKeySource::KeyFile, None) => load_key_file(&self.config.key_file_path()?)?,
+            (EncryptionKeySource::KeyFile, None) => {
+                let random_keys = self.random_keys(RandomKeyNeed::MustExist)?;
+                return verify_random_keys(random_keys, metadata.key_check());
+            }
             (EncryptionKeySource::Passphrase { salt, parameters }, Some(passphrase)) => {
                 derive_key_from_passphrase(passphrase, salt, *parameters)?
             }
@@ -238,7 +316,8 @@ impl KeyManager {
     ///
     /// Inputs: None.
     /// Outputs: The key source to record and the key.
-    /// Side effects: Generates a salt and runs Argon2id, or reads or creates the key file.
+    /// Side effects: Generates a salt and runs Argon2id, or resolves the random key through the
+    /// keychain or key file (see `random_keys`).
     fn create_key(&self) -> Result<(EncryptionKeySource, EncryptionKey), CryptoError> {
         match &self.config.passphrase {
             Some(passphrase) => {
@@ -250,10 +329,305 @@ impl KeyManager {
             }
             None => Ok((
                 EncryptionKeySource::KeyFile,
-                load_or_create_key_file(&self.config.key_file_path()?)?,
+                self.random_keys(RandomKeyNeed::CreateIfMissing)?.preferred,
             )),
         }
     }
+
+    /// Returns the keychain when it may hold the random key: injected, enabled, no passphrase.
+    fn active_keychain(&self) -> Option<&dyn KeychainStore> {
+        if !self.config.keychain_enabled || self.config.uses_passphrase() {
+            return None;
+        }
+        self.keychain.as_deref()
+    }
+
+    /// Resolves the random key through the keychain, migrating or falling back to the key file.
+    ///
+    /// Inputs: Whether a missing key may be generated.
+    /// Outputs: The key(s) to try, or `Keychain` (corrupt entry), `KeyMissing`, or `KeyFile`.
+    /// Side effects: Reads and may write the keychain; may create, read, or delete the key file.
+    /// Logs every fallback and migration outcome without key material.
+    fn random_keys(&self, need: RandomKeyNeed) -> Result<RandomKeys, CryptoError> {
+        let Some(keychain) = self.active_keychain() else {
+            return self.key_file_key(need).map(RandomKeys::single);
+        };
+        match keychain.load_key() {
+            Ok(Some(key_bytes)) => {
+                let keychain_key = key_from_keychain_bytes(keychain, &key_bytes)?;
+                Ok(self.reconcile_leftover_key_file(keychain_key))
+            }
+            Ok(None) => self
+                .key_without_keychain_entry(keychain, need)
+                .map(RandomKeys::single),
+            Err(keychain_error) => {
+                log_keychain_failure(keychain, &keychain_error, "using the key file instead");
+                if need == RandomKeyNeed::MustExist && !self.key_file_exists() {
+                    return Err(self.key_missing(&format!(
+                        "{} could not be read ({keychain_error})",
+                        keychain.location()
+                    )));
+                }
+                self.key_file_key(need).map(RandomKeys::single)
+            }
+        }
+    }
+
+    /// Resolves the key when the keychain is reachable but has no entry.
+    ///
+    /// Inputs: The keychain and whether a missing key may be generated.
+    /// Outputs: The migrated or new key, or `KeyMissing` / `KeyFile` errors.
+    /// Side effects: Migrates an existing key file (see `migrate_key_file`), or stores a new key
+    /// in the keychain, falling back to a new key file when the keychain cannot keep it.
+    fn key_without_keychain_entry(
+        &self,
+        keychain: &dyn KeychainStore,
+        need: RandomKeyNeed,
+    ) -> Result<EncryptionKey, CryptoError> {
+        let key_file_path = self.config.key_file_path();
+        if let Ok(key_file_path) = &key_file_path
+            && key_file_path.exists()
+        {
+            return migrate_key_file(keychain, key_file_path);
+        }
+        if need == RandomKeyNeed::MustExist {
+            return Err(self.key_missing(&format!("{} does not exist", keychain.location())));
+        }
+        match store_and_read_back(keychain, &EncryptionKey::generate()) {
+            Ok(stored_key) => {
+                tracing::info!(
+                    keychain = keychain.location(),
+                    "Generated encryption key in the platform keychain"
+                );
+                Ok(stored_key)
+            }
+            Err(keychain_error) => {
+                log_keychain_failure(
+                    keychain,
+                    &keychain_error,
+                    "storing the new key in the key file instead",
+                );
+                load_or_create_key_file(&key_file_path?)
+            }
+        }
+    }
+
+    /// Checks for a key file next to a keychain entry and decides what to do with it.
+    ///
+    /// Inputs: The key read from the keychain.
+    /// Outputs: The keychain key, plus the file's key when it differs.
+    /// Side effects: Deletes a key file holding the same key (an interrupted migration); keeps a
+    /// conflicting or unreadable one and logs a warning.
+    fn reconcile_leftover_key_file(&self, keychain_key: EncryptionKey) -> RandomKeys {
+        let Ok(key_file_path) = self.config.key_file_path() else {
+            return RandomKeys::single(keychain_key);
+        };
+        if !key_file_path.exists() {
+            return RandomKeys::single(keychain_key);
+        }
+        match load_key_file(&key_file_path) {
+            Ok(file_key) if file_key.as_bytes() == keychain_key.as_bytes() => {
+                delete_migrated_key_file(&key_file_path);
+                RandomKeys::single(keychain_key)
+            }
+            Ok(file_key) => {
+                tracing::warn!(
+                    path = %key_file_path.display(),
+                    "Encryption key file differs from the keychain entry; keeping both"
+                );
+                RandomKeys {
+                    preferred: keychain_key,
+                    conflicting_key_file: Some(file_key),
+                }
+            }
+            Err(file_error) => {
+                tracing::warn!(error = %file_error, "Ignoring an unreadable leftover encryption key file");
+                RandomKeys::single(keychain_key)
+            }
+        }
+    }
+
+    /// Loads, or for a new database creates, the key file.
+    ///
+    /// Inputs: Whether a missing file may be created.
+    /// Outputs: The key, or a `KeyFile` error.
+    /// Side effects: See `load_or_create_key_file` and `load_key_file`.
+    fn key_file_key(&self, need: RandomKeyNeed) -> Result<EncryptionKey, CryptoError> {
+        let key_file_path = self.config.key_file_path()?;
+        match need {
+            RandomKeyNeed::CreateIfMissing => load_or_create_key_file(&key_file_path),
+            RandomKeyNeed::MustExist => load_key_file(&key_file_path),
+        }
+    }
+
+    /// Reports whether the key file exists.
+    fn key_file_exists(&self) -> bool {
+        self.config
+            .key_file_path()
+            .is_ok_and(|key_file_path| key_file_path.exists())
+    }
+
+    /// Builds the `KeyMissing` error naming the keychain state and the key file.
+    ///
+    /// Inputs: What happened to the keychain entry.
+    /// Outputs: The error; it names locations only.
+    /// Side effects: None.
+    fn key_missing(&self, keychain_state: &str) -> CryptoError {
+        let key_file_state = match self.config.key_file_path() {
+            Ok(key_file_path) => format!("{} does not exist", key_file_path.display()),
+            Err(_) => format!("no key file directory is known ({KEY_DIRECTORY_VARIABLE} or HOME)"),
+        };
+        CryptoError::KeyMissing {
+            reason: format!(
+                "{keychain_state}, and {key_file_state}; restore the keychain entry or the key \
+                 file to read this database's voice embeddings"
+            ),
+        }
+    }
+}
+
+/// Tries the preferred random key, then a conflicting key file's key, against the key check.
+///
+/// Inputs: The candidate keys and the database's key-check value.
+/// Outputs: The encryptor for the first key that verifies, or `WrongKey`.
+/// Side effects: Logs a warning when only the conflicting key file matches.
+fn verify_random_keys(
+    random_keys: RandomKeys,
+    key_check: &[u8],
+) -> Result<VoiceEncryptor, CryptoError> {
+    let preferred = VoiceEncryptor::new(&random_keys.preferred);
+    match (
+        preferred.verify_key_check(key_check),
+        random_keys.conflicting_key_file,
+    ) {
+        (Ok(()), _) => Ok(preferred),
+        (Err(CryptoError::WrongKey), Some(file_key)) => {
+            let from_file = VoiceEncryptor::new(&file_key);
+            from_file.verify_key_check(key_check)?;
+            tracing::warn!(
+                "This database uses the key file, not the keychain entry; keep the key file"
+            );
+            Ok(from_file)
+        }
+        (Err(error), _) => Err(error),
+    }
+}
+
+/// Copies the key file's key into the keychain and deletes the file once the copy is verified.
+///
+/// Inputs: The keychain and the existing key file.
+/// Outputs: The file's key (also when migration fails), or a `KeyFile` error for an unreadable or
+/// invalid file, in which case nothing is migrated.
+/// Side effects: Writes and reads back the keychain entry; deletes the file only when the
+/// read-back equals the file. Any failure keeps the file and logs an error.
+fn migrate_key_file(
+    keychain: &dyn KeychainStore,
+    key_file_path: &Path,
+) -> Result<EncryptionKey, CryptoError> {
+    let file_key = load_key_file(key_file_path)?;
+    match store_and_read_back(keychain, &file_key) {
+        Ok(stored_key) if stored_key.as_bytes() == file_key.as_bytes() => {
+            tracing::info!(
+                keychain = keychain.location(),
+                path = %key_file_path.display(),
+                "Migrated the encryption key file into the platform keychain"
+            );
+            delete_migrated_key_file(key_file_path);
+        }
+        Ok(_) => tracing::error!(
+            keychain = keychain.location(),
+            path = %key_file_path.display(),
+            "Encryption key migration failed: the keychain returned a different key; keeping the key file"
+        ),
+        Err(keychain_error) => tracing::error!(
+            keychain = keychain.location(),
+            path = %key_file_path.display(),
+            error = %keychain_error,
+            "Encryption key migration to the platform keychain failed; keeping the key file"
+        ),
+    }
+    Ok(file_key)
+}
+
+/// Writes `key` to the keychain and returns what the keychain then holds.
+///
+/// Inputs: The keychain and the key to store.
+/// Outputs: The key read back (callers compare it when it must equal `key`), or `Keychain` /
+/// `KeychainUnavailable` when the write fails or the entry is empty or invalid afterwards.
+/// Side effects: Writes and reads the keychain entry.
+fn store_and_read_back(
+    keychain: &dyn KeychainStore,
+    key: &EncryptionKey,
+) -> Result<EncryptionKey, CryptoError> {
+    keychain.store_key(key.as_bytes())?;
+    match keychain.load_key()? {
+        Some(key_bytes) => key_from_keychain_bytes(keychain, &key_bytes),
+        None => Err(CryptoError::Keychain {
+            reason: format!(
+                "{} was empty right after it was written",
+                keychain.location()
+            ),
+        }),
+    }
+}
+
+/// Validates a keychain secret as a 32-byte key.
+///
+/// Inputs: The keychain (for the message) and the secret.
+/// Outputs: The key, or `Keychain` when the entry has another length.
+/// Side effects: None.
+fn key_from_keychain_bytes(
+    keychain: &dyn KeychainStore,
+    key_bytes: &[u8],
+) -> Result<EncryptionKey, CryptoError> {
+    let key_array: [u8; 32] = key_bytes.try_into().map_err(|_| CryptoError::Keychain {
+        reason: format!(
+            "{} does not hold a 32-byte encryption key; restore the original entry",
+            keychain.location()
+        ),
+    })?;
+    Ok(EncryptionKey::from_bytes(key_array))
+}
+
+/// Deletes a key file whose key is now in the keychain.
+///
+/// Inputs: The key file path.
+/// Outputs: None; a failure is logged because the key is safe in both places.
+/// Side effects: Removes the file. A file another process already removed counts as success.
+fn delete_migrated_key_file(key_file_path: &Path) {
+    match fs::remove_file(key_file_path) {
+        Ok(()) => {
+            tracing::info!(path = %key_file_path.display(), "Deleted the migrated encryption key file")
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => tracing::warn!(
+            path = %key_file_path.display(),
+            %error,
+            "The key is in the keychain, but the old key file could not be deleted; delete it manually"
+        ),
+    }
+}
+
+/// Logs a keychain failure at a level that matches its cause.
+///
+/// Inputs: The keychain, the error, and what happens next.
+/// Outputs: None.
+/// Side effects: A warning for a keychain that does not exist on this machine, an error for an
+/// access failure.
+fn log_keychain_failure(keychain: &dyn KeychainStore, error: &CryptoError, consequence: &str) {
+    if matches!(error, CryptoError::KeychainUnavailable { .. }) {
+        tracing::warn!(keychain = keychain.location(), %error, "Platform keychain unavailable; {consequence}");
+    } else {
+        tracing::error!(keychain = keychain.location(), %error, "Platform keychain access failed; {consequence}");
+    }
+}
+
+/// Reports whether a `NOTE_TAKER_KEYCHAIN_ENABLED` value turns the keychain off.
+fn disables_keychain(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "false" | "0" | "no" | "off"
+    )
 }
 
 /// Derives a 256-bit key from a passphrase with Argon2id (version 0x13).

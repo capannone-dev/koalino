@@ -219,6 +219,26 @@ pub enum CryptoError {
         /// A reason that names paths but never key bytes.
         reason: String,
     },
+    /// The platform keychain does not exist on this machine (for example headless Linux without a
+    /// Secret Service); the key manager falls back to the key file.
+    #[error("platform keychain unavailable: {reason}")]
+    KeychainUnavailable {
+        /// A reason from the platform that contains no key material.
+        reason: String,
+    },
+    /// The platform keychain refused or failed an operation, or holds an entry that is not a
+    /// valid key.
+    #[error("platform keychain error: {reason}")]
+    Keychain {
+        /// A reason naming the keychain entry but never key bytes.
+        reason: String,
+    },
+    /// An encrypted database's random key is in neither the keychain nor the key file.
+    #[error("encryption key not found: {reason}")]
+    KeyMissing {
+        /// Names every place that was searched and how to recover.
+        reason: String,
+    },
     /// The configured key does not decrypt this database's key-check value.
     #[error("the configured encryption key does not match this database")]
     WrongKey,

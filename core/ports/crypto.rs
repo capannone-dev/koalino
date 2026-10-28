@@ -4,7 +4,11 @@
 //! after reading, so they never handle keys or cipher primitives. `EncryptionMetadataRepository`
 //! persists the non-secret facts needed to unlock a database again: which key source it uses, the
 //! Argon2id salt and parameters for passphrase keys, and a key-check value that detects a wrong
-//! key before any embedding is touched.
+//! key before any embedding is touched. `KeychainStore` (Issue #40) holds the random database key
+//! in the operating system's credential store, so the application layer never links a platform
+//! keychain library.
+
+use zeroize::Zeroizing;
 
 use crate::domain::errors::{CryptoError, StorageError};
 
@@ -74,7 +78,9 @@ impl Default for KeyDerivationParameters {
 /// Records where a database's encryption key comes from.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EncryptionKeySource {
-    /// A random 32-byte key stored in a local key file.
+    /// A random 32-byte key held in the platform keychain or, as a fallback, in a local key file.
+    /// The name and stored value (`key_file`) predate the keychain and are kept for existing
+    /// databases.
     KeyFile,
     /// A key derived with Argon2id from `NOTE_TAKER_ENCRYPTION_PASSPHRASE`.
     Passphrase {
@@ -89,11 +95,11 @@ impl EncryptionKeySource {
     /// Names the source for error messages and documentation.
     ///
     /// Inputs: None.
-    /// Outputs: `"key file"` or `"passphrase"`.
+    /// Outputs: `"random key"` or `"passphrase"`.
     /// Side effects: None.
     pub fn label(&self) -> &'static str {
         match self {
-            Self::KeyFile => "key file",
+            Self::KeyFile => "random key",
             Self::Passphrase { .. } => "passphrase",
         }
     }
@@ -147,4 +153,34 @@ pub trait EncryptionMetadataRepository {
     /// Side effects: Writes at most one metadata record; never overwrites an existing one.
     fn save_encryption_metadata(&self, metadata: &EncryptionMetadata)
     -> Result<bool, StorageError>;
+}
+
+/// Holds the random database key in one operating-system credential store entry.
+///
+/// Implementations are the macOS Keychain, the Windows Credential Manager, and the Secret Service
+/// on Linux (`adapters::keychain`), or an in-memory double in tests. Errors distinguish a store
+/// that does not exist on this machine (`KeychainUnavailable`) from one that refused or failed an
+/// operation (`Keychain`); the key manager falls back to the key file in both cases.
+pub trait KeychainStore: Send + Sync {
+    /// Reads the stored key bytes.
+    ///
+    /// Inputs: None.
+    /// Outputs: The bytes (wiped on drop), `None` when the entry does not exist, or
+    /// `KeychainUnavailable` / `Keychain`. The length is validated by the caller.
+    /// Side effects: Queries the credential store; the platform may prompt the user to unlock it.
+    fn load_key(&self) -> Result<Option<Zeroizing<Vec<u8>>>, CryptoError>;
+
+    /// Creates or replaces the entry with `key_bytes`.
+    ///
+    /// Inputs: The raw key; implementations must never log it.
+    /// Outputs: Success, or `KeychainUnavailable` / `Keychain`.
+    /// Side effects: Writes the credential store.
+    fn store_key(&self, key_bytes: &[u8]) -> Result<(), CryptoError>;
+
+    /// Names the store and entry for log and error messages (no secret material).
+    ///
+    /// Inputs: None.
+    /// Outputs: For example `Secret Service item service=note-taker account=encryption-key`.
+    /// Side effects: None.
+    fn location(&self) -> &str;
 }
