@@ -6,15 +6,28 @@ import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 
+/// What a start or resume request achieved.
+enum RecordingStartOutcome {
+  /// Rust is recording.
+  started,
+
+  /// The microphone could not be opened (Rust status 7): no input device, or access denied by
+  /// the operating system. Nothing is recording.
+  microphoneUnavailable,
+
+  /// Rust rejected the request for another reason.
+  failed,
+}
+
 /// Declares Flutter operations supported by the native recording boundary.
 abstract interface class RecordingBridge {
   /// Requests a recording start through the Rust core, or resumes a paused recording.
   ///
   /// Inputs: None.
-  /// Outputs: `true` when Rust accepted the request; otherwise `false`.
-  /// Side effects: Resumes a paused or interrupted recording into the same meeting, or starts a
-  /// new untitled one.
-  Future<bool> startRecording();
+  /// Outputs: The outcome; `microphoneUnavailable` when the microphone did not open.
+  /// Side effects: Turns the microphone on and resumes a paused or interrupted recording into
+  /// the same meeting, or starts a new untitled one.
+  Future<RecordingStartOutcome> startRecording();
 
   /// Pauses the active recording; audio pushed while paused is discarded.
   ///
@@ -35,10 +48,11 @@ abstract interface class RecordingBridge {
   ///
   /// Inputs: `title` is the meeting title, or `null` (or blank) for an untitled meeting, which
   /// Rust shows as `Meeting YYYY-MM-DD HH:MM UTC`.
-  /// Outputs: `true` when Rust accepted the request; otherwise `false`, including for a title
-  /// Rust rejects (over 200 characters or containing control characters).
-  /// Side effects: May start a Rust-owned recording into a new meeting and store its title.
-  Future<bool> startRecordingWithTitle(String? title);
+  /// Outputs: The outcome; `failed` includes a title Rust rejects (over 200 characters or
+  /// containing control characters), and `microphoneUnavailable` a microphone that did not open.
+  /// Side effects: May turn the microphone on and start a Rust-owned recording into a new
+  /// meeting, storing its title.
+  Future<RecordingStartOutcome> startRecordingWithTitle(String? title);
 
   /// Sets the Rust tracing filter without exposing Rust logging types to Flutter.
   ///
@@ -69,12 +83,12 @@ final class RustRecordingBridge implements RecordingBridge {
   /// Requests a start, or a resume of a paused recording, through the C ABI.
   ///
   /// Inputs: None.
-  /// Outputs: `true` only for the Rust success status code.
+  /// Outputs: The outcome of Rust's status code.
   /// Side effects: Invokes `note_taker_start_recording` on a background isolate, because the
   /// first start composes the meeting pipeline and may load a model.
   @override
-  Future<bool> startRecording() async =>
-      await _runLifecycleCommand('note_taker_start_recording') == _ffiSuccess;
+  Future<RecordingStartOutcome> startRecording() async =>
+      startOutcomeOf(await _runLifecycleCommand('note_taker_start_recording'));
 
   /// Requests a pause through the C ABI.
   ///
@@ -99,15 +113,15 @@ final class RustRecordingBridge implements RecordingBridge {
   ///
   /// Inputs: `title` is trimmed; a null or blank title is sent as a null pointer, because Rust
   /// rejects an empty string. The meeting ID is always null, so Rust generates one.
-  /// Outputs: `true` only for the Rust success status code.
+  /// Outputs: The outcome of Rust's status code.
   /// Side effects: Allocates a temporary UTF-8 buffer and invokes
   /// `note_taker_start_recording_with_title`, which may load a model on first use.
   @override
-  Future<bool> startRecordingWithTitle(String? title) async {
+  Future<RecordingStartOutcome> startRecordingWithTitle(String? title) async {
     final String? trimmedTitle = title?.trim();
     final String? requestedTitle =
         trimmedTitle == null || trimmedTitle.isEmpty ? null : trimmedTitle;
-    return await _startTitledRecording(requestedTitle) == _ffiSuccess;
+    return startOutcomeOf(await _startTitledRecording(requestedTitle));
   }
 
   /// Requests a tracing filter change through the C ABI.
@@ -201,3 +215,17 @@ typedef _DartSetLogLevel = int Function(Pointer<Utf8> filterDirective);
 
 /// Matches the success status documented by the Rust FFI contract.
 const int _ffiSuccess = 0;
+
+/// Matches `FFI_MICROPHONE_UNAVAILABLE` in the Rust FFI contract.
+const int microphoneUnavailableStatus = 7;
+
+/// Maps a start status from Rust to its outcome.
+///
+/// Inputs: The status code. Outputs: `started` for 0, `microphoneUnavailable` for 7, otherwise
+/// `failed`. Side effects: None.
+RecordingStartOutcome startOutcomeOf(int status) => switch (status) {
+      _ffiSuccess => RecordingStartOutcome.started,
+      microphoneUnavailableStatus =>
+        RecordingStartOutcome.microphoneUnavailable,
+      _ => RecordingStartOutcome.failed,
+    };

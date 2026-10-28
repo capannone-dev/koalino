@@ -1,7 +1,8 @@
 // Hosts the Flutter UI, holds a Wi-Fi multicast lock while the app is visible so the Rust core's
 // mDNS discovery receives other devices' announcements (Issue #43), and hands the database key
 // from the Android Keystore to the Rust core over JNI when Dart asks on `note_taker/key_vault`.
-// It also serves the app lock (`AppLock`) on `note_taker/app_lock`.
+// It also serves the app lock (`AppLock`) on `note_taker/app_lock` and the microphone permission
+// (`MicrophonePermission`) on `note_taker/microphone`.
 package com.example.note_taker_ui
 
 import android.content.Context
@@ -18,6 +19,9 @@ class MainActivity : FlutterActivity() {
     /** Lets multicast packets through Android's Wi-Fi filter; null until first started. */
     private var multicastLock: WifiManager.MulticastLock? = null
 
+    /** Answers `note_taker/microphone`; null until the engine is configured. */
+    private var microphonePermission: MicrophonePermission? = null
+
     /** Runs Keystore work off the main thread. */
     private val keyVaultExecutor = Executors.newSingleThreadExecutor()
 
@@ -32,6 +36,10 @@ class MainActivity : FlutterActivity() {
         appLock.applyRecentsPreview()
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/app_lock")
             .setMethodCallHandler(appLock)
+        val microphone = MicrophonePermission(this)
+        microphonePermission = microphone
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/microphone")
+            .setMethodCallHandler(microphone)
         val mainThread = Handler(Looper.getMainLooper())
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/key_vault")
             .setMethodCallHandler { call, result ->
@@ -72,6 +80,17 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
+    }
+
+    /** Hands RECORD_AUDIO answers to `MicrophonePermission`. */
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        if (microphonePermission?.onRequestPermissionsResult(requestCode, grantResults) != true) {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        }
     }
 
     /** Acquires the lock when the app becomes visible. Side effects: raises Wi-Fi power use. */

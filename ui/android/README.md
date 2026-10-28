@@ -34,6 +34,14 @@ background thread and passes it straight to Rust with `NativeCore.provideEncrypt
 failure answers `keystore_unavailable` and a refused key or missing JNI method `key_rejected`;
 the app shows both as the keychain error with Retry.
 
+## Microphone
+
+The Rust core records the microphone itself (`cpal` on AAudio, Issue #45), so the app declares
+`RECORD_AUDIO`. `MicrophonePermission.kt` serves `note_taker/microphone`: `ensureGranted` answers
+true at once when granted, otherwise shows the system dialog (`MainActivity` forwards
+`onRequestPermissionsResult`); a permanent refusal answers false without a dialog. Framework APIs
+only, no AndroidX.
+
 ## App lock
 
 `AppLock.kt` serves `note_taker/app_lock`: the setting (SharedPreferences

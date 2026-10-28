@@ -32,6 +32,12 @@ both native strings, and maps non-zero statuses to `MeetingRenameException` thro
 `meetingRenameExceptionFor` (1 invalid title, 2 storage, 3 runtime, 5 not found, other unknown)
 (Issue #41).
 
+`recording_bridge.dart` maps start and resume statuses to `RecordingStartOutcome`: `started`
+(0), `microphoneUnavailable` (7, the Rust core could not open the microphone), or `failed`.
+`microphone_permission.dart` asks for microphone access before each start or resume: Android
+uses `MicrophonePermission.kt` on `note_taker/microphone` (`RECORD_AUDIO`); desktops have no
+runtime prompt, and a Windows privacy refusal surfaces as status 7 (Issue #45).
+
 `app_configuration.dart` runs first: `configureCore` passes the application-support directory
 (`<support>/note_taker`), the device name (the host name; "Android device" on Android), and
 `models/ggml-base.bin` when present to `note_taker_configure` on a background isolate. Every

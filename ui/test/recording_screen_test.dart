@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
+import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 import 'package:note_taker_ui/presentation/recording_screen.dart';
 
@@ -17,10 +18,18 @@ final class FakeRecordingBridge implements RecordingBridge {
     this.pauseResult = true,
     this.resumeResult = true,
     this.stopResult = true,
+    this.startOutcome,
+    this.resumeOutcome,
   });
 
   /// Controls whether the simulated Rust start operation succeeds.
   final bool startResult;
+
+  /// Overrides the start outcome derived from `startResult` (e.g. microphone unavailable).
+  final RecordingStartOutcome? startOutcome;
+
+  /// Overrides the resume outcome derived from `resumeResult`.
+  final RecordingStartOutcome? resumeOutcome;
 
   /// Controls whether `pauseRecording` succeeds.
   final bool pauseResult;
@@ -47,9 +56,9 @@ final class FakeRecordingBridge implements RecordingBridge {
   Future<bool> setLogLevel(String filterDirective) async => true;
 
   @override
-  Future<bool> startRecording() async {
+  Future<RecordingStartOutcome> startRecording() async {
     lifecycleCommands.add('resume');
-    return resumeResult;
+    return resumeOutcome ?? _outcomeOf(resumeResult);
   }
 
   @override
@@ -66,20 +75,45 @@ final class FakeRecordingBridge implements RecordingBridge {
   }
 
   @override
-  Future<bool> startRecordingWithTitle(String? title) async {
+  Future<RecordingStartOutcome> startRecordingWithTitle(String? title) async {
     requestedTitles.add(title);
-    return startResult;
+    return startOutcome ?? _outcomeOf(startResult);
+  }
+
+  static RecordingStartOutcome _outcomeOf(bool succeeded) =>
+      succeeded ? RecordingStartOutcome.started : RecordingStartOutcome.failed;
+}
+
+/// Answers microphone permission requests with a fixed result and counts them.
+final class FakeMicrophonePermission implements MicrophonePermission {
+  /// Creates a fake that grants or denies every request.
+  FakeMicrophonePermission({required this.granted});
+
+  /// Whether requests are granted.
+  final bool granted;
+
+  /// How many times the permission was requested.
+  int requestCount = 0;
+
+  @override
+  Future<bool> ensureGranted() async {
+    requestCount += 1;
+    return granted;
   }
 }
 
 /// Pumps the recording screen around a controller backed by `recordingBridge`.
 Future<void> pumpRecordingScreen(
-    WidgetTester tester, FakeRecordingBridge recordingBridge) async {
+    WidgetTester tester, FakeRecordingBridge recordingBridge,
+    {MicrophonePermission? microphonePermission}) async {
   await tester.pumpWidget(
     MaterialApp(
       home: RecordingScreen(
-        recordingController:
-            RecordingController(recordingBridge: recordingBridge),
+        recordingController: RecordingController(
+          recordingBridge: recordingBridge,
+          microphonePermission:
+              microphonePermission ?? const GrantedMicrophonePermission(),
+        ),
       ),
     ),
   );
@@ -116,6 +150,39 @@ void main() {
     expect(recordingBridge.startRecordingCallCount, 1);
     expect(find.text('Ready to record'), findsOneWidget);
     expect(find.text('Unable to start recording'), findsOneWidget);
+  });
+
+  testWidgets('a microphone that cannot open keeps the recorder idle',
+      (WidgetTester tester) async {
+    await pumpRecordingScreen(
+        tester,
+        FakeRecordingBridge(
+            startResult: false,
+            startOutcome: RecordingStartOutcome.microphoneUnavailable));
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+
+    expect(find.text('Ready to record'), findsOneWidget);
+    expect(find.text('Unable to open the microphone'), findsOneWidget);
+  });
+
+  testWidgets('a denied microphone permission never starts a recording',
+      (WidgetTester tester) async {
+    final FakeRecordingBridge recordingBridge =
+        FakeRecordingBridge(startResult: true);
+    final FakeMicrophonePermission microphonePermission =
+        FakeMicrophonePermission(granted: false);
+    await pumpRecordingScreen(tester, recordingBridge,
+        microphonePermission: microphonePermission);
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+
+    expect(microphonePermission.requestCount, 1);
+    expect(recordingBridge.startRecordingCallCount, 0);
+    expect(find.text('Ready to record'), findsOneWidget);
+    expect(find.text('Microphone access is needed to record'), findsOneWidget);
   });
 
   testWidgets('an optional meeting title field exists and accepts text',
@@ -204,15 +271,34 @@ void main() {
   group('pause, resume, and stop', () {
     /// Pumps the screen and starts a titled recording.
     Future<FakeRecordingBridge> startRecordingIn(WidgetTester tester,
-        {bool pauseResult = true, bool stopResult = true}) async {
+        {bool pauseResult = true,
+        bool stopResult = true,
+        RecordingStartOutcome? resumeOutcome}) async {
       final FakeRecordingBridge recordingBridge = FakeRecordingBridge(
-          startResult: true, pauseResult: pauseResult, stopResult: stopResult);
+          startResult: true,
+          pauseResult: pauseResult,
+          stopResult: stopResult,
+          resumeOutcome: resumeOutcome);
       await pumpRecordingScreen(tester, recordingBridge);
       await tester.enterText(find.byType(TextField), 'Weekly sync');
       await tester.tap(find.text('Start recording'));
       await tester.pump();
       return recordingBridge;
     }
+
+    testWidgets('a resume whose microphone cannot open stays paused',
+        (WidgetTester tester) async {
+      await startRecordingIn(tester,
+          resumeOutcome: RecordingStartOutcome.microphoneUnavailable);
+
+      await tester.tap(find.text('Pause'));
+      await tester.pump();
+      await tester.tap(find.text('Resume'));
+      await tester.pump();
+
+      expect(find.text('Resume'), findsOneWidget);
+      expect(find.text('Unable to open the microphone'), findsOneWidget);
+    });
 
     testWidgets('a recording offers Pause and Stop instead of Start',
         (WidgetTester tester) async {

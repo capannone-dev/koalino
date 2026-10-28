@@ -113,7 +113,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | --- | --- | --- | --- |
 | P0 | #43 | **In progress**. Done: libp2p 0.57.1, persistent sealed identity, allowlist store, connection gate, pairing protocol, `PairingManager`, the meeting document as the source of truth (option A), multi-meeting `RepositorySyncManager`, the daemon P2P task, the `/api/p2p` routes, document revisions polled every second so any writer's change reaches connected devices, static peer addresses, and kept-alive paired connections with redial (verified on deb-gui, deb-shell, win11 and an Android 16 phone). Flutter Devices screen, FFI composition and Linux/Android packaging done (Linux app verified pairing and syncing on deb-gui). Remaining: phone app check, Windows Flutter, web and CLI Devices UI, manifests | 3.3, 3.4, 4.1 |
 | P0 | #44 | Real diarization adapter (Pyannote/SpeechBrain behind a Cargo feature); retune the 0.70 clustering threshold on its embeddings | 3.2 |
-| P0 | #45 | Flutter microphone capture feeding `note_taker_push_audio_pcm` (plugin needs approval) | 3.1 |
+| P0 | #45 | Microphone capture: `cpal` in the Rust core (`microphone` feature), Android `RECORD_AUDIO`; done except the phone permission check | 3.1 |
 | P1 | #46 | Flutter Settings: runtime log level and Share/Export Logs | 6.1, 6.2 |
 | P1 | #47 | Android foreground service and lock-screen/notification Start/Pause/Stop | 2.1 |
 | P1 | — | Embedding key in the iOS Keychain (Android Keystore done 2026-10-28); re-keying and passphrase change | 4.1 |

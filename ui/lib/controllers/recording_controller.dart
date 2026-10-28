@@ -1,6 +1,7 @@
 // Coordinates recording UI state exclusively through the Flutter recording bridge.
 
 import 'package:flutter/foundation.dart';
+import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 
 /// Describes the recording status rendered by the Flutter presentation layer.
@@ -25,13 +26,20 @@ enum RecordingUiState {
 final class RecordingController extends ChangeNotifier {
   /// Creates a controller whose native work is delegated to `recordingBridge`.
   ///
-  /// Inputs: `recordingBridge` must implement the stable Dart bridge contract.
+  /// Inputs: `recordingBridge` must implement the stable Dart bridge contract;
+  /// `microphonePermission` is asked before every start and resume (Android's runtime
+  /// permission; granted elsewhere).
   /// Outputs: A controller in the idle state.
   /// Side effects: None.
-  RecordingController({required RecordingBridge recordingBridge})
-      : _recordingBridge = recordingBridge;
+  RecordingController({
+    required RecordingBridge recordingBridge,
+    MicrophonePermission microphonePermission =
+        const GrantedMicrophonePermission(),
+  })  : _recordingBridge = recordingBridge,
+        _microphonePermission = microphonePermission;
 
   final RecordingBridge _recordingBridge;
+  final MicrophonePermission _microphonePermission;
   RecordingUiState _state = RecordingUiState.idle;
   String? _errorMessage;
   String? _activeTitle;
@@ -79,14 +87,20 @@ final class RecordingController extends ChangeNotifier {
     _completionMessage = null;
     notifyListeners();
 
-    final bool didStart =
+    if (!await _microphonePermission.ensureGranted()) {
+      _state = RecordingUiState.idle;
+      _errorMessage = _permissionDeniedMessage;
+      notifyListeners();
+      return;
+    }
+    final RecordingStartOutcome outcome =
         await _recordingBridge.startRecordingWithTitle(requestedTitle);
-    if (didStart) {
+    if (outcome == RecordingStartOutcome.started) {
       _state = RecordingUiState.recording;
       _activeTitle = requestedTitle;
     } else {
       _state = RecordingUiState.idle;
-      _errorMessage = 'Unable to start recording';
+      _errorMessage = _startErrorMessage(outcome, 'Unable to start recording');
     }
     notifyListeners();
   }
@@ -125,12 +139,19 @@ final class RecordingController extends ChangeNotifier {
     }
     _isTransitioning = true;
     _errorMessage = null;
-    final bool didResume = await _recordingBridge.startRecording();
+    if (!await _microphonePermission.ensureGranted()) {
+      _isTransitioning = false;
+      _errorMessage = _permissionDeniedMessage;
+      notifyListeners();
+      return;
+    }
+    final RecordingStartOutcome outcome =
+        await _recordingBridge.startRecording();
     _isTransitioning = false;
-    if (didResume) {
+    if (outcome == RecordingStartOutcome.started) {
       _state = RecordingUiState.recording;
     } else {
-      _errorMessage = 'Unable to resume recording';
+      _errorMessage = _startErrorMessage(outcome, 'Unable to resume recording');
     }
     notifyListeners();
   }
@@ -163,3 +184,15 @@ final class RecordingController extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// Shown when the owner refuses microphone access.
+const String _permissionDeniedMessage = 'Microphone access is needed to record';
+
+/// The error for a start or resume that did not record.
+///
+/// Inputs: The outcome and the generic message for it. Outputs: The message to show.
+/// Side effects: None.
+String _startErrorMessage(RecordingStartOutcome outcome, String fallback) =>
+    outcome == RecordingStartOutcome.microphoneUnavailable
+        ? 'Unable to open the microphone'
+        : fallback;

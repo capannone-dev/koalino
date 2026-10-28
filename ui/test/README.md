@@ -12,7 +12,9 @@ and Select forwards the exact opaque attachment and meeting IDs to Rust.
 Meeting-title tests (Issue #36):
 
 - `recording_screen_test.dart` covers the title field, its hint, sending a trimmed title or
-  `null`, keyboard submit, locking while recording, and phone/desktop sizing.
+  `null`, keyboard submit, locking while recording, and phone/desktop sizing. It also covers the
+  microphone (Issue #45): a refused permission never reaches the bridge, and status 7 on start or
+  resume shows "Unable to open the microphone".
 - `meeting_bridge_test.dart` covers JSON decoding (titles, fallbacks, durations, segments, and
   error objects) and the formatting helpers.
 - `meeting_list_screen_test.dart` checks custom and fallback titles, the title placed above and
