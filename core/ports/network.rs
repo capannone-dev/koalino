@@ -5,9 +5,11 @@ use crate::domain::{errors::NetworkError, models::DeviceId};
 /// Describes a portable state change emitted by an encrypted peer network.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum NetworkEvent {
-    /// An authenticated peer became discoverable through a decentralized mechanism.
+    /// A paired peer has an open encrypted connection, so sync messages can be sent to it now.
+    /// Emitted when its first connection is established, or when an already-connected peer
+    /// becomes trusted.
     PeerDiscovered(DeviceId),
-    /// A previously discovered peer is no longer reachable through that mechanism.
+    /// A reported peer is gone: its last connection closed, or it was revoked.
     PeerExpired(DeviceId),
     /// An authenticated peer delivered an opaque application payload.
     MessageReceived {

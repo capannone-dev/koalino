@@ -5,8 +5,8 @@
 //! HTTP routes) to `handle_command`. `status` returns a snapshot for the Devices screens without
 //! touching storage: the paired-device list is cached and refreshed whenever pairing changes it.
 //!
-//! A device whose pairing completes starts syncing at once, so meetings flow without waiting for
-//! the next discovery announcement.
+//! A device whose pairing completes starts syncing at once: the transport reports the connected,
+//! newly trusted peer, so meetings flow without waiting for the next discovery announcement.
 
 use std::{collections::VecDeque, time::Duration};
 
@@ -183,6 +183,16 @@ where
     /// completes pairings (persisting trust), and starts syncing with newly paired devices.
     /// Errors concern one event or one peer, so they are logged and processing continues.
     pub fn process_pending_events(&mut self) {
+        // Pairing first: completing a pairing trusts the peer, which queues the `PeerDiscovered`
+        // that the sync pass below must see in this same call. Nothing else would wake the task.
+        match self.pairing_manager.process_events() {
+            Ok(updates) => {
+                for update in updates {
+                    self.record_update(update);
+                }
+            }
+            Err(error) => tracing::warn!(error = %error, "a pairing event could not be applied"),
+        }
         for _ in 0..MAX_EVENTS_PER_PASS {
             match self
                 .sync_manager
@@ -192,14 +202,6 @@ where
                 Ok(false) => break,
                 Err(error) => tracing::warn!(error = %error, "a sync message could not be applied"),
             }
-        }
-        match self.pairing_manager.process_events() {
-            Ok(updates) => {
-                for update in updates {
-                    self.record_update(update);
-                }
-            }
-            Err(error) => tracing::warn!(error = %error, "a pairing event could not be applied"),
         }
     }
 
@@ -282,22 +284,17 @@ where
         self.sync_manager.repository()
     }
 
-    /// Keeps `update` for the screens; a completed pairing also refreshes the allowlist cache and
-    /// starts syncing with the new device.
+    /// Keeps `update` for the screens; a completed pairing also refreshes the allowlist cache.
+    /// Sync with the new device starts from the transport's `PeerDiscovered`, which it reports as
+    /// soon as the already-connected peer becomes trusted.
     ///
-    /// Side effects: May read the allowlist and send sync messages. Failures are logged, since
-    /// the trust decision itself is already persisted.
+    /// Side effects: May read the allowlist. A failure is logged, since the trust decision itself
+    /// is already persisted.
     fn record_update(&mut self, update: PairingUpdate) {
-        if let PairingUpdate::Paired { peer_id, .. } = &update {
-            if let Err(error) = self.refresh_trusted_devices() {
-                tracing::warn!(error = %error, "the paired-device list could not be refreshed");
-            }
-            if let Err(error) = self
-                .sync_manager
-                .peer_connected(self.pairing_manager.transport_mut(), peer_id.clone())
-            {
-                tracing::warn!(error = %error, "sync with a newly paired device could not start");
-            }
+        if matches!(update, PairingUpdate::Paired { .. })
+            && let Err(error) = self.refresh_trusted_devices()
+        {
+            tracing::warn!(error = %error, "the paired-device list could not be refreshed");
         }
         if self.recent_updates.len() == MAX_RECENT_UPDATES {
             self.recent_updates.pop_front();

@@ -59,8 +59,9 @@ devices. It replaces the single-meeting `SyncManager` for the daemon's P2P task:
   to every connected peer.
 - **Disconnect:** an expired peer's state is dropped.
 - **Shared adapter:** the manager borrows the network on each call rather than owning it, so the
-  P2P task can share one adapter with `PairingManager`. `peer_connected` starts syncing with a
-  device as soon as its pairing completes.
+  P2P task can share one adapter with `PairingManager`. Syncing with a device starts from the
+  transport's `PeerDiscovered`, which arrives once the device is connected and trusted, including
+  right after pairing.
 
 `repository_sync_manager_tests.rs` runs two document-backed SQLite repositories over a linked
 in-process network.

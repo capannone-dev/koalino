@@ -389,11 +389,13 @@ impl Libp2pNetworkAdapter {
     ///
     /// Inputs: A peer ID in the adapter's portable form. Outputs: Success, or `SecurityPolicy`
     /// for an ID that is not a libp2p peer ID.
-    /// Side effects: Updates the connection gate; a later mDNS discovery dials the peer.
+    /// Side effects: Updates the connection gate. A peer already connected (for pairing) is
+    /// reported as `PeerDiscovered` at once; otherwise a later mDNS discovery dials it.
     pub fn trust_peer(&mut self, peer_device_id: &DeviceId) -> Result<(), NetworkError> {
         let peer_id = Self::peer_id_from_device_id(peer_device_id)?;
         self.swarm.behaviour_mut().peer_gate.trust(peer_id);
         self.nearby_unpaired_peer_ids.remove(peer_device_id);
+        self.record_connected_peer(peer_id);
         Ok(())
     }
 
@@ -468,8 +470,16 @@ impl Libp2pNetworkAdapter {
     /// Outputs: None.
     /// Side effects: Updates local discovery state and may enqueue a portable discovery event.
     fn translate_swarm_event(&mut self, swarm_event: SwarmEvent<NoteTakerBehaviourEvent>) {
-        if let SwarmEvent::Behaviour(behaviour_event) = swarm_event {
-            match behaviour_event {
+        match swarm_event {
+            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                self.record_connected_peer(peer_id);
+            }
+            SwarmEvent::ConnectionClosed {
+                peer_id,
+                num_established: 0,
+                ..
+            } => self.record_disconnected_peer(peer_id),
+            SwarmEvent::Behaviour(behaviour_event) => match behaviour_event {
                 NoteTakerBehaviourEvent::Mdns(mdns_event) => self.translate_mdns_event(mdns_event),
                 NoteTakerBehaviourEvent::SyncPayload(sync_payload_event) => {
                     self.translate_sync_payload_event(sync_payload_event);
@@ -480,7 +490,8 @@ impl Libp2pNetworkAdapter {
                 NoteTakerBehaviourEvent::Pairing(pairing_event) => {
                     self.translate_pairing_event(pairing_event);
                 }
-            }
+            },
+            _ => {}
         }
     }
 
@@ -649,16 +660,32 @@ impl Libp2pNetworkAdapter {
     ///
     /// Inputs: `peer_id` is the libp2p identity authenticated by mDNS discovery.
     /// Outputs: None.
-    /// Side effects: Adds reachability and queues a portable discovery event on first observation.
+    /// Side effects: Lists an unpaired peer as nearby, or dials a paired one that is not
+    /// connected. A paired peer is reported to the application once its connection is up (see
+    /// `record_connected_peer`), so its first sync message never races the dial.
     fn record_discovered_peer(&mut self, peer_id: PeerId) {
-        let peer_device_id = Self::device_id_from_peer_id(peer_id);
         if !self.swarm.behaviour().peer_gate.is_trusted(&peer_id) {
-            self.nearby_unpaired_peer_ids.insert(peer_device_id);
+            self.nearby_unpaired_peer_ids
+                .insert(Self::device_id_from_peer_id(peer_id));
             return;
         }
         if !self.swarm.is_connected(&peer_id) && self.swarm.dial(peer_id).is_err() {
             tracing::debug!("could not dial a discovered paired peer");
         }
+    }
+
+    /// Reports a paired peer as available when it has an open connection.
+    ///
+    /// Inputs: `peer_id` just connected or just became trusted.
+    /// Outputs: None.
+    /// Side effects: Adds it to the reachable peers and queues `PeerDiscovered` the first time.
+    fn record_connected_peer(&mut self, peer_id: PeerId) {
+        if !self.swarm.behaviour().peer_gate.is_trusted(&peer_id)
+            || !self.swarm.is_connected(&peer_id)
+        {
+            return;
+        }
+        let peer_device_id = Self::device_id_from_peer_id(peer_id);
         if self
             .reachable_peer_device_ids
             .insert(peer_device_id.clone())
@@ -668,18 +695,27 @@ impl Libp2pNetworkAdapter {
         }
     }
 
-    /// Records a peer expiry when mDNS no longer advertises the peer.
+    /// Reports a peer as gone when its last connection closed.
     ///
-    /// Inputs: `peer_id` is the libp2p identity whose discovery entry expired.
-    /// Outputs: None.
-    /// Side effects: Removes reachability and queues a portable expiry event when it was known.
-    fn record_expired_peer(&mut self, peer_id: PeerId) {
+    /// Side effects: Removes it from the reachable peers and queues `PeerExpired` when it was
+    /// reachable.
+    fn record_disconnected_peer(&mut self, peer_id: PeerId) {
         let peer_device_id = Self::device_id_from_peer_id(peer_id);
-        self.nearby_unpaired_peer_ids.remove(&peer_device_id);
         if self.reachable_peer_device_ids.remove(&peer_device_id) {
             self.pending_network_events
                 .push_back(NetworkEvent::PeerExpired(peer_device_id));
         }
+    }
+
+    /// Records a peer expiry when mDNS no longer advertises the peer.
+    ///
+    /// Inputs: `peer_id` is the libp2p identity whose discovery entry expired.
+    /// Outputs: None.
+    /// Side effects: Removes it from the nearby unpaired peers. Reachability of paired peers
+    /// follows their connections instead, so an open connection outlives a stale announcement.
+    fn record_expired_peer(&mut self, peer_id: PeerId) {
+        self.nearby_unpaired_peer_ids
+            .remove(&Self::device_id_from_peer_id(peer_id));
     }
 
     /// Converts a libp2p peer identity into the opaque device identifier used by the port.
@@ -1540,7 +1576,10 @@ mod tests {
                     }
                     drive_result = receiving_adapter.drive_next_swarm_event() => {
                         drive_result.unwrap_or_else(|error| panic!("adapter B swarm should remain available: {error}"));
-                        if let Some(network_event) = receiving_adapter.poll_event().unwrap_or_else(|error| panic!("adapter B event queue should be readable: {error}")) {
+                        // The connection itself is reported first; the payload follows it.
+                        if let Some(network_event) = receiving_adapter.poll_event().unwrap_or_else(|error| panic!("adapter B event queue should be readable: {error}"))
+                            && !matches!(network_event, NetworkEvent::PeerDiscovered(_))
+                        {
                             break network_event;
                         }
                     }
@@ -1572,7 +1611,10 @@ mod tests {
                     }
                     drive_result = receiving_adapter.drive_next_swarm_event() => {
                         drive_result.unwrap_or_else(|error| panic!("adapter B swarm should remain available: {error}"));
-                        if let Some(network_event) = receiving_adapter.poll_event().unwrap_or_else(|error| panic!("adapter B event queue should be readable: {error}")) {
+                        // The connection itself is reported first; the payload follows it.
+                        if let Some(network_event) = receiving_adapter.poll_event().unwrap_or_else(|error| panic!("adapter B event queue should be readable: {error}"))
+                            && !matches!(network_event, NetworkEvent::PeerDiscovered(_))
+                        {
                             break network_event;
                         }
                     }
@@ -1637,11 +1679,10 @@ mod tests {
             }
         }).await.unwrap_or_else(|_| panic!("file frame should arrive"));
         assert_eq!(received, file_chunk_frame);
-        assert!(
-            receiver
-                .poll_event()
-                .unwrap_or_else(|error| panic!("event queue should be readable: {error}"))
-                .is_none()
+        // Only the connection is reported on the sync queue; the file frame never appears there.
+        assert_eq!(
+            drain_events(&mut receiver),
+            vec![NetworkEvent::PeerDiscovered(sender.local_device_id())]
         );
     }
 
@@ -1679,6 +1720,111 @@ mod tests {
         assert!(
             addresses[0].starts_with("/ip4/127.0.0.1/tcp/"),
             "unexpected address {addresses:?}"
+        );
+    }
+
+    /// Collects every queued port event of `adapter`.
+    fn drain_events(adapter: &mut Libp2pNetworkAdapter) -> Vec<NetworkEvent> {
+        let mut events = Vec::new();
+        while let Some(event) = adapter
+            .poll_event()
+            .unwrap_or_else(|error| panic!("event queue should be readable: {error}"))
+        {
+            events.push(event);
+        }
+        events
+    }
+
+    /// A paired peer is reported only once its connection is up, so the first sync message can be
+    /// sent at once; it is reported gone when its last connection closes.
+    #[tokio::test]
+    async fn paired_peers_are_reported_when_connected_and_when_disconnected() {
+        let (mut dialer, mut listener, address) = listening_pair("/memory/9361");
+        trust_each_other(&mut dialer, &mut listener);
+        let dialer_id = dialer.local_device_id();
+        let listener_id = listener.local_device_id();
+        dialer
+            .dial_memory(address)
+            .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+
+        let mut dialer_events = Vec::new();
+        let mut listener_events = Vec::new();
+        let both_reported = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(5),
+            |dialer, listener| {
+                dialer_events.extend(drain_events(dialer));
+                listener_events.extend(drain_events(listener));
+                !dialer_events.is_empty() && !listener_events.is_empty()
+            },
+        )
+        .await;
+        assert!(both_reported, "both sides must report the connection");
+        assert_eq!(
+            dialer_events,
+            vec![NetworkEvent::PeerDiscovered(listener_id.clone())]
+        );
+        assert_eq!(
+            listener_events,
+            vec![NetworkEvent::PeerDiscovered(dialer_id.clone())]
+        );
+        assert!(
+            dialer.send_encrypted(&listener_id, b"first").is_ok(),
+            "a reported peer must accept a send immediately"
+        );
+
+        dialer
+            .revoke_peer(&listener_id)
+            .unwrap_or_else(|error| panic!("revocation must succeed: {error}"));
+        let mut listener_after = Vec::new();
+        let expired = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(5),
+            |_, listener| {
+                listener_after.extend(drain_events(listener));
+                listener_after.contains(&NetworkEvent::PeerExpired(dialer_id.clone()))
+            },
+        )
+        .await;
+        assert!(
+            expired,
+            "the listener must report the closed connection: {listener_after:?}"
+        );
+    }
+
+    /// Trusting a peer that is already connected for pairing reports it at once, so sync starts
+    /// without waiting for another discovery.
+    #[tokio::test]
+    async fn trusting_a_connected_peer_reports_it() {
+        let (mut dialer, mut listener, address) = listening_pair("/memory/9362");
+        let listener_id = listener.local_device_id();
+        listener.open_pairing_window(Duration::from_secs(60));
+        dialer
+            .allow_pairing_dial(&listener_id)
+            .and_then(|()| dialer.dial_memory(address))
+            .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+        let connected = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(5),
+            |dialer, _| dialer.is_connected_to(&listener_id),
+        )
+        .await;
+        assert!(connected);
+        assert!(
+            drain_events(&mut dialer).is_empty(),
+            "an unpaired peer is not reported"
+        );
+
+        dialer
+            .trust_peer(&listener_id)
+            .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+
+        assert_eq!(
+            drain_events(&mut dialer),
+            vec![NetworkEvent::PeerDiscovered(listener_id)]
         );
     }
 }

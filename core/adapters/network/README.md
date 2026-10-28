@@ -17,9 +17,13 @@ authenticated the remote key:
 
 Being admitted grants nothing beyond the connection. The adapter drops sync and file-transfer
 requests from untrusted peers, `send_encrypted` refuses an untrusted target, and
-`broadcast_encrypted` reaches only trusted peers. mDNS discoveries of trusted peers are dialed
-and reported as `PeerDiscovered`. Untrusted ones are listed only by `nearby_unpaired_peers()`, as
-pairing candidates. The trusted set is loaded from `TrustedPeerStore` by the composition layer.
+`broadcast_encrypted` reaches only trusted peers. mDNS discoveries of trusted peers are dialed.
+Untrusted ones are listed only by `nearby_unpaired_peers()`, as pairing candidates.
+
+Reachability follows connections, not announcements. A trusted peer is reported as
+`PeerDiscovered` when its first connection is established, or at once when an already-connected
+(pairing) peer becomes trusted. Its first sync message therefore never races the dial. The peer is
+reported as `PeerExpired` when its last connection closes or it is revoked. The trusted set is loaded from `TrustedPeerStore` by the composition layer.
 
 `pairing_behaviour.rs` defines `/note-taker/pairing/1`, which carries version-1 JSON in 4 KiB
 length-prefixed frames. The initiator sends `PairingRequest { device_name }`. The responder replies
