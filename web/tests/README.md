@@ -16,3 +16,6 @@ Meeting rename tests (Issue #42):
   the pre-filled dialog, each validation message, saving by button and Enter, unchanged titles,
   Cancel and Escape, every failure message, the in-flight state, and the empty list.
 - `meeting-title-header.test.tsx` covers the pencil beside the heading, success, and failure.
+- `theme.test.ts` checks that every colour token has a dark value, that the page declares
+  `color-scheme: light dark`, and that no component uses a fixed palette colour that would not
+  switch.

@@ -1,5 +1,82 @@
-/* Loads Tailwind utilities and defines a neutral responsive dashboard baseline. */
+/* Loads Tailwind utilities and defines the light and dark colour tokens every page uses.
+ *
+ * Components use only these semantic tokens (bg-surface, text-muted, border-line, bg-accent…),
+ * so the whole UI follows the browser's light or dark preference from this one file. The values
+ * are Tailwind's slate/blue/green/amber/red shades, chosen for at least 4.5:1 text contrast on
+ * their surfaces in both schemes. */
 
 @import "tailwindcss";
 
-body { background: #f8fafc; color: #0f172a; }
+@theme {
+  --color-canvas: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f5f9;
+  --color-surface-hover: #e2e8f0;
+  --color-ink: #0f172a;
+  --color-ink-soft: #334155;
+  --color-muted: #475569;
+  --color-faint: #94a3b8;
+  --color-line: #e2e8f0;
+  --color-line-strong: #cbd5e1;
+  --color-accent: #1d4ed8;
+  --color-accent-strong: #1e40af;
+  --color-accent-text: #1d4ed8;
+  --color-accent-soft: #eff6ff;
+  --color-on-accent: #ffffff;
+  --color-focus: #2563eb;
+  --color-disabled: #94a3b8;
+  --color-emphasis: #0f172a;
+  --color-on-emphasis: #ffffff;
+  --color-on-emphasis-muted: #cbd5e1;
+  --color-success: #15803d;
+  --color-success-soft: #d1fae5;
+  --color-warning: #b45309;
+  --color-danger: #b91c1c;
+  --color-danger-line: #fecaca;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #020617;
+    --color-surface: #0f172a;
+    --color-surface-muted: #1e293b;
+    --color-surface-hover: #334155;
+    --color-ink: #f1f5f9;
+    --color-ink-soft: #cbd5e1;
+    --color-muted: #94a3b8;
+    --color-faint: #64748b;
+    --color-line: #334155;
+    --color-line-strong: #475569;
+    --color-accent: #2563eb;
+    --color-accent-strong: #1d4ed8;
+    --color-accent-text: #93c5fd;
+    --color-accent-soft: #172554;
+    --color-on-accent: #ffffff;
+    --color-focus: #60a5fa;
+    --color-disabled: #475569;
+    --color-emphasis: #1e293b;
+    --color-on-emphasis: #f8fafc;
+    --color-on-emphasis-muted: #cbd5e1;
+    --color-success: #4ade80;
+    --color-success-soft: #064e3b;
+    --color-warning: #fbbf24;
+    --color-danger: #f87171;
+    --color-danger-line: #7f1d1d;
+  }
+}
+
+/* Lets the browser draw scrollbars, form controls and autofill in the matching scheme. */
+:root { color-scheme: light dark; }
+
+body { background: var(--color-canvas); color: var(--color-ink); }
+
+/* Recharts sets fixed SVG colours; these follow the scheme instead. */
+.recharts-text { fill: var(--color-muted); }
+.recharts-cartesian-axis-line,
+.recharts-cartesian-axis-tick-line,
+.recharts-cartesian-grid line { stroke: var(--color-line-strong); }
+.recharts-default-tooltip {
+  background: var(--color-surface) !important;
+  border-color: var(--color-line) !important;
+  color: var(--color-ink);
+}

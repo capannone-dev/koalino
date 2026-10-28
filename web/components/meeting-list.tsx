@@ -60,15 +60,15 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
   }
 
   if (currentMeetings.length === 0) {
-    return <p className="text-slate-600">No meetings yet.</p>;
+    return <p className="text-muted">No meetings yet.</p>;
   }
 
   return (
     <>
-      <p role="status" aria-live="polite" className="text-sm text-green-700">
+      <p role="status" aria-live="polite" className="text-sm text-success">
         {statusMessage}
       </p>
-      <ul className="divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
+      <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
         {currentMeetings.map((meeting) => {
           const isMenuOpen = openMenu?.meetingId === meeting.meeting_id;
           const menuId = `meeting-actions-${meeting.meeting_id}`;
@@ -84,11 +84,11 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
               <div className="min-w-0 flex-1 py-1">
                 <Link
                   href={`/meetings/${encodeURIComponent(meeting.meeting_id)}`}
-                  className="block font-semibold break-words text-slate-900 hover:underline"
+                  className="block font-semibold break-words text-ink hover:underline"
                 >
                   {meeting.title}
                 </Link>
-                <small className="block truncate text-slate-500">{meeting.meeting_id}</small>
+                <small className="block truncate text-muted">{meeting.meeting_id}</small>
               </div>
               <button
                 ref={(button) => {
@@ -101,7 +101,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                 aria-expanded={isMenuOpen}
                 aria-controls={isMenuOpen ? menuId : undefined}
                 onClick={() => setOpenMenu(isMenuOpen ? null : { meetingId: meeting.meeting_id, position: null })}
-                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-xl text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-blue-600"
+                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-xl text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
               >
                 <span aria-hidden="true">⋯</span>
               </button>
@@ -113,7 +113,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                   aria-label={`Actions for ${meeting.title}`}
                   onKeyDown={(event) => handleMenuKeyDown(event, meeting.meeting_id)}
                   style={openMenu.position ? { left: openMenu.position.x, top: openMenu.position.y } : undefined}
-                  className={`z-40 min-w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lg ${
+                  className={`z-40 min-w-40 rounded-lg border border-line bg-surface py-1 shadow-lg ${
                     openMenu.position ? "fixed" : "absolute top-full right-3"
                   }`}
                 >
@@ -125,7 +125,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                       setStatusMessage("");
                       setRenamingMeeting(meeting);
                     }}
-                    className="flex min-h-11 w-full items-center px-4 text-left hover:bg-slate-100 focus:bg-slate-100 focus:outline-none"
+                    className="flex min-h-11 w-full items-center px-4 text-left hover:bg-surface-muted focus:bg-surface-muted focus:outline-none"
                   >
                     Rename
                   </button>

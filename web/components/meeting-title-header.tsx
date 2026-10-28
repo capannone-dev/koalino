@@ -38,12 +38,12 @@ export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
             setStatusMessage("");
             setIsRenaming(true);
           }}
-          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-slate-600 hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-blue-600"
+          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-focus"
         >
           <PencilIcon />
         </button>
       </div>
-      <p role="status" aria-live="polite" className="text-sm text-green-700">
+      <p role="status" aria-live="polite" className="text-sm text-success">
         {statusMessage}
       </p>
       {isRenaming ? (

@@ -106,13 +106,13 @@ export function RenameMeetingDialog({ meeting, onRenamed, onClose }: RenameMeeti
         aria-modal="true"
         aria-labelledby={headingId}
         onKeyDown={handleKeyDown}
-        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
+        className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl"
       >
         <h2 id={headingId} className="text-lg font-semibold">
           Rename meeting
         </h2>
         <form onSubmit={save} noValidate className="mt-4">
-          <label htmlFor={`${headingId}-title`} className="block text-sm font-medium text-slate-700">
+          <label htmlFor={`${headingId}-title`} className="block text-sm font-medium text-ink-soft">
             Title
           </label>
           <input
@@ -127,14 +127,14 @@ export function RenameMeetingDialog({ meeting, onRenamed, onClose }: RenameMeeti
               setTypedTitle(event.target.value);
               setSaveErrorMessage(null);
             }}
-            className="mt-1 block min-h-11 w-full rounded-lg border border-slate-300 px-3 text-base focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600/30 aria-invalid:border-red-600"
+            className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30 aria-invalid:border-danger"
           />
           <div className="mt-1 flex items-start justify-between gap-4 text-sm">
-            <p id={errorId} role="alert" className="text-red-700">
+            <p id={errorId} role="alert" className="text-danger">
               {errorMessage}
             </p>
             {/* Counted in Unicode characters, as Rust counts them. */}
-            <p id={counterId} className="shrink-0 text-slate-500">
+            <p id={counterId} className="shrink-0 text-muted">
               {characterCount}/{maxMeetingTitleCharacters}
             </p>
           </div>
@@ -143,14 +143,14 @@ export function RenameMeetingDialog({ meeting, onRenamed, onClose }: RenameMeeti
               type="button"
               disabled={isSaving}
               onClick={onClose}
-              className="min-h-11 rounded-lg px-4 font-medium text-blue-700 hover:bg-blue-50 disabled:text-slate-400"
+              className="min-h-11 rounded-lg px-4 font-medium text-accent-text hover:bg-accent-soft disabled:text-faint"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="min-h-11 rounded-lg bg-blue-700 px-4 font-medium text-white hover:bg-blue-800 disabled:bg-slate-400"
+              className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled"
             >
               {isSaving ? "Saving…" : "Save"}
             </button>
