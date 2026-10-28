@@ -2,4 +2,25 @@
 
 # Observability adapter
 
-The adapter configures `tracing` JSON output to stdout and a daily rolling local file. Application events must include `device_id` and must never include raw audio, voice embeddings, encryption keys, or other sensitive values.
+`../observability.rs` installs `tracing` output to stdout and to a daily rolling `app_log.<date>`
+file in `NOTE_TAKER_LOG_DIR` (default `logs`), behind a reloadable filter (`LoggingRuntime::set_filter`)
+so verbosity changes at runtime. The default level is `INFO`.
+
+`structured_json.rs` formats both sinks. Each event is one JSON object with the fields required
+by REQUIREMENTS.md 6.3:
+
+```json
+{"timestamp":"2026-10-28T09:05:00.123456Z","level":"INFO","target":"p2p_network",
+ "device_id":"device-…","message":"synced","context":{"peer_id":"xyz","latency_ms":45}}
+```
+
+- `device_id` is on every line (it used to be on the start-up line only).
+- Event fields go into `context` with their JSON types; `context` is omitted when there are none.
+- **Redaction (6.4):** a field whose name contains `embedding`, `passphrase`, `password`,
+  `secret`, `token`, `api_key`, `encryption_key`, `private_key`, `key_material`,
+  `authorization`, `credential`, `title`, `transcript`, `raw_audio`, or `pcm`
+  (case-insensitive) is written as `"[redacted]"`. Matching errs towards redacting. It is a
+  safety net: code must still never log raw audio, embeddings, keys, or meeting content, and
+  free-text messages are not inspected.
+
+`structured_json_tests.rs` pins the required fields, typed context values, and redaction.

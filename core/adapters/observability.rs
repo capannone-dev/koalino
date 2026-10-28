@@ -1,4 +1,11 @@
 //! Configures JSON tracing output for stdout and a daily rolling local log file.
+//!
+//! Both sinks use `StructuredJsonFormat`, which stamps the device ID on every entry, groups fields
+//! under `context`, and redacts sensitive values (see `structured_json`).
+
+mod structured_json;
+
+pub use structured_json::StructuredJsonFormat;
 
 use std::{
     fs,
@@ -81,11 +88,12 @@ pub fn initialize_logging(logging_configuration: LoggingConfiguration) -> Result
         tracing_appender::rolling::daily(&logging_configuration.log_directory, "app_log");
     let (non_blocking_file_writer, file_worker_guard) =
         tracing_appender::non_blocking(rolling_file_appender);
+    let structured_format = StructuredJsonFormat::new(&logging_configuration.device_id);
     let stdout_json_layer = tracing_subscriber::fmt::layer()
-        .json()
+        .event_format(structured_format.clone())
         .with_writer(std::io::stdout);
     let file_json_layer = tracing_subscriber::fmt::layer()
-        .json()
+        .event_format(structured_format)
         .with_writer(non_blocking_file_writer);
 
     tracing_subscriber::registry()
@@ -94,7 +102,7 @@ pub fn initialize_logging(logging_configuration: LoggingConfiguration) -> Result
         .with(file_json_layer)
         .try_init()
         .with_context(|| "global tracing subscriber is already initialized")?;
-    tracing::info!(device_id = %logging_configuration.device_id.as_str(), "structured logging initialized");
+    tracing::info!("structured logging initialized");
 
     Ok(LoggingRuntime {
         filter_handle,
