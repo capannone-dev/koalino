@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
 /// Widest the detail content grows, in logical pixels, so transcript lines stay readable.
 const double _maxReadableWidth = 840;
@@ -104,7 +105,8 @@ final class MeetingDetailView extends StatelessWidget {
           return Center(child: Text(errorMessage));
         }
         return switch (controller.selectedMeeting) {
-          final MeetingDetail meeting => _MeetingContent(meeting: meeting),
+          final MeetingDetail meeting =>
+            _MeetingContent(controller: controller, meeting: meeting),
           null => const Center(
               child: Text('Select a meeting to see its transcript.')),
         };
@@ -113,10 +115,11 @@ final class MeetingDetailView extends StatelessWidget {
   }
 }
 
-/// Lays out the title header, metadata, and transcript of a loaded meeting.
+/// Lays out the title header (with its rename action), metadata, and transcript of a meeting.
 final class _MeetingContent extends StatelessWidget {
-  const _MeetingContent({required this.meeting});
+  const _MeetingContent({required this.controller, required this.meeting});
 
+  final MeetingListController controller;
   final MeetingDetail meeting;
 
   @override
@@ -130,13 +133,30 @@ final class _MeetingContent extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: <Widget>[
-            Semantics(
-              header: true,
-              child: Text(
-                summary.title,
-                style: theme.textTheme.headlineMedium
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Expanded(
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      summary.title,
+                      style: theme.textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  tooltip: 'Rename meeting',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => showRenameMeetingDialog(
+                    context,
+                    controller: controller,
+                    meeting: summary,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             Text(

@@ -2,9 +2,12 @@
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
+import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
 /// Window width from which the list and the detail are shown side by side (Material 3
 /// "expanded" window class).
@@ -169,27 +172,130 @@ final class _MeetingList extends StatelessWidget {
             itemCount: newestFirst.length,
             itemBuilder: (BuildContext context, int index) {
               final MeetingSummary meeting = newestFirst[index];
-              return ListTile(
-                leading: const Icon(Icons.event_note),
-                selected: highlightSelection &&
-                    controller.selectedMeetingId == meeting.meetingId,
-                title: Text(
-                  meeting.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
+              return _MeetingRow(
+                controller: controller,
+                meeting: meeting,
+                child: ListTile(
+                  leading: const Icon(Icons.event_note),
+                  selected: highlightSelection &&
+                      controller.selectedMeetingId == meeting.meetingId,
+                  title: Text(
+                    meeting.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '${formatMeetingCreatedAt(meeting.createdAt)} · '
+                    '${formatMeetingDuration(meeting.durationMs)}',
+                  ),
+                  onTap: () => onOpenMeeting(meeting),
                 ),
-                subtitle: Text(
-                  '${formatMeetingCreatedAt(meeting.createdAt)} · '
-                  '${formatMeetingDuration(meeting.durationMs)}',
-                ),
-                onTap: () => onOpenMeeting(meeting),
               );
             },
           ),
         );
       },
+    );
+  }
+}
+
+/// Actions offered in a meeting row's context menu.
+enum _MeetingRowAction {
+  /// Opens the rename dialog.
+  rename,
+}
+
+/// Adds a context menu with "Rename" to one meeting row.
+///
+/// The menu opens on long-press (touch), right-click (mouse), and Shift+F10 or the context menu
+/// key (keyboard); screen readers get the same action as a custom semantics action.
+final class _MeetingRow extends StatelessWidget {
+  const _MeetingRow({
+    required this.controller,
+    required this.meeting,
+    required this.child,
+  });
+
+  final MeetingListController controller;
+  final MeetingSummary meeting;
+
+  /// The row's list tile.
+  final Widget child;
+
+  /// Shows the context menu at `globalPosition` and runs the chosen action.
+  ///
+  /// Inputs: A context inside the row and the pointer position in global coordinates.
+  /// Outputs: Completes once the menu (and any dialog it opened) closes.
+  /// Side effects: May rename the meeting through the rename dialog.
+  Future<void> _showContextMenu(
+      BuildContext context, Offset globalPosition) async {
+    if (Overlay.of(context).context.findRenderObject()
+        case final RenderBox overlay) {
+      await _showContextMenuIn(context, overlay, globalPosition);
+    }
+  }
+
+  /// Shows the context menu inside `overlay` and runs the chosen action.
+  Future<void> _showContextMenuIn(
+      BuildContext context, RenderBox overlay, Offset globalPosition) async {
+    final Offset overlayPosition = overlay.globalToLocal(globalPosition);
+    final _MeetingRowAction? action = await showMenu<_MeetingRowAction>(
+      context: context,
+      position: RelativeRect.fromRect(
+          overlayPosition & Size.zero, Offset.zero & overlay.size),
+      items: const <PopupMenuEntry<_MeetingRowAction>>[
+        PopupMenuItem<_MeetingRowAction>(
+          value: _MeetingRowAction.rename,
+          child: ListTile(
+            leading: Icon(Icons.edit_outlined),
+            title: Text('Rename'),
+          ),
+        ),
+      ],
+    );
+    if (action == _MeetingRowAction.rename && context.mounted) {
+      await _rename(context);
+    }
+  }
+
+  /// Opens the context menu below the row's centre, for keyboard users.
+  void _showContextMenuForRow(BuildContext context) {
+    if (context.findRenderObject() case final RenderBox rowBox) {
+      _showContextMenu(
+          context, rowBox.localToGlobal(rowBox.size.center(Offset.zero)));
+    }
+  }
+
+  /// Opens the rename dialog for this row's meeting.
+  Future<void> _rename(BuildContext context) => showRenameMeetingDialog(
+        context,
+        controller: controller,
+        meeting: meeting,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
+        const CustomSemanticsAction(label: 'Rename'): () => _rename(context),
+      },
+      child: CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.f10, shift: true): () =>
+              _showContextMenuForRow(context),
+          const SingleActivator(LogicalKeyboardKey.contextMenu): () =>
+              _showContextMenuForRow(context),
+        },
+        child: GestureDetector(
+          onLongPressStart: (LongPressStartDetails details) =>
+              _showContextMenu(context, details.globalPosition),
+          onSecondaryTapUp: (TapUpDetails details) =>
+              _showContextMenu(context, details.globalPosition),
+          child: child,
+        ),
+      ),
     );
   }
 }

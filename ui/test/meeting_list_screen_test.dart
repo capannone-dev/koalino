@@ -2,12 +2,15 @@
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
+import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
 import 'fake_meeting_bridge.dart';
 
@@ -121,5 +124,280 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Project Sync'), findsOneWidget);
+  });
+
+  group('rename', () {
+    /// Pumps the list with both fixture meetings and returns its fake bridge.
+    Future<FakeMeetingBridge> pumpRenamableList(WidgetTester tester,
+        {Size size = const Size(390, 844)}) async {
+      final FakeMeetingBridge meetingBridge = FakeMeetingBridge(
+        meetings: <MeetingSummary>[titledMeeting, untitledMeeting],
+        details: <String, MeetingDetail>{'meeting-titled': titledMeetingDetail},
+      );
+      await pumpMeetingList(tester, meetingBridge, size: size);
+      return meetingBridge;
+    }
+
+    /// Opens the rename dialog for "Project Sync" through its long-press menu.
+    Future<void> openRenameDialog(WidgetTester tester) async {
+      await tester.longPress(find.text('Project Sync'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+    }
+
+    /// Replaces the dialog's title text and presses Save.
+    Future<void> submitTitle(WidgetTester tester, String newTitle) async {
+      await tester.enterText(
+          find.descendant(
+              of: find.byType(RenameMeetingDialog),
+              matching: find.byType(TextField)),
+          newTitle);
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('long-pressing a meeting shows a Rename option',
+        (WidgetTester tester) async {
+      await pumpRenamableList(tester);
+
+      await tester.longPress(find.text('Project Sync'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rename'), findsOneWidget);
+    });
+
+    testWidgets('right-clicking a meeting shows a Rename option',
+        (WidgetTester tester) async {
+      await pumpRenamableList(tester, size: const Size(1280, 800));
+
+      await tester.tap(find.text('Project Sync'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rename'), findsOneWidget);
+    });
+
+    testWidgets('Shift+F10 on a focused meeting shows a Rename option',
+        (WidgetTester tester) async {
+      await pumpRenamableList(tester, size: const Size(1280, 800));
+      Focus.of(tester.element(find.text('Project Sync'))).requestFocus();
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.f10);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rename'), findsOneWidget);
+    });
+
+    testWidgets('screen readers get a Rename action on each meeting',
+        (WidgetTester tester) async {
+      final SemanticsHandle semantics = tester.ensureSemantics();
+      await pumpRenamableList(tester);
+
+      final int renameActionId = CustomSemanticsAction.getIdentifier(
+          const CustomSemanticsAction(label: 'Rename'));
+      SemanticsNode? semanticsNode =
+          tester.getSemantics(find.text('Project Sync'));
+      bool exposesRename = false;
+      while (semanticsNode != null && !exposesRename) {
+        exposesRename = semanticsNode
+                .getSemanticsData()
+                .customSemanticsActionIds
+                ?.contains(renameActionId) ??
+            false;
+        semanticsNode = semanticsNode.parent;
+      }
+      expect(exposesRename, isTrue);
+      semantics.dispose();
+    });
+
+    testWidgets('Rename opens a dialog pre-filled with the current title',
+        (WidgetTester tester) async {
+      await pumpRenamableList(tester);
+
+      await openRenameDialog(tester);
+
+      expect(find.text('Rename meeting'), findsOneWidget);
+      final TextField titleField = tester.widget<TextField>(find.descendant(
+          of: find.byType(RenameMeetingDialog),
+          matching: find.byType(TextField)));
+      expect(titleField.controller?.text, 'Project Sync');
+      expect(titleField.controller?.selection,
+          const TextSelection(baseOffset: 0, extentOffset: 12));
+      expect(find.text('Cancel'), findsOneWidget);
+      expect(find.text('Save'), findsOneWidget);
+    });
+
+    testWidgets('an empty title shows an error and is not sent',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge meetingBridge = await pumpRenamableList(tester);
+      await openRenameDialog(tester);
+
+      await submitTitle(tester, '   ');
+
+      expect(find.text('Enter a title.'), findsOneWidget);
+      expect(find.byType(RenameMeetingDialog), findsOneWidget);
+      expect(meetingBridge.renameRequests, isEmpty);
+    });
+
+    testWidgets('a title over 200 characters shows an error and is not sent',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge meetingBridge = await pumpRenamableList(tester);
+      await openRenameDialog(tester);
+
+      await submitTitle(tester, 'a' * 201);
+
+      expect(find.text('Titles can be at most 200 characters (you have 201).'),
+          findsOneWidget);
+      expect(meetingBridge.renameRequests, isEmpty);
+    });
+
+    testWidgets('a control character shows an error and is not sent',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge meetingBridge = await pumpRenamableList(tester);
+      await openRenameDialog(tester);
+
+      await submitTitle(tester, 'Weekly\tsync');
+
+      expect(
+          find.text("Titles can't contain line breaks or control characters."),
+          findsOneWidget);
+      expect(meetingBridge.renameRequests, isEmpty);
+    });
+
+    testWidgets('a successful rename closes the dialog and updates the row',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge meetingBridge = await pumpRenamableList(tester);
+      await openRenameDialog(tester);
+
+      await submitTitle(tester, '  Roadmap Review  ');
+
+      expect(meetingBridge.renameRequests, <RenameRequest>[
+        (meetingId: 'meeting-titled', newTitle: 'Roadmap Review')
+      ]);
+      expect(find.byType(RenameMeetingDialog), findsNothing);
+      expect(find.text('Roadmap Review'), findsOneWidget);
+      expect(find.text('Project Sync'), findsNothing);
+      expect(find.text('Meeting renamed'), findsOneWidget);
+      expect(meetingBridge.meetingListRequestCount, 1);
+    });
+
+    testWidgets('pressing Enter in the field saves the title',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge meetingBridge = await pumpRenamableList(tester);
+      await openRenameDialog(tester);
+
+      await tester.enterText(find.byType(TextField), 'Roadmap Review');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+
+      expect(meetingBridge.renameRequests, hasLength(1));
+      expect(find.text('Roadmap Review'), findsOneWidget);
+    });
+
+    testWidgets('saving an unchanged title closes without calling Rust',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge meetingBridge = await pumpRenamableList(tester);
+      await openRenameDialog(tester);
+
+      await submitTitle(tester, ' Project Sync ');
+
+      expect(find.byType(RenameMeetingDialog), findsNothing);
+      expect(meetingBridge.renameRequests, isEmpty);
+    });
+
+    testWidgets('Cancel closes the dialog without renaming',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge meetingBridge = await pumpRenamableList(tester);
+      await openRenameDialog(tester);
+      await tester.enterText(find.byType(TextField), 'Roadmap Review');
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RenameMeetingDialog), findsNothing);
+      expect(meetingBridge.renameRequests, isEmpty);
+      expect(find.text('Project Sync'), findsOneWidget);
+    });
+
+    testWidgets('Escape closes the dialog without renaming',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge meetingBridge = await pumpRenamableList(tester);
+      await openRenameDialog(tester);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(RenameMeetingDialog), findsNothing);
+      expect(meetingBridge.renameRequests, isEmpty);
+    });
+
+    for (final (int statusCode, String message) in <(int, String)>[
+      (1, "This title isn't allowed."),
+      (2, "Couldn't save the new title. Try again."),
+      (3, "The note-taking engine isn't available right now."),
+      (5, 'This meeting no longer exists.'),
+      (42, "Couldn't rename the meeting."),
+    ]) {
+      testWidgets(
+          'Rust status $statusCode keeps the dialog open with a message',
+          (WidgetTester tester) async {
+        final FakeMeetingBridge meetingBridge = await pumpRenamableList(tester);
+        meetingBridge.renameError = meetingRenameExceptionFor(statusCode);
+        await openRenameDialog(tester);
+
+        await submitTitle(tester, 'Roadmap Review');
+
+        expect(find.text(message), findsOneWidget);
+        expect(find.byType(RenameMeetingDialog), findsOneWidget);
+        expect(find.text('Meeting renamed'), findsNothing);
+      });
+    }
+
+    testWidgets('on desktop a rename from the list updates the detail pane',
+        (WidgetTester tester) async {
+      await pumpRenamableList(tester, size: const Size(1280, 800));
+      await tester.tap(find.text('Project Sync'));
+      await tester.pumpAndSettle();
+      expect(find.text('Project Sync'), findsNWidgets(2));
+
+      await tester.tap(find.text('Project Sync').first,
+          buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      await submitTitle(tester, 'Roadmap Review');
+
+      expect(find.text('Roadmap Review'), findsNWidgets(2));
+      expect(find.text('Project Sync'), findsNothing);
+    });
+
+    /// Measures the dialog's visible surface; `AlertDialog` itself fills the screen.
+    double dialogSurfaceWidth(WidgetTester tester) => tester
+        .getSize(find
+            .descendant(
+                of: find.byType(AlertDialog), matching: find.byType(Material))
+            .first)
+        .width;
+
+    testWidgets('the dialog stays compact on desktop and fits a phone',
+        (WidgetTester tester) async {
+      await pumpRenamableList(tester, size: const Size(1280, 800));
+      await tester.tap(find.text('Project Sync'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      expect(dialogSurfaceWidth(tester), lessThanOrEqualTo(560));
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      tester.view.physicalSize = const Size(320, 640);
+      await tester.pumpAndSettle();
+      await openRenameDialog(tester);
+      expect(dialogSurfaceWidth(tester), lessThanOrEqualTo(320));
+      expect(tester.takeException(), isNull);
+    });
   });
 }

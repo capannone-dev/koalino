@@ -7,21 +7,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
+import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
 import 'fake_meeting_bridge.dart';
 
 /// Pumps the detail screen for `meetingId`, optionally with an attachment screen builder.
-Future<void> pumpMeetingDetail(
+Future<FakeMeetingBridge> pumpMeetingDetail(
   WidgetTester tester,
   String meetingId, {
   WidgetBuilder? attachmentScreenBuilder,
 }) async {
-  final MeetingListController controller = MeetingListController(
-    meetingBridge: FakeMeetingBridge(details: <String, MeetingDetail>{
-      'meeting-titled': titledMeetingDetail,
-      'meeting-untitled': untitledMeetingDetail,
-    }),
-  );
+  final FakeMeetingBridge meetingBridge =
+      FakeMeetingBridge(details: <String, MeetingDetail>{
+    'meeting-titled': titledMeetingDetail,
+    'meeting-untitled': untitledMeetingDetail,
+  });
+  final MeetingListController controller =
+      MeetingListController(meetingBridge: meetingBridge);
   await tester.pumpWidget(
     MaterialApp(
       home: MeetingDetailScreen(
@@ -32,6 +34,7 @@ Future<void> pumpMeetingDetail(
     ),
   );
   await tester.pumpAndSettle();
+  return meetingBridge;
 }
 
 /// Verifies the title header, fallback title, transcript, and attachment action.
@@ -95,5 +98,69 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Attachment import'), findsOneWidget);
+  });
+
+  testWidgets('the pencil next to the title opens the rename dialog',
+      (WidgetTester tester) async {
+    await pumpMeetingDetail(tester, 'meeting-titled');
+
+    await tester.tap(find.byTooltip('Rename meeting'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RenameMeetingDialog), findsOneWidget);
+    final TextField titleField = tester.widget<TextField>(find.descendant(
+        of: find.byType(RenameMeetingDialog),
+        matching: find.byType(TextField)));
+    expect(titleField.controller?.text, 'Project Sync');
+  });
+
+  testWidgets('the pencil sits on the same line as the title',
+      (WidgetTester tester) async {
+    await pumpMeetingDetail(tester, 'meeting-titled');
+
+    final Rect titleRect = tester.getRect(find.text('Project Sync'));
+    final Rect pencilRect = tester.getRect(find.byTooltip('Rename meeting'));
+    expect(pencilRect.left, greaterThanOrEqualTo(titleRect.right));
+    expect(
+        pencilRect.center.dy, closeTo(titleRect.center.dy, titleRect.height));
+  });
+
+  testWidgets('a rename from the detail updates the header immediately',
+      (WidgetTester tester) async {
+    final FakeMeetingBridge meetingBridge =
+        await pumpMeetingDetail(tester, 'meeting-titled');
+
+    await tester.tap(find.byTooltip('Rename meeting'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.descendant(
+            of: find.byType(RenameMeetingDialog),
+            matching: find.byType(TextField)),
+        'Roadmap Review');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(meetingBridge.renameRequests, <RenameRequest>[
+      (meetingId: 'meeting-titled', newTitle: 'Roadmap Review')
+    ]);
+    expect(find.text('Roadmap Review'), findsOneWidget);
+    expect(find.text('Project Sync'), findsNothing);
+  });
+
+  testWidgets('a failed rename from the detail shows the error in the dialog',
+      (WidgetTester tester) async {
+    final FakeMeetingBridge meetingBridge =
+        await pumpMeetingDetail(tester, 'meeting-titled');
+    meetingBridge.renameError = meetingRenameExceptionFor(2);
+
+    await tester.tap(find.byTooltip('Rename meeting'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Roadmap Review');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text("Couldn't save the new title. Try again."), findsOneWidget);
+    expect(find.text('Project Sync'), findsOneWidget);
   });
 }
