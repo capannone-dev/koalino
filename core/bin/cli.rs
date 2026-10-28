@@ -39,13 +39,12 @@ fn main() -> Result<()> {
     let log_directory = env::var("NOTE_TAKER_LOG_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("logs"));
-    // `error` by default: the CLI prints JSON logs to stdout, which would mix with command output.
-    let log_filter = parsed_cli
-        .log_level
-        .clone()
-        .unwrap_or_else(|| String::from("error"));
+    // The file keeps `info` by default; stdout shows only errors so logs do not mix with output.
+    let log_filters = parsed_cli.log_filters();
     let _logging_runtime = initialize_logging(
-        LoggingConfiguration::new(device_id.clone(), log_directory).with_filter(log_filter),
+        LoggingConfiguration::new(device_id.clone(), log_directory)
+            .with_filter(log_filters.file_filter)
+            .with_stdout_filter(log_filters.stdout_filter),
     )?;
     let store_device_id = device_id;
     let EncryptedStores {

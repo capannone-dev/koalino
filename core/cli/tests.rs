@@ -1131,3 +1131,26 @@ fn core_service_writes_the_requested_level_for_the_daemon() {
 fn core_service_without_a_control_file_rejects_log_level_requests() {
     assert!(in_memory_core_service().request_log_level("debug").is_err());
 }
+
+/// Without `--log-level`, the log file keeps the production default `info` (REQUIREMENTS 6.1)
+/// while stdout shows only errors, so JSON logs do not mix with command output.
+#[test]
+fn default_log_filters_keep_info_in_the_file_and_errors_on_stdout() {
+    let parsed_cli = Cli::parse_from(["note-taker", "meetings", "list"]);
+
+    let log_filters = parsed_cli.log_filters();
+
+    assert_eq!(log_filters.file_filter, "info");
+    assert_eq!(log_filters.stdout_filter, "error");
+}
+
+/// An explicit `--log-level` applies to both sinks, so `--log-level debug` shows debug output.
+#[test]
+fn explicit_log_level_applies_to_file_and_stdout() {
+    let parsed_cli = Cli::parse_from(["note-taker", "--log-level", "debug", "meetings", "list"]);
+
+    let log_filters = parsed_cli.log_filters();
+
+    assert_eq!(log_filters.file_filter, "debug");
+    assert_eq!(log_filters.stdout_filter, "debug");
+}

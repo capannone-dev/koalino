@@ -17,8 +17,9 @@ account `encryption-key`). An existing `~/.note_taker/encryption.key` (or
 keychain, or with `NOTE_TAKER_KEYCHAIN_ENABLED=false`, the key file is used. Keep using the same
 choice: a database encrypted one way refuses to open the other way, and a lost passphrase or
 random key makes its voice data unrecoverable.
-The executable's own tracing filter defaults to `error`, so terminal output contains only command
-results; the global `--log-level <level>` flag raises it for one invocation. `log-level <directive>`
+The executable's own log file records `info` by default (REQUIREMENTS.md 6.1), while stdout shows
+only `error` entries, so terminal output contains only command results; the global
+`--log-level <level>` flag sets both sinks for one invocation. `log-level <directive>`
 changes a running daemon's verbosity without a restart (REQUIREMENTS.md 6.1): it validates the
 directive and writes it to `<database>.log-level`, which the daemon on the same database polls
 every 2 seconds. A request written while no daemon runs is ignored at the next start, where

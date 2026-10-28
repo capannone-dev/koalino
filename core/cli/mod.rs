@@ -41,9 +41,40 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: CliCommand,
     /// Verbosity of this command's own logs (`error`, `warn`, `info`, `debug`, `trace`, or a
-    /// `tracing` directive). Defaults to `error`, so JSON logs do not mix with command output.
+    /// `tracing` directive). Without it the log file records `info` and stdout shows only
+    /// errors, so JSON logs do not mix with command output.
     #[arg(long, global = true, value_name = "LEVEL")]
     pub log_level: Option<String>,
+}
+
+/// The tracing filters for the CLI's two log sinks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CliLogFilters {
+    /// Filter for the rolling JSON log file.
+    pub file_filter: String,
+    /// Filter for JSON logs on stdout, which is shared with command output.
+    pub stdout_filter: String,
+}
+
+impl Cli {
+    /// Chooses the log filters for this invocation.
+    ///
+    /// Inputs: `self.log_level`, the optional `--log-level` value.
+    /// Outputs: The requested level for both sinks; otherwise `info` for the file (the
+    /// production default of REQUIREMENTS 6.1) and `error` for stdout.
+    /// Side effects: None.
+    pub fn log_filters(&self) -> CliLogFilters {
+        match &self.log_level {
+            Some(requested_level) => CliLogFilters {
+                file_filter: requested_level.clone(),
+                stdout_filter: requested_level.clone(),
+            },
+            None => CliLogFilters {
+                file_filter: String::from("info"),
+                stdout_filter: String::from("error"),
+            },
+        }
+    }
 }
 
 /// Defines top-level command groups.

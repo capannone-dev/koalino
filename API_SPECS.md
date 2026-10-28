@@ -303,7 +303,7 @@ date, duration), `meetings view <meeting-id>` (title first),
 `voice assign-cluster <cluster-uuid> <identity-name>`, `telemetry`,
 `log-level <directive>` (writes `<database>.log-level`; a running daemon on the same database
 applies it within 2 seconds without restarting), the global `--log-level <level>` flag (this
-command's own logging, default `error`),
+command's own logging; by default the log file records `info` and stdout only `error`),
 `meetings export <meeting-id> --format <markdown|pdf|json> [--output <path>]`, and
 `meetings export-all --format <format> [--date-range <start>:<end>]` (see `core/cli/README.md`). It calls only the
 portable `AudioCapture`, repository, and `VoiceIdentityManager` boundaries. Voice assignment

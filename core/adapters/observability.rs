@@ -17,7 +17,7 @@ use std::{
 use anyhow::{Context, Result};
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::{
-    EnvFilter, Registry, layer::SubscriberExt, reload, util::SubscriberInitExt,
+    EnvFilter, Layer, Registry, layer::SubscriberExt, reload, util::SubscriberInitExt,
 };
 
 use crate::domain::models::DeviceId;
@@ -28,6 +28,8 @@ pub struct LoggingConfiguration {
     device_id: DeviceId,
     log_directory: PathBuf,
     filter_directive: String,
+    /// Extra filter for stdout only, or `None` when stdout follows `filter_directive`.
+    stdout_filter_directive: Option<String>,
 }
 
 impl LoggingConfiguration {
@@ -41,6 +43,7 @@ impl LoggingConfiguration {
             device_id,
             log_directory: log_directory.into(),
             filter_directive: String::from("info"),
+            stdout_filter_directive: None,
         }
     }
 
@@ -51,6 +54,17 @@ impl LoggingConfiguration {
     /// Side effects: None.
     pub fn with_filter(mut self, filter_directive: impl Into<String>) -> Self {
         self.filter_directive = filter_directive.into();
+        self
+    }
+
+    /// Restricts stdout further than the file, e.g. for a CLI whose stdout carries command output.
+    ///
+    /// Inputs: `stdout_filter_directive` must be a valid `EnvFilter` directive. It applies on top of
+    /// the main (runtime-reloadable) filter, so stdout never shows more than the file.
+    /// Outputs: The updated configuration.
+    /// Side effects: None.
+    pub fn with_stdout_filter(mut self, stdout_filter_directive: impl Into<String>) -> Self {
+        self.stdout_filter_directive = Some(stdout_filter_directive.into());
         self
     }
 }
@@ -91,9 +105,16 @@ pub fn initialize_logging(logging_configuration: LoggingConfiguration) -> Result
     let (non_blocking_file_writer, file_worker_guard) =
         tracing_appender::non_blocking(rolling_file_appender);
     let structured_format = StructuredJsonFormat::new(&logging_configuration.device_id);
+    let stdout_filter = logging_configuration
+        .stdout_filter_directive
+        .as_deref()
+        .map(EnvFilter::try_new)
+        .transpose()
+        .with_context(|| "stdout logging filter directive is invalid")?;
     let stdout_json_layer = tracing_subscriber::fmt::layer()
         .event_format(structured_format.clone())
-        .with_writer(std::io::stdout);
+        .with_writer(std::io::stdout)
+        .with_filter(stdout_filter);
     let file_json_layer = tracing_subscriber::fmt::layer()
         .event_format(structured_format)
         .with_writer(non_blocking_file_writer);
