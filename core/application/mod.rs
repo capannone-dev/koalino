@@ -56,6 +56,8 @@ mod network_events_tests;
 pub mod p2p_service;
 #[cfg(test)]
 mod p2p_service_tests;
+/// Serializable P2P status and pairing views shared by the HTTP routes and the FFI.
+pub mod p2p_view;
 /// Orchestrates numeric-comparison pairing and the trusted-peer allowlist (Issue #43).
 pub mod pairing_manager;
 #[cfg(test)]
