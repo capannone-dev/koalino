@@ -11,5 +11,9 @@ pub mod meeting_session;
 pub mod pipeline_factory;
 #[cfg(test)]
 mod pipeline_factory_tests;
+/// Records one privacy-safe telemetry row per transcribed or diarized chunk.
+pub mod task_metrics;
+#[cfg(test)]
+mod task_metrics_tests;
 #[cfg(test)]
 mod tests;

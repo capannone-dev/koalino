@@ -8,7 +8,7 @@
 //! `DiarizationEngine`, `VoiceIdentityMatcher`, `IdentityMapper`, `NoteRepository`, and (for
 //! cluster assignment) `VoiceVectorDB` ports. It never logs transcript text, audio, or embeddings.
 
-use std::time::Instant;
+use std::{rc::Rc, time::Instant};
 
 use uuid::Uuid;
 
@@ -31,6 +31,8 @@ use crate::{
 use crate::application::unknown_speaker_clusterer::{
     ClusterAssignment, ClusteringConfig, ClusteringError, UnknownSpeakerClusterer,
 };
+
+use super::task_metrics::TaskMetricsRecorder;
 
 use super::alignment::{AlignedRegion, ChunkBounds, SpeakerRegion, align_chunk_regions};
 pub use super::alignment::{ChunkBoundsError, SpeakerAttribution};
@@ -139,6 +141,8 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     previous_transcript_text: Option<String>,
     /// Similarity policy used to group unknown voices into clusters.
     clustering_config: ClusteringConfig,
+    /// Saves a telemetry row per completed transcription and diarization; `None` records none.
+    task_metrics: Option<Rc<TaskMetricsRecorder>>,
 }
 
 impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
@@ -179,6 +183,7 @@ where
             persisted_segments,
             previous_transcript_text: None,
             clustering_config: ClusteringConfig::default(),
+            task_metrics: None,
         })
     }
 
@@ -189,6 +194,16 @@ where
     /// Side effects: None.
     pub fn with_clustering_config(mut self, clustering_config: ClusteringConfig) -> Self {
         self.clustering_config = clustering_config;
+        self
+    }
+
+    /// Records telemetry for every later chunk (Issue #53).
+    ///
+    /// Inputs: The recorder, shared with the factory's other sessions.
+    /// Outputs: The session saving one row per completed transcription and diarization.
+    /// Side effects: None until a chunk is processed.
+    pub fn with_task_metrics(mut self, task_metrics: Rc<TaskMetricsRecorder>) -> Self {
+        self.task_metrics = Some(task_metrics);
         self
     }
 
@@ -238,8 +253,9 @@ where
     /// error when the meeting mismatches, transcription fails, or the timeline cannot be saved.
     /// Diarization and voice-matching failures degrade to `Unattributed`/`Unknown` instead.
     /// Side effects: Runs transcription (synchronously) and diarization, queries voice identities,
-    /// saves review clips for weak/unknown voices, rewrites the meeting's segments in storage, and
-    /// emits structured logs without text, audio, or embeddings.
+    /// saves review clips for weak/unknown voices, rewrites the meeting's segments in storage,
+    /// saves a telemetry row per completed AI task when a recorder is set, and emits structured
+    /// logs without text, audio, or embeddings.
     pub async fn process_vad_chunk(
         &mut self,
         vad_chunk: &VadAudioChunk,
@@ -253,6 +269,9 @@ where
             .transcription_engine
             .transcribe(vad_chunk.audio_recording(), &transcription_context)
             .map_err(|error| self.log_transcription_failure(chunk_bounds, error))?;
+        if let Some(task_metrics) = &self.task_metrics {
+            task_metrics.record_transcription(processing_started_at.elapsed());
+        }
 
         let speaker_regions = self.diarize_and_attribute(vad_chunk).await;
         let aligned_regions =
@@ -388,17 +407,23 @@ where
             );
             return Vec::new();
         };
+        let diarization_started_at = Instant::now();
         match diarization_engine.diarize(vad_chunk.audio_bytes()).await {
-            Ok(speaker_segments) => speaker_segments
-                .iter()
-                .map(|speaker_segment| {
-                    SpeakerRegion::new(
-                        speaker_segment.start_time_ms(),
-                        speaker_segment.end_time_ms(),
-                        self.attribute_speaker_segment(vad_chunk, speaker_segment),
-                    )
-                })
-                .collect(),
+            Ok(speaker_segments) => {
+                if let Some(task_metrics) = &self.task_metrics {
+                    task_metrics.record_diarization(diarization_started_at.elapsed());
+                }
+                speaker_segments
+                    .iter()
+                    .map(|speaker_segment| {
+                        SpeakerRegion::new(
+                            speaker_segment.start_time_ms(),
+                            speaker_segment.end_time_ms(),
+                            self.attribute_speaker_segment(vad_chunk, speaker_segment),
+                        )
+                    })
+                    .collect()
+            }
             Err(error) => {
                 let chunk_bounds = vad_chunk.chunk_bounds();
                 tracing::warn!(

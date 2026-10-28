@@ -16,6 +16,8 @@ is imported.
 | `pipeline_factory.rs` | `PipelineFactory`: the composition root that owns the pipeline ports once and opens one session per recording. |
 | `tests.rs` | Mock-port TDD specification plus an in-memory SQLite integration test of a three-chunk meeting. |
 | `pipeline_factory_tests.rs` | Factory availability, graceful degradation, meeting creation, engine reuse, and clustering policy. |
+| `task_metrics.rs` | `TaskMetricsRecorder` and `TaskProfile`: one telemetry row per completed transcription or diarization. |
+| `task_metrics_tests.rs` | Per-chunk telemetry: one row per task, none for failures, and a failing store never fails a chunk. |
 
 ## MeetingSession
 
@@ -42,6 +44,18 @@ point that has no engine fails at composition (see `core/bin/pipeline_compositio
 
 `application::recording_manager::RecordingManager` runs these sessions on a worker thread for
 live recordings; see `../README.md`.
+
+## Telemetry (Issue #53)
+
+`PipelineFactory::with_task_metrics(recorder)` makes every session save one `TaskMetrics` row
+through the `MetricsRepository` port after each successful transcription, and one after each
+successful diarization. A row holds the device, task type, model label, duration (also the latency,
+since a chunk is processed as soon as it arrives), an energy estimate (the profile's milliwatts
+times the duration) and the completion time. It never holds audio, text or embeddings. Failed
+tasks record nothing. A save that fails is logged and the chunk continues. The recorder is shared
+through `Rc` because the factory and its sessions live on one worker thread. In production,
+`core/bin/pipeline_composition.rs` gives it its own SQLite connection and labels local models by
+file stem, never by path.
 
 ## Local VAD chunk flow
 

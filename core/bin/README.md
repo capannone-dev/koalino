@@ -31,6 +31,9 @@ documented nonzero status codes distinguishable from lifecycle states.
   chunk audio then leaves the device). `spawn_recording_controller` builds the pipeline on the
   worker thread, with its own SQLite connections sharing the verified cipher and the encrypted
   voice library as matcher. No diarization adapter exists yet, so segments are `Unattributed`.
+  Each transcribed chunk saves a telemetry row on a separate connection (Issue #53), so the
+  Telemetry dashboard has data. Local whisper is recorded as `transcription` with the model's file
+  stem at an estimated 5 W. OpenAI is recorded as `cloud_transcription` with its model name at 1 W.
 - `recording_controller.rs` (`RecordingController`) drives one recording: PCM → `LocalRecorder`
   (lifecycle; audio is dropped while paused) → `VadChunker` → `ChunkAudioStore` plus a
   `VadAudioChunk` with meeting-relative offsets → `RecordingManager`. A recording into an existing

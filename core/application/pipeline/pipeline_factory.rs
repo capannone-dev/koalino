@@ -7,6 +7,8 @@
 //! dependencies degrade instead of failing: no diarization engine yields `Unattributed` segments,
 //! and no voice matcher treats every diarized voice as unknown. The factory depends only on ports.
 
+use std::rc::Rc;
+
 use crate::{
     domain::{
         errors::{DiarizationError, StorageError},
@@ -23,7 +25,10 @@ use crate::application::{
     meeting_crdt::MeetingCrdtService, unknown_speaker_clusterer::ClusteringConfig,
 };
 
-use super::meeting_session::{MeetingSession, MeetingSessionError};
+use super::{
+    meeting_session::{MeetingSession, MeetingSessionError},
+    task_metrics::TaskMetricsRecorder,
+};
 
 /// Placeholder diarization port for factories built without a diarization engine.
 ///
@@ -121,6 +126,8 @@ pub struct PipelineFactory<TranscriptionPort, DiarizationPort, MatcherPort, Repo
     note_repository: RepositoryPort,
     /// Similarity policy every session uses to group unknown voices.
     clustering_config: ClusteringConfig,
+    /// Telemetry every session records into; `None` records none.
+    task_metrics: Option<Rc<TaskMetricsRecorder>>,
 }
 
 impl<TranscriptionPort, RepositoryPort>
@@ -140,6 +147,7 @@ impl<TranscriptionPort, RepositoryPort>
             },
             note_repository,
             clustering_config: ClusteringConfig::default(),
+            task_metrics: None,
         }
     }
 }
@@ -162,6 +170,7 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
             voice_identity_matcher: self.voice_identity_matcher,
             note_repository: self.note_repository,
             clustering_config: self.clustering_config,
+            task_metrics: self.task_metrics,
         }
     }
 
@@ -182,6 +191,7 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
             },
             note_repository: self.note_repository,
             clustering_config: self.clustering_config,
+            task_metrics: self.task_metrics,
         }
     }
 
@@ -192,6 +202,16 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
     /// Side effects: None.
     pub fn with_clustering_config(mut self, clustering_config: ClusteringConfig) -> Self {
         self.clustering_config = clustering_config;
+        self
+    }
+
+    /// Records a telemetry row for every chunk any later session transcribes or diarizes
+    /// (Issue #53).
+    ///
+    /// Inputs: The recorder; sessions share it.
+    /// Outputs: The factory. Side effects: None.
+    pub fn with_task_metrics(mut self, task_metrics: TaskMetricsRecorder) -> Self {
+        self.task_metrics = Some(Rc::new(task_metrics));
         self
     }
 
@@ -231,7 +251,8 @@ where
     /// Inputs: `meeting_id` names a new or existing meeting.
     /// Outputs: A session borrowing this factory's ports, or a storage error.
     /// Side effects: May create the meeting (with an empty CRDT document) in the repository, then
-    /// loads its existing segments so new chunks append to them.
+    /// loads its existing segments so new chunks append to them. Sessions share the factory's
+    /// telemetry recorder, if any.
     pub fn create_session(
         &self,
         meeting_id: &MeetingId,
@@ -254,6 +275,12 @@ where
             &self.voice_identity_matcher,
             &self.note_repository,
         )
-        .map(|session| session.with_clustering_config(self.clustering_config))
+        .map(|session| {
+            let session = session.with_clustering_config(self.clustering_config);
+            match &self.task_metrics {
+                Some(task_metrics) => session.with_task_metrics(Rc::clone(task_metrics)),
+                None => session,
+            }
+        })
     }
 }

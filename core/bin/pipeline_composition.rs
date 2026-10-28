@@ -33,13 +33,19 @@ use crate::{
         storage::sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
     application::{
-        pipeline::pipeline_factory::{NoDiarizationEngine, PipelineFactory},
+        pipeline::{
+            pipeline_factory::{NoDiarizationEngine, PipelineFactory},
+            task_metrics::{TaskMetricsRecorder, TaskProfile},
+        },
         recording_manager::RecordingManager,
         voice_identity_manager::VoiceIdentityManager,
     },
     domain::{
         errors::TranscriptionError,
-        models::{AudioRecording, DeviceId, ExternalMediaChunk, Transcript, TranscriptionContext},
+        models::{
+            AudioRecording, DeviceId, ExternalMediaChunk, TaskType, Transcript,
+            TranscriptionContext,
+        },
     },
     ports::{ai::TranscriptionEngine, crypto::EmbeddingCipher},
     recording_controller::{ChunkingMode, RecordingController},
@@ -49,6 +55,13 @@ use crate::{
 #[cfg(test)]
 #[path = "pipeline_composition_tests.rs"]
 mod tests;
+
+/// Estimated draw of on-device whisper.cpp, which runs on the CPU: the same 5 W the compute
+/// router assumes for CPU work.
+pub const LOCAL_TRANSCRIPTION_POWER_MILLIWATTS: f32 = 5_000.0;
+/// Estimated draw while a chunk is uploaded and the provider transcribes it: the device mostly
+/// waits on the network, so a fifth of the local estimate.
+pub const CLOUD_TRANSCRIPTION_POWER_MILLIWATTS: f32 = 1_000.0;
 
 /// Selects the transcription provider.
 pub const TRANSCRIPTION_PROVIDER_VARIABLE: &str = "NOTE_TAKER_TRANSCRIPTION_PROVIDER";
@@ -301,6 +314,53 @@ pub fn select_transcription_engine(
     }
 }
 
+/// Describes how the selected engine's transcriptions appear in telemetry (Issue #53).
+///
+/// Inputs: The selected engine and the configuration it was built from.
+/// Outputs: `CloudTranscription` with the OpenAI model for the cloud engine, `Transcription`
+/// with the model file's name for the local one.
+/// Side effects: None.
+pub fn transcription_task_profile(
+    engine: &SelectedTranscriptionEngine,
+    config: &PipelineConfig,
+) -> TaskProfile {
+    match engine {
+        SelectedTranscriptionEngine::OpenAi(_) => TaskProfile::new(
+            TaskType::CloudTranscription,
+            config.openai_model.clone(),
+            CLOUD_TRANSCRIPTION_POWER_MILLIWATTS,
+        ),
+        #[cfg(feature = "local-ai")]
+        SelectedTranscriptionEngine::Local(_) => TaskProfile::new(
+            TaskType::Transcription,
+            config
+                .whisper_model_path
+                .as_deref()
+                .map_or_else(|| "whisper.cpp".to_owned(), local_model_label),
+            LOCAL_TRANSCRIPTION_POWER_MILLIWATTS,
+        ),
+    }
+}
+
+/// Labels a local model by its file name without folder or extension (`ggml-small`).
+///
+/// Inputs: The model path, with `/` or `\` separators whatever the host.
+/// Outputs: The label; `whisper.cpp` when the path has no file name. The folder is dropped so
+/// telemetry, which peers can see, never carries a path that may name the user.
+/// Side effects: None.
+pub fn local_model_label(model_path: &Path) -> String {
+    let path_text = model_path.to_string_lossy();
+    let file_name = path_text.rsplit(['/', '\\']).next().unwrap_or_default();
+    let stem = file_name
+        .rsplit_once('.')
+        .map_or(file_name, |(stem, _extension)| stem);
+    if stem.is_empty() {
+        "whisper.cpp".to_owned()
+    } else {
+        stem.to_owned()
+    }
+}
+
 /// Builds the OpenAI engine.
 ///
 /// Inputs: The configuration (requires the API key) and the chunk audio store.
@@ -386,7 +446,8 @@ fn local_engine(
 /// verified embedding cipher from `open_encrypted_stores`, and the pipeline configuration.
 /// Outputs: The controller, or an error explaining which dependency is missing.
 /// Side effects: Spawns the worker thread, which selects (and may load) the transcription
-/// engine and opens its own note-repository and voice-store connections. Blocks until ready.
+/// engine and opens its own note-repository, telemetry and voice-store connections; every
+/// transcribed chunk then saves one telemetry row. Blocks until ready.
 pub fn spawn_recording_controller(
     database_path: &Path,
     device_id: DeviceId,
@@ -402,10 +463,22 @@ pub fn spawn_recording_controller(
         let transcription_engine = select_transcription_engine(&config, &engine_audio_store)?;
         let note_repository = open_note_repository(
             &worker_database_path,
-            worker_device_id,
+            worker_device_id.clone(),
             Arc::clone(&embedding_cipher),
         )
         .context("unable to open the pipeline note repository")?;
+        // Its own connection, so telemetry writes never wait on the transcript's.
+        let metrics_repository = open_note_repository(
+            &worker_database_path,
+            worker_device_id.clone(),
+            Arc::clone(&embedding_cipher),
+        )
+        .context("unable to open the pipeline telemetry store")?;
+        let task_metrics = TaskMetricsRecorder::new(
+            Box::new(metrics_repository),
+            worker_device_id,
+            transcription_task_profile(&transcription_engine, &config),
+        );
         let voice_store = SqliteVoiceVectorDB::open(&worker_database_path, embedding_cipher)
             .context("unable to open the pipeline voice store")?;
         if config.diarization_requested {
@@ -416,7 +489,8 @@ pub fn spawn_recording_controller(
         }
         Ok(PipelineFactory::new(transcription_engine, note_repository)
             .with_diarization_engine(None::<NoDiarizationEngine>)
-            .with_voice_matcher(Some(VoiceIdentityManager::new(voice_store))))
+            .with_voice_matcher(Some(VoiceIdentityManager::new(voice_store)))
+            .with_task_metrics(task_metrics))
     })?;
     Ok(RecordingController::new(
         recording_manager,

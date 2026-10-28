@@ -7,12 +7,14 @@ use uuid::Uuid;
 
 use crate::{
     adapters::audio::chunk_audio_store::ChunkAudioStore,
-    application::crypto::voice_encryptor::ephemeral_cipher, domain::models::DeviceId,
+    application::{crypto::voice_encryptor::ephemeral_cipher, pipeline::task_metrics::TaskProfile},
+    domain::models::{DeviceId, TaskType},
 };
 
 use super::{
-    PipelineConfig, SelectedTranscriptionEngine, TranscriptionProvider,
-    select_transcription_engine, spawn_recording_controller,
+    CLOUD_TRANSCRIPTION_POWER_MILLIWATTS, PipelineConfig, SelectedTranscriptionEngine,
+    TranscriptionProvider, local_model_label, select_transcription_engine,
+    spawn_recording_controller, transcription_task_profile,
 };
 
 /// Builds a config from literal variables, ignoring the real environment.
@@ -178,6 +180,41 @@ fn an_api_key_selects_the_openai_engine() {
         .unwrap_or_else(|error| panic!("{provider} with a key should compose: {error:#}"));
         assert!(matches!(engine, SelectedTranscriptionEngine::OpenAi(_)));
     }
+}
+
+/// Verifies cloud transcriptions are recorded as `cloud_transcription` with the OpenAI model.
+#[test]
+fn openai_transcriptions_are_recorded_as_cloud_work() {
+    let config = valid_config(&[
+        ("OPENAI_API_KEY", "sk-test"),
+        ("NOTE_TAKER_OPENAI_WHISPER_MODEL", "gpt-4o-transcribe"),
+    ]);
+    let engine = select_transcription_engine(&config, &Arc::new(ChunkAudioStore::new()))
+        .unwrap_or_else(|error| panic!("a key should compose: {error:#}"));
+
+    assert_eq!(
+        transcription_task_profile(&engine, &config),
+        TaskProfile::new(
+            TaskType::CloudTranscription,
+            "gpt-4o-transcribe",
+            CLOUD_TRANSCRIPTION_POWER_MILLIWATTS
+        )
+    );
+}
+
+/// Verifies a local model is labelled by its file name without the folder or extension, so no
+/// path (which can name the user) reaches telemetry.
+#[test]
+fn local_models_are_labelled_by_file_stem() {
+    assert_eq!(
+        local_model_label(std::path::Path::new("/home/someone/models/ggml-small.bin")),
+        "ggml-small"
+    );
+    assert_eq!(
+        local_model_label(std::path::Path::new("C:\\models\\ggml-base.en.bin")),
+        "ggml-base.en"
+    );
+    assert_eq!(local_model_label(std::path::Path::new("")), "whisper.cpp");
 }
 
 /// Verifies the composed controller opens its own stores on the database and reports that a
