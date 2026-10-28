@@ -38,7 +38,9 @@ both native strings, and maps non-zero statuses to `MeetingRenameException` thro
 sets `keychain_enabled: false`, so the key file stays in the app-private `keys/` directory.
 `appConfigurationJson` builds the JSON and is unit-tested; it also passes peer addresses compiled
 in with `--dart-define=NOTE_TAKER_P2P_PEERS`. After `runApp`, `startCore` calls
-`note_taker_start_runtime` on an isolate, so sync starts with the app.
+`note_taker_start_runtime` on an isolate, so sync starts with the app. `CoreStartupController`
+holds the screens back until it returns 0. Status 6 means the keychain is missing, locked, or
+refused.
 
 `p2p_bridge.dart` defines `P2pStatus` and its rows, `P2pCommandResult`, and `P2pException` (with
 Rust's `error_code`), the pure decoders `decodeP2pStatus` and `decodeP2pCommandResult`, and

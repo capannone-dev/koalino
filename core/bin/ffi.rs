@@ -68,6 +68,10 @@ pub const FFI_RUNTIME_UNAVAILABLE: c_int = 3;
 pub const FFI_PIPELINE_UNAVAILABLE: c_int = 4;
 /// Indicates that the requested meeting does not exist (returned by `note_taker_rename_meeting`).
 pub const FFI_MEETING_NOT_FOUND: c_int = 5;
+/// Indicates that the platform keychain holding the database key is missing, locked, or refused
+/// access (for example a dismissed unlock prompt). The app shows the error with Retry; there is
+/// no key-file fallback.
+pub const FFI_KEYCHAIN_UNAVAILABLE: c_int = 6;
 /// Returns the portable Idle state from `note_taker_get_current_state`.
 pub const FFI_AUDIO_STATE_IDLE: c_int = 10;
 /// Returns the portable Recording state from `note_taker_get_current_state`.
@@ -342,7 +346,7 @@ impl FfiRuntime {
         )
         .map_err(|error| {
             tracing::error!(error = %format!("{error:#}"), "unable to open encrypted stores");
-            FFI_OPERATION_REJECTED
+            store_open_status(&error)
         })?;
         let review_clip_directory = setting("NOTE_TAKER_REVIEW_CLIP_DIR")
             .map(PathBuf::from)
@@ -1333,6 +1337,29 @@ fn runtime_p2p() -> Result<Option<Arc<P2pHandle>>, c_int> {
         .and_then(|runtime| runtime.p2p.clone()))
 }
 
+/// Maps a failure to open the encrypted stores to its FFI status.
+///
+/// Inputs: The error from `open_encrypted_stores`, with any context layers.
+/// Outputs: `FFI_KEYCHAIN_UNAVAILABLE` when a keychain error caused it, otherwise
+/// `FFI_OPERATION_REJECTED`.
+/// Side effects: None.
+fn store_open_status(error: &anyhow::Error) -> c_int {
+    let keychain_failed = error.chain().any(|cause| {
+        matches!(
+            cause.downcast_ref::<crate::domain::errors::CryptoError>(),
+            Some(
+                crate::domain::errors::CryptoError::Keychain { .. }
+                    | crate::domain::errors::CryptoError::KeychainUnavailable { .. }
+            )
+        )
+    });
+    if keychain_failed {
+        FFI_KEYCHAIN_UNAVAILABLE
+    } else {
+        FFI_OPERATION_REJECTED
+    }
+}
+
 /// Applies the app's settings; call once, before any other function.
 ///
 /// Inputs: `configuration_json` is a NUL-terminated UTF-8 JSON object:
@@ -1372,7 +1399,8 @@ pub unsafe extern "C" fn note_taker_configure(configuration_json: *const c_char)
 ///
 /// Inputs: None; call after `note_taker_configure`.
 /// Outputs: `0` once the runtime is open (also when it already was), or the status that opening
-/// it failed with (`3` when the database, keys, or settings are unusable).
+/// it failed with: `6` when the keychain is missing, locked, or refused (call again to retry),
+/// `2` when the database, keys, or settings are otherwise unusable.
 /// Side effects: Opens the database and key store, and starts the P2P task when it is enabled.
 /// Blocks while they open, so callers use a background thread.
 #[unsafe(no_mangle)]
@@ -2866,6 +2894,34 @@ mod ffi_contract_tests {
 
         assert_eq!(null_status, FFI_INVALID_ARGUMENT);
         assert_eq!(invalid_status, FFI_INVALID_ARGUMENT);
+    }
+
+    /// A keychain that is missing, locked, or refused gets its own status, so the app can offer
+    /// a retry; every other failure to open the stores stays `FFI_OPERATION_REJECTED`.
+    #[test]
+    fn a_keychain_failure_opening_the_stores_has_its_own_status() {
+        use crate::domain::errors::CryptoError;
+        let unavailable = anyhow::Error::new(CryptoError::KeychainUnavailable {
+            reason: "no Secret Service".to_owned(),
+        })
+        .context("unable to unlock the voice embedding encryption key");
+        let refused = anyhow::Error::new(CryptoError::Keychain {
+            reason: "the unlock prompt was dismissed".to_owned(),
+        })
+        .context("unable to unlock the voice embedding encryption key");
+        let wrong_key = anyhow::Error::new(CryptoError::WrongKey).context("unable to unlock");
+        let other = anyhow::anyhow!("unable to open the voice store");
+
+        assert_eq!(
+            super::store_open_status(&unavailable),
+            super::FFI_KEYCHAIN_UNAVAILABLE
+        );
+        assert_eq!(
+            super::store_open_status(&refused),
+            super::FFI_KEYCHAIN_UNAVAILABLE
+        );
+        assert_eq!(super::store_open_status(&wrong_key), FFI_OPERATION_REJECTED);
+        assert_eq!(super::store_open_status(&other), FFI_OPERATION_REJECTED);
     }
 
     /// `note_taker_start_runtime` opens the configured runtime at once, creating its database in

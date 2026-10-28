@@ -26,3 +26,7 @@ confirm codes, cancel, accept, reject, and remove. It refreshes after each succe
 error codes to plain messages, keeping the last good status. It polls every 2 s while the Devices
 destination is shown. `discoverable` is true for the five-minute pairing window, measured with
 `package:clock`, so tests can fake time without leaving a timer pending (Issue #43).
+
+`CoreStartupController` runs `startCore` and maps Rust's status to `ready`, `keychainUnavailable`
+(status 6), or `failed`. A throwing start, such as a missing library, also counts as `failed`.
+`start` can be called again to retry.

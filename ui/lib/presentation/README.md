@@ -31,3 +31,8 @@ task shows "Device sync is off". `HomeShell` lists it as the fourth destination,
 `noteTakerTheme(brightness)`. `NoteTakerApp` sets both and `ThemeMode.system`, so the app follows
 the system setting, including changes while it runs. Screens take colours from the theme's
 `colorScheme`, so both themes keep their contrast.
+
+`core_startup_gate.dart` (`CoreStartupGate`) shows "Unlocking your notes…" while the core opens,
+which may wait on a keychain unlock prompt. On a keychain or storage failure it explains the
+problem and offers Retry and Quit, instead of the app. There is no key-file fallback
+(`DECISION_LOG.md`).

@@ -51,3 +51,6 @@ Devices (Issue #43):
 
 `app_theme_test.dart` checks that both themes come from the same seed with the right brightness,
 and that the app follows a light and a dark system setting.
+
+`core_startup_test.dart` covers the status mapping, the waiting message, the keychain
+explanation with Retry, and Quit.
