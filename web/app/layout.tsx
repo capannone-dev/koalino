@@ -19,6 +19,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             <Link href="/dashboard">Dashboard</Link>
             <Link href="/meetings">Meetings</Link>
             <Link href="/voice-gallery">Voice gallery</Link>
+            <Link href="/settings">Settings</Link>
           </nav>
         </header>
         <main className="mx-auto max-w-7xl p-4">{children}</main>

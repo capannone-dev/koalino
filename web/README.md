@@ -33,6 +33,8 @@ checks on every change under `web/`, so they are verified even where Node.js is 
   `GET /api/meetings/{id}/unknown-clusters`. It shows each cluster's total speech time and chunk
   count, and posts the typed name to `POST /api/clusters/{id}/assign`. An assigned cluster is
   removed from the list.
+- `/settings` (Issue #46) shows the daemon's log level, changes it until the daemon restarts,
+  and downloads the newest week of logs (`app/settings/README.md`).
 
 Cluster responses deliberately carry no audio paths, so the web gallery has no playback. Local
 review clips can be played from the Flutter Voice Gallery, which receives local file paths over FFI.

@@ -10,3 +10,7 @@ WebSocket URL construction.
 distinguishes an invalid title (400), an unknown meeting (404), server errors (5xx), other statuses,
 and network failures. `meeting-title.ts` validates titles with the same rules as Rust's
 `MeetingTitle::parse` (Issue #42).
+
+`getLogLevel`, `setLogLevel`, and `fetchLogExport` (Issue #46) reach the Settings routes and throw
+`LogSettingsError`, whose `kind` is `invalid_level`, `no_logs`, `unavailable` (503), `server`, or
+`network`. `fetchLogExport` returns the file and the name from its `Content-Disposition`.

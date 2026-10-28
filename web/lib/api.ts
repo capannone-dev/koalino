@@ -106,6 +106,84 @@ export async function assignVoiceClip(clipId: string, identityId: string): Promi
   if (!response.ok) throw new Error(`Voice assignment failed: ${response.status}`);
 }
 
+/** Why a log settings request failed; `network` when the daemon was unreachable (Issue #46). */
+export type LogSettingsFailureKind = "invalid_level" | "no_logs" | "unavailable" | "server" | "network";
+
+/** Thrown by the log settings calls; `status` is the HTTP status, or `null` for `network`. */
+export class LogSettingsError extends Error {
+  constructor(
+    readonly kind: LogSettingsFailureKind,
+    readonly status: number | null
+  ) {
+    super(`Log settings request failed (${status ?? "network"}): ${kind}`);
+    this.name = "LogSettingsError";
+  }
+}
+
+/** The logs as downloaded: the file and the name the daemon gave it. */
+export type LogDownload = { fileName: string; blob: Blob };
+
+/** Sends one log settings request, mapping an unreachable daemon and non-2xx answers to `LogSettingsError`. */
+async function logSettingsRequest(path: string, init: RequestInit): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, init);
+  } catch {
+    throw new LogSettingsError("network", null);
+  }
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => ({}))) as { error_code?: unknown };
+    const kind: LogSettingsFailureKind =
+      errorBody.error_code === "invalid_level" || errorBody.error_code === "no_logs"
+        ? errorBody.error_code
+        : response.status === 503
+          ? "unavailable"
+          : "server";
+    throw new LogSettingsError(kind, response.status);
+  }
+  return response;
+}
+
+/**
+ * Reads the daemon's log level through `GET /api/settings/log-level`.
+ *
+ * Outputs: the `tracing` directive in effect, such as `info`. Throws `LogSettingsError`.
+ * Side effects: none.
+ */
+export async function getLogLevel(): Promise<string> {
+  const response = await logSettingsRequest("/api/settings/log-level", { cache: "no-store" });
+  return ((await response.json()) as { level: string }).level;
+}
+
+/**
+ * Changes the daemon's log level through `PUT /api/settings/log-level` until it restarts.
+ *
+ * Inputs: a directive such as `debug`. Outputs: the level now in effect. Throws `LogSettingsError`
+ * (`invalid_level` for a directive the daemon refuses).
+ * Side effects: reloads the daemon's logging filter.
+ */
+export async function setLogLevel(level: string): Promise<string> {
+  const response = await logSettingsRequest("/api/settings/log-level", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ level })
+  });
+  return ((await response.json()) as { level: string }).level;
+}
+
+/**
+ * Downloads the newest week of the daemon's logs through `GET /api/logs/export`.
+ *
+ * Outputs: the JSON-lines file and its name. Throws `LogSettingsError` (`no_logs` when there are none).
+ * Side effects: none on the daemon beyond a temporary file it removes.
+ */
+export async function fetchLogExport(): Promise<LogDownload> {
+  const response = await logSettingsRequest("/api/logs/export", { cache: "no-store" });
+  const disposition = response.headers.get("content-disposition") ?? "";
+  const fileName = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "note_taker_logs.jsonl";
+  return { fileName, blob: await response.blob() };
+}
+
 export function webSocketUrl(): string {
   if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
   return `${apiBaseUrl.replace(/^http/, "ws")}/ws`;

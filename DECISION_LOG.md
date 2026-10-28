@@ -1072,3 +1072,26 @@ lock-screen version of the notification hides the meeting title. POST_NOTIFICATI
 together with RECORD_AUDIO on Android 13 and later. Desktops need nothing: capture is native and
 continues while the window is minimized.
 
+
+## 2026-10-28 — #46 Settings: log level and log export on every platform
+
+- **The app logs from start-up.** It used to start file logging only when Dart set a level, which
+  it never did. `ffi_logging.rs` now starts it when the runtime opens, before the stores, in
+  `<data>/logs`. The logging runtime sits in a process-wide cell, because the subscriber can be
+  installed once while opening the runtime can be retried (a locked keychain).
+- **Persistence differs by process, on purpose.** The app stores the Settings level in
+  `<db>.log-level` and reads it back at the next start, as owners expect of a setting. The daemon
+  keeps its rule: `RUST_LOG` sets the start level, and changes from `cli log-level` or the web page
+  last until it restarts. Both share `LogLevelControlFile`'s validation.
+- **One export format.** The newest seven daily files, joined oldest first into one JSON-lines
+  file (`export_log_files`), bounded so a long-lived install shares a reasonable file. It is
+  served by FFI (to a path) and by `GET /api/logs/export` (as a download). Entries were redacted
+  when written.
+- **Android sharing without a library.** Our own read-only, non-exported `SharedFileProvider`
+  serves only `cache/shared`, where the export is written; the share intent grants the chosen app
+  read access to that one file. `share_plus` and androidx `FileProvider` were not added.
+  Desktops reuse `file_picker`'s save dialog.
+- **Web.** `/settings` changes the daemon's level and downloads the logs. The routes depend on a
+  `LogControl` port, so they are tested without the global subscriber; the daemon's control-file
+  watcher applies `cli log-level` through the same `LiveLogControl`, so the page shows the level
+  in effect.

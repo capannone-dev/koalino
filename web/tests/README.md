@@ -19,3 +19,11 @@ Meeting rename tests (Issue #42):
 - `theme.test.ts` checks that every colour token has a dark value, that the page declares
   `color-scheme: light dark`, and that no component uses a fixed palette colour that would not
   switch.
+
+Settings tests (Issue #46):
+
+- `log-settings-api.test.ts` covers the level `GET` and `PUT`, the failure kinds, an unreachable
+  daemon, and the log download with its file name.
+- `log-settings.test.tsx` covers the selector (offered and custom levels), applying a level, a
+  failed change keeping the old one, the disabled selector without a server, and Export logs
+  (download and no logs yet).
