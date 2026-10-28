@@ -2,6 +2,9 @@
 
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 
+/// One `renameMeeting` request received by the fake.
+typedef RenameRequest = ({String meetingId, String newTitle});
+
 /// Serves fixed meetings without loading the Rust library and records every request.
 final class FakeMeetingBridge implements MeetingBridge {
   /// Creates a fake serving `meetings` and the details keyed by meeting ID.
@@ -22,8 +25,18 @@ final class FakeMeetingBridge implements MeetingBridge {
   /// Meeting IDs requested through `getMeeting`.
   final List<String> requestedMeetings = <String>[];
 
+  /// Number of `getMeetings` calls, so tests can prove a rename did not reload the list.
+  int meetingListRequestCount = 0;
+
+  /// Requests received through `renameMeeting`, in order.
+  final List<RenameRequest> renameRequests = <RenameRequest>[];
+
+  /// When set, `renameMeeting` records the request and then throws this error.
+  Object? renameError;
+
   @override
   Future<List<MeetingSummary>> getMeetings() async {
+    meetingListRequestCount += 1;
     if (listError case final Object error) {
       throw error;
     }
@@ -36,6 +49,14 @@ final class FakeMeetingBridge implements MeetingBridge {
     return details[meetingId] ??
         (throw StateError('Rust rejected the meeting request '
             '(meeting_not_found): $meetingId'));
+  }
+
+  @override
+  Future<void> renameMeeting(String meetingId, String newTitle) async {
+    renameRequests.add((meetingId: meetingId, newTitle: newTitle));
+    if (renameError case final Object error) {
+      throw error;
+    }
   }
 }
 

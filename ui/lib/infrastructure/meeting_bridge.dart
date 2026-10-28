@@ -1,4 +1,5 @@
-// Defines the Dart-native boundary for reading meetings, their titles, and their transcripts.
+// Defines the Dart-native boundary for reading meetings, their titles, and their transcripts,
+// and for renaming meetings.
 
 import 'dart:convert';
 import 'dart:ffi';
@@ -180,13 +181,74 @@ StateError _nativeError(Map<String, Object?> json) =>
     StateError('Rust rejected the meeting request '
         '(${json['error_code'] ?? 'unknown_error'}): ${json['error'] ?? ''}');
 
-/// Declares meeting read operations available to controllers.
+/// Why Rust rejected a rename, decoded from the `note_taker_rename_meeting` status code.
+enum MeetingRenameFailure {
+  /// Status 1: the title is empty, longer than 200 characters, or contains control characters
+  /// (or an argument was not a valid string).
+  invalidTitle,
+
+  /// Status 2: the title could not be written to storage.
+  storageFailure,
+
+  /// Status 3: the native runtime could not start.
+  runtimeUnavailable,
+
+  /// Status 5: no meeting has this ID (for example, it was deleted meanwhile).
+  meetingNotFound,
+
+  /// Any other status, which this version of the app does not know.
+  unknown,
+}
+
+/// Thrown when Rust rejects a rename.
+final class MeetingRenameException implements Exception {
+  /// Creates an exception for `failure`, keeping the raw `statusCode` for diagnostics.
+  const MeetingRenameException(this.failure, this.statusCode);
+
+  /// The decoded reason.
+  final MeetingRenameFailure failure;
+
+  /// The status code `note_taker_rename_meeting` returned.
+  final int statusCode;
+
+  @override
+  String toString() =>
+      'MeetingRenameException(${failure.name}, status $statusCode)';
+}
+
+/// Maps a non-zero `note_taker_rename_meeting` status code to the exception to throw.
+///
+/// Inputs: The status code (0 means success and must not be passed).
+/// Outputs: The exception; unknown codes map to `MeetingRenameFailure.unknown`.
+/// Side effects: None.
+MeetingRenameException meetingRenameExceptionFor(int statusCode) =>
+    MeetingRenameException(
+      switch (statusCode) {
+        1 => MeetingRenameFailure.invalidTitle,
+        2 => MeetingRenameFailure.storageFailure,
+        3 => MeetingRenameFailure.runtimeUnavailable,
+        5 => MeetingRenameFailure.meetingNotFound,
+        _ => MeetingRenameFailure.unknown,
+      },
+      statusCode,
+    );
+
+/// Declares the meeting operations available to controllers.
 abstract interface class MeetingBridge {
   /// Loads every local meeting in repository (creation) order.
   Future<List<MeetingSummary>> getMeetings();
 
   /// Loads one meeting's title, metadata, and transcript.
   Future<MeetingDetail> getMeeting(String meetingId);
+
+  /// Replaces a meeting's title.
+  ///
+  /// Inputs: The meeting ID and the new title. Rust trims the title and requires 1–200
+  /// characters without control characters.
+  /// Outputs: Completes on success; throws `MeetingRenameException` when Rust rejects the rename.
+  /// Side effects: Writes the title to the meeting's CRDT document and SQLite, so it replicates
+  /// to peers on the next sync.
+  Future<void> renameMeeting(String meetingId, String newTitle);
 }
 
 /// Implements meeting reads with the Rust C ABI.
@@ -204,7 +266,35 @@ final class RustMeetingBridge implements MeetingBridge {
   @override
   Future<MeetingDetail> getMeeting(String meetingId) async =>
       decodeMeetingDetail(await _fetchMeetingJson(meetingId));
+
+  @override
+  Future<void> renameMeeting(String meetingId, String newTitle) async {
+    final int statusCode = await _renameMeeting(meetingId, newTitle);
+    if (statusCode != 0) {
+      throw meetingRenameExceptionFor(statusCode);
+    }
+  }
 }
+
+/// Calls `note_taker_rename_meeting` on a background isolate, because it writes to SQLite.
+///
+/// Declared at top level so the isolate closure captures only the two strings.
+Future<int> _renameMeeting(String meetingId, String newTitle) =>
+    Isolate.run(() {
+      final DynamicLibrary coreLibrary = _openCoreLibrary();
+      final _DartRenameMeeting renameMeeting =
+          coreLibrary.lookupFunction<_NativeRenameMeeting, _DartRenameMeeting>(
+              'note_taker_rename_meeting');
+      final Pointer<Utf8> nativeMeetingId = meetingId.toNativeUtf8();
+      final Pointer<Utf8> nativeTitle = newTitle.toNativeUtf8();
+      try {
+        return renameMeeting(nativeMeetingId, nativeTitle);
+      } finally {
+        calloc
+          ..free(nativeMeetingId)
+          ..free(nativeTitle);
+      }
+    });
 
 /// Calls `note_taker_get_meetings` on a background isolate.
 Future<String> _fetchMeetingsJson() => Isolate.run(() => _callNativeJson(
@@ -269,6 +359,14 @@ typedef _NativeOneStringJson = Pointer<Utf8> Function(Pointer<Utf8> argument);
 
 /// Represents the Dart callable form of `note_taker_get_meeting`.
 typedef _DartOneStringJson = Pointer<Utf8> Function(Pointer<Utf8> argument);
+
+/// Represents `int note_taker_rename_meeting(const char *meeting_id, const char *new_title)`.
+typedef _NativeRenameMeeting = Int32 Function(
+    Pointer<Utf8> meetingId, Pointer<Utf8> newTitle);
+
+/// Represents the Dart callable form of `note_taker_rename_meeting`.
+typedef _DartRenameMeeting = int Function(
+    Pointer<Utf8> meetingId, Pointer<Utf8> newTitle);
 
 /// Represents `void note_taker_free_string(char *value)`.
 typedef _NativeFreeString = Void Function(Pointer<Utf8> value);

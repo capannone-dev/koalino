@@ -83,6 +83,26 @@ void main() {
     });
   });
 
+  group('rename status mapping', () {
+    test('maps each Rust status code to a rename failure', () {
+      expect(meetingRenameExceptionFor(1).failure,
+          MeetingRenameFailure.invalidTitle);
+      expect(meetingRenameExceptionFor(2).failure,
+          MeetingRenameFailure.storageFailure);
+      expect(meetingRenameExceptionFor(3).failure,
+          MeetingRenameFailure.runtimeUnavailable);
+      expect(meetingRenameExceptionFor(5).failure,
+          MeetingRenameFailure.meetingNotFound);
+      expect(
+          meetingRenameExceptionFor(42).failure, MeetingRenameFailure.unknown);
+    });
+
+    test('keeps the raw status code for diagnostics', () {
+      expect(meetingRenameExceptionFor(42).statusCode, 42);
+      expect(meetingRenameExceptionFor(2).toString(), contains('2'));
+    });
+  });
+
   group('display formatting', () {
     test('formats durations as M:SS and H:MM:SS', () {
       expect(formatMeetingDuration(0), '0:00');
