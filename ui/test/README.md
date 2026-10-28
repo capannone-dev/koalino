@@ -54,3 +54,7 @@ and that the app follows a light and a dark system setting.
 
 `core_startup_test.dart` covers the status mapping, the waiting message, the keychain
 explanation with Retry, and Quit.
+
+`host_key_test.dart` covers `startCoreWithHostKey`: the desktop path without a host key, the key
+handed over before start-up, a vault failure or refused key reported as status 6 without starting
+the core, a read-only channel buffer, and the `note_taker/key_vault` method-channel request.

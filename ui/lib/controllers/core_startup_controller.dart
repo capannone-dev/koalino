@@ -44,14 +44,24 @@ final class CoreStartupController extends ChangeNotifier {
     notifyListeners();
     try {
       final int status = await _startCore();
+      _debugLog('core start status $status');
       state = switch (status) {
         0 => CoreStartupState.ready,
         keychainUnavailableStatus => CoreStartupState.keychainUnavailable,
         _ => CoreStartupState.failed,
       };
-    } on Object {
+    } on Object catch (error) {
+      _debugLog('core start threw ${error.runtimeType}: $error');
       state = CoreStartupState.failed;
     }
     notifyListeners();
   }
+}
+
+/// Logs start-up diagnostics in debug builds only; the messages can name file paths.
+void _debugLog(String message) {
+  assert(() {
+    debugPrint(message);
+    return true;
+  }());
 }

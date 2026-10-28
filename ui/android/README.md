@@ -21,6 +21,17 @@ Issue #47.
 The root `build.gradle.kts` raises plugin libraries' `compileSdk` to 36 after they are evaluated,
 because file_picker 8 still compiles against 34 while its AndroidX dependencies require 36.
 
+## Database key (Android Keystore)
+
+`EncryptionKeyVault.kt` keeps the 32-byte database key in `keys/encryption.key.wrapped`
+(`[version 1][12-byte IV][ciphertext + tag]`), wrapped with the non-exportable AES-256-GCM
+Keystore key `note_taker_database_key_wrapper`, in StrongBox when the phone has one and in the TEE
+otherwise. On first use it creates a random key, or wraps the plain `encryption.key` left by
+earlier builds, checks the wrapped file unwraps to the same key, and only then deletes the plain
+file. `MainActivity` serves it on the `note_taker/key_vault` method channel from a background
+thread; any failure is reported as `keystore_unavailable`, which the app shows as the keychain
+error with Retry. Verified on the Galaxy S23 (StrongBox; the migrated database opened).
+
 For a development build that must reach devices mDNS cannot see, such as VMs through
 `adb reverse`, compile peer addresses in:
 `flutter build apk --dart-define=NOTE_TAKER_P2P_PEERS=/ip4/127.0.0.1/tcp/14001/p2p/<peer id>`.

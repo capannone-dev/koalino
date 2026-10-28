@@ -91,14 +91,13 @@ void main() {
   });
 
   group('appConfigurationJson', () {
-    test('Android keeps the key out of the unavailable keychain', () {
+    test('every platform uses its keychain; Android through the Keystore', () {
       final Map<String, Object?> configuration =
           jsonDecode(appConfigurationJson(
         dataDirectory: '/data/user/0/app/files/note_taker',
         deviceName: 'Galaxy S23',
         whisperModelPath:
             '/data/user/0/app/files/note_taker/models/ggml-base.bin',
-        isAndroid: true,
       )) as Map<String, Object?>;
 
       expect(configuration, <String, Object?>{
@@ -106,7 +105,6 @@ void main() {
         'device_name': 'Galaxy S23',
         'whisper_model_path':
             '/data/user/0/app/files/note_taker/models/ggml-base.bin',
-        'keychain_enabled': false,
       });
     });
 
@@ -116,7 +114,6 @@ void main() {
         dataDirectory: '/home/user/.local/share/note_taker',
         deviceName: 'laptop',
         whisperModelPath: null,
-        isAndroid: false,
       )) as Map<String, Object?>;
 
       expect(configuration, <String, Object?>{
@@ -131,7 +128,6 @@ void main() {
         dataDirectory: '/data/note_taker',
         deviceName: 'Android device',
         whisperModelPath: null,
-        isAndroid: false,
         p2pPeersDefine:
             ' /ip4/127.0.0.1/tcp/14001/p2p/12D3KooWA ,,/ip4/10.0.0.2/tcp/4001/p2p/12D3KooWB',
       )) as Map<String, Object?>;

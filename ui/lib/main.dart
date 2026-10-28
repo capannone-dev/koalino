@@ -15,6 +15,7 @@ import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_configuration.dart';
 import 'package:note_taker_ui/infrastructure/attachment_bridge.dart';
+import 'package:note_taker_ui/infrastructure/host_key.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
@@ -43,8 +44,18 @@ Future<void> main() async {
   final RecordingController recordingController = RecordingController(
     recordingBridge: RustRecordingBridge(),
   );
-  final CoreStartupController coreStartupController =
-      CoreStartupController(startCore: startCore);
+  final CoreStartupController coreStartupController = CoreStartupController(
+    // Android keeps the key in the Keystore and hands it over first; desktops reach their
+    // keychain from Rust.
+    startCore: () => startCoreWithHostKey(
+      loadHostKey: Platform.isAndroid
+          ? () async =>
+              const AndroidKeyVault().loadEncryptionKey(await appKeyDirectory())
+          : null,
+      provideKey: provideEncryptionKeyToCore,
+      startCore: startCore,
+    ),
+  );
   runApp(NoteTakerApp(
     recordingController: recordingController,
     coreStartupController: coreStartupController,

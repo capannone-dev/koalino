@@ -19,9 +19,9 @@ const String whisperModelFileName = 'ggml-base.bin';
 
 /// Builds the JSON for `note_taker_configure`.
 ///
-/// Inputs: The absolute app-private data directory, this device's name, the model path when the
-/// model is present, and whether the platform is Android (which has no keychain backend, so the
-/// key file stays in the app-private directory). `p2pPeersDefine` is a comma-separated list of
+/// Inputs: The absolute app-private data directory, this device's name, and the model path when
+/// the model is present. The keychain stays enabled everywhere; on Android it is the Keystore key
+/// that `startCoreWithHostKey` hands over. `p2pPeersDefine` is a comma-separated list of
 /// `…/p2p/<peer id>` addresses to dial; blank entries are dropped.
 /// Outputs: The JSON object text; absent options are omitted, so Rust's defaults apply.
 /// Side effects: None.
@@ -29,7 +29,6 @@ String appConfigurationJson({
   required String dataDirectory,
   required String deviceName,
   required String? whisperModelPath,
-  required bool isAndroid,
   String p2pPeersDefine = '',
 }) {
   final List<String> peers = p2pPeersDefine
@@ -41,7 +40,6 @@ String appConfigurationJson({
     'data_directory': dataDirectory,
     'device_name': deviceName,
     if (whisperModelPath != null) 'whisper_model_path': whisperModelPath,
-    if (isAndroid) 'keychain_enabled': false,
     if (peers.isNotEmpty) 'p2p_peers': peers,
   });
 }
@@ -59,6 +57,21 @@ String defaultDeviceName() {
   return hostName.isEmpty ? 'Note Taker device' : hostName;
 }
 
+/// Returns the app's data directory, `<application support>/note_taker`.
+///
+/// Side effects: Asks the platform for the application-support directory; creates nothing.
+Future<Directory> appDataDirectory() async {
+  final Directory supportDirectory = await getApplicationSupportDirectory();
+  return Directory(
+      '${supportDirectory.path}${Platform.pathSeparator}note_taker');
+}
+
+/// Returns the directory holding the encryption key material, `<data directory>/keys`.
+///
+/// Side effects: As `appDataDirectory`.
+Future<String> appKeyDirectory() async =>
+    '${(await appDataDirectory()).path}${Platform.pathSeparator}keys';
+
 /// Configures the Rust core for this app; call once before any other bridge.
 ///
 /// Inputs: None; the data directory is the platform's application-support directory.
@@ -66,9 +79,7 @@ String defaultDeviceName() {
 /// was already configured or started.
 /// Side effects: Creates `<support>/note_taker` and stores the settings in the native process.
 Future<int> configureCore() async {
-  final Directory supportDirectory = await getApplicationSupportDirectory();
-  final Directory dataDirectory =
-      Directory('${supportDirectory.path}${Platform.pathSeparator}note_taker');
+  final Directory dataDirectory = await appDataDirectory();
   await dataDirectory.create(recursive: true);
   final File model = File(
       '${dataDirectory.path}${Platform.pathSeparator}models${Platform.pathSeparator}$whisperModelFileName');
@@ -76,7 +87,6 @@ Future<int> configureCore() async {
     dataDirectory: dataDirectory.path,
     deviceName: defaultDeviceName(),
     whisperModelPath: await model.exists() ? model.path : null,
-    isAndroid: Platform.isAndroid,
     p2pPeersDefine: p2pPeersDefine,
   );
   return Isolate.run(() {

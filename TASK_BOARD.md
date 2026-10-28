@@ -116,7 +116,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P0 | #45 | Flutter microphone capture feeding `note_taker_push_audio_pcm` (plugin needs approval) | 3.1 |
 | P1 | #46 | Flutter Settings: runtime log level and Share/Export Logs | 6.1, 6.2 |
 | P1 | #47 | Android foreground service and lock-screen/notification Start/Pause/Stop | 2.1 |
-| P1 | — | Embedding key in the mobile keystores (Android Keystore, iOS Keychain); re-keying and passphrase change | 4.1 |
+| P1 | — | Embedding key in the iOS Keychain (Android Keystore done 2026-10-28); re-keying and passphrase change | 4.1 |
 | P1 | — | Run the #40 keychain checks on macOS and Windows hosts | 4.1 |
 | P2 | #48 | Flutter export binding and UI for `note_taker_export_meeting` | 3.3.1 |
 | P2 | #49 | Local screen-share detection and slide screenshots outside Teams | 3.1 |

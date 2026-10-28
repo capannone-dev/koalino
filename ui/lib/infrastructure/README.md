@@ -34,8 +34,11 @@ both native strings, and maps non-zero statuses to `MeetingRenameException` thro
 
 `app_configuration.dart` runs first: `configureCore` passes the application-support directory
 (`<support>/note_taker`), the device name (the host name; "Android device" on Android), and
-`models/ggml-base.bin` when present to `note_taker_configure` on a background isolate. Android
-sets `keychain_enabled: false`, so the key file stays in the app-private `keys/` directory.
+`models/ggml-base.bin` when present to `note_taker_configure` on a background isolate. Every
+platform uses its keychain. On Android, `host_key.dart` first fetches the key from the Keystore
+vault (`AndroidKeyVault`, channel `note_taker/key_vault`) and moves it with
+`TransferableTypedData` to an isolate that calls `note_taker_provide_encryption_key`, then wipes
+its native copy; `startCoreWithHostKey` reports any failure as status 6.
 `appConfigurationJson` builds the JSON and is unit-tested; it also passes peer addresses compiled
 in with `--dart-define=NOTE_TAKER_P2P_PEERS`. After `runApp`, `startCore` calls
 `note_taker_start_runtime` on an isolate, so sync starts with the app. `CoreStartupController`
