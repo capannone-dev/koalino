@@ -152,6 +152,12 @@ contents, EXIF data, or database-specific values.
   is RFC 3339 UTC. Errors use `{"ok":false,"error_code","error"}` with `invalid_argument`,
   `meeting_not_found`, `list_failed`, `load_failed`, or `runtime_unavailable`. Free results
   with `note_taker_free_string`.
+- `int32_t note_taker_rename_meeting(const char *meeting_id, const char *new_title)` (Issue #38)
+  replaces a meeting's title. It returns `0` on success; `1` for a null or non-UTF-8 pointer, a
+  blank meeting ID, or an invalid title (the same rules as creation: trimmed, 1–200 characters,
+  no control characters such as newlines); `2` for a storage failure; `3` for unavailable
+  runtime state; and `5` (`FFI_MEETING_NOT_FOUND`) for an unknown meeting. A rejected call
+  writes nothing. Read the new title back with `note_taker_get_meeting`.
 - `int32_t note_taker_push_audio_pcm(const int16_t *samples, size_t sample_count)` copies 16 kHz
   mono signed 16-bit PCM from the platform capture into the active recording. It returns `0`
   (audio is discarded while paused), `1` for a null pointer with a nonzero count, or `2` when no
@@ -194,6 +200,22 @@ with opaque meeting/clip IDs. The router allows browser CORS only from `http://l
 returns `204` after the existing voice identity service writes a derived signature variant. Invalid
 identifiers return `400`, a missing clip or an identity the voice store has never saved returns
 `404`, and no raw audio or embedding is returned.
+
+### Meeting rename
+
+`PATCH /api/meetings/{id}` (Issue #38) accepts `{ "title": "New Title" }`. `title` is required
+and other fields are rejected. The title is trimmed and must be 1–200 characters without control
+characters (such as newlines), the same rules as `POST /api/meetings`. Responses:
+
+- `200` with the meeting summary: `{ "meeting_id": "meeting-1", "title": "New Title", "created_at": "2026-10-27T09:05:00+00:00" }`.
+- `400` with `{ "error": "invalid title: meeting title must not be blank" }` (or the length or
+  control-character reason). Nothing is written.
+- `404` with `{ "error": "meeting meeting-1 does not exist" }`.
+- A malformed body (missing `title`, non-string `title`, unknown field) gets axum's `4xx`.
+- `500` with `{ "error": "unable to rename the meeting" }` for storage failures.
+
+CORS allows `PATCH` from `http://localhost:3000`. The rename is local metadata and is not
+replicated to peers.
 
 ### Meeting export
 
@@ -241,6 +263,7 @@ returns `400`, an unknown cluster `404`, an already-resolved cluster `409`, and 
 
 `note-taker` accepts `record start [--title <title>]|stop|status`, `meetings list` (ID, title,
 date, duration), `meetings view <meeting-id>` (title first),
+`meetings rename <meeting-id> <new-title>` (prints `Renamed meeting <id>: "<old>" -> "<new>"`),
 `voice list`, `voice assign <clip-uuid> <identity-uuid>`, `voice list-clusters <meeting-id>`,
 `voice assign-cluster <cluster-uuid> <identity-name>`, `telemetry`,
 `meetings export <meeting-id> --format <markdown|pdf|json> [--output <path>]`, and

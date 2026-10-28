@@ -290,3 +290,19 @@ Issue #39 replicates meeting titles through the Automerge meeting document:
   so their titles replicate.
 - **Gap:** nothing composes `SyncManager` in the daemon, FFI, or CLI yet. Replication is verified
   between two in-memory peers exchanging real sync messages, not between devices.
+
+Issue #38 adds meeting renaming:
+
+- **Use case:** `application/meeting_rename.rs` is shared by every entry point. It validates the
+  title with `MeetingTitle::parse` before any I/O, checks that the meeting exists, and writes
+  through `MeetingCrdtService::set_meeting_title` (#39): the replicated Automerge title, then
+  the SQLite projection. It returns the previous display title. No storage method was added.
+- **Entry points:**
+  - CLI: `meetings rename <meeting-id> <new-title>` prints `Renamed meeting <id>: "<old>" -> "<new>"`.
+  - HTTP: `PATCH /api/meetings/{id}` with `{"title":"..."}` returns `200` with the summary,
+    `400` for an invalid title, and `404` for an unknown meeting. CORS now allows `PATCH`.
+  - FFI: `note_taker_rename_meeting(meeting_id, new_title)` returns `0`, `1` for invalid input
+    or null pointers, `2` for storage failures, `3` for an unavailable runtime, and the new
+    `5` (`FFI_MEETING_NOT_FOUND`).
+- **Gaps:** renames replicate on the next sync, but nothing composes `SyncManager` yet (see
+  #39). There is no Dart binding, Flutter UI, or web UI for renaming yet.

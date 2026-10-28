@@ -22,6 +22,7 @@ note-taker record start --input <file.wav|-> [--meeting-id <id>] [--title <title
 note-taker record stop|status
 note-taker meetings list
 note-taker meetings view <meeting-id>
+note-taker meetings rename <meeting-id> <new-title>
 note-taker meetings export <meeting-id> --format <markdown|pdf|json> [--output <path>] [--no-attachments] [--no-metadata]
 note-taker meetings export-all --format <markdown|pdf|json> [--date-range <YYYY-MM-DD>:<YYYY-MM-DD>] [--output <path>] [--no-attachments] [--no-metadata]
 note-taker voice list
@@ -34,6 +35,13 @@ note-taker telemetry
 `record start --title` stores a title on the meeting (Issue #35). Without it, a new meeting is
 untitled and an existing one keeps its title. Blank titles, titles longer than 200 characters,
 and titles with control characters are rejected before recording starts.
+
+`meetings rename` (Issue #38) replaces a meeting's title through `application::meeting_rename`,
+the same use case as the HTTP API and FFI. It prints
+`Renamed meeting <id>: "<old title>" -> "<new title>"`, where the old title is the dated fallback
+for a previously untitled meeting. The same title rules apply as for `--title`. An unknown meeting
+prints `meeting <id> does not exist`, an invalid title prints `invalid title: <reason>`, and both
+exit with status 1 without writing anything.
 
 `meetings list` prints `ID | Title | Date | Duration`. Title is the stored title, or
 `Meeting YYYY-MM-DD HH:MM UTC` for untitled meetings. Date is the UTC creation time. Duration is

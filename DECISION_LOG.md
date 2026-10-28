@@ -713,3 +713,29 @@
   - Compose `SyncManager` in the daemon/FFI.
   - The #38 rename command should call `set_meeting_title`.
 
+## 2026-10-28 — Issue #38 Meeting rename across CLI, FFI, and HTTP
+
+- Storage: the issue asked for a new `update_meeting_title(&str, &str)` in the SQLite adapter.
+  `NoteRepository::save_meeting_title(&MeetingId, &MeetingTitle)` already does exactly that: an
+  `UPDATE` that rejects an unknown meeting, reserved by #35 as the rename primitive. No duplicate
+  with weaker string types was added. A new storage test pins that it touches only the target row.
+- Replication: #39 landed while this issue was in progress and made the Automerge document the
+  title's source of truth. The use case therefore writes through
+  `MeetingCrdtService::set_meeting_title`, not `save_meeting_title` directly. A SQLite-only rename
+  would never reach peers and would be overwritten by the next merge projection. A test checks
+  the CRDT title after a rename.
+- Use case: `application::meeting_rename::rename_meeting` is shared by the CLI, HTTP, and FFI,
+  following the `cluster_review` pattern. It validates first, so an invalid title does no I/O,
+  then loads metadata to distinguish `MeetingNotFound` and to report the previous display title.
+- Validation: `MeetingTitle::parse`, unchanged, enforces the issue's rules (trimmed, non-empty,
+  ≤ 200 characters, no control characters, which covers newlines). Creation and rename share it.
+- FFI: the issue specified a plain status code, so the function returns `c_int` rather than
+  JSON. A new `FFI_MEETING_NOT_FOUND = 5` makes "unknown meeting" distinguishable from storage
+  failures (`2`). Null pointers return `1` before the runtime is opened.
+- HTTP: `PATCH` returns the same summary shape as `GET`/`POST`, so clients can update their state
+  without another request. Error bodies reuse `{"error": "..."}`. CORS gained `PATCH`, without
+  which the web dashboard could not call it.
+- Paths: the issue named `core/adapters/storage/sqlite.rs` and `core/server/routes.rs`. The real
+  files are `sqlite_adapter.rs` and `core/server/api.rs`.
+- Follow-ups: a Dart binding and UI, web UI, and calling `notify_local_change` after a rename
+  once `SyncManager` is composed.

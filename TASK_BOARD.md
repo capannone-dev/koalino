@@ -64,6 +64,7 @@
 | --- | --- | --- |
 | #35 Meeting titles | Ready for review | Validated `MeetingTitle` and `MeetingMetadata::display_title()` fallback (`Meeting YYYY-MM-DD HH:MM UTC`, computed on read); nullable `meetings.title` with an idempotent migration for older databases; `record start --title` and title-aware `meetings list`/`view`; FFI `note_taker_start_recording_with_title`, `note_taker_get_meetings`, `note_taker_get_meeting`; `title`/`created_at` on `GET /api/meetings[/{id}]` and a new `POST /api/meetings`; title-based export headers and filenames; Teams metadata titles stored on untitled meetings; web meeting pages show titles. Follow-up: replicating titles through the CRDT and a rename command (Dart binding/UI done in #36). |
 | #39 Sync meeting titles via P2P CRDT | Ready for review | Optional root `title` register in the Automerge meeting document; `MeetingCrdtService::create_titled_meeting`/`set_meeting_title`/`load_title`; SQLite `meetings.title` projected from every merged peer change; SQLite-only (#35) titles copied into title-less documents before syncing; invalid peer titles ignored; HTTP create, titled recording, and Teams titles routed through the CRDT; 12 two-peer `SyncManager` tests (create, rename, A→B, concurrent and causal conflicts, legacy documents, default title, payload budget). Not verified: a real two-device sync, because `SyncManager` is not yet composed in any entry point. |
+| #38 Meeting rename across CLI, FFI, and HTTP | Ready for review | Shared `application::meeting_rename` use case writing through `MeetingCrdtService::set_meeting_title` so renames replicate (#39) (title validated before I/O, unknown meeting → `MeetingNotFound`, previous display title returned); `meetings rename <id> <title>` CLI printing old and new titles; `PATCH /api/meetings/{id}` (`200` summary, `400`/`404` JSON errors, CORS `PATCH`); `note_taker_rename_meeting` FFI with new status `5` (`FFI_MEETING_NOT_FOUND`). Use-case, storage-isolation, CLI, HTTP, and FFI tests; manual CLI run against a scratch database. Follow-ups: Dart binding/UI, web UI. |
 | #26 Meeting export to Markdown, PDF, and JSON | Ready for review | Persisted speaker-attributed transcript segments, `MeetingExporter` port with Markdown/PDF/JSON adapters, `ExportManager` extraction and attachment staging, and shared CLI/HTTP/FFI entry points with in-memory SQLite tests. |
 
 ## WP7: Headless server API
@@ -108,8 +109,8 @@
 - Tune the 0.70 clustering threshold against real diarization embeddings.
 - Replace proportional word distribution with word-level timestamps once `TranscriptionEngine` exposes them.
 - Resolve segment speakers through the persisted voice-store names (#30), so exports can show them instead of `Unknown speaker`. (Meeting titles were added in #35.)
-- Add a rename command (CLI, FFI, and `PATCH /api/meetings/{id}`, #38). It should call `MeetingCrdtService::set_meeting_title` so that renames replicate (#39).
 - Compose `SyncManager` in the daemon/FFI with the libp2p adapter and call `notify_local_change` after local CRDT writes, including title changes.
+- Add a Dart binding and Flutter/web UI for meeting rename (`note_taker_rename_meeting`, `PATCH /api/meetings/{id}`).
 - Capture microphone PCM in Flutter and feed `note_taker_push_audio_pcm`, and add stop/pause controls; the recording screen still only starts recordings.
 - Add a Dart binding and UI for `note_taker_export_meeting`.
 

@@ -15,6 +15,7 @@ use crate::{
             NamedClusterAssignment, assign_cluster_to_named_identity, list_unknown_clusters,
         },
         export_manager::{ExportManager, ExportWriter},
+        meeting_rename::rename_meeting,
         voice_identity_manager::VoiceIdentityManager,
     },
     domain::models::{
@@ -45,7 +46,7 @@ pub struct Cli {
 pub enum CliCommand {
     /// Controls portable audio recording.
     Record(RecordArgs),
-    /// Reads locally persisted meeting data.
+    /// Reads, renames, and exports locally persisted meetings.
     Meetings(MeetingArgs),
     /// Lists or resolves voice review items.
     Voice(VoiceArgs),
@@ -85,7 +86,7 @@ pub struct RecordArgs {
     pub command: RecordCommand,
 }
 
-/// Defines meeting read and export actions.
+/// Defines meeting read, rename, and export actions.
 #[derive(Debug, Subcommand)]
 pub enum MeetingCommand {
     /// Lists meetings with their titles, creation dates, and durations.
@@ -94,6 +95,14 @@ pub enum MeetingCommand {
     View {
         /// The meeting to show.
         meeting_id: String,
+    },
+    /// Changes a meeting's title and prints the old and new titles.
+    Rename {
+        /// The meeting to rename.
+        meeting_id: String,
+        /// The new title: 1–200 characters after trimming, on one line, without control
+        /// characters. Quote it when it contains spaces.
+        new_title: String,
     },
     /// Exports one meeting as Markdown, PDF, or JSON.
     Export {
@@ -285,6 +294,8 @@ pub trait CliService {
     fn list_meetings(&self) -> Result<Vec<MeetingListRow>, String>;
     /// Loads one terminal-safe meeting detail view.
     fn view_meeting(&self, meeting_id: &str) -> Result<String, String>;
+    /// Replaces a meeting's title and describes the change.
+    fn rename_meeting(&mut self, meeting_id: &str, new_title: &str) -> Result<String, String>;
     /// Loads display-safe voice rows.
     fn list_voices(&self) -> Result<Vec<(String, String, usize)>, String>;
     /// Resolves a clip through the voice identity application service.
@@ -334,6 +345,13 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
         CliCommand::Meetings(MeetingArgs {
             command: MeetingCommand::View { meeting_id },
         }) => cli_service.view_meeting(&meeting_id),
+        CliCommand::Meetings(MeetingArgs {
+            command:
+                MeetingCommand::Rename {
+                    meeting_id,
+                    new_title,
+                },
+        }) => cli_service.rename_meeting(&meeting_id, &new_title),
         CliCommand::Meetings(MeetingArgs {
             command:
                 MeetingCommand::Export {
@@ -615,6 +633,25 @@ where
         Ok(format!(
             "{display_title}\n{title_underline}\nMeeting: {meeting_id}\nCreated: {created_at}\nTranscript:\n{transcript}\nAttachments:\n{attachment_lines}"
         ))
+    }
+    /// Renames through the shared use case and prints `Renamed meeting <id>: "<old>" -> "<new>"`,
+    /// where `<old>` is the dated fallback for a previously untitled meeting.
+    ///
+    /// Inputs: The meeting ID and the unvalidated new title.
+    /// Outputs: The confirmation line, or `meeting <id> does not exist`, `invalid title: <reason>`,
+    /// or a storage error message.
+    /// Side effects: Replaces the title in SQLite; an invalid title writes nothing.
+    fn rename_meeting(&mut self, meeting_id: &str, new_title: &str) -> Result<String, String> {
+        rename_meeting(&self.repository, &MeetingId::new(meeting_id), new_title)
+            .map(|rename| {
+                format!(
+                    "Renamed meeting {}: \"{}\" -> \"{}\"",
+                    rename.meeting_id().as_str(),
+                    rename.previous_title(),
+                    rename.new_title().as_str()
+                )
+            })
+            .map_err(|error| error.to_string())
     }
     fn list_voices(&self) -> Result<Vec<(String, String, usize)>, String> {
         self.voice_identity_manager

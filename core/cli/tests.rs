@@ -45,6 +45,8 @@ struct MockCliService {
     export_requests: RefCell<Vec<RecordedExportRequest>>,
     /// `(meeting_id, title, input)` triples passed to `start_recording`.
     recording_requests: Vec<(Option<String>, Option<String>, PathBuf)>,
+    /// `(meeting_id, new_title)` pairs passed to `rename_meeting`.
+    rename_requests: Vec<(String, String)>,
 }
 
 /// Rejects every recording command; for service tests that never record.
@@ -97,6 +99,11 @@ impl CliService for MockCliService {
     }
     fn view_meeting(&self, _meeting_id: &str) -> Result<String, String> {
         Ok(String::new())
+    }
+    fn rename_meeting(&mut self, meeting_id: &str, new_title: &str) -> Result<String, String> {
+        self.rename_requests
+            .push((String::from(meeting_id), String::from(new_title)));
+        Ok(String::from("meeting renamed"))
     }
     fn list_voices(&self) -> Result<Vec<(String, String, usize)>, String> {
         Ok(Vec::new())
@@ -637,6 +644,141 @@ fn core_service_reports_unknown_meeting_export() {
         .expect_err("unknown meetings must fail");
 
     assert!(export_failure.contains("meeting missing-meeting does not exist"));
+}
+
+/// Verifies `meetings rename` parses the meeting ID and a title that contains spaces, and
+/// requires both.
+#[test]
+fn parses_meetings_rename_command() {
+    let parsed_command = parse_export_command(&["rename", "meeting-rome", "Rome offsite"])
+        .unwrap_or_else(|error| panic!("rename must parse: {error}"));
+    assert!(
+        matches!(
+            &parsed_command,
+            MeetingCommand::Rename { meeting_id, new_title }
+                if meeting_id == "meeting-rome" && new_title == "Rome offsite"
+        ),
+        "{parsed_command:?}"
+    );
+
+    assert!(parse_export_command(&["rename", "meeting-rome"]).is_err());
+    assert!(parse_export_command(&["rename"]).is_err());
+}
+
+/// Verifies `meetings rename` delegates its arguments to the service exactly once.
+#[test]
+fn meetings_rename_delegates_to_the_service() {
+    let mut cli_service = MockCliService::default();
+
+    let output = dispatch(
+        CliCommand::Meetings(MeetingArgs {
+            command: MeetingCommand::Rename {
+                meeting_id: String::from("meeting-rome"),
+                new_title: String::from("Rome offsite"),
+            },
+        }),
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("rename must dispatch: {error}"));
+
+    assert_eq!(output, "meeting renamed");
+    assert_eq!(
+        cli_service.rename_requests,
+        vec![(String::from("meeting-rome"), String::from("Rome offsite"))]
+    );
+}
+
+/// Builds a CLI service over in-memory SQLite holding one meeting titled `Project Sync`.
+fn core_service_with_titled_meeting()
+-> CoreCliService<NoRecordingControl, SqliteNoteRepository, InMemoryVoiceVectorDB> {
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    crate::application::meeting_crdt::MeetingCrdtService::new(&repository)
+        .create_titled_meeting(
+            &MeetingId::new("meeting-rename"),
+            &MeetingTitle::parse("Project Sync")
+                .unwrap_or_else(|error| panic!("title must parse: {error}")),
+        )
+        .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+    CoreCliService::new(
+        NoRecordingControl,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    )
+}
+
+/// Verifies `meetings rename` stores the trimmed title, prints the old and new titles, and
+/// `meetings list` then shows the new title.
+#[test]
+fn core_service_renames_a_meeting_and_prints_both_titles() {
+    let mut cli_service = core_service_with_titled_meeting();
+
+    let rename_output = dispatch(
+        CliCommand::Meetings(MeetingArgs {
+            command: MeetingCommand::Rename {
+                meeting_id: String::from("meeting-rename"),
+                new_title: String::from("  Project Sync (Q4)  "),
+            },
+        }),
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("rename must succeed: {error}"));
+    let list_output = dispatch(
+        CliCommand::Meetings(MeetingArgs {
+            command: MeetingCommand::List,
+        }),
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("meeting list must dispatch: {error}"));
+
+    assert_eq!(
+        rename_output,
+        r#"Renamed meeting meeting-rename: "Project Sync" -> "Project Sync (Q4)""#
+    );
+    assert!(
+        list_output.contains("meeting-rename | Project Sync (Q4) |"),
+        "{list_output}"
+    );
+}
+
+/// Verifies unknown meetings and invalid titles produce readable errors and keep the title.
+#[test]
+fn core_service_rejects_unknown_meetings_and_invalid_titles_on_rename() {
+    let mut cli_service = core_service_with_titled_meeting();
+
+    let missing_error = cli_service
+        .rename_meeting("meeting-missing", "Orphan")
+        .expect_err("an unknown meeting must not be renamed");
+    let blank_error = cli_service
+        .rename_meeting("meeting-rename", "   ")
+        .expect_err("a blank title must be rejected");
+    let multi_line_error = cli_service
+        .rename_meeting("meeting-rename", "line one\nline two")
+        .expect_err("a multi-line title must be rejected");
+    let oversized_error = cli_service
+        .rename_meeting("meeting-rename", &"x".repeat(201))
+        .expect_err("an oversized title must be rejected");
+    let list_output = cli_service
+        .list_meetings()
+        .unwrap_or_else(|error| panic!("meetings must list: {error}"));
+
+    assert_eq!(missing_error, "meeting meeting-missing does not exist");
+    assert_eq!(
+        blank_error,
+        "invalid title: meeting title must not be blank"
+    );
+    assert_eq!(
+        multi_line_error,
+        "invalid title: meeting title must not contain control characters"
+    );
+    assert_eq!(
+        oversized_error,
+        "invalid title: meeting title must be at most 200 characters"
+    );
+    assert_eq!(list_output[0].title, "Project Sync");
 }
 
 /// Verifies `voice list-clusters` and `voice assign-cluster` parse their arguments.
