@@ -5,10 +5,12 @@ use std::{env, path::PathBuf, sync::Arc};
 use anyhow::Result;
 use note_taker_core::{
     adapters::observability::{
-        LOG_LEVEL_POLL_INTERVAL, LogLevelControlFile, LogLevelWatcher, LoggingConfiguration,
-        LoggingRuntime, initialize_logging,
+        LOG_LEVEL_POLL_INTERVAL, LiveLogControl, LogLevelControlFile, LogLevelWatcher,
+        LoggingConfiguration, initialize_logging,
     },
-    application::{crypto::key_manager::KeyManagerConfig, p2p_service::P2pControl},
+    application::{
+        crypto::key_manager::KeyManagerConfig, log_control::LogControl, p2p_service::P2pControl,
+    },
     device_identity::device_id_from_environment,
     domain::models::DeviceId,
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
@@ -47,10 +49,16 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| PathBuf::from("logs"));
     let log_filter = env::var("RUST_LOG").unwrap_or_else(|_| String::from("info"));
     let logging_runtime = initialize_logging(
-        LoggingConfiguration::new(device_id.clone(), log_directory).with_filter(log_filter),
+        LoggingConfiguration::new(device_id.clone(), &log_directory).with_filter(&log_filter),
     )?;
-    let log_level_watcher = tokio::spawn(apply_log_level_requests(
+    // Shared by `cli log-level` (through the watcher) and the web Settings page (Issue #46).
+    let log_control = Arc::new(LiveLogControl::for_runtime(
         logging_runtime,
+        &log_filter,
+        log_directory,
+    ));
+    let log_level_watcher = tokio::spawn(apply_log_level_requests(
+        Arc::clone(&log_control),
         LogLevelWatcher::start(LogLevelControlFile::for_database(&database_path)),
     ));
     let bind_address =
@@ -83,7 +91,8 @@ async fn main() -> Result<()> {
         recording_controller.as_ref(),
     )
     .await;
-    let mut application_state = ServerAppState::new(note_repository, voice_store);
+    let mut application_state = ServerAppState::new(note_repository, voice_store)
+        .with_log_control(Arc::clone(&log_control) as Arc<dyn LogControl>);
     if let Some(p2p_task) = &p2p_task {
         application_state =
             application_state.with_p2p_control(Arc::clone(p2p_task) as Arc<dyn P2pControl>);
@@ -114,22 +123,22 @@ async fn main() -> Result<()> {
 
 /// Applies `cli log-level` requests to the running daemon (REQUIREMENTS.md 6.1).
 ///
-/// Inputs: The logging runtime (owned here so it lives as long as the daemon) and a watcher on
-/// `<database>.log-level`.
+/// Inputs: The log control (shared with the web Settings routes, so they show the level in
+/// effect) and a watcher on `<database>.log-level`.
 /// Outputs: Never completes; the daemon aborts it on shutdown.
 /// Side effects: Every `LOG_LEVEL_POLL_INTERVAL`, reads the control file (a few bytes, so the
 /// read stays on the async runtime) and reloads the tracing filter when a new valid level was
 /// requested. Invalid requests are logged as warnings and ignored.
 async fn apply_log_level_requests(
-    logging_runtime: LoggingRuntime,
+    log_control: Arc<LiveLogControl>,
     mut log_level_watcher: LogLevelWatcher,
 ) {
     let mut poll_interval = tokio::time::interval(LOG_LEVEL_POLL_INTERVAL);
     loop {
         poll_interval.tick().await;
         match log_level_watcher.poll() {
-            Ok(Some(filter_directive)) => match logging_runtime.set_filter(&filter_directive) {
-                Ok(()) => tracing::warn!(level = %filter_directive, "log level changed"),
+            Ok(Some(filter_directive)) => match log_control.set_level(&filter_directive) {
+                Ok(level) => tracing::warn!(level = %level, "log level changed"),
                 Err(error) => {
                     tracing::warn!(error = %format!("{error:#}"), "unable to change the log level");
                 }

@@ -221,6 +221,17 @@ its summary. An invalid title returns `400` (Issue #35). `GET /api/voice-gallery
 speaker labels and unresolved review-clip identifiers/timing only; voice vectors and raw audio are
 never serialized. `GET /api/telemetry` returns aggregate task count, duration, and latency.
 
+### Settings (Issue #46)
+
+`GET /api/settings/log-level` returns `{"level":"info"}`, the daemon's level in effect.
+`PUT /api/settings/log-level` with `{"level":"debug"}` applies a `tracing` directive until the
+daemon restarts (`RUST_LOG` sets the start level; `cli log-level` changes it too, and the route
+reports either) and returns `{"level"}`. An invalid directive returns `400`
+`{"error_code":"invalid_level","error"}`. `GET /api/logs/export` returns the newest seven daily log
+files, oldest first, as one `application/x-ndjson` attachment, or `404`
+`{"error_code":"no_logs"}`. The entries were redacted when written. A process without log
+control answers `503` `{"error_code":"unavailable"}`.
+
 ### Telemetry
 
 All telemetry responses carry privacy-safe metrics only: task kinds, durations, latencies, and

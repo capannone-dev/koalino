@@ -7,6 +7,10 @@
 pub mod api;
 #[cfg(test)]
 mod api_tests;
+/// Serves the web Settings page's log level and log download routes (Issue #46).
+pub mod log_routes;
+#[cfg(test)]
+mod log_routes_tests;
 /// Serves the `/api/p2p/*` pairing and device routes (Issue #43).
 pub mod p2p_routes;
 #[cfg(test)]

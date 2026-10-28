@@ -54,6 +54,17 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
   - A successful `POST /api/meetings` or `PATCH /api/meetings/{meeting_id}` reports the meeting
     through `P2pControl::notify_local_change`, so connected devices get it at once. Cluster
     assignments are not reported yet: speaker identities stay local until the voice library syncs.
+- Settings (Issue #46, `log_routes.rs`) work through the `LogControl` port, which
+  `ServerAppState::with_log_control` attaches:
+  - `GET /api/settings/log-level` returns `{"level"}`, the level in effect.
+  - `PUT /api/settings/log-level` with `{"level"}` applies it until the daemon restarts and
+    returns `{"level"}`; an invalid directive returns `400` `{"error_code":"invalid_level"}`.
+    CORS allows `PUT`.
+  - `GET /api/logs/export` returns the newest seven daily log files as one
+    `application/x-ndjson` attachment (`note_taker_logs_<YYYYMMDD-HHMMSS>.jsonl`), or `404`
+    `{"error_code":"no_logs"}`. It writes through a per-request temporary directory that it removes.
+  - Without a log control every route returns `503`. `log_routes_tests.rs` covers each case and
+    the CORS preflight.
 - `GET /api/telemetry` returns `task_count`, `total_duration_ms`, and `average_latency_ms`.
 - `GET /api/devices` returns telemetry-observed devices with `device_id`, feature-gated
   `supports_vad`, observed `supported_models`, and epoch-millisecond `last_seen`. Device data is

@@ -3,10 +3,12 @@
 //! Both sinks use `StructuredJsonFormat`, which stamps the device ID on every entry, groups fields
 //! under `context`, and redacts sensitive values (see `structured_json`).
 
+mod live_log_control;
 mod log_export;
 mod log_level_control;
 mod structured_json;
 
+pub use live_log_control::{FilterReloader, LiveLogControl};
 pub use log_export::{LogExport, LogExportError, MAX_EXPORTED_LOG_FILES, export_log_files};
 pub use log_level_control::{LOG_LEVEL_POLL_INTERVAL, LogLevelControlFile, LogLevelWatcher};
 pub use structured_json::StructuredJsonFormat;

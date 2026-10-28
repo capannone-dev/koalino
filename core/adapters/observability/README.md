@@ -31,3 +31,9 @@ Issue #46). It streams each file, ends a day cut off mid-line with a newline, wr
 `.partial` file, and reports `NoLogs` when there is nothing to export. The entries were redacted
 when written, so the export adds no user content. `log_export_tests.rs` covers the order, the
 seven-day bound, other files left out, replacing an earlier export, and the empty case.
+
+`live_log_control.rs` (`LiveLogControl`) implements the `LogControl` port over a filter reloader
+built from the daemon's `LoggingRuntime`. The web Settings routes and the daemon's `cli log-level`
+watcher both apply levels through it, so `GET /api/settings/log-level` shows the level in effect.
+It validates like the control file, keeps the old level when the reload fails, and is tested with
+a recording reloader (`live_log_control_tests.rs`).

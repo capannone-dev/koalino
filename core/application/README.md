@@ -69,6 +69,10 @@ devices. It replaces the single-meeting `SyncManager` for the daemon's P2P task:
 `repository_sync_manager_tests.rs` runs two document-backed SQLite repositories over a linked
 in-process network.
 
+`log_control.rs` (`LogControl`, Issue #46) is the port the HTTP Settings routes use to read and
+change the running daemon's log level and find its log directory. `LiveLogControl` in
+`adapters/observability` implements it.
+
 `p2p_service.rs` (`P2pService`, Issue #43) is what the daemon's P2P task owns. It joins
 `PairingManager` and `RepositorySyncManager` on one transport:
 

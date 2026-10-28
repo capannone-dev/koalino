@@ -30,6 +30,8 @@ mod export_manager_tests;
 pub mod file_sync_manager;
 #[cfg(test)]
 mod file_sync_manager_tests;
+/// The daemon's runtime log level and log location, as a port for the HTTP routes (Issue #46).
+pub mod log_control;
 /// Coordinates Automerge meeting documents through storage ports.
 pub mod meeting_crdt;
 /// Implements the meeting-document schema: origin, transcript, and segments (Issue #43).
