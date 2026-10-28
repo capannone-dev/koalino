@@ -7,6 +7,20 @@ in a `NodeIdentityStore`, so the peer ID, and therefore every pairing, survives 
 `Libp2pNetworkAdapter::new` takes one. `NodeIdentity::ephemeral()` exists only for tests and
 throwaway nodes.
 
+`peer_gate.rs` is the first behaviour in the swarm. It decides on each connection after Noise has
+authenticated the remote key:
+
+- **Inbound:** a trusted peer, or any peer while `open_pairing_window(duration)` is in effect.
+- **Outbound:** a trusted peer, or the peer passed to `allow_pairing_dial`.
+- **Disconnects:** `revoke_peer` closes that peer's connections, and `end_pairing` closes every
+  connection that is still untrusted.
+
+Being admitted grants nothing beyond the connection. The adapter drops sync and file-transfer
+requests from untrusted peers, `send_encrypted` refuses an untrusted target, and
+`broadcast_encrypted` reaches only trusted peers. mDNS discoveries of trusted peers are dialed
+and reported as `PeerDiscovered`. Untrusted ones are listed only by `nearby_unpaired_peers()`, as
+pairing candidates. The trusted set is loaded from `TrustedPeerStore` by the composition layer.
+
 `libp2p_adapter.rs` builds the decentralized local-network transport: TCP secured with Noise,
 connections multiplexed with Yamux, and mDNS events for local peer discovery. Its private
 `/note-taker/sync-message/1` request-response behaviour frames bounded opaque `SyncMessage`

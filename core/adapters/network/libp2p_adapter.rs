@@ -146,8 +146,9 @@ impl request_response::Codec for SyncPayloadCodec {
 }
 
 use crate::{
-    adapters::network::file_transfer_behaviour::{
-        self, FileTransferRequestPayload, FileTransferResponsePayload,
+    adapters::network::{
+        file_transfer_behaviour::{self, FileTransferRequestPayload, FileTransferResponsePayload},
+        peer_gate::PeerGate,
     },
     domain::{errors::NetworkError, models::DeviceId},
     ports::{
@@ -161,6 +162,8 @@ use zeroize::Zeroizing;
 #[derive(NetworkBehaviour)]
 #[behaviour(to_swarm = "NoteTakerBehaviourEvent")]
 struct NoteTakerBehaviour {
+    /// Refuses connections from unpaired peers; listed first so it is consulted first.
+    peer_gate: PeerGate,
     /// Discovers peers on the local network without a centralized registry.
     mdns: Toggle<mdns::tokio::Behaviour>,
     /// Carries opaque versioned application payloads on encrypted authenticated substreams.
@@ -178,6 +181,13 @@ enum NoteTakerBehaviourEvent {
     SyncPayload(request_response::Event<Vec<u8>, Vec<u8>>),
     /// Carries a message on the independently negotiated attachment protocol.
     FileTransfer(request_response::Event<FileTransferRequestPayload, FileTransferResponsePayload>),
+}
+
+impl From<std::convert::Infallible> for NoteTakerBehaviourEvent {
+    /// The peer gate emits no events.
+    fn from(never: std::convert::Infallible) -> Self {
+        match never {}
+    }
 }
 
 impl From<mdns::Event> for NoteTakerBehaviourEvent {
@@ -276,6 +286,8 @@ pub struct Libp2pNetworkAdapter {
     pending_network_events: VecDeque<NetworkEvent>,
     /// Retains adapter-private attachment frames separately from CRDT network events.
     pending_file_transfer_payloads: VecDeque<Vec<u8>>,
+    /// Unpaired peers advertising themselves on the LAN, offered as pairing candidates.
+    nearby_unpaired_peer_ids: HashSet<DeviceId>,
 }
 
 impl Libp2pNetworkAdapter {
@@ -299,6 +311,7 @@ impl Libp2pNetworkAdapter {
             })?
             .with_behaviour(|_| {
                 Ok(NoteTakerBehaviour {
+                    peer_gate: PeerGate::default(),
                     mdns: Toggle::from(Some(mdns::tokio::Behaviour::new(
                         mdns::Config::default(),
                         local_peer_id,
@@ -317,7 +330,74 @@ impl Libp2pNetworkAdapter {
             reachable_peer_device_ids: HashSet::new(),
             pending_network_events: VecDeque::new(),
             pending_file_transfer_payloads: VecDeque::new(),
+            nearby_unpaired_peer_ids: HashSet::new(),
         })
+    }
+
+    /// Allows `peer_device_id` to connect and sync, as after a confirmed pairing.
+    ///
+    /// Inputs: A peer ID in the adapter's portable form. Outputs: Success, or `SecurityPolicy`
+    /// for an ID that is not a libp2p peer ID.
+    /// Side effects: Updates the connection gate; a later mDNS discovery dials the peer.
+    pub fn trust_peer(&mut self, peer_device_id: &DeviceId) -> Result<(), NetworkError> {
+        let peer_id = Self::peer_id_from_device_id(peer_device_id)?;
+        self.swarm.behaviour_mut().peer_gate.trust(peer_id);
+        self.nearby_unpaired_peer_ids.remove(peer_device_id);
+        Ok(())
+    }
+
+    /// Stops trusting `peer_device_id` and closes its connections.
+    ///
+    /// Inputs: A peer ID in portable form. Outputs: Success, or `SecurityPolicy` for a bad ID.
+    /// Side effects: Updates the gate, queues a disconnect, and removes it from reachable peers.
+    pub fn revoke_peer(&mut self, peer_device_id: &DeviceId) -> Result<(), NetworkError> {
+        let peer_id = Self::peer_id_from_device_id(peer_device_id)?;
+        self.swarm.behaviour_mut().peer_gate.revoke(&peer_id);
+        if self.reachable_peer_device_ids.remove(peer_device_id) {
+            self.pending_network_events
+                .push_back(NetworkEvent::PeerExpired(peer_device_id.clone()));
+        }
+        Ok(())
+    }
+
+    /// Admits inbound connections from unpaired peers for `duration`, for pairing only.
+    ///
+    /// Side effects: Updates the gate. Payloads from such peers are still dropped.
+    pub fn open_pairing_window(&mut self, duration: std::time::Duration) {
+        self.swarm
+            .behaviour_mut()
+            .peer_gate
+            .open_pairing_window(duration);
+    }
+
+    /// Allows this node to connect to the unpaired `peer_device_id` to pair with it.
+    ///
+    /// Inputs: A peer ID in portable form. Outputs: Success, or `SecurityPolicy` for a bad ID.
+    /// Side effects: Updates the gate.
+    pub fn allow_pairing_dial(&mut self, peer_device_id: &DeviceId) -> Result<(), NetworkError> {
+        let peer_id = Self::peer_id_from_device_id(peer_device_id)?;
+        self.swarm
+            .behaviour_mut()
+            .peer_gate
+            .allow_pairing_dial(peer_id);
+        Ok(())
+    }
+
+    /// Ends pairing: closes the window and disconnects every peer that is still unpaired.
+    ///
+    /// Side effects: Updates the gate and queues disconnects.
+    pub fn end_pairing(&mut self) {
+        self.swarm.behaviour_mut().peer_gate.end_pairing();
+    }
+
+    /// Lists unpaired peers currently advertising on the LAN, sorted by peer ID.
+    ///
+    /// Outputs: Candidate peer IDs for pairing. Side effects: None.
+    pub fn nearby_unpaired_peers(&self) -> Vec<DeviceId> {
+        let mut nearby_peers: Vec<DeviceId> =
+            self.nearby_unpaired_peer_ids.iter().cloned().collect();
+        nearby_peers.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        nearby_peers
     }
 
     /// Awaits one libp2p swarm event and queues its portable representation when relevant.
@@ -380,6 +460,10 @@ impl Libp2pNetworkAdapter {
             ..
         } = sync_payload_event
         {
+            if !self.swarm.behaviour().peer_gate.is_trusted(&peer) {
+                tracing::warn!("dropped a sync payload from an unpaired peer");
+                return;
+            }
             self.pending_network_events
                 .push_back(NetworkEvent::MessageReceived {
                     peer_device_id: Self::device_id_from_peer_id(peer),
@@ -406,6 +490,7 @@ impl Libp2pNetworkAdapter {
         >,
     ) {
         if let request_response::Event::Message {
+            peer,
             message:
                 request_response::Message::Request {
                     request, channel, ..
@@ -413,6 +498,10 @@ impl Libp2pNetworkAdapter {
             ..
         } = file_transfer_event
         {
+            if !self.swarm.behaviour().peer_gate.is_trusted(&peer) {
+                tracing::warn!("dropped a file-transfer frame from an unpaired peer");
+                return;
+            }
             self.pending_file_transfer_payloads.push_back(request.0);
             let _ = self
                 .swarm
@@ -449,6 +538,13 @@ impl Libp2pNetworkAdapter {
     /// Side effects: Adds reachability and queues a portable discovery event on first observation.
     fn record_discovered_peer(&mut self, peer_id: PeerId) {
         let peer_device_id = Self::device_id_from_peer_id(peer_id);
+        if !self.swarm.behaviour().peer_gate.is_trusted(&peer_id) {
+            self.nearby_unpaired_peer_ids.insert(peer_device_id);
+            return;
+        }
+        if !self.swarm.is_connected(&peer_id) && self.swarm.dial(peer_id).is_err() {
+            tracing::debug!("could not dial a discovered paired peer");
+        }
         if self
             .reachable_peer_device_ids
             .insert(peer_device_id.clone())
@@ -465,6 +561,7 @@ impl Libp2pNetworkAdapter {
     /// Side effects: Removes reachability and queues a portable expiry event when it was known.
     fn record_expired_peer(&mut self, peer_id: PeerId) {
         let peer_device_id = Self::device_id_from_peer_id(peer_id);
+        self.nearby_unpaired_peer_ids.remove(&peer_device_id);
         if self.reachable_peer_device_ids.remove(&peer_device_id) {
             self.pending_network_events
                 .push_back(NetworkEvent::PeerExpired(peer_device_id));
@@ -528,6 +625,7 @@ impl Libp2pNetworkAdapter {
         let swarm = Swarm::new(
             encrypted_memory_transport,
             NoteTakerBehaviour {
+                peer_gate: PeerGate::default(),
                 mdns: Toggle::from(None),
                 sync_payloads: Self::sync_payload_behaviour(),
                 file_transfers: file_transfer_behaviour::new_file_transfer_behaviour(),
@@ -540,6 +638,7 @@ impl Libp2pNetworkAdapter {
             reachable_peer_device_ids: HashSet::new(),
             pending_network_events: VecDeque::new(),
             pending_file_transfer_payloads: VecDeque::new(),
+            nearby_unpaired_peer_ids: HashSet::new(),
         })
     }
 
@@ -638,6 +737,11 @@ impl P2pNetwork for Libp2pNetworkAdapter {
         payload: &[u8],
     ) -> Result<(), NetworkError> {
         let peer_id = Self::peer_id_from_device_id(peer_device_id)?;
+        if !self.swarm.behaviour().peer_gate.is_trusted(&peer_id) {
+            return Err(NetworkError::SecurityPolicy {
+                reason: "sync payloads are only sent to paired peers".to_owned(),
+            });
+        }
         if !self.swarm.is_connected(&peer_id) {
             return Err(NetworkError::Disconnected);
         }
@@ -654,7 +758,13 @@ impl P2pNetwork for Libp2pNetworkAdapter {
     /// Outputs: Success after the payload is queued for every current peer.
     /// Side effects: Queues payload bytes for encrypted transmission by the owned libp2p swarm.
     fn broadcast_encrypted(&mut self, payload: &[u8]) -> Result<(), NetworkError> {
-        let connected_peer_ids: Vec<_> = self.swarm.connected_peers().copied().collect();
+        let gate = &self.swarm.behaviour().peer_gate;
+        let connected_peer_ids: Vec<_> = self
+            .swarm
+            .connected_peers()
+            .filter(|peer_id| gate.is_trusted(peer_id))
+            .copied()
+            .collect();
         for connected_peer_id in connected_peer_ids {
             self.swarm
                 .behaviour_mut()
@@ -709,6 +819,182 @@ mod tests {
         },
     };
 
+    /// Makes two adapters trust each other, as a completed pairing would.
+    fn trust_each_other(first: &mut Libp2pNetworkAdapter, second: &mut Libp2pNetworkAdapter) {
+        let first_id = first.local_device_id();
+        let second_id = second.local_device_id();
+        first
+            .trust_peer(&second_id)
+            .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+        second
+            .trust_peer(&first_id)
+            .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+    }
+
+    /// Drives both swarms until `condition` holds or `deadline` passes, returning whether it held.
+    async fn drive_until(
+        first: &mut Libp2pNetworkAdapter,
+        second: &mut Libp2pNetworkAdapter,
+        deadline: Duration,
+        mut condition: impl FnMut(&mut Libp2pNetworkAdapter, &mut Libp2pNetworkAdapter) -> bool,
+    ) -> bool {
+        tokio::time::timeout(deadline, async {
+            while !condition(first, second) {
+                tokio::select! {
+                    drive_result = first.drive_next_swarm_event() => {
+                        drive_result.unwrap_or_else(|error| panic!("swarm must stay available: {error}"));
+                    }
+                    drive_result = second.drive_next_swarm_event() => {
+                        drive_result.unwrap_or_else(|error| panic!("swarm must stay available: {error}"));
+                    }
+                }
+            }
+        })
+        .await
+        .is_ok()
+    }
+
+    /// Creates two memory adapters with `second` listening on `memory_address`.
+    fn listening_pair(
+        memory_address: &str,
+    ) -> (Libp2pNetworkAdapter, Libp2pNetworkAdapter, Multiaddr) {
+        let first = Libp2pNetworkAdapter::new_for_memory_transport()
+            .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+        let mut second = Libp2pNetworkAdapter::new_for_memory_transport()
+            .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+        let address: Multiaddr = memory_address
+            .parse()
+            .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+        second
+            .listen_on_memory(address.clone())
+            .unwrap_or_else(|error| panic!("adapter must listen: {error}"));
+        (first, second, address)
+    }
+
+    /// Without pairing, a dial to an unknown node is refused: no connection, no payload.
+    #[tokio::test]
+    async fn untrusted_peers_cannot_connect() {
+        let (mut dialer, mut listener, address) = listening_pair("/memory/9311");
+        let listener_id = listener.local_device_id();
+        let dialer_id = dialer.local_device_id();
+        dialer
+            .allow_pairing_dial(&listener_id)
+            .unwrap_or_else(|error| panic!("pairing dial must be allowed: {error}"));
+        dialer
+            .dial_memory(address)
+            .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+
+        // The dialer's side finishes the handshake before the listener refuses, so only the
+        // listener's view proves the refusal.
+        let admitted = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(1),
+            |_, listener| listener.is_connected_to(&dialer_id),
+        )
+        .await;
+        let dialer_dropped = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(5),
+            |dialer, _| !dialer.is_connected_to(&listener_id),
+        )
+        .await;
+
+        assert!(
+            !admitted,
+            "a node without an open pairing window must refuse unknown peers"
+        );
+        assert!(
+            dialer_dropped,
+            "the refused connection must close on the dialer's side too"
+        );
+        assert!(dialer.send_encrypted(&listener_id, b"sync").is_err());
+    }
+
+    /// An open pairing window admits an unknown peer, but only for pairing: its sync payloads
+    /// are dropped, and this node refuses to send sync payloads to it.
+    #[tokio::test]
+    async fn a_pairing_window_connection_cannot_exchange_sync_payloads() {
+        let (mut dialer, mut listener, address) = listening_pair("/memory/9312");
+        let listener_id = listener.local_device_id();
+        let dialer_id = dialer.local_device_id();
+        // The dialer already trusts the listener; the listener has not paired yet.
+        dialer
+            .trust_peer(&listener_id)
+            .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+        listener.open_pairing_window(Duration::from_secs(60));
+        dialer
+            .dial_memory(address)
+            .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+        assert!(
+            drive_until(
+                &mut dialer,
+                &mut listener,
+                Duration::from_secs(5),
+                |dialer, _| { dialer.is_connected_to(&listener_id) }
+            )
+            .await,
+            "a pairing window must admit the unknown dialer"
+        );
+
+        dialer
+            .send_encrypted(&listener_id, b"sync-before-pairing")
+            .unwrap_or_else(|error| panic!("trusted send must be queued: {error}"));
+        let received = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(1),
+            |_, listener| {
+                matches!(
+                    listener.poll_event(),
+                    Ok(Some(NetworkEvent::MessageReceived { .. }))
+                )
+            },
+        )
+        .await;
+
+        assert!(
+            !received,
+            "sync payloads from an unpaired peer must be dropped"
+        );
+        assert!(listener.send_encrypted(&dialer_id, b"sync").is_err());
+    }
+
+    /// Revoking a connected trusted peer disconnects it.
+    #[tokio::test]
+    async fn revoking_a_peer_disconnects_it() {
+        let (mut dialer, mut listener, address) = listening_pair("/memory/9313");
+        trust_each_other(&mut dialer, &mut listener);
+        let listener_id = listener.local_device_id();
+        let dialer_id = dialer.local_device_id();
+        dialer
+            .dial_memory(address)
+            .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+        assert!(
+            drive_until(
+                &mut dialer,
+                &mut listener,
+                Duration::from_secs(5),
+                |dialer, _| { dialer.is_connected_to(&listener_id) }
+            )
+            .await
+        );
+
+        listener
+            .revoke_peer(&dialer_id)
+            .unwrap_or_else(|error| panic!("peer must be revoked: {error}"));
+        let disconnected = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(5),
+            |dialer, _| !dialer.is_connected_to(&listener_id),
+        )
+        .await;
+
+        assert!(disconnected, "revocation must close the connection");
+    }
+
     /// Loading the identity twice from one store yields the same peer ID, and an adapter built
     /// from it uses that ID, so paired devices recognise this node after a restart.
     #[test]
@@ -757,6 +1043,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("memory adapter A should initialize: {error}"));
         let mut receiving_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
             .unwrap_or_else(|error| panic!("memory adapter B should initialize: {error}"));
+        trust_each_other(&mut sending_adapter, &mut receiving_adapter);
         let listener_address: Multiaddr = "/memory/8128"
             .parse()
             .unwrap_or_else(|error| panic!("memory multiaddress should parse: {error}"));
@@ -860,6 +1147,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("sender should initialize: {error}"));
         let mut receiver = Libp2pNetworkAdapter::new_for_memory_transport()
             .unwrap_or_else(|error| panic!("receiver should initialize: {error}"));
+        trust_each_other(&mut sender, &mut receiver);
         let address: Multiaddr = "/memory/8129"
             .parse()
             .unwrap_or_else(|error| panic!("memory address should parse: {error}"));
