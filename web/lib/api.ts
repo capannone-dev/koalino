@@ -45,6 +45,58 @@ export async function assignCluster(clusterId: string, identityName: string): Pr
   return response.json() as Promise<ClusterAssignment>;
 }
 
+/** Why `renameMeeting` failed: the HTTP status class, or `network` when the daemon was unreachable. */
+export type MeetingRenameFailureKind = "invalid_title" | "not_found" | "server" | "network" | "unexpected";
+
+/** Thrown by `renameMeeting`; `serverMessage` is for diagnostics and is not meant to be shown. */
+export class MeetingRenameError extends Error {
+  constructor(
+    readonly kind: MeetingRenameFailureKind,
+    readonly status: number | null,
+    readonly serverMessage: string | null
+  ) {
+    super(`Meeting rename failed (${status ?? "network"}): ${kind}`);
+    this.name = "MeetingRenameError";
+  }
+}
+
+/** Maps a non-2xx `PATCH /api/meetings/{id}` status to its failure kind. */
+function renameFailureKind(status: number): MeetingRenameFailureKind {
+  if (status === 400) return "invalid_title";
+  if (status === 404) return "not_found";
+  if (status >= 500) return "server";
+  return "unexpected";
+}
+
+/**
+ * Renames a meeting through `PATCH /api/meetings/{id}` with `{ "title": newTitle }`.
+ *
+ * Inputs: the opaque meeting ID (URL-encoded here) and the new title; the server trims it and
+ * requires 1–200 characters without control characters.
+ * Outputs: the updated meeting summary (200). Throws `MeetingRenameError` with kind
+ * `invalid_title` (400), `not_found` (404), `server` (5xx), `unexpected` (any other status), or
+ * `network` (the request never completed).
+ * Side effects: writes the title to the meeting's CRDT document and SQLite on the daemon.
+ */
+export async function renameMeeting(meetingId: string, newTitle: string): Promise<MeetingSummary> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/api/meetings/${encodeURIComponent(meetingId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: newTitle })
+    });
+  } catch {
+    throw new MeetingRenameError("network", null, null);
+  }
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => ({}))) as { error?: unknown };
+    const serverMessage = typeof errorBody.error === "string" ? errorBody.error : null;
+    throw new MeetingRenameError(renameFailureKind(response.status), response.status, serverMessage);
+  }
+  return response.json() as Promise<MeetingSummary>;
+}
+
 export async function assignVoiceClip(clipId: string, identityId: string): Promise<void> {
   const response = await fetch(`${apiBaseUrl}/api/voice/assign`, {
     method: "POST",
