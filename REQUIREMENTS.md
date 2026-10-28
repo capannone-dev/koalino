@@ -46,7 +46,8 @@ The application MUST be deployed across the following platforms, adhering to the
 *   **Filename pattern:** `{date}_{meeting_id}_{export timestamp}.{ext}` for single meetings and `meetings-export_{count}_{export timestamp}.{ext}` for batches, sanitized to `[A-Za-z0-9._-]` and suffixed `-N` on collision. Meeting titles are not stored yet, so the meeting ID stands in for `{meeting_title}`.
 *   **Attachments:** Markdown links copies placed beside the export, PDF embeds images inline and other files as PDF attachments, and JSON lists original file paths. Source files are never modified.
 *   **Privacy:** Exports MUST NOT contain voice embeddings or raw audio.
-*   **PDF template customization:** Future work. PDFs currently use the built-in Helvetica faces, which cover only WinAnsi (Latin-1-like) characters.
+*   **PDF text:** PDFs MUST render any Unicode text, including non-Latin scripts and emoji, and keep it copyable. They embed the bundled DejaVu Sans fonts, plus fallback TrueType fonts from `NOTE_TAKER_PDF_FONT_DIR`, `~/.note_taker/fonts/`, or well-known system paths, subset to the glyphs used. Characters no available font covers render as U+FFFD; an unusable font never fails an export (Issue #37). Emoji render in monochrome.
+*   **PDF template customization:** Future work.
 
 ### 3.4 Distributed AI Compute & Routing
 *   **Device Manifests:** Every node MUST broadcast a manifest detailing its hardware capabilities (e.g., GPU VRAM, CPU cores, available models).

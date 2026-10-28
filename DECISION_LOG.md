@@ -781,3 +781,48 @@
   - macOS and Windows manual checks.
   - iOS Keychain and Android Keystore support.
   - A CLI command to export or re-key.
+
+## 2026-10-28 — Issue #37 Unicode PDF export
+
+- Library: stayed on printpdf 0.7. `add_external_font` already embeds TrueType fonts as
+  Type0/Identity-H with a `ToUnicode` map, so switching to raw lopdf would have meant rewriting
+  that by hand. The approved `font_subsetting` feature (adds `allsorts`) keeps PDFs small: the
+  17 MB Noto Sans SC adds only the glyphs used. `owned_ttf_parser` 0.19 became a direct
+  dependency; it was already in the tree through printpdf and is used for coverage and widths.
+- Fonts (option A, approved): bundle DejaVu Sans Regular and Bold (about 1.4 MB, Bitstream Vera
+  license). Discover CJK and emoji fonts at runtime instead of bundling Noto CJK, which would
+  add about 20 MB.
+  - Fallback order: `NOTE_TAKER_PDF_FONT_DIR`, `~/.note_taker/fonts/`, then a fixed list of
+    system files. There is no recursive font-directory scan, which would be slow and
+    unpredictable.
+  - Only single TrueType-outline fonts are accepted. printpdf writes every font as `FontFile2`,
+    so `.ttc` and CFF `.otf` would produce broken PDFs.
+- Fallback granularity: per character, with consecutive characters grouped into runs. printpdf
+  silently drops characters a font lacks, so fallback had to happen before drawing.
+- Missing glyphs: U+FFFD (DejaVu has it) instead of `?`. It cannot be confused with real text,
+  and the export still succeeds. Invisible format characters are dropped instead.
+  Last-resort fallback: built-in Helvetica with the old `?` substitution, used if the bundled
+  font cannot be parsed.
+- `ToUnicode` fixes: printpdf writes code points above U+FFFF bare (`<1f389>`), and for shared
+  glyphs keeps the lowest code point (`目` copied as `⽬`). The maps are rebuilt from the
+  embedded subset fonts, preferring drawn characters, but only when a drawn character is
+  affected. That avoids a lopdf reopen for typical Latin exports.
+  - The bundled fonts skip the shared-glyph scan, which costs about 34 ms per face in debug
+    builds. A unit test asserts they share no glyphs.
+- Performance: printpdf's `write_text` clones the whole external font, including its byte
+  buffer, on every call. Writing the `Tj` glyph IDs directly made Latin exports faster than the
+  Helvetica path (about 5 ms against 7 ms for 300 segments, release). The test compares
+  best-of-five timings against the Helvetica path with a 2x bound.
+- Tests: the issue asked for system-font tests with skips. They use committed OFL subset
+  fixtures (about 5 KB each) instead, so they never skip and never depend on the host. The PDF
+  text extractor was rewritten to decode through `ToUnicode`, because `lopdf::extract_text`
+  cannot read Identity-H fonts.
+- Verification: `make rust-lint` and `make rust-test` pass. A manual export used the full
+  variable Noto Sans SC and Noto Emoji: 18 pages, 103 KB. It was rasterized with poppler
+  (Latin, Cyrillic, Greek, CJK, and emoji all drawn) and extracted with pypdf (text and title
+  exact).
+- Follow-ups:
+  - Color emoji, which needs a renderer that supports `COLR`/`CBDT`.
+  - Instancing variable fonts at weight 400. Google's variable Noto Sans SC defaults to Thin.
+  - Checks on macOS and Windows hosts.
+  - A real bold for fallback scripts.

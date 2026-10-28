@@ -315,3 +315,26 @@ Issue #38 adds meeting renaming:
     `5` (`FFI_MEETING_NOT_FOUND`).
 - **Gaps:** renames replicate on the next sync, but nothing composes `SyncManager` yet (see
   #39). There is no Dart binding, Flutter UI, or web UI for renaming yet.
+
+Issue #37 makes PDF exports Unicode-capable:
+
+- **Fonts:** `adapters/export/pdf_fonts.rs` loads the bundled DejaVu Sans Regular and Bold
+  (`export/fonts/`, compiled in) as primary faces. Characters they lack use the first fallback
+  `.ttf` that covers them. Fallbacks come from `NOTE_TAKER_PDF_FONT_DIR`, then
+  `~/.note_taker/fonts/`, then well-known system files, and are read only when a document needs
+  them.
+- **Degradation:** uncovered characters render as U+FFFD. Unusable font files are skipped.
+  An unparsable bundled font falls back to built-in Helvetica with `?`.
+- **Rendering:** `pdf_exporter.rs` wraps by measured glyph advances and draws each line as one
+  text object with one run per font. It writes glyph IDs directly, because printpdf's
+  `write_text` clones the whole font per call. printpdf's `font_subsetting` (adds `allsorts`)
+  embeds only the glyphs used.
+- **Post-processing:** a lopdf pass rebuilds `ToUnicode` maps when printpdf's would be wrong:
+  characters above U+FFFF, or glyphs shared by several code points. It also stores a non-ASCII
+  title as UTF-16, and embeds attachments as before.
+- **Tests:** `export/pdf_unicode_tests.rs` uses OFL subset fonts in `export/test_fonts/`. The
+  shared PDF text extractor in `export/tests.rs` decodes through `ToUnicode`, as viewers do.
+- **Gaps:**
+  - Emoji are monochrome.
+  - Variable fallback fonts render at their default instance.
+  - The macOS and Windows system font paths have not been tried on those platforms.
