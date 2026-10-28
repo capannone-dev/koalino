@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
@@ -21,20 +22,22 @@ const double _listPaneWidth = 360;
 final class MeetingListScreen extends StatefulWidget {
   /// Creates a screen observing `controller`.
   ///
-  /// Inputs: The meeting controller, optional builders for the attachment import screen and a
-  /// meeting's speakers, and the export controller, passed on to the detail.
+  /// Inputs: The meeting controller, the attachments controller, optional builders for the
+  /// camera and a meeting's speakers, and the export controller, passed on to the detail.
   /// Outputs: A Material 3 meeting list screen.
   /// Side effects: Loads the meetings when first inserted.
   const MeetingListScreen({
     required this.controller,
-    this.attachmentScreenBuilder,
+    this.attachmentsController,
+    this.photoScreenBuilder,
     this.speakersScreenBuilder,
     this.exportController,
     super.key,
   });
 
   final MeetingListController controller;
-  final WidgetBuilder? attachmentScreenBuilder;
+  final MeetingAttachmentsController? attachmentsController;
+  final MeetingScreenBuilder? photoScreenBuilder;
   final MeetingScreenBuilder? speakersScreenBuilder;
   final MeetingExportController? exportController;
 
@@ -60,7 +63,8 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
       builder: (BuildContext context) => MeetingDetailScreen(
         controller: widget.controller,
         meetingId: meeting.meetingId,
-        attachmentScreenBuilder: widget.attachmentScreenBuilder,
+        attachmentsController: widget.attachmentsController,
+        photoScreenBuilder: widget.photoScreenBuilder,
         speakersScreenBuilder: widget.speakersScreenBuilder,
         exportController: widget.exportController,
       ),
@@ -122,15 +126,39 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                     },
                   ),
               if (isTwoPane)
-                if (widget.attachmentScreenBuilder
-                    case final WidgetBuilder builder)
+                if (widget.photoScreenBuilder
+                    case final MeetingScreenBuilder builder)
                   AnimatedBuilder(
                     animation: widget.controller,
-                    builder: (BuildContext context, Widget? child) => widget
-                                .controller.selectedMeeting ==
-                            null
-                        ? const SizedBox.shrink()
-                        : AttachFileButton(attachmentScreenBuilder: builder),
+                    builder: (BuildContext context, Widget? child) =>
+                        switch (widget.controller.selectedMeetingId) {
+                      final String meetingId
+                          when widget.controller.selectedMeeting != null =>
+                        TakePhotosButton(
+                          controller: widget.controller,
+                          meetingId: meetingId,
+                          photoScreenBuilder: builder,
+                        ),
+                      _ => const SizedBox.shrink(),
+                    },
+                  ),
+              if (isTwoPane)
+                if (widget.attachmentsController
+                    case final MeetingAttachmentsController
+                        attachmentsController)
+                  AnimatedBuilder(
+                    animation: widget.controller,
+                    builder: (BuildContext context, Widget? child) =>
+                        switch (widget.controller.selectedMeetingId) {
+                      final String meetingId
+                          when widget.controller.selectedMeeting != null =>
+                        AttachFilesButton(
+                          controller: widget.controller,
+                          attachmentsController: attachmentsController,
+                          meetingId: meetingId,
+                        ),
+                      _ => const SizedBox.shrink(),
+                    },
                   ),
             ],
           ),

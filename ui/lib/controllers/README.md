@@ -9,6 +9,16 @@ refused) and shows "Unable to open the microphone" for status 7 (Issue #45). It 
 through `RecordingNotifier` and follows pause, resume, and stop made from the Android notification
 without calling the bridge again (Issue #47).
 
+`MeetingAttachmentsController` (Issue #54) picks several files and attaches them at once. It
+reports `Attached N files`, plus how many could not be attached.
+
+`PhotoCaptureController` owns one multi-shot camera session for a meeting:
+- **Attached right away:** each photo is attached as soon as it is taken, so a photo taken during
+  a recording gets that moment's meeting time from Rust.
+- **Temporary files:** the camera's temporary file is deleted whatever happened, so no photo is
+  left outside the app's storage.
+- **Closing:** disposing the controller turns the camera off.
+
 `MeetingExportController` runs one export at a time (Issue #48). On desktops it asks for a path
 first (cancelling exports nothing; with no dialog available, such as Linux without zenity, the
 core writes to its default export folder) and reports "Exported to <path>". On phones the core writes a

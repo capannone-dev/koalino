@@ -5,9 +5,20 @@
 `RecordingScreen` observes `RecordingController` and calls its public methods. It has no knowledge
 of Rust types, dynamic-library handles, or native status codes.
 
-`AttachmentImportScreen` renders the Meeting Detail paperclip control and the Material 3 dialog
-for Rust-ranked meeting suggestions. It depends only on `AttachmentController` and requires an
-explicit user selection before the controller calls Rust to persist a link.
+Meeting attachments (Issue #54):
+- **Meeting detail and the desktop list-detail app bar:**
+  - Take photos (`TakePhotosButton`, when a camera exists) and Attach files (`AttachFilesButton`)
+    act on the meeting being viewed and reload it afterwards.
+  - The transcript places each attachment with `buildMeetingTimeline`: a photo shows as a
+    picture (tap for full screen), a document as a card, and anything added after the meeting
+    under "Added after the meeting".
+- **Record screen:** offers Take photos (where a camera exists) and Attach files while
+  recording or paused. They act on the meeting Rust reports as active, so what they add lands
+  at that point of the transcript; on Linux, Attach files is the only way.
+- **`PhotoCaptureScreen`:**
+  - the shutter can be pressed again and again;
+  - thumbnails of the photos taken so far;
+  - Done.
 
 `HomeShell` switches between the Record, Meetings, Devices, and Settings destinations, with a bottom
 `NavigationBar` below 840 px and a `NavigationRail` above it. `RecordingScreen` adds an optional,

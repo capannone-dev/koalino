@@ -5,11 +5,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recording_notifier.dart';
 import 'package:note_taker_ui/presentation/recording_screen.dart';
+
+import 'fake_photo_camera.dart';
 
 /// Records calls made by a widget through the bridge boundary without loading Rust code.
 final class FakeRecordingBridge implements RecordingBridge {
@@ -149,8 +152,112 @@ Future<void> pumpRecordingScreen(
   );
 }
 
+/// Pumps the recording screen with the camera action, recording which meetings it opened.
+Future<List<String>> pumpRecordingScreenWithCamera(
+    WidgetTester tester, FakeRecordingBridge recordingBridge) async {
+  final List<String> photoScreenMeetings = <String>[];
+  await tester.pumpWidget(
+    MaterialApp(
+      home: RecordingScreen(
+        recordingController: RecordingController(
+          recordingBridge: recordingBridge,
+          microphonePermission: const GrantedMicrophonePermission(),
+          recordingNotifier: const NoRecordingNotifier(),
+        ),
+        activeMeetingId: recordingBridge.activeMeetingId,
+        photoScreenBuilder: (BuildContext context, String meetingId) {
+          photoScreenMeetings.add(meetingId);
+          return const Scaffold(body: Text('Camera'));
+        },
+      ),
+    ),
+  );
+  return photoScreenMeetings;
+}
+
 /// Verifies the recording lifecycle and the optional meeting title sent to Rust.
 void main() {
+  testWidgets('Take photos opens the camera for the meeting being recorded',
+      (WidgetTester tester) async {
+    final FakeRecordingBridge recordingBridge =
+        FakeRecordingBridge(startResult: true);
+    final List<String> photoScreenMeetings =
+        await pumpRecordingScreenWithCamera(tester, recordingBridge);
+    expect(find.text('Take photos'), findsNothing, reason: 'idle');
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    recordingBridge.recordingMeetingId = 'meeting-live';
+    await tester.tap(find.text('Take photos'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Camera'), findsOneWidget);
+    expect(photoScreenMeetings, <String>['meeting-live']);
+  });
+
+  testWidgets('Take photos explains when the meeting is not known yet',
+      (WidgetTester tester) async {
+    final FakeRecordingBridge recordingBridge =
+        FakeRecordingBridge(startResult: true);
+    final List<String> photoScreenMeetings =
+        await pumpRecordingScreenWithCamera(tester, recordingBridge);
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    await tester.tap(find.text('Take photos'));
+    await tester.pumpAndSettle();
+
+    expect(photoScreenMeetings, isEmpty);
+    expect(find.text('The recording is still starting; try again.'),
+        findsOneWidget);
+  });
+
+  testWidgets('Attach files while recording attaches to the recorded meeting',
+      (WidgetTester tester) async {
+    final FakeRecordingBridge recordingBridge =
+        FakeRecordingBridge(startResult: true);
+    final FakeMeetingAttachmentBridge attachmentBridge =
+        FakeMeetingAttachmentBridge();
+    final FakeFilesPicker filesPicker = FakeFilesPicker()
+      ..pickedPaths = <String>['/tmp/slides.pdf'];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecordingScreen(
+          recordingController: RecordingController(
+            recordingBridge: recordingBridge,
+            microphonePermission: const GrantedMicrophonePermission(),
+            recordingNotifier: const NoRecordingNotifier(),
+          ),
+          activeMeetingId: recordingBridge.activeMeetingId,
+          attachmentsController: MeetingAttachmentsController(
+              attachmentBridge: attachmentBridge, filesPicker: filesPicker),
+        ),
+      ),
+    );
+    expect(find.text('Attach files'), findsNothing, reason: 'idle');
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    recordingBridge.recordingMeetingId = 'meeting-live';
+    await tester.tap(find.text('Attach files'));
+    await tester.pumpAndSettle();
+
+    expect(attachmentBridge.requests.single.meetingId, 'meeting-live');
+    expect(find.text('Attached 1 file'), findsOneWidget);
+  });
+
+  testWidgets('without a camera the recording screen has no Take photos',
+      (WidgetTester tester) async {
+    final FakeRecordingBridge recordingBridge =
+        FakeRecordingBridge(startResult: true);
+    await pumpRecordingScreen(tester, recordingBridge);
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+
+    expect(find.text('Take photos'), findsNothing);
+  });
+
   testWidgets(
       'start control changes idle state to recording after bridge success',
       (WidgetTester tester) async {

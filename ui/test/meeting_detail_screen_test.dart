@@ -11,12 +11,11 @@ import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
 import 'fake_meeting_bridge.dart';
 
-/// Pumps the detail screen for `meetingId`, optionally with an attachment screen builder.
+/// Pumps the detail screen for `meetingId`.
 Future<FakeMeetingBridge> pumpMeetingDetail(
   WidgetTester tester,
-  String meetingId, {
-  WidgetBuilder? attachmentScreenBuilder,
-}) async {
+  String meetingId,
+) async {
   final FakeMeetingBridge meetingBridge =
       FakeMeetingBridge(details: <String, MeetingDetail>{
     'meeting-titled': titledMeetingDetail,
@@ -29,7 +28,6 @@ Future<FakeMeetingBridge> pumpMeetingDetail(
       home: MeetingDetailScreen(
         controller: controller,
         meetingId: meetingId,
-        attachmentScreenBuilder: attachmentScreenBuilder,
       ),
     ),
   );
@@ -37,7 +35,7 @@ Future<FakeMeetingBridge> pumpMeetingDetail(
   return meetingBridge;
 }
 
-/// Verifies the title header, fallback title, transcript, and attachment action.
+/// Verifies the title header, fallback title, and transcript.
 void main() {
   testWidgets('shows the title as a large bold header above the content',
       (WidgetTester tester) async {
@@ -83,21 +81,6 @@ void main() {
     await pumpMeetingDetail(tester, 'meeting-missing');
 
     expect(find.text('Unable to load this meeting'), findsOneWidget);
-  });
-
-  testWidgets('the paperclip action opens the attachment import screen',
-      (WidgetTester tester) async {
-    await pumpMeetingDetail(
-      tester,
-      'meeting-titled',
-      attachmentScreenBuilder: (BuildContext context) =>
-          const Scaffold(body: Text('Attachment import')),
-    );
-
-    await tester.tap(find.byTooltip('Attach file'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Attachment import'), findsOneWidget);
   });
 
   testWidgets('the pencil next to the title opens the rename dialog',

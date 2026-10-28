@@ -1,5 +1,5 @@
-// Defines the Dart-native boundary for reading meetings, their titles, and their transcripts,
-// and for renaming meetings.
+// Defines the Dart-native boundary for reading meetings, their titles, transcripts and
+// attachments, and for renaming meetings.
 
 import 'dart:convert';
 import 'dart:ffi';
@@ -83,6 +83,59 @@ final class MeetingTranscriptSegment {
   }
 }
 
+/// Describes one picture or document attached to a meeting (Issue #54).
+final class MeetingAttachment {
+  /// Creates immutable attachment metadata.
+  const MeetingAttachment({
+    required this.attachmentId,
+    required this.fileName,
+    required this.filePath,
+    required this.mimeType,
+    required this.meetingTimeMs,
+  });
+
+  /// Stable attachment identifier.
+  final String attachmentId;
+
+  /// Name to show, without the prefix Rust adds to the stored copy.
+  final String fileName;
+
+  /// Absolute path of the app's private copy.
+  final String filePath;
+
+  /// MIME type Rust derived from the file type, e.g. `image/jpeg`.
+  final String mimeType;
+
+  /// Meeting time at which the attachment belongs in the transcript; `null` for the end.
+  final int? meetingTimeMs;
+
+  /// Whether the attachment can be shown as a picture.
+  bool get isImage => mimeType.startsWith('image/');
+
+  /// Decodes one element of an `attachments` (or `attached`) array.
+  ///
+  /// Inputs: A JSON object with `attachment_id`, `file_name`, `file_path`, `mime_type`, and a
+  /// nullable `meeting_time_ms`.
+  /// Outputs: The attachment; throws `TypeError` for a malformed object.
+  factory MeetingAttachment.fromJson(Map<String, Object?> json) {
+    return MeetingAttachment(
+      attachmentId: json['attachment_id']! as String,
+      fileName: json['file_name']! as String,
+      filePath: json['file_path']! as String,
+      mimeType: json['mime_type']! as String,
+      meetingTimeMs: (json['meeting_time_ms'] as num?)?.toInt(),
+    );
+  }
+}
+
+/// Decodes a JSON array of attachment objects; a missing array means none.
+List<MeetingAttachment> decodeMeetingAttachments(Object? attachmentsJson) =>
+    ((attachmentsJson as List<Object?>?) ?? const <Object?>[])
+        .cast<Map<Object?, Object?>>()
+        .map((Map<Object?, Object?> attachmentJson) =>
+            MeetingAttachment.fromJson(attachmentJson.cast<String, Object?>()))
+        .toList(growable: false);
+
 /// Describes one meeting returned by `note_taker_get_meeting`.
 final class MeetingDetail {
   /// Creates immutable meeting content.
@@ -90,6 +143,7 @@ final class MeetingDetail {
     required this.summary,
     required this.transcript,
     required this.segments,
+    this.attachments = const <MeetingAttachment>[],
   });
 
   /// Title, creation time, and duration shared with the list row.
@@ -100,6 +154,9 @@ final class MeetingDetail {
 
   /// Speaker-attributed transcript in timeline order (empty when none was stored).
   final List<MeetingTranscriptSegment> segments;
+
+  /// Pictures and documents attached to the meeting, in the order they were added.
+  final List<MeetingAttachment> attachments;
 }
 
 /// Builds the title Rust shows for an untitled meeting, such as `Meeting 2026-01-15 14:30 UTC`.
@@ -173,6 +230,7 @@ MeetingDetail decodeMeetingDetail(String responseJson) {
             MeetingTranscriptSegment.fromJson(
                 segmentJson.cast<String, Object?>()))
         .toList(growable: false),
+    attachments: decodeMeetingAttachments(json['attachments']),
   );
 }
 

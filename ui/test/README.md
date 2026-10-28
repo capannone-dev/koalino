@@ -5,9 +5,21 @@
 Tests inject a `RecordingBridge` fake into the controller, proving that widgets make state changes
 without loading a native Rust library or accessing Rust implementation types.
 
-`attachment_import_screen_test.dart` injects fake picker and FFI boundaries. It specifies that the
-paperclip action opens the picker, JSON candidates render in rank order with confidence scores,
-and Select forwards the exact opaque attachment and meeting IDs to Rust.
+Meeting attachments (Issue #54) use `fake_photo_camera.dart` (a camera and an attachment bridge
+without a device or Rust):
+- `meeting_attachments_decoding_test.dart` covers:
+  - the JSON contract;
+  - where each attachment sits among the segments: after those that started before it, with
+    untimed ones last.
+- `photo_capture_test.dart` covers the multi-shot camera:
+  - each photo is attached on its own, and its temporary file is deleted;
+  - failures are reported;
+  - the screen stays open for the next shot.
+- `meeting_attachments_test.dart` covers the meeting detail:
+  - photos and documents appear in place;
+  - Attach files sends several picked files at once and reports failures;
+  - Take photos opens the camera for this meeting and reloads it.
+- `recording_screen_test.dart` covers Take photos while recording.
 
 `whisper_model_test.dart` covers where the app finds its Whisper model: the data directory
 first, then the bundle's `data/models` on desktops; Android installs the APK's copy.

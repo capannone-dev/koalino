@@ -1,11 +1,14 @@
-// Renders the recording lifecycle and optional meeting title using Material 3 controls, and the
-// live transcript growing chunk by chunk while recording (Issue #52).
+// Renders the recording lifecycle and optional meeting title using Material 3 controls, the
+// live transcript growing chunk by chunk while recording (Issue #52), and the camera for photos
+// of the meeting (Issue #54).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/live_transcript_controller.dart';
+import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 
 /// Longest title Rust accepts, in characters (`MeetingTitle::MAX_CHARACTERS`).
 const int _maxMeetingTitleLength = 200;
@@ -21,17 +24,26 @@ final class RecordingScreen extends StatefulWidget {
   /// Creates a screen that observes `recordingController` for its displayable state.
   ///
   /// Inputs: `recordingController` must outlive this widget or be disposed by its owner;
-  /// `liveTranscriptController`, when given, adds the live transcript below the controls.
+  /// `liveTranscriptController`, when given, adds the live transcript below the controls;
+  /// `photoScreenBuilder` and `attachmentsController`, each with `activeMeetingId` (which reads
+  /// the recorded meeting from Rust), add Take photos and Attach files while recording or
+  /// paused; what they add is placed at that point of the transcript.
   /// Outputs: A Material 3 recording screen.
   /// Side effects: Registers an animated listener while the widget is mounted.
   const RecordingScreen({
     required this.recordingController,
     this.liveTranscriptController,
+    this.photoScreenBuilder,
+    this.attachmentsController,
+    this.activeMeetingId,
     super.key,
   });
 
   final RecordingController recordingController;
   final LiveTranscriptController? liveTranscriptController;
+  final MeetingScreenBuilder? photoScreenBuilder;
+  final MeetingAttachmentsController? attachmentsController;
+  final Future<String?> Function()? activeMeetingId;
 
   @override
   State<RecordingScreen> createState() => _RecordingScreenState();
@@ -70,6 +82,55 @@ final class _RecordingScreenState extends State<RecordingScreen> {
     }
   }
 
+  /// Reads the meeting being recorded from Rust.
+  ///
+  /// Outputs: The meeting ID, or `null` after showing a snack bar when Rust does not report it
+  /// yet (or the screen was closed meanwhile).
+  Future<String?> _recordedMeetingId(
+      Future<String?> Function() activeMeetingId) async {
+    final String? meetingId = await activeMeetingId();
+    if (!mounted) {
+      return null;
+    }
+    if (meetingId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('The recording is still starting; try again.')));
+    }
+    return meetingId;
+  }
+
+  /// Opens the camera for the meeting being recorded, so photos land at this point of its
+  /// transcript.
+  ///
+  /// Side effects: Reads the recorded meeting from Rust and pushes the camera screen.
+  Future<void> _takePhotos(MeetingScreenBuilder photoScreenBuilder,
+      Future<String?> Function() activeMeetingId) async {
+    final String? meetingId = await _recordedMeetingId(activeMeetingId);
+    if (meetingId == null || !mounted) {
+      return;
+    }
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (BuildContext context) =>
+            photoScreenBuilder(context, meetingId)));
+  }
+
+  /// Attaches picked files to the meeting being recorded, at this point of its transcript.
+  ///
+  /// Side effects: Reads the recorded meeting from Rust, opens the picker, attaches the files
+  /// and shows the result in a snack bar.
+  Future<void> _attachFiles(MeetingAttachmentsController attachmentsController,
+      Future<String?> Function() activeMeetingId) async {
+    final String? meetingId = await _recordedMeetingId(activeMeetingId);
+    if (meetingId == null || !mounted) {
+      return;
+    }
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final String? message = await attachmentsController.attachFiles(meetingId);
+    if (message != null) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
   /// Builds the title field, status label, messages, and the lifecycle controls.
   ///
   /// Inputs: `context` supplies the Material theme and localization context.
@@ -96,6 +157,16 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                   final bool isStopping = state == RecordingUiState.stopping;
                   final bool isBusy = state != RecordingUiState.idle;
                   final String? activeTitle = recordingController.activeTitle;
+                  final MeetingScreenBuilder? photoScreenBuilder =
+                      widget.photoScreenBuilder;
+                  final MeetingAttachmentsController? attachmentsController =
+                      widget.attachmentsController;
+                  // Photos and files can be added only while a meeting is being recorded.
+                  final Future<String?> Function()? activeMeetingId =
+                      state == RecordingUiState.recording ||
+                              state == RecordingUiState.paused
+                          ? widget.activeMeetingId
+                          : null;
                   final String statusLabel = switch ((state, activeTitle)) {
                     (RecordingUiState.recording, final String title) =>
                       'Recording "$title"',
@@ -190,6 +261,22 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                               onPressed: isStopping ? null : _stopRecording,
                               icon: const Icon(Icons.stop),
                               label: const Text('Stop'),
+                            ),
+                          if (activeMeetingId != null &&
+                              photoScreenBuilder != null)
+                            OutlinedButton.icon(
+                              onPressed: () => _takePhotos(
+                                  photoScreenBuilder, activeMeetingId),
+                              icon: const Icon(Icons.photo_camera_outlined),
+                              label: const Text('Take photos'),
+                            ),
+                          if (activeMeetingId != null &&
+                              attachmentsController != null)
+                            OutlinedButton.icon(
+                              onPressed: () => _attachFiles(
+                                  attachmentsController, activeMeetingId),
+                              icon: const Icon(Icons.attach_file),
+                              label: const Text('Attach files'),
                             ),
                         ],
                       ),

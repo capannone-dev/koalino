@@ -1,11 +1,16 @@
-// Renders one meeting with its title as the header, followed by metadata and transcript.
+// Renders one meeting with its title as the header, followed by metadata and transcript, with
+// its photos and documents placed where they were taken (Issue #54).
+
+import 'dart:io';
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/presentation/meeting_timeline.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
 /// Builds a screen about one meeting, such as the voice gallery for its unknown speakers.
@@ -19,16 +24,17 @@ const double _maxReadableWidth = 840;
 final class MeetingDetailScreen extends StatefulWidget {
   /// Creates a screen that selects and renders `meetingId` through `controller`.
   ///
-  /// Inputs: The shared meeting controller, the meeting to show, optional builders for the
-  /// attachment import screen and the meeting's speakers, and the export controller (each
-  /// action is hidden without its builder or controller).
+  /// Inputs: The shared meeting controller, the meeting to show, the attachments controller
+  /// (Attach files), optional builders for the camera (Take photos) and the meeting's speakers,
+  /// and the export controller (each action is hidden without its builder or controller).
   /// Outputs: A Material 3 detail screen.
   /// Side effects: Loads the meeting through the controller after the first frame, unless the
   /// caller already selected it (the list does, so the route never shows another meeting).
   const MeetingDetailScreen({
     required this.controller,
     required this.meetingId,
-    this.attachmentScreenBuilder,
+    this.attachmentsController,
+    this.photoScreenBuilder,
     this.speakersScreenBuilder,
     this.exportController,
     super.key,
@@ -36,7 +42,8 @@ final class MeetingDetailScreen extends StatefulWidget {
 
   final MeetingListController controller;
   final String meetingId;
-  final WidgetBuilder? attachmentScreenBuilder;
+  final MeetingAttachmentsController? attachmentsController;
+  final MeetingScreenBuilder? photoScreenBuilder;
   final MeetingScreenBuilder? speakersScreenBuilder;
   final MeetingExportController? exportController;
 
@@ -79,8 +86,19 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
               exportController: exportController,
               meetingId: widget.meetingId,
             ),
-          if (widget.attachmentScreenBuilder case final WidgetBuilder builder)
-            AttachFileButton(attachmentScreenBuilder: builder),
+          if (widget.photoScreenBuilder case final MeetingScreenBuilder builder)
+            TakePhotosButton(
+              controller: widget.controller,
+              meetingId: widget.meetingId,
+              photoScreenBuilder: builder,
+            ),
+          if (widget.attachmentsController
+              case final MeetingAttachmentsController attachmentsController)
+            AttachFilesButton(
+              controller: widget.controller,
+              attachmentsController: attachmentsController,
+              meetingId: widget.meetingId,
+            ),
         ],
       ),
       body: MeetingDetailView(controller: widget.controller),
@@ -88,20 +106,79 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
   }
 }
 
-/// Opens the attachment import screen from a meeting's app bar.
-final class AttachFileButton extends StatelessWidget {
-  /// Creates the paperclip action pushing `attachmentScreenBuilder`.
-  const AttachFileButton({required this.attachmentScreenBuilder, super.key});
+/// Opens the multi-shot camera for a meeting from its app bar (Issue #54).
+final class TakePhotosButton extends StatelessWidget {
+  /// Creates the action for `meetingId`.
+  ///
+  /// Inputs: The meeting controller, the meeting, and the builder of the camera screen.
+  /// Outputs: An icon button.
+  /// Side effects: On return from the camera, reloads the meeting, so the new photos show.
+  const TakePhotosButton({
+    required this.controller,
+    required this.meetingId,
+    required this.photoScreenBuilder,
+    super.key,
+  });
 
-  final WidgetBuilder attachmentScreenBuilder;
+  final MeetingListController controller;
+  final String meetingId;
+  final MeetingScreenBuilder photoScreenBuilder;
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      tooltip: 'Attach file',
-      icon: const Icon(Icons.attach_file),
-      onPressed: () => Navigator.of(context)
-          .push(MaterialPageRoute<void>(builder: attachmentScreenBuilder)),
+      tooltip: 'Take photos',
+      icon: const Icon(Icons.photo_camera_outlined),
+      onPressed: () async {
+        await Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (BuildContext context) =>
+                photoScreenBuilder(context, meetingId)));
+        await controller.selectMeeting(meetingId);
+      },
+    );
+  }
+}
+
+/// Attaches several pictures or documents to a meeting from its app bar (Issue #54).
+final class AttachFilesButton extends StatelessWidget {
+  /// Creates the action for `meetingId`.
+  ///
+  /// Inputs: The meeting controller, the attachments controller, and the meeting.
+  /// Outputs: An icon button, disabled while files are being attached.
+  /// Side effects: Opens the picker, attaches the picked files, shows a snack bar with the
+  /// result, and reloads the meeting.
+  const AttachFilesButton({
+    required this.controller,
+    required this.attachmentsController,
+    required this.meetingId,
+    super.key,
+  });
+
+  final MeetingListController controller;
+  final MeetingAttachmentsController attachmentsController;
+  final String meetingId;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: attachmentsController,
+      builder: (BuildContext context, Widget? child) => IconButton(
+        tooltip: 'Attach files',
+        icon: const Icon(Icons.attach_file),
+        onPressed: attachmentsController.isAttaching
+            ? null
+            : () async {
+                final ScaffoldMessengerState messenger =
+                    ScaffoldMessenger.of(context);
+                final String? message =
+                    await attachmentsController.attachFiles(meetingId);
+                if (message == null) {
+                  return;
+                }
+                messenger.showSnackBar(SnackBar(content: Text(message)));
+                await controller.selectMeeting(meetingId);
+              },
+      ),
     );
   }
 }
@@ -296,38 +373,151 @@ final class _MeetingContent extends StatelessWidget {
     );
   }
 
-  /// Builds one block per segment, the flat transcript, or an empty-transcript message.
+  /// Builds one block per segment and attachment in timeline order, or the flat transcript or
+  /// an empty-transcript message followed by the attachments.
   List<Widget> _transcriptChildren(ThemeData theme) {
+    final List<MeetingTimelineEntry> timeline = buildMeetingTimeline(
+        segments: meeting.segments, attachments: meeting.attachments);
+    final List<Widget> entries = timeline
+        .map((MeetingTimelineEntry entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: switch (entry) {
+                SegmentEntry(:final MeetingTranscriptSegment segment) =>
+                  _segmentBlock(theme, segment),
+                AttachmentEntry(:final MeetingAttachment attachment) =>
+                  MeetingAttachmentView(attachment: attachment),
+              },
+            ))
+        .toList(growable: false);
     if (meeting.segments.isNotEmpty) {
-      return meeting.segments
-          .map((MeetingTranscriptSegment segment) => Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      '${segment.speaker} · '
-                      '${formatMeetingDuration(segment.startTimeMs)}',
-                      style: theme.textTheme.labelLarge
-                          ?.copyWith(color: theme.colorScheme.primary),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(segment.text, style: theme.textTheme.bodyLarge),
-                  ],
-                ),
-              ))
-          .toList(growable: false);
+      return entries;
     }
-    if (meeting.transcript case final String transcript
-        when transcript.trim().isNotEmpty) {
-      return <Widget>[Text(transcript, style: theme.textTheme.bodyLarge)];
-    }
+    final Widget transcriptText = switch (meeting.transcript) {
+      final String transcript when transcript.trim().isNotEmpty =>
+        Text(transcript, style: theme.textTheme.bodyLarge),
+      _ => Text(
+          'No transcript is available.',
+          style: theme.textTheme.bodyLarge
+              ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+    };
     return <Widget>[
-      Text(
-        'No transcript is available.',
-        style: theme.textTheme.bodyLarge
-            ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-      ),
+      Padding(
+          padding: const EdgeInsets.only(bottom: 16), child: transcriptText),
+      ...entries,
     ];
+  }
+
+  /// Builds one segment: speaker and start time above its text.
+  Widget _segmentBlock(ThemeData theme, MeetingTranscriptSegment segment) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            '${segment.speaker} · ${formatMeetingDuration(segment.startTimeMs)}',
+            style: theme.textTheme.labelLarge
+                ?.copyWith(color: theme.colorScheme.primary),
+          ),
+          const SizedBox(height: 4),
+          Text(segment.text, style: theme.textTheme.bodyLarge),
+        ],
+      );
+}
+
+/// Tallest a photo is shown in the transcript, in logical pixels.
+const double _maxInlinePhotoHeight = 240;
+
+/// Shows one attachment in the transcript: a photo as a picture that opens full screen, a
+/// document as its name and type.
+final class MeetingAttachmentView extends StatelessWidget {
+  /// Creates the view of `attachment`.
+  const MeetingAttachmentView({required this.attachment, super.key});
+
+  final MeetingAttachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final String placement = switch (attachment.meetingTimeMs) {
+      final int meetingTimeMs => '${attachment.isImage ? 'Photo' : 'File'} · '
+          '${formatMeetingDuration(meetingTimeMs)}',
+      null => 'Added after the meeting',
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(placement,
+            style: theme.textTheme.labelLarge
+                ?.copyWith(color: theme.colorScheme.secondary)),
+        const SizedBox(height: 4),
+        if (attachment.isImage)
+          Semantics(
+            button: true,
+            label: 'Photo ${attachment.fileName}, open full screen',
+            child: InkWell(
+              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (BuildContext context) =>
+                      _PhotoViewer(attachment: attachment))),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ConstrainedBox(
+                  constraints:
+                      const BoxConstraints(maxHeight: _maxInlinePhotoHeight),
+                  child: Image.file(
+                    File(attachment.filePath),
+                    fit: BoxFit.contain,
+                    cacheHeight: 720,
+                    errorBuilder: (BuildContext context, Object error,
+                            StackTrace? stackTrace) =>
+                        _DocumentTile(attachment: attachment),
+                  ),
+                ),
+              ),
+            ),
+          )
+        else
+          _DocumentTile(attachment: attachment),
+      ],
+    );
+  }
+}
+
+/// Shows a document attachment, or a photo that cannot be read, as a card with its name.
+final class _DocumentTile extends StatelessWidget {
+  const _DocumentTile({required this.attachment});
+
+  final MeetingAttachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card.outlined(
+      margin: EdgeInsets.zero,
+      child: ListTile(
+        leading: Icon(attachment.isImage
+            ? Icons.image_outlined
+            : Icons.insert_drive_file_outlined),
+        title: Text(attachment.fileName),
+        subtitle: Text(attachment.mimeType),
+      ),
+    );
+  }
+}
+
+/// Shows a photo full screen, with pinch and scroll zoom.
+final class _PhotoViewer extends StatelessWidget {
+  const _PhotoViewer({required this.attachment});
+
+  final MeetingAttachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(title: Text(attachment.fileName)),
+      body: InteractiveViewer(
+        maxScale: 5,
+        child: Center(child: Image.file(File(attachment.filePath))),
+      ),
+    );
   }
 }

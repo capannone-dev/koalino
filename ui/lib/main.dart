@@ -11,21 +11,23 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/core_startup_controller.dart';
-import 'package:note_taker_ui/controllers/attachment_controller.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
 import 'package:note_taker_ui/controllers/live_transcript_controller.dart';
 import 'package:note_taker_ui/controllers/log_settings_controller.dart';
+import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
+import 'package:note_taker_ui/controllers/photo_capture_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
 import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_configuration.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
-import 'package:note_taker_ui/infrastructure/attachment_bridge.dart';
 import 'package:note_taker_ui/infrastructure/host_key.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
+import 'package:note_taker_ui/infrastructure/meeting_attachment_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
+import 'package:note_taker_ui/infrastructure/photo_camera.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
@@ -35,11 +37,12 @@ import 'package:note_taker_ui/infrastructure/telemetry_bridge.dart';
 import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
 import 'package:note_taker_ui/presentation/app_lock_gate.dart';
 import 'package:note_taker_ui/presentation/app_theme.dart';
-import 'package:note_taker_ui/presentation/attachment_import_screen.dart';
 import 'package:note_taker_ui/presentation/core_startup_gate.dart';
 import 'package:note_taker_ui/presentation/devices_screen.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
+import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
+import 'package:note_taker_ui/presentation/photo_capture_screen.dart';
 import 'package:note_taker_ui/presentation/recording_screen.dart';
 import 'package:note_taker_ui/presentation/settings_screen.dart';
 import 'package:note_taker_ui/presentation/telemetry_dashboard_screen.dart';
@@ -88,6 +91,7 @@ Future<void> main() async {
   runApp(NoteTakerApp(
     recordingController: recordingController,
     liveTranscriptController: liveTranscriptController,
+    activeMeetingId: recordingBridge.activeMeetingId,
     coreStartupController: coreStartupController,
     appLockController: appLockController,
   ));
@@ -103,7 +107,8 @@ final class NoteTakerApp extends StatelessWidget {
   /// Inputs: `recordingController` is retained by the app for its lifetime, so an active
   /// recording survives switching destinations. `coreStartupController`, when given, holds the
   /// screens back until the Rust core is open (tests that fake every bridge omit it).
-  /// `liveTranscriptController`, when given, shows the transcript growing on the Record screen.
+  /// `liveTranscriptController`, when given, shows the transcript growing on the Record screen;
+  /// `activeMeetingId` adds Take photos there on platforms with a camera.
   /// `appLockController`, when given (Android), covers every screen while the app is locked
   /// and adds the App lock switch to Settings.
   /// Outputs: A configured Material application.
@@ -111,6 +116,7 @@ final class NoteTakerApp extends StatelessWidget {
   const NoteTakerApp({
     required this.recordingController,
     this.liveTranscriptController,
+    this.activeMeetingId,
     this.coreStartupController,
     this.appLockController,
     super.key,
@@ -118,6 +124,9 @@ final class NoteTakerApp extends StatelessWidget {
 
   final RecordingController recordingController;
   final LiveTranscriptController? liveTranscriptController;
+
+  /// Reads the meeting being recorded, for Take photos on the Record screen (Issue #54).
+  final Future<String?> Function()? activeMeetingId;
   final CoreStartupController? coreStartupController;
   final AppLockController? appLockController;
 
@@ -132,6 +141,9 @@ final class NoteTakerApp extends StatelessWidget {
       recordingScreenBuilder: (BuildContext context) => RecordingScreen(
         recordingController: recordingController,
         liveTranscriptController: liveTranscriptController,
+        photoScreenBuilder: _photoScreenBuilder,
+        attachmentsController: _recordingAttachmentsController,
+        activeMeetingId: activeMeetingId,
       ),
       meetingsScreenBuilder: (BuildContext context) =>
           const _MeetingsDestination(),
@@ -185,11 +197,17 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
     exportBridge: const RustExportBridge(),
     exportSaver: const FilePickerExportSaver(),
   );
+  final MeetingAttachmentsController _attachmentsController =
+      MeetingAttachmentsController(
+    attachmentBridge: const RustMeetingAttachmentBridge(),
+    filesPicker: const PlatformAttachmentFilesPicker(),
+  );
 
   @override
   void dispose() {
     _controller.dispose();
     _exportController.dispose();
+    _attachmentsController.dispose();
     super.dispose();
   }
 
@@ -198,16 +216,59 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
     return MeetingListScreen(
       controller: _controller,
       exportController: _exportController,
-      attachmentScreenBuilder: (BuildContext context) => AttachmentImportScreen(
-        attachmentController: AttachmentController(
-          attachmentBridge: RustAttachmentBridge(),
-          attachmentFilePicker: PlatformAttachmentFilePicker(),
-        ),
-      ),
+      attachmentsController: _attachmentsController,
+      photoScreenBuilder: _photoScreenBuilder,
       speakersScreenBuilder: (BuildContext context, String meetingId) =>
           _VoiceGalleryDestination(meetingId: meetingId),
     );
   }
+}
+
+/// Attaches files to the meeting being recorded from the Record screen; it holds no resources,
+/// so it lives as long as the app.
+final MeetingAttachmentsController _recordingAttachmentsController =
+    MeetingAttachmentsController(
+  attachmentBridge: const RustMeetingAttachmentBridge(),
+  filesPicker: const PlatformAttachmentFilesPicker(),
+);
+
+/// Builds the camera for a meeting, or `null` on platforms without camera support (Linux),
+/// which then offer file attachments only (Issue #54).
+final MeetingScreenBuilder? _photoScreenBuilder = isCameraSupported
+    ? (BuildContext context, String meetingId) =>
+        _PhotoCaptureDestination(meetingId: meetingId)
+    : null;
+
+/// Owns the camera and its controller while the photo screen of one meeting is shown, so
+/// leaving the screen turns the camera off.
+final class _PhotoCaptureDestination extends StatefulWidget {
+  const _PhotoCaptureDestination({required this.meetingId});
+
+  final String meetingId;
+
+  @override
+  State<_PhotoCaptureDestination> createState() =>
+      _PhotoCaptureDestinationState();
+}
+
+/// Creates and disposes the screen's controller.
+final class _PhotoCaptureDestinationState
+    extends State<_PhotoCaptureDestination> {
+  late final PhotoCaptureController _controller = PhotoCaptureController(
+    camera: PluginPhotoCamera(),
+    attachmentBridge: const RustMeetingAttachmentBridge(),
+    meetingId: widget.meetingId,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      PhotoCaptureScreen(controller: _controller);
 }
 
 /// Owns a voice gallery controller for one meeting while its speakers screen is shown.

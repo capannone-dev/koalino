@@ -5,11 +5,19 @@
 The recording bridge converts Dart calls to primitive C ABI functions and status codes. Rust
 domain structs are never represented in Dart or presented to widgets.
 
-`attachment_bridge.dart` wraps the standard `file_picker` plugin behind `AttachmentFilePicker` and
-maps its selected local path to the narrow Rust C ABI. Suggestions return as caller-freed JSON;
-the bridge deliberately leaves JSON parsing to `AttachmentController`.
-Both attachment calls run on a background isolate, because scoring reads every meeting from
-SQLite.
+`meeting_attachment_bridge.dart` (Issue #54):
+- `PlatformAttachmentFilesPicker` wraps `file_picker` with multiple selection, limited to the
+  types Rust accepts.
+- `RustMeetingAttachmentBridge` calls `note_taker_attach_files` on a background isolate, since it
+  copies files, and decodes the attached and failed files.
+
+`photo_camera.dart` hides the `camera` plugin behind `PhotoCamera`:
+- the back camera, without audio;
+- `isCameraSupported` is false on Linux, which has no implementation;
+- Windows uses the unendorsed `camera_windows`;
+- Android declares `CAMERA`, asked at run time, and marks the camera feature optional.
+
+`MeetingBridge.getMeeting` also decodes the meeting's `attachments`.
 
 `telemetry_bridge.dart` defines the telemetry DTOs and `RustTelemetryBridge`, which calls
 `note_taker_get_devices`, `note_taker_get_telemetry_summary`, and
