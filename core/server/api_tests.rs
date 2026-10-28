@@ -255,6 +255,143 @@ async fn meeting_creation_defaults_and_rejects_invalid_titles() {
     );
 }
 
+/// Verifies `PATCH /api/meetings/{id}` renames a meeting, returns its summary with the trimmed
+/// title, and `GET` then shows the new title.
+#[tokio::test]
+async fn patch_meeting_renames_it() {
+    let router = seeded_router().0;
+
+    let (rename_status, renamed_meeting) = send_json(
+        &router,
+        "PATCH",
+        "/api/meetings/meeting-rome",
+        Some(r#"{"title":"  Rome offsite  "}"#),
+    )
+    .await;
+    assert_eq!(rename_status, StatusCode::OK, "{renamed_meeting}");
+    assert_eq!(renamed_meeting["meeting_id"], "meeting-rome");
+    assert_eq!(renamed_meeting["title"], "Rome offsite");
+    assert!(
+        renamed_meeting["created_at"].is_string(),
+        "{renamed_meeting}"
+    );
+
+    let (detail_status, meeting_detail) =
+        send_json(&router, "GET", "/api/meetings/meeting-rome", None).await;
+    assert_eq!(detail_status, StatusCode::OK);
+    assert_eq!(meeting_detail["title"], "Rome offsite");
+}
+
+/// Verifies renaming an unknown meeting returns `404` with a JSON error and creates nothing.
+#[tokio::test]
+async fn patch_unknown_meeting_returns_not_found() {
+    let router = seeded_router().0;
+
+    let (status, error_body) = send_json(
+        &router,
+        "PATCH",
+        "/api/meetings/missing-meeting",
+        Some(r#"{"title":"Orphan"}"#),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND, "{error_body}");
+    assert!(
+        error_body["error"]
+            .as_str()
+            .is_some_and(|message| message.contains("missing-meeting")),
+        "{error_body}"
+    );
+    let (_, listed_meetings) = send_json(&router, "GET", "/api/meetings", None).await;
+    assert_eq!(
+        listed_meetings.as_array().map(Vec::len),
+        Some(1),
+        "{listed_meetings}"
+    );
+}
+
+/// Verifies invalid titles return `400` with a JSON error, malformed bodies a client error, and
+/// neither changes the stored title.
+#[tokio::test]
+async fn patch_meeting_rejects_invalid_titles() {
+    let router = seeded_router().0;
+    let (fixture_status, _) = send_json(
+        &router,
+        "PATCH",
+        "/api/meetings/meeting-rome",
+        Some(r#"{"title":"Original"}"#),
+    )
+    .await;
+    assert_eq!(fixture_status, StatusCode::OK);
+    let oversized_body = format!(r#"{{"title":"{}"}}"#, "x".repeat(201));
+
+    for invalid_body in [
+        r#"{"title":""}"#,
+        r#"{"title":"   "}"#,
+        r#"{"title":"line one\nline two"}"#,
+        r#"{"title":"a\u0007b"}"#,
+        oversized_body.as_str(),
+    ] {
+        let (status, error_body) = send_json(
+            &router,
+            "PATCH",
+            "/api/meetings/meeting-rome",
+            Some(invalid_body),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{invalid_body}");
+        assert!(
+            error_body["error"]
+                .as_str()
+                .is_some_and(|message| message.contains("meeting title")),
+            "{invalid_body} returned {error_body}"
+        );
+    }
+    for malformed_body in ["{}", r#"{"title":7}"#, r#"{"title":"x","extra":1}"#] {
+        let (status, _) = send_json(
+            &router,
+            "PATCH",
+            "/api/meetings/meeting-rome",
+            Some(malformed_body),
+        )
+        .await;
+        assert!(
+            status.is_client_error(),
+            "{malformed_body} returned {status}"
+        );
+    }
+
+    let (_, meeting_detail) = send_json(&router, "GET", "/api/meetings/meeting-rome", None).await;
+    assert_eq!(meeting_detail["title"], "Original");
+}
+
+/// Verifies the local web UI's CORS preflight is allowed to send `PATCH`.
+#[tokio::test]
+async fn cors_preflight_allows_patch_from_the_web_ui() {
+    let response = seeded_router()
+        .0
+        .oneshot(
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/api/meetings/meeting-rome")
+                .header("origin", "http://localhost:3000")
+                .header("access-control-request-method", "PATCH")
+                .header("access-control-request-headers", "content-type")
+                .body(Body::empty())
+                .unwrap_or_else(|error| panic!("test request must build: {error}")),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("router must serve the test request: {error}"));
+
+    let allowed_methods = response
+        .headers()
+        .get("access-control-allow-methods")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    assert!(allowed_methods.contains("PATCH"), "{allowed_methods:?}");
+}
+
 /// Verifies meeting detail exposes transcript and linked attachment metadata through ports.
 #[tokio::test]
 async fn meeting_detail_returns_transcript_and_linked_attachments() {

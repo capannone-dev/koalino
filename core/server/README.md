@@ -21,6 +21,10 @@ separately authenticated reverse proxy is configured. CORS permits only `http://
 - `POST /api/meetings` accepts `{"title":"..."}` or `{}` and returns `201` with the new
   meeting's summary (generated `meeting-<uuid>` ID). An invalid title returns `400` and creates
   nothing. A malformed body gets axum's `4xx`.
+- `PATCH /api/meetings/{meeting_id}` accepts `{"title":"..."}` and returns `200` with the
+  renamed meeting's summary, `400` with `{"error":"..."}` for an invalid title (nothing is
+  written), and `404` for an unknown meeting (Issue #38). It calls
+  `application::meeting_rename`, the same use case as the CLI and FFI. CORS allows `PATCH`.
 - `GET /api/meetings/{meeting_id}` returns `meeting_id`, `title`, `created_at`, nullable
   `transcript`, and linked
   attachment metadata (`attachment_id`, `file_path`, `mime_type`, `original_timestamp_utc`). It

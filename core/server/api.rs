@@ -28,6 +28,7 @@ use crate::{
         },
         export_manager::{ExportManager, ExportWriter},
         meeting_crdt::MeetingCrdtService,
+        meeting_rename::{MeetingRenameError, rename_meeting},
         unknown_speaker_clusterer::ClusteringError,
         voice_identity_manager::VoiceIdentityManager,
     },
@@ -119,7 +120,10 @@ pub enum WebSocketEvent {
 pub fn build_router(application_state: ServerAppState) -> Router {
     Router::new()
         .route("/api/meetings", get(list_meetings).post(create_meeting))
-        .route("/api/meetings/{meeting_id}", get(get_meeting))
+        .route(
+            "/api/meetings/{meeting_id}",
+            get(get_meeting).patch(rename_meeting_title),
+        )
         .route("/api/meetings/{meeting_id}/export", post(export_meeting))
         .route(
             "/api/meetings/{meeting_id}/unknown-clusters",
@@ -139,7 +143,11 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .layer(
             CorsLayer::new()
                 .allow_origin(HeaderValue::from_static("http://localhost:3000"))
-                .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+                .allow_methods([
+                    axum::http::Method::GET,
+                    axum::http::Method::POST,
+                    axum::http::Method::PATCH,
+                ])
                 .allow_headers([header::CONTENT_TYPE])
                 .expose_headers([header::CONTENT_DISPOSITION]),
         )
@@ -242,6 +250,58 @@ async fn get_meeting(
     }))
 }
 
+/// Request body for `PATCH /api/meetings/{meeting_id}`; `title` is required.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RenameMeetingRequest {
+    title: String,
+}
+
+/// Renames one meeting through the shared meeting-rename use case.
+///
+/// Inputs: The meeting ID path segment and a `{"title": "…"}` JSON body.
+/// Outputs: `200` with the meeting summary (`meeting_id`, the trimmed `title`, `created_at`);
+/// `400` for a blank, over-200-character, or control-character title; `404` for an unknown
+/// meeting; `500` for storage failures. Errors are `{"error": "…"}`. A malformed body (missing
+/// `title`, wrong type, unknown field) gets axum's `4xx`.
+/// Side effects: Replaces the title in SQLite under the repository lock; validation happens
+/// first, so a rejected title writes nothing. The title is never logged.
+async fn rename_meeting_title(
+    Path(meeting_identifier): Path<String>,
+    State(application_state): State<ServerAppState>,
+    Json(rename_request): Json<RenameMeetingRequest>,
+) -> Response {
+    tracing::info!(endpoint = "PATCH /api/meetings/:meeting_id", meeting_id = %meeting_identifier, "headless API request received");
+    let meeting_id = MeetingId::new(meeting_identifier);
+    let repositories = application_state.repositories.lock().await;
+    let rename_result = rename_meeting(&**repositories, &meeting_id, &rename_request.title)
+        .and_then(|_| {
+            repositories
+                .load_meeting_metadata(&meeting_id)
+                .map_err(MeetingRenameError::from)
+        });
+    let (status_code, error) = match rename_result {
+        Ok(Some(meeting_metadata)) => {
+            return Json(MeetingSummary::from(&meeting_metadata)).into_response();
+        }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            MeetingRenameError::MeetingNotFound { meeting_id }.to_string(),
+        ),
+        Err(error @ MeetingRenameError::InvalidTitle(_)) => {
+            (StatusCode::BAD_REQUEST, error.to_string())
+        }
+        Err(error @ MeetingRenameError::MeetingNotFound { .. }) => {
+            (StatusCode::NOT_FOUND, error.to_string())
+        }
+        Err(MeetingRenameError::Storage(storage_error)) => (
+            storage_error_status(storage_error),
+            String::from("unable to rename the meeting"),
+        ),
+    };
+    (status_code, Json(ExportErrorBody { error })).into_response()
+}
+
 /// Request body for `POST /api/meetings/{meeting_id}/export`.
 #[derive(Deserialize)]
 struct ExportRequestBody {
@@ -259,7 +319,7 @@ struct ExportRequestOptions {
     include_metadata: Option<bool>,
 }
 
-/// JSON error body returned by the export and unknown-speaker cluster endpoints.
+/// JSON error body returned by the export, rename, and unknown-speaker cluster endpoints.
 #[derive(Serialize)]
 struct ExportErrorBody {
     error: String,
