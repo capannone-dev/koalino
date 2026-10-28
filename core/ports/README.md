@@ -25,6 +25,9 @@ persistent adapter may reject variants for identities that were never saved.
 at rest and keep the first stored value, so concurrent first starts agree (Issue #43).
 `TrustedPeerStore` in the same file holds the allowlist of paired devices: `trust_peer` (an upsert),
 `revoke_peer`, `trusted_peers`, and `is_trusted`.
+`PairingTransport` and `PairingEvent` (in the same file) are the network side of pairing:
+admission (a pairing window, nearby unpaired devices, trust and revoke) and the
+request/answer exchange.
 
 `EmbeddingCipher` (`crypto.rs`) seals and opens embeddings for a named row context. It also seals
 arbitrary secrets (`seal_secret`/`open_secret`), such as the P2P node key. Storage

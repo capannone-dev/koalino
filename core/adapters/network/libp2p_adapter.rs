@@ -1,7 +1,7 @@
 //! Builds and drives a Noise-encrypted libp2p swarm while exposing only portable P2P port values.
 
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     io,
 };
 
@@ -148,12 +148,13 @@ impl request_response::Codec for SyncPayloadCodec {
 use crate::{
     adapters::network::{
         file_transfer_behaviour::{self, FileTransferRequestPayload, FileTransferResponsePayload},
+        pairing_behaviour::{PairingCodec, PairingRequest, PairingResponse, new_pairing_behaviour},
         peer_gate::PeerGate,
     },
-    domain::{errors::NetworkError, models::DeviceId},
+    domain::{errors::NetworkError, models::DeviceId, peer_trust::DeviceName},
     ports::{
         network::{NetworkEvent, P2pNetwork, PeerDiscovery},
-        peer_trust::NodeIdentityStore,
+        peer_trust::{NodeIdentityStore, PairingEvent, PairingTransport},
     },
 };
 use zeroize::Zeroizing;
@@ -170,6 +171,8 @@ struct NoteTakerBehaviour {
     sync_payloads: request_response::Behaviour<SyncPayloadCodec>,
     /// Carries attachment-only frames and never CRDT sync bytes.
     file_transfers: request_response::Behaviour<file_transfer_behaviour::FileTransferCodec>,
+    /// Carries the pairing exchange, the only protocol an unpaired peer may use.
+    pairing: request_response::Behaviour<PairingCodec>,
 }
 
 /// Normalizes individual behaviour events for the swarm event loop.
@@ -181,6 +184,15 @@ enum NoteTakerBehaviourEvent {
     SyncPayload(request_response::Event<Vec<u8>, Vec<u8>>),
     /// Carries a message on the independently negotiated attachment protocol.
     FileTransfer(request_response::Event<FileTransferRequestPayload, FileTransferResponsePayload>),
+    /// Carries a pairing request, answer, or failure.
+    Pairing(request_response::Event<PairingRequest, PairingResponse>),
+}
+
+impl From<request_response::Event<PairingRequest, PairingResponse>> for NoteTakerBehaviourEvent {
+    /// Wraps a pairing-protocol event.
+    fn from(pairing_event: request_response::Event<PairingRequest, PairingResponse>) -> Self {
+        Self::Pairing(pairing_event)
+    }
 }
 
 impl From<std::convert::Infallible> for NoteTakerBehaviourEvent {
@@ -288,6 +300,10 @@ pub struct Libp2pNetworkAdapter {
     pending_file_transfer_payloads: VecDeque<Vec<u8>>,
     /// Unpaired peers advertising themselves on the LAN, offered as pairing candidates.
     nearby_unpaired_peer_ids: HashSet<DeviceId>,
+    /// Pairing requests awaiting the owner's answer, by requesting peer.
+    pending_pairing_answers: HashMap<PeerId, request_response::ResponseChannel<PairingResponse>>,
+    /// Pairing events not yet taken by the application.
+    pending_pairing_events: VecDeque<PairingEvent>,
 }
 
 impl Libp2pNetworkAdapter {
@@ -318,6 +334,7 @@ impl Libp2pNetworkAdapter {
                     )?)),
                     sync_payloads: Self::sync_payload_behaviour(),
                     file_transfers: file_transfer_behaviour::new_file_transfer_behaviour(),
+                    pairing: new_pairing_behaviour(),
                 })
             })
             .map_err(|error| NetworkError::SecurityPolicy {
@@ -331,6 +348,8 @@ impl Libp2pNetworkAdapter {
             pending_network_events: VecDeque::new(),
             pending_file_transfer_payloads: VecDeque::new(),
             nearby_unpaired_peer_ids: HashSet::new(),
+            pending_pairing_answers: HashMap::new(),
+            pending_pairing_events: VecDeque::new(),
         })
     }
 
@@ -426,6 +445,9 @@ impl Libp2pNetworkAdapter {
                 NoteTakerBehaviourEvent::FileTransfer(file_transfer_event) => {
                     self.translate_file_transfer_event(file_transfer_event);
                 }
+                NoteTakerBehaviourEvent::Pairing(pairing_event) => {
+                    self.translate_pairing_event(pairing_event);
+                }
             }
         }
     }
@@ -508,6 +530,66 @@ impl Libp2pNetworkAdapter {
                 .behaviour_mut()
                 .file_transfers
                 .send_response(channel, FileTransferResponsePayload(Vec::new()));
+        }
+    }
+
+    /// Turns pairing-protocol traffic into `PairingEvent`s.
+    ///
+    /// Inputs: An event from the pairing behaviour.
+    /// Outputs: None.
+    /// Side effects: A request with a valid name is held until the owner answers. A request with an
+    /// invalid name is rejected at once. Answers and failures are queued as events.
+    fn translate_pairing_event(
+        &mut self,
+        pairing_event: request_response::Event<PairingRequest, PairingResponse>,
+    ) {
+        match pairing_event {
+            request_response::Event::Message {
+                peer,
+                message:
+                    request_response::Message::Request {
+                        request, channel, ..
+                    },
+                ..
+            } => match DeviceName::parse(&request.device_name) {
+                Ok(device_name) => {
+                    self.pending_pairing_answers.insert(peer, channel);
+                    self.pending_pairing_events
+                        .push_back(PairingEvent::Requested {
+                            peer_id: Self::device_id_from_peer_id(peer),
+                            device_name,
+                        });
+                }
+                Err(_) => {
+                    tracing::warn!("rejected a pairing request with an invalid device name");
+                    let _ = self
+                        .swarm
+                        .behaviour_mut()
+                        .pairing
+                        .send_response(channel, PairingResponse::new(None));
+                }
+            },
+            request_response::Event::Message {
+                peer,
+                message: request_response::Message::Response { response, .. },
+                ..
+            } => {
+                let accepted_as = response
+                    .accepted_as
+                    .as_deref()
+                    .and_then(|name| DeviceName::parse(name).ok());
+                self.pending_pairing_events
+                    .push_back(PairingEvent::Answered {
+                        peer_id: Self::device_id_from_peer_id(peer),
+                        accepted_as,
+                    });
+            }
+            request_response::Event::OutboundFailure { peer, .. } => {
+                self.pending_pairing_events.push_back(PairingEvent::Failed {
+                    peer_id: Self::device_id_from_peer_id(peer),
+                });
+            }
+            _ => {}
         }
     }
 
@@ -629,6 +711,7 @@ impl Libp2pNetworkAdapter {
                 mdns: Toggle::from(None),
                 sync_payloads: Self::sync_payload_behaviour(),
                 file_transfers: file_transfer_behaviour::new_file_transfer_behaviour(),
+                pairing: new_pairing_behaviour(),
             },
             local_peer_id,
             Config::with_tokio_executor(),
@@ -639,6 +722,8 @@ impl Libp2pNetworkAdapter {
             pending_network_events: VecDeque::new(),
             pending_file_transfer_payloads: VecDeque::new(),
             nearby_unpaired_peer_ids: HashSet::new(),
+            pending_pairing_answers: HashMap::new(),
+            pending_pairing_events: VecDeque::new(),
         })
     }
 
@@ -784,6 +869,74 @@ impl P2pNetwork for Libp2pNetworkAdapter {
     }
 }
 
+impl PairingTransport for Libp2pNetworkAdapter {
+    fn local_peer_id(&self) -> DeviceId {
+        Self::device_id_from_peer_id(*self.swarm.local_peer_id())
+    }
+
+    fn open_pairing_window(&mut self, duration: std::time::Duration) {
+        Libp2pNetworkAdapter::open_pairing_window(self, duration);
+    }
+
+    fn end_pairing(&mut self) {
+        self.pending_pairing_answers.clear();
+        Libp2pNetworkAdapter::end_pairing(self);
+    }
+
+    fn nearby_unpaired_peers(&self) -> Vec<DeviceId> {
+        Libp2pNetworkAdapter::nearby_unpaired_peers(self)
+    }
+
+    /// Allows the dial and sends the request; libp2p dials using addresses mDNS provided.
+    fn request_pairing(
+        &mut self,
+        peer_id: &DeviceId,
+        local_name: &DeviceName,
+    ) -> Result<(), NetworkError> {
+        let libp2p_peer_id = Self::peer_id_from_device_id(peer_id)?;
+        self.allow_pairing_dial(peer_id)?;
+        self.swarm
+            .behaviour_mut()
+            .pairing
+            .send_request(&libp2p_peer_id, PairingRequest::new(local_name.as_str()));
+        Ok(())
+    }
+
+    fn answer_pairing(
+        &mut self,
+        peer_id: &DeviceId,
+        accept_as: Option<&DeviceName>,
+    ) -> Result<(), NetworkError> {
+        let libp2p_peer_id = Self::peer_id_from_device_id(peer_id)?;
+        let channel = self
+            .pending_pairing_answers
+            .remove(&libp2p_peer_id)
+            .ok_or_else(|| NetworkError::SecurityPolicy {
+                reason: "no pairing request from this peer is pending".to_owned(),
+            })?;
+        self.swarm
+            .behaviour_mut()
+            .pairing
+            .send_response(
+                channel,
+                PairingResponse::new(accept_as.map(DeviceName::as_str)),
+            )
+            .map_err(|_| NetworkError::Disconnected)
+    }
+
+    fn trust_peer(&mut self, peer_id: &DeviceId) -> Result<(), NetworkError> {
+        Libp2pNetworkAdapter::trust_peer(self, peer_id)
+    }
+
+    fn revoke_peer(&mut self, peer_id: &DeviceId) -> Result<(), NetworkError> {
+        Libp2pNetworkAdapter::revoke_peer(self, peer_id)
+    }
+
+    fn poll_pairing_event(&mut self) -> Option<PairingEvent> {
+        self.pending_pairing_events.pop_front()
+    }
+}
+
 impl PeerDiscovery for Libp2pNetworkAdapter {
     /// Lists peers currently reachable through local mDNS discovery.
     ///
@@ -812,10 +965,10 @@ mod tests {
     use crate::{
         adapters::storage::sqlite_peer_store::SqlitePeerStore,
         application::crypto::voice_encryptor::ephemeral_cipher,
-        domain::errors::StorageError,
+        domain::{errors::StorageError, peer_trust::DeviceName},
         ports::{
             network::{NetworkEvent, P2pNetwork},
-            peer_trust::NodeIdentityStore,
+            peer_trust::{NodeIdentityStore, PairingEvent, PairingTransport},
         },
     };
 
@@ -993,6 +1146,132 @@ mod tests {
         .await;
 
         assert!(disconnected, "revocation must close the connection");
+    }
+
+    /// Returns a validated device name.
+    fn device_name(name: &str) -> DeviceName {
+        DeviceName::parse(name).unwrap_or_else(|error| panic!("valid name: {error}"))
+    }
+
+    /// Connects `initiator` to `responder` (which has a pairing window open) and sends a
+    /// pairing request, returning the request event the responder observed.
+    async fn deliver_pairing_request(
+        initiator: &mut Libp2pNetworkAdapter,
+        responder: &mut Libp2pNetworkAdapter,
+        address: Multiaddr,
+    ) -> PairingEvent {
+        let responder_id = responder.local_device_id();
+        responder.open_pairing_window(Duration::from_secs(60));
+        // In production mDNS supplies the address and libp2p dials on demand; memory transports
+        // have no discovery, so connect first.
+        initiator
+            .allow_pairing_dial(&responder_id)
+            .unwrap_or_else(|error| panic!("pairing dial must be allowed: {error}"));
+        initiator
+            .dial_memory(address)
+            .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+        assert!(
+            drive_until(
+                initiator,
+                responder,
+                Duration::from_secs(5),
+                |initiator, _| { initiator.is_connected_to(&responder_id) }
+            )
+            .await
+        );
+        PairingTransport::request_pairing(initiator, &responder_id, &device_name("Laptop"))
+            .unwrap_or_else(|error| panic!("request must be queued: {error}"));
+        let mut observed = None;
+        assert!(
+            drive_until(
+                initiator,
+                responder,
+                Duration::from_secs(5),
+                |_, responder| {
+                    observed = responder.poll_pairing_event();
+                    observed.is_some()
+                }
+            )
+            .await,
+            "the responder must receive the pairing request"
+        );
+        observed.unwrap_or_else(|| panic!("an event was observed"))
+    }
+
+    /// Request, owner acceptance, and answer travel between two unpaired nodes.
+    #[tokio::test]
+    async fn an_accepted_pairing_request_reaches_both_sides() {
+        let (mut initiator, mut responder, address) = listening_pair("/memory/9321");
+        let initiator_id = initiator.local_device_id();
+        let responder_id = responder.local_device_id();
+
+        let request = deliver_pairing_request(&mut initiator, &mut responder, address).await;
+        assert_eq!(
+            request,
+            PairingEvent::Requested {
+                peer_id: initiator_id.clone(),
+                device_name: device_name("Laptop"),
+            }
+        );
+        responder
+            .answer_pairing(&initiator_id, Some(&device_name("Phone")))
+            .unwrap_or_else(|error| panic!("answer must be sent: {error}"));
+        let mut answer = None;
+        assert!(
+            drive_until(
+                &mut initiator,
+                &mut responder,
+                Duration::from_secs(5),
+                |initiator, _| {
+                    answer = initiator.poll_pairing_event();
+                    answer.is_some()
+                }
+            )
+            .await
+        );
+
+        assert_eq!(
+            answer,
+            Some(PairingEvent::Answered {
+                peer_id: responder_id,
+                accepted_as: Some(device_name("Phone")),
+            })
+        );
+    }
+
+    /// A rejection arrives as an answer without a name, and a second answer is refused.
+    #[tokio::test]
+    async fn a_rejected_pairing_request_is_reported_and_cannot_be_answered_twice() {
+        let (mut initiator, mut responder, address) = listening_pair("/memory/9322");
+        let initiator_id = initiator.local_device_id();
+        let responder_id = responder.local_device_id();
+        deliver_pairing_request(&mut initiator, &mut responder, address).await;
+
+        responder
+            .answer_pairing(&initiator_id, None)
+            .unwrap_or_else(|error| panic!("rejection must be sent: {error}"));
+        let mut answer = None;
+        assert!(
+            drive_until(
+                &mut initiator,
+                &mut responder,
+                Duration::from_secs(5),
+                |initiator, _| {
+                    answer = initiator.poll_pairing_event();
+                    answer.is_some()
+                }
+            )
+            .await
+        );
+
+        assert_eq!(
+            answer,
+            Some(PairingEvent::Answered {
+                peer_id: responder_id,
+                accepted_as: None,
+            })
+        );
+        assert!(responder.answer_pairing(&initiator_id, None).is_err());
     }
 
     /// Loading the identity twice from one store yields the same peer ID, and an adapter built

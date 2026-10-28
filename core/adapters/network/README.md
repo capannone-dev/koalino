@@ -21,6 +21,19 @@ requests from untrusted peers, `send_encrypted` refuses an untrusted target, and
 and reported as `PeerDiscovered`. Untrusted ones are listed only by `nearby_unpaired_peers()`, as
 pairing candidates. The trusted set is loaded from `TrustedPeerStore` by the composition layer.
 
+`pairing_behaviour.rs` defines `/note-taker/pairing/1`, which carries version-1 JSON in 4 KiB
+length-prefixed frames. The initiator sends `PairingRequest { device_name }`. The responder replies
+`PairingResponse { accepted_as: Some(name) | None }` once its owner has compared the codes. The
+request timeout is two minutes, to leave time for that.
+
+The adapter implements `PairingTransport` as follows:
+
+- An incoming request with a valid name becomes `PairingEvent::Requested`, and its response
+  channel is held until `answer_pairing`. A request with an invalid name is rejected at once.
+- Answers and delivery failures become `Answered` or `Failed`.
+- Pairing events have their own queue, `poll_pairing_event`, separate from `NetworkEvent`.
+- The adapter only carries messages. Deciding when to trust a peer is the application's job.
+
 `libp2p_adapter.rs` builds the decentralized local-network transport: TCP secured with Noise,
 connections multiplexed with Yamux, and mDNS events for local peer discovery. Its private
 `/note-taker/sync-message/1` request-response behaviour frames bounded opaque `SyncMessage`
