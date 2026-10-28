@@ -19,6 +19,8 @@ Future<void> pumpHomeShell(WidgetTester tester, Size size) async {
             const Text('Meetings screen'),
         telemetryScreenBuilder: (BuildContext context) =>
             const Text('Telemetry screen'),
+        devicesScreenBuilder: (BuildContext context) =>
+            const Text('Devices screen'),
       ),
     ),
   );
@@ -39,6 +41,11 @@ void main() {
 
     expect(find.text('Meetings screen'), findsOneWidget);
     expect(find.text('Recording screen'), findsNothing);
+
+    await tester.tap(find.text('Devices'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Devices screen'), findsOneWidget);
   });
 
   testWidgets('a desktop window switches destinations with a navigation rail',

@@ -37,3 +37,14 @@ Meeting rename tests (Issue #41):
 
 `fake_meeting_bridge.dart` holds the shared fake and fixtures; it records rename requests and
 list loads, and can be told to fail a rename.
+
+Devices (Issue #43):
+
+- `p2p_bridge_test.dart` decodes the status, command answers, and errors, and builds the command
+  and configuration JSON.
+- `devices_controller_test.dart` covers each command, the refresh after it, the readable error
+  messages, 2 s polling, and the five-minute discoverable window (with `fake_async`).
+- `devices_screen_test.dart` covers the sections, the large and spoken codes, Accept and
+  Codes match, the waiting state, the confirmed removal, make discoverable, and sync off.
+
+`fake_p2p_bridge.dart` holds the scripted bridge and the `busyStatus` and `emptyStatus` fixtures.

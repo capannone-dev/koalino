@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 
-/// Hosts the Record, Meetings, and Telemetry destinations.
+/// Hosts the Record, Meetings, Telemetry, and Devices destinations.
 ///
 /// Phones get a bottom `NavigationBar`; windows at least `twoPaneBreakpoint` wide get a
 /// `NavigationRail`. Only the selected destination is built, so hidden screens neither poll
@@ -12,7 +12,7 @@ import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 final class HomeShell extends StatefulWidget {
   /// Creates the shell from one builder per destination.
   ///
-  /// Inputs: Builders for the recording, meeting list, and telemetry screens, supplied by the
+  /// Inputs: Builders for the recording, meeting list, telemetry, and devices screens, supplied by the
   /// composition root (tests pass placeholders).
   /// Outputs: The navigation shell, starting on Record.
   /// Side effects: None.
@@ -20,12 +20,14 @@ final class HomeShell extends StatefulWidget {
     required this.recordingScreenBuilder,
     required this.meetingsScreenBuilder,
     required this.telemetryScreenBuilder,
+    required this.devicesScreenBuilder,
     super.key,
   });
 
   final WidgetBuilder recordingScreenBuilder;
   final WidgetBuilder meetingsScreenBuilder;
   final WidgetBuilder telemetryScreenBuilder;
+  final WidgetBuilder devicesScreenBuilder;
 
   @override
   State<HomeShell> createState() => _HomeShellState();
@@ -49,6 +51,11 @@ final class _HomeShellState extends State<HomeShell> {
       selectedIcon: Icons.insights,
       label: 'Telemetry'
     ),
+    (
+      icon: Icons.devices_outlined,
+      selectedIcon: Icons.devices,
+      label: 'Devices'
+    ),
   ];
 
   void _selectDestination(int index) => setState(() => _selectedIndex = index);
@@ -61,6 +68,7 @@ final class _HomeShellState extends State<HomeShell> {
         builder: switch (_selectedIndex) {
           1 => widget.meetingsScreenBuilder,
           2 => widget.telemetryScreenBuilder,
+          3 => widget.devicesScreenBuilder,
           _ => widget.recordingScreenBuilder,
         },
       ),

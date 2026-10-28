@@ -31,3 +31,14 @@ frees each response with `note_taker_free_string` (Issue #36).
 both native strings, and maps non-zero statuses to `MeetingRenameException` through
 `meetingRenameExceptionFor` (1 invalid title, 2 storage, 3 runtime, 5 not found, other unknown)
 (Issue #41).
+
+`app_configuration.dart` runs first: `configureCore` passes the application-support directory
+(`<support>/note_taker`), the device name (the host name; "Android device" on Android), and
+`models/ggml-base.bin` when present to `note_taker_configure` on a background isolate. Android
+sets `keychain_enabled: false`, so the key file stays in the app-private `keys/` directory.
+`appConfigurationJson` builds the JSON and is unit-tested.
+
+`p2p_bridge.dart` defines `P2pStatus` and its rows, `P2pCommandResult`, and `P2pException` (with
+Rust's `error_code`), the pure decoders `decodeP2pStatus` and `decodeP2pCommandResult`, and
+`p2pCommandJson`. `RustP2pBridge` calls `note_taker_p2p_status` and `note_taker_p2p_command` on
+background isolates; a command blocks its isolate until the P2P task answers (Issue #43).

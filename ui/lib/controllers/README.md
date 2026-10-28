@@ -20,3 +20,9 @@ empty titles, titles over 200 Unicode characters, and control characters, with a
 `MeetingListController.renameMeeting` sends the trimmed title and, on success, replaces the
 summary in the list and the selected detail without reloading. It rethrows failures and reloads
 the list when the meeting no longer exists (Issue #41).
+
+`DevicesController` holds the P2P status and runs the pairing commands: make discoverable, pair,
+confirm codes, cancel, accept, reject, and remove. It refreshes after each success and maps Rust
+error codes to plain messages, keeping the last good status. It polls every 2 s while the Devices
+destination is shown. `discoverable` is true for the five-minute pairing window, measured with
+`package:clock`, so tests can fake time without leaving a timer pending (Issue #43).

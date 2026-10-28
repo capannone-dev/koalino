@@ -1,0 +1,151 @@
+// Owns the Devices screen's state: the P2P status, pairing commands, and readable errors
+// (Issue #43). Widgets call it; it is the only caller of `P2pBridge`.
+
+import 'dart:async';
+
+import 'package:clock/clock.dart';
+import 'package:flutter/foundation.dart';
+import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
+
+/// How long `make_pairable` keeps this device open to pairing requests; matches Rust's window.
+const Duration pairingWindow = Duration(minutes: 5);
+
+/// How often the open Devices screen re-reads the status, so codes and requests appear quickly.
+const Duration devicesPollInterval = Duration(seconds: 2);
+
+/// Loads the P2P status and runs the owner's pairing actions.
+final class DevicesController extends ChangeNotifier {
+  /// Creates a controller over `p2pBridge`; nothing loads until `refresh` or `startPolling`.
+  DevicesController({required P2pBridge p2pBridge}) : _bridge = p2pBridge;
+
+  final P2pBridge _bridge;
+
+  /// The last status read; kept when a later read fails.
+  P2pStatus? status;
+
+  /// A message safe to show, or `null`; never contains Rust's error text.
+  String? errorMessage;
+
+  /// Repeats `refresh` while the screen is shown.
+  Timer? _pollTimer;
+
+  /// When the current pairing window closes, or `null` when it is not open.
+  DateTime? _discoverableUntil;
+
+  /// Set by `dispose`, so late answers do not notify a dead controller.
+  bool _disposed = false;
+
+  /// Whether this device accepts pairing requests right now.
+  bool get discoverable {
+    final DateTime? until = _discoverableUntil;
+    return until != null && clock.now().isBefore(until);
+  }
+
+  /// Reads the status.
+  ///
+  /// Outputs: Completes when the status or the error is stored.
+  /// Side effects: Calls the bridge; clears `errorMessage` on success, sets it on failure while
+  /// keeping the previous status; notifies listeners.
+  Future<void> refresh() async {
+    try {
+      final P2pStatus latest = await _bridge.getStatus();
+      status = latest;
+      errorMessage = null;
+    } on Object {
+      errorMessage = 'Unable to load devices';
+    }
+    _notify();
+  }
+
+  /// Starts refreshing now and every `devicesPollInterval` until `stopPolling`.
+  ///
+  /// Side effects: Starts a periodic timer; replaces one already running.
+  void startPolling() {
+    _pollTimer?.cancel();
+    unawaited(refresh());
+    _pollTimer =
+        Timer.periodic(devicesPollInterval, (_) => unawaited(refresh()));
+  }
+
+  /// Stops the timer started by `startPolling`.
+  void stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  /// Opens this device to pairing requests for `pairingWindow`.
+  ///
+  /// Side effects: Sends `make_pairable`; on success records the window's end and refreshes.
+  Future<void> makeDiscoverable() async {
+    if (await _run('make_pairable')) {
+      _discoverableUntil = clock.now().add(pairingWindow);
+      await refresh();
+    }
+  }
+
+  /// Asks the nearby device `peerId` to pair; both devices then show a code.
+  Future<void> startPairing(String peerId) =>
+      _runAndRefresh('start_pairing', peerId);
+
+  /// Confirms that the code shown for the outgoing pairing with `peerId` matches.
+  Future<void> confirmCode(String peerId) =>
+      _runAndRefresh('confirm_code', peerId);
+
+  /// Abandons the outgoing pairing with `peerId`.
+  Future<void> cancelPairing(String peerId) =>
+      _runAndRefresh('cancel_pairing', peerId);
+
+  /// Accepts the incoming request from `peerId` after the owner compared codes.
+  Future<void> acceptRequest(String peerId) =>
+      _runAndRefresh('accept_request', peerId);
+
+  /// Rejects the incoming request from `peerId`.
+  Future<void> rejectRequest(String peerId) =>
+      _runAndRefresh('reject_request', peerId);
+
+  /// Removes the paired device `peerId`; it stops syncing with this device.
+  Future<void> removeDevice(String peerId) => _runAndRefresh('revoke', peerId);
+
+  /// Runs a peer command and refreshes when it succeeds.
+  Future<void> _runAndRefresh(String command, String peerId) async {
+    if (await _run(command, peerId: peerId)) {
+      await refresh();
+    }
+  }
+
+  /// Runs `command`, storing a readable message when it fails.
+  ///
+  /// Outputs: Whether the command succeeded.
+  /// Side effects: Calls the bridge; on failure sets `errorMessage`, keeps the status, and
+  /// notifies listeners.
+  Future<bool> _run(String command, {String? peerId}) async {
+    try {
+      await _bridge.runCommand(command, peerId: peerId);
+      return true;
+    } on P2pException catch (error) {
+      errorMessage = switch (error.errorCode) {
+        'refused' => 'The other device is no longer pairing. Try again.',
+        'unavailable' => 'Device sync is not running.',
+        _ => 'That did not work. Try again.',
+      };
+    } on Object {
+      errorMessage = 'That did not work. Try again.';
+    }
+    _notify();
+    return false;
+  }
+
+  /// Notifies listeners unless disposed.
+  void _notify() {
+    if (!_disposed) {
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    stopPolling();
+    super.dispose();
+  }
+}

@@ -3,25 +3,33 @@
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/attachment_controller.dart';
+import 'package:note_taker_ui/controllers/devices_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
+import 'package:note_taker_ui/infrastructure/app_configuration.dart';
 import 'package:note_taker_ui/infrastructure/attachment_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 import 'package:note_taker_ui/infrastructure/telemetry_bridge.dart';
 import 'package:note_taker_ui/presentation/attachment_import_screen.dart';
+import 'package:note_taker_ui/presentation/devices_screen.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 import 'package:note_taker_ui/presentation/recording_screen.dart';
 import 'package:note_taker_ui/presentation/telemetry_dashboard_screen.dart';
 
-/// Starts the Material 3 application using the production Rust recording bridge.
+/// Configures the Rust core, then starts the Material 3 application over the Rust bridges.
 ///
-/// Inputs: Reads the platform dynamic-library configuration through `RustRecordingBridge`.
+/// Inputs: The platform's application-support directory, from `configureCore`.
 /// Outputs: None; Flutter owns the process event loop after this function returns.
-/// Side effects: Opens the Rust shared library and renders the application window.
-void main() {
+/// Side effects: Creates the app's data directory, opens the Rust shared library, stores its
+/// settings before any other native call, and renders the application window.
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // A non-zero status leaves the core on its defaults; the screens then report their own errors.
+  await configureCore();
   final RecordingController recordingController = RecordingController(
     recordingBridge: RustRecordingBridge(),
   );
@@ -57,6 +65,8 @@ final class NoteTakerApp extends StatelessWidget {
             const _MeetingsDestination(),
         telemetryScreenBuilder: (BuildContext context) =>
             const _TelemetryDestination(),
+        devicesScreenBuilder: (BuildContext context) =>
+            const _DevicesDestination(),
       ),
     );
   }
@@ -117,4 +127,33 @@ final class _TelemetryDestinationState extends State<_TelemetryDestination> {
   @override
   Widget build(BuildContext context) =>
       TelemetryDashboardScreen(controller: _controller);
+}
+
+/// Owns a devices controller and polls only while the Devices destination is shown.
+final class _DevicesDestination extends StatefulWidget {
+  const _DevicesDestination();
+
+  @override
+  State<_DevicesDestination> createState() => _DevicesDestinationState();
+}
+
+/// Creates the controller, starts polling, and disposes both when the destination is left.
+final class _DevicesDestinationState extends State<_DevicesDestination> {
+  final DevicesController _controller =
+      DevicesController(p2pBridge: const RustP2pBridge());
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.startPolling();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => DevicesScreen(controller: _controller);
 }
