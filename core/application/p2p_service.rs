@@ -133,6 +133,12 @@ pub trait P2pControl: Send + Sync {
     /// Outputs: The outcome, `Refused` when the command failed, or `Stopped`.
     /// Side effects: Those of the command.
     async fn command(&self, command: P2pCommand) -> Result<P2pCommandOutcome, P2pControlError>;
+
+    /// Reports that `meeting_id` was just written locally, without waiting.
+    ///
+    /// Side effects: Queues a `LocalChange` for the task; a full queue is logged, and the change
+    /// then reaches peers at their next connection.
+    fn notify_local_change(&self, meeting_id: &MeetingId);
 }
 
 /// Pairing plus whole-repository sync over one shared transport.

@@ -228,6 +228,10 @@ impl P2pControl for P2pHandle {
             .map_err(|_| P2pControlError::Stopped)?
             .map_err(P2pControlError::Refused)
     }
+
+    fn notify_local_change(&self, meeting_id: &MeetingId) {
+        P2pHandle::notify_local_change(self, meeting_id);
+    }
 }
 
 /// The service type the task runs.

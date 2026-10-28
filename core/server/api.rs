@@ -115,6 +115,15 @@ impl ServerAppState {
     pub(super) fn p2p_control(&self) -> Option<Arc<dyn P2pControl>> {
         self.p2p_control.clone()
     }
+
+    /// Tells the P2P task, if any, that `meeting_id` was just written, so connected devices get it.
+    ///
+    /// Side effects: Queues a notification without waiting; nothing without P2P.
+    fn notify_local_change(&self, meeting_id: &MeetingId) {
+        if let Some(p2p_control) = &self.p2p_control {
+            p2p_control.notify_local_change(meeting_id);
+        }
+    }
 }
 
 /// Describes a real-time update safe to expose to the local web UI.
@@ -241,6 +250,7 @@ async fn create_meeting(
         .load_meeting_metadata(&meeting_id)
         .map_err(storage_error_status)?
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    application_state.notify_local_change(&meeting_id);
     Ok((
         StatusCode::CREATED,
         Json(MeetingSummary::from(&meeting_metadata)),
@@ -306,6 +316,7 @@ async fn rename_meeting_title(
         });
     let (status_code, error) = match rename_result {
         Ok(Some(meeting_metadata)) => {
+            application_state.notify_local_change(&meeting_id);
             return Json(MeetingSummary::from(&meeting_metadata)).into_response();
         }
         Ok(None) => (

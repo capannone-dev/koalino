@@ -23,7 +23,7 @@ use crate::{
         pairing_manager::{IncomingPairingRequest, OutgoingPairingStatus, PairingUpdate},
     },
     domain::{
-        models::DeviceId,
+        models::{DeviceId, MeetingId},
         peer_trust::{DeviceName, PairingCode, TrustedPeer},
     },
     server::api::{ServerAppState, build_router},
@@ -38,6 +38,8 @@ type Script = Box<dyn Fn(&P2pCommand) -> Result<P2pCommandOutcome, P2pControlErr
 /// Records commands and answers them from a script.
 struct FakeControl {
     commands: Mutex<Vec<P2pCommand>>,
+    /// Meetings reported through `notify_local_change`.
+    local_changes: Mutex<Vec<MeetingId>>,
     script: Script,
 }
 
@@ -54,6 +56,13 @@ impl P2pControl for FakeControl {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(command);
         outcome
+    }
+
+    fn notify_local_change(&self, meeting_id: &MeetingId) {
+        self.local_changes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(meeting_id.clone());
     }
 }
 
@@ -93,6 +102,7 @@ fn snapshot() -> P2pSnapshot {
 fn router_with(script: Script) -> (axum::Router, Arc<FakeControl>) {
     let control = Arc::new(FakeControl {
         commands: Mutex::new(Vec::new()),
+        local_changes: Mutex::new(Vec::new()),
         script,
     });
     let repository = SqliteNoteRepository::open_in_memory(ephemeral_cipher())
@@ -391,4 +401,53 @@ async fn cors_preflight_allows_delete_from_the_web_ui() {
         .unwrap_or_default()
         .to_owned();
     assert!(allowed_methods.contains("DELETE"), "{allowed_methods:?}");
+}
+
+/// Creating and renaming a meeting over HTTP report it to the P2P task, so connected devices get
+/// the change at once; a failed rename reports nothing.
+#[tokio::test]
+async fn meeting_writes_are_reported_to_the_p2p_task() {
+    let (router, control) = router();
+
+    let (created_code, created) = send(
+        router.clone(),
+        "POST",
+        "/api/meetings",
+        Some(r#"{"title":"Standup"}"#),
+    )
+    .await;
+    let meeting_id = created["meeting_id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the new meeting must have an ID: {created}"))
+        .to_owned();
+    let renamed = send(
+        router.clone(),
+        "PATCH",
+        &format!("/api/meetings/{meeting_id}"),
+        Some(r#"{"title":"Weekly standup"}"#),
+    )
+    .await;
+    let invalid = send(
+        router,
+        "PATCH",
+        &format!("/api/meetings/{meeting_id}"),
+        Some(r#"{"title":"   "}"#),
+    )
+    .await;
+
+    assert_eq!(created_code, StatusCode::CREATED);
+    assert_eq!(renamed.0, StatusCode::OK);
+    assert_eq!(invalid.0, StatusCode::BAD_REQUEST);
+    let local_changes = control
+        .local_changes
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    assert_eq!(
+        local_changes,
+        vec![
+            MeetingId::new(meeting_id.clone()),
+            MeetingId::new(meeting_id)
+        ]
+    );
 }
