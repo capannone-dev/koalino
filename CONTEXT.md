@@ -205,6 +205,15 @@ adapters call only the `EmbeddingCipher` port. `storage_composition::open_encryp
 verifies the key against the database's key-check value before opening the stores, and plaintext
 rows from older databases are re-encrypted on first open.
 
+Issue #40 moves the random key into the platform keychain. `KeyManager` takes an optional
+`KeychainStore` port, implemented by `adapters/keychain::PlatformKeychain` (`keyring` crate:
+macOS Keychain, Windows Credential Manager, Linux Secret Service over zbus; service `note-taker`,
+account `encryption-key`). `open_encrypted_stores` injects it unless a passphrase is set or
+`NOTE_TAKER_KEYCHAIN_ENABLED` is false. An existing key file is stored, read back, and deleted
+only on an exact match. An unavailable or failing keychain falls back to the key file with a
+logged warning or error. An encrypted database whose key is in neither place fails with
+`KeyMissing`. Tests use a mock keychain; composition test configs disable the real one.
+
 Issue #32 wires `MeetingSession` into the recording flow. `PipelineFactory` is the composition
 root: it owns the pipeline ports once, creates missing meetings, and degrades without diarization
 or a matcher. `RecordingManager` runs sessions on a worker thread with FIFO commands, so stop

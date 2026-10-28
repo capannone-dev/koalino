@@ -243,6 +243,8 @@ restarts and is reused by later assignments.
 
 `crypto/` (Issue #31) holds `VoiceEncryptor`, which seals embeddings with AES-256-GCM and
 implements the `EmbeddingCipher` port, and `KeyManager`, which resolves the key from
-`NOTE_TAKER_ENCRYPTION_PASSPHRASE` (Argon2id) or a random local key file and verifies it against
-the database's key-check value. Storage adapters receive the cipher through the port and never
+`NOTE_TAKER_ENCRYPTION_PASSPHRASE` (Argon2id) or a random key and verifies it against
+the database's key-check value. Since Issue #40 the random key lives in the platform keychain
+through the `KeychainStore` port, with automatic migration from, and fallback to, the local key
+file. Storage adapters receive the cipher through the port and never
 handle keys. The scheme and the key-storage tradeoff are documented in `crypto/README.md`.

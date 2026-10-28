@@ -295,7 +295,7 @@ impl FfiRuntime {
     /// Inputs: None; the portable 16 kHz mono capture format is fixed for this initial bridge.
     /// Outputs: A ready runtime or an audio configuration error encoded as a C status by callers.
     /// Side effects: Unlocks the embedding encryption key (`NOTE_TAKER_ENCRYPTION_PASSPHRASE`,
-    /// else the key file) and opens the note repository and the voice store on the same SQLite
+    /// else the platform keychain or key file) and opens the note repository and the voice store on the same SQLite
     /// file. The meeting pipeline is composed later, on the first recording start.
     fn new() -> Result<Self, c_int> {
         let database_path = env::var("NOTE_TAKER_DATABASE_PATH")

@@ -63,7 +63,7 @@ The application MUST be deployed across the following platforms, adhering to the
 ### 4.1 Networking & Security
 *   **P2P Topology:** The network MUST be strictly Peer-to-Peer. A node going offline MUST NOT block or crash other nodes.
 *   **Connectivity:** MUST work over local LAN (mDNS) and over the internet (NAT traversal/hole punching).
-*   **Encryption:** ALL communication between devices MUST be End-to-End Encrypted (E2EE). Voice signatures (biometric data) MUST be encrypted at rest. *Status: enabled (Issue #31). Every stored voice embedding is sealed with AES-256-GCM using a key derived with Argon2id from `NOTE_TAKER_ENCRYPTION_PASSPHRASE`, or else a random local key file; see `core/application/crypto/README.md`.*
+*   **Encryption:** ALL communication between devices MUST be End-to-End Encrypted (E2EE). Voice signatures (biometric data) MUST be encrypted at rest. *Status: enabled (Issue #31). Every stored voice embedding is sealed with AES-256-GCM using a key derived with Argon2id from `NOTE_TAKER_ENCRYPTION_PASSPHRASE`, or else a random key held in the platform keychain (Issue #40), falling back to a local key file; see `core/application/crypto/README.md`.*
 
 ### 4.2 Language Support
 *   The AI transcription and NLP models MUST be optimized for **Italian** and **English**.

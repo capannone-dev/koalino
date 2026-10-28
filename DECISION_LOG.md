@@ -739,3 +739,45 @@
   files are `sqlite_adapter.rs` and `core/server/api.rs`.
 - Follow-ups: a Dart binding and UI, web UI, and calling `notify_local_change` after a rename
   once `SyncManager` is composed.
+
+## 2026-10-28 — Issue #40 Platform keychain for the embedding key
+
+- Library: `keyring` 4.2 in `v1` mode, as the issue specified. It is the keyring-core rewrite,
+  with one store per platform. On Linux it uses the pure-Rust zbus Secret Service client, so no
+  `libdbus` headers or build scripts are needed. `keyring-core` (already transitive) is a direct
+  dependency for two reasons: Windows needs a `target` modifier to get the issue's
+  `note-taker:encryption-key` (the default would be `encryption-key.note-taker`), and its mock
+  credential lets the adapter tests avoid the real store.
+- Port, not a direct call: `KeychainStore` sits in `ports/crypto.rs`, and `KeyManager` takes it
+  through `with_keychain`. This keeps the platform library out of the application layer and lets
+  the migration logic be tested with an in-memory mock. `KeyManager::new` alone stays file-only,
+  so existing tests and callers cannot reach a real keychain by accident.
+- Key source unchanged: the database still records `key_file`. Keychain and file hold the same
+  random key, so moving it needs no metadata migration, and older binaries can still open a
+  database if the key is copied back to a file. Only the label changed, to "random key".
+- Migration safety: the key file is deleted only after the keychain returns the identical
+  32 bytes. Any store or read-back failure keeps the file and logs an error. A leftover file
+  identical to the entry (an interrupted migration) is removed. A different file is never
+  deleted, and both keys are tried against the key check. That case arises when a database was
+  created while the keychain was locked, so an existing entry and a new key file disagree.
+- Fallback levels: no store, failed initialization, and `PlatformFailure` count as "unavailable"
+  and log a warning (expected on headless servers). `NoStorageAccess` and malformed entries
+  count as access failures and log an error, as the issue asked. Both fall back to the file. A
+  corrupt (non-32-byte) entry is a hard error, because replacing it could orphan other databases.
+- No overwrite before deletion: the migrated file is unlinked, not shredded. Overwriting gives
+  no guarantee on SSDs or copy-on-write file systems, and the file had the same exposure before.
+- Residual race: two processes generating a brand-new key into an empty keychain at the same
+  moment can each store their own key. Writes are read back and the read-back value is adopted,
+  which narrows the window. There is no atomic create-if-absent in the keychain APIs.
+- Build impact: zbus's `zvariant_utils` links `proc-macro2`/`quote` into the target graph. That
+  gives their build-script runs the target profile and changes bindgen's hash, so
+  `make rust-lint` (`--all-features`) rebuilds whisper.cpp once and needs `cmake`. The
+  alternative backend (`dbus-secret-service`) would add a C library build instead.
+- Verification: `make rust-lint` and `make rust-test` pass. Two `--ignored` tests (binary round
+  trip, full migration) were run against GNOME Keyring under throwaway service names. A manual
+  CLI run on a scratch database checked migration (byte-identical, file deleted), a restart from
+  the keychain alone, and `KeyMissing`. The machine's keychain was left unchanged.
+- Follow-ups:
+  - macOS and Windows manual checks.
+  - iOS Keychain and Android Keystore support.
+  - A CLI command to export or re-key.

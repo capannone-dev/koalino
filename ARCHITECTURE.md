@@ -63,7 +63,11 @@
 ```text
  CLI / daemon / FFI ─▶ storage_composition::open_encrypted_stores
                         1 KeyManager.unlock(SqliteEncryptionMetadataStore)   passphrase → Argon2id
-                                                                             else ~/.note_taker/encryption.key
+                                                                             else random key:
+                                                                               KeychainStore (#40) ◀── adapters::keychain::PlatformKeychain
+                                                                                 macOS Keychain / Windows Credential Manager / Secret Service
+                                                                               migrate ~/.note_taker/encryption.key → keychain, then delete
+                                                                               keychain unavailable → key file fallback
                           verify key-check value (wrong key → stop)
                         2 SqliteNoteRepository / SqliteVoiceVectorDB (Arc<dyn EmbeddingCipher>)
                           re-encrypt embedding_format = 0 rows, then seal/open every embedding

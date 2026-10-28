@@ -70,8 +70,9 @@ failed bridge is logged and the daemon keeps running.
 
 `storage_composition.rs` (`open_encrypted_stores`) is shared by all three roots. It opens the
 `encryption_meta` record, unlocks and verifies the embedding key through `KeyManager`
-(`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, else the key file in `NOTE_TAKER_ENCRYPTION_KEY_DIR` or
-`~/.note_taker`), and only then opens `SqliteNoteRepository` and `SqliteVoiceVectorDB` with one
+(`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, else the random key in the platform keychain via
+`PlatformKeychain`, migrating or falling back to the key file in `NOTE_TAKER_ENCRYPTION_KEY_DIR`
+or `~/.note_taker`; `NOTE_TAKER_KEYCHAIN_ENABLED=false` skips the keychain), and only then opens `SqliteNoteRepository` and `SqliteVoiceVectorDB` with one
 shared cipher. A wrong key stops start-up with a readable error before any embedding is read.
 
 `daemon.rs` composes the headless Axum server from the encrypted `SqliteNoteRepository` and
