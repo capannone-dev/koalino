@@ -53,6 +53,12 @@ final class FakeRecordingBridge implements RecordingBridge {
   /// Counts the recording-start requests made through this bridge.
   int get startRecordingCallCount => requestedTitles.length;
 
+  /// The meeting `activeMeetingId` reports, like Rust while a recording runs.
+  String? recordingMeetingId;
+
+  @override
+  Future<String?> activeMeetingId() async => recordingMeetingId;
+
   @override
   Future<bool> setLogLevel(String filterDirective) async => true;
 

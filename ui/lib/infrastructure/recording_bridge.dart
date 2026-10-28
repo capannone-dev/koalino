@@ -60,6 +60,13 @@ abstract interface class RecordingBridge {
   /// Outputs: `true` when Rust accepted the filter; otherwise `false`.
   /// Side effects: Changes process logging verbosity for subsequent Rust events.
   Future<bool> setLogLevel(String filterDirective);
+
+  /// Reads which meeting the running recording writes into (Issue #52).
+  ///
+  /// Inputs: None.
+  /// Outputs: The meeting ID while a recording is active or paused, otherwise `null`.
+  /// Side effects: None beyond a read of Rust's recording state.
+  Future<String?> activeMeetingId();
 }
 
 /// Invokes the C-compatible Rust symbols used by the Flutter application.
@@ -143,6 +150,9 @@ final class RustRecordingBridge implements RecordingBridge {
     }
   }
 
+  @override
+  Future<String?> activeMeetingId() => Isolate.run(_readActiveMeetingId);
+
   /// Opens the platform-specific dynamic library produced by the Rust core crate.
   ///
   /// Inputs: Reads the current runtime platform.
@@ -171,6 +181,26 @@ Future<int> _runLifecycleCommand(String symbolName) =>
     Isolate.run(() => RustRecordingBridge._openCoreLibrary()
         .lookupFunction<_NativeLifecycleCommand, _DartLifecycleCommand>(
             symbolName)());
+
+/// Reads `note_taker_get_active_meeting_id`; runs inside an isolate.
+///
+/// Outputs: The meeting ID, or `null` when no recording is active.
+/// Side effects: Frees the Rust-owned string.
+String? _readActiveMeetingId() {
+  final DynamicLibrary coreLibrary = RustRecordingBridge._openCoreLibrary();
+  final Pointer<Utf8> meetingId =
+      coreLibrary.lookupFunction<_NativeStringQuery, _NativeStringQuery>(
+          'note_taker_get_active_meeting_id')();
+  if (meetingId == nullptr) {
+    return null;
+  }
+  try {
+    return meetingId.toDartString();
+  } finally {
+    coreLibrary.lookupFunction<_NativeFreeString, _DartFreeString>(
+        'note_taker_free_string')(meetingId);
+  }
+}
 
 /// Calls `note_taker_start_recording_with_title` with a null meeting ID on a background isolate.
 ///
@@ -229,3 +259,12 @@ RecordingStartOutcome startOutcomeOf(int status) => switch (status) {
         RecordingStartOutcome.microphoneUnavailable,
       _ => RecordingStartOutcome.failed,
     };
+
+/// Represents `char *note_taker_get_active_meeting_id(void)`.
+typedef _NativeStringQuery = Pointer<Utf8> Function();
+
+/// Represents `void note_taker_free_string(char *)`.
+typedef _NativeFreeString = Void Function(Pointer<Utf8> value);
+
+/// Represents the Dart callable form of `note_taker_free_string`.
+typedef _DartFreeString = void Function(Pointer<Utf8> value);

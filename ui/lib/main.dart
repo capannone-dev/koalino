@@ -13,6 +13,7 @@ import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/core_startup_controller.dart';
 import 'package:note_taker_ui/controllers/attachment_controller.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
+import 'package:note_taker_ui/controllers/live_transcript_controller.dart';
 import 'package:note_taker_ui/controllers/log_settings_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
@@ -56,10 +57,18 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // A non-zero status leaves the core on its defaults; the screens then report their own errors.
   await configureCore();
+  final RustRecordingBridge recordingBridge = RustRecordingBridge();
   final RecordingController recordingController = RecordingController(
-    recordingBridge: RustRecordingBridge(),
+    recordingBridge: recordingBridge,
     microphonePermission: platformMicrophonePermission(),
     recordingNotifier: platformRecordingNotifier(),
+  );
+  // Lives as long as the recording, so the transcript keeps growing on any destination.
+  final LiveTranscriptController liveTranscriptController =
+      LiveTranscriptController(
+    recordingController: recordingController,
+    recordingBridge: recordingBridge,
+    meetingBridge: const RustMeetingBridge(),
   );
   final CoreStartupController coreStartupController = CoreStartupController(
     // Android keeps the key in the Keystore and Kotlin hands it to Rust over JNI first;
@@ -78,6 +87,7 @@ Future<void> main() async {
       : null;
   runApp(NoteTakerApp(
     recordingController: recordingController,
+    liveTranscriptController: liveTranscriptController,
     coreStartupController: coreStartupController,
     appLockController: appLockController,
   ));
@@ -93,18 +103,21 @@ final class NoteTakerApp extends StatelessWidget {
   /// Inputs: `recordingController` is retained by the app for its lifetime, so an active
   /// recording survives switching destinations. `coreStartupController`, when given, holds the
   /// screens back until the Rust core is open (tests that fake every bridge omit it).
+  /// `liveTranscriptController`, when given, shows the transcript growing on the Record screen.
   /// `appLockController`, when given (Android), covers every screen while the app is locked
   /// and adds the App lock switch to Settings.
   /// Outputs: A configured Material application.
   /// Side effects: None.
   const NoteTakerApp({
     required this.recordingController,
+    this.liveTranscriptController,
     this.coreStartupController,
     this.appLockController,
     super.key,
   });
 
   final RecordingController recordingController;
+  final LiveTranscriptController? liveTranscriptController;
   final CoreStartupController? coreStartupController;
   final AppLockController? appLockController;
 
@@ -116,8 +129,10 @@ final class NoteTakerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Widget shell = HomeShell(
-      recordingScreenBuilder: (BuildContext context) =>
-          RecordingScreen(recordingController: recordingController),
+      recordingScreenBuilder: (BuildContext context) => RecordingScreen(
+        recordingController: recordingController,
+        liveTranscriptController: liveTranscriptController,
+      ),
       meetingsScreenBuilder: (BuildContext context) =>
           const _MeetingsDestination(),
       devicesScreenBuilder: (BuildContext context) =>

@@ -1,8 +1,11 @@
-// Renders the recording lifecycle and optional meeting title using Material 3 controls.
+// Renders the recording lifecycle and optional meeting title using Material 3 controls, and the
+// live transcript growing chunk by chunk while recording (Issue #52).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/live_transcript_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
+import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 
 /// Longest title Rust accepts, in characters (`MeetingTitle::MAX_CHARACTERS`).
 const int _maxMeetingTitleLength = 200;
@@ -10,16 +13,25 @@ const int _maxMeetingTitleLength = 200;
 /// Widest the title field and controls grow on desktop, in logical pixels.
 const double _maxContentWidth = 480;
 
+/// Tallest the live transcript grows before it scrolls, in logical pixels.
+const double _maxTranscriptHeight = 320;
+
 /// Displays recording state and an optional title field, delegating actions to a controller.
 final class RecordingScreen extends StatefulWidget {
   /// Creates a screen that observes `recordingController` for its displayable state.
   ///
-  /// Inputs: `recordingController` must outlive this widget or be disposed by its owner.
+  /// Inputs: `recordingController` must outlive this widget or be disposed by its owner;
+  /// `liveTranscriptController`, when given, adds the live transcript below the controls.
   /// Outputs: A Material 3 recording screen.
   /// Side effects: Registers an animated listener while the widget is mounted.
-  const RecordingScreen({required this.recordingController, super.key});
+  const RecordingScreen({
+    required this.recordingController,
+    this.liveTranscriptController,
+    super.key,
+  });
 
   final RecordingController recordingController;
+  final LiveTranscriptController? liveTranscriptController;
 
   @override
   State<RecordingScreen> createState() => _RecordingScreenState();
@@ -181,6 +193,9 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                             ),
                         ],
                       ),
+                      if (widget.liveTranscriptController
+                          case final LiveTranscriptController liveTranscript)
+                        _LiveTranscript(controller: liveTranscript),
                     ],
                   );
                 },
@@ -189,6 +204,126 @@ final class _RecordingScreenState extends State<RecordingScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The transcript of the meeting being recorded, newest line kept in view.
+final class _LiveTranscript extends StatefulWidget {
+  const _LiveTranscript({required this.controller});
+
+  final LiveTranscriptController controller;
+
+  @override
+  State<_LiveTranscript> createState() => _LiveTranscriptState();
+}
+
+/// Scrolls to the newest line whenever one arrives.
+final class _LiveTranscriptState extends State<_LiveTranscript> {
+  final ScrollController _scrollController = ScrollController();
+  int _shownSegmentCount = 0;
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// Scrolls to the end after the frame that added lines.
+  void _followNewestLine(int segmentCount) {
+    if (segmentCount == _shownSegmentCount) {
+      return;
+    }
+    _shownSegmentCount = segmentCount;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: widget.controller,
+        builder: (BuildContext context, Widget? child) {
+          final LiveTranscriptController controller = widget.controller;
+          if (!controller.isVisible) {
+            return const SizedBox.shrink();
+          }
+          final List<MeetingTranscriptSegment> segments = controller.segments;
+          _followNewestLine(segments.length);
+          final ThemeData theme = Theme.of(context);
+          return Padding(
+            padding: const EdgeInsets.only(top: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text('Live transcript', style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ConstrainedBox(
+                    constraints:
+                        const BoxConstraints(maxHeight: _maxTranscriptHeight),
+                    child: segments.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Text(
+                              'The transcript appears here a few seconds after '
+                              'each pause in speech.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant),
+                            ),
+                          )
+                        : ListView.separated(
+                            controller: _scrollController,
+                            shrinkWrap: true,
+                            padding: const EdgeInsets.all(16),
+                            itemCount: segments.length,
+                            separatorBuilder: (BuildContext context, int _) =>
+                                const SizedBox(height: 12),
+                            itemBuilder: (BuildContext context, int index) =>
+                                _TranscriptLine(segment: segments[index]),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      );
+}
+
+/// One line: its time, its speaker when one is known, and its text.
+final class _TranscriptLine extends StatelessWidget {
+  const _TranscriptLine({required this.segment});
+
+  final MeetingTranscriptSegment segment;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final TextStyle? labelStyle = theme.textTheme.labelMedium
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Text(formatMeetingDuration(segment.startTimeMs), style: labelStyle),
+            // Until diarization exists (#44) every line is Unattributed; the label adds nothing.
+            if (segment.speaker != 'Unattributed') ...<Widget>[
+              const SizedBox(width: 8),
+              Text(segment.speaker, style: labelStyle),
+            ],
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(segment.text, style: theme.textTheme.bodyLarge),
+      ],
     );
   }
 }
