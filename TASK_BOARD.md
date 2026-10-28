@@ -119,6 +119,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P1 | — | Embedding key in the iOS Keychain (Android Keystore done 2026-10-28); re-keying and passphrase change | 4.1 |
 | P1 | — | Run the #40 keychain checks on macOS and Windows hosts | 4.1 |
 | P2 | #48 | Flutter export binding and UI for `note_taker_export_meeting` (Markdown, PDF, JSON from the meeting's Export menu); done | 3.3.1 |
+| P1 | #53 | Telemetry recorded per transcribed chunk; Telemetry moved into Settings (app and web); done | 6 |
 | P2 | #49 | Local screen-share detection and slide screenshots outside Teams | 3.1 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |

@@ -1095,3 +1095,19 @@ continues while the window is minimized.
   `LogControl` port, so they are tested without the global subscriber; the daemon's control-file
   watcher applies `cli log-level` through the same `LiveLogControl`, so the page shows the level
   in effect.
+
+## 2026-10-28 — #53 Telemetry: recorded by the pipeline, shown under Settings
+
+- **Recorded where the work happens.** `MeetingSession` times transcription and diarization per
+  chunk and saves a row through an optional `TaskMetricsRecorder` (`MetricsRepository` port).
+  `ComputeRouter` stays as it is; routing live recordings through it would be a larger change
+  than the empty dashboard calls for. Failed tasks record nothing. A failed telemetry save is
+  logged and never fails the chunk.
+- **Labels are privacy-safe.** A local model is labelled by its file stem (`ggml-base`), never its
+  path, which can name the user and is visible to peers.
+- **Energy is an estimate.** Local whisper.cpp is CPU work at 5 W, the router's existing CPU
+  figure. Cloud transcription is 1 W, since the device mostly waits on the network. Neither is
+  measured.
+- **Placement (owner's request).** Telemetry is a page of Settings in the app and
+  `/settings/telemetry` on the web; `/dashboard` redirects there. The web home's duplicate
+  aggregate card was removed.
