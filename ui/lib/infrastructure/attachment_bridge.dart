@@ -2,6 +2,7 @@
 
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:file_picker/file_picker.dart';
@@ -53,6 +54,60 @@ abstract interface class AttachmentBridge {
   });
 }
 
+/// Calls `note_taker_process_attachment` on a background isolate.
+///
+/// Inputs: The selected file path.
+/// Outputs: The suggestion JSON, or `null` when Rust returned no response.
+/// Side effects: Rust reads the file's metadata and scores every meeting in SQLite (and the first
+/// native call unlocks the encryption key), so this must not run on the UI isolate. Frees both the
+/// argument and the Rust-owned response inside the isolate.
+Future<String?> _processAttachmentInIsolate(String filePath) => Isolate.run(() {
+      final DynamicLibrary coreLibrary =
+          RustAttachmentBridge._openCoreLibrary();
+      final _DartProcessAttachment processAttachment = coreLibrary
+          .lookupFunction<_NativeProcessAttachment, _DartProcessAttachment>(
+              'note_taker_process_attachment');
+      final _DartFreeString freeString =
+          coreLibrary.lookupFunction<_NativeFreeString, _DartFreeString>(
+              'note_taker_free_string');
+      final Pointer<Utf8> nativeFilePath = filePath.toNativeUtf8();
+      try {
+        final Pointer<Utf8> responsePointer = processAttachment(nativeFilePath);
+        if (responsePointer == nullptr) {
+          return null;
+        }
+        try {
+          return responsePointer.toDartString();
+        } finally {
+          freeString(responsePointer);
+        }
+      } finally {
+        calloc.free(nativeFilePath);
+      }
+    });
+
+/// Calls `note_taker_confirm_attachment_link` on a background isolate.
+///
+/// Inputs: The opaque attachment and meeting IDs. Outputs: The C status code.
+/// Side effects: Rust persists the link in SQLite; buffers are freed inside the isolate.
+Future<int> _confirmAttachmentLinkInIsolate(
+        String attachmentId, String meetingId) =>
+    Isolate.run(() {
+      final _DartConfirmAttachmentLink confirmAttachmentLink =
+          RustAttachmentBridge._openCoreLibrary().lookupFunction<
+              _NativeConfirmAttachmentLink,
+              _DartConfirmAttachmentLink>('note_taker_confirm_attachment_link');
+      final Pointer<Utf8> nativeAttachmentId = attachmentId.toNativeUtf8();
+      final Pointer<Utf8> nativeMeetingId = meetingId.toNativeUtf8();
+      try {
+        return confirmAttachmentLink(nativeAttachmentId, nativeMeetingId);
+      } finally {
+        calloc
+          ..free(nativeAttachmentId)
+          ..free(nativeMeetingId);
+      }
+    });
+
 /// Converts Dart attachment commands to the narrow Rust C ABI.
 final class RustAttachmentBridge implements AttachmentBridge {
   /// Resolves attachment symbols from `dynamicLibrary` or the platform core library.
@@ -60,24 +115,7 @@ final class RustAttachmentBridge implements AttachmentBridge {
   /// Inputs: `dynamicLibrary` supplies a test or embedded native library when present.
   /// Outputs: A ready adapter with no parsed Rust domain values.
   /// Side effects: Opens the configured Rust dynamic library when omitted.
-  RustAttachmentBridge({DynamicLibrary? dynamicLibrary})
-      : _dynamicLibrary = dynamicLibrary ?? _openCoreLibrary() {
-    _processAttachment = _dynamicLibrary.lookupFunction<
-        _NativeProcessAttachment,
-        _DartProcessAttachment>('note_taker_process_attachment');
-    _confirmAttachmentLink = _dynamicLibrary.lookupFunction<
-        _NativeConfirmAttachmentLink,
-        _DartConfirmAttachmentLink>('note_taker_confirm_attachment_link');
-    _freeString =
-        _dynamicLibrary.lookupFunction<_NativeFreeString, _DartFreeString>(
-      'note_taker_free_string',
-    );
-  }
-
-  final DynamicLibrary _dynamicLibrary;
-  late final _DartProcessAttachment _processAttachment;
-  late final _DartConfirmAttachmentLink _confirmAttachmentLink;
-  late final _DartFreeString _freeString;
+  RustAttachmentBridge();
 
   /// Loads FFI-owned suggestion JSON and promptly releases the native allocation.
   ///
@@ -86,20 +124,11 @@ final class RustAttachmentBridge implements AttachmentBridge {
   /// Side effects: Allocates short-lived UTF-8 buffers and calls the Rust core.
   @override
   Future<String> processAttachment(String filePath) async {
-    final Pointer<Utf8> nativeFilePath = filePath.toNativeUtf8();
-    try {
-      final Pointer<Utf8> responsePointer = _processAttachment(nativeFilePath);
-      if (responsePointer == nullptr) {
-        throw StateError('Rust could not process the selected attachment.');
-      }
-      try {
-        return responsePointer.toDartString();
-      } finally {
-        _freeString(responsePointer);
-      }
-    } finally {
-      calloc.free(nativeFilePath);
+    final String? responseJson = await _processAttachmentInIsolate(filePath);
+    if (responseJson == null) {
+      throw StateError('Rust could not process the selected attachment.');
     }
+    return responseJson;
   }
 
   /// Sends the selected opaque IDs to Rust without constructing Rust-domain values in Dart.
@@ -112,15 +141,8 @@ final class RustAttachmentBridge implements AttachmentBridge {
     required String attachmentId,
     required String meetingId,
   }) async {
-    final Pointer<Utf8> nativeAttachmentId = attachmentId.toNativeUtf8();
-    final Pointer<Utf8> nativeMeetingId = meetingId.toNativeUtf8();
-    try {
-      if (_confirmAttachmentLink(nativeAttachmentId, nativeMeetingId) != 0) {
-        throw StateError('Rust rejected the attachment link.');
-      }
-    } finally {
-      calloc.free(nativeAttachmentId);
-      calloc.free(nativeMeetingId);
+    if (await _confirmAttachmentLinkInIsolate(attachmentId, meetingId) != 0) {
+      throw StateError('Rust rejected the attachment link.');
     }
   }
 

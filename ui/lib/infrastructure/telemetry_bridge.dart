@@ -3,6 +3,8 @@
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:isolate';
+
 import 'package:ffi/ffi.dart';
 
 final class TelemetryDevice {
@@ -65,57 +67,92 @@ abstract interface class TelemetryBridge {
   Future<List<TelemetryMetric>> getDeviceTelemetry(String deviceId);
 }
 
+/// Reads telemetry from the Rust core through the C ABI.
+///
+/// Every native call runs on a background isolate, because each one reads SQLite (and the first
+/// one may unlock the encryption key), which would otherwise freeze the dashboard.
 final class RustTelemetryBridge implements TelemetryBridge {
-  RustTelemetryBridge({DynamicLibrary? library})
-      : _library = library ?? _open() {
-    _devices =
-        _library.lookupFunction<_NativeGet, _DartGet>('note_taker_get_devices');
-    _summary = _library.lookupFunction<_NativeGet, _DartGet>(
-        'note_taker_get_telemetry_summary');
-    _series = _library.lookupFunction<_NativeSeries, _DartSeries>(
-        'note_taker_get_device_telemetry');
-    _free = _library
-        .lookupFunction<_NativeFree, _DartFree>('note_taker_free_string');
-  }
-  final DynamicLibrary _library;
-  late final _DartGet _devices;
-  late final _DartGet _summary;
-  late final _DartSeries _series;
-  late final _DartFree _free;
-  String _read(Pointer<Utf8> value) {
-    if (value == nullptr) throw StateError('Rust telemetry is unavailable');
-    try {
-      return value.toDartString();
-    } finally {
-      _free(value);
-    }
-  }
+  /// Creates a bridge; the native library is opened lazily inside each worker isolate.
+  RustTelemetryBridge();
 
+  /// Lists the devices that have reported telemetry.
+  ///
+  /// Outputs: Devices as Rust lists them; throws `StateError` when Rust returns no response.
+  /// Side effects: Reads SQLite on a background isolate.
   @override
   Future<List<TelemetryDevice>> getDevices() async =>
-      (jsonDecode(_read(_devices())) as List)
+      (jsonDecode(await _readTelemetry('note_taker_get_devices', null)) as List)
           .map((Object? value) =>
               TelemetryDevice.fromJson((value! as Map).cast<String, Object?>()))
           .toList();
+
+  /// Loads the aggregate telemetry summary.
+  ///
+  /// Outputs: The summary; throws `StateError` when Rust returns no response.
+  /// Side effects: Reads SQLite on a background isolate.
   @override
-  Future<TelemetrySummary> getSummary() async => TelemetrySummary.fromJson(
-      (jsonDecode(_read(_summary())) as Map).cast<String, Object?>());
+  Future<TelemetrySummary> getSummary() async =>
+      TelemetrySummary.fromJson((jsonDecode(await _readTelemetry(
+              'note_taker_get_telemetry_summary', null)) as Map)
+          .cast<String, Object?>());
+
+  /// Loads the metric series recorded by `deviceId`.
+  ///
+  /// Inputs: A device ID from `getDevices`.
+  /// Outputs: The device's metrics; throws `StateError` when Rust returns no response.
+  /// Side effects: Reads SQLite on a background isolate.
   @override
-  Future<List<TelemetryMetric>> getDeviceTelemetry(String deviceId) async {
-    final Pointer<Utf8> input = deviceId.toNativeUtf8();
-    try {
-      return (jsonDecode(_read(_series(input))) as Map)['metrics']
-          .cast<Object?>()
+  Future<List<TelemetryMetric>> getDeviceTelemetry(String deviceId) async =>
+      ((jsonDecode(await _readTelemetry(
+                  'note_taker_get_device_telemetry', deviceId))
+              as Map)['metrics'] as List)
           .map((Object? value) =>
               TelemetryMetric.fromJson((value! as Map).cast<String, Object?>()))
           .toList();
-    } finally {
-      calloc.free(input);
-    }
-  }
 
+  /// Opens the platform's Rust core library.
   static DynamicLibrary _open() => DynamicLibrary.open(
       Platform.isWindows ? 'note_taker_core.dll' : 'libnote_taker_core.so');
+}
+
+/// Calls the telemetry export `symbol` on a background isolate and returns its JSON.
+///
+/// Inputs: The C symbol, and `argument` for the one export that takes a device ID (`null` for the
+/// argument-less ones).
+/// Outputs: The response JSON; throws `StateError` when Rust returns a null pointer.
+/// Side effects: Rust reads SQLite. The argument and the Rust-owned response are freed inside the
+/// isolate, because native pointers and `DynamicLibrary` handles can't cross isolates.
+Future<String> _readTelemetry(String symbol, String? argument) async {
+  final String? responseJson = await Isolate.run(() {
+    final DynamicLibrary coreLibrary = RustTelemetryBridge._open();
+    final _DartFree freeString = coreLibrary
+        .lookupFunction<_NativeFree, _DartFree>('note_taker_free_string');
+    final Pointer<Utf8> responsePointer;
+    if (argument == null) {
+      responsePointer =
+          coreLibrary.lookupFunction<_NativeGet, _DartGet>(symbol)();
+    } else {
+      final Pointer<Utf8> nativeArgument = argument.toNativeUtf8();
+      try {
+        responsePointer = coreLibrary
+            .lookupFunction<_NativeSeries, _DartSeries>(symbol)(nativeArgument);
+      } finally {
+        calloc.free(nativeArgument);
+      }
+    }
+    if (responsePointer == nullptr) {
+      return null;
+    }
+    try {
+      return responsePointer.toDartString();
+    } finally {
+      freeString(responsePointer);
+    }
+  });
+  if (responseJson == null) {
+    throw StateError('Rust telemetry is unavailable');
+  }
+  return responseJson;
 }
 
 typedef _NativeGet = Pointer<Utf8> Function();

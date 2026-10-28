@@ -8,6 +8,16 @@ domain structs are never represented in Dart or presented to widgets.
 `attachment_bridge.dart` wraps the standard `file_picker` plugin behind `AttachmentFilePicker` and
 maps its selected local path to the narrow Rust C ABI. Suggestions return as caller-freed JSON;
 the bridge deliberately leaves JSON parsing to `AttachmentController`.
+Both attachment calls run on a background isolate, because scoring reads every meeting from
+SQLite.
+
+`telemetry_bridge.dart` defines the telemetry DTOs and `RustTelemetryBridge`, which calls
+`note_taker_get_devices`, `note_taker_get_telemetry_summary`, and
+`note_taker_get_device_telemetry` on a background isolate and frees each response there.
+
+Rule for every bridge: no native call runs on the UI isolate. Each worker isolate opens the
+library and looks up its symbols itself, because `DynamicLibrary` handles and native pointers
+can't cross isolates; only Dart strings and ints come back.
 
 `RustRecordingBridge` binds start (also resume), pause, and stop, and runs each on a background
 isolate. `startRecordingWithTitle` calls `note_taker_start_recording_with_title`,
