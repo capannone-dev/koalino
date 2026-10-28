@@ -338,3 +338,19 @@ Issue #37 makes PDF exports Unicode-capable:
   - Emoji are monochrome.
   - Variable fallback fonts render at their default instance.
   - The macOS and Windows system font paths have not been tried on those platforms.
+
+Issue #41 adds meeting renaming to Flutter:
+
+- **Entry points:** the meeting list row's context menu (long-press, right-click, Shift+F10 or
+  the context-menu key, and a screen-reader custom action) and a pencil beside the detail title.
+  Both open `RenameMeetingDialog` (`ui/lib/presentation/rename_meeting_dialog.dart`).
+- **Validation:** `ui/lib/controllers/meeting_title_validation.dart` duplicates
+  `MeetingTitle::parse` (trim, non-empty, at most 200 Unicode characters, no category Cc
+  characters), so invalid titles never reach FFI. Keep the two in sync if the Rust rules change.
+- **Binding:** `RustMeetingBridge.renameMeeting` calls `note_taker_rename_meeting` in
+  `Isolate.run`. `meetingRenameExceptionFor` maps statuses 1/2/3/5 and unknown codes to
+  `MeetingRenameFailure`.
+- **State:** `MeetingListController.renameMeeting` updates the list and the selected detail in
+  place and reloads the list when the meeting is gone.
+- **Gaps:** a successful rename was not run through the real library (creating a meeting needs a
+  transcription engine), and there was no GUI run on a device.

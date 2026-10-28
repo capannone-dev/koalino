@@ -47,6 +47,28 @@ destinations. This replaces the earlier drawer, whose push used a context above 
   and turn Rust's `{"ok":false,...}` errors into a `StateError`. Controllers show generic
   messages, because Rust errors can contain storage paths.
 
+## Renaming meetings (Issue #41)
+
+- **Where:** in the meeting list, long-press a row (touch), right-click it (mouse), or press
+  Shift+F10 or the context-menu key on a focused row, then choose **Rename**. Screen readers get
+  the same **Rename** custom action. In the meeting detail, the pencil next to the title opens
+  the same dialog.
+- **Dialog:** `RenameMeetingDialog` is a Material 3 `AlertDialog` with the current title
+  pre-filled and selected. Enter saves and Escape or **Cancel** closes. The field is 400 px wide,
+  narrower on small phones. The counter counts Unicode characters, as Rust does.
+- **Validation:** `validateMeetingTitle` applies Rust's `MeetingTitle::parse` rules before any
+  FFI call: trim, then reject empty titles ("Enter a title."), titles over 200 Unicode
+  characters (an emoji counts once), and control characters (U+0000–U+001F, U+007F–U+009F).
+  Errors appear after the first Save and then update as the person types. Saving an unchanged
+  title just closes the dialog.
+- **Bridge:** `RustMeetingBridge.renameMeeting` calls `note_taker_rename_meeting` in
+  `Isolate.run` and maps non-zero statuses to `MeetingRenameException`: 1 `invalidTitle`, 2
+  `storageFailure`, 3 `runtimeUnavailable`, 5 `meetingNotFound`, any other `unknown`. The
+  dialog stays open and shows a plain message for each.
+- **State:** `MeetingListController.renameMeeting` updates the list row and the open detail in
+  place, without reloading, so the desktop two-pane layout updates both. A "Meeting renamed"
+  snack bar confirms. If the meeting was deleted meanwhile, the list reloads.
+
 ## Voice Gallery
 
 `VoiceGalleryScreen` renders `VoiceGalleryController` state for a meeting's unresolved

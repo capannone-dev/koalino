@@ -826,3 +826,27 @@
   - Instancing variable fonts at weight 400. Google's variable Noto Sans SC defaults to Thin.
   - Checks on macOS and Windows hosts.
   - A real bold for fallback scripts.
+
+## 2026-10-28 — Issue #41 Flutter meeting rename
+
+- Binding location: the issue named `ui/lib/ffi/note_taker_bindings.dart`, which does not exist.
+  The binding lives in `ui/lib/infrastructure/meeting_bridge.dart` with the other meeting FFI
+  calls, behind the `MeetingBridge` interface, so widget tests keep using the fake.
+- Errors: typed `MeetingRenameException` with a `MeetingRenameFailure` enum rather than
+  `StateError`, because the dialog needs a distinct message per status. Unknown codes map to
+  `unknown` instead of throwing a different type.
+- Validation duplicates Rust's rules in Dart so the dialog can explain errors without a native
+  call. Length counts runes (Unicode scalars), as Rust's `chars().count()` does, not grapheme
+  clusters. For the same reason the field shows a custom counter instead of `maxLength`, which
+  counts graphemes and would truncate input silently. Rust still validates, and status 1 is
+  handled.
+- Errors show after the first Save, then update live, so clearing the field to retype does not
+  flash an error.
+- Unchanged title: Save closes the dialog without calling Rust and shows no snack bar.
+- State: the controller patches the list and the selected detail in place instead of reloading.
+  It reloads only on `meetingNotFound`, so a meeting deleted elsewhere disappears.
+- Accessibility: beyond the issue's long-press and right-click, Shift+F10, the context-menu key,
+  and a "Rename" custom semantics action make the menu reachable without a pointer.
+- Verification: a Dart script against the real `cdylib` confirmed statuses 5 and 1 through the
+  isolate. A successful rename was not exercised natively, because creating a meeting requires a
+  transcription engine; the Rust FFI tests from #38 cover it.

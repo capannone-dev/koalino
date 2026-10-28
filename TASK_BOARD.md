@@ -48,6 +48,7 @@
 | #14 Attachment import UI, file picking, and meeting suggestion workflow | Ready for review | File-picker seam, JSON-only AttachmentManager FFI, Riverpod controller parsing, Material 3 ranked confirmation dialog, and fake-boundary widget tests. |
 | #25 Flutter telemetry dashboard | Ready for review | Caller-freed telemetry FFI JSON, polling controller, responsive Material 3 fl_chart dashboard, and drawer navigation. |
 | #36 Flutter meeting titles | Ready for review | Optional title field on the recording screen (blank → null) via `note_taker_start_recording_with_title`; `RustMeetingBridge` + JSON decoders for `note_taker_get_meetings`/`note_taker_get_meeting`, which now also return `duration_ms` and speaker `segments`; title-first meeting list (phone route, desktop list-detail ≥ 840 px) and bold headline detail header; adaptive `NavigationBar`/`NavigationRail` shell replacing the broken drawer. Verified with `make flutter-lint`/`flutter-test` (42 tests) and a Dart script against the real `cdylib`. Not verified: a GUI run on a device (no emulator, no `cmake`/`ninja`, no transcription engine). |
+| #41 Flutter meeting rename | Ready for review | `RustMeetingBridge.renameMeeting` binds `note_taker_rename_meeting` on a background isolate and maps statuses 1/2/3/5/other to `MeetingRenameException`; `validateMeetingTitle` mirrors `MeetingTitle::parse` (trim, non-empty, ≤ 200 Unicode characters, no control characters); shared Material 3 `RenameMeetingDialog` (pre-filled and selected, Enter saves, Escape cancels, per-status messages, snack bar); list context menu by long-press, right-click, Shift+F10/context-menu key, and a screen-reader action; pencil beside the detail title; in-place list and detail updates. Verified with `make flutter-lint`/`flutter-test` (77 tests) and a Dart script against the real `cdylib` (statuses 1 and 5). Not verified: a successful rename through the real library (no transcription engine to create a meeting) and a GUI run on a device. |
 
 ## WP11: Unknown-speaker clustering
 
@@ -114,7 +115,7 @@
 - Resolve segment speakers through the persisted voice-store names (#30), so exports can show them instead of `Unknown speaker`. (Meeting titles were added in #35.)
 - Compose `SyncManager` in the daemon/FFI with the libp2p adapter and call `notify_local_change` after local CRDT writes, including title changes.
 - PDF export (#37): color emoji, weight-400 instancing for variable fallback fonts, and a check of the macOS/Windows system font paths on those hosts.
-- Add a Dart binding and Flutter/web UI for meeting rename (`note_taker_rename_meeting`, `PATCH /api/meetings/{id}`).
+- Add a web UI for meeting rename (`PATCH /api/meetings/{id}`); the Flutter UI was added in #41.
 - Capture microphone PCM in Flutter and feed `note_taker_push_audio_pcm`, and add stop/pause controls; the recording screen still only starts recordings.
 - Add a Dart binding and UI for `note_taker_export_meeting`.
 

@@ -15,3 +15,8 @@ width-capped meeting title field. `MeetingListScreen` renders titles above their
 duration, and pushes `MeetingDetailScreen` on phones or shows `MeetingDetailView` beside the list
 on desktops. The detail view puts the title in a bold `headlineMedium` semantic header
 (Issue #36).
+
+`rename_meeting_dialog.dart` holds `RenameMeetingDialog` and `showRenameMeetingDialog`, shared by
+the list's context menu (long-press, right-click, Shift+F10, and a screen-reader action) and the
+detail's pencil button. It validates locally, maps Rust failures to plain messages, and confirms
+success with a snack bar (Issue #41).

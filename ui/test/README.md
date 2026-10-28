@@ -22,4 +22,18 @@ Meeting-title tests (Issue #36):
   header), the transcript, the fallback title, load errors, and the paperclip action.
 - `home_shell_test.dart` checks the adaptive navigation.
 
-`fake_meeting_bridge.dart` holds the shared fake and fixtures.
+Meeting rename tests (Issue #41):
+
+- `meeting_title_validation_test.dart` covers trimming, empty input, the 200-character limit
+  counted in Unicode characters, control characters, and CJK/emoji titles.
+- `meeting_list_controller_test.dart` covers in-place list and detail updates, rethrown
+  failures, and the reload after "meeting not found".
+- `meeting_bridge_test.dart` maps each rename status code to its failure.
+- `meeting_list_screen_test.dart` opens the menu by long-press, right-click, Shift+F10, and the
+  semantics action. It also covers validation errors, saving (button and Enter), unchanged
+  titles, Cancel and Escape, every Rust status message, the desktop detail pane, and dialog sizing.
+- `meeting_detail_screen_test.dart` covers the pencil's placement, the pre-filled dialog, and
+  success and failure.
+
+`fake_meeting_bridge.dart` holds the shared fake and fixtures; it records rename requests and
+list loads, and can be told to fail a rename.

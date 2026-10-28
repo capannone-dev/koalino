@@ -14,3 +14,9 @@ active title. `MeetingListController` owns the meeting list, the selected meetin
 their loading and error states. One controller serves both the desktop list-detail layout and
 the phone detail route, and it drops a detail response that arrives after a newer selection
 (Issue #36).
+
+`meeting_title_validation.dart` mirrors Rust's `MeetingTitle::parse`: it trims, then rejects
+empty titles, titles over 200 Unicode characters, and control characters, with a message for each.
+`MeetingListController.renameMeeting` sends the trimmed title and, on success, replaces the
+summary in the list and the selected detail without reloading. It rethrows failures and reloads
+the list when the meeting no longer exists (Issue #41).
