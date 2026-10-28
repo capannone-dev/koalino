@@ -156,6 +156,7 @@ fn loud_samples(duration_ms: usize) -> Vec<i16> {
 /// Builds `duration_ms` of synthetic speech: two tones at a syllable-rate envelope plus a little
 /// noise. WebRTC keeps classifying it as voice for many seconds, unlike a constant square wave,
 /// which its noise adaptation soon treats as background.
+#[cfg(feature = "vad")]
 fn speech_samples(duration_ms: usize) -> Vec<i16> {
     let mut noise_state: u32 = 12_345;
     (0..duration_ms * 16)
@@ -173,6 +174,7 @@ fn speech_samples(duration_ms: usize) -> Vec<i16> {
 }
 
 /// Frames WebRTC still reports as voice after speech stops (its hangover); measured as six.
+#[cfg(feature = "vad")]
 const VAD_HANGOVER_FRAMES: usize = 6;
 
 /// Pushes `samples` in one block.
