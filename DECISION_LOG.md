@@ -1111,3 +1111,23 @@ continues while the window is minimized.
 - **Placement (owner's request).** Telemetry is a page of Settings in the app and
   `/settings/telemetry` on the web; `/dashboard` redirects there. The web home's duplicate
   aggregate card was removed.
+
+## 2026-10-28 — #51/#52 Chunking: no overlap, short chunks, no prompt carry-over
+
+Each choice below was measured with the real ggml-base model: jfk.wav ×3 at four cut positions,
+and a 90 s Italian clip.
+- **No overlap.** A 1 s lookback was transcribed twice, and nothing could reliably remove the
+  repeated words. Text de-duplication would also delete genuine repetitions. A forced cut now
+  lands at the end of the quietest 30 ms frame in the last 3 s, so every sample is transcribed
+  exactly once.
+- **15 s at most.** This bounds how far the live transcript lags, in both modes (was 120 s with
+  VAD and 30 s without). With VAD, a pause ends a chunk only once it holds 3 s, which avoids
+  fragments Whisper handles poorly.
+- **Silent chunks are skipped.** Whisper invents text for silence. The timeline still advances.
+  Marker-only segments (`[BLANK_AUDIO]`) are dropped as well.
+- **No previous-text prompt.** With it, Whisper echoed the previous chunk's last phrase (2 of 4
+  runs) or garbled the boundary (2 of 4). Without it, all 4 runs were exact. The configured
+  language keeps chunks consistent.
+- **Live transcript by polling.** The app polls the active meeting's segments every 2 s
+  (existing FFI) instead of adding a push channel. Chunks arrive every few seconds, so polling
+  is enough and adds no new FFI surface.
