@@ -679,7 +679,7 @@ impl Libp2pNetworkAdapter {
     /// Outputs: An adapter that can listen and dial only through `MemoryTransport`.
     /// Side effects: Allocates an in-memory encrypted transport and no operating-system sockets.
     #[cfg(test)]
-    fn new_for_memory_transport() -> Result<Self, NetworkError> {
+    pub(crate) fn new_for_memory_transport() -> Result<Self, NetworkError> {
         Self::new_for_memory_transport_with(NodeIdentity::ephemeral())
     }
 
@@ -733,7 +733,10 @@ impl Libp2pNetworkAdapter {
     /// Outputs: Success when the swarm begins listening, or a portable configuration error.
     /// Side effects: Registers an in-process memory listener and no operating-system socket.
     #[cfg(test)]
-    fn listen_on_memory(&mut self, memory_address: libp2p::Multiaddr) -> Result<(), NetworkError> {
+    pub(crate) fn listen_on_memory(
+        &mut self,
+        memory_address: libp2p::Multiaddr,
+    ) -> Result<(), NetworkError> {
         self.swarm
             .listen_on(memory_address)
             .map(|_| ())
@@ -748,7 +751,10 @@ impl Libp2pNetworkAdapter {
     /// Outputs: Success after the dial is scheduled, or a portable configuration error.
     /// Side effects: Schedules an in-process encrypted libp2p connection attempt.
     #[cfg(test)]
-    fn dial_memory(&mut self, memory_address: libp2p::Multiaddr) -> Result<(), NetworkError> {
+    pub(crate) fn dial_memory(
+        &mut self,
+        memory_address: libp2p::Multiaddr,
+    ) -> Result<(), NetworkError> {
         self.swarm
             .dial(memory_address)
             .map_err(|error| NetworkError::SecurityPolicy {
@@ -762,7 +768,7 @@ impl Libp2pNetworkAdapter {
     /// Outputs: The portable representation of the adapter's generated libp2p peer identity.
     /// Side effects: None.
     #[cfg(test)]
-    fn local_device_id(&self) -> DeviceId {
+    pub(crate) fn local_device_id(&self) -> DeviceId {
         Self::device_id_from_peer_id(*self.swarm.local_peer_id())
     }
 
@@ -772,7 +778,7 @@ impl Libp2pNetworkAdapter {
     /// Outputs: `true` only while the corresponding libp2p peer is connected.
     /// Side effects: None.
     #[cfg(test)]
-    fn is_connected_to(&self, peer_device_id: &DeviceId) -> bool {
+    pub(crate) fn is_connected_to(&self, peer_device_id: &DeviceId) -> bool {
         Self::peer_id_from_device_id(peer_device_id)
             .is_ok_and(|peer_id| self.swarm.is_connected(&peer_id))
     }

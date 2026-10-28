@@ -48,6 +48,10 @@ mod meeting_title_sync_tests;
 pub mod network_events;
 #[cfg(test)]
 mod network_events_tests;
+/// Combines pairing and repository sync on one transport for the daemon's P2P task.
+pub mod p2p_service;
+#[cfg(test)]
+mod p2p_service_tests;
 /// Orchestrates numeric-comparison pairing and the trusted-peer allowlist (Issue #43).
 pub mod pairing_manager;
 #[cfg(test)]

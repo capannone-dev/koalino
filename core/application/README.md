@@ -65,6 +65,21 @@ devices. It replaces the single-meeting `SyncManager` for the daemon's P2P task:
 `repository_sync_manager_tests.rs` runs two document-backed SQLite repositories over a linked
 in-process network.
 
+`p2p_service.rs` (`P2pService`, Issue #43) is what the daemon's P2P task owns. It joins
+`PairingManager` and `RepositorySyncManager` on one transport:
+
+- `process_pending_events` runs after every transport event. It applies sync messages and
+  pairing events, and a device whose pairing completes starts syncing at once.
+- `handle_command(P2pCommand)` carries out the owner's steps and local-change notices: make
+  pairable (`PAIRING_WINDOW`), start, confirm, cancel, accept, reject, revoke, and `LocalChange`.
+- `status()` returns a `P2pStatus` snapshot: this device, paired devices (cached, so no storage
+  read), nearby devices, pairings in progress with their codes (`PairingManager::incoming_requests`
+  and `outgoing_pairings`), and recent updates.
+
+Errors about one event or peer are logged and processing continues. `p2p_service_tests.rs` pairs
+two services over real memory-transport swarms and checks that a meeting, then a rename, reach the
+other device.
+
 `meeting_crdt.rs` owns the meeting document schema. The root map holds `note_text` and, since
 Issue #39, an optional `title` scalar string. `create_titled_meeting` and `set_meeting_title` write
 the CRDT first and then the SQLite `meetings.title` column, which is only a local projection kept

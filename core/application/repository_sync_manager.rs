@@ -94,29 +94,29 @@ where
 
     /// Processes at most one event from `p2p_network`.
     ///
-    /// Outputs: Success when no event is pending or the event was handled; otherwise an error
-    /// for that event only, after which later events can still be processed.
+    /// Outputs: `true` when an event was handled, `false` when none was pending; otherwise an
+    /// error for that event only, after which later events can still be processed.
     /// Side effects: On a connected peer, sends one handshake per local meeting. On a received
     /// message, may merge and persist a document, create a meeting, and send a reply. On an
     /// expired peer, forgets its protocol state.
     pub fn process_next_network_event(
         &mut self,
         p2p_network: &mut impl P2pNetwork,
-    ) -> Result<(), RepositorySyncManagerError> {
-        match p2p_network.poll_event()? {
-            Some(NetworkEvent::PeerDiscovered(peer_device_id)) => {
-                self.peer_connected(p2p_network, peer_device_id)
+    ) -> Result<bool, RepositorySyncManagerError> {
+        let Some(network_event) = p2p_network.poll_event()? else {
+            return Ok(false);
+        };
+        match network_event {
+            NetworkEvent::PeerDiscovered(peer_device_id) => {
+                self.peer_connected(p2p_network, peer_device_id)?;
             }
-            Some(NetworkEvent::MessageReceived {
+            NetworkEvent::MessageReceived {
                 peer_device_id,
                 payload,
-            }) => self.apply_remote_sync_message(p2p_network, &peer_device_id, &payload),
-            Some(NetworkEvent::PeerExpired(peer_device_id)) => {
-                self.forget_peer(&peer_device_id);
-                Ok(())
-            }
-            None => Ok(()),
+            } => self.apply_remote_sync_message(p2p_network, &peer_device_id, &payload)?,
+            NetworkEvent::PeerExpired(peer_device_id) => self.forget_peer(&peer_device_id),
         }
+        Ok(true)
     }
 
     /// Sends a local change of `meeting_id`, or a new local meeting, to every connected peer.

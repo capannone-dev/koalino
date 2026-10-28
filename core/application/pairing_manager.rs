@@ -77,6 +77,28 @@ pub enum PairingUpdate {
     },
 }
 
+/// A request from another device that awaits the owner's answer, as shown on screen.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IncomingPairingRequest {
+    /// The requesting device.
+    pub peer_id: DeviceId,
+    /// Its announced name.
+    pub device_name: DeviceName,
+    /// The code this device shows; the owner compares it with the requester's.
+    pub code: PairingCode,
+}
+
+/// A pairing this device started, as shown on screen.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OutgoingPairingStatus {
+    /// The device being paired.
+    pub peer_id: DeviceId,
+    /// The code this device shows.
+    pub code: PairingCode,
+    /// Whether the owner already confirmed the matching code here.
+    pub locally_confirmed: bool,
+}
+
 /// A pairing this device started.
 struct OutgoingPairing {
     /// Whether the owner confirmed the matching code here.
@@ -152,6 +174,45 @@ where
     /// Outputs: The allowlist, or a storage error. Side effects: None.
     pub fn trusted_devices(&self) -> Result<Vec<TrustedPeer>, PairingError> {
         Ok(self.store.trusted_peers()?)
+    }
+
+    /// This device's announced name.
+    pub fn local_name(&self) -> &DeviceName {
+        &self.local_name
+    }
+
+    /// Lists requests awaiting the owner's answer, ordered by peer ID.
+    ///
+    /// Side effects: None.
+    pub fn incoming_requests(&self) -> Vec<IncomingPairingRequest> {
+        let mut requests: Vec<IncomingPairingRequest> = self
+            .incoming
+            .iter()
+            .map(|(peer_id, device_name)| IncomingPairingRequest {
+                peer_id: peer_id.clone(),
+                device_name: device_name.clone(),
+                code: self.code_with(peer_id),
+            })
+            .collect();
+        requests.sort_by(|left, right| left.peer_id.as_str().cmp(right.peer_id.as_str()));
+        requests
+    }
+
+    /// Lists pairings this device started that have not finished, ordered by peer ID.
+    ///
+    /// Side effects: None.
+    pub fn outgoing_pairings(&self) -> Vec<OutgoingPairingStatus> {
+        let mut pairings: Vec<OutgoingPairingStatus> = self
+            .outgoing
+            .iter()
+            .map(|(peer_id, pairing)| OutgoingPairingStatus {
+                peer_id: peer_id.clone(),
+                code: self.code_with(peer_id),
+                locally_confirmed: pairing.locally_confirmed,
+            })
+            .collect();
+        pairings.sort_by(|left, right| left.peer_id.as_str().cmp(right.peer_id.as_str()));
+        pairings
     }
 
     /// Asks `peer_id` to pair and returns the code both devices will show.

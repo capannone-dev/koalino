@@ -5,7 +5,9 @@
 
 use std::{collections::VecDeque, sync::Mutex, time::Duration};
 
-use super::pairing_manager::{PairingError, PairingManager, PairingUpdate};
+use super::pairing_manager::{
+    IncomingPairingRequest, OutgoingPairingStatus, PairingError, PairingManager, PairingUpdate,
+};
 use crate::{
     domain::{
         errors::{NetworkError, StorageError},
@@ -390,4 +392,46 @@ fn making_the_device_pairable_opens_the_window() {
 
     assert_eq!(pairing.transport().calls, vec!["open_window 120"]);
     assert_eq!(pairing.nearby_devices(), vec![DeviceId::new("peer-nearby")]);
+}
+
+/// The pairings in progress are listed for the owner's screens: incoming requests with the
+/// requester's name and code, outgoing ones with their code and whether the owner confirmed it.
+#[test]
+fn pairings_in_progress_are_listed_with_their_codes() {
+    let mut pairing = manager();
+    let phone = DeviceId::new("peer-phone");
+    let tablet = DeviceId::new("peer-tablet");
+    pairing
+        .transport_mut()
+        .events
+        .push_back(PairingEvent::Requested {
+            peer_id: tablet.clone(),
+            device_name: name("Tablet"),
+        });
+    pairing
+        .process_events()
+        .unwrap_or_else(|error| panic!("events must process: {error}"));
+    pairing
+        .start_pairing(&phone)
+        .and_then(|_| pairing.confirm_code(&phone))
+        .unwrap_or_else(|error| panic!("pairing must start and confirm: {error}"));
+
+    let local = DeviceId::new(LOCAL_PEER);
+    assert_eq!(pairing.local_name(), &name("Laptop"));
+    assert_eq!(
+        pairing.incoming_requests(),
+        vec![IncomingPairingRequest {
+            peer_id: tablet.clone(),
+            device_name: name("Tablet"),
+            code: PairingCode::for_peers(&local, &tablet),
+        }]
+    );
+    assert_eq!(
+        pairing.outgoing_pairings(),
+        vec![OutgoingPairingStatus {
+            peer_id: phone.clone(),
+            code: PairingCode::for_peers(&local, &phone),
+            locally_confirmed: true,
+        }]
+    );
 }
