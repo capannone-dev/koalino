@@ -266,11 +266,16 @@ returns `400`, an unknown cluster `404`, an already-resolved cluster `409`, and 
 
 ## Linux CLI contract
 
-`note-taker` accepts `record start [--title <title>]|stop|status`, `meetings list` (ID, title,
+`note-taker` accepts `record start --input <file.wav|-> [--meeting-id <id>] [--title <title>]`,
+`record stop` (asks the running `record start` on the same database to finish and waits until
+its audio is transcribed), `record status`, `meetings list` (ID, title,
 date, duration), `meetings view <meeting-id>` (title first),
 `meetings rename <meeting-id> <new-title>` (prints `Renamed meeting <id>: "<old>" -> "<new>"`),
 `voice list`, `voice assign <clip-uuid> <identity-uuid>`, `voice list-clusters <meeting-id>`,
 `voice assign-cluster <cluster-uuid> <identity-name>`, `telemetry`,
+`log-level <directive>` (writes `<database>.log-level`; a running daemon on the same database
+applies it within 2 seconds without restarting), the global `--log-level <level>` flag (this
+command's own logging, default `error`),
 `meetings export <meeting-id> --format <markdown|pdf|json> [--output <path>]`, and
 `meetings export-all --format <format> [--date-range <start>:<end>]` (see `core/cli/README.md`). It calls only the
 portable `AudioCapture`, repository, and `VoiceIdentityManager` boundaries. Voice assignment

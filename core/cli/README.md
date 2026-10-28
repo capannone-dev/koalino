@@ -17,8 +17,12 @@ account `encryption-key`). An existing `~/.note_taker/encryption.key` (or
 keychain, or with `NOTE_TAKER_KEYCHAIN_ENABLED=false`, the key file is used. Keep using the same
 choice: a database encrypted one way refuses to open the other way, and a lost passphrase or
 random key makes its voice data unrecoverable.
-The executable intentionally fixes its tracing filter to `error`; terminal output therefore contains
-only command results.
+The executable's own tracing filter defaults to `error`, so terminal output contains only command
+results; the global `--log-level <level>` flag raises it for one invocation. `log-level <directive>`
+changes a running daemon's verbosity without a restart (REQUIREMENTS.md 6.1): it validates the
+directive and writes it to `<database>.log-level`, which the daemon on the same database polls
+every 2 seconds. A request written while no daemon runs is ignored at the next start, where
+`RUST_LOG` decides.
 
 ```text
 note-taker record start --input <file.wav|-> [--meeting-id <id>] [--title <title>]
@@ -33,6 +37,8 @@ note-taker voice assign <clip-uuid> <identity-uuid>
 note-taker voice list-clusters <meeting-id>
 note-taker voice assign-cluster <cluster-uuid> <identity-name>
 note-taker telemetry
+note-taker log-level <error|warn|info|debug|trace|directive>
+note-taker [--log-level <level>] <command> ...
 ```
 
 `record start --title` stores a title on the meeting (Issue #35). Without it, a new meeting is

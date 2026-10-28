@@ -4,7 +4,10 @@ use std::{env, path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use note_taker_core::{
-    adapters::observability::{LoggingConfiguration, initialize_logging},
+    adapters::observability::{
+        LOG_LEVEL_POLL_INTERVAL, LogLevelControlFile, LogLevelWatcher, LoggingConfiguration,
+        LoggingRuntime, initialize_logging,
+    },
     application::crypto::key_manager::KeyManagerConfig,
     device_identity::device_id_from_environment,
     domain::models::DeviceId,
@@ -39,9 +42,13 @@ async fn main() -> Result<()> {
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("logs"));
     let log_filter = env::var("RUST_LOG").unwrap_or_else(|_| String::from("info"));
-    let _logging_runtime = initialize_logging(
+    let logging_runtime = initialize_logging(
         LoggingConfiguration::new(device_id.clone(), log_directory).with_filter(log_filter),
     )?;
+    let log_level_watcher = tokio::spawn(apply_log_level_requests(
+        logging_runtime,
+        LogLevelWatcher::start(LogLevelControlFile::for_database(&database_path)),
+    ));
     let bind_address =
         env::var("NOTE_TAKER_BIND_ADDRESS").unwrap_or_else(|_| String::from("127.0.0.1:8080"));
     let EncryptedStores {
@@ -82,7 +89,40 @@ async fn main() -> Result<()> {
         tokio::task::spawn_blocking(move || drop(recording_controller)).await?;
     }
     tracing::info!("headless daemon shut down");
+    // Dropping the task drops the logging runtime last, which flushes the log file.
+    log_level_watcher.abort();
+    let _ = log_level_watcher.await;
     Ok(())
+}
+
+/// Applies `cli log-level` requests to the running daemon (REQUIREMENTS.md 6.1).
+///
+/// Inputs: The logging runtime (owned here so it lives as long as the daemon) and a watcher on
+/// `<database>.log-level`.
+/// Outputs: Never completes; the daemon aborts it on shutdown.
+/// Side effects: Every `LOG_LEVEL_POLL_INTERVAL`, reads the control file (a few bytes, so the
+/// read stays on the async runtime) and reloads the tracing filter when a new valid level was
+/// requested. Invalid requests are logged as warnings and ignored.
+async fn apply_log_level_requests(
+    logging_runtime: LoggingRuntime,
+    mut log_level_watcher: LogLevelWatcher,
+) {
+    let mut poll_interval = tokio::time::interval(LOG_LEVEL_POLL_INTERVAL);
+    loop {
+        poll_interval.tick().await;
+        match log_level_watcher.poll() {
+            Ok(Some(filter_directive)) => match logging_runtime.set_filter(&filter_directive) {
+                Ok(()) => tracing::warn!(level = %filter_directive, "log level changed"),
+                Err(error) => {
+                    tracing::warn!(error = %format!("{error:#}"), "unable to change the log level");
+                }
+            },
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(error = %format!("{error:#}"), "ignored an invalid log level request");
+            }
+        }
+    }
 }
 
 /// Composes the meeting pipeline without blocking the async runtime.

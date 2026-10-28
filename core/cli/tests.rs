@@ -16,6 +16,7 @@ use super::{
 use crate::{
     adapters::{
         export::default_exporters,
+        observability::LogLevelControlFile,
         storage::{
             in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
             sqlite_voice_vector_db::SqliteVoiceVectorDB,
@@ -47,6 +48,8 @@ struct MockCliService {
     recording_requests: Vec<(Option<String>, Option<String>, PathBuf)>,
     /// `(meeting_id, new_title)` pairs passed to `rename_meeting`.
     rename_requests: Vec<(String, String)>,
+    /// Directives passed to `request_log_level`.
+    log_level_requests: Vec<String>,
 }
 
 /// Rejects every recording command; for service tests that never record.
@@ -128,6 +131,10 @@ impl CliService for MockCliService {
     }
     fn telemetry(&self) -> Result<String, String> {
         Ok(String::new())
+    }
+    fn request_log_level(&mut self, filter_directive: &str) -> Result<String, String> {
+        self.log_level_requests.push(filter_directive.to_owned());
+        Ok(String::from("log level requested"))
     }
     fn export_meeting(
         &self,
@@ -1055,4 +1062,72 @@ fn assigned_cluster_names_are_listed_after_a_restart() {
     let listed = listed.unwrap_or_else(|error| panic!("voice list must dispatch: {error}"));
     assert!(listed.contains("Grace Hopper"), "{listed}");
     assert!(listed.contains("| 1"), "{listed}");
+}
+
+/// Verifies the global `--log-level` flag parses before or after the subcommand and is optional.
+#[test]
+fn parses_the_global_log_level_flag() {
+    let before = Cli::try_parse_from(["note-taker", "--log-level", "debug", "meetings", "list"])
+        .unwrap_or_else(|error| panic!("a leading --log-level must parse: {error}"));
+    let after = Cli::try_parse_from(["note-taker", "meetings", "list", "--log-level", "trace"])
+        .unwrap_or_else(|error| panic!("a trailing --log-level must parse: {error}"));
+    let absent = Cli::try_parse_from(["note-taker", "meetings", "list"])
+        .unwrap_or_else(|error| panic!("the flag must be optional: {error}"));
+
+    assert_eq!(before.log_level.as_deref(), Some("debug"));
+    assert_eq!(after.log_level.as_deref(), Some("trace"));
+    assert_eq!(absent.log_level, None);
+}
+
+/// Verifies `log-level <directive>` is dispatched to the service.
+#[test]
+fn log_level_command_requests_the_daemon_level() {
+    let parsed_cli = Cli::try_parse_from(["note-taker", "log-level", "note_taker_core=debug"])
+        .unwrap_or_else(|error| panic!("log-level must parse: {error}"));
+    let mut cli_service = MockCliService::default();
+
+    let output = dispatch(parsed_cli.command, &mut cli_service);
+
+    assert_eq!(output, Ok(String::from("log level requested")));
+    assert_eq!(cli_service.log_level_requests, ["note_taker_core=debug"]);
+    assert!(Cli::try_parse_from(["note-taker", "log-level"]).is_err());
+}
+
+/// Builds a core service over in-memory storage.
+fn in_memory_core_service()
+-> CoreCliService<NoRecordingControl, SqliteNoteRepository, InMemoryVoiceVectorDB> {
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    CoreCliService::new(
+        NoRecordingControl,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    )
+}
+
+/// Verifies the core service writes a validated level to the daemon's control file.
+#[test]
+fn core_service_writes_the_requested_level_for_the_daemon() {
+    let directory = std::env::temp_dir().join(format!("note-taker-cli-log-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&directory)
+        .unwrap_or_else(|error| panic!("scratch directory must be created: {error}"));
+    let control_file = LogLevelControlFile::for_database(&directory.join("note_taker.sqlite3"));
+    let mut cli_service = in_memory_core_service().with_log_level_control(control_file.clone());
+
+    let output = cli_service.request_log_level("debug");
+    let rejected = cli_service.request_log_level("note_taker_core=loud");
+
+    assert!(output.is_ok_and(|message| message.contains("debug")));
+    assert!(rejected.is_err());
+    assert_eq!(control_file.read().ok(), Some(Some("debug".to_owned())));
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+/// Verifies a service composed without a control file reports that instead of panicking.
+#[test]
+fn core_service_without_a_control_file_rejects_log_level_requests() {
+    assert!(in_memory_core_service().request_log_level("debug").is_err());
 }

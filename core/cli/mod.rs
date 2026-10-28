@@ -9,6 +9,7 @@ use chrono::{NaiveDate, NaiveTime};
 use clap::{Args, Parser, Subcommand};
 use uuid::Uuid;
 
+use crate::adapters::observability::LogLevelControlFile;
 use crate::{
     application::{
         cluster_review::{
@@ -39,6 +40,10 @@ pub struct Cli {
     /// Selects the requested capability.
     #[command(subcommand)]
     pub command: CliCommand,
+    /// Verbosity of this command's own logs (`error`, `warn`, `info`, `debug`, `trace`, or a
+    /// `tracing` directive). Defaults to `error`, so JSON logs do not mix with command output.
+    #[arg(long, global = true, value_name = "LEVEL")]
+    pub log_level: Option<String>,
 }
 
 /// Defines top-level command groups.
@@ -52,6 +57,12 @@ pub enum CliCommand {
     Voice(VoiceArgs),
     /// Displays aggregate privacy-safe telemetry.
     Telemetry,
+    /// Changes a running daemon's log level without restarting it (applied within seconds).
+    LogLevel {
+        /// `error`, `warn`, `info`, `debug`, `trace`, or a `tracing` directive such as
+        /// `note_taker_core=debug,info`.
+        directive: String,
+    },
 }
 
 /// Defines recording state actions.
@@ -307,6 +318,8 @@ pub trait CliService {
     fn assign_cluster(&mut self, cluster_id: Uuid, identity_name: &str) -> Result<String, String>;
     /// Loads aggregate metrics.
     fn telemetry(&self) -> Result<String, String>;
+    /// Asks a running daemon on the same database to switch to `filter_directive`.
+    fn request_log_level(&mut self, filter_directive: &str) -> Result<String, String>;
     /// Exports one meeting through the shared export manager.
     fn export_meeting(
         &self,
@@ -397,6 +410,7 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
                 },
         }) => cli_service.assign_cluster(cluster_id, &identity_name),
         CliCommand::Telemetry => cli_service.telemetry(),
+        CliCommand::LogLevel { directive } => cli_service.request_log_level(&directive),
     }
 }
 
@@ -498,6 +512,8 @@ fn format_cluster_assignment(assignment: &NamedClusterAssignment) -> String {
 /// Adapts the recording control, repository, and voice-manager services for the CLI.
 pub struct CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort> {
     recording_control: RecordingPort,
+    /// Where `log-level` writes the daemon's requested verbosity; `None` disables the command.
+    log_level_control: Option<LogLevelControlFile>,
     repository: RepositoryPort,
     voice_identity_manager: VoiceIdentityManager<VectorDatabasePort>,
     export_writer: ExportWriter,
@@ -522,10 +538,19 @@ where
     ) -> Self {
         Self {
             recording_control,
+            log_level_control: None,
             repository,
             voice_identity_manager: VoiceIdentityManager::new(vector_database),
             export_writer,
         }
+    }
+
+    /// Enables `log-level` by naming the control file a daemon on the same database polls.
+    ///
+    /// Inputs: The database's `LogLevelControlFile`. Outputs: The service. Side effects: None.
+    pub fn with_log_level_control(mut self, log_level_control: LogLevelControlFile) -> Self {
+        self.log_level_control = Some(log_level_control);
+        self
     }
 
     /// Builds an export manager over this service's ports for one command.
@@ -717,6 +742,20 @@ where
         )
         .map(|assignment| format_cluster_assignment(&assignment))
         .map_err(|error| error.to_string())
+    }
+    fn request_log_level(&mut self, filter_directive: &str) -> Result<String, String> {
+        let log_level_control = self
+            .log_level_control
+            .as_ref()
+            .ok_or_else(|| String::from("changing the daemon log level is not available here"))?;
+        log_level_control
+            .request(filter_directive)
+            .map_err(|error| format!("{error:#}"))?;
+        Ok(format!(
+            "Requested log level \"{}\"; a running daemon on this database applies it within {} seconds.",
+            filter_directive.trim(),
+            crate::adapters::observability::LOG_LEVEL_POLL_INTERVAL.as_secs()
+        ))
     }
     fn telemetry(&self) -> Result<String, String> {
         self.repository

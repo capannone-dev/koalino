@@ -3,8 +3,10 @@
 //! Both sinks use `StructuredJsonFormat`, which stamps the device ID on every entry, groups fields
 //! under `context`, and redacts sensitive values (see `structured_json`).
 
+mod log_level_control;
 mod structured_json;
 
+pub use log_level_control::{LOG_LEVEL_POLL_INTERVAL, LogLevelControlFile, LogLevelWatcher};
 pub use structured_json::StructuredJsonFormat;
 
 use std::{

@@ -7,7 +7,7 @@ use clap::Parser;
 use note_taker_core::{
     adapters::{
         export::{default_export_directory, default_exporters},
-        observability::{LoggingConfiguration, initialize_logging},
+        observability::{LogLevelControlFile, LoggingConfiguration, initialize_logging},
     },
     application::{crypto::key_manager::KeyManagerConfig, export_manager::ExportWriter},
     cli::{Cli, CoreCliService, dispatch},
@@ -29,6 +29,9 @@ use note_taker_core::{
 /// database, and may run a foreground recording through the meeting pipeline or invoke a
 /// repository/voice application service according to the parsed command.
 fn main() -> Result<()> {
+    // Parsed first so `--help`, `--version`, and usage errors never open the database, and so
+    // `--log-level` applies to this command's own logging.
+    let parsed_cli = Cli::parse();
     let database_path = env::var("NOTE_TAKER_DATABASE_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
@@ -36,7 +39,11 @@ fn main() -> Result<()> {
     let log_directory = env::var("NOTE_TAKER_LOG_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("logs"));
-    let log_filter = String::from("error");
+    // `error` by default: the CLI prints JSON logs to stdout, which would mix with command output.
+    let log_filter = parsed_cli
+        .log_level
+        .clone()
+        .unwrap_or_else(|| String::from("error"));
     let _logging_runtime = initialize_logging(
         LoggingConfiguration::new(device_id.clone(), log_directory).with_filter(log_filter),
     )?;
@@ -64,8 +71,8 @@ fn main() -> Result<()> {
     );
     let export_writer = ExportWriter::new(default_exporters(), default_export_directory());
     let mut cli_service =
-        CoreCliService::new(recording_control, repository, voice_store, export_writer);
-    let parsed_cli = Cli::parse();
+        CoreCliService::new(recording_control, repository, voice_store, export_writer)
+            .with_log_level_control(LogLevelControlFile::for_database(&database_path));
     let command_output =
         dispatch(parsed_cli.command, &mut cli_service).map_err(anyhow::Error::msg)?;
     println!("{command_output}");
