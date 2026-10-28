@@ -1368,6 +1368,18 @@ pub unsafe extern "C" fn note_taker_configure(configuration_json: *const c_char)
     }
 }
 
+/// Opens the runtime now instead of at the first other call, so P2P sync runs from app start.
+///
+/// Inputs: None; call after `note_taker_configure`.
+/// Outputs: `0` once the runtime is open (also when it already was), or the status that opening
+/// it failed with (`3` when the database, keys, or settings are unusable).
+/// Side effects: Opens the database and key store, and starts the P2P task when it is enabled.
+/// Blocks while they open, so callers use a background thread.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_start_runtime() -> c_int {
+    with_runtime(|_| FFI_SUCCESS)
+}
+
 /// Returns the P2P status for the Devices screen as caller-freed JSON.
 ///
 /// Inputs: None.
@@ -2854,5 +2866,32 @@ mod ffi_contract_tests {
 
         assert_eq!(null_status, FFI_INVALID_ARGUMENT);
         assert_eq!(invalid_status, FFI_INVALID_ARGUMENT);
+    }
+
+    /// `note_taker_start_runtime` opens the configured runtime at once, creating its database in
+    /// the data directory, and is idempotent; configuring afterwards is refused. This is the only
+    /// test that opens the process-wide runtime, so it cannot disturb the others.
+    #[test]
+    fn start_runtime_opens_the_configured_database_once() {
+        let data_directory =
+            std::env::temp_dir().join(format!("note-taker-ffi-start-{}", uuid::Uuid::new_v4()));
+        let configuration = std::ffi::CString::new(format!(
+            r#"{{"data_directory":"{}","device_name":"Test phone","keychain_enabled":false,"p2p_enabled":false}}"#,
+            data_directory.display()
+        ))
+        .unwrap_or_else(|error| panic!("fixture must be a C string: {error}"));
+
+        // SAFETY: `configuration` is a valid C string for both calls.
+        let configure_status = unsafe { super::note_taker_configure(configuration.as_ptr()) };
+        let first_start = super::note_taker_start_runtime();
+        let second_start = super::note_taker_start_runtime();
+        // SAFETY: as above.
+        let late_configure = unsafe { super::note_taker_configure(configuration.as_ptr()) };
+
+        assert_eq!(configure_status, FFI_SUCCESS);
+        assert_eq!(first_start, FFI_SUCCESS);
+        assert_eq!(second_start, FFI_SUCCESS);
+        assert!(data_directory.join("note_taker.sqlite3").exists());
+        assert_eq!(late_configure, FFI_OPERATION_REJECTED);
     }
 }

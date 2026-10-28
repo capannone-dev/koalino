@@ -109,6 +109,10 @@ environment is never modified.
 The call is refused with `2` once the runtime has started, because the runtime would already
 have opened its stores elsewhere.
 
+Otherwise the runtime opens lazily, on the first native call. The app calls
+`note_taker_start_runtime` right after configuring, on a background isolate, so the database and
+P2P sync start with the app instead of when the owner first opens a screen that needs them.
+
 On Android, `keychain_enabled` is false, because the keyring crate has no Android backend. The
 key file then lives in `keys/` in the app-private directory, which only the app can read. Keeping
 it in the Android Keystore instead is a follow-up.
