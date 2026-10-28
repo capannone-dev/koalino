@@ -296,7 +296,7 @@ pub struct Libp2pNetworkAdapter {
     swarm: Swarm<NoteTakerBehaviour>,
     reachable_peer_device_ids: HashSet<DeviceId>,
     /// Peers configured by address (`NOTE_TAKER_P2P_PEERS`), for networks where mDNS cannot
-    /// find them; `redial_static_peers` treats them as rediscovered.
+    /// find them; `redial_paired_peers` treats them as rediscovered.
     static_peer_ids: HashSet<PeerId>,
     pending_network_events: VecDeque<NetworkEvent>,
     /// Retains adapter-private attachment frames separately from CRDT network events.
@@ -308,6 +308,10 @@ pub struct Libp2pNetworkAdapter {
     /// Pairing events not yet taken by the application.
     pending_pairing_events: VecDeque<PairingEvent>,
 }
+
+/// How long a connection with nothing keeping it open survives; libp2p's own default.
+#[cfg(test)]
+const DEFAULT_IDLE_CONNECTION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 impl Libp2pNetworkAdapter {
     /// Constructs a swarm using libp2p's Noise encrypted TCP transport, Yamux, and mDNS.
@@ -422,13 +426,28 @@ impl Libp2pNetworkAdapter {
         Ok(Self::device_id_from_peer_id(peer_id))
     }
 
-    /// Treats every configured peer as rediscovered: lists unpaired ones as nearby and dials
-    /// paired ones that are not connected, so a device that comes back online reconnects.
+    /// Dials every paired peer that is not connected, and lists unpaired configured peers as
+    /// nearby, so a device that comes back online reconnects.
     ///
-    /// Side effects: May schedule dials. The P2P task calls it periodically.
-    pub fn redial_static_peers(&mut self) {
+    /// Paired connections stay open while both devices are online, so this only matters after
+    /// one went away. mDNS reports a peer once and then keeps its address cached for minutes,
+    /// so waiting for a new announcement would leave a returning device unsynced that long.
+    ///
+    /// Side effects: May schedule dials to the addresses mDNS or the configuration supplied; a
+    /// peer with no known address fails to dial quietly. The P2P task calls it periodically.
+    pub fn redial_paired_peers(&mut self) {
         let static_peer_ids: Vec<PeerId> = self.static_peer_ids.iter().copied().collect();
         for peer_id in static_peer_ids {
+            self.record_discovered_peer(peer_id);
+        }
+        let paired_peer_ids: Vec<PeerId> = self
+            .swarm
+            .behaviour()
+            .peer_gate
+            .trusted_peers()
+            .copied()
+            .collect();
+        for peer_id in paired_peer_ids {
             self.record_discovered_peer(peer_id);
         }
     }
@@ -812,6 +831,19 @@ impl Libp2pNetworkAdapter {
     /// Like `new_for_memory_transport`, with a given identity.
     #[cfg(test)]
     fn new_for_memory_transport_with(node_identity: NodeIdentity) -> Result<Self, NetworkError> {
+        Self::new_for_memory_transport_with_idle_timeout(
+            node_identity,
+            DEFAULT_IDLE_CONNECTION_TIMEOUT,
+        )
+    }
+
+    /// Like `new_for_memory_transport_with`, closing connections that have nothing to keep them
+    /// open after `idle_connection_timeout`, so tests need not wait the production timeout.
+    #[cfg(test)]
+    fn new_for_memory_transport_with_idle_timeout(
+        node_identity: NodeIdentity,
+        idle_connection_timeout: std::time::Duration,
+    ) -> Result<Self, NetworkError> {
         use libp2p::{
             Transport,
             core::{transport::MemoryTransport, upgrade},
@@ -840,7 +872,7 @@ impl Libp2pNetworkAdapter {
                 pairing: new_pairing_behaviour(),
             },
             local_peer_id,
-            Config::with_tokio_executor(),
+            Config::with_tokio_executor().with_idle_connection_timeout(idle_connection_timeout),
         );
         Ok(Self {
             swarm,
@@ -887,6 +919,21 @@ impl Libp2pNetworkAdapter {
             .map_err(|error| NetworkError::SecurityPolicy {
                 reason: format!("cannot dial in-memory transport: {error}"),
             })
+    }
+
+    /// Gives the swarm an address for `peer_device_id` without configuring it as a static peer,
+    /// standing in for the address cache mDNS keeps on a real network.
+    ///
+    /// Side effects: Records the address for later dials only.
+    #[cfg(test)]
+    pub(crate) fn learn_peer_address(
+        &mut self,
+        peer_device_id: &DeviceId,
+        address: libp2p::Multiaddr,
+    ) -> Result<(), NetworkError> {
+        let peer_id = Self::peer_id_from_device_id(peer_device_id)?;
+        self.swarm.add_peer_address(peer_id, address);
+        Ok(())
     }
 
     /// Returns this adapter's translated local peer identity for adapter-local integration tests.
@@ -1959,7 +2006,7 @@ mod tests {
         listener
             .trust_peer(&dialer.local_device_id())
             .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
-        dialer.redial_static_peers();
+        dialer.redial_paired_peers();
         let connected = drive_until(
             &mut dialer,
             &mut listener,
@@ -1973,5 +2020,151 @@ mod tests {
             drain_events(&mut dialer),
             vec![NetworkEvent::PeerDiscovered(listener_id)]
         );
+    }
+
+    /// Creates a memory adapter that closes idle connections after `SHORT_IDLE_TIMEOUT`.
+    fn short_idle_adapter() -> Libp2pNetworkAdapter {
+        Libp2pNetworkAdapter::new_for_memory_transport_with_idle_timeout(
+            NodeIdentity::ephemeral(),
+            SHORT_IDLE_TIMEOUT,
+        )
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"))
+    }
+
+    /// An idle timeout short enough to observe in a test.
+    const SHORT_IDLE_TIMEOUT: Duration = Duration::from_millis(200);
+
+    /// Drives both swarms for `duration`, so idle timers can fire.
+    async fn drive_for(
+        first: &mut Libp2pNetworkAdapter,
+        second: &mut Libp2pNetworkAdapter,
+        duration: Duration,
+    ) {
+        drive_until(first, second, duration, |_, _| false).await;
+    }
+
+    /// A connection between paired devices stays open while nothing is being sent, so a change
+    /// made later reaches the other device at once; a pairing-only connection still times out.
+    #[tokio::test]
+    async fn a_paired_connection_stays_open_while_idle() {
+        let mut dialer = short_idle_adapter();
+        let mut listener = short_idle_adapter();
+        let address: Multiaddr = "/memory/9391"
+            .parse()
+            .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+        listener
+            .listen_on_memory(address.clone())
+            .unwrap_or_else(|error| panic!("adapter must listen: {error}"));
+        let listener_id = listener.local_device_id();
+        trust_each_other(&mut dialer, &mut listener);
+        dialer
+            .dial_memory(address)
+            .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+        let connected = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(5),
+            |dialer, _| dialer.is_connected_to(&listener_id),
+        )
+        .await;
+        assert!(connected, "paired devices must connect");
+
+        drive_for(&mut dialer, &mut listener, SHORT_IDLE_TIMEOUT * 5).await;
+
+        assert!(
+            dialer.is_connected_to(&listener_id),
+            "an idle connection between paired devices must stay open"
+        );
+    }
+
+    /// A pairing connection that becomes trusted stays open, while one that stays unpaired is
+    /// closed by the idle timeout.
+    #[tokio::test]
+    async fn a_pairing_connection_stays_open_only_once_trusted() {
+        for (memory_address, trusted) in [("/memory/9392", true), ("/memory/9393", false)] {
+            let mut dialer = short_idle_adapter();
+            let mut listener = short_idle_adapter();
+            let address: Multiaddr = memory_address
+                .parse()
+                .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+            listener
+                .listen_on_memory(address.clone())
+                .unwrap_or_else(|error| panic!("adapter must listen: {error}"));
+            let listener_id = listener.local_device_id();
+            listener.open_pairing_window(Duration::from_secs(60));
+            dialer
+                .allow_pairing_dial(&listener_id)
+                .and_then(|()| dialer.dial_memory(address))
+                .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+            let connected = drive_until(
+                &mut dialer,
+                &mut listener,
+                Duration::from_secs(5),
+                |dialer, _| dialer.is_connected_to(&listener_id),
+            )
+            .await;
+            assert!(connected, "the pairing dial must connect");
+            if trusted {
+                trust_each_other(&mut dialer, &mut listener);
+            }
+
+            drive_for(&mut dialer, &mut listener, SHORT_IDLE_TIMEOUT * 5).await;
+
+            assert_eq!(
+                dialer.is_connected_to(&listener_id),
+                trusted,
+                "trusted: {trusted}"
+            );
+        }
+    }
+
+    /// A paired device whose connection dropped is dialed again from the address discovery
+    /// gave, even though it is not a configured peer and discovery reports nothing new.
+    #[tokio::test]
+    async fn a_paired_device_that_dropped_is_dialed_again() {
+        let (mut dialer, mut listener, address) = listening_pair("/memory/9394");
+        let dialer_id = dialer.local_device_id();
+        let listener_id = listener.local_device_id();
+        trust_each_other(&mut dialer, &mut listener);
+        dialer
+            .learn_peer_address(&listener_id, address)
+            .unwrap_or_else(|error| panic!("address must be recorded: {error}"));
+        dialer.redial_paired_peers();
+        let connected = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(5),
+            |dialer, _| dialer.is_connected_to(&listener_id),
+        )
+        .await;
+        assert!(
+            connected,
+            "a paired device with a known address must be dialed"
+        );
+
+        listener
+            .revoke_peer(&dialer_id)
+            .unwrap_or_else(|error| panic!("revocation must succeed: {error}"));
+        let dropped = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(5),
+            |dialer, _| !dialer.is_connected_to(&listener_id),
+        )
+        .await;
+        assert!(dropped, "the connection must drop");
+        listener
+            .trust_peer(&dialer_id)
+            .unwrap_or_else(|error| panic!("peer must be trusted again: {error}"));
+        dialer.redial_paired_peers();
+        let reconnected = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(5),
+            |dialer, _| dialer.is_connected_to(&listener_id),
+        )
+        .await;
+
+        assert!(reconnected, "the dropped device must be dialed again");
     }
 }

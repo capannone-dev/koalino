@@ -6,23 +6,28 @@
 //! - **Inbound:** admit a trusted peer, or any peer while the owner keeps a pairing window open.
 //! - **Outbound:** admit a trusted peer, or the one peer the owner chose to pair with.
 //! - **Revocation, and the end of pairing:** close connections to peers that are not trusted.
+//! - **Keep-alive:** a connection to a trusted peer stays open while idle, so a change reaches it
+//!   at once; other connections close after the swarm's idle timeout.
 //!
 //! Admission alone never grants sync access: the adapter separately drops sync and file payloads
 //! from untrusted peers, so a pairing connection can only carry the pairing protocol.
 
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     convert::Infallible,
     task::{Context, Poll, Waker},
     time::{Duration, Instant},
 };
 
+use libp2p::core::upgrade::DeniedUpgrade;
 use libp2p::{
     Multiaddr, PeerId,
     core::{Endpoint, transport::PortUse},
     swarm::{
-        CloseConnection, ConnectionDenied, ConnectionId, FromSwarm, NetworkBehaviour, THandler,
-        THandlerInEvent, THandlerOutEvent, ToSwarm, dummy,
+        CloseConnection, ConnectionDenied, ConnectionHandler, ConnectionHandlerEvent, ConnectionId,
+        FromSwarm, NetworkBehaviour, NotifyHandler, SubstreamProtocol, THandler, THandlerInEvent,
+        THandlerOutEvent, ToSwarm,
+        handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     },
 };
 
@@ -40,10 +45,10 @@ pub(super) struct PeerGate {
     pairing_window_ends_at: Option<Instant>,
     /// Unknown peers this node may dial because the owner started pairing with them.
     pairing_dial_targets: HashSet<PeerId>,
-    /// Peers with at least one open connection, so untrusted ones can be closed later.
-    connected_peers: HashSet<PeerId>,
-    /// Peers whose connections `poll` must close.
-    peers_to_disconnect: VecDeque<PeerId>,
+    /// Open connections by peer, so untrusted ones can be closed and newly trusted ones kept.
+    connections: HashMap<PeerId, HashSet<ConnectionId>>,
+    /// Swarm actions `poll` must emit: disconnects and keep-alive changes.
+    pending_actions: VecDeque<ToSwarm<Infallible, bool>>,
     /// Wakes the swarm when a disconnect is queued.
     waker: Option<Waker>,
 }
@@ -54,10 +59,29 @@ impl PeerGate {
         self.trusted_peers.contains(peer)
     }
 
+    /// Lists the trusted peers.
+    pub(super) fn trusted_peers(&self) -> impl Iterator<Item = &PeerId> {
+        self.trusted_peers.iter()
+    }
+
     /// Adds `peer` to the allowlist and ends any pending pairing dial to it.
+    ///
+    /// Side effects: Keeps its open connections (from pairing) alive from now on.
     pub(super) fn trust(&mut self, peer: PeerId) {
         self.pairing_dial_targets.remove(&peer);
         self.trusted_peers.insert(peer);
+        let open_connections: Vec<ConnectionId> = self
+            .connections
+            .get(&peer)
+            .map(|connections| connections.iter().copied().collect())
+            .unwrap_or_default();
+        for connection in open_connections {
+            self.queue_action(ToSwarm::NotifyHandler {
+                peer_id: peer,
+                handler: NotifyHandler::One(connection),
+                event: true,
+            });
+        }
     }
 
     /// Removes `peer` from the allowlist and closes its connections.
@@ -66,7 +90,7 @@ impl PeerGate {
     pub(super) fn revoke(&mut self, peer: &PeerId) {
         self.trusted_peers.remove(peer);
         self.pairing_dial_targets.remove(peer);
-        if self.connected_peers.contains(peer) {
+        if self.connections.contains_key(peer) {
             self.queue_disconnect(*peer);
         }
     }
@@ -88,8 +112,8 @@ impl PeerGate {
         self.pairing_window_ends_at = None;
         self.pairing_dial_targets.clear();
         let untrusted_connected: Vec<PeerId> = self
-            .connected_peers
-            .iter()
+            .connections
+            .keys()
             .filter(|peer| !self.trusted_peers.contains(peer))
             .copied()
             .collect();
@@ -104,17 +128,83 @@ impl PeerGate {
             .is_some_and(|ends_at| Instant::now() < ends_at)
     }
 
-    /// Queues `peer` for disconnection and wakes the swarm.
+    /// Queues `peer` for disconnection.
     fn queue_disconnect(&mut self, peer: PeerId) {
-        self.peers_to_disconnect.push_back(peer);
+        self.queue_action(ToSwarm::CloseConnection {
+            peer_id: peer,
+            connection: CloseConnection::All,
+        });
+    }
+
+    /// Queues a swarm action and wakes the swarm.
+    fn queue_action(&mut self, action: ToSwarm<Infallible, bool>) {
+        self.pending_actions.push_back(action);
         if let Some(waker) = self.waker.take() {
             waker.wake();
         }
     }
 }
 
+/// The gate's per-connection handler: it speaks no protocol, like libp2p's `dummy` handler,
+/// and keeps the connection open while the peer is trusted.
+///
+/// The gate sends `true` when a connected peer becomes trusted. Revocation closes the
+/// connection instead, so the flag never needs to go back to `false`.
+pub(super) struct PairedKeepAlive {
+    /// Whether the connection is to a trusted peer.
+    keep_alive: bool,
+}
+
+impl ConnectionHandler for PairedKeepAlive {
+    type FromBehaviour = bool;
+    type ToBehaviour = Infallible;
+    type InboundProtocol = DeniedUpgrade;
+    type OutboundProtocol = DeniedUpgrade;
+    type InboundOpenInfo = ();
+    type OutboundOpenInfo = ();
+
+    /// Accepts no inbound streams; the other behaviours carry all traffic.
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        SubstreamProtocol::new(DeniedUpgrade, ())
+    }
+
+    /// Keeps a trusted peer's connection open while idle.
+    fn connection_keep_alive(&self) -> bool {
+        self.keep_alive
+    }
+
+    /// Records that the peer became trusted.
+    fn on_behaviour_event(&mut self, keep_alive: bool) {
+        self.keep_alive = keep_alive;
+    }
+
+    /// Never opens streams or emits events.
+    fn poll(
+        &mut self,
+        _: &mut Context<'_>,
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, (), Self::ToBehaviour>> {
+        Poll::Pending
+    }
+
+    /// No stream is ever negotiated through `DeniedUpgrade`, so there is nothing to handle.
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<Self::InboundProtocol, Self::OutboundProtocol>,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol, ..
+            }) => match protocol {},
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol, ..
+            }) => match protocol {},
+            _ => {}
+        }
+    }
+}
+
 impl NetworkBehaviour for PeerGate {
-    type ConnectionHandler = dummy::ConnectionHandler;
+    type ConnectionHandler = PairedKeepAlive;
     type ToSwarm = Infallible;
 
     /// Admits a trusted peer, or any peer while the pairing window is open.
@@ -126,7 +216,9 @@ impl NetworkBehaviour for PeerGate {
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         if self.is_trusted(&peer) || self.pairing_window_is_open() {
-            Ok(dummy::ConnectionHandler)
+            Ok(PairedKeepAlive {
+                keep_alive: self.is_trusted(&peer),
+            })
         } else {
             tracing::debug!("refused an inbound connection from an unpaired peer");
             Err(ConnectionDenied::new(NotPaired))
@@ -143,27 +235,37 @@ impl NetworkBehaviour for PeerGate {
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         if self.is_trusted(&peer) || self.pairing_dial_targets.contains(&peer) {
-            Ok(dummy::ConnectionHandler)
+            Ok(PairedKeepAlive {
+                keep_alive: self.is_trusted(&peer),
+            })
         } else {
             tracing::debug!("refused an outbound connection to an unpaired peer");
             Err(ConnectionDenied::new(NotPaired))
         }
     }
 
-    /// Tracks which peers are connected.
+    /// Tracks each peer's open connections.
     fn on_swarm_event(&mut self, event: FromSwarm) {
         match event {
             FromSwarm::ConnectionEstablished(established) => {
-                self.connected_peers.insert(established.peer_id);
+                self.connections
+                    .entry(established.peer_id)
+                    .or_default()
+                    .insert(established.connection_id);
             }
-            FromSwarm::ConnectionClosed(closed) if closed.remaining_established == 0 => {
-                self.connected_peers.remove(&closed.peer_id);
+            FromSwarm::ConnectionClosed(closed) => {
+                if let Some(connections) = self.connections.get_mut(&closed.peer_id) {
+                    connections.remove(&closed.connection_id);
+                    if connections.is_empty() {
+                        self.connections.remove(&closed.peer_id);
+                    }
+                }
             }
             _ => {}
         }
     }
 
-    /// The dummy handler emits no events.
+    /// The handler emits no events.
     fn on_connection_handler_event(
         &mut self,
         _: PeerId,
@@ -173,16 +275,13 @@ impl NetworkBehaviour for PeerGate {
         match event {}
     }
 
-    /// Closes queued connections.
+    /// Emits queued disconnects and keep-alive changes.
     fn poll(
         &mut self,
         context: &mut Context<'_>,
     ) -> Poll<ToSwarm<Self::ToSwarm, THandlerInEvent<Self>>> {
-        if let Some(peer) = self.peers_to_disconnect.pop_front() {
-            return Poll::Ready(ToSwarm::CloseConnection {
-                peer_id: peer,
-                connection: CloseConnection::All,
-            });
+        if let Some(action) = self.pending_actions.pop_front() {
+            return Poll::Ready(action);
         }
         self.waker = Some(context.waker().clone());
         Poll::Pending

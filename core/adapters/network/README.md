@@ -14,6 +14,10 @@ authenticated the remote key:
 - **Outbound:** a trusted peer, or the peer passed to `allow_pairing_dial`.
 - **Disconnects:** `revoke_peer` closes that peer's connections, and `end_pairing` closes every
   connection that is still untrusted.
+- **Keep-alive:** a connection to a trusted peer stays open while idle, including a pairing
+  connection once its peer becomes trusted. Other connections close after libp2p's 10-second idle
+  timeout. Without this, a paired connection closed 10 s after its last sync, and the device was
+  not dialed again until mDNS re-announced it, minutes later.
 
 Being admitted grants nothing beyond the connection. The adapter drops sync and file-transfer
 requests from untrusted peers, `send_encrypted` refuses an untrusted target, and
@@ -30,7 +34,9 @@ send again.
 
 `add_static_peer` takes a `…/p2p/<peer id>` multiaddress for a device that mDNS cannot find (another
 subnet, NAT, a VPN, a tunnel). An unpaired one is listed as nearby so it can be paired; a paired one
-is dialed. `redial_static_peers` repeats that, so a device that comes back online reconnects. The
+is dialed. `redial_paired_peers` dials every trusted peer that is not connected (configured or
+found by mDNS, whose address stays cached) and lists unpaired configured ones again, so a device
+that comes back online reconnects. The
 address is only a hint: Noise still authenticates the peer ID, and the gate still decides
 admission. The trusted set is loaded from `TrustedPeerStore` by the composition layer.
 
