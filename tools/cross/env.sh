@@ -12,3 +12,6 @@ export AR_aarch64_linux_android=$NDK_BIN/llvm-ar
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$NDK_BIN/aarch64-linux-android29-clang
 export CMAKE_TOOLCHAIN_FILE_aarch64_linux_android=$CROSS_DIR/cmake/android-arm64.cmake
 export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$NDK_BIN/../sysroot"
+# Flutter app builds (fetch-flutter.sh): Flutter SDK, JDK and Android SDK.
+export JAVA_HOME=$T/jdk ANDROID_HOME=$T/android-sdk ANDROID_SDK_ROOT=$T/android-sdk
+export PATH=$T/flutter/bin:$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH
