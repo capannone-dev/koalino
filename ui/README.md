@@ -15,6 +15,22 @@ controller and dispose it when left, so the telemetry timer stops and the meetin
 on every visit. The app-lifetime `RecordingController` keeps an active recording across
 destinations. This replaces the earlier drawer, whose push used a context above the navigator.
 
+## Recording controls
+
+`RecordingScreen` offers **Start recording**, then **Pause** and **Stop** while recording, and
+**Resume** and **Stop** while paused. Resume calls `note_taker_start_recording`, which continues
+the paused meeting (a titled start would create a new one). Stop shows "Finishing
+transcription…" until Rust has transcribed and persisted every chunk, then "Recording saved" and
+clears the title. A failed pause, resume, or stop keeps the current state and shows an error.
+
+`RustRecordingBridge` runs start, pause, and stop on `Isolate.run`, as the Rust contract requires:
+the first start may load a model and stop waits for transcription, so calling them on the UI
+isolate froze the app. Each isolate looks the symbol up itself, because a `DynamicLibrary`
+cannot cross isolates.
+
+Microphone capture is not wired yet: nothing feeds `note_taker_push_audio_pcm`, so a recording
+started from the app receives no audio (see TASK_BOARD.md).
+
 ## Meeting titles (Issue #36)
 
 - **Recording:** `RecordingScreen` has an optional **Meeting title** field ("Enter meeting

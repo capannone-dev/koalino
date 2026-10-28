@@ -1,6 +1,8 @@
 // Defines widget-first recording-state and meeting-title requirements for the Flutter client.
 
 // ignore: deprecated_member_use
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
@@ -9,11 +11,31 @@ import 'package:note_taker_ui/presentation/recording_screen.dart';
 
 /// Records calls made by a widget through the bridge boundary without loading Rust code.
 final class FakeRecordingBridge implements RecordingBridge {
-  /// Creates a fake that returns the supplied start outcome.
-  FakeRecordingBridge({required this.startResult});
+  /// Creates a fake that returns the supplied outcomes.
+  FakeRecordingBridge({
+    required this.startResult,
+    this.pauseResult = true,
+    this.resumeResult = true,
+    this.stopResult = true,
+  });
 
   /// Controls whether the simulated Rust start operation succeeds.
   final bool startResult;
+
+  /// Controls whether `pauseRecording` succeeds.
+  final bool pauseResult;
+
+  /// Controls whether `startRecording` (resume) succeeds.
+  final bool resumeResult;
+
+  /// Controls whether `stopRecording` succeeds.
+  final bool stopResult;
+
+  /// When set, `stopRecording` waits for this completer, like Rust finishing transcription.
+  Completer<void>? stopGate;
+
+  /// Lifecycle commands after the first start, in order: `pause`, `resume`, `stop`.
+  final List<String> lifecycleCommands = <String>[];
 
   /// Titles passed to `startRecordingWithTitle`, in call order (`null` for untitled starts).
   final List<String?> requestedTitles = <String?>[];
@@ -25,7 +47,23 @@ final class FakeRecordingBridge implements RecordingBridge {
   Future<bool> setLogLevel(String filterDirective) async => true;
 
   @override
-  Future<bool> startRecording() => startRecordingWithTitle(null);
+  Future<bool> startRecording() async {
+    lifecycleCommands.add('resume');
+    return resumeResult;
+  }
+
+  @override
+  Future<bool> pauseRecording() async {
+    lifecycleCommands.add('pause');
+    return pauseResult;
+  }
+
+  @override
+  Future<bool> stopRecording() async {
+    lifecycleCommands.add('stop');
+    await stopGate?.future;
+    return stopResult;
+  }
 
   @override
   Future<bool> startRecordingWithTitle(String? title) async {
@@ -161,5 +199,125 @@ void main() {
     await tester.pump();
     expect(
         tester.getSize(find.byType(TextField)).width, lessThanOrEqualTo(480));
+  });
+
+  group('pause, resume, and stop', () {
+    /// Pumps the screen and starts a titled recording.
+    Future<FakeRecordingBridge> startRecordingIn(WidgetTester tester,
+        {bool pauseResult = true, bool stopResult = true}) async {
+      final FakeRecordingBridge recordingBridge = FakeRecordingBridge(
+          startResult: true, pauseResult: pauseResult, stopResult: stopResult);
+      await pumpRecordingScreen(tester, recordingBridge);
+      await tester.enterText(find.byType(TextField), 'Weekly sync');
+      await tester.tap(find.text('Start recording'));
+      await tester.pump();
+      return recordingBridge;
+    }
+
+    testWidgets('a recording offers Pause and Stop instead of Start',
+        (WidgetTester tester) async {
+      await startRecordingIn(tester);
+
+      expect(find.text('Pause'), findsOneWidget);
+      expect(find.text('Stop'), findsOneWidget);
+      expect(find.text('Start recording'), findsNothing);
+    });
+
+    testWidgets('Pause pauses the recording and offers Resume',
+        (WidgetTester tester) async {
+      final FakeRecordingBridge recordingBridge =
+          await startRecordingIn(tester);
+
+      await tester.tap(find.text('Pause'));
+      await tester.pump();
+
+      expect(recordingBridge.lifecycleCommands, <String>['pause']);
+      expect(find.text('Paused "Weekly sync"'), findsOneWidget);
+      expect(find.text('Resume'), findsOneWidget);
+      expect(find.text('Stop'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Resume continues the same meeting instead of starting a new one',
+        (WidgetTester tester) async {
+      final FakeRecordingBridge recordingBridge =
+          await startRecordingIn(tester);
+      await tester.tap(find.text('Pause'));
+      await tester.pump();
+
+      await tester.tap(find.text('Resume'));
+      await tester.pump();
+
+      expect(recordingBridge.lifecycleCommands, <String>['pause', 'resume']);
+      expect(recordingBridge.startRecordingCallCount, 1);
+      expect(find.text('Recording "Weekly sync"'), findsOneWidget);
+    });
+
+    testWidgets('Stop waits for transcription, then returns to idle',
+        (WidgetTester tester) async {
+      final FakeRecordingBridge recordingBridge =
+          await startRecordingIn(tester);
+      recordingBridge.stopGate = Completer<void>();
+
+      await tester.tap(find.text('Stop'));
+      await tester.pump();
+
+      expect(find.text('Finishing transcription…'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      final ButtonStyleButton stopButton = tester.widget<ButtonStyleButton>(
+          find.ancestor(
+              of: find.text('Stop'),
+              matching: find.byWidgetPredicate(
+                  (Widget widget) => widget is ButtonStyleButton)));
+      expect(stopButton.onPressed, isNull);
+
+      recordingBridge.stopGate?.complete();
+      await tester.pump();
+
+      expect(recordingBridge.lifecycleCommands, <String>['stop']);
+      expect(find.text('Ready to record'), findsOneWidget);
+      expect(find.text('Recording saved'), findsOneWidget);
+      final TextField titleField =
+          tester.widget<TextField>(find.byType(TextField));
+      expect(titleField.enabled, isTrue);
+      expect(titleField.controller?.text, isEmpty);
+    });
+
+    testWidgets('a paused recording can be stopped',
+        (WidgetTester tester) async {
+      final FakeRecordingBridge recordingBridge =
+          await startRecordingIn(tester);
+      await tester.tap(find.text('Pause'));
+      await tester.pump();
+
+      await tester.tap(find.text('Stop'));
+      await tester.pump();
+
+      expect(recordingBridge.lifecycleCommands, <String>['pause', 'stop']);
+      expect(find.text('Ready to record'), findsOneWidget);
+    });
+
+    testWidgets('a failed pause keeps recording and shows an error',
+        (WidgetTester tester) async {
+      await startRecordingIn(tester, pauseResult: false);
+
+      await tester.tap(find.text('Pause'));
+      await tester.pump();
+
+      expect(find.text('Recording "Weekly sync"'), findsOneWidget);
+      expect(find.text('Unable to pause recording'), findsOneWidget);
+    });
+
+    testWidgets('a failed stop keeps the recording and shows an error',
+        (WidgetTester tester) async {
+      await startRecordingIn(tester, stopResult: false);
+
+      await tester.tap(find.text('Stop'));
+      await tester.pump();
+
+      expect(find.text('Recording "Weekly sync"'), findsOneWidget);
+      expect(find.text('Unable to stop recording'), findsOneWidget);
+      expect(find.text('Stop'), findsOneWidget);
+    });
   });
 }

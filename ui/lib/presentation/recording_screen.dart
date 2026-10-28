@@ -45,7 +45,20 @@ final class _RecordingScreenState extends State<RecordingScreen> {
     widget.recordingController.startRecording(title: _titleController.text);
   }
 
-  /// Builds the title field, status label, error message, and recording-start action.
+  /// Stops the recording and, once it is saved, clears the title for the next meeting.
+  ///
+  /// Inputs: None.
+  /// Outputs: Completes after Rust finished transcribing.
+  /// Side effects: Requests the stop through the controller; clears the title field on success.
+  Future<void> _stopRecording() async {
+    final RecordingController recordingController = widget.recordingController;
+    await recordingController.stopRecording();
+    if (mounted && recordingController.completionMessage != null) {
+      _titleController.clear();
+    }
+  }
+
+  /// Builds the title field, status label, messages, and the lifecycle controls.
   ///
   /// Inputs: `context` supplies the Material theme and localization context.
   /// Outputs: A widget tree representing the current controller state; it scrolls when the
@@ -66,17 +79,21 @@ final class _RecordingScreenState extends State<RecordingScreen> {
               child: AnimatedBuilder(
                 animation: recordingController,
                 builder: (BuildContext context, Widget? child) {
-                  final bool isStarting =
-                      recordingController.state == RecordingUiState.starting;
-                  final bool isRecording =
-                      recordingController.state == RecordingUiState.recording;
-                  final bool isBusy = isStarting || isRecording;
-                  final String statusLabel =
-                      switch ((isRecording, recordingController.activeTitle)) {
-                    (true, final String activeTitle) =>
-                      'Recording "$activeTitle"',
-                    (true, null) => 'Recording',
-                    (false, _) => 'Ready to record',
+                  final RecordingUiState state = recordingController.state;
+                  final bool isStarting = state == RecordingUiState.starting;
+                  final bool isStopping = state == RecordingUiState.stopping;
+                  final bool isBusy = state != RecordingUiState.idle;
+                  final String? activeTitle = recordingController.activeTitle;
+                  final String statusLabel = switch ((state, activeTitle)) {
+                    (RecordingUiState.recording, final String title) =>
+                      'Recording "$title"',
+                    (RecordingUiState.recording, null) => 'Recording',
+                    (RecordingUiState.paused, final String title) =>
+                      'Paused "$title"',
+                    (RecordingUiState.paused, null) => 'Paused',
+                    (RecordingUiState.stopping, _) =>
+                      'Finishing transcription…',
+                    _ => 'Ready to record',
                   };
 
                   return Column(
@@ -105,6 +122,18 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.headlineSmall,
                       ),
+                      if (isStopping)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 12),
+                          child: LinearProgressIndicator(),
+                        ),
+                      if (recordingController.completionMessage
+                          case final String completionMessage)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(completionMessage,
+                              textAlign: TextAlign.center),
+                        ),
                       if (recordingController.errorMessage
                           case final String errorMessage)
                         Padding(
@@ -117,14 +146,40 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                           ),
                         ),
                       const SizedBox(height: 24),
-                      Center(
-                        child: FilledButton.icon(
-                          onPressed: isBusy ? null : _startRecording,
-                          icon: const Icon(Icons.fiber_manual_record),
-                          label: Text(isStarting
-                              ? 'Starting recording'
-                              : 'Start recording'),
-                        ),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: <Widget>[
+                          if (state == RecordingUiState.idle || isStarting)
+                            FilledButton.icon(
+                              onPressed: isBusy ? null : _startRecording,
+                              icon: const Icon(Icons.fiber_manual_record),
+                              label: Text(isStarting
+                                  ? 'Starting recording'
+                                  : 'Start recording'),
+                            ),
+                          if (state == RecordingUiState.recording)
+                            FilledButton.tonalIcon(
+                              onPressed: recordingController.pauseRecording,
+                              icon: const Icon(Icons.pause),
+                              label: const Text('Pause'),
+                            ),
+                          if (state == RecordingUiState.paused)
+                            FilledButton.icon(
+                              onPressed: recordingController.resumeRecording,
+                              icon: const Icon(Icons.play_arrow),
+                              label: const Text('Resume'),
+                            ),
+                          if (state == RecordingUiState.recording ||
+                              state == RecordingUiState.paused ||
+                              isStopping)
+                            OutlinedButton.icon(
+                              onPressed: isStopping ? null : _stopRecording,
+                              icon: const Icon(Icons.stop),
+                              label: const Text('Stop'),
+                            ),
+                        ],
                       ),
                     ],
                   );

@@ -9,7 +9,8 @@ domain structs are never represented in Dart or presented to widgets.
 maps its selected local path to the narrow Rust C ABI. Suggestions return as caller-freed JSON;
 the bridge deliberately leaves JSON parsing to `AttachmentController`.
 
-`RustRecordingBridge.startRecordingWithTitle` calls `note_taker_start_recording_with_title`,
+`RustRecordingBridge` binds start (also resume), pause, and stop, and runs each on a background
+isolate. `startRecordingWithTitle` calls `note_taker_start_recording_with_title`,
 sending a null pointer for the meeting ID and for a blank title. `meeting_bridge.dart` defines the
 `MeetingSummary`, `MeetingDetail`, and `MeetingTranscriptSegment` models, and the pure JSON
 decoders with their fallback-title and formatting helpers. It also defines `RustMeetingBridge`,
