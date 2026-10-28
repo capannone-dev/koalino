@@ -93,4 +93,48 @@ final class MeetingListController extends ChangeNotifier {
     _isLoadingDetail = false;
     notifyListeners();
   }
+
+  /// Renames `meetingId` and updates the list row and open detail without reloading them.
+  ///
+  /// Inputs: The meeting ID and the title as typed; it is trimmed before it is sent. Callers
+  /// validate it first with `validateMeetingTitle`, so Rust only rejects races and storage errors.
+  /// Outputs: Completes on success; rethrows `MeetingRenameException` (or any bridge error) and
+  /// leaves the titles unchanged on failure.
+  /// Side effects: Writes the title through the bridge (CRDT document and SQLite) and notifies
+  /// listeners. When the meeting no longer exists, reloads the list so the row disappears.
+  Future<void> renameMeeting(String meetingId, String newTitle) async {
+    final String trimmedTitle = newTitle.trim();
+    try {
+      await _meetingBridge.renameMeeting(meetingId, trimmedTitle);
+    } on MeetingRenameException catch (error) {
+      if (error.failure == MeetingRenameFailure.meetingNotFound) {
+        await loadMeetings();
+      }
+      rethrow;
+    }
+    _meetings = <MeetingSummary>[
+      for (final MeetingSummary meeting in _meetings)
+        meeting.meetingId == meetingId
+            ? _retitled(meeting, trimmedTitle)
+            : meeting,
+    ];
+    if (_selectedMeeting case final MeetingDetail selectedMeeting
+        when selectedMeeting.summary.meetingId == meetingId) {
+      _selectedMeeting = MeetingDetail(
+        summary: _retitled(selectedMeeting.summary, trimmedTitle),
+        transcript: selectedMeeting.transcript,
+        segments: selectedMeeting.segments,
+      );
+    }
+    notifyListeners();
+  }
 }
+
+/// Returns a copy of `meeting` titled `title`, keeping its ID, creation time, and duration.
+MeetingSummary _retitled(MeetingSummary meeting, String title) =>
+    MeetingSummary(
+      meetingId: meeting.meetingId,
+      title: title,
+      createdAt: meeting.createdAt,
+      durationMs: meeting.durationMs,
+    );
