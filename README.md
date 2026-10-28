@@ -46,6 +46,10 @@ features:
 cargo build --features local-ai,vad   # whisper.cpp (needs cmake and a C++ toolchain) + WebRTC VAD
 ```
 
+Run with `NOTE_TAKER_WHISPER_MODEL` set to a GGML model, such as whisper.cpp's multilingual
+`ggml-base.bin`. To build the daemon and CLI for Windows and Android from Linux, with whisper.cpp,
+see [`tools/cross/README.md`](tools/cross/README.md).
+
 For the web dashboard: `cd web && npm install && npm run dev`. For the Teams bot, see
 [`teams-bot/README.md`](teams-bot/README.md).
 
