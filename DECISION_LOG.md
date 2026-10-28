@@ -943,3 +943,29 @@ Convenience.
   Android background controls (#47), Flutter export (#48), local screen-share capture (#49). Peer
   authorization is listed with #43 as a hard prerequisite: composing the swarm without it would
   let any LAN node that speaks the protocol read meetings and voice embeddings.
+
+## 2026-10-28 — Approved routes for #43, #44, #45–#47
+
+The owner decided the following after the v1.0 audit:
+
+- **Flutter plugins (#45, #46, #47):** approved. Each issue records the plugin it picks.
+- **#43 P2P sync:**
+  - **Scope:** sync runs only between the owner's own devices (no colleagues).
+  - **Trust model:** pairing plus a persisted allowlist. One device shows a short code; the other
+    confirms it, and both compare a fingerprint of the two peer IDs. Trusted peers live in
+    SQLite and are enforced with libp2p's `allow_block_list` before any sync protocol runs.
+    Rejected alternatives:
+    - a pre-shared `pnet` key: TCP-only, all-or-nothing, rotate-everywhere revocation;
+    - owner-signed device certificates: unnecessary for one owner.
+  - **Prerequisites:**
+    - libp2p 0.56 → 0.57.1, which clears the yamux 0.12 and hickory 0.25 advisories;
+    - a persisted node identity, since the adapter currently generates one per start.
+  - **Order of work:** LAN (mDNS) first. A relay on the owner's own reachable daemon (Circuit
+    Relay v2, DCUtR, AutoNAT, QUIC) follows as a separate step. Public relays are not used.
+- **#44 diarization:** our own adapter on the `ort` crate (ONNX Runtime). It runs pyannote
+  segmentation-3.0 for turns and SpeechBrain ECAPA (Apache-2.0) for embeddings, behind a
+  `diarization` Cargo feature, with models supplied by path. The `ort` dependency is approved.
+  Rejected alternatives:
+  - `pyannote-rs` and `speakrs`: maintenance and maturity risk;
+  - a Python sidecar: a new runtime, and no Android support;
+  - cloud diarization: audio would leave the device.

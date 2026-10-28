@@ -89,7 +89,6 @@ impl SyncPayloadCodec {
     }
 }
 
-#[async_trait::async_trait]
 impl request_response::Codec for SyncPayloadCodec {
     type Protocol = SyncPayloadProtocol;
     type Request = Vec<u8>;

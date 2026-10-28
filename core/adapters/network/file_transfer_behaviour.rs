@@ -69,7 +69,6 @@ impl FileTransferCodec {
     }
 }
 
-#[async_trait::async_trait]
 impl request_response::Codec for FileTransferCodec {
     type Protocol = FileTransferProtocol;
     type Request = FileTransferRequestPayload;
