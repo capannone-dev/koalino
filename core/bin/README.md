@@ -86,6 +86,9 @@ with operational logs.
 
 `ffi.rs` exports `note_taker_get_meetings()` and `note_taker_get_meeting(meeting_id)`, which return
 caller-freed JSON with each meeting's ID, display title, and creation time (see `API_SPECS.md`).
+`note_taker_rename_meeting(meeting_id, new_title)` (Issue #38) replaces a title through
+`application::meeting_rename` and returns a C status: `0`, `1` for null pointers or invalid input,
+`2` for storage failures, `3` for an unavailable runtime, and `5` (`FFI_MEETING_NOT_FOUND`).
 `teams_bridge_composition.rs` stores the Teams meeting title on a meeting that has none yet.
 
 `ffi.rs` also exports `note_taker_export_meeting(meeting_id, format, options_json)`, which runs the

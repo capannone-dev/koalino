@@ -27,6 +27,7 @@ use crate::{
         export_manager::{
             ExportManager, ExportWriter, UNATTRIBUTED_SPEAKER_LABEL, UNKNOWN_SPEAKER_LABEL,
         },
+        meeting_rename::{MeetingRenameError, rename_meeting},
         unknown_speaker_clusterer::ClusteringError,
         voice_identity_manager::VoiceIdentityManager,
     },
@@ -61,6 +62,8 @@ pub const FFI_RUNTIME_UNAVAILABLE: c_int = 3;
 /// Indicates that the meeting pipeline could not be built, e.g. no transcription engine is
 /// configured (see the Rust logs for the variables to set).
 pub const FFI_PIPELINE_UNAVAILABLE: c_int = 4;
+/// Indicates that the requested meeting does not exist (returned by `note_taker_rename_meeting`).
+pub const FFI_MEETING_NOT_FOUND: c_int = 5;
 /// Returns the portable Idle state from `note_taker_get_current_state`.
 pub const FFI_AUDIO_STATE_IDLE: c_int = 10;
 /// Returns the portable Recording state from `note_taker_get_current_state`.
@@ -989,6 +992,31 @@ impl FfiRuntime {
         serde_json::Value::Array(serialized_meetings).to_string()
     }
 
+    /// Renames one meeting through the shared meeting-rename use case.
+    ///
+    /// Inputs: `meeting_id` (non-blank) and `new_title` (unvalidated user text; trimmed, 1–200
+    /// characters, no control characters).
+    /// Outputs: `FFI_SUCCESS`, `FFI_INVALID_ARGUMENT` for a blank ID or invalid title,
+    /// `FFI_MEETING_NOT_FOUND` for an unknown meeting, or `FFI_OPERATION_REJECTED` for storage
+    /// failures.
+    /// Side effects: Replaces the title in SQLite; invalid input writes nothing. The title is
+    /// never logged.
+    fn rename_meeting(&mut self, meeting_id: &str, new_title: &str) -> c_int {
+        if meeting_id.trim().is_empty() {
+            return FFI_INVALID_ARGUMENT;
+        }
+        match rename_meeting(
+            &self.note_repository,
+            &MeetingId::new(meeting_id),
+            new_title,
+        ) {
+            Ok(_) => FFI_SUCCESS,
+            Err(MeetingRenameError::InvalidTitle(_)) => FFI_INVALID_ARGUMENT,
+            Err(MeetingRenameError::MeetingNotFound { .. }) => FFI_MEETING_NOT_FOUND,
+            Err(MeetingRenameError::Storage(_)) => FFI_OPERATION_REJECTED,
+        }
+    }
+
     /// Describes one meeting with its display title, duration, segments, and flat transcript.
     ///
     /// Inputs: A non-blank `meeting_id`.
@@ -1408,6 +1436,33 @@ pub unsafe extern "C" fn note_taker_get_meeting(meeting_id: *const c_char) -> *m
         .unwrap_or(std::ptr::null_mut())
 }
 
+/// Renames one meeting.
+///
+/// Inputs: `meeting_id` and `new_title` are non-null NUL-terminated UTF-8 strings. The meeting
+/// ID must not be blank; the title is trimmed and must then be 1–200 characters without control
+/// characters (such as newlines), the same rules as `note_taker_start_recording_with_title`.
+/// Outputs: `FFI_SUCCESS` (0); `FFI_INVALID_ARGUMENT` (1) for a null or non-UTF-8 pointer, a
+/// blank meeting ID, or an invalid title; `FFI_OPERATION_REJECTED` (2) for a storage failure;
+/// `FFI_RUNTIME_UNAVAILABLE` (3) when the native runtime cannot start; `FFI_MEETING_NOT_FOUND`
+/// (5) for an unknown meeting.
+/// Side effects: Opens the runtime on first use and replaces the meeting's title in SQLite. Null
+/// pointers are rejected before the runtime is touched. The title is never logged.
+///
+/// # Safety
+/// Each pointer must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_rename_meeting(
+    meeting_id: *const c_char,
+    new_title: *const c_char,
+) -> c_int {
+    let (Some(meeting_id), Some(new_title)) = (unsafe { ffi_string(meeting_id) }, unsafe {
+        ffi_string(new_title)
+    }) else {
+        return FFI_INVALID_ARGUMENT;
+    };
+    with_runtime(|runtime| runtime.rename_meeting(meeting_id, new_title))
+}
+
 /// Feeds captured 16 kHz mono signed 16-bit PCM into the active recording.
 ///
 /// Inputs: `samples` points to `sample_count` samples (null is allowed only for a count of 0).
@@ -1785,8 +1840,8 @@ mod ffi_contract_tests {
     use super::{
         FFI_AUDIO_STATE_IDLE, FFI_AUDIO_STATE_INTERRUPTED, FFI_AUDIO_STATE_PAUSED,
         FFI_AUDIO_STATE_RECORDING, FFI_AUDIO_STATE_STOPPED, FFI_INVALID_ARGUMENT,
-        FFI_OPERATION_REJECTED, FFI_PIPELINE_UNAVAILABLE, FFI_SUCCESS, FfiRuntime,
-        pcm_samples_from_raw, titled_start_arguments,
+        FFI_MEETING_NOT_FOUND, FFI_OPERATION_REJECTED, FFI_PIPELINE_UNAVAILABLE, FFI_SUCCESS,
+        FfiRuntime, note_taker_rename_meeting, pcm_samples_from_raw, titled_start_arguments,
     };
     use crate::{
         application::unknown_speaker_clusterer::{ClusteringConfig, UnknownSpeakerClusterer},
@@ -2302,6 +2357,84 @@ mod ffi_contract_tests {
             (segments[0].start_time_ms(), segments[0].end_time_ms()),
             (0, 2_000)
         );
+    }
+
+    /// Verifies a rename with valid inputs succeeds and `get_meeting` then shows the trimmed title.
+    #[test]
+    fn rename_meeting_updates_the_title_in_meeting_json() {
+        let (mut ffi_runtime, export_directory) = export_runtime();
+        crate::application::meeting_crdt::MeetingCrdtService::new(&ffi_runtime.note_repository)
+            .create_meeting(&MeetingId::new("ffi-rename"))
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+
+        let rename_status = ffi_runtime.rename_meeting("ffi-rename", "  Project Sync  ");
+        let meeting = parse_response(&ffi_runtime.get_meeting("ffi-rename"));
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert_eq!(rename_status, FFI_SUCCESS);
+        assert_eq!(meeting["title"], "Project Sync");
+    }
+
+    /// Verifies blank IDs and invalid titles return `FFI_INVALID_ARGUMENT`, an unknown meeting
+    /// returns `FFI_MEETING_NOT_FOUND`, and none of them changes the stored title.
+    #[test]
+    fn rename_meeting_rejects_invalid_inputs_and_unknown_meetings() {
+        let (mut ffi_runtime, export_directory) = export_runtime();
+        crate::application::meeting_crdt::MeetingCrdtService::new(&ffi_runtime.note_repository)
+            .create_meeting(&MeetingId::new("ffi-rename"))
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        assert_eq!(
+            ffi_runtime.rename_meeting("ffi-rename", "Original"),
+            FFI_SUCCESS
+        );
+        let oversized_title = "x".repeat(MeetingTitle::MAX_CHARACTERS + 1);
+
+        let invalid_statuses: Vec<_> = [
+            ("ffi-rename", ""),
+            ("ffi-rename", "   "),
+            ("ffi-rename", "line one\nline two"),
+            ("ffi-rename", "bell\u{0007}"),
+            ("ffi-rename", oversized_title.as_str()),
+            ("", "Valid"),
+            ("   ", "Valid"),
+        ]
+        .into_iter()
+        .map(|(meeting_id, title)| ffi_runtime.rename_meeting(meeting_id, title))
+        .collect();
+        let missing_status = ffi_runtime.rename_meeting("ffi-missing", "Orphan");
+        let meeting = parse_response(&ffi_runtime.get_meeting("ffi-rename"));
+        let missing_meeting = parse_response(&ffi_runtime.get_meeting("ffi-missing"));
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert!(
+            invalid_statuses
+                .iter()
+                .all(|status| *status == FFI_INVALID_ARGUMENT),
+            "{invalid_statuses:?}"
+        );
+        assert_eq!(missing_status, FFI_MEETING_NOT_FOUND);
+        assert_eq!(meeting["title"], "Original");
+        assert_eq!(missing_meeting["error_code"], "meeting_not_found");
+    }
+
+    /// Verifies null pointers are rejected before the runtime is touched.
+    #[test]
+    fn rename_meeting_rejects_null_pointers() {
+        let meeting_id = std::ffi::CString::new("ffi-rename")
+            .unwrap_or_else(|error| panic!("fixture C string must build: {error}"));
+        let title = std::ffi::CString::new("Title")
+            .unwrap_or_else(|error| panic!("fixture C string must build: {error}"));
+
+        // SAFETY: Each pointer is null or a valid NUL-terminated string alive for the call.
+        let statuses = unsafe {
+            [
+                note_taker_rename_meeting(std::ptr::null(), title.as_ptr()),
+                note_taker_rename_meeting(meeting_id.as_ptr(), std::ptr::null()),
+                note_taker_rename_meeting(std::ptr::null(), std::ptr::null()),
+            ]
+        };
+
+        assert_eq!(statuses, [FFI_INVALID_ARGUMENT; 3]);
     }
 
     /// Verifies a titled start persists the title, and `get_meetings`/`get_meeting` return it
