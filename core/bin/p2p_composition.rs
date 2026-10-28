@@ -358,8 +358,10 @@ async fn run_service(
             }
             changed
         });
+        let next_retry_at = service.next_retry_at();
         tokio::select! {
             _ = &mut stop => break,
+            () = sleep_until_retry(next_retry_at) => {}
             swarm_result = service.transport_mut().drive_next_swarm_event() => {
                 if let Err(error) = swarm_result {
                     tracing::error!(error = %error, "the P2P swarm stopped");
@@ -378,6 +380,14 @@ async fn run_service(
         }
     }
     tracing::info!("P2P sync stopped");
+}
+
+/// Sleeps until `retry_at`, or forever when no retry is scheduled.
+async fn sleep_until_retry(retry_at: Option<std::time::Instant>) {
+    match retry_at {
+        Some(retry_at) => tokio::time::sleep_until(tokio::time::Instant::from_std(retry_at)).await,
+        None => std::future::pending().await,
+    }
 }
 
 /// Captures the service's status and listen addresses.

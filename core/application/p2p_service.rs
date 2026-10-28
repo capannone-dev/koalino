@@ -8,7 +8,10 @@
 //! A device whose pairing completes starts syncing at once: the transport reports the connected,
 //! newly trusted peer, so meetings flow without waiting for the next discovery announcement.
 
-use std::{collections::VecDeque, time::Duration};
+use std::{
+    collections::{HashMap, VecDeque},
+    time::{Duration, Instant},
+};
 
 use crate::{
     application::{
@@ -31,6 +34,10 @@ use crate::{
 
 /// How long `MakePairable` admits connections from unpaired devices.
 pub const PAIRING_WINDOW: Duration = Duration::from_secs(5 * 60);
+
+/// How long after a failed delivery sync with that peer restarts. Failures in between collapse
+/// into this one restart, so a peer that drops messages costs one retry per delay.
+pub const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(2);
 
 /// Most pairing updates kept for the Devices screens, newest last.
 const MAX_RECENT_UPDATES: usize = 16;
@@ -151,6 +158,10 @@ pub struct P2pService<Transport, Store, Repository> {
     trusted_devices: Vec<TrustedPeer>,
     /// The latest pairing updates, newest last, at most `MAX_RECENT_UPDATES`.
     recent_updates: VecDeque<PairingUpdate>,
+    /// Delay between a failed delivery and the restart it schedules.
+    retry_delay: Duration,
+    /// Peers whose sync restarts at the given instant.
+    scheduled_restarts: HashMap<DeviceId, Instant>,
 }
 
 impl<Transport, Store, Repository> P2pService<Transport, Store, Repository>
@@ -171,7 +182,22 @@ where
             sync_manager,
             trusted_devices: Vec::new(),
             recent_updates: VecDeque::new(),
+            retry_delay: DEFAULT_RETRY_DELAY,
+            scheduled_restarts: HashMap::new(),
         }
+    }
+
+    /// Replaces `DEFAULT_RETRY_DELAY`, for example with a short delay in tests.
+    pub fn with_retry_delay(mut self, retry_delay: Duration) -> Self {
+        self.retry_delay = retry_delay;
+        self
+    }
+
+    /// When the earliest scheduled restart is due, so the task loop can wake for it.
+    ///
+    /// Side effects: None.
+    pub fn next_retry_at(&self) -> Option<Instant> {
+        self.scheduled_restarts.values().min().copied()
     }
 
     /// Admits the stored paired devices into the transport and caches the allowlist.
@@ -207,6 +233,40 @@ where
                 Ok(true) => {}
                 Ok(false) => break,
                 Err(error) => tracing::warn!(error = %error, "a sync message could not be applied"),
+            }
+        }
+        self.run_scheduled_restarts();
+    }
+
+    /// Schedules a restart for each peer whose delivery failed, then runs the restarts that are
+    /// due for peers still connected.
+    ///
+    /// Side effects: May send one handshake per local meeting to each restarted peer. Failures
+    /// are logged; a disconnected peer starts over at its next connection.
+    fn run_scheduled_restarts(&mut self) {
+        let now = Instant::now();
+        let retry_at = now.checked_add(self.retry_delay).unwrap_or(now);
+        for failed_peer in self.sync_manager.take_failed_peers() {
+            self.scheduled_restarts
+                .entry(failed_peer)
+                .or_insert(retry_at);
+        }
+        let due_peers: Vec<DeviceId> = self
+            .scheduled_restarts
+            .iter()
+            .filter(|(_, restart_at)| **restart_at <= now)
+            .map(|(peer_id, _)| peer_id.clone())
+            .collect();
+        for peer_id in due_peers {
+            self.scheduled_restarts.remove(&peer_id);
+            if !self.sync_manager.is_connected(&peer_id) {
+                continue;
+            }
+            if let Err(error) = self
+                .sync_manager
+                .restart_peer(self.pairing_manager.transport_mut(), peer_id)
+            {
+                tracing::warn!(error = %error, "sync with a paired device could not restart");
             }
         }
     }
@@ -290,17 +350,24 @@ where
         self.sync_manager.repository()
     }
 
-    /// Keeps `update` for the screens; a completed pairing also refreshes the allowlist cache.
-    /// Sync with the new device starts from the transport's `PeerDiscovered`, which it reports as
-    /// soon as the already-connected peer becomes trusted.
+    /// Keeps `update` for the screens. A completed pairing also refreshes the allowlist cache and
+    /// restarts sync with the device from fresh state: if this device already trusted it (it
+    /// re-paired after the other side revoked), its first handshake went out while the other side
+    /// still dropped it, and only a restart sends it again.
     ///
-    /// Side effects: May read the allowlist. A failure is logged, since the trust decision itself
-    /// is already persisted.
+    /// Side effects: May read the allowlist and send sync messages. Failures are logged, since
+    /// the trust decision itself is already persisted.
     fn record_update(&mut self, update: PairingUpdate) {
-        if matches!(update, PairingUpdate::Paired { .. })
-            && let Err(error) = self.refresh_trusted_devices()
-        {
-            tracing::warn!(error = %error, "the paired-device list could not be refreshed");
+        if let PairingUpdate::Paired { peer_id, .. } = &update {
+            if let Err(error) = self.refresh_trusted_devices() {
+                tracing::warn!(error = %error, "the paired-device list could not be refreshed");
+            }
+            if let Err(error) = self
+                .sync_manager
+                .restart_peer(self.pairing_manager.transport_mut(), peer_id.clone())
+            {
+                tracing::warn!(error = %error, "sync with a newly paired device could not start");
+            }
         }
         if self.recent_updates.len() == MAX_RECENT_UPDATES {
             self.recent_updates.pop_front();

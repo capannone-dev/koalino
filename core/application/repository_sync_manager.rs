@@ -68,6 +68,9 @@ pub struct RepositorySyncManager<RepositoryPort> {
     peer_sync_states: HashMap<(DeviceId, MeetingId), sync::State>,
     /// Documents of meetings that exist only on a peer, until their first changes arrive.
     pending_remote_meetings: HashMap<MeetingId, AutoCommit>,
+    /// Connected peers that failed to acknowledge a sync payload since the last
+    /// `take_failed_peers`.
+    failed_peers: HashSet<DeviceId>,
 }
 
 impl<RepositoryPort> RepositorySyncManager<RepositoryPort>
@@ -84,6 +87,7 @@ where
             connected_peers: HashSet::new(),
             peer_sync_states: HashMap::new(),
             pending_remote_meetings: HashMap::new(),
+            failed_peers: HashSet::new(),
         }
     }
 
@@ -115,6 +119,11 @@ where
                 payload,
             } => self.apply_remote_sync_message(p2p_network, &peer_device_id, &payload)?,
             NetworkEvent::PeerExpired(peer_device_id) => self.forget_peer(&peer_device_id),
+            NetworkEvent::DeliveryFailed(peer_device_id) => {
+                if self.connected_peers.contains(&peer_device_id) {
+                    self.failed_peers.insert(peer_device_id);
+                }
+            }
         }
         Ok(true)
     }
@@ -138,7 +147,8 @@ where
 
     /// Records `peer_device_id` as connected and starts a handshake for every local meeting.
     ///
-    /// Inputs: A paired peer that just connected, from discovery or from a completed pairing.
+    /// Inputs: A paired peer that just connected. A peer already recorded as connected is
+    /// ignored, so a repeated report never sends a second handshake.
     /// Outputs: Success, or the first storage, protocol, or network error.
     /// Side effects: Lists local meetings and sends up to one message per meeting.
     pub fn peer_connected(
@@ -146,13 +156,52 @@ where
         p2p_network: &mut impl P2pNetwork,
         peer_device_id: DeviceId,
     ) -> Result<(), RepositorySyncManagerError> {
+        if self.connected_peers.contains(&peer_device_id) {
+            return Ok(());
+        }
         tracing::info!(peer_id = %peer_device_id.as_str(), "Starting repository sync");
         let local_meeting_ids = self.repository().list_meeting_ids()?;
         self.connected_peers.insert(peer_device_id.clone());
         for meeting_id in local_meeting_ids {
-            self.send_local_sync_message(p2p_network, &peer_device_id, &meeting_id)?;
+            if let Err(error) =
+                self.send_local_sync_message(p2p_network, &peer_device_id, &meeting_id)
+            {
+                // Not connected after all: the next report of this peer starts over.
+                self.forget_peer(&peer_device_id);
+                return Err(error);
+            }
         }
         Ok(())
+    }
+
+    /// Reports whether `peer_device_id` is recorded as connected.
+    pub fn is_connected(&self, peer_device_id: &DeviceId) -> bool {
+        self.connected_peers.contains(peer_device_id)
+    }
+
+    /// Returns the connected peers whose deliveries failed since the last call, by peer ID, and
+    /// clears the set.
+    ///
+    /// Side effects: Clears the in-memory set.
+    pub fn take_failed_peers(&mut self) -> Vec<DeviceId> {
+        let mut failed_peers: Vec<DeviceId> = self.failed_peers.drain().collect();
+        failed_peers.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        failed_peers
+    }
+
+    /// Restarts sync with `peer_device_id` from fresh protocol state.
+    ///
+    /// Inputs: A connected peer whose earlier messages may have been dropped, such as a device
+    /// that did not trust this one until a pairing just completed.
+    /// Outputs: Success, or the first storage, protocol, or network error.
+    /// Side effects: Drops the peer's sync states, then sends one handshake per local meeting.
+    pub fn restart_peer(
+        &mut self,
+        p2p_network: &mut impl P2pNetwork,
+        peer_device_id: DeviceId,
+    ) -> Result<(), RepositorySyncManagerError> {
+        self.forget_peer(&peer_device_id);
+        self.peer_connected(p2p_network, peer_device_id)
     }
 
     /// Forgets a disconnected peer's protocol state and abandons meetings only it was sending.
@@ -160,6 +209,7 @@ where
     /// Side effects: Updates in-memory state only.
     fn forget_peer(&mut self, peer_device_id: &DeviceId) {
         self.connected_peers.remove(peer_device_id);
+        self.failed_peers.remove(peer_device_id);
         self.peer_sync_states
             .retain(|(state_peer, _), _| state_peer != peer_device_id);
         let peer_sync_states = &self.peer_sync_states;

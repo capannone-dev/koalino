@@ -516,6 +516,16 @@ impl Libp2pNetworkAdapter {
         &mut self,
         sync_payload_event: request_response::Event<Vec<u8>, Vec<u8>>,
     ) {
+        if let request_response::Event::OutboundFailure { peer, .. } = &sync_payload_event {
+            if self.swarm.behaviour().peer_gate.is_trusted(peer) {
+                tracing::debug!("a sync payload was not acknowledged by a paired peer");
+                self.pending_network_events
+                    .push_back(NetworkEvent::DeliveryFailed(Self::device_id_from_peer_id(
+                        *peer,
+                    )));
+            }
+            return;
+        }
         if let request_response::Event::Message {
             peer,
             message:
@@ -1826,5 +1836,47 @@ mod tests {
             drain_events(&mut dialer),
             vec![NetworkEvent::PeerDiscovered(listener_id)]
         );
+    }
+
+    /// A sync payload the receiver drops (it does not trust the sender yet) is reported to the
+    /// sender as `DeliveryFailed`, so it can send again once trust is mutual.
+    #[tokio::test]
+    async fn a_dropped_sync_payload_is_reported_to_the_sender() {
+        let (mut sender, mut receiver, address) = listening_pair("/memory/9363");
+        let receiver_id = receiver.local_device_id();
+        receiver.open_pairing_window(Duration::from_secs(60));
+        sender
+            .trust_peer(&receiver_id)
+            .and_then(|()| sender.dial_memory(address))
+            .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+        let connected = drive_until(
+            &mut sender,
+            &mut receiver,
+            Duration::from_secs(5),
+            |sender, _| sender.is_connected_to(&receiver_id),
+        )
+        .await;
+        assert!(connected);
+        sender
+            .send_encrypted(&receiver_id, b"too-early")
+            .unwrap_or_else(|error| panic!("send must be queued: {error}"));
+
+        let mut sender_events = Vec::new();
+        let reported = drive_until(
+            &mut sender,
+            &mut receiver,
+            Duration::from_secs(5),
+            |sender, _| {
+                sender_events.extend(drain_events(sender));
+                sender_events.contains(&NetworkEvent::DeliveryFailed(receiver_id.clone()))
+            },
+        )
+        .await;
+
+        assert!(
+            reported,
+            "the sender must learn of the drop: {sender_events:?}"
+        );
+        assert!(drain_events(&mut receiver).is_empty());
     }
 }

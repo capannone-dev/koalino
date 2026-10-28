@@ -11,6 +11,10 @@ pub enum NetworkEvent {
     PeerDiscovered(DeviceId),
     /// A reported peer is gone: its last connection closed, or it was revoked.
     PeerExpired(DeviceId),
+    /// A sync payload sent to this paired peer was not acknowledged: the peer dropped it (it did
+    /// not trust this device yet), the request timed out, or the connection broke. The sender
+    /// should send its state again later.
+    DeliveryFailed(DeviceId),
     /// An authenticated peer delivered an opaque application payload.
     MessageReceived {
         /// Identifies the authenticated sender of the payload.

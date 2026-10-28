@@ -395,3 +395,63 @@ fn unknown_meetings_beyond_the_pending_bound_are_refused() {
         .unwrap_or_else(|error| panic!("meetings must list: {error}"));
     assert!(created.is_empty());
 }
+
+/// Messages a peer dropped (it did not trust this device yet) leave the handshake waiting;
+/// restarting sync with that peer sends everything again from fresh state.
+#[test]
+fn restarting_a_peer_resends_what_it_dropped() {
+    let (mut laptop, mut phone) = linked_devices("laptop", "phone");
+    let meeting_id = MeetingId::new("meeting-standup");
+    laptop.record_meeting(&meeting_id, "Standup");
+    laptop.discover(&phone);
+    laptop
+        .manager
+        .process_next_network_event(&mut laptop.network)
+        .unwrap_or_else(|error| panic!("discovery must be handled: {error}"));
+    phone.inbox.borrow_mut().clear();
+    let phone_id = phone.device_id.clone();
+
+    laptop
+        .manager
+        .peer_connected(&mut laptop.network, phone_id.clone())
+        .unwrap_or_else(|error| panic!("a repeated connection must be ignored: {error}"));
+    assert!(
+        phone.inbox.borrow().is_empty(),
+        "an already-connected peer must not get a second handshake"
+    );
+    laptop
+        .manager
+        .restart_peer(&mut laptop.network, phone_id)
+        .unwrap_or_else(|error| panic!("restart must succeed: {error}"));
+    phone.discover(&laptop);
+    run_until_quiet(&mut laptop, &mut phone);
+
+    assert_eq!(phone.meeting_ids(), vec![meeting_id.clone()]);
+    assert_eq!(phone.stored_title(&meeting_id).as_deref(), Some("Standup"));
+}
+
+/// A failed delivery to a connected peer is collected once for a later restart; one to a peer
+/// that is not connected is ignored, since its next connection restarts sync anyway.
+#[test]
+fn failed_deliveries_to_connected_peers_are_collected_once() {
+    let repository = device_repository("phone");
+    let laptop = DeviceId::new("laptop");
+    let tablet = DeviceId::new("tablet");
+    let mut manager = RepositorySyncManager::new(repository);
+    let mut network = ScriptedNetwork {
+        events: VecDeque::from([
+            NetworkEvent::PeerDiscovered(laptop.clone()),
+            NetworkEvent::DeliveryFailed(laptop.clone()),
+            NetworkEvent::DeliveryFailed(laptop.clone()),
+            NetworkEvent::DeliveryFailed(tablet),
+        ]),
+    };
+
+    while manager
+        .process_next_network_event(&mut network)
+        .unwrap_or_else(|error| panic!("events must be handled: {error}"))
+    {}
+
+    assert_eq!(manager.take_failed_peers(), vec![laptop]);
+    assert!(manager.take_failed_peers().is_empty());
+}

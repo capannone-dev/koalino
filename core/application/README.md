@@ -60,8 +60,11 @@ devices. It replaces the single-meeting `SyncManager` for the daemon's P2P task:
 - **Disconnect:** an expired peer's state is dropped.
 - **Shared adapter:** the manager borrows the network on each call rather than owning it, so the
   P2P task can share one adapter with `PairingManager`. Syncing with a device starts from the
-  transport's `PeerDiscovered`, which arrives once the device is connected and trusted, including
-  right after pairing.
+  transport's `PeerDiscovered`, which arrives once the device is connected and trusted.
+  `peer_connected` ignores a peer already recorded as connected.
+- **Lost messages:** `DeliveryFailed` from a connected peer is collected (`take_failed_peers`).
+  `restart_peer` drops that peer's sync states and sends a fresh handshake for every meeting.
+  Without it, a dropped message leaves Automerge waiting for a reply that never comes.
 
 `repository_sync_manager_tests.rs` runs two document-backed SQLite repositories over a linked
 in-process network.
@@ -76,6 +79,16 @@ in-process network.
 - `status()` returns a `P2pStatus` snapshot: this device, paired devices (cached, so no storage
   read), nearby devices, pairings in progress with their codes (`PairingManager::incoming_requests`
   and `outgoing_pairings`), and recent updates.
+
+Two cases need a restart around pairing:
+
+- **Pairing completes:** the service restarts sync with the device. This covers a device that
+  already trusted this one (re-pairing after a revocation on one side), whose first handshake the
+  other side dropped.
+- **Delivery fails:** the service schedules one restart per device after `DEFAULT_RETRY_DELAY` (2 s).
+  This covers the responder, whose messages sent right after accepting can be dropped while the
+  initiator has not confirmed. `next_retry_at` tells the task loop when to wake. Failures in
+  between collapse into that one restart.
 
 Errors about one event or peer are logged and processing continues. `p2p_service_tests.rs` pairs
 two services over real memory-transport swarms and checks that a meeting, then a rename, reach the

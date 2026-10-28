@@ -86,7 +86,8 @@ where
                 self.peer_sync_states.remove(&peer_device_id);
                 Ok(())
             }
-            None => Ok(()),
+            // Retries are scheduled by the whole-repository manager this one predates.
+            Some(NetworkEvent::DeliveryFailed(_)) | None => Ok(()),
         }
     }
 

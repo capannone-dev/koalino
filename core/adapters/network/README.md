@@ -23,7 +23,10 @@ Untrusted ones are listed only by `nearby_unpaired_peers()`, as pairing candidat
 Reachability follows connections, not announcements. A trusted peer is reported as
 `PeerDiscovered` when its first connection is established, or at once when an already-connected
 (pairing) peer becomes trusted. Its first sync message therefore never races the dial. The peer is
-reported as `PeerExpired` when its last connection closes or it is revoked. The trusted set is loaded from `TrustedPeerStore` by the composition layer.
+reported as `PeerExpired` when its last connection closes or it is revoked. A sync payload that a
+trusted peer does not acknowledge is reported as `DeliveryFailed`. This happens when the peer dropped
+it because it did not trust this device yet, or when the request timed out, so the sender knows to
+send again. The trusted set is loaded from `TrustedPeerStore` by the composition layer.
 
 `pairing_behaviour.rs` defines `/note-taker/pairing/1`, which carries version-1 JSON in 4 KiB
 length-prefixed frames. The initiator sends `PairingRequest { device_name }`. The responder replies

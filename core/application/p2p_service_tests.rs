@@ -53,7 +53,8 @@ fn service(name: &str, adapter: Libp2pNetworkAdapter) -> Service {
     let mut service = P2pService::new(
         PairingManager::new(adapter, trust_store, device_name, Box::new(|| 7)),
         RepositorySyncManager::new(repository),
-    );
+    )
+    .with_retry_delay(Duration::from_millis(50));
     service
         .start()
         .unwrap_or_else(|error| panic!("service must start: {error}"));
@@ -73,6 +74,11 @@ async fn drive(
             if condition(laptop, phone) {
                 return;
             }
+            // Wakes for scheduled retries too, as the daemon loop does.
+            let next_retry = [laptop.next_retry_at(), phone.next_retry_at()]
+                .into_iter()
+                .flatten()
+                .min();
             tokio::select! {
                 result = laptop.transport_mut().drive_next_swarm_event() => {
                     result.unwrap_or_else(|error| panic!("laptop swarm: {error}"));
@@ -80,11 +86,20 @@ async fn drive(
                 result = phone.transport_mut().drive_next_swarm_event() => {
                     result.unwrap_or_else(|error| panic!("phone swarm: {error}"));
                 }
+                () = sleep_until_retry(next_retry) => {}
             }
         }
     })
     .await
     .unwrap_or_else(|_| panic!("condition not reached before timeout"));
+}
+
+/// Sleeps until `retry_at`, or forever when no retry is scheduled.
+async fn sleep_until_retry(retry_at: Option<std::time::Instant>) {
+    match retry_at {
+        Some(retry_at) => tokio::time::sleep_until(tokio::time::Instant::from_std(retry_at)).await,
+        None => std::future::pending().await,
+    }
 }
 
 /// Runs one command and fails the test on error.
@@ -218,4 +233,62 @@ async fn status_names_the_device_and_unknown_pairings_are_refused() {
     assert_eq!(status.device_name.as_str(), "Laptop");
     assert!(status.trusted_devices.is_empty() && status.incoming_requests.is_empty());
     assert!(refused.is_err());
+}
+
+/// The phone accepts first and syncs its meeting at once, while the laptop, which has not
+/// confirmed yet, still drops those messages. Once the laptop confirms, the phone's retry
+/// delivers the meeting.
+#[tokio::test]
+async fn messages_dropped_before_mutual_trust_are_sent_again() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9352"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let mut laptop = service("Laptop", laptop_adapter);
+    let mut phone = service("Phone", phone_adapter);
+    let laptop_id = laptop.transport().local_peer_id();
+    let phone_id = phone.transport().local_peer_id();
+    let meeting_id = MeetingId::new("meeting-on-phone");
+    MeetingCrdtService::new(phone.repository())
+        .create_titled_meeting(&meeting_id, &title("Phone call"))
+        .unwrap_or_else(|error| panic!("meeting must be recorded: {error}"));
+    run(&mut phone, P2pCommand::MakePairable);
+    laptop
+        .transport_mut()
+        .allow_pairing_dial(&phone_id)
+        .and_then(|()| laptop.transport_mut().dial_memory(phone_address))
+        .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+    drive(&mut laptop, &mut phone, |laptop, _| {
+        laptop.transport().is_connected_to(&phone_id)
+    })
+    .await;
+    run(&mut laptop, P2pCommand::StartPairing(phone_id.clone()));
+    drive(&mut laptop, &mut phone, |_, phone| {
+        !phone.status().incoming_requests.is_empty()
+    })
+    .await;
+
+    // The phone accepts and starts syncing before the laptop's owner has confirmed.
+    run(&mut phone, P2pCommand::AcceptIncoming(laptop_id));
+    drive(&mut laptop, &mut phone, |_, phone| {
+        phone.next_retry_at().is_some()
+    })
+    .await;
+    assert_eq!(stored_title(&laptop, &meeting_id), None);
+
+    run(&mut laptop, P2pCommand::ConfirmCode(phone_id));
+    drive(&mut laptop, &mut phone, |laptop, _| {
+        stored_title(laptop, &meeting_id).is_some()
+    })
+    .await;
+    assert_eq!(
+        stored_title(&laptop, &meeting_id).as_deref(),
+        Some("Phone call")
+    );
 }

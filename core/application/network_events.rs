@@ -78,7 +78,7 @@ impl NetworkEventHandler {
                 self.reachable_peer_device_ids
                     .retain(|reachable_device_id| reachable_device_id != &expired_device_id);
             }
-            NetworkEvent::MessageReceived { .. } => {}
+            NetworkEvent::MessageReceived { .. } | NetworkEvent::DeliveryFailed(_) => {}
         }
     }
 }
