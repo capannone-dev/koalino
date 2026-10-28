@@ -12,7 +12,7 @@ use note_taker_core::{
     application::{crypto::key_manager::KeyManagerConfig, export_manager::ExportWriter},
     cli::{Cli, CoreCliService, dispatch},
     cli_recording::{PipelineRecordingControl, RecordingControlFiles},
-    domain::models::DeviceId,
+    device_identity::device_id_from_environment,
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
     storage_composition::{EncryptedStores, open_encrypted_stores},
 };
@@ -29,22 +29,18 @@ use note_taker_core::{
 /// database, and may run a foreground recording through the meeting pipeline or invoke a
 /// repository/voice application service according to the parsed command.
 fn main() -> Result<()> {
-    let device_id = DeviceId::new(
-        env::var("NOTE_TAKER_DEVICE_ID").unwrap_or_else(|_| String::from("unconfigured-device")),
-    );
+    let database_path = env::var("NOTE_TAKER_DATABASE_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
+    let device_id = device_id_from_environment(&database_path)?;
     let log_directory = env::var("NOTE_TAKER_LOG_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("logs"));
     let log_filter = String::from("error");
     let _logging_runtime = initialize_logging(
-        LoggingConfiguration::new(device_id, log_directory).with_filter(log_filter),
+        LoggingConfiguration::new(device_id.clone(), log_directory).with_filter(log_filter),
     )?;
-    let database_path = env::var("NOTE_TAKER_DATABASE_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
-    let store_device_id = DeviceId::new(
-        env::var("NOTE_TAKER_DEVICE_ID").unwrap_or_else(|_| String::from("unconfigured-device")),
-    );
+    let store_device_id = device_id;
     let EncryptedStores {
         note_repository: repository,
         voice_store,

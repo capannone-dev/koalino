@@ -50,6 +50,11 @@ pub struct SqliteNoteRepository {
 }
 
 impl SqliteNoteRepository {
+    /// Returns the acquisition device ID this repository stamps on records it creates.
+    pub fn device_id(&self) -> &DeviceId {
+        &self.device_id
+    }
+
     /// Opens a SQLite database at `database_path` and initializes the meeting schema.
     ///
     /// Inputs: `database_path` must be a writable SQLite path; `device_id` identifies structured log

@@ -31,12 +31,13 @@ use crate::{
         unknown_speaker_clusterer::ClusteringError,
         voice_identity_manager::VoiceIdentityManager,
     },
+    device_identity::device_id_from_environment,
     domain::{
         errors::ExportError,
         models::{
-            Attachment, AudioState, DeviceId, ExportFormat, ExportOptions, MeetingId,
-            MeetingMetadata, MeetingTitle, SpeakerIdentity, TaskMetrics, TaskType,
-            TranscriptSegment, UnassignedVoiceClip,
+            Attachment, AudioState, ExportFormat, ExportOptions, MeetingId, MeetingMetadata,
+            MeetingTitle, SpeakerIdentity, TaskMetrics, TaskType, TranscriptSegment,
+            UnassignedVoiceClip,
         },
     },
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
@@ -181,7 +182,7 @@ fn test_recording_controller(
         let note_repository = match shared_database {
             Some((database_path, embedding_cipher)) => SqliteNoteRepository::open(
                 database_path,
-                DeviceId::new("ffi-test"),
+                crate::domain::models::DeviceId::new("ffi-test"),
                 embedding_cipher,
             )?,
             None => SqliteNoteRepository::open_in_memory(ephemeral_cipher())?,
@@ -195,7 +196,7 @@ fn test_recording_controller(
         recording_manager,
         std::sync::Arc::new(ChunkAudioStore::new()),
         ChunkingMode::TimeBased,
-        DeviceId::new("ffi-test"),
+        crate::domain::models::DeviceId::new("ffi-test"),
     ))
 }
 
@@ -301,10 +302,10 @@ impl FfiRuntime {
         let database_path = env::var("NOTE_TAKER_DATABASE_PATH")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
-        let device_id = DeviceId::new(
-            env::var("NOTE_TAKER_DEVICE_ID")
-                .unwrap_or_else(|_| String::from("unconfigured-device")),
-        );
+        let device_id = device_id_from_environment(&database_path).map_err(|error| {
+            tracing::error!(error = %format!("{error:#}"), "unable to resolve the device ID");
+            FFI_OPERATION_REJECTED
+        })?;
         let EncryptedStores {
             note_repository,
             voice_store,
@@ -401,7 +402,7 @@ impl FfiRuntime {
             embedding_cipher,
         } = open_encrypted_stores(
             database_path,
-            DeviceId::new("ffi-test"),
+            crate::domain::models::DeviceId::new("ffi-test"),
             crate::storage_composition::key_file_config_for_tests(&export_directory.join("keys")),
         )
         .map_err(|_| FFI_OPERATION_REJECTED)?;
@@ -619,10 +620,10 @@ impl FfiRuntime {
     /// Returns safe source-device metadata for a local attachment record.
     ///
     /// Inputs: None.
-    /// Outputs: The configured local device identifier or the documented fallback value.
-    /// Side effects: Reads one environment variable.
+    /// Outputs: The device ID the note repository was opened with (see `device_identity`).
+    /// Side effects: None.
     fn note_repository_device_id(&self) -> String {
-        env::var("NOTE_TAKER_DEVICE_ID").unwrap_or_else(|_| String::from("unconfigured-device"))
+        self.note_repository.device_id().as_str().to_owned()
     }
 
     /// Delegates a user-approved candidate to the existing voice identity application service.
@@ -1180,10 +1181,7 @@ impl FfiRuntime {
         }
 
         if self.logging_runtime.is_none() {
-            let device_id = DeviceId::new(
-                env::var("NOTE_TAKER_DEVICE_ID")
-                    .unwrap_or_else(|_| String::from("unconfigured-device")),
-            );
+            let device_id = self.note_repository.device_id().clone();
             let log_directory = env::var("NOTE_TAKER_LOG_DIR")
                 .map(PathBuf::from)
                 .unwrap_or_else(|_| PathBuf::from("logs"));

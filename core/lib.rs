@@ -13,6 +13,9 @@ pub mod cli;
 /// Runs foreground CLI recordings and coordinates `record stop` across processes.
 #[path = "bin/cli_recording.rs"]
 pub mod cli_recording;
+/// Resolves the acquisition device ID shared by the CLI, daemon, and FFI composition roots.
+#[path = "bin/device_identity.rs"]
+pub mod device_identity;
 /// Contains pure business types and business failures.
 pub mod domain;
 /// Exposes the C-compatible Flutter bridge without leaking Rust domain types across FFI.

@@ -6,6 +6,7 @@ use anyhow::Result;
 use note_taker_core::{
     adapters::observability::{LoggingConfiguration, initialize_logging},
     application::crypto::key_manager::KeyManagerConfig,
+    device_identity::device_id_from_environment,
     domain::models::DeviceId,
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
     recording_controller::RecordingController,
@@ -16,7 +17,8 @@ use note_taker_core::{
 
 /// Initializes logging, composes headless server ports, and serves the local Axum API.
 ///
-/// Inputs: Reads optional device, log, database, bind-address, encryption
+/// Inputs: Reads optional device (`NOTE_TAKER_DEVICE_ID`, else the ID persisted beside the
+/// database, see `device_identity`), log, database, bind-address, encryption
 /// (`NOTE_TAKER_ENCRYPTION_PASSPHRASE`, `NOTE_TAKER_ENCRYPTION_KEY_DIR`), and meeting-pipeline
 /// (see `pipeline_composition`), and Teams bridge (`NOTE_TAKER_TEAMS_BRIDGE_*`, see
 /// `teams_bridge_composition`) environment variables.
@@ -29,19 +31,17 @@ use note_taker_core::{
 /// (its pump drains buffered media), and lets the pipeline worker drain before exiting.
 #[tokio::main]
 async fn main() -> Result<()> {
-    let device_id = DeviceId::new(
-        env::var("NOTE_TAKER_DEVICE_ID").unwrap_or_else(|_| String::from("unconfigured-device")),
-    );
+    let database_path = env::var("NOTE_TAKER_DATABASE_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
+    let device_id = device_id_from_environment(&database_path)?;
     let log_directory = env::var("NOTE_TAKER_LOG_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("logs"));
     let log_filter = env::var("RUST_LOG").unwrap_or_else(|_| String::from("info"));
     let _logging_runtime = initialize_logging(
-        LoggingConfiguration::new(device_id, log_directory).with_filter(log_filter),
+        LoggingConfiguration::new(device_id.clone(), log_directory).with_filter(log_filter),
     )?;
-    let database_path = env::var("NOTE_TAKER_DATABASE_PATH")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));
     let bind_address =
         env::var("NOTE_TAKER_BIND_ADDRESS").unwrap_or_else(|_| String::from("127.0.0.1:8080"));
     let EncryptedStores {
@@ -50,14 +50,18 @@ async fn main() -> Result<()> {
         embedding_cipher,
     } = open_encrypted_stores(
         &database_path,
-        DeviceId::new("headless-server"),
+        device_id.clone(),
         KeyManagerConfig::from_environment(),
     )?;
-    let recording_controller =
-        compose_recording_pipeline(database_path.clone(), Arc::clone(&embedding_cipher)).await;
+    let recording_controller = compose_recording_pipeline(
+        database_path.clone(),
+        device_id.clone(),
+        Arc::clone(&embedding_cipher),
+    )
+    .await;
     let teams_bridge = start_teams_bridge_from_environment(
         &database_path,
-        DeviceId::new("headless-server"),
+        device_id,
         embedding_cipher,
         recording_controller.as_ref(),
     )
@@ -83,19 +87,20 @@ async fn main() -> Result<()> {
 
 /// Composes the meeting pipeline without blocking the async runtime.
 ///
-/// Inputs: The database path and the verified embedding cipher.
+/// Inputs: The database path, the acquisition device ID, and the verified embedding cipher.
 /// Outputs: The idle recording controller, or `None` when no transcription engine is
 /// configured (logged as a warning; the daemon keeps serving notes).
 /// Side effects: Spawns the pipeline worker on a blocking thread; it may load a local model and
 /// opens its own SQLite connections. Logs which optional pipeline stages are available.
 async fn compose_recording_pipeline(
     database_path: PathBuf,
+    device_id: DeviceId,
     embedding_cipher: Arc<dyn note_taker_core::ports::crypto::EmbeddingCipher>,
 ) -> Option<RecordingController> {
     let composition = tokio::task::spawn_blocking(move || {
         spawn_recording_controller(
             &database_path,
-            DeviceId::new("headless-server"),
+            device_id,
             embedding_cipher,
             PipelineConfig::from_environment()?,
         )

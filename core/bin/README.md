@@ -4,6 +4,12 @@
 
 `cli.rs` is the command-line composition root and `daemon.rs` is the headless service composition root. They own process-level configuration such as logging. `ffi.rs` owns the C-compatible Flutter boundary: it exposes primitive status-code functions only, keeping Rust domain structs and adapter implementations out of Dart.
 
+`device_identity.rs` resolves the acquisition device ID that the CLI, daemon, and FFI stamp on
+meetings, attachments, and log lines (requirement 3.3): `NOTE_TAKER_DEVICE_ID` when set, otherwise
+a `device-<uuid>` generated once and kept in `<database>.device-id` beside the database. A blank or
+corrupted ID file stops start-up instead of being replaced, because a new ID would split one
+device's notes across two identities.
+
 Attachment import uses a caller-freed JSON string for ranked metadata only. `ffi.rs` composes
 `AttachmentManager` with the local metadata and SQLite adapters, then receives opaque IDs back for
 the user-confirmed persistence action; it never accepts attachment bytes from Flutter.
