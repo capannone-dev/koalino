@@ -38,6 +38,12 @@ axum = { version = "0.8.6", features = ["json", "ws"] }
 chrono = { version = "0.4.42", default-features = false, features = ["clock", "std"] }
 clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.31"
+# Platform keychain for the random embedding key (Issue #40): macOS Keychain, Windows Credential
+# Manager, and the pure-Rust (zbus) Secret Service client on Linux/BSD, so no libdbus is needed.
+keyring = "4.2.0"
+# Already pulled in by `keyring`; used directly for per-platform entry modifiers (the Windows
+# target name) and the in-memory mock credential in adapter tests.
+keyring-core = "1.0.1"
 libp2p = { version = "0.56.0", features = ["macros", "mdns", "noise", "request-response", "tcp", "tokio", "yamux"] }
 # Teams bridge wire format (Issue #33): rust-protobuf 3.x runtime for the generated messages.
 protobuf = "=3.7.2"

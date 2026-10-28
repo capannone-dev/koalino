@@ -6,6 +6,8 @@ pub mod ai;
 pub mod audio;
 /// Implements portable meeting export renderers behind the export port.
 pub mod export;
+/// Stores the random embedding key in the operating system's credential store.
+pub mod keychain;
 /// Implements local attachment metadata extraction behind the media port.
 pub mod media;
 /// Implements encrypted libp2p transport and decentralized local discovery.

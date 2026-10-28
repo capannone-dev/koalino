@@ -3,16 +3,22 @@
 //! The order matters: the database key is unlocked and verified against the stored key-check
 //! value before either adapter opens, so legacy plaintext embeddings are only ever migrated
 //! under the correct key, and a wrong passphrase stops start-up without touching any row.
+//!
+//! This is also where the platform keychain adapter (Issue #40) is injected into the key manager,
+//! unless `NOTE_TAKER_KEYCHAIN_ENABLED` disables it or a passphrase is configured.
 
 use std::{path::Path, sync::Arc};
 
 use anyhow::{Context, Result};
 
 use crate::{
-    adapters::storage::{
-        sqlite_adapter::SqliteNoteRepository,
-        sqlite_encryption_metadata::SqliteEncryptionMetadataStore,
-        sqlite_voice_vector_db::SqliteVoiceVectorDB,
+    adapters::{
+        keychain::platform_keychain::PlatformKeychain,
+        storage::{
+            sqlite_adapter::SqliteNoteRepository,
+            sqlite_encryption_metadata::SqliteEncryptionMetadataStore,
+            sqlite_voice_vector_db::SqliteVoiceVectorDB,
+        },
     },
     application::crypto::key_manager::{KeyManager, KeyManagerConfig},
     domain::models::DeviceId,
@@ -35,9 +41,10 @@ pub struct EncryptedStores {
 /// Inputs: The SQLite path, the device identifier for repository logs, and the key
 /// configuration (normally `KeyManagerConfig::from_environment()`).
 /// Outputs: Both stores, or an error naming the failed step (never key material).
-/// Side effects: May create the database file, the key file, and the encryption metadata on
-/// first start; runs Argon2id when a passphrase is configured; re-encrypts legacy plaintext
-/// embeddings. Call it off UI threads.
+/// Side effects: May create the database file, the keychain entry or key file, and the
+/// encryption metadata on first start; may migrate the key file into the platform keychain and
+/// delete it; runs Argon2id when a passphrase is configured; re-encrypts legacy plaintext
+/// embeddings. Keychain access may block on a platform unlock prompt. Call it off UI threads.
 pub fn open_encrypted_stores(
     database_path: &Path,
     device_id: DeviceId,
@@ -45,8 +52,13 @@ pub fn open_encrypted_stores(
 ) -> Result<EncryptedStores> {
     let metadata_store = SqliteEncryptionMetadataStore::open(database_path)
         .context("unable to open encryption metadata")?;
+    let uses_keychain = key_config.keychain_enabled() && !key_config.uses_passphrase();
+    let mut key_manager = KeyManager::new(key_config);
+    if uses_keychain {
+        key_manager = key_manager.with_keychain(Arc::new(PlatformKeychain::new()));
+    }
     let embedding_cipher: Arc<dyn EmbeddingCipher> = Arc::new(
-        KeyManager::new(key_config)
+        key_manager
             .unlock(&metadata_store)
             .context("unable to unlock the voice embedding encryption key")?,
     );
@@ -65,13 +77,19 @@ pub fn open_encrypted_stores(
 /// Builds a key-file configuration rooted at `key_directory`, for restart tests.
 ///
 /// Inputs: The directory holding (or receiving) the random key file.
-/// Outputs: A configuration that ignores the process environment.
+/// Outputs: A configuration that ignores the process environment and disables the platform
+/// keychain, so tests never read or write the developer's real keychain.
 /// Side effects: None.
 #[cfg(test)]
 pub(crate) fn key_file_config_for_tests(key_directory: &Path) -> KeyManagerConfig {
     let key_directory = key_directory.to_string_lossy().into_owned();
-    KeyManagerConfig::from_lookup(|name| {
-        (name == crate::application::crypto::key_manager::KEY_DIRECTORY_VARIABLE)
-            .then(|| key_directory.clone())
+    KeyManagerConfig::from_lookup(|name| match name {
+        crate::application::crypto::key_manager::KEY_DIRECTORY_VARIABLE => {
+            Some(key_directory.clone())
+        }
+        crate::application::crypto::key_manager::KEYCHAIN_ENABLED_VARIABLE => {
+            Some(String::from("false"))
+        }
+        _ => None,
     })
 }
