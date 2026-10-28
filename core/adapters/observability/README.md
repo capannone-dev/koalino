@@ -24,3 +24,10 @@ by REQUIREMENTS.md 6.3:
   free-text messages are not inspected.
 
 `structured_json_tests.rs` pins the required fields, typed context values, and redaction.
+
+`log_export.rs` (`export_log_files`) joins the newest seven daily files, oldest first, into one
+JSON-lines file for the app's Export logs and the daemon's log download (REQUIREMENTS 6.2,
+Issue #46). It streams each file, ends a day cut off mid-line with a newline, writes through a
+`.partial` file, and reports `NoLogs` when there is nothing to export. The entries were redacted
+when written, so the export adds no user content. `log_export_tests.rs` covers the order, the
+seven-day bound, other files left out, replacing an earlier export, and the empty case.
