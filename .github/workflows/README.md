@@ -3,7 +3,8 @@
 # Workflows
 
 `web-ci.yml` verifies the standalone Next.js dashboard with Node 22 on relevant pushes and pull
-requests: `npm ci` from the lockfile (with npm caching), `npm run lint`, the Vitest component and
+requests: `npm install` (with the npm cache keyed on `web/package.json`, because
+`package-lock.json` is gitignored), `npm run lint`, the Vitest component and
 API client tests with the verbose reporter (so each test is listed in the log), and
 `npm run build`. A newer push to the same branch cancels an older run.
 

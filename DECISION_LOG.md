@@ -867,8 +867,11 @@
   maps to `unexpected`, and a failed `fetch` (daemon down or CORS) maps to `network`.
 - Validation and unchanged titles behave as in Flutter (#41). Length counts code points
   (`Array.from`), as Rust counts `char`s.
-- CI: `web-ci.yml` already ran lint, tests, and build. It now uses `npm ci` with npm caching, names
-  each step, lists tests with the verbose reporter, and cancels superseded runs.
+- CI: `web-ci.yml` already ran lint, tests, and build. It now caches npm downloads, names each
+  step, lists tests with the verbose reporter, and cancels superseded runs. A first version used
+  `npm ci` keyed on `package-lock.json` and failed in Actions, because the lockfile is gitignored
+  (`.gitignore`). It went back to `npm install`, with the cache keyed on `package.json`, whose
+  versions are exact. Committing the lockfile would change project policy and was left alone.
 - Docs: `API_SPECS.md` said renames were "not replicated to peers", which #38/#39 made stale; it
   was corrected.
 - Verification: the bundled client against a scratch daemon returned 200 (trimmed, emoji kept),

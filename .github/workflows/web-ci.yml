@@ -25,10 +25,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
-      # `npm ci` installs exactly what package-lock.json pins and fails if the lockfile is stale.
+          # package-lock.json is gitignored, so the cache is keyed on package.json (exact versions).
+          cache-dependency-path: web/package.json
       - name: Install web dependencies
-        run: npm ci
+        run: npm install
       - name: Lint
         run: npm run lint
       # The verbose reporter lists every test by name, so the run log shows which UI behaviors
