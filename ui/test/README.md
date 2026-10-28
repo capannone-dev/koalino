@@ -17,7 +17,9 @@ Meeting-title tests (Issue #36):
 - `recording_screen_test.dart` covers the title field, its hint, sending a trimmed title or
   `null`, keyboard submit, locking while recording, and phone/desktop sizing. It also covers the
   microphone (Issue #45): a refused permission never reaches the bridge, and status 7 on start or
-  resume shows "Unable to open the microphone".
+  resume shows "Unable to open the microphone". The notification group (Issue #47) checks the
+  states shown to the notifier and that pause, resume, and stop from the notification update the
+  screen.
 - `meeting_bridge_test.dart` covers JSON decoding (titles, fallbacks, durations, segments, and
   error objects) and the formatting helpers.
 - `meeting_list_screen_test.dart` checks custom and fallback titles, the title placed above and

@@ -5,7 +5,9 @@
 `RecordingController` maps bridge success or failure into displayable recording state. It contains
 no `dart:ffi` code and can be exercised through an in-memory bridge fake. It asks
 `MicrophonePermission` before each start or resume ("Microphone access is needed to record" when
-refused) and shows "Unable to open the microphone" for status 7 (Issue #45).
+refused) and shows "Unable to open the microphone" for status 7 (Issue #45). It shows every state
+through `RecordingNotifier` and follows pause, resume, and stop made from the Android notification
+without calling the bridge again (Issue #47).
 
 `AttachmentController` owns selected-file workflow state and decodes the Rust-owned JSON array of
 meeting candidates. It receives both a picker and `AttachmentBridge` interface, preserving

@@ -115,7 +115,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P0 | #44 | Real diarization adapter (Pyannote/SpeechBrain behind a Cargo feature); retune the 0.70 clustering threshold on its embeddings | 3.2 |
 | P0 | #45 | Microphone capture: `cpal` in the Rust core (`microphone` feature), Android `RECORD_AUDIO`; done | 3.1 |
 | P1 | #46 | Flutter Settings: runtime log level and Share/Export Logs | 6.1, 6.2 |
-| P1 | #47 | Android foreground service and lock-screen/notification Start/Pause/Stop | 2.1 |
+| P1 | #47 | Android foreground service and lock-screen/notification Start/Pause/Stop; done | 2.1 |
 | P1 | — | Embedding key in the iOS Keychain (Android Keystore done 2026-10-28); re-keying and passphrase change | 4.1 |
 | P1 | — | Run the #40 keychain checks on macOS and Windows hosts | 4.1 |
 | P2 | #48 | Flutter export binding and UI for `note_taker_export_meeting` | 3.3.1 |

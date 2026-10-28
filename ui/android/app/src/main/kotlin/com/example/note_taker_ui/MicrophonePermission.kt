@@ -1,11 +1,14 @@
 // Serves the `note_taker/microphone` channel: `ensureGranted` answers whether the app holds
-// RECORD_AUDIO, showing Android's dialog first when it does not (Issue #45). The Rust core opens
+// RECORD_AUDIO, showing Android's dialog first when it does not (Issue #45). On Android 13 and
+// later it asks for POST_NOTIFICATIONS in the same request, so the recording notification and
+// its lock-screen controls are visible (Issue #47); refusing that one does not stop recording. The Rust core opens
 // the microphone itself (cpal, AAudio) and would fail without it. Framework APIs only, so no
 // AndroidX library is needed.
 package com.example.note_taker_ui
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import io.flutter.plugin.common.MethodCall
@@ -29,7 +32,12 @@ class MicrophonePermission(private val activity: Activity) : MethodChannel.Metho
             return
         }
         // Before Android 6 the permission is granted at install time.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || isGranted()) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            result.success(true)
+            return
+        }
+        val missing = missingPermissions()
+        if (missing.isEmpty()) {
             result.success(true)
             return
         }
@@ -38,7 +46,7 @@ class MicrophonePermission(private val activity: Activity) : MethodChannel.Metho
             return
         }
         pendingResult = result
-        activity.requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQUEST_CODE)
+        activity.requestPermissions(missing.toTypedArray(), REQUEST_CODE)
     }
 
     /**
@@ -52,18 +60,46 @@ class MicrophonePermission(private val activity: Activity) : MethodChannel.Metho
         if (requestCode != REQUEST_CODE) {
             return false
         }
-        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
-        pendingResult?.success(granted)
+        pendingResult?.success(isGranted(Manifest.permission.RECORD_AUDIO))
         pendingResult = null
         return true
     }
 
-    private fun isGranted(): Boolean =
-        activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
-            PackageManager.PERMISSION_GRANTED
+    /**
+     * The permissions still to ask for: RECORD_AUDIO, and POST_NOTIFICATIONS on Android 13 and
+     * later. Notifications alone are asked only once per install, so a refusal is not nagged.
+     */
+    private fun missingPermissions(): List<String> {
+        val missing = mutableListOf<String>()
+        if (!isGranted(Manifest.permission.RECORD_AUDIO)) {
+            missing.add(Manifest.permission.RECORD_AUDIO)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !isGranted(Manifest.permission.POST_NOTIFICATIONS) &&
+            (missing.isNotEmpty() || !notificationsAsked())
+        ) {
+            missing.add(Manifest.permission.POST_NOTIFICATIONS)
+            markNotificationsAsked()
+        }
+        return missing
+    }
+
+    private fun isGranted(permission: String): Boolean =
+        activity.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun notificationsAsked(): Boolean =
+        activity.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+            .getBoolean(NOTIFICATIONS_ASKED_KEY, false)
+
+    private fun markNotificationsAsked() {
+        activity.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean(NOTIFICATIONS_ASKED_KEY, true).apply()
+    }
 
     private companion object {
         /** Identifies this request among the activity's permission results. */
         const val REQUEST_CODE = 4501
+        const val PREFERENCES_NAME = "note_taker_permissions"
+        const val NOTIFICATIONS_ASKED_KEY = "notifications_asked"
     }
 }

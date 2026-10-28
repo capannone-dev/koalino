@@ -24,6 +24,7 @@ import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
+import 'package:note_taker_ui/infrastructure/recording_notifier.dart';
 import 'package:note_taker_ui/infrastructure/telemetry_bridge.dart';
 import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
 import 'package:note_taker_ui/presentation/app_lock_gate.dart';
@@ -53,6 +54,7 @@ Future<void> main() async {
   final RecordingController recordingController = RecordingController(
     recordingBridge: RustRecordingBridge(),
     microphonePermission: platformMicrophonePermission(),
+    recordingNotifier: platformRecordingNotifier(),
   );
   final CoreStartupController coreStartupController = CoreStartupController(
     // Android keeps the key in the Keystore and Kotlin hands it to Rust over JNI first;

@@ -42,10 +42,22 @@ source in `app/build.gradle.kts`). whisper.cpp needs a file path, so `WhisperMod
 into the app's data directory through a temporary file on first start. The APK is about 218 MB;
 Play Store distribution would need an asset pack instead.
 
+## Background recording (Issue #47)
+
+`RecordingService.kt` is a foreground service of type `microphone` (permissions
+`FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MICROPHONE`), so capture continues with the app in the
+background or the screen off. Dart starts, updates, and ends it on `note_taker/recording_service`
+(`show(state, title)`); its ongoing notification offers Pause/Resume and Stop, which call the core
+through `NativeCore` on a background thread and report `stateChanged` back to Dart. The
+lock-screen (public) version omits the meeting title. A tap opens the app. Verified on the S23:
+recording from the background while another app played audio, pause and resume from the
+notification, and a stop that finished transcription and ended the service.
+
 ## Microphone
 
 The Rust core records the microphone itself (`cpal` on AAudio, Issue #45), so the app declares
-`RECORD_AUDIO`. `MicrophonePermission.kt` serves `note_taker/microphone`: `ensureGranted` answers
+`RECORD_AUDIO`; on Android 13 and later the same request asks for `POST_NOTIFICATIONS` (once if
+refused). `MicrophonePermission.kt` serves `note_taker/microphone`: `ensureGranted` answers
 true at once when granted, otherwise shows the system dialog (`MainActivity` forwards
 `onRequestPermissionsResult`); a permanent refusal answers false without a dialog. Framework APIs
 only, no AndroidX.

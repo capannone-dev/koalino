@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
+import 'package:note_taker_ui/infrastructure/recording_notifier.dart';
 import 'package:note_taker_ui/presentation/recording_screen.dart';
 
 /// Records calls made by a widget through the bridge boundary without loading Rust code.
@@ -102,10 +103,32 @@ final class FakeMicrophonePermission implements MicrophonePermission {
   }
 }
 
+/// Records what the controller shows in the notification and replays notification actions.
+final class FakeRecordingNotifier implements RecordingNotifier {
+  /// Every state shown, in order, with its title.
+  final List<(RecordingNotificationState, String?)> shown =
+      <(RecordingNotificationState, String?)>[];
+
+  final StreamController<RecordingNotificationState> _actions =
+      StreamController<RecordingNotificationState>.broadcast();
+
+  @override
+  Future<void> show(RecordingNotificationState state, {String? title}) async {
+    shown.add((state, title));
+  }
+
+  @override
+  Stream<RecordingNotificationState> get externalChanges => _actions.stream;
+
+  /// Simulates the notification (or lock screen) changing the recording.
+  void emit(RecordingNotificationState state) => _actions.add(state);
+}
+
 /// Pumps the recording screen around a controller backed by `recordingBridge`.
 Future<void> pumpRecordingScreen(
     WidgetTester tester, FakeRecordingBridge recordingBridge,
-    {MicrophonePermission? microphonePermission}) async {
+    {MicrophonePermission? microphonePermission,
+    RecordingNotifier? recordingNotifier}) async {
   await tester.pumpWidget(
     MaterialApp(
       home: RecordingScreen(
@@ -113,6 +136,7 @@ Future<void> pumpRecordingScreen(
           recordingBridge: recordingBridge,
           microphonePermission:
               microphonePermission ?? const GrantedMicrophonePermission(),
+          recordingNotifier: recordingNotifier ?? const NoRecordingNotifier(),
         ),
       ),
     ),
@@ -404,6 +428,91 @@ void main() {
       expect(find.text('Recording "Weekly sync"'), findsOneWidget);
       expect(find.text('Unable to stop recording'), findsOneWidget);
       expect(find.text('Stop'), findsOneWidget);
+    });
+  });
+
+  group('notification and lock-screen controls', () {
+    /// Pumps the screen with `notifier` and starts a recording titled "Weekly sync".
+    Future<FakeRecordingBridge> startWithNotifier(
+        WidgetTester tester, FakeRecordingNotifier notifier) async {
+      final FakeRecordingBridge recordingBridge =
+          FakeRecordingBridge(startResult: true);
+      await pumpRecordingScreen(tester, recordingBridge,
+          recordingNotifier: notifier);
+      await tester.enterText(find.byType(TextField), 'Weekly sync');
+      await tester.tap(find.text('Start recording'));
+      await tester.pump();
+      return recordingBridge;
+    }
+
+    testWidgets('the notification follows start, pause, resume, and stop',
+        (WidgetTester tester) async {
+      final FakeRecordingNotifier notifier = FakeRecordingNotifier();
+      await startWithNotifier(tester, notifier);
+
+      await tester.tap(find.text('Pause'));
+      await tester.pump();
+      await tester.tap(find.text('Resume'));
+      await tester.pump();
+      await tester.tap(find.text('Stop'));
+      await tester.pump();
+
+      expect(notifier.shown, <(RecordingNotificationState, String?)>[
+        (RecordingNotificationState.recording, 'Weekly sync'),
+        (RecordingNotificationState.paused, 'Weekly sync'),
+        (RecordingNotificationState.recording, 'Weekly sync'),
+        (RecordingNotificationState.stopping, 'Weekly sync'),
+        (RecordingNotificationState.idle, null),
+      ]);
+    });
+
+    testWidgets('a failed start shows no notification',
+        (WidgetTester tester) async {
+      final FakeRecordingNotifier notifier = FakeRecordingNotifier();
+      await pumpRecordingScreen(tester, FakeRecordingBridge(startResult: false),
+          recordingNotifier: notifier);
+
+      await tester.tap(find.text('Start recording'));
+      await tester.pump();
+
+      expect(notifier.shown, isEmpty);
+    });
+
+    testWidgets('a pause from the notification shows the recording paused',
+        (WidgetTester tester) async {
+      final FakeRecordingNotifier notifier = FakeRecordingNotifier();
+      final FakeRecordingBridge recordingBridge =
+          await startWithNotifier(tester, notifier);
+
+      notifier.emit(RecordingNotificationState.paused);
+      await tester.pump();
+
+      expect(find.text('Paused "Weekly sync"'), findsOneWidget);
+      expect(recordingBridge.lifecycleCommands, isEmpty,
+          reason: 'the notification already paused Rust');
+
+      notifier.emit(RecordingNotificationState.recording);
+      await tester.pump();
+
+      expect(find.text('Recording "Weekly sync"'), findsOneWidget);
+    });
+
+    testWidgets('a stop from the notification ends with Recording saved',
+        (WidgetTester tester) async {
+      final FakeRecordingNotifier notifier = FakeRecordingNotifier();
+      final FakeRecordingBridge recordingBridge =
+          await startWithNotifier(tester, notifier);
+
+      notifier.emit(RecordingNotificationState.stopping);
+      await tester.pump();
+      expect(find.text('Finishing transcription…'), findsOneWidget);
+
+      notifier.emit(RecordingNotificationState.idle);
+      await tester.pump();
+
+      expect(find.text('Ready to record'), findsOneWidget);
+      expect(find.text('Recording saved'), findsOneWidget);
+      expect(recordingBridge.lifecycleCommands, isEmpty);
     });
   });
 }

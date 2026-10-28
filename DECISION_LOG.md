@@ -1054,3 +1054,21 @@ The owner decided:
 - CLI: `record start` without `--input` records from the microphone.
 - Android asks for `RECORD_AUDIO` through our own Kotlin channel (no permission plugin).
 - Trade-off accepted: no Android hardware echo cancellation or noise suppression.
+
+## 2026-10-28 — Ship the Whisper model; #47 background recording with our own service
+
+**Model.** The owner asked for an app that works out of the box. The multilingual `ggml-base.bin`
+(148 MB) now ships in the Linux and Windows bundles (`data/models`) and as an uncompressed APK
+asset that `WhisperModel.kt` copies into the data directory on first start (whisper.cpp needs a
+file path). A model placed in the data directory still wins. The APK grows to about 218 MB:
+fine for sideloading, but Play Store distribution would need an asset pack, and a quantized model
+(`ggml-base-q5_1`, about 57 MB) is the fallback if size matters more than accuracy.
+
+**#47.** `RecordingService.kt` is our own foreground service of type `microphone` (no plugin, as
+planned on the issue). Dart mirrors its state into the service; the notification's Pause, Resume,
+and Stop call the Rust lifecycle functions over JNI (`ffi_android.rs`), so they work with the app
+in the background or the screen locked, and the service reports each change back to Dart. The
+lock-screen version of the notification hides the meeting title. POST_NOTIFICATIONS is asked
+together with RECORD_AUDIO on Android 13 and later. Desktops need nothing: capture is native and
+continues while the window is minimized.
+

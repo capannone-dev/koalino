@@ -6,6 +6,10 @@
 //! `ffi::store_host_encryption_key`, the same store as the C entry point
 //! `note_taker_provide_encryption_key`.
 //!
+//! The recording notification (`RecordingService.kt`, Issue #47) pauses, resumes, and stops the
+//! recording through the same lifecycle functions Dart calls, so its actions work while the app
+//! is in the background or the screen is locked.
+//!
 //! The Kotlin side is `com.example.note_taker_ui.NativeCore`. It loads this library with
 //! `System.loadLibrary("note_taker_core")`, which returns the instance Dart already opened, so
 //! both share the runtime's statics.
@@ -18,7 +22,10 @@ use jni::{
 };
 use zeroize::Zeroizing;
 
-use crate::ffi::{FFI_INVALID_ARGUMENT, HOST_ENCRYPTION_KEY_LENGTH, store_host_encryption_key};
+use crate::ffi::{
+    FFI_INVALID_ARGUMENT, HOST_ENCRYPTION_KEY_LENGTH, note_taker_pause_recording,
+    note_taker_start_recording, note_taker_stop_recording, store_host_encryption_key,
+};
 
 /// Implements `NativeCore.provideEncryptionKey(key: ByteArray): Int`.
 ///
@@ -44,4 +51,43 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_provideEncryp
             Ok(store_host_encryption_key(key_bytes.as_slice()))
         })
         .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Implements `NativeCore.resumeRecording(): Int` for the recording notification (Issue #47).
+///
+/// Inputs: None (the JNI environment is unused).
+/// Outputs: The status of `note_taker_start_recording`, which resumes a paused recording; `7`
+/// when the microphone cannot be reopened.
+/// Side effects: As `note_taker_start_recording`: turns the microphone on.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_resumeRecording<'caller>(
+    _unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+) -> jint {
+    note_taker_start_recording()
+}
+
+/// Implements `NativeCore.pauseRecording(): Int` for the recording notification.
+///
+/// Outputs: The status of `note_taker_pause_recording`.
+/// Side effects: Pauses the recording and turns the microphone off.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_pauseRecording<'caller>(
+    _unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+) -> jint {
+    note_taker_pause_recording()
+}
+
+/// Implements `NativeCore.stopRecording(): Int` for the recording notification.
+///
+/// Outputs: The status of `note_taker_stop_recording`.
+/// Side effects: Blocks until the remaining audio is transcribed and saved; call it off the
+/// main thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_stopRecording<'caller>(
+    _unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+) -> jint {
+    note_taker_stop_recording()
 }

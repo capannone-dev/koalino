@@ -1,8 +1,11 @@
 // Coordinates recording UI state exclusively through the Flutter recording bridge.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
+import 'package:note_taker_ui/infrastructure/recording_notifier.dart';
 
 /// Describes the recording status rendered by the Flutter presentation layer.
 enum RecordingUiState {
@@ -28,18 +31,26 @@ final class RecordingController extends ChangeNotifier {
   ///
   /// Inputs: `recordingBridge` must implement the stable Dart bridge contract;
   /// `microphonePermission` is asked before every start and resume (Android's runtime
-  /// permission; granted elsewhere).
+  /// permission; granted elsewhere); `recordingNotifier` mirrors every state into the Android
+  /// notification and reports the changes made from it (Issue #47).
   /// Outputs: A controller in the idle state.
-  /// Side effects: None.
+  /// Side effects: Subscribes to the notifier's changes until `dispose`.
   RecordingController({
     required RecordingBridge recordingBridge,
     MicrophonePermission microphonePermission =
         const GrantedMicrophonePermission(),
+    RecordingNotifier recordingNotifier = const NoRecordingNotifier(),
   })  : _recordingBridge = recordingBridge,
-        _microphonePermission = microphonePermission;
+        _microphonePermission = microphonePermission,
+        _recordingNotifier = recordingNotifier {
+    _externalChanges =
+        recordingNotifier.externalChanges.listen(_applyExternalChange);
+  }
 
   final RecordingBridge _recordingBridge;
   final MicrophonePermission _microphonePermission;
+  final RecordingNotifier _recordingNotifier;
+  late final StreamSubscription<RecordingNotificationState> _externalChanges;
   RecordingUiState _state = RecordingUiState.idle;
   String? _errorMessage;
   String? _activeTitle;
@@ -47,6 +58,9 @@ final class RecordingController extends ChangeNotifier {
 
   /// Whether a pause or resume request is awaiting Rust, so duplicate taps are ignored.
   bool _isTransitioning = false;
+
+  /// Whether the app's own stop is awaiting Rust; the notification's reports wait for it.
+  bool _isStopping = false;
 
   /// Returns the state that presentation widgets should render.
   ///
@@ -98,6 +112,8 @@ final class RecordingController extends ChangeNotifier {
     if (outcome == RecordingStartOutcome.started) {
       _state = RecordingUiState.recording;
       _activeTitle = requestedTitle;
+      unawaited(_recordingNotifier.show(RecordingNotificationState.recording,
+          title: requestedTitle));
     } else {
       _state = RecordingUiState.idle;
       _errorMessage = _startErrorMessage(outcome, 'Unable to start recording');
@@ -121,6 +137,8 @@ final class RecordingController extends ChangeNotifier {
     _isTransitioning = false;
     if (didPause) {
       _state = RecordingUiState.paused;
+      unawaited(_recordingNotifier.show(RecordingNotificationState.paused,
+          title: _activeTitle));
     } else {
       _errorMessage = 'Unable to pause recording';
     }
@@ -150,6 +168,8 @@ final class RecordingController extends ChangeNotifier {
     _isTransitioning = false;
     if (outcome == RecordingStartOutcome.started) {
       _state = RecordingUiState.recording;
+      unawaited(_recordingNotifier.show(RecordingNotificationState.recording,
+          title: _activeTitle));
     } else {
       _errorMessage = _startErrorMessage(outcome, 'Unable to resume recording');
     }
@@ -172,16 +192,66 @@ final class RecordingController extends ChangeNotifier {
     _state = RecordingUiState.stopping;
     _errorMessage = null;
     notifyListeners();
+    unawaited(_recordingNotifier.show(RecordingNotificationState.stopping,
+        title: _activeTitle));
+    _isStopping = true;
     final bool didStop = await _recordingBridge.stopRecording();
+    _isStopping = false;
     if (didStop) {
-      _state = RecordingUiState.idle;
-      _activeTitle = null;
-      _completionMessage = 'Recording saved';
+      _finishStop();
+      unawaited(_recordingNotifier.show(RecordingNotificationState.idle));
     } else {
       _state = stateBeforeStop;
       _errorMessage = 'Unable to stop recording';
+      unawaited(_recordingNotifier.show(
+          stateBeforeStop == RecordingUiState.paused
+              ? RecordingNotificationState.paused
+              : RecordingNotificationState.recording,
+          title: _activeTitle));
     }
     notifyListeners();
+  }
+
+  /// Returns to idle with "Recording saved" after Rust finished a stop.
+  void _finishStop() {
+    _state = RecordingUiState.idle;
+    _activeTitle = null;
+    _completionMessage = 'Recording saved';
+  }
+
+  /// Follows a change the owner made from the notification or lock screen.
+  ///
+  /// Inputs: The state Rust has already reached. Changes that do not follow from the current
+  /// state (such as a late report after the app stopped the recording itself) are ignored.
+  /// Side effects: Updates the state and notifies listeners; never calls the bridge.
+  void _applyExternalChange(RecordingNotificationState change) {
+    final RecordingUiState previousState = _state;
+    switch (change) {
+      case RecordingNotificationState.recording
+          when previousState == RecordingUiState.paused:
+        _state = RecordingUiState.recording;
+      case RecordingNotificationState.paused
+          when previousState == RecordingUiState.recording:
+        _state = RecordingUiState.paused;
+      case RecordingNotificationState.stopping
+          when previousState == RecordingUiState.recording ||
+              previousState == RecordingUiState.paused:
+        _state = RecordingUiState.stopping;
+      case RecordingNotificationState.idle
+          when previousState == RecordingUiState.stopping && !_isStopping:
+        _finishStop();
+      default:
+        return;
+    }
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  /// Stops listening to the notifier. Side effects: Cancels the subscription.
+  @override
+  void dispose() {
+    unawaited(_externalChanges.cancel());
+    super.dispose();
   }
 }
 

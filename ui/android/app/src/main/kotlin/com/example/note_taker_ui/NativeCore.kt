@@ -1,5 +1,6 @@
 // JNI bindings to the Rust core (`core/bin/ffi_android.rs`) for calls that must not pass
-// through Dart, such as handing over the database key.
+// through Dart: handing over the database key, and the recording notification's actions, which
+// run while the app may be in the background (Issue #47).
 package com.example.note_taker_ui
 
 /** The Rust core's JNI methods; loading it reuses the library instance Dart already opened. */
@@ -17,4 +18,20 @@ object NativeCore {
      */
     @JvmStatic
     external fun provideEncryptionKey(key: ByteArray): Int
+
+    /** Resumes a paused recording. Outputs: the core's status (0, or 7 without a microphone). */
+    @JvmStatic
+    external fun resumeRecording(): Int
+
+    /** Pauses the recording and turns the microphone off. Outputs: the core's status. */
+    @JvmStatic
+    external fun pauseRecording(): Int
+
+    /**
+     * Stops the recording. Outputs: the core's status.
+     * Side effects: Blocks until the remaining audio is transcribed; never call it on the main
+     * thread.
+     */
+    @JvmStatic
+    external fun stopRecording(): Int
 }

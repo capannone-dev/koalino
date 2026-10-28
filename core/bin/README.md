@@ -120,7 +120,10 @@ Otherwise the runtime opens lazily, on the first native call. The app calls
 P2P sync start with the app instead of when the owner first opens a screen that needs them.
 
 The keyring crate has no Android backend, so on Android Kotlin unwraps the key from the Android
-Keystore and passes it to Rust over JNI before Dart starts the runtime: `ffi_android.rs` exports
+Keystore and passes it to Rust over JNI before Dart starts the runtime. The recording
+notification (`RecordingService.kt`, Issue #47) also calls `NativeCore.resumeRecording`,
+`pauseRecording`, and `stopRecording`, thin JNI wrappers over the C lifecycle functions, so its
+actions work while Dart is in the background. `ffi_android.rs` exports
 `Java_com_example_note_1taker_1ui_NativeCore_provideEncryptionKey` (Android builds only, with the
 `jni` crate). The key never enters the Dart heap. Other hosts can use the C entry point
 `note_taker_provide_encryption_key(key, 32)`. Both return 0 when stored and 1 for a null key or

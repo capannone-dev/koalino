@@ -3,7 +3,9 @@
 // from the Android Keystore to the Rust core over JNI when Dart asks on `note_taker/key_vault`.
 // It also serves the app lock (`AppLock`) on `note_taker/app_lock` and the microphone permission
 // (`MicrophonePermission`) on `note_taker/microphone`, and installs the shipped Whisper model
-// (`WhisperModel`) on `note_taker/whisper_model`.
+// (`WhisperModel`) on `note_taker/whisper_model`, and drives the recording foreground service
+// (`RecordingService`) on `note_taker/recording_service`, reporting its notification's actions
+// back to Dart.
 package com.example.note_taker_ui
 
 import android.content.Context
@@ -43,6 +45,29 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler(microphone)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/whisper_model")
             .setMethodCallHandler(WhisperModel(assets))
+        val recordingChannel =
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/recording_service")
+        recordingChannel.setMethodCallHandler { call, result ->
+            if (call.method != "show") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val state = call.argument<String>("state")
+            if (state == null) {
+                result.error("invalid_argument", "state is required", null)
+                return@setMethodCallHandler
+            }
+            try {
+                RecordingService.show(this, state, call.argument<String>("title"))
+                result.success(null)
+            } catch (error: RuntimeException) {
+                // For example a foreground service the system refuses to start.
+                result.error("service_unavailable", error.message, null)
+            }
+        }
+        RecordingService.stateListener = { state ->
+            recordingChannel.invokeMethod("stateChanged", state)
+        }
         val mainThread = Handler(Looper.getMainLooper())
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/key_vault")
             .setMethodCallHandler { call, result ->
@@ -83,6 +108,12 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
+    }
+
+    /** Stops reporting to an engine that is going away. */
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        RecordingService.stateListener = null
+        super.cleanUpFlutterEngine(flutterEngine)
     }
 
     /** Hands RECORD_AUDIO answers to `MicrophonePermission`. */
