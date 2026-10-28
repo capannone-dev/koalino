@@ -18,6 +18,7 @@ documented nonzero status codes distinguishable from lifecycle states.
 
 - `pipeline_composition.rs` is the only module that names concrete AI adapters. `PipelineConfig`
   reads `NOTE_TAKER_TRANSCRIPTION_PROVIDER` (`auto`, `local`, `openai`), `NOTE_TAKER_WHISPER_MODEL`,
+  `NOTE_TAKER_WHISPER_LANGUAGE` (`auto` by default; whisper.cpp would otherwise force English),
   `OPENAI_API_KEY` (redacted from `Debug`), `NOTE_TAKER_OPENAI_WHISPER_MODEL`,
   `NOTE_TAKER_OPENAI_LANGUAGE`, `NOTE_TAKER_ENABLE_DIARIZATION`, and `NOTE_TAKER_VAD_ENABLED`.
   `auto` prefers a local whisper.cpp model and uses OpenAI only when a key is set (logged, since

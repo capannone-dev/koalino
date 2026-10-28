@@ -74,6 +74,47 @@ fn invalid_values_are_rejected_with_the_variable_name() {
     assert!(format!("{flag_error:#}").contains("NOTE_TAKER_VAD_ENABLED"));
 }
 
+/// Verifies local Whisper auto-detects the language by default.
+///
+/// whisper.cpp's own default is English, which transcribes Italian meetings as broken English
+/// (requirement 4.2), so the composition must always pass an explicit language.
+#[test]
+fn local_whisper_language_defaults_to_auto_detection() {
+    assert_eq!(valid_config(&[]).whisper_language(), "auto");
+    assert_eq!(
+        valid_config(&[("NOTE_TAKER_WHISPER_LANGUAGE", "  ")]).whisper_language(),
+        "auto"
+    );
+}
+
+/// Verifies an explicit local Whisper language is normalized to a lowercase language code.
+#[test]
+fn local_whisper_language_accepts_language_codes() {
+    assert_eq!(
+        valid_config(&[("NOTE_TAKER_WHISPER_LANGUAGE", " IT ")]).whisper_language(),
+        "it"
+    );
+    assert_eq!(
+        valid_config(&[("NOTE_TAKER_WHISPER_LANGUAGE", "en")]).whisper_language(),
+        "en"
+    );
+    assert_eq!(
+        valid_config(&[("NOTE_TAKER_WHISPER_LANGUAGE", "Auto")]).whisper_language(),
+        "auto"
+    );
+}
+
+/// Verifies malformed languages are rejected with the variable name instead of reaching whisper.
+#[test]
+fn local_whisper_language_rejects_malformed_values() {
+    for malformed_language in ["italian", "e", "en-US", "i\u{0}t", "1t"] {
+        let language_error = config_from(&[("NOTE_TAKER_WHISPER_LANGUAGE", malformed_language)])
+            .err()
+            .unwrap_or_else(|| panic!("{malformed_language:?} must be rejected"));
+        assert!(format!("{language_error:#}").contains("NOTE_TAKER_WHISPER_LANGUAGE"));
+    }
+}
+
 /// Verifies the OpenAI key never appears in debug output.
 #[test]
 fn debug_output_redacts_the_api_key() {

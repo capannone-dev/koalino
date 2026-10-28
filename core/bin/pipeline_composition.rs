@@ -11,6 +11,7 @@
 //! | --- | --- | --- |
 //! | `NOTE_TAKER_TRANSCRIPTION_PROVIDER` | `auto`, `local`, `openai` | `auto` (local model, else OpenAI key) |
 //! | `NOTE_TAKER_WHISPER_MODEL` | path to a GGML/GGUF model (`local-ai` builds) | unset |
+//! | `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` or a 2–3 letter Whisper language code (`it`, `en`) | `auto` |
 //! | `OPENAI_API_KEY` | OpenAI key (never logged) | unset |
 //! | `NOTE_TAKER_OPENAI_WHISPER_MODEL`, `NOTE_TAKER_OPENAI_LANGUAGE` | OpenAI model and language | `whisper-1`, auto |
 //! | `NOTE_TAKER_ENABLE_DIARIZATION` | boolean | `false` |
@@ -58,6 +59,9 @@ pub const WHISPER_MODEL_VARIABLE: &str = "NOTE_TAKER_WHISPER_MODEL";
 pub const OPENAI_API_KEY_VARIABLE: &str = "OPENAI_API_KEY";
 /// OpenAI transcription model.
 pub const OPENAI_MODEL_VARIABLE: &str = "NOTE_TAKER_OPENAI_WHISPER_MODEL";
+/// Local Whisper transcription language: `auto` or a Whisper language code such as `it` or `en`.
+pub const WHISPER_LANGUAGE_VARIABLE: &str = "NOTE_TAKER_WHISPER_LANGUAGE";
+
 /// OpenAI transcription language.
 pub const OPENAI_LANGUAGE_VARIABLE: &str = "NOTE_TAKER_OPENAI_LANGUAGE";
 /// Requests speaker diarization.
@@ -81,6 +85,8 @@ pub enum TranscriptionProvider {
 pub struct PipelineConfig {
     transcription_provider: TranscriptionProvider,
     whisper_model_path: Option<PathBuf>,
+    /// Always passed to whisper.cpp, whose own default (`en`) would force English output.
+    whisper_language: String,
     /// Secret; excluded from `Debug`.
     openai_api_key: Option<String>,
     openai_model: String,
@@ -96,6 +102,7 @@ impl std::fmt::Debug for PipelineConfig {
             .debug_struct("PipelineConfig")
             .field("transcription_provider", &self.transcription_provider)
             .field("whisper_model_path", &self.whisper_model_path)
+            .field("whisper_language", &self.whisper_language)
             .field(
                 "openai_api_key",
                 &self.openai_api_key.as_ref().map(|_| "<redacted>"),
@@ -140,6 +147,7 @@ impl PipelineConfig {
         Ok(Self {
             transcription_provider,
             whisper_model_path: read(WHISPER_MODEL_VARIABLE).map(PathBuf::from),
+            whisper_language: parse_whisper_language(read(WHISPER_LANGUAGE_VARIABLE))?,
             openai_api_key: read(OPENAI_API_KEY_VARIABLE),
             openai_model: read(OPENAI_MODEL_VARIABLE).unwrap_or_else(|| "whisper-1".to_owned()),
             openai_language: read(OPENAI_LANGUAGE_VARIABLE),
@@ -150,6 +158,11 @@ impl PipelineConfig {
             )?,
             vad_enabled: parse_flag(VAD_ENABLED_VARIABLE, read(VAD_ENABLED_VARIABLE), true)?,
         })
+    }
+
+    /// Returns the local Whisper language: `auto` (detect per chunk) or a lowercase language code.
+    pub fn whisper_language(&self) -> &str {
+        &self.whisper_language
     }
 
     /// Returns the selected transcription provider.
@@ -174,6 +187,28 @@ impl PipelineConfig {
         } else {
             ChunkingMode::TimeBased
         }
+    }
+}
+
+/// Parses `NOTE_TAKER_WHISPER_LANGUAGE`.
+///
+/// Inputs: The variable's value (`None` when unset or blank).
+/// Outputs: `auto` when unset, else the value trimmed and lowercased, which must be `auto` or a
+/// 2–3 letter language code; anything else is an error naming the variable.
+/// Side effects: None.
+fn parse_whisper_language(value: Option<String>) -> Result<String> {
+    let Some(value) = value else {
+        return Ok("auto".to_owned());
+    };
+    let language = value.trim().to_ascii_lowercase();
+    let is_language_code =
+        (2..=3).contains(&language.len()) && language.bytes().all(|byte| byte.is_ascii_lowercase());
+    if language == "auto" || is_language_code {
+        Ok(language)
+    } else {
+        bail!(
+            "{WHISPER_LANGUAGE_VARIABLE} must be auto or a Whisper language code such as it or en"
+        )
     }
 }
 
@@ -315,8 +350,15 @@ fn local_engine(
         anyhow!("local transcription requires {WHISPER_MODEL_VARIABLE} to name a model file")
     })?;
     let thread_count = std::thread::available_parallelism().map_or(4, usize::from);
-    let local_config = LocalWhisperCppConfig::new(model_path, thread_count, false, None)
-        .context("invalid local transcription configuration")?;
+    // An explicit language is required: whisper.cpp defaults to English, so Italian meetings
+    // would otherwise come out as English text. `auto` makes it detect the language per chunk.
+    let local_config = LocalWhisperCppConfig::new(
+        model_path,
+        thread_count,
+        false,
+        Some(config.whisper_language.clone()),
+    )
+    .context("invalid local transcription configuration")?;
     let engine =
         LocalWhisperCppTranscriptionEngine::new(local_config, Arc::clone(chunk_audio_store) as _)
             .context("unable to load the local whisper model")?;
