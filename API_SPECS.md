@@ -41,8 +41,22 @@ code receive that interface and never access Rust structs.
   its start transition. `1` is reserved for invalid arguments, `2` for an operation rejected by
   the Rust core, and `3` when the bridge runtime cannot be acquired.
 - `int32_t note_taker_set_log_level(const char *filter_directive)` accepts a non-null,
-  NUL-terminated UTF-8 `tracing` filter directive and returns the same status codes. It installs
-  or reloads Rust's JSON stdout and rolling-file logging without passing logging structs to Dart.
+  NUL-terminated UTF-8 `tracing` filter directive (`error`, `warn`, `info`, `debug`, `trace`, or
+  any valid directive). It returns `0`, `1` for a null, non-UTF-8, or invalid directive (nothing
+  is stored), or `2` when the level cannot be stored or applied. It stores the level in
+  `<db>.log-level`, so it survives restarts, and reloads the filter, starting file logging if it
+  has not started. It does not need the runtime to be open (Issue #46).
+- `char *note_taker_get_log_level(void)` returns the stored level, or `info` when none is stored.
+  Free it with `note_taker_free_string`.
+- `char *note_taker_export_logs(const char *output_path)` joins the newest seven daily log files,
+  oldest first, into one JSON-lines file at `output_path` (absolute), or at
+  `<export folder>/note_taker_logs_<YYYYMMDD-HHMMSS>.jsonl` when it is null or empty. It returns
+  `{"ok":true,"file_path","size_bytes","file_count"}` or `{"ok":false,"error_code","error"}` with
+  `invalid_argument`, `no_logs`, or `export_failed`; free it with `note_taker_free_string`. It
+  does blocking file I/O, so call it from a background isolate.
+
+The app starts file logging (`<data>/logs/app_log.<date>`) when the runtime first opens, at the
+stored level.
 
 Neither function accepts raw audio, voice embeddings, P2P credentials, Rust ownership pointers,
 or serialized domain structures.

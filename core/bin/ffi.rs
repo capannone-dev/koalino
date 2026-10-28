@@ -15,7 +15,6 @@ use crate::{
         audio::live_microphone::LiveMicrophone,
         export::{default_export_directory, default_exporters},
         media::local_file_metadata::LocalFileMetadataExtractor,
-        observability::{LoggingConfiguration, LoggingRuntime, initialize_logging},
         storage::{
             sqlite_adapter::SqliteNoteRepository, sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
@@ -224,7 +223,6 @@ struct FfiRuntime {
     recording_controller: Option<RecordingController>,
     /// Composes the meeting pipeline; retried on the next start if it fails.
     recording_controller_builder: RecordingControllerBuilder,
-    logging_runtime: Option<LoggingRuntime>,
     note_repository: SqliteNoteRepository,
     voice_identity_manager: VoiceIdentityManager<SqliteVoiceVectorDB>,
     review_clip_directory: PathBuf,
@@ -330,6 +328,8 @@ impl FfiRuntime {
     /// else the platform keychain or key file) and opens the note repository and the voice store on the same SQLite
     /// file. The meeting pipeline is composed later, on the first recording start.
     fn new() -> Result<Self, c_int> {
+        // First, so failures while opening the stores reach the log file (Issue #46).
+        crate::ffi_logging::start_app_logging();
         Self::from_settings(&app_setting)
     }
 
@@ -421,7 +421,6 @@ impl FfiRuntime {
         Self {
             recording_controller: None,
             recording_controller_builder,
-            logging_runtime: None,
             note_repository,
             voice_identity_manager: VoiceIdentityManager::new(voice_store),
             review_clip_directory,
@@ -1328,39 +1327,6 @@ impl FfiRuntime {
             .and_then(RecordingController::active_meeting_id)
             .map(|meeting_id| meeting_id.as_str().to_owned())
     }
-
-    /// Updates tracing verbosity while retaining the logging worker for the process lifetime.
-    ///
-    /// Inputs: `filter_directive` is a valid non-empty tracing filter directive.
-    /// Outputs: A C status indicating whether the filter could be installed.
-    /// Side effects: Lazily installs JSON stdout/rolling-file logging and reloads its filter.
-    fn set_log_level(&mut self, filter_directive: &str) -> c_int {
-        if filter_directive.is_empty() {
-            return FFI_INVALID_ARGUMENT;
-        }
-
-        if self.logging_runtime.is_none() {
-            let device_id = self.note_repository.device_id().clone();
-            let log_directory = app_setting("NOTE_TAKER_LOG_DIR")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("logs"));
-            let logging_configuration =
-                LoggingConfiguration::new(device_id, log_directory).with_filter(filter_directive);
-            let logging_runtime = match initialize_logging(logging_configuration) {
-                Ok(logging_runtime) => logging_runtime,
-                Err(_) => return FFI_OPERATION_REJECTED,
-            };
-            self.logging_runtime = Some(logging_runtime);
-        }
-
-        match &self.logging_runtime {
-            Some(logging_runtime) => logging_runtime
-                .set_filter(filter_directive)
-                .map(|()| FFI_SUCCESS)
-                .unwrap_or(FFI_OPERATION_REJECTED),
-            None => FFI_RUNTIME_UNAVAILABLE,
-        }
-    }
 }
 
 /// Escapes UTF-8 text for the narrow JSON response without accepting arbitrary JSON values.
@@ -1913,28 +1879,6 @@ pub extern "C" fn note_taker_get_active_meeting_id() -> *mut c_char {
 #[unsafe(no_mangle)]
 pub extern "C" fn note_taker_get_current_state() -> c_int {
     with_runtime(|runtime| runtime.current_recording_state())
-}
-
-/// Applies a Rust tracing filter supplied by a Flutter caller.
-///
-/// Inputs: `filter_directive` must point to a NUL-terminated UTF-8 C string for this call's duration.
-/// Outputs: `FFI_SUCCESS` on success or a documented nonzero C status.
-/// Side effects: May initialize local JSON logging and reload its verbosity without restarting Rust.
-///
-/// # Safety
-/// The caller must pass either a null pointer or a valid NUL-terminated C string. The pointer is
-/// read only for the duration of this call and is never retained.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn note_taker_set_log_level(filter_directive: *const c_char) -> c_int {
-    if filter_directive.is_null() {
-        return FFI_INVALID_ARGUMENT;
-    }
-
-    let filter_directive = match unsafe { CStr::from_ptr(filter_directive) }.to_str() {
-        Ok(filter_directive) => filter_directive,
-        Err(_) => return FFI_INVALID_ARGUMENT,
-    };
-    with_runtime(|runtime| runtime.set_log_level(filter_directive))
 }
 
 /// Returns telemetry-observed device cards as caller-freed UTF-8 JSON.
@@ -2498,15 +2442,6 @@ mod ffi_contract_tests {
             ffi_runtime.current_recording_state(),
             FFI_AUDIO_STATE_STOPPED
         );
-    }
-
-    /// Verifies that an empty logging directive is rejected before logging initialization.
-    #[test]
-    fn rejects_an_empty_logging_directive() {
-        let mut ffi_runtime = FfiRuntime::in_memory_for_tests(&std::env::temp_dir())
-            .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
-
-        assert_eq!(ffi_runtime.set_log_level(""), FFI_INVALID_ARGUMENT);
     }
 
     /// Seeds one meeting with a two-chunk cluster that owns a review clip and one segment.

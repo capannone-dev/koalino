@@ -119,6 +119,15 @@ Otherwise the runtime opens lazily, on the first native call. The app calls
 `note_taker_start_runtime` right after configuring, on a background isolate, so the database and
 P2P sync start with the app instead of when the owner first opens a screen that needs them.
 
+`ffi_logging.rs` (Issue #46) starts the app's file logging in `<data>/logs` when the runtime
+first opens, before the stores, so failures while opening them are logged. It holds the logging
+runtime in a process-wide cell, because the subscriber can be installed only once while opening
+the runtime can be retried. `note_taker_set_log_level` stores the Settings choice in
+`<db>.log-level` (the daemon's control file) and applies it; the next start reads it back, and a
+missing or damaged file means `info`. `note_taker_export_logs` writes the newest week of logs to
+one file with `export_log_files`. `ffi_logging_tests.rs` covers the default, persistence,
+refused levels, and the export's paths and errors.
+
 The keyring crate has no Android backend, so on Android Kotlin unwraps the key from the Android
 Keystore and passes it to Rust over JNI before Dart starts the runtime. The recording
 notification (`RecordingService.kt`, Issue #47) also calls `NativeCore.resumeRecording`,

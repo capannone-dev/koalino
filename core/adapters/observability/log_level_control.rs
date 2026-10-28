@@ -42,6 +42,14 @@ impl LogLevelControlFile {
         &self.path
     }
 
+    /// Checks a directive without storing it.
+    ///
+    /// Inputs: A `tracing` filter directive. Outputs: The trimmed directive, or the error
+    /// `request` would report for it. Side effects: None.
+    pub fn validate(filter_directive: &str) -> Result<&str> {
+        validated_directive(filter_directive)
+    }
+
     /// Records `filter_directive` as the requested verbosity for the daemon.
     ///
     /// Inputs: A `tracing` filter directive such as `debug` or `note_taker_core=trace,info`.

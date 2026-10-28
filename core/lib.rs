@@ -25,6 +25,9 @@ pub mod ffi;
 #[cfg(target_os = "android")]
 #[path = "bin/ffi_android.rs"]
 pub mod ffi_android;
+/// The app's log level and log export over the C ABI (Issue #46).
+#[path = "bin/ffi_logging.rs"]
+pub mod ffi_logging;
 /// Turns the Flutter Devices screen's JSON requests into P2P commands.
 #[path = "bin/ffi_p2p.rs"]
 pub mod ffi_p2p;
