@@ -7,4 +7,10 @@ import { fileURLToPath } from "node:url";
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const compatibility = new FlatCompat({ baseDirectory: currentDirectory });
 
-export default [...compatibility.extends("next/core-web-vitals", "next/typescript")];
+const eslintConfig = [
+  // Generated output: without this, `npm run lint` after `npm run build` reports the compiled bundle.
+  { ignores: [".next/**", "node_modules/**", "next-env.d.ts"] },
+  ...compatibility.extends("next/core-web-vitals", "next/typescript")
+];
+
+export default eslintConfig;
