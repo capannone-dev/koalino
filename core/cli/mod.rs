@@ -671,12 +671,12 @@ where
         let display_title = meeting_metadata.display_title();
         let title_underline = "=".repeat(display_title.chars().count());
         let created_at = format_created_at(&meeting_metadata);
-        let transcript = self
-            .repository
-            .load_transcript(&typed_meeting_id)
-            .map_err(|error| error.to_string())?
-            .map(|value| String::from(value.content()))
-            .unwrap_or_else(|| String::from("(no transcript)"));
+        let transcript = crate::application::meeting_transcript::readable_transcript(
+            &self.repository,
+            &typed_meeting_id,
+        )
+        .map_err(|error| error.to_string())?
+        .unwrap_or_else(|| String::from("(no transcript)"));
         let attachments = self
             .repository
             .get_attachments_for_meeting(&typed_meeting_id)

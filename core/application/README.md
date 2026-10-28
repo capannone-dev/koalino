@@ -296,6 +296,15 @@ identity before its first variant, without renaming identities that already exis
 stored first. If saving segments or resolving fails, a retry re-stores variants, which only adds
 duplicate acoustic variants. A cluster is never marked resolved before its segments are relinked.
 
+## Readable transcript
+
+`meeting_transcript.rs` gives `meetings view` (CLI) and `GET /api/meetings/{id}` (HTTP) one rule
+for a meeting's transcript text. A recorded meeting stores only timed segments, and the flat
+`transcript` field exists only for meetings imported as text. So `readable_transcript` returns the
+non-blank segments in start-time order, one per line, then falls back to the flat text, then to
+`None`. Export follows the same order. Before this, both read paths showed a recorded meeting as
+having no transcript.
+
 ## Meeting rename
 
 `meeting_rename.rs` (Issue #38) is the one use case behind `meetings rename` (CLI),

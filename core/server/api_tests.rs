@@ -430,6 +430,39 @@ async fn meeting_detail_returns_transcript_and_linked_attachments() {
     );
 }
 
+/// A recorded meeting stores only timed segments; its detail shows them as the transcript, so
+/// the web meeting page is not empty for a meeting recorded on any device.
+#[tokio::test]
+async fn meeting_detail_shows_a_recorded_meeting_s_segments_as_its_transcript() {
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("test SQLite repository must initialize: {error}"));
+    let meeting_id = MeetingId::new("meeting-recorded");
+    repository
+        .create_meeting(&meeting_id, &AutoCommit::new().save())
+        .unwrap_or_else(|error| panic!("test meeting must persist: {error}"));
+    repository
+        .save_transcript_segments(
+            &meeting_id,
+            &[
+                TranscriptSegment::new(meeting_id.clone(), 2_000, 4_000, None, "and then"),
+                TranscriptSegment::new(meeting_id.clone(), 0, 2_000, None, "We start"),
+            ],
+        )
+        .unwrap_or_else(|error| panic!("test segments must persist: {error}"));
+    let router = build_router(ServerAppState::new(
+        repository,
+        InMemoryVoiceVectorDB::new(),
+    ));
+
+    let (status, meeting_detail) =
+        send_json(&router, "GET", "/api/meetings/meeting-recorded", None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(meeting_detail["transcript"], "We start\nand then");
+}
+
 /// Verifies unknown meeting identifiers return a portable HTTP not-found response.
 #[tokio::test]
 async fn unknown_meeting_returns_not_found() {

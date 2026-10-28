@@ -257,7 +257,8 @@ async fn create_meeting(
     ))
 }
 
-/// Returns one meeting's title, transcript, and linked metadata-only attachments.
+/// Returns one meeting's title, readable transcript (recorded segments, or imported text), and
+/// linked metadata-only attachments.
 async fn get_meeting(
     Path(meeting_identifier): Path<String>,
     State(application_state): State<ServerAppState>,
@@ -269,9 +270,9 @@ async fn get_meeting(
         .load_meeting_metadata(&meeting_id)
         .map_err(storage_error_status)?
         .ok_or(StatusCode::NOT_FOUND)?;
-    let transcript = repositories
-        .load_transcript(&meeting_id)
-        .map_err(storage_error_status)?;
+    let transcript =
+        crate::application::meeting_transcript::readable_transcript(&**repositories, &meeting_id)
+            .map_err(storage_error_status)?;
     let attachments = repositories
         .get_attachments_for_meeting(&meeting_id)
         .map_err(storage_error_status)?;
@@ -279,7 +280,7 @@ async fn get_meeting(
         meeting_id: String::from(meeting_id.as_str()),
         title: meeting_metadata.display_title(),
         created_at: meeting_metadata.created_at().to_rfc3339(),
-        transcript: transcript.map(|value| String::from(value.content())),
+        transcript,
         attachments: attachments.iter().map(AttachmentSummary::from).collect(),
     }))
 }

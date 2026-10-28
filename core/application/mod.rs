@@ -44,6 +44,10 @@ pub mod meeting_rename;
 mod meeting_rename_tests;
 #[cfg(test)]
 mod meeting_title_sync_tests;
+/// Builds the readable transcript text (segments, or the flat imported text) for read paths.
+pub mod meeting_transcript;
+#[cfg(test)]
+mod meeting_transcript_tests;
 /// Applies adapter-neutral encrypted-network events to application state.
 pub mod network_events;
 #[cfg(test)]

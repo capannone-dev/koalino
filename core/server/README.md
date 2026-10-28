@@ -29,7 +29,8 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
   written), and `404` for an unknown meeting (Issue #38). It calls
   `application::meeting_rename`, the same use case as the CLI and FFI. CORS allows `PATCH`.
 - `GET /api/meetings/{meeting_id}` returns `meeting_id`, `title`, `created_at`, nullable
-  `transcript`, and linked
+  `transcript` (the recorded segments one per line, or the imported text; see
+  `application::meeting_transcript`), and linked
   attachment metadata (`attachment_id`, `file_path`, `mime_type`, `original_timestamp_utc`). It
   returns `404` for an unknown meeting and never returns CRDT bytes or attachment contents.
 - `GET /api/voice-gallery` returns display-safe identity labels and unresolved clip ID/time-range
