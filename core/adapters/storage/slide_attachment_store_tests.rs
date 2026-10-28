@@ -177,6 +177,7 @@ fn local_slide_is_attached_to_a_recorded_meeting() {
         .get_attachments_for_meeting(&meeting_id)
         .unwrap_or_else(|error| panic!("attachments should load: {error}"));
     assert_eq!(attachments.len(), 1);
+    assert_eq!(attachments[0].meeting_time_ms(), Some(6_000));
     let saved_path = Path::new(attachments[0].file_path());
     assert_eq!(
         saved_path.parent(),

@@ -158,6 +158,7 @@ impl SqliteNoteRepository {
                     mime_type TEXT NOT NULL,
                     original_timestamp_utc TEXT NOT NULL,
                     original_device_id TEXT NOT NULL,
+                    meeting_time_ms INTEGER,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
                 );
                 CREATE TABLE IF NOT EXISTS transcript_segments (
@@ -175,6 +176,7 @@ impl SqliteNoteRepository {
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
         add_meeting_title_column(&sqlite_connection)?;
         add_document_revision_column(&sqlite_connection)?;
+        add_attachment_meeting_time_column(&sqlite_connection)?;
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
         for embedding_column in [
             &CLIP_EMBEDDINGS,
@@ -330,8 +332,8 @@ impl AttachmentRepository for SqliteNoteRepository {
     fn save_attachment(&self, attachment: &Attachment) -> Result<(), StorageError> {
         let meeting_id = attachment.meeting_id().map(MeetingId::as_str);
         let inserted_row_count = self.connection.execute(
-            "INSERT INTO attachments (attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id)
-             SELECT ?1, ?2, ?3, ?4, ?5, ?6
+            "INSERT INTO attachments (attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
              WHERE ?2 IS NULL OR EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
             params![
                 attachment.attachment_id().to_string(),
@@ -340,6 +342,9 @@ impl AttachmentRepository for SqliteNoteRepository {
                 attachment.mime_type(),
                 attachment.original_timestamp().to_rfc3339(),
                 attachment.original_device_id(),
+                attachment
+                    .meeting_time_ms()
+                    .map(|meeting_time_ms| i64::try_from(meeting_time_ms).unwrap_or(i64::MAX)),
             ],
         ).map_err(|error| sqlite_error("unable to save attachment", error))?;
         if inserted_row_count == 0 {
@@ -388,11 +393,11 @@ impl SqliteNoteRepository {
     ) -> Result<Vec<Attachment>, StorageError> {
         let (query, parameter) = match meeting_id {
             Some(value) => (
-                "SELECT attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id FROM attachments WHERE meeting_id = ?1 ORDER BY rowid",
+                "SELECT attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms FROM attachments WHERE meeting_id = ?1 ORDER BY rowid",
                 Some(value.as_str()),
             ),
             None => (
-                "SELECT attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id FROM attachments WHERE meeting_id IS NULL ORDER BY rowid",
+                "SELECT attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms FROM attachments WHERE meeting_id IS NULL ORDER BY rowid",
                 None,
             ),
         };
@@ -409,12 +414,20 @@ impl SqliteNoteRepository {
                     row.get::<_, String>(3)?,
                     row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?,
+                    row.get::<_, Option<i64>>(6)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to load attachments", error))?;
         rows.map(|row| {
-            let (attachment_id, persisted_meeting_id, file_path, mime_type, timestamp, device_id) =
-                row.map_err(|error| sqlite_error("unable to decode attachment", error))?;
+            let (
+                attachment_id,
+                persisted_meeting_id,
+                file_path,
+                mime_type,
+                timestamp,
+                device_id,
+                meeting_time_ms,
+            ) = row.map_err(|error| sqlite_error("unable to decode attachment", error))?;
             let parsed_attachment_id =
                 uuid::Uuid::parse_str(&attachment_id).map_err(|error| StorageError::Rejected {
                     reason: format!("stored attachment has an invalid UUID: {error}"),
@@ -424,14 +437,21 @@ impl SqliteNoteRepository {
                     reason: format!("stored attachment has an invalid timestamp: {error}"),
                 })?
                 .with_timezone(&chrono::Utc);
-            Ok(Attachment::new(
+            let attachment = Attachment::new(
                 parsed_attachment_id,
                 persisted_meeting_id.map(MeetingId::new),
                 file_path,
                 mime_type,
                 parsed_timestamp,
                 device_id,
-            ))
+            );
+            // A negative value can only come from outside the app; it is treated as unknown.
+            Ok(
+                match meeting_time_ms.and_then(|value| u64::try_from(value).ok()) {
+                    Some(meeting_time_ms) => attachment.with_meeting_time_ms(meeting_time_ms),
+                    None => attachment,
+                },
+            )
         })
         .collect()
     }
@@ -1336,6 +1356,31 @@ fn add_meeting_title_column(sqlite_connection: &Connection) -> Result<(), Storag
     Ok(())
 }
 
+/// Adds the nullable `attachments.meeting_time_ms` column (Issue #54) to older databases.
+///
+/// Outputs: Success (also when the column exists) or a storage error.
+/// Side effects: May run one `ALTER TABLE`; existing attachments go at the end of their meeting.
+fn add_attachment_meeting_time_column(sqlite_connection: &Connection) -> Result<(), StorageError> {
+    let meeting_time_column_count: i64 = sqlite_connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('attachments') WHERE name = 'meeting_time_ms'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| sqlite_error("unable to inspect attachments schema", error))?;
+    if meeting_time_column_count == 0 {
+        sqlite_connection
+            .execute(
+                "ALTER TABLE attachments ADD COLUMN meeting_time_ms INTEGER",
+                [],
+            )
+            .map_err(|error| {
+                sqlite_error("unable to add the attachment meeting time column", error)
+            })?;
+    }
+    Ok(())
+}
+
 /// Adds the `document_revision` column (Issue #43) to databases created before it, with its index.
 ///
 /// Outputs: Success (also when the column exists) or a storage error.
@@ -1621,6 +1666,100 @@ mod tests {
             .and_then(|metadata| metadata.title().map(|title| title.as_str().to_owned()));
         let _ = std::fs::remove_dir_all(&database_directory);
         assert_eq!(reopened_title.as_deref(), Some("Retro"));
+    }
+
+    /// Verifies an attachment keeps its meeting time (Issue #54), and one without stays without.
+    #[test]
+    fn attachments_keep_their_meeting_time() {
+        use crate::{domain::models::Attachment, ports::storage::AttachmentRepository};
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let meeting_id = MeetingId::new("meeting-photos");
+        repository
+            .create_meeting(&meeting_id, &[1_u8])
+            .unwrap_or_else(|error| panic!("meeting creation should succeed: {error}"));
+        let attachment = |meeting_time_ms: Option<u64>| {
+            let attachment = Attachment::new(
+                uuid::Uuid::new_v4(),
+                Some(meeting_id.clone()),
+                "/data/attachments/photo.jpg",
+                "image/jpeg",
+                chrono::Utc::now(),
+                "device-test",
+            );
+            match meeting_time_ms {
+                Some(meeting_time_ms) => attachment.with_meeting_time_ms(meeting_time_ms),
+                None => attachment,
+            }
+        };
+        for saved in [attachment(Some(42_000)), attachment(None)] {
+            repository
+                .save_attachment(&saved)
+                .unwrap_or_else(|error| panic!("attachment save should succeed: {error}"));
+        }
+
+        let meeting_times: Vec<Option<u64>> = repository
+            .get_attachments_for_meeting(&meeting_id)
+            .unwrap_or_else(|error| panic!("attachments should load: {error}"))
+            .iter()
+            .map(Attachment::meeting_time_ms)
+            .collect();
+        assert_eq!(meeting_times, vec![Some(42_000), None]);
+    }
+
+    /// Verifies a database whose attachments table predates meeting times gains the column.
+    #[test]
+    fn migrates_attachments_without_a_meeting_time_column() {
+        use crate::ports::storage::AttachmentRepository;
+        let database_directory =
+            std::env::temp_dir().join(format!("note-taker-attach-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&database_directory)
+            .unwrap_or_else(|error| panic!("test directory must be created: {error}"));
+        let database_path = database_directory.join("legacy.sqlite3");
+        let legacy_connection = rusqlite::Connection::open(&database_path)
+            .unwrap_or_else(|error| panic!("legacy database must open: {error}"));
+        legacy_connection
+            .execute_batch(
+                "CREATE TABLE meetings (
+                    meeting_id TEXT PRIMARY KEY NOT NULL,
+                    created_at_utc TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    acquisition_device_id TEXT NOT NULL,
+                    transcript TEXT,
+                    automerge_document BLOB NOT NULL
+                );
+                CREATE TABLE attachments (
+                    attachment_id TEXT PRIMARY KEY NOT NULL,
+                    meeting_id TEXT,
+                    file_path TEXT NOT NULL,
+                    mime_type TEXT NOT NULL,
+                    original_timestamp_utc TEXT NOT NULL,
+                    original_device_id TEXT NOT NULL
+                );
+                INSERT INTO meetings (meeting_id, acquisition_device_id, automerge_document)
+                    VALUES ('legacy-meeting', 'old-device', X'01');
+                INSERT INTO attachments VALUES ('6f1c1d4e-58f5-4c55-9a64-3b1f0c0b8d11',
+                    'legacy-meeting', '/old/slide.png', 'image/png',
+                    '2026-10-20T14:30:00+00:00', 'old-device');",
+            )
+            .unwrap_or_else(|error| panic!("legacy schema must be created: {error}"));
+        drop(legacy_connection);
+
+        let repository = SqliteNoteRepository::open(
+            &database_path,
+            crate::domain::models::DeviceId::new("migration-test"),
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("legacy database must migrate: {error}"));
+        let attachments = repository
+            .get_attachments_for_meeting(&MeetingId::new("legacy-meeting"))
+            .unwrap_or_else(|error| panic!("attachments should load: {error}"));
+        drop(repository);
+        let _ = std::fs::remove_dir_all(&database_directory);
+
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0].meeting_time_ms(), None);
     }
 
     /// Parses a fixture title.

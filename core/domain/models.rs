@@ -761,6 +761,8 @@ pub struct Attachment {
     mime_type: String,
     original_timestamp: DateTime<Utc>,
     original_device_id: String,
+    /// Meeting time (ms) the attachment belongs at in the transcript; `None` places it at the end.
+    meeting_time_ms: Option<u64>,
 }
 
 /// Identifies one meeting attachment stored by SHA-256 content address rather than a mutable path.
@@ -918,7 +920,25 @@ impl Attachment {
             mime_type: mime_type.into(),
             original_timestamp,
             original_device_id: original_device_id.into(),
+            meeting_time_ms: None,
         }
+    }
+
+    /// Places the attachment at a point of its meeting's transcript (Issue #54).
+    ///
+    /// Inputs: The meeting time in milliseconds, e.g. when a photo was taken during a recording.
+    /// Outputs: The attachment. Side effects: None.
+    pub fn with_meeting_time_ms(mut self, meeting_time_ms: u64) -> Self {
+        self.meeting_time_ms = Some(meeting_time_ms);
+        self
+    }
+
+    /// Returns the meeting time the attachment belongs at, or `None` for the end of the meeting.
+    /// Inputs: None.
+    /// Outputs: Milliseconds of meeting time, when known.
+    /// Side effects: None.
+    pub fn meeting_time_ms(&self) -> Option<u64> {
+        self.meeting_time_ms
     }
 
     /// Returns the attachment's globally unique identifier.

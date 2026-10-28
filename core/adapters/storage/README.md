@@ -83,6 +83,9 @@ The adapter rejects writes to unknown meetings rather than silently creating orp
 The `attachments` table persists only an attachment UUID, optional confirmed meeting ID, local
 path, MIME type, original UTC timestamp, and source-device metadata. It never stores attachment
 bytes. `AttachmentRepository` checks referenced meetings before accepting a confirmed link.
+The nullable `meeting_time_ms` column (Issue #54, added to older databases on open) records where
+in the transcript the attachment belongs. Photos taken while recording and screen-share slides
+set it. A `NULL` places the attachment at the end of the meeting.
 
 `sqlite_peer_store.rs` implements `NodeIdentityStore` (Issue #43) on the same SQLite file. The
 singleton table `p2p_node_identity(singleton, sealed_identity)` holds this node's libp2p keypair,

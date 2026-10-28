@@ -115,7 +115,9 @@ where
 {
     /// Writes one slide under `<slide_directory>/<meeting ID>/` and links it to the meeting.
     ///
-    /// Inputs: The meeting, the image bytes, and the timestamp used in the file name.
+    /// Inputs: The meeting, the image bytes, and the meeting time it was shown at (used in the
+    /// file name and as the attachment's meeting time, so it sits at that point of the
+    /// transcript; Issue #54).
     /// Outputs: Success, or a rejection for an unsafe meeting ID, an unsupported image format, a
     /// file-system failure, or an attachment row that cannot be saved.
     /// Side effects: Creates directories and one file; writes one attachment row; removes the
@@ -147,7 +149,8 @@ where
             mime_type,
             Utc::now(),
             self.device_id.as_str(),
-        );
+        )
+        .with_meeting_time_ms(timestamp_ms);
         if let Err(error) = self.attachment_repository.save_attachment(&attachment) {
             if let Err(removal_error) = std::fs::remove_file(&slide_path) {
                 tracing::warn!(%attachment_id, error = %removal_error, "Unlinked slide file could not be removed");
