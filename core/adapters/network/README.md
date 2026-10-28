@@ -26,7 +26,13 @@ Reachability follows connections, not announcements. A trusted peer is reported 
 reported as `PeerExpired` when its last connection closes or it is revoked. A sync payload that a
 trusted peer does not acknowledge is reported as `DeliveryFailed`. This happens when the peer dropped
 it because it did not trust this device yet, or when the request timed out, so the sender knows to
-send again. The trusted set is loaded from `TrustedPeerStore` by the composition layer.
+send again.
+
+`add_static_peer` takes a `…/p2p/<peer id>` multiaddress for a device that mDNS cannot find (another
+subnet, NAT, a VPN, a tunnel). An unpaired one is listed as nearby so it can be paired; a paired one
+is dialed. `redial_static_peers` repeats that, so a device that comes back online reconnects. The
+address is only a hint: Noise still authenticates the peer ID, and the gate still decides
+admission. The trusted set is loaded from `TrustedPeerStore` by the composition layer.
 
 `pairing_behaviour.rs` defines `/note-taker/pairing/1`, which carries version-1 JSON in 4 KiB
 length-prefixed frames. The initiator sends `PairingRequest { device_name }`. The responder replies

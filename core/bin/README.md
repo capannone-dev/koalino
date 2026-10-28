@@ -60,15 +60,18 @@ HTTP runtime.
 - **Configuration:** `P2pConfig::from_lookup` reads three variables:
   - `NOTE_TAKER_P2P_ENABLED` (default `true`);
   - `NOTE_TAKER_P2P_LISTEN` (default `/ip4/0.0.0.0/tcp/0`);
-  - `NOTE_TAKER_DEVICE_NAME` (default: the host name, else "Note Taker device").
+  - `NOTE_TAKER_DEVICE_NAME` (default: the host name, else "Note Taker device");
+  - `NOTE_TAKER_P2P_PEERS` (comma-separated `…/p2p/<peer id>` addresses for devices that mDNS
+    cannot find; an invalid entry stops start-up).
 - **Start-up:** `spawn_p2p_task` opens the task's own connections: a document-backed note
   repository and `SqlitePeerStore`. It then loads the sealed node identity, starts listening,
   restores the paired devices, and returns only once all of that worked.
 - **Handle:** `P2pHandle` offers `command` (awaits a `P2pCommand` outcome), `notify_local_change`
   (non-blocking, callable from any thread), `snapshot` (status plus listen addresses), and
   `shutdown` (blocking, so callers run it in `spawn_blocking`).
-- **Loop:** the task wakes on swarm events, on commands, on scheduled sync retries, and on a
-  1-second tick that calls `poll_local_changes`. A transcript saved by the pipeline therefore
+- **Loop:** the task wakes on swarm events, on commands, on scheduled sync retries, on a
+  1-second tick that calls `poll_local_changes`, and on a 10-second tick that redials configured
+  peers. A transcript saved by the pipeline therefore
   reaches connected devices about a second later.
 - **Daemon:** `daemon.rs` starts the task after the pipeline. A disabled or failed task is logged
   and is not fatal. The task is stopped after the Teams bridge at shutdown.

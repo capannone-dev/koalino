@@ -295,6 +295,9 @@ impl std::fmt::Debug for NodeIdentity {
 pub struct Libp2pNetworkAdapter {
     swarm: Swarm<NoteTakerBehaviour>,
     reachable_peer_device_ids: HashSet<DeviceId>,
+    /// Peers configured by address (`NOTE_TAKER_P2P_PEERS`), for networks where mDNS cannot
+    /// find them; `redial_static_peers` treats them as rediscovered.
+    static_peer_ids: HashSet<PeerId>,
     pending_network_events: VecDeque<NetworkEvent>,
     /// Retains adapter-private attachment frames separately from CRDT network events.
     pending_file_transfer_payloads: VecDeque<Vec<u8>>,
@@ -345,6 +348,7 @@ impl Libp2pNetworkAdapter {
         Ok(Self {
             swarm,
             reachable_peer_device_ids: HashSet::new(),
+            static_peer_ids: HashSet::new(),
             pending_network_events: VecDeque::new(),
             pending_file_transfer_payloads: VecDeque::new(),
             nearby_unpaired_peer_ids: HashSet::new(),
@@ -383,6 +387,50 @@ impl Libp2pNetworkAdapter {
             .listeners()
             .map(|listen_address| listen_address.to_string())
             .collect()
+    }
+
+    /// Adds a peer reachable at a known address, for networks where mDNS cannot find it (another
+    /// subnet, NAT, a VPN, or a tunnel).
+    ///
+    /// Inputs: A multiaddress ending in `/p2p/<peer id>`, such as
+    /// `/ip4/192.168.1.20/tcp/4001/p2p/12D3Koo…`.
+    /// Outputs: The peer's ID, or `SecurityPolicy` for an address that does not parse, lacks the
+    /// peer ID, or names this node.
+    /// Side effects: Records the address for dialing. An unpaired peer is listed as nearby, so the
+    /// owner can pair with it; a paired one is dialed. The peer is still authenticated by Noise
+    /// and admitted only by the connection gate, so a wrong address cannot impersonate it.
+    pub fn add_static_peer(&mut self, peer_address: &str) -> Result<DeviceId, NetworkError> {
+        let parsed_address: libp2p::Multiaddr =
+            peer_address
+                .parse()
+                .map_err(|error| NetworkError::SecurityPolicy {
+                    reason: format!("invalid P2P peer address: {error}"),
+                })?;
+        let Some(libp2p::multiaddr::Protocol::P2p(peer_id)) = parsed_address.iter().last() else {
+            return Err(NetworkError::SecurityPolicy {
+                reason: "a P2P peer address must end with /p2p/<peer id>".to_owned(),
+            });
+        };
+        if peer_id == *self.swarm.local_peer_id() {
+            return Err(NetworkError::SecurityPolicy {
+                reason: "a P2P peer address must not name this device".to_owned(),
+            });
+        }
+        self.swarm.add_peer_address(peer_id, parsed_address);
+        self.static_peer_ids.insert(peer_id);
+        self.record_discovered_peer(peer_id);
+        Ok(Self::device_id_from_peer_id(peer_id))
+    }
+
+    /// Treats every configured peer as rediscovered: lists unpaired ones as nearby and dials
+    /// paired ones that are not connected, so a device that comes back online reconnects.
+    ///
+    /// Side effects: May schedule dials. The P2P task calls it periodically.
+    pub fn redial_static_peers(&mut self) {
+        let static_peer_ids: Vec<PeerId> = self.static_peer_ids.iter().copied().collect();
+        for peer_id in static_peer_ids {
+            self.record_discovered_peer(peer_id);
+        }
     }
 
     /// Allows `peer_device_id` to connect and sync, as after a confirmed pairing.
@@ -797,6 +845,7 @@ impl Libp2pNetworkAdapter {
         Ok(Self {
             swarm,
             reachable_peer_device_ids: HashSet::new(),
+            static_peer_ids: HashSet::new(),
             pending_network_events: VecDeque::new(),
             pending_file_transfer_payloads: VecDeque::new(),
             nearby_unpaired_peer_ids: HashSet::new(),
@@ -1878,5 +1927,51 @@ mod tests {
             "the sender must learn of the drop: {sender_events:?}"
         );
         assert!(drain_events(&mut receiver).is_empty());
+    }
+
+    /// A configured peer address (for networks without mDNS) lists an unpaired peer as nearby,
+    /// rejects an address without a peer ID, and is dialed again once the peer is paired.
+    #[tokio::test]
+    async fn configured_peer_addresses_are_offered_for_pairing_and_redialed_once_paired() {
+        let mut dialer = Libp2pNetworkAdapter::new_for_memory_transport()
+            .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+        let mut listener = Libp2pNetworkAdapter::new_for_memory_transport()
+            .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+        let listener_id = listener.local_device_id();
+        listener
+            .listen_on_memory(
+                "/memory/9381"
+                    .parse()
+                    .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}")),
+            )
+            .unwrap_or_else(|error| panic!("listener must listen: {error}"));
+
+        assert!(dialer.add_static_peer("/memory/9381").is_err());
+        let added = dialer
+            .add_static_peer(&format!("/memory/9381/p2p/{}", listener_id.as_str()))
+            .unwrap_or_else(|error| panic!("a full peer address must be accepted: {error}"));
+        assert_eq!(added, listener_id);
+        assert_eq!(dialer.nearby_unpaired_peers(), vec![listener_id.clone()]);
+
+        dialer
+            .trust_peer(&listener_id)
+            .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+        listener
+            .trust_peer(&dialer.local_device_id())
+            .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+        dialer.redial_static_peers();
+        let connected = drive_until(
+            &mut dialer,
+            &mut listener,
+            Duration::from_secs(5),
+            |dialer, _| dialer.is_connected_to(&listener_id),
+        )
+        .await;
+
+        assert!(connected, "a paired configured peer must be dialed");
+        assert_eq!(
+            drain_events(&mut dialer),
+            vec![NetworkEvent::PeerDiscovered(listener_id)]
+        );
     }
 }

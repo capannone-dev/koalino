@@ -15,8 +15,9 @@
 //! - `snapshot` reads the latest status.
 //!
 //! Environment: `NOTE_TAKER_P2P_ENABLED` (`true` by default, `false` turns P2P off),
-//! `NOTE_TAKER_P2P_LISTEN` (default `/ip4/0.0.0.0/tcp/0`), and `NOTE_TAKER_DEVICE_NAME` (default:
-//! the host name). Unpaired devices on the LAN can see this node's peer ID through mDNS, but they
+//! `NOTE_TAKER_P2P_LISTEN` (default `/ip4/0.0.0.0/tcp/0`), `NOTE_TAKER_DEVICE_NAME` (default: the
+//! host name), and `NOTE_TAKER_P2P_PEERS` (comma-separated `…/p2p/<peer id>` addresses of devices
+//! mDNS cannot find, redialed every 10 s). Unpaired devices on the LAN can see this node's peer ID through mDNS, but they
 //! cannot connect except while the owner keeps a pairing window open, and even then they cannot
 //! sync.
 
@@ -68,6 +69,10 @@ const MAX_DEFAULT_NAME_CHARACTERS: usize = 64;
 /// is saved.
 const LOCAL_CHANGE_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
+/// How often configured peers that are not connected are dialed again, so a device that comes
+/// back online reconnects without mDNS.
+const STATIC_PEER_REDIAL_INTERVAL: Duration = Duration::from_secs(10);
+
 /// Commands that may wait for the task before senders see back-pressure.
 const COMMAND_QUEUE_CAPACITY: usize = 64;
 
@@ -78,6 +83,8 @@ pub struct P2pConfig {
     pub listen_address: String,
     /// Name announced to devices during pairing.
     pub device_name: DeviceName,
+    /// Addresses of peers that mDNS cannot find, each ending in `/p2p/<peer id>`.
+    pub static_peers: Vec<String>,
 }
 
 impl P2pConfig {
@@ -117,9 +124,20 @@ impl P2pConfig {
                 .context("NOTE_TAKER_DEVICE_NAME is not a valid device name")?,
             None => default_device_name(lookup("HOSTNAME").as_deref())?,
         };
+        let static_peers = lookup("NOTE_TAKER_P2P_PEERS")
+            .map(|peer_list| {
+                peer_list
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|peer_address| !peer_address.is_empty())
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
         Ok(Some(Self {
             listen_address,
             device_name,
+            static_peers,
         }))
     }
 }
@@ -329,6 +347,11 @@ fn open_service(
     adapter
         .listen_on(&config.listen_address)
         .context("unable to listen for P2P connections")?;
+    for peer_address in &config.static_peers {
+        adapter
+            .add_static_peer(peer_address)
+            .context("NOTE_TAKER_P2P_PEERS contains an invalid peer address")?;
+    }
     let mut service = P2pService::new(
         PairingManager::new(
             adapter,
@@ -355,6 +378,8 @@ async fn run_service(
 ) {
     let mut change_poll = tokio::time::interval(LOCAL_CHANGE_POLL_INTERVAL);
     change_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut static_peer_redial = tokio::time::interval(STATIC_PEER_REDIAL_INTERVAL);
+    static_peer_redial.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         service.process_pending_events();
         let snapshot = snapshot_of(service);
@@ -370,6 +395,7 @@ async fn run_service(
             _ = &mut stop => break,
             () = sleep_until_retry(next_retry_at) => {}
             _ = change_poll.tick() => service.poll_local_changes(),
+            _ = static_peer_redial.tick() => service.transport_mut().redial_static_peers(),
             swarm_result = service.transport_mut().drive_next_swarm_event() => {
                 if let Err(error) = swarm_result {
                     tracing::error!(error = %error, "the P2P swarm stopped");

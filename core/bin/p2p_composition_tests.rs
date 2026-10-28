@@ -39,6 +39,24 @@ fn defaults_listen_everywhere_and_use_the_host_name() {
 
     assert_eq!(config.listen_address, "/ip4/0.0.0.0/tcp/0");
     assert_eq!(config.device_name.as_str(), "ettore-laptop");
+    assert!(config.static_peers.is_empty());
+}
+
+/// `NOTE_TAKER_P2P_PEERS` lists peer addresses separated by commas; blanks are ignored.
+#[test]
+fn configured_peer_addresses_are_split_and_trimmed() {
+    let config = enabled_config(&[(
+        "NOTE_TAKER_P2P_PEERS",
+        " /ip4/10.0.0.2/tcp/4001/p2p/12D3KooWA , ,/ip4/10.0.0.3/tcp/4001/p2p/12D3KooWB",
+    )]);
+
+    assert_eq!(
+        config.static_peers,
+        vec![
+            "/ip4/10.0.0.2/tcp/4001/p2p/12D3KooWA".to_owned(),
+            "/ip4/10.0.0.3/tcp/4001/p2p/12D3KooWB".to_owned(),
+        ]
+    );
 }
 
 /// Explicit values win, and `NOTE_TAKER_P2P_ENABLED=false` turns P2P off.
@@ -78,8 +96,20 @@ async fn the_task_serves_status_and_commands_until_shutdown() {
         ("NOTE_TAKER_P2P_LISTEN", "/ip4/127.0.0.1/tcp/0"),
         ("NOTE_TAKER_DEVICE_NAME", "Test laptop"),
     ]);
+    let mut misconfigured = config.clone();
+    misconfigured.static_peers = vec!["/ip4/127.0.0.1/tcp/4001".to_owned()];
     let cipher = Arc::new(VoiceEncryptor::new(&EncryptionKey::from_bytes([4; 32])));
 
+    let refused_start = spawn_p2p_task(
+        &directory.join("misconfigured.sqlite3"),
+        DeviceId::new("device-test"),
+        Arc::clone(&cipher) as Arc<dyn crate::ports::crypto::EmbeddingCipher>,
+        misconfigured,
+    );
+    assert!(
+        refused_start.is_err(),
+        "a peer address without a peer ID must stop start-up"
+    );
     let handle = spawn_p2p_task(
         &directory.join("notes.sqlite3"),
         DeviceId::new("device-test"),
