@@ -1207,16 +1207,20 @@ impl FfiRuntime {
 /// Escapes UTF-8 text for the narrow JSON response without accepting arbitrary JSON values.
 ///
 /// Inputs: `value` is text emitted in a JSON string field.
-/// Outputs: JSON string content with required quote and backslash escapes.
+/// Outputs: JSON string content (without the surrounding quotes) with every escape JSON requires:
+/// quotes, backslashes, and control characters.
 /// Side effects: None.
 fn json_escape(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('"', "\\\"")
+    // serde_json escapes quotes, backslashes, and every control character; replacing only quotes
+    // and backslashes produced invalid JSON for paths or IDs containing a newline or tab.
+    let quoted_value = serde_json::Value::String(value.to_owned()).to_string();
+    quoted_value[1..quoted_value.len() - 1].to_owned()
 }
 
 /// Escapes a platform path for the narrow JSON response without accepting arbitrary JSON values.
 ///
 /// Inputs: `path` is an absolute local file-system path.
-/// Outputs: JSON string content with required quote and backslash escapes.
+/// Outputs: JSON string content with every escape JSON requires.
 /// Side effects: None.
 fn json_escape_path(path: &Path) -> String {
     json_escape(&path.to_string_lossy())
@@ -2607,5 +2611,22 @@ mod ffi_contract_tests {
         assert!(first_meeting.is_some());
         assert_ne!(ffi_runtime.active_meeting_id(), first_meeting);
         assert_eq!(build_count.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    /// Verifies JSON string escaping covers control characters, which Linux paths may contain.
+    #[test]
+    fn json_escape_produces_valid_json_for_any_string() {
+        for raw_value in [
+            "plain",
+            "quote \" and backslash \\",
+            "new\nline\ttab\rreturn",
+            "nul\u{0}bell\u{7}escape\u{1b}",
+            "unicode 会议 🎉 \u{2028}",
+        ] {
+            let json_document = format!("{{\"value\":\"{}\"}}", super::json_escape(raw_value));
+            let parsed: serde_json::Value = serde_json::from_str(&json_document)
+                .unwrap_or_else(|error| panic!("{raw_value:?} must stay valid JSON: {error}"));
+            assert_eq!(parsed["value"], raw_value);
+        }
     }
 }
