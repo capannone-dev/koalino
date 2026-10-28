@@ -1,3 +1,4 @@
+```bash
 /core (Rust)
 ├── domain/           # PURE BUSINESS LOGIC (No external crates)
 │   ├── models/       # Meeting, Note, VoiceSignature structs
@@ -32,7 +33,7 @@
 └── src/
     ├── components/   # Web UI
     └── api/          # REST/WebSocket wrappers for the Rust daemon
-
+```
 ## Connected meeting pipeline (Issue #27)
 
 ```text
