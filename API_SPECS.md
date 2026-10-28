@@ -141,6 +141,18 @@ from a background isolate.
 - `int32_t note_taker_confirm_attachment_link(const char *attachment_id, const char *meeting_id)`
   persists only an explicitly selected local metadata link. Both IDs are opaque strings returned by
   the prior suggestion response. It returns the standard `0` success / nonzero rejection statuses.
+- `char *note_taker_attach_files(const char *meeting_id, const char *paths_json)` (Issue #54)
+  attaches several pictures or documents to one meeting. `paths_json` is a non-empty JSON array
+  of absolute paths. Each accepted file (JPEG, PNG, WebP, HEIC, PDF, TXT, Markdown, DOCX, XLSX,
+  PPTX or ODT, up to 100 MiB) is copied privately to
+  `<data_directory>/attachments/<meeting_id>/`. The source is left in place, so the app deletes
+  its camera temporaries.
+  - While the meeting is being recorded, attachments carry its current `meeting_time_ms`;
+    otherwise it is null, which places them at the end of the meeting.
+  - It returns `{"ok":true,"attached":[<attachment>],"failed":[{"path","error"}]}`. A file that
+    fails does not stop the others.
+  - A blank ID or a malformed or empty array returns `invalid_argument`; an unknown meeting
+    returns `meeting_not_found`.
 
 The ABI returns JSON strings rather than nested Rust structs. It neither accepts nor returns file
 contents, EXIF data, or database-specific values.
@@ -175,7 +187,11 @@ contents, EXIF data, or database-specific values.
   `char *note_taker_get_meeting(const char *meeting_id)` returns the same fields plus
   `transcript` (the flat transcript, null until stored) and `segments`
   (`[{"start_time_ms","end_time_ms","speaker","text"}]` in timeline order, where `speaker` is
-  the voice-store name, `Unknown speaker`, or `Unattributed`, as in exports; Issue #36).
+  the voice-store name, `Unknown speaker`, or `Unattributed`, as in exports; Issue #36), and
+  `attachments`
+  (`[{"attachment_id","file_name","file_path","mime_type","meeting_time_ms"}]` in the order they
+  were added; Issue #54). `meeting_time_ms` is where in the transcript the attachment belongs,
+  or null for the end of the meeting.
   `duration_ms` is the end of the latest segment (0 without segments). `title`
   is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting; `created_at`
   is RFC 3339 UTC. Errors use `{"ok":false,"error_code","error"}` with `invalid_argument`,

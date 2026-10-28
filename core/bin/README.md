@@ -58,6 +58,9 @@ documented nonzero status codes distinguishable from lifecycle states.
   next start. `note_taker_start_recording_for_meeting`,
   `note_taker_start_recording_with_title` (Issue #35), `note_taker_push_audio_pcm`, and
   `note_taker_get_active_meeting_id` complete the ABI (see `API_SPECS.md`).
+  `note_taker_attach_files` (Issue #54) copies pictures and documents into
+  `<data_directory>/attachments/` through `AttachmentFileStore`. While the meeting is being
+  recorded, it stamps them with `RecordingController::current_meeting_time_ms`.
   With the `microphone` feature, start and resume open the default microphone first and return
   `FFI_MICROPHONE_UNAVAILABLE` (`7`) without starting when it cannot open; pause, interruption,
   and stop close it and push its queued tail. A `microphone-drain` thread moves captured audio
@@ -115,7 +118,7 @@ read-only. The app therefore calls `note_taker_configure` once, before anything 
 
 | Field | Required | Becomes |
 | --- | --- | --- |
-| `data_directory` | yes | The database, `keys/`, `logs/`, `voice_review_clips/` and `exports/` inside it |
+| `data_directory` | yes | The database, `keys/`, `logs/`, `voice_review_clips/`, `attachments/` and `exports/` inside it |
 | `device_name` | no | `NOTE_TAKER_DEVICE_NAME` |
 | `whisper_model_path` | no | `NOTE_TAKER_WHISPER_MODEL` |
 | `keychain_enabled` | no | `NOTE_TAKER_KEYCHAIN_ENABLED` |

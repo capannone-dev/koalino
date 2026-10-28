@@ -16,7 +16,8 @@ use crate::{
         export::{default_export_directory, default_exporters},
         media::local_file_metadata::LocalFileMetadataExtractor,
         storage::{
-            sqlite_adapter::SqliteNoteRepository, sqlite_voice_vector_db::SqliteVoiceVectorDB,
+            attachment_file_store::AttachmentFileStore, sqlite_adapter::SqliteNoteRepository,
+            sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
     },
     application::{
@@ -228,6 +229,8 @@ struct FfiRuntime {
     review_clip_directory: PathBuf,
     loaded_review_clips: HashMap<Uuid, UnassignedVoiceClip>,
     pending_attachment_imports: HashMap<Uuid, PendingAttachmentImport>,
+    /// Where `note_taker_attach_files` copies attached files and photos (Issue #54).
+    attachment_directory: PathBuf,
     export_writer: ExportWriter,
     /// The P2P pairing and sync task, when enabled and started (Issue #43). Shared so a command
     /// can wait for the task without holding the runtime lock.
@@ -400,6 +403,9 @@ impl FfiRuntime {
             ExportWriter::new(default_exporters(), export_directory),
         );
         runtime.p2p = p2p;
+        runtime.attachment_directory = setting("NOTE_TAKER_ATTACHMENT_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("attachments"));
         runtime.microphone_source = default_microphone_source();
         runtime.spawn_microphone_ticker = spawn_global_microphone_ticker;
         Ok(runtime)
@@ -426,6 +432,7 @@ impl FfiRuntime {
             review_clip_directory,
             loaded_review_clips: HashMap::new(),
             pending_attachment_imports: HashMap::new(),
+            attachment_directory: PathBuf::from("attachments"),
             export_writer,
             p2p: None,
             microphone_source: None,
@@ -454,7 +461,8 @@ impl FfiRuntime {
             voice_store,
             export_directory.join("review-clips"),
             ExportWriter::new(default_exporters(), export_directory),
-        ))
+        )
+        .with_attachment_directory(export_directory.join("attachments")))
     }
 
     /// Creates a runtime over the SQLite file at `database_path`, as one app launch would.
@@ -487,7 +495,17 @@ impl FfiRuntime {
             voice_store,
             export_directory.join("review-clips"),
             ExportWriter::new(default_exporters(), export_directory),
-        ))
+        )
+        .with_attachment_directory(export_directory.join("attachments")))
+    }
+
+    /// Copies attached files under `attachment_directory` instead of `attachments`.
+    ///
+    /// Inputs: The attachment root. Outputs: The runtime using it. Side effects: None.
+    #[cfg(test)]
+    fn with_attachment_directory(mut self, attachment_directory: PathBuf) -> Self {
+        self.attachment_directory = attachment_directory;
+        self
     }
 
     /// Replaces the pipeline builder, e.g. with one that fails or counts its calls.
@@ -1173,13 +1191,79 @@ impl FfiRuntime {
         }
     }
 
+    /// Attaches files or photos to a meeting (Issue #54).
+    ///
+    /// Inputs: A non-blank `meeting_id` and a non-empty JSON array of absolute file paths.
+    /// Outputs: `{"ok":true,"attached":[<attachment>],"failed":[{"path","error"}]}`, where each
+    /// `<attachment>` is as in `get_meeting`; or `{"ok":false,"error_code","error"}` with
+    /// `invalid_argument` or `meeting_not_found`. While the meeting is being recorded, attachments
+    /// carry its current meeting time; otherwise they go at the end of the meeting.
+    /// Side effects: Copies each accepted file privately into the attachment folder and writes
+    /// its attachment row; leaves the sources (the caller deletes camera temporaries). Never
+    /// logs paths or contents.
+    fn attach_files(&mut self, meeting_id: &str, paths_json: &str) -> String {
+        if meeting_id.trim().is_empty() {
+            return export_error_json("invalid_argument", "meeting_id must not be empty");
+        }
+        let source_paths = match serde_json::from_str::<Vec<String>>(paths_json) {
+            Ok(source_paths) if !source_paths.is_empty() => source_paths,
+            _ => {
+                return export_error_json(
+                    "invalid_argument",
+                    "paths must be a non-empty JSON array of strings",
+                );
+            }
+        };
+        let typed_meeting_id = MeetingId::new(meeting_id);
+        match self
+            .note_repository
+            .load_meeting_metadata(&typed_meeting_id)
+        {
+            Ok(Some(_)) => {}
+            Ok(None) => {
+                return export_error_json(
+                    "meeting_not_found",
+                    &format!("meeting {meeting_id} does not exist"),
+                );
+            }
+            Err(error) => return export_error_json("load_failed", &error.to_string()),
+        }
+        let meeting_time_ms = self
+            .recording_controller
+            .as_ref()
+            .and_then(|controller| controller.current_meeting_time_ms(&typed_meeting_id));
+        let file_store = AttachmentFileStore::new(
+            self.attachment_directory.clone(),
+            self.note_repository.device_id().clone(),
+        );
+        let mut attached = Vec::new();
+        let mut failed = Vec::new();
+        for source_path in source_paths {
+            match file_store.import_file(
+                &self.note_repository,
+                &typed_meeting_id,
+                Path::new(&source_path),
+                meeting_time_ms,
+            ) {
+                Ok(attachment) => attached.push(attachment_json(&attachment)),
+                Err(error) => failed.push(serde_json::json!({
+                    "path": source_path,
+                    "error": error.to_string(),
+                })),
+            }
+        }
+        serde_json::json!({ "ok": true, "attached": attached, "failed": failed }).to_string()
+    }
+
     /// Describes one meeting with its display title, duration, segments, and flat transcript.
     ///
     /// Inputs: A non-blank `meeting_id`.
-    /// Outputs: `{"meeting_id","title","created_at","duration_ms","transcript","segments"}`, where
-    /// `transcript` is null until a flat transcript is stored and `segments` is
+    /// Outputs: `{"meeting_id","title","created_at","duration_ms","transcript","segments",
+    /// "attachments"}`, where `transcript` is null until a flat transcript is stored, `segments` is
     /// `[{"start_time_ms","end_time_ms","speaker","text"}]` in timeline order (`speaker` is the
-    /// voice-store name, `Unknown speaker`, or `Unattributed`, as in exports); or
+    /// voice-store name, `Unknown speaker`, or `Unattributed`, as in exports), and `attachments`
+    /// is `[{"attachment_id","file_name","file_path","mime_type","meeting_time_ms"}]` in the
+    /// order they were added (`meeting_time_ms` is null for the end of the meeting); or
     /// `{"ok":false,"error_code","error"}` where `error_code` is `invalid_argument`,
     /// `meeting_not_found`, or `load_failed`.
     /// Side effects: Reads SQLite, including speaker names from the voice store; never returns
@@ -1224,7 +1308,15 @@ impl FfiRuntime {
                 .collect(),
             Err(error) => return export_error_json("load_failed", &error.to_string()),
         };
+        let attachments = match self
+            .note_repository
+            .get_attachments_for_meeting(&typed_meeting_id)
+        {
+            Ok(attachments) => attachments,
+            Err(error) => return export_error_json("load_failed", &error.to_string()),
+        };
         let mut meeting_json = meeting_summary_json(&meeting_metadata, &segments);
+        meeting_json["attachments"] = attachments.iter().map(attachment_json).collect();
         meeting_json["transcript"] = transcript
             .map(|transcript| serde_json::Value::from(transcript.content()))
             .unwrap_or(serde_json::Value::Null);
@@ -1349,6 +1441,30 @@ fn json_escape(value: &str) -> String {
 /// Side effects: None.
 fn json_escape_path(path: &Path) -> String {
     json_escape(&path.to_string_lossy())
+}
+
+/// Describes one attachment for the app.
+///
+/// Inputs: A stored attachment.
+/// Outputs: `{"attachment_id","file_name","file_path","mime_type","meeting_time_ms"}`, where
+/// `file_name` is the stored name without the `<attachment UUID>-` prefix imports add.
+/// Side effects: None; the file is not read.
+fn attachment_json(attachment: &Attachment) -> serde_json::Value {
+    let stored_name = Path::new(attachment.file_path())
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let attachment_prefix = format!("{}-", attachment.attachment_id());
+    let file_name = stored_name
+        .strip_prefix(&attachment_prefix)
+        .map_or(stored_name.clone(), str::to_owned);
+    serde_json::json!({
+        "attachment_id": attachment.attachment_id().to_string(),
+        "file_name": file_name,
+        "file_path": attachment.file_path(),
+        "mime_type": attachment.mime_type(),
+        "meeting_time_ms": attachment.meeting_time_ms(),
+    })
 }
 
 /// Classifies a selected attachment by extension for local metadata persistence.
@@ -1801,6 +1917,42 @@ pub unsafe extern "C" fn note_taker_get_meeting(meeting_id: *const c_char) -> *m
         None => export_error_json(
             "invalid_argument",
             "meeting_id must be a valid UTF-8 C string",
+        ),
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Attaches files or camera photos to a meeting (Issue #54).
+///
+/// Inputs: `meeting_id` and `paths_json` (a JSON array of absolute file paths) are non-null
+/// NUL-terminated UTF-8 strings.
+/// Outputs: A caller-freed JSON response as described by `attach_files`: the attached files and
+/// those that failed, or `{"ok":false,"error_code","error"}` (`invalid_argument`,
+/// `meeting_not_found`, `runtime_unavailable`); null only if the response cannot be built.
+/// Side effects: Copies the files into the app's attachment folder and links them to the
+/// meeting, at its current meeting time while it is being recorded. The sources are left.
+///
+/// # Safety
+/// Both pointers must be null or valid NUL-terminated C strings for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_attach_files(
+    meeting_id: *const c_char,
+    paths_json: *const c_char,
+) -> *mut c_char {
+    let response_json = match (unsafe { ffi_string(meeting_id) }, unsafe {
+        ffi_string(paths_json)
+    }) {
+        (Some(meeting_id), Some(paths_json)) => {
+            with_runtime_json(|runtime| Ok(runtime.attach_files(meeting_id, paths_json)))
+                .unwrap_or_else(|_| {
+                    export_error_json("runtime_unavailable", "the native runtime is unavailable")
+                })
+        }
+        _ => export_error_json(
+            "invalid_argument",
+            "meeting_id and paths_json must be valid UTF-8 C strings",
         ),
     };
     CString::new(response_json)
@@ -2939,6 +3091,143 @@ mod ffi_contract_tests {
         assert_eq!(meeting_detail["segments"][0]["speaker"], "Alice");
         assert_eq!(meeting_detail["segments"][1]["speaker"], "Unknown speaker");
         assert_eq!(meeting_detail["segments"][1]["text"], "Hi.");
+    }
+
+    /// Verifies files attached while a meeting is recorded carry its current meeting time, files
+    /// attached afterwards go at the end, and the meeting JSON lists them (Issue #54).
+    #[test]
+    fn attached_files_are_timed_while_recording_and_listed_with_the_meeting() {
+        let test_directory =
+            std::env::temp_dir().join(format!("note-taker-ffi-attach-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&test_directory)
+            .unwrap_or_else(|error| panic!("test directory must be created: {error}"));
+        let mut ffi_runtime =
+            FfiRuntime::open_for_tests(&test_directory.join("notes.sqlite3"), &test_directory)
+                .unwrap_or_else(|status| {
+                    panic!("fixture runtime must initialize: status {status}")
+                });
+        let source = |name: &str| {
+            let path = test_directory.join(name);
+            std::fs::write(&path, b"fixture")
+                .unwrap_or_else(|error| panic!("fixture file must be written: {error}"));
+            path.display().to_string()
+        };
+        let request = |paths: &[String]| serde_json::json!(paths).to_string();
+
+        assert_eq!(
+            ffi_runtime.start_recording_titled(Some(MeetingId::new("ffi-photos")), None),
+            FFI_SUCCESS
+        );
+        assert_eq!(ffi_runtime.push_audio_pcm(vec![100; 32_000]), FFI_SUCCESS);
+        let during = parse_response(
+            &ffi_runtime.attach_files("ffi-photos", &request(&[source("whiteboard.jpg")])),
+        );
+        assert_eq!(ffi_runtime.stop_recording(), FFI_SUCCESS);
+        let after = parse_response(&ffi_runtime.attach_files(
+            "ffi-photos",
+            &request(&[source("agenda.pdf"), source("virus.exe")]),
+        ));
+        let meeting = parse_response(&ffi_runtime.get_meeting("ffi-photos"));
+        drop(ffi_runtime);
+        let _ = std::fs::remove_dir_all(&test_directory);
+
+        assert_eq!(during["ok"], true, "{during}");
+        assert_eq!(during["attached"][0]["meeting_time_ms"], 2_000);
+        assert_eq!(
+            after["attached"].as_array().map(Vec::len),
+            Some(1),
+            "{after}"
+        );
+        assert_eq!(
+            after["attached"][0]["meeting_time_ms"],
+            serde_json::Value::Null
+        );
+        assert_eq!(after["failed"][0]["path"], source_name(&after, "virus.exe"));
+        let attachments: Vec<(String, String, serde_json::Value)> = meeting["attachments"]
+            .as_array()
+            .unwrap_or_else(|| panic!("attachments must be listed: {meeting}"))
+            .iter()
+            .map(|attachment| {
+                (
+                    attachment["file_name"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned(),
+                    attachment["mime_type"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_owned(),
+                    attachment["meeting_time_ms"].clone(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            attachments,
+            vec![
+                (
+                    String::from("whiteboard.jpg"),
+                    String::from("image/jpeg"),
+                    serde_json::json!(2_000)
+                ),
+                (
+                    String::from("agenda.pdf"),
+                    String::from("application/pdf"),
+                    serde_json::Value::Null
+                ),
+            ]
+        );
+    }
+
+    /// Returns the failed path in `response` that ends with `name`, so the test need not rebuild
+    /// the temporary path.
+    fn source_name(response: &serde_json::Value, name: &str) -> serde_json::Value {
+        response["failed"]
+            .as_array()
+            .and_then(|failed| {
+                failed.iter().find(|entry| {
+                    entry["path"]
+                        .as_str()
+                        .is_some_and(|path| path.ends_with(name))
+                })
+            })
+            .map(|entry| entry["path"].clone())
+            .unwrap_or(serde_json::Value::Null)
+    }
+
+    /// Verifies blank meeting IDs, malformed or empty path lists and unknown meetings are
+    /// rejected as a whole.
+    #[test]
+    fn attach_files_rejects_invalid_requests() {
+        let (mut ffi_runtime, export_directory) = export_runtime();
+        ffi_runtime
+            .note_repository
+            .create_meeting(&MeetingId::new("ffi-attach"), &[1])
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+
+        let error_codes: Vec<serde_json::Value> = [
+            ("", r#"["/tmp/a.pdf"]"#),
+            ("ffi-attach", "not json"),
+            ("ffi-attach", r#"{"path":"/tmp/a.pdf"}"#),
+            ("ffi-attach", "[]"),
+            ("ffi-missing", r#"["/tmp/a.pdf"]"#),
+        ]
+        .into_iter()
+        .map(|(meeting_id, paths_json)| {
+            parse_response(&ffi_runtime.attach_files(meeting_id, paths_json))["error_code"].clone()
+        })
+        .collect();
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert_eq!(
+            error_codes,
+            vec![
+                "invalid_argument",
+                "invalid_argument",
+                "invalid_argument",
+                "invalid_argument",
+                "meeting_not_found"
+            ]
+        );
     }
 
     /// Verifies the titled-start C arguments: null means absent, blank IDs and invalid titles are

@@ -535,3 +535,28 @@ fn the_screen_is_captured_only_while_recording() {
     let meetings: Vec<&str> = slides.iter().map(|(meeting, _)| meeting.as_str()).collect();
     assert_eq!(meetings, vec!["meeting-first", "meeting-second"]);
 }
+
+/// Verifies the controller reports the meeting time of the meeting being recorded, for photos
+/// taken during the recording (Issue #54), and nothing for other meetings or after stop.
+#[test]
+fn the_recorded_meeting_reports_its_current_meeting_time() {
+    let (mut controller, _) = controller_with(true, |_| {});
+    let meeting_id = controller
+        .start(Some(MeetingId::new("meeting-photo")))
+        .unwrap_or_else(|error| panic!("start should succeed: {error}"));
+    assert_eq!(controller.current_meeting_time_ms(&meeting_id), Some(0));
+
+    controller
+        .push_pcm(pcm_seconds(3))
+        .unwrap_or_else(|error| panic!("PCM should be accepted: {error}"));
+    assert_eq!(controller.current_meeting_time_ms(&meeting_id), Some(3_000));
+    assert_eq!(
+        controller.current_meeting_time_ms(&MeetingId::new("meeting-other")),
+        None
+    );
+
+    controller
+        .stop()
+        .unwrap_or_else(|error| panic!("stop should succeed: {error}"));
+    assert_eq!(controller.current_meeting_time_ms(&meeting_id), None);
+}

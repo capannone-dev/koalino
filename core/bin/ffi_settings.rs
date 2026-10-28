@@ -69,6 +69,7 @@ impl ConfiguredSettings {
             ("NOTE_TAKER_ENCRYPTION_KEY_DIR", "keys"),
             ("NOTE_TAKER_LOG_DIR", "logs"),
             ("NOTE_TAKER_REVIEW_CLIP_DIR", "voice_review_clips"),
+            ("NOTE_TAKER_ATTACHMENT_DIR", "attachments"),
             ("NOTE_TAKER_EXPORT_DIR", "exports"),
         ] {
             values.insert(name, data_directory.join(file).display().to_string());

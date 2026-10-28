@@ -209,6 +209,22 @@ impl RecordingController {
             .map(|capture| &capture.meeting_id)
     }
 
+    /// Returns the current meeting time of `meeting_id` while it is being recorded.
+    ///
+    /// Inputs: Any meeting.
+    /// Outputs: Milliseconds of meeting time of the audio captured so far (paused or not), or
+    /// `None` when that meeting is not the one being recorded. Photos taken now go there in the
+    /// transcript (Issue #54).
+    /// Side effects: None.
+    pub fn current_meeting_time_ms(&self, meeting_id: &MeetingId) -> Option<u64> {
+        self.active_capture
+            .as_ref()
+            .filter(|capture| &capture.meeting_id == meeting_id)
+            .map(|capture| {
+                capture.meeting_start_offset_ms + samples_to_ms(capture.captured_sample_count)
+            })
+    }
+
     /// Starts a new untitled recording, or resumes a paused or interrupted one.
     ///
     /// Inputs: `meeting_id` for a new recording (`None` generates `meeting-<uuid>`); ignored when

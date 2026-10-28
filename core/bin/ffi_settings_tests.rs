@@ -18,7 +18,8 @@ fn value(settings: &ConfiguredSettings, name: &str) -> Option<String> {
     settings.lookup(name, |_| None)
 }
 
-/// The data directory places the database, keys, logs, review clips, and exports inside it.
+/// The data directory places the database, keys, logs, review clips, attachments, and exports
+/// inside it.
 #[test]
 fn the_data_directory_holds_every_file_the_core_writes() {
     let data_directory = Path::new("/data/user/0/app/files/note_taker");
@@ -32,6 +33,7 @@ fn the_data_directory_holds_every_file_the_core_writes() {
         ("NOTE_TAKER_ENCRYPTION_KEY_DIR", "keys"),
         ("NOTE_TAKER_LOG_DIR", "logs"),
         ("NOTE_TAKER_REVIEW_CLIP_DIR", "voice_review_clips"),
+        ("NOTE_TAKER_ATTACHMENT_DIR", "attachments"),
         ("NOTE_TAKER_EXPORT_DIR", "exports"),
     ] {
         assert_eq!(
