@@ -13,6 +13,8 @@ when to read, write, migrate, or fall back; this adapter only reads and writes o
 | --- | --- |
 | `platform_keychain.rs` | `PlatformKeychain`, entry names, platform modifiers, error classification |
 | `platform_keychain_tests.rs` | Mock-credential tests, plus two `#[ignore]`d tests against the real OS keychain |
+| `host_provided_keychain.rs` | `HostProvidedKeychain`: serves a key the host app unwrapped (the Android Keystore), refuses writes |
+| `host_provided_keychain_tests.rs` | Load, missing-key, and refused-store tests |
 
 ## Entry per platform
 
@@ -23,7 +25,8 @@ The secret is the raw 32-byte key (binary, not text).
 | macOS | Keychain Services (login keychain) | Generic password, service `note-taker`, account `encryption-key` |
 | Windows | Credential Manager | Generic credential, target name `note-taker:encryption-key` |
 | Linux / BSD | Secret Service (GNOME Keyring, KWallet, KeePassXC) over D-Bus | Default collection, attributes `service=note-taker`, `username=encryption-key`, label "Note Taker voice embedding encryption key" |
-| iOS, Android, others | none (`keyring` v1 mode has no store there) | Always `KeychainUnavailable`, so the key file is used |
+| Android | Android Keystore, through the Flutter app (`HostProvidedKeychain`) | `keys/encryption.key.wrapped` in the app-private directory, wrapped by the Keystore AES-256-GCM key `note_taker_database_key_wrapper` |
+| iOS, others | none (`keyring` v1 mode has no store there) | Always `KeychainUnavailable`: start-up fails unless the keychain is explicitly disabled |
 
 Inspecting the entry:
 

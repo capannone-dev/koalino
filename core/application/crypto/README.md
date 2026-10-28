@@ -65,7 +65,7 @@ Keychain entries (implemented in `core/adapters/keychain/`):
 | macOS | Keychain Services | Generic password, service `note-taker`, account `encryption-key` |
 | Windows | Credential Manager | Generic credential, target name `note-taker:encryption-key` |
 | Linux / BSD | Secret Service (D-Bus) | Attributes `service=note-taker`, `username=encryption-key` |
-| Android | Android Keystore (planned, see `DECISION_LOG.md`) | Until then the Flutter app sets `keychain_enabled: false`, so the key file lives in the app's private directory |
+| Android | Android Keystore | The Flutter app unwraps the key with a Keystore key (StrongBox when present) and hands it to the core through `note_taker_provide_encryption_key`; see `ui/android/README.md` |
 | iOS | none yet | Set `NOTE_TAKER_KEYCHAIN_ENABLED=false` and `NOTE_TAKER_ENCRYPTION_KEY_DIR` to the app's private directory |
 
 The entry is per user, not per database: every database on the machine that uses a random key

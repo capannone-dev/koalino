@@ -113,9 +113,11 @@ Otherwise the runtime opens lazily, on the first native call. The app calls
 `note_taker_start_runtime` right after configuring, on a background isolate, so the database and
 P2P sync start with the app instead of when the owner first opens a screen that needs them.
 
-On Android, `keychain_enabled` is false, because the keyring crate has no Android backend. The
-key file then lives in `keys/` in the app-private directory, which only the app can read. Keeping
-it in the Android Keystore instead is a follow-up.
+The keyring crate has no Android backend, so on Android the app unwraps the key from the Android
+Keystore and passes it to `note_taker_provide_encryption_key(key, 32)` before starting the
+runtime (0 accepted, 1 null or not 32 bytes). The core keeps it in a zeroizing buffer and serves
+it through `HostProvidedKeychain`; without it, Android start-up fails with status 6 instead of
+writing a key file. Desktops ignore the call unless it was made, and use the platform keychain.
 
 Unpaired devices on the LAN can see the node's peer ID through mDNS. They can connect only while
 the owner keeps a pairing window open, and even then they cannot sync.

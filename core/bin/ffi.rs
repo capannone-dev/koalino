@@ -51,7 +51,7 @@ use crate::{
         voice::VoiceVectorDB,
     },
     recording_controller::{RecordingControlError, RecordingController},
-    storage_composition::{EncryptedStores, open_encrypted_stores},
+    storage_composition::{EncryptedStores, open_encrypted_stores_with_keychain},
 };
 use uuid::Uuid;
 
@@ -339,10 +339,11 @@ impl FfiRuntime {
             note_repository,
             voice_store,
             embedding_cipher,
-        } = open_encrypted_stores(
+        } = open_encrypted_stores_with_keychain(
             &database_path,
             device_id.clone(),
             KeyManagerConfig::from_lookup(setting),
+            || runtime_keychain(provided_encryption_key(), cfg!(target_os = "android")),
         )
         .map_err(|error| {
             tracing::error!(error = %format!("{error:#}"), "unable to open encrypted stores");
@@ -442,7 +443,7 @@ impl FfiRuntime {
             note_repository,
             voice_store,
             embedding_cipher,
-        } = open_encrypted_stores(
+        } = crate::storage_composition::open_encrypted_stores(
             database_path,
             crate::domain::models::DeviceId::new("ffi-test"),
             crate::storage_composition::key_file_config_for_tests(&export_directory.join("keys")),
@@ -1335,6 +1336,69 @@ fn runtime_p2p() -> Result<Option<Arc<P2pHandle>>, c_int> {
     Ok(runtime_guard
         .as_ref()
         .and_then(|runtime| runtime.p2p.clone()))
+}
+
+/// The database key the host app handed over (Android: unwrapped from the Android Keystore).
+static HOST_ENCRYPTION_KEY: Mutex<Option<zeroize::Zeroizing<Vec<u8>>>> = Mutex::new(None);
+
+/// Returns a copy of the host-provided key, if any.
+fn provided_encryption_key() -> Option<Vec<u8>> {
+    HOST_ENCRYPTION_KEY
+        .lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().map(|key| key.to_vec()))
+}
+
+/// Picks the keychain the runtime unlocks through.
+///
+/// Inputs: The host-provided key, if any, and whether this is an Android build.
+/// Outputs: The host-provided keychain when a key was given or on Android (where it reports the
+/// missing key as unavailable, status 6), otherwise the platform keychain.
+/// Side effects: None until the keychain is used.
+fn runtime_keychain(
+    host_key: Option<Vec<u8>>,
+    is_android: bool,
+) -> Arc<dyn crate::ports::crypto::KeychainStore> {
+    if host_key.is_some() || is_android {
+        Arc::new(
+            crate::adapters::keychain::host_provided_keychain::HostProvidedKeychain::new(
+                host_key,
+                "Android Keystore",
+            ),
+        )
+    } else {
+        Arc::new(crate::adapters::keychain::platform_keychain::PlatformKeychain::new())
+    }
+}
+
+/// Hands the runtime the database key that the host app manages (Android Keystore).
+///
+/// Inputs: `key` points to `key_length` bytes, which must be 32. The caller wipes its own copy
+/// afterwards.
+/// Outputs: `0` when stored, `1` for a null pointer or another length.
+/// Side effects: Replaces any earlier key in process memory (wiped on replacement). The next
+/// runtime start unlocks with it; a runtime that is already open is unaffected.
+///
+/// # Safety
+///
+/// `key` must be null or valid for reads of `key_length` bytes for the duration of the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_provide_encryption_key(
+    key: *const u8,
+    key_length: usize,
+) -> c_int {
+    if key.is_null() || key_length != 32 {
+        return FFI_INVALID_ARGUMENT;
+    }
+    // SAFETY: non-null and valid for `key_length` reads per the caller contract.
+    let key_bytes = unsafe { std::slice::from_raw_parts(key, key_length) };
+    match HOST_ENCRYPTION_KEY.lock() {
+        Ok(mut guard) => {
+            *guard = Some(zeroize::Zeroizing::new(key_bytes.to_vec()));
+            FFI_SUCCESS
+        }
+        Err(_) => FFI_RUNTIME_UNAVAILABLE,
+    }
 }
 
 /// Maps a failure to open the encrypted stores to its FFI status.
@@ -2922,6 +2986,43 @@ mod ffi_contract_tests {
         );
         assert_eq!(super::store_open_status(&wrong_key), FFI_OPERATION_REJECTED);
         assert_eq!(super::store_open_status(&other), FFI_OPERATION_REJECTED);
+    }
+
+    /// `note_taker_provide_encryption_key` accepts exactly 32 bytes and refuses anything else.
+    #[test]
+    fn provide_encryption_key_checks_its_input() {
+        let short_key = [1_u8; 16];
+        let key = [2_u8; 32];
+
+        // SAFETY: null is accepted by contract; the arrays are valid for the given lengths.
+        let (null_status, short_status, key_status) = unsafe {
+            (
+                super::note_taker_provide_encryption_key(std::ptr::null(), 32),
+                super::note_taker_provide_encryption_key(short_key.as_ptr(), short_key.len()),
+                super::note_taker_provide_encryption_key(key.as_ptr(), key.len()),
+            )
+        };
+
+        assert_eq!(null_status, FFI_INVALID_ARGUMENT);
+        assert_eq!(short_status, FFI_INVALID_ARGUMENT);
+        assert_eq!(key_status, FFI_SUCCESS);
+    }
+
+    /// The host's key is used when provided; Android without one gets an unavailable keychain
+    /// (status 6), never the `keyring` crate, which has no Android store.
+    #[test]
+    fn the_runtime_keychain_prefers_the_host_key() {
+        let provided = super::runtime_keychain(Some(vec![3; 32]), true);
+        let android_without_key = super::runtime_keychain(None, true);
+        let desktop = super::runtime_keychain(None, false);
+
+        assert_eq!(provided.location(), "Android Keystore");
+        assert!(provided.load_key().is_ok_and(|key| key.is_some()));
+        assert!(matches!(
+            android_without_key.load_key(),
+            Err(crate::domain::errors::CryptoError::KeychainUnavailable { .. })
+        ));
+        assert_ne!(desktop.location(), "Android Keystore");
     }
 
     /// `note_taker_start_runtime` opens the configured runtime at once, creating its database in

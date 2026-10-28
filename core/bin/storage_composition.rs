@@ -25,7 +25,7 @@ use crate::{
         meeting_document::AutomergeMeetingDocumentCodec,
     },
     domain::models::DeviceId,
-    ports::crypto::EmbeddingCipher,
+    ports::crypto::{EmbeddingCipher, KeychainStore},
 };
 
 /// The note repository and voice store opened on one database with one verified key.
@@ -53,12 +53,29 @@ pub fn open_encrypted_stores(
     device_id: DeviceId,
     key_config: KeyManagerConfig,
 ) -> Result<EncryptedStores> {
+    open_encrypted_stores_with_keychain(database_path, device_id, key_config, || {
+        Arc::new(PlatformKeychain::new())
+    })
+}
+
+/// Unlocks the database key through a chosen keychain and opens both stores.
+///
+/// Inputs: As `open_encrypted_stores`, plus a factory for the keychain to use when the
+/// configuration enables one (the FFI passes the host-provided Android Keystore key there).
+/// Outputs and side effects: As `open_encrypted_stores`; the factory runs only when the keychain
+/// is enabled and no passphrase is set.
+pub fn open_encrypted_stores_with_keychain(
+    database_path: &Path,
+    device_id: DeviceId,
+    key_config: KeyManagerConfig,
+    keychain: impl FnOnce() -> Arc<dyn KeychainStore>,
+) -> Result<EncryptedStores> {
     let metadata_store = SqliteEncryptionMetadataStore::open(database_path)
         .context("unable to open encryption metadata")?;
     let uses_keychain = key_config.keychain_enabled() && !key_config.uses_passphrase();
     let mut key_manager = KeyManager::new(key_config);
     if uses_keychain {
-        key_manager = key_manager.with_keychain(Arc::new(PlatformKeychain::new()));
+        key_manager = key_manager.with_keychain(keychain());
     }
     let embedding_cipher: Arc<dyn EmbeddingCipher> = Arc::new(
         key_manager

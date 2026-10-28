@@ -4,3 +4,8 @@
 pub mod platform_keychain;
 #[cfg(test)]
 mod platform_keychain_tests;
+
+/// Implements `KeychainStore` over a key the host app unwrapped (the Android Keystore).
+pub mod host_provided_keychain;
+#[cfg(test)]
+mod host_provided_keychain_tests;
