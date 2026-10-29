@@ -89,7 +89,11 @@ final class _DevicesList extends StatelessWidget {
         ListTile(
           leading: const Icon(Icons.devices),
           title: Text(status.deviceName),
-          subtitle: const Text('This device'),
+          subtitle: Text(switch (status.capabilities) {
+            final DeviceCapabilities capabilities =>
+              'This device\n${describeCapabilities(capabilities)}',
+            null => 'This device',
+          }),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -156,7 +160,12 @@ final class _DevicesList extends StatelessWidget {
           ListTile(
             leading: const Icon(Icons.verified_user_outlined),
             title: Text(device.deviceName),
-            subtitle: Text('Paired ${formatPairedDate(device.pairedAt)}'),
+            subtitle: Text('Paired ${formatPairedDate(device.pairedAt)}\n'
+                '${switch (device.capabilities) {
+              final DeviceCapabilities capabilities =>
+                describeCapabilities(capabilities),
+              null => 'Not connected',
+            }}'),
             trailing: IconButton(
               tooltip: 'Remove ${device.deviceName}',
               icon: const Icon(Icons.delete_outline),
@@ -304,6 +313,33 @@ String formatPairingCode(String code) =>
 String shortPeerId(String peerId) => peerId.length <= 16
     ? peerId
     : '${peerId.substring(0, 7)}…${peerId.substring(peerId.length - 6)}';
+
+/// Display names of known transcription model labels; others are shown as given.
+const Map<String, String> _modelNames = <String, String>{
+  'whisper': 'Whisper (on device)',
+  'openai': 'OpenAI (cloud)',
+};
+
+/// Summarizes a device's manifest as `8 CPU cores · 4 GB GPU · Whisper (on device)`.
+///
+/// Inputs: The advertised capabilities. Outputs: One line of text. Side effects: None.
+String describeCapabilities(DeviceCapabilities capabilities) {
+  final List<String> parts = <String>[
+    '${capabilities.cpuCores} CPU ${capabilities.cpuCores == 1 ? 'core' : 'cores'}',
+  ];
+  final int gpuMegabytes = capabilities.gpuVramMegabytes;
+  if (gpuMegabytes > 0) {
+    parts.add(gpuMegabytes >= 1024
+        ? '${(gpuMegabytes / 1024).round()} GB GPU'
+        : '$gpuMegabytes MB GPU');
+  }
+  parts.add(capabilities.transcriptionModels.isEmpty
+      ? 'No transcription models'
+      : capabilities.transcriptionModels
+          .map((String model) => _modelNames[model] ?? model)
+          .join(', '));
+  return parts.join(' · ');
+}
 
 /// Formats a pairing date in local time as `28 Oct 2026`.
 ///

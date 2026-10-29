@@ -53,11 +53,26 @@ P2pStatus busyStatus() => P2pStatus(
       enabled: true,
       localPeerId: '12D3KooWLocal',
       deviceName: 'Studio laptop',
+      capabilities: const DeviceCapabilities(
+        cpuCores: 8,
+        gpuVramMegabytes: 0,
+        transcriptionModels: <String>['whisper'],
+      ),
       pairedDevices: <PairedDevice>[
         PairedDevice(
           peerId: '12D3KooWPhone',
           deviceName: 'Galaxy',
           pairedAt: DateTime.utc(2026, 10, 28, 9, 52),
+          capabilities: const DeviceCapabilities(
+            cpuCores: 16,
+            gpuVramMegabytes: 8192,
+            transcriptionModels: <String>['whisper', 'openai'],
+          ),
+        ),
+        PairedDevice(
+          peerId: '12D3KooWOldTablet',
+          deviceName: 'Old tablet',
+          pairedAt: DateTime.utc(2026, 10, 27, 18),
         ),
       ],
       nearbyPeerIds: const <String>['12D3KooWNearbyDevice1234'],

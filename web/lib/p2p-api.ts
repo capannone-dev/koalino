@@ -4,8 +4,22 @@
 
 import { apiBaseUrl } from "@/lib/api";
 
-/** A paired device. `paired_at_ms` is Unix milliseconds. */
-export type TrustedDevice = { peer_id: string; device_name: string; paired_at_ms: number };
+/**
+ * What a device advertises in its manifest (REQUIREMENTS 3.4): CPU cores, GPU memory in
+ * megabytes (0 when none is known), transcription model labels such as `whisper` or `openai`,
+ * and whether it can split audio at speech pauses.
+ */
+export type DeviceCapabilities = {
+  cpu_cores: number;
+  gpu_vram_megabytes: number;
+  transcription_models: string[];
+  supports_vad: boolean;
+};
+/**
+ * A paired device. `paired_at_ms` is Unix milliseconds; `capabilities` is `null` while the device
+ * is not connected.
+ */
+export type TrustedDevice = { peer_id: string; device_name: string; paired_at_ms: number; capabilities: DeviceCapabilities | null };
 /** An unpaired device seen on the local network. */
 export type NearbyDevice = { peer_id: string };
 /** A pairing request awaiting the owner's answer, with the code both devices show. */
@@ -29,6 +43,7 @@ export type P2pStatus =
       local_peer_id: string;
       device_name: string;
       listen_addresses: string[];
+      capabilities: DeviceCapabilities;
       trusted_devices: TrustedDevice[];
       nearby_devices: NearbyDevice[];
       incoming_requests: IncomingPairingRequest[];

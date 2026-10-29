@@ -16,6 +16,7 @@ import {
   rejectPairingRequest,
   removeDevice,
   startPairing,
+  type DeviceCapabilities,
   type P2pFailureKind,
   type P2pStatus,
   type PairingUpdate,
@@ -71,6 +72,24 @@ export function formatPairingCode(code: string): string {
 /** Formats a pairing time (Unix milliseconds) in local time as `28 Oct 2026`. */
 export function formatPairedDate(pairedAtMs: number): string {
   return new Date(pairedAtMs).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+/** Display names of known transcription model labels; others are shown as given. */
+const modelNames: Record<string, string> = { whisper: "Whisper (on device)", openai: "OpenAI (cloud)" };
+
+/** Summarizes a device's manifest as `8 CPU cores · 4 GB GPU · Whisper (on device)`. */
+export function describeCapabilities(capabilities: DeviceCapabilities): string {
+  const parts = [`${capabilities.cpu_cores} CPU ${capabilities.cpu_cores === 1 ? "core" : "cores"}`];
+  const gpuMegabytes = capabilities.gpu_vram_megabytes;
+  if (gpuMegabytes > 0) {
+    parts.push(gpuMegabytes >= 1_024 ? `${Math.round(gpuMegabytes / 1_024)} GB GPU` : `${gpuMegabytes} MB GPU`);
+  }
+  parts.push(
+    capabilities.transcription_models.length === 0
+      ? "No transcription models"
+      : capabilities.transcription_models.map((model) => modelNames[model] ?? model).join(", ")
+  );
+  return parts.join(" · ");
 }
 
 const primaryButton = "min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled";
@@ -150,6 +169,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
         <div>
           <p className="font-semibold">{status.device_name}</p>
           <p className="text-sm text-muted">This device</p>
+          <p className="text-sm text-muted">{describeCapabilities(status.capabilities)}</p>
         </div>
         {isDiscoverable ? (
           <p>Discoverable: your other devices can ask to pair for a few minutes.</p>
@@ -216,6 +236,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
               <div>
                 <p className="font-semibold">{device.device_name}</p>
                 <p className="text-sm text-muted">{`Paired ${formatPairedDate(device.paired_at_ms)}`}</p>
+                <p className="text-sm text-muted">{device.capabilities ? describeCapabilities(device.capabilities) : "Not connected"}</p>
               </div>
               {deviceToRemove?.peer_id !== device.peer_id && (
                 <button type="button" className={secondaryButton} aria-label={`Remove ${device.device_name}`} disabled={isBusy} onClick={() => setDeviceToRemove(device)}>

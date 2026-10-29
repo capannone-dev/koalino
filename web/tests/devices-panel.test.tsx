@@ -29,6 +29,7 @@ function runningStatus(overrides: Partial<Extract<P2pStatus, { enabled: true }>>
     local_peer_id: "12D3KooWLocal",
     device_name: "Office server",
     listen_addresses: [],
+    capabilities: { cpu_cores: 8, gpu_vram_megabytes: 0, transcription_models: ["whisper"], supports_vad: true },
     trusted_devices: [],
     nearby_devices: [],
     incoming_requests: [],
@@ -146,7 +147,7 @@ test("removing a paired device asks first", async () => {
   vi.mocked(p2pApi.removeDevice).mockResolvedValue();
   render(
     <DevicesPanel
-      initialStatus={runningStatus({ trusted_devices: [{ peer_id: pairedPeerId, device_name: "Laptop", paired_at_ms: Date.UTC(2026, 9, 28, 12) }] })}
+      initialStatus={runningStatus({ trusted_devices: [{ peer_id: pairedPeerId, device_name: "Laptop", paired_at_ms: Date.UTC(2026, 9, 28, 12), capabilities: null }] })}
     />
   );
 
@@ -183,4 +184,38 @@ test("the status refreshes every two seconds", async () => {
   });
 
   expect(screen.getByText("12D3Koo…abcdef")).toBeInTheDocument();
+});
+
+test("shows what each device can run, and which paired devices are not connected", () => {
+  render(
+    <DevicesPanel
+      initialStatus={runningStatus({
+        trusted_devices: [
+          {
+            peer_id: pairedPeerId,
+            device_name: "Laptop",
+            paired_at_ms: Date.UTC(2026, 9, 28, 12),
+            capabilities: { cpu_cores: 16, gpu_vram_megabytes: 8_192, transcription_models: ["whisper", "openai"], supports_vad: true }
+          },
+          { peer_id: nearbyPeerId, device_name: "Phone", paired_at_ms: Date.UTC(2026, 9, 28, 12), capabilities: null }
+        ]
+      })}
+    />
+  );
+
+  expect(screen.getByText("8 CPU cores · Whisper (on device)")).toBeInTheDocument();
+  expect(screen.getByText("16 CPU cores · 8 GB GPU · Whisper (on device), OpenAI (cloud)")).toBeInTheDocument();
+  expect(screen.getByText("Not connected")).toBeInTheDocument();
+});
+
+test("a device that runs no models says so", () => {
+  render(
+    <DevicesPanel
+      initialStatus={runningStatus({
+        capabilities: { cpu_cores: 1, gpu_vram_megabytes: 512, transcription_models: [], supports_vad: false }
+      })}
+    />
+  );
+
+  expect(screen.getByText("1 CPU core · 512 MB GPU · No transcription models")).toBeInTheDocument();
 });

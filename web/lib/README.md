@@ -20,3 +20,5 @@ the pairing steps `makeDiscoverable`, `startPairing` (returns the code), `confir
 `cancelPairing`, `acceptPairingRequest`, `rejectPairingRequest`, and `removeDevice`. Failures
 throw `P2pRequestError`, whose `kind` is `invalid_peer` (400), `not_found` (404), `refused` (409),
 `unavailable` (503), `server`, or `network`. It shares `apiBaseUrl` with `api.ts`.
+`DeviceCapabilities` is the manifest summary the status carries for this server and for each
+connected paired device (`null` while not connected).

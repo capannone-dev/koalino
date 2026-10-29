@@ -80,7 +80,8 @@ in with `--dart-define=NOTE_TAKER_P2P_PEERS`. After `runApp`, `startCore` calls
 holds the screens back until it returns 0. Status 6 means the keychain is missing, locked, or
 refused.
 
-`p2p_bridge.dart` defines `P2pStatus` and its rows, `P2pCommandResult`, and `P2pException` (with
+`p2p_bridge.dart` defines `P2pStatus` and its rows (with `DeviceCapabilities` for this device and
+each connected paired device), `P2pCommandResult`, and `P2pException` (with
 Rust's `error_code`), the pure decoders `decodeP2pStatus` and `decodeP2pCommandResult`, and
 `p2pCommandJson`. `RustP2pBridge` calls `note_taker_p2p_status` and `note_taker_p2p_command` on
 background isolates; a command blocks its isolate until the P2P task answers (Issue #43).

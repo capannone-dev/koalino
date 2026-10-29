@@ -31,4 +31,6 @@ seconds and offers the same steps and wording as the Flutter Devices screen: Mak
 (shown as discoverable for the daemon's five-minute pairing window), Pair with a nearby device,
 the six-digit code to compare with **Codes match** or **Cancel pairing**, **Accept** or
 **Reject** for requests, and **Remove** for a paired device after an inline confirmation. Failures
-map to plain messages; server text is never shown.
+map to plain messages; server text is never shown. This server and each paired device show
+their manifest in one line (`describeCapabilities`, such as "8 CPU cores · Whisper (on device)"),
+or "Not connected".

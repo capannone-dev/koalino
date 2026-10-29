@@ -15,6 +15,7 @@ final class PairedDevice {
     required this.peerId,
     required this.deviceName,
     required this.pairedAt,
+    this.capabilities,
   });
 
   /// The device's libp2p peer ID, used to address commands.
@@ -25,6 +26,28 @@ final class PairedDevice {
 
   /// When the pairing completed, in UTC.
   final DateTime pairedAt;
+
+  /// What the device advertised in its manifest; `null` while it is not connected.
+  final DeviceCapabilities? capabilities;
+}
+
+/// What a device advertises in its manifest (REQUIREMENTS 3.4).
+final class DeviceCapabilities {
+  /// Creates a capabilities summary.
+  const DeviceCapabilities({
+    required this.cpuCores,
+    required this.gpuVramMegabytes,
+    required this.transcriptionModels,
+  });
+
+  /// CPU cores available to the app.
+  final int cpuCores;
+
+  /// GPU memory in megabytes; 0 when none is known.
+  final int gpuVramMegabytes;
+
+  /// Model labels such as `whisper` (on device) or `openai` (cloud).
+  final List<String> transcriptionModels;
 }
 
 /// Another device asking to pair, awaiting the owner's answer.
@@ -72,6 +95,7 @@ final class P2pStatus {
     required this.enabled,
     this.localPeerId = '',
     this.deviceName = '',
+    this.capabilities,
     this.pairedDevices = const <PairedDevice>[],
     this.nearbyPeerIds = const <String>[],
     this.incomingRequests = const <IncomingPairingRequest>[],
@@ -86,6 +110,9 @@ final class P2pStatus {
 
   /// The name this device announces.
   final String deviceName;
+
+  /// What this device advertises to its paired devices; `null` from an older core.
+  final DeviceCapabilities? capabilities;
 
   /// Paired devices, oldest first.
   final List<PairedDevice> pairedDevices;
@@ -171,6 +198,7 @@ P2pStatus decodeP2pStatus(String json) {
       enabled: true,
       localPeerId: object['local_peer_id']! as String,
       deviceName: object['device_name']! as String,
+      capabilities: _capabilities(object['capabilities']),
       pairedDevices: _list(object['trusted_devices'])
           .map((Map<String, Object?> device) => PairedDevice(
                 peerId: device['peer_id']! as String,
@@ -178,6 +206,7 @@ P2pStatus decodeP2pStatus(String json) {
                 pairedAt: DateTime.fromMillisecondsSinceEpoch(
                     (device['paired_at_ms']! as num).toInt(),
                     isUtc: true),
+                capabilities: _capabilities(device['capabilities']),
               ))
           .toList(growable: false),
       nearbyPeerIds: _list(object['nearby_devices'])
@@ -220,6 +249,23 @@ P2pCommandResult decodeP2pCommandResult(String json) {
     updateKind:
         update is Map<String, Object?> ? update['kind'] as String? : null,
     revoked: object['revoked'] as bool?,
+  );
+}
+
+/// Decodes a capabilities object, or `null` when it is absent or `null`.
+///
+/// Throws `TypeError` for an object of the wrong shape (reported as `malformed_response`).
+DeviceCapabilities? _capabilities(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  final Map<String, Object?> object = value as Map<String, Object?>;
+  return DeviceCapabilities(
+    cpuCores: (object['cpu_cores']! as num).toInt(),
+    gpuVramMegabytes: (object['gpu_vram_megabytes']! as num).toInt(),
+    transcriptionModels: (object['transcription_models']! as List<Object?>)
+        .map((Object? model) => model! as String)
+        .toList(growable: false),
   );
 }
 

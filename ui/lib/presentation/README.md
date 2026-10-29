@@ -34,7 +34,9 @@ success with a snack bar (Issue #41).
 
 `devices_screen.dart` shows this device, a "Make discoverable" button, incoming requests and
 outgoing pairings with their six-digit codes in large type (read out digit by digit by screen
-readers), paired devices with a confirmed Remove, and nearby devices with Pair. A disabled P2P
+readers), paired devices with a confirmed Remove, and nearby devices with Pair. This device and
+each paired device show their manifest in one line (`describeCapabilities`, such as
+"8 CPU cores · Whisper (on device)"), or "Not connected". A disabled P2P
 task shows "Device sync is off". `HomeShell` lists it as the fourth destination, Devices
 (Issue #43).
 

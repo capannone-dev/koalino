@@ -41,6 +41,35 @@ void main() {
     expect(find.text('Pair'), findsOneWidget);
   });
 
+  testWidgets('shows what each device can run, or that it is not connected',
+      (WidgetTester tester) async {
+    await pumpDevices(tester, FakeP2pBridge(status: busyStatus()));
+
+    expect(find.textContaining('8 CPU cores · Whisper (on device)'),
+        findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Old tablet'), 200);
+    expect(
+        find.textContaining(
+            '16 CPU cores · 8 GB GPU · Whisper (on device), OpenAI (cloud)'),
+        findsOneWidget);
+    expect(find.textContaining('Not connected'), findsOneWidget);
+  });
+
+  test('capabilities are summarized in one line', () {
+    expect(
+      describeCapabilities(const DeviceCapabilities(
+          cpuCores: 1,
+          gpuVramMegabytes: 512,
+          transcriptionModels: <String>['acme'])),
+      '1 CPU core · 512 MB GPU · acme',
+    );
+    expect(
+      describeCapabilities(const DeviceCapabilities(
+          cpuCores: 4, gpuVramMegabytes: 0, transcriptionModels: <String>[])),
+      '4 CPU cores · No transcription models',
+    );
+  });
+
   testWidgets('pairing codes are shown in large type',
       (WidgetTester tester) async {
     await pumpDevices(tester, FakeP2pBridge(status: busyStatus()));
@@ -98,6 +127,9 @@ void main() {
     final FakeP2pBridge bridge = FakeP2pBridge(status: busyStatus());
     await pumpDevices(tester, bridge);
     await tester.scrollUntilVisible(find.byTooltip('Remove Galaxy'), 200);
+    // Paired tiles are two lines tall; bring the whole button on screen before tapping it.
+    await tester.ensureVisible(find.byTooltip('Remove Galaxy'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Remove Galaxy'));
     await tester.pumpAndSettle();

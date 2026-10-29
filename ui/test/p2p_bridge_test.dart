@@ -10,7 +10,8 @@ import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 const String runningStatusJson = '''
 {"enabled":true,"local_peer_id":"12D3KooWLocal","device_name":"Studio laptop",
  "listen_addresses":["/ip4/192.168.1.5/tcp/4001"],
- "trusted_devices":[{"peer_id":"12D3KooWPhone","device_name":"Galaxy","paired_at_ms":1793181121148}],
+ "capabilities":{"cpu_cores":8,"gpu_vram_megabytes":4096,"transcription_models":["whisper","openai"],"supports_vad":true},
+ "trusted_devices":[{"peer_id":"12D3KooWPhone","device_name":"Galaxy","paired_at_ms":1793181121148,"capabilities":null}],
  "nearby_devices":[{"peer_id":"12D3KooWNearby"}],
  "incoming_requests":[{"peer_id":"12D3KooWTablet","device_name":"Tablet","code":"639210"}],
  "outgoing_pairings":[{"peer_id":"12D3KooWDesk","code":"888224","locally_confirmed":true}],
@@ -31,6 +32,11 @@ void main() {
         status.pairedDevices.single.pairedAt,
         DateTime.fromMillisecondsSinceEpoch(1793181121148, isUtc: true),
       );
+      expect(status.capabilities?.cpuCores, 8);
+      expect(status.capabilities?.gpuVramMegabytes, 4096);
+      expect(status.capabilities?.transcriptionModels,
+          <String>['whisper', 'openai']);
+      expect(status.pairedDevices.single.capabilities, isNull);
       expect(status.nearbyPeerIds, <String>['12D3KooWNearby']);
       expect(status.incomingRequests.single.deviceName, 'Tablet');
       expect(status.incomingRequests.single.code, '639210');
