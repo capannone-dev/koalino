@@ -1174,3 +1174,23 @@ the comment on #49.
   starting after it; one added afterwards has none and goes at the end. Slides use the same field.
 - **One flow replaces the old import screen.** "Take photos" and "Attach files" (multi-select)
   are on the Record screen and the meeting detail; the single-file import screen was removed.
+
+## 2026-10-29 — #43 wrap-up: CLI revocation through the database; manifests on the sync stream
+
+- **The CLI edits the allowlist directly; the running task reconciles.** The CLI has no HTTP
+  client and adding one would be a new library, so `devices revoke` deletes the row in the shared
+  database. The P2P task compares its gate with the stored allowlist on its existing one-second
+  tick (`PairingManager::reconcile_trusted_peers`) and drops and disconnects removed devices. The
+  stored allowlist stays the single source of truth. Pairing stays on the Devices screens, since it
+  needs the code comparison on a running device.
+- **Manifests share the encrypted sync stream, with their own magic.** `NTM1` + JSON beside
+  `NTS1` sync envelopes avoids a new libp2p protocol; older devices reject the unknown envelope
+  and carry on. A manifest is sent when a paired device connects, accepted only when it names its
+  sender, bounded in size and content, and forgotten on disconnect or unpairing, so the status only
+  lists devices that could take work now.
+- **Advertised models come from the pipeline configuration, not from loading the model.** Loading
+  Whisper just to advertise it would cost seconds at start; a model file that later fails to load
+  is still advertised (the pipeline reports that failure itself). GPU memory is advertised as 0
+  until a detection adapter exists.
+- **The web Devices page mirrors the Flutter screen** in steps and wording, polling the status
+  every two seconds; server error text is never shown.

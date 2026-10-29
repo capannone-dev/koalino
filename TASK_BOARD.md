@@ -111,7 +111,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 
 | Priority | Issue | Work | Requirement |
 | --- | --- | --- | --- |
-| P0 | #43 | **In progress**. Done: libp2p 0.57.1, persistent sealed identity, allowlist store, connection gate, pairing protocol, `PairingManager`, the meeting document as the source of truth (option A), multi-meeting `RepositorySyncManager`, the daemon P2P task, the `/api/p2p` routes, document revisions polled every second so any writer's change reaches connected devices, static peer addresses, and kept-alive paired connections with redial (verified on deb-gui, deb-shell, win11 and an Android 16 phone). Flutter Devices screen, FFI composition and Linux/Android packaging done (Linux app verified pairing and syncing on deb-gui). Remaining: phone app check, Windows Flutter, web and CLI Devices UI, manifests | 3.3, 3.4, 4.1 |
+| P0 | #43 | Done (2026-10-29): pairing with an allowlist, Automerge sync in the daemon and apps, `/api/p2p/*`, Flutter and web Devices screens, CLI `devices list`/`revoke` (applied by a running daemon within a second), and `DeviceManifest` exchange shown on the Devices screens. Follow-ups: #55 relay, #56 voice-library sync, #57 attachment sync, #58 Nearby during pairing, #59 routing by manifests | 3.3, 3.4, 4.1 |
 | P0 | #44 | Real diarization adapter (Pyannote/SpeechBrain behind a Cargo feature); retune the 0.70 clustering threshold on its embeddings | 3.2 |
 | P0 | #45 | Microphone capture: `cpal` in the Rust core (`microphone` feature), Android `RECORD_AUDIO`; done | 3.1 |
 | P1 | #46 | Settings on Linux, Windows, Android, and the web: runtime log level and Share/Export Logs; done | 6.1, 6.2 |
@@ -124,6 +124,11 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P1 | #53 | Telemetry recorded per transcribed chunk; Telemetry moved into Settings (app and web); done | 6 |
 | P2 | #49 | Local screen-share slides outside Teams: harness done (detector/capturer/sink ports, no-op adapters, slide-change heuristic, per-recording watcher); a conferencing-app adapter waits for the owner's choice of app | 3.1 |
 | P1 | #54 | In-app camera (multi-shot, `camera` plugin; Android, iOS, Windows) and multi-file attachments during and after a meeting, placed in the transcript by meeting time; Linux attaches files only; done | 3.1 |
+| P1 | #55 | Relay through the owner's own daemon (circuit relay v2 + hole punching) for devices that cannot connect directly | 4.1 |
+| P1 | #56 | Voice-library sync between paired devices (union merge, embeddings re-sealed on receipt) | 3.3 |
+| P2 | #57 | Attachment sync (metadata with the meeting, files over `FileTransferNetwork`) | 3.3 |
+| P3 | #58 | Leave devices with a pending pairing out of Nearby | 4.1 |
+| P2 | #59 | Route transcription to a paired device using the exchanged manifests | 3.4 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |
 | P3 | — | Decide how the Voice Galleries surface unclustered fallback clips | 3.2 |
