@@ -28,7 +28,10 @@ transactions without linking the CRDT library.
 `NodeIdentityStore` (`peer_trust.rs`) keeps this node's encoded P2P identity. Implementations seal it
 at rest and keep the first stored value, so concurrent first starts agree (Issue #43).
 `TrustedPeerStore` in the same file holds the allowlist of paired devices: `trust_peer` (an upsert),
-`revoke_peer`, `trusted_peers`, and `is_trusted`.
+`revoke_peer`, `trusted_peers`, and `is_trusted`, plus `pin_pair_key` (answering a
+`PairKeyPinning`) and `pair_key` for the key agreed with each device (Issue #50).
+`PairAgreementSecretStore` keeps this device's sealed X25519 secret the way `NodeIdentityStore`
+keeps the identity.
 `PairingTransport` and `PairingEvent` (in the same file) are the network side of pairing:
 admission (a pairing window, nearby unpaired devices, trust and revoke) and the
 request/answer exchange.

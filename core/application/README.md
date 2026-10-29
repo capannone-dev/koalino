@@ -110,6 +110,13 @@ pipeline is configured to run, `PipelineConfig::advertised_transcription_models`
 manifest is forgotten when it disconnects or is unpaired, so the status only lists devices that
 could take work now (REQUIREMENTS 3.4).
 
+`pair_key_exchange.rs` frames this device's X25519 public key as `NTK1` + 32 bytes (Issue #50).
+Given a `PairAgreementSecret` (`with_pair_agreement_secret`; the daemon loads it from the peer
+store), `P2pService` sends it to each paired device that connects and derives the pair key from
+the one it receives, pinning it with `TrustedPeerStore::pin_pair_key`. Malformed or low-order
+keys, keys from unpaired devices, and keys that differ from the pinned one are logged and
+ignored. See `crypto/README.md`.
+
 `poll_trust_changes`, on the same tick, calls `PairingManager::reconcile_trusted_peers`. The
 stored allowlist is authoritative: a device another process removed from it (the CLI's `devices
 revoke`) is dropped from the transport's gate and disconnected, a stored device not yet admitted

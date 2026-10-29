@@ -4,8 +4,12 @@
 //! Pairing uses numeric comparison: both devices derive the same `PairingCode` from the two
 //! authenticated peer IDs, and the owner confirms on each device that the codes match. A device
 //! impersonating the intended peer has a different peer ID, so its code differs.
+//!
+//! Each pair also agrees a `PairKey` (Issue #50) that protects review clips sent between the two
+//! devices on top of the transport's encryption.
 
 use sha2::{Digest, Sha256};
+use zeroize::Zeroizing;
 
 use super::{errors::DeviceNameError, models::DeviceId};
 
@@ -121,5 +125,41 @@ impl PairingCode {
     /// Borrows the six digits.
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+/// The 256-bit key two paired devices agreed (Issue #50); wiped on drop and never printed.
+pub struct PairKey(Zeroizing<[u8; 32]>);
+
+impl PairKey {
+    /// Wraps key bytes, as derived from the agreement or opened from storage.
+    ///
+    /// Inputs: 32 secret bytes. Outputs: The key. Side effects: None.
+    pub fn from_bytes(key_bytes: [u8; 32]) -> Self {
+        Self(Zeroizing::new(key_bytes))
+    }
+
+    /// Borrows the key bytes; never log or persist them unsealed.
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Compares two keys in constant time.
+    ///
+    /// Outputs: `true` when every byte is equal. Side effects: None.
+    pub fn matches(&self, other: &Self) -> bool {
+        self.0
+            .iter()
+            .zip(other.0.iter())
+            .fold(0_u8, |difference, (left, right)| {
+                difference | (left ^ right)
+            })
+            == 0
+    }
+}
+
+impl std::fmt::Debug for PairKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("PairKey(redacted)")
     }
 }

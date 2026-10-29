@@ -1194,3 +1194,21 @@ the comment on #49.
   until a detection adapter exists.
 - **The web Devices page mirrors the Flutter screen** in steps and wording, polling the status
   every two seconds; server error text is never shown.
+
+## 2026-10-29 — #50 unknown-speaker clusters across paired devices
+
+- **The owner chose to share clusters, embeddings and review clips** with paired devices, with
+  the raw audio clips under an extra encryption layer on top of the Noise transport. Through the
+  follow-up questions the owner picked a per-pair key and encryption of clip audio at rest.
+- **Review-clip audio is sealed at rest** with the database cipher, like embeddings, under
+  `unassigned_voice_clips:audio:<clip id>` and an `audio_format` column; older plaintext rows
+  are sealed once when the adapter opens.
+- **Pair keys come from static X25519 secrets.** Each device keeps one secret, sealed in the peer
+  store, and sends its public key (`NTK1`) to each connected paired device; HKDF-SHA256 over the
+  shared value, bound to both peer IDs and public keys, gives the pair key. A static secret
+  needs no coordination between the two devices, survives reconnection and re-pairing, and
+  covers devices paired before #50, which agree at their next connection. Ephemeral keys would
+  add forward secrecy, but the Noise transport underneath already provides it for traffic. The
+  first key is pinned in the allowlist row and a different one is ignored, so a later message
+  cannot swap it. The owner approved `x25519-dalek` (3.0, already built by libp2p-noise) and
+  `hkdf` (0.12, matching the direct `sha2` 0.10).

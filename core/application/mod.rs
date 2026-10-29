@@ -64,6 +64,10 @@ pub mod p2p_service;
 mod p2p_service_tests;
 /// Serializable P2P status and pairing views shared by the HTTP routes and the FFI.
 pub mod p2p_view;
+/// Frames the X25519 public key paired devices exchange to agree their pair key (Issue #50).
+pub mod pair_key_exchange;
+#[cfg(test)]
+mod pair_key_exchange_tests;
 /// Orchestrates numeric-comparison pairing and the trusted-peer allowlist (Issue #43).
 pub mod pairing_manager;
 #[cfg(test)]

@@ -16,7 +16,10 @@ use crate::{
         storage::{sqlite_adapter::SqliteNoteRepository, sqlite_peer_store::SqlitePeerStore},
     },
     application::{
-        crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
+        crypto::{
+            pair_key::PairAgreementSecret,
+            voice_encryptor::{EncryptionKey, VoiceEncryptor},
+        },
         meeting_crdt::MeetingCrdtService,
         meeting_document::AutomergeMeetingDocumentCodec,
         p2p_service::{LocalCapabilities, P2pCommand, P2pCommandOutcome, P2pService},
@@ -617,4 +620,48 @@ async fn paired_devices_exchange_manifests_and_forget_revoked_ones() {
     run(&mut laptop, P2pCommand::Revoke(phone_id));
     laptop.process_pending_events();
     assert!(laptop.status().peer_manifests.is_empty());
+}
+
+/// Paired devices agree a per-pair key once connected (Issue #50): each sends its X25519 public
+/// key, and both allowlists end up holding the same key for the other device. Devices paired
+/// before #50 get theirs the same way, at their next connection.
+#[tokio::test]
+async fn paired_devices_agree_the_same_pair_key() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9411"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let (laptop, laptop_database) = service_with_database("Laptop", laptop_adapter);
+    let (phone, phone_database) = service_with_database("Phone", phone_adapter);
+    let mut laptop = laptop.with_pair_agreement_secret(PairAgreementSecret::generate());
+    let mut phone = phone.with_pair_agreement_secret(PairAgreementSecret::generate());
+    let laptop_id = laptop.transport().local_peer_id();
+    let phone_id = phone.transport().local_peer_id();
+    let laptop_store = trust_store_connection(&laptop_database);
+    let phone_store = trust_store_connection(&phone_database);
+
+    pair(&mut laptop, &mut phone, phone_address).await;
+    drive(&mut laptop, &mut phone, |_, _| {
+        matches!(laptop_store.pair_key(&phone_id), Ok(Some(_)))
+            && matches!(phone_store.pair_key(&laptop_id), Ok(Some(_)))
+    })
+    .await;
+
+    let on_laptop = laptop_store
+        .pair_key(&phone_id)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| panic!("laptop must hold the pair key"));
+    let on_phone = phone_store
+        .pair_key(&laptop_id)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| panic!("phone must hold the pair key"));
+    assert!(on_laptop.matches(&on_phone));
 }

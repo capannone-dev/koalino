@@ -1,5 +1,7 @@
 //! Specifies the peer store's node-identity contract: one sealed identity per database, kept
-//! across reopenings, agreed on by concurrent first starts, and never stored in plaintext.
+//! across reopenings, agreed on by concurrent first starts, and never stored in plaintext. The
+//! pair-agreement secret and the per-pair keys of Issue #50 follow the same rules, and a pair key
+//! is pinned once agreed.
 
 use std::{
     path::{Path, PathBuf},
@@ -13,11 +15,13 @@ use crate::{
     application::crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
     domain::{
         models::DeviceId,
-        peer_trust::{DeviceName, TrustedPeer},
+        peer_trust::{DeviceName, PairKey, TrustedPeer},
     },
     ports::{
         crypto::EmbeddingCipher,
-        peer_trust::{NodeIdentityStore, TrustedPeerStore},
+        peer_trust::{
+            NodeIdentityStore, PairAgreementSecretStore, PairKeyPinning, TrustedPeerStore,
+        },
     },
 };
 
@@ -210,4 +214,136 @@ fn revoking_a_peer_removes_it_persistently() {
     assert!(revoked);
     assert!(!revoked_again);
     assert!(reopened_peers.is_empty());
+}
+
+/// The first pair-agreement secret is kept across reopenings and sealed at rest.
+#[test]
+fn the_pair_agreement_secret_is_kept_and_sealed() {
+    let scratch = ScratchDirectory::new();
+    let first = open_store(&scratch.database_path())
+        .load_or_insert_pair_agreement_secret(b"agreement-secret-one")
+        .unwrap_or_else(|error| panic!("secret must persist: {error}"));
+    let reopened = open_store(&scratch.database_path())
+        .load_or_insert_pair_agreement_secret(b"agreement-secret-two")
+        .unwrap_or_else(|error| panic!("secret must load: {error}"));
+
+    let stored: Vec<u8> = Connection::open(scratch.database_path())
+        .and_then(|connection| {
+            connection.query_row(
+                "SELECT sealed_secret FROM p2p_pair_agreement_secret",
+                [],
+                |row| row.get(0),
+            )
+        })
+        .unwrap_or_else(|error| panic!("sealed row must exist: {error}"));
+
+    assert_eq!(first.as_slice(), b"agreement-secret-one");
+    assert_eq!(reopened.as_slice(), b"agreement-secret-one");
+    assert!(
+        !stored
+            .windows(20)
+            .any(|window| window == b"agreement-secret-one")
+    );
+}
+
+/// The first key agreed with a paired device is stored sealed and pinned: agreeing it again is a
+/// no-op, a different key is reported and ignored, and re-pairing keeps it.
+#[test]
+fn a_pair_key_is_pinned_sealed_and_kept_on_re_pairing() {
+    let scratch = ScratchDirectory::new();
+    let store = open_store(&scratch.database_path());
+    let phone_id = DeviceId::new("peer-phone");
+    store
+        .trust_peer(&trusted_peer("peer-phone", "Phone", 1))
+        .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+    assert!(
+        store
+            .pair_key(&phone_id)
+            .unwrap_or_else(|error| panic!("pair key must be queryable: {error}"))
+            .is_none()
+    );
+
+    let pin = |key_byte: u8| {
+        store
+            .pin_pair_key(&phone_id, &PairKey::from_bytes([key_byte; 32]))
+            .unwrap_or_else(|error| panic!("pair key must pin: {error}"))
+    };
+    assert_eq!(pin(4), PairKeyPinning::Stored);
+    assert_eq!(pin(4), PairKeyPinning::AlreadyPinned);
+    assert_eq!(pin(5), PairKeyPinning::Mismatch);
+    store
+        .trust_peer(&trusted_peer("peer-phone", "Work phone", 2))
+        .unwrap_or_else(|error| panic!("peer must be re-trusted: {error}"));
+    drop(store);
+
+    let pinned = open_store(&scratch.database_path())
+        .pair_key(&phone_id)
+        .unwrap_or_else(|error| panic!("pair key must load: {error}"))
+        .unwrap_or_else(|| panic!("pair key must be stored"));
+    let stored: Vec<u8> = Connection::open(scratch.database_path())
+        .and_then(|connection| {
+            connection.query_row("SELECT sealed_pair_key FROM p2p_trusted_peers", [], |row| {
+                row.get(0)
+            })
+        })
+        .unwrap_or_else(|error| panic!("sealed pair key must exist: {error}"));
+    assert!(pinned.matches(&PairKey::from_bytes([4; 32])));
+    assert!(!stored.windows(32).any(|window| window == [4; 32]));
+}
+
+/// Only paired devices get a pair key, and revoking a device deletes its key with it.
+#[test]
+fn pair_keys_belong_to_paired_devices_only() {
+    let store = SqlitePeerStore::open_in_memory(fixed_cipher())
+        .unwrap_or_else(|error| panic!("peer store must open: {error}"));
+    let phone_id = DeviceId::new("peer-phone");
+
+    let for_stranger = store
+        .pin_pair_key(&phone_id, &PairKey::from_bytes([4; 32]))
+        .unwrap_or_else(|error| panic!("pinning must answer: {error}"));
+    store
+        .trust_peer(&trusted_peer("peer-phone", "Phone", 1))
+        .and_then(|()| store.pin_pair_key(&phone_id, &PairKey::from_bytes([4; 32])))
+        .and_then(|_| store.revoke_peer(&phone_id))
+        .and_then(|_| store.trust_peer(&trusted_peer("peer-phone", "Phone", 2)))
+        .unwrap_or_else(|error| panic!("pair, revoke and pair again must succeed: {error}"));
+
+    assert_eq!(for_stranger, PairKeyPinning::UnknownPeer);
+    assert!(
+        store
+            .pair_key(&phone_id)
+            .unwrap_or_else(|error| panic!("pair key must be queryable: {error}"))
+            .is_none()
+    );
+}
+
+/// A peer table written before Issue #50 gains the pair-key column when the store opens.
+#[test]
+fn an_older_peer_table_gains_the_pair_key_column() {
+    let scratch = ScratchDirectory::new();
+    Connection::open(scratch.database_path())
+        .and_then(|connection| {
+            connection.execute_batch(
+                "CREATE TABLE p2p_trusted_peers (
+                    peer_id TEXT PRIMARY KEY NOT NULL,
+                    device_name TEXT NOT NULL,
+                    paired_at_ms INTEGER NOT NULL
+                );
+                INSERT INTO p2p_trusted_peers VALUES ('peer-phone', 'Phone', 1);",
+            )
+        })
+        .unwrap_or_else(|error| panic!("legacy table must be created: {error}"));
+
+    let store = open_store(&scratch.database_path());
+    let pinning = store
+        .pin_pair_key(&DeviceId::new("peer-phone"), &PairKey::from_bytes([4; 32]))
+        .unwrap_or_else(|error| panic!("pair key must pin: {error}"));
+
+    assert_eq!(pinning, PairKeyPinning::Stored);
+    assert_eq!(
+        store
+            .trusted_peers()
+            .unwrap_or_else(|error| panic!("peers must list: {error}")),
+        vec![trusted_peer("peer-phone", "Phone", 1)]
+    );
 }

@@ -37,6 +37,7 @@ use crate::{
         storage::{sqlite_adapter::SqliteNoteRepository, sqlite_peer_store::SqlitePeerStore},
     },
     application::{
+        crypto::pair_key::PairAgreementSecret,
         p2p_service::{
             LocalCapabilities, P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError,
             P2pService, P2pSnapshot,
@@ -48,7 +49,7 @@ use crate::{
         models::{DeviceId, MeetingId},
         peer_trust::DeviceName,
     },
-    ports::crypto::EmbeddingCipher,
+    ports::{crypto::EmbeddingCipher, peer_trust::PairAgreementSecretStore},
     storage_composition::open_note_repository,
 };
 
@@ -283,10 +284,11 @@ type DaemonP2pService = P2pService<Libp2pNetworkAdapter, SqlitePeerStore, Sqlite
 /// Starts the P2P task and returns once it listens, or with the reason it could not start.
 ///
 /// Inputs: The database path (the task opens its own connections), this device's ID, the
-/// verified embedding cipher (it seals the node identity), and the settings.
+/// verified embedding cipher (it seals the node identity and the pair-agreement secret), and the
+/// settings.
 /// Outputs: The handle, or an error naming the failed step.
 /// Side effects: Spawns the `note-taker-p2p` thread, opens SQLite connections, creates or loads the
-/// node identity, and binds the listen address. Blocks the caller while starting, so async callers
+/// node identity and the pair-agreement secret, and binds the listen address. Blocks the caller while starting, so async callers
 /// run it in `spawn_blocking`.
 pub fn spawn_p2p_task(
     database_path: &Path,
@@ -362,6 +364,13 @@ fn open_service(
         .context("unable to open the peer store")?;
     let node_identity =
         NodeIdentity::load_or_create(&peer_store).context("unable to load the node identity")?;
+    let pair_agreement_secret = peer_store
+        .load_or_insert_pair_agreement_secret(PairAgreementSecret::generate().to_bytes().as_slice())
+        .context("unable to load the pair-agreement secret")
+        .and_then(|secret_bytes| {
+            PairAgreementSecret::from_bytes(&secret_bytes)
+                .context("the stored pair-agreement secret is malformed")
+        })?;
     let mut adapter =
         Libp2pNetworkAdapter::new(node_identity).context("unable to configure libp2p")?;
     adapter
@@ -381,7 +390,8 @@ fn open_service(
         ),
         RepositorySyncManager::new(note_repository),
     )
-    .with_local_capabilities(config.capabilities);
+    .with_local_capabilities(config.capabilities)
+    .with_pair_agreement_secret(pair_agreement_secret);
     service
         .start()
         .context("unable to load the paired devices")?;

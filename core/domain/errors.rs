@@ -259,6 +259,10 @@ pub enum CryptoError {
     /// The configured key does not decrypt this database's key-check value.
     #[error("the configured encryption key does not match this database")]
     WrongKey,
+    /// A paired device's X25519 public key has low order, so agreeing a pair key with it would
+    /// yield a value an attacker can predict (Issue #50).
+    #[error("the paired device's agreement key is unusable")]
+    KeyAgreement,
     /// The database was set up with a different key source than the one configured now.
     #[error("this database is encrypted with a {stored}, but a {configured} is configured")]
     KeySourceMismatch {

@@ -12,6 +12,7 @@ sealed here before it reaches disk. The adapters only see the `EmbeddingCipher` 
 | File | Purpose |
 | --- | --- |
 | `voice_encryptor.rs` | AES-256-GCM sealing (`encrypt_embedding`, `decrypt_embedding`, `VoiceEncryptor`) |
+| `pair_key.rs` | `PairAgreementSecret`: this device's static X25519 secret and the HKDF-SHA256 derivation of the `PairKey` it shares with each paired device (Issue #50) |
 | `key_manager.rs` | Resolves the key from a passphrase (Argon2id), the platform keychain, or a random key file; migrates the key file into the keychain; verifies the key |
 | `*_tests.rs` | Round trips, tampering, wrong keys, key sources, keychain migration and fallback (with a mock keychain), and the performance budget |
 
@@ -120,3 +121,21 @@ same database at once, the second adopts the first one's record.
 Argon2id derivation and keychain access run once per process, during start-up. Derivation is
 CPU-bound and the keychain may show an unlock prompt, so composition roots never run them on a
 UI thread.
+
+## Pair keys (Issue #50)
+
+Review clips sent to a paired device are encrypted with a key only the two devices know, on top
+of the Noise transport. Each device keeps one static X25519 secret, sealed in the peer store, and
+sends its public key to each connected paired device (`NTK1`). Both devices then compute:
+
+```text
+shared   = X25519(own secret, other public key)       refused when not contributory (low order)
+pair key = HKDF-SHA256(salt = "note-taker/pair-key/v1", ikm = shared,
+                       info = id_a ‖ 0 ‖ id_b ‖ 0 ‖ public_a ‖ public_b)   a/b ordered by peer ID
+```
+
+The key is bound to both peer IDs, so the same agreement under other IDs yields another key. The
+secrets are static, so the key survives reconnections and re-pairing, and devices paired before
+#50 agree theirs at their next connection. The first key is pinned in the allowlist; a different
+one later is logged and ignored. `PairAgreementSecret` and `PairKey` are wiped on drop and print
+as redacted.

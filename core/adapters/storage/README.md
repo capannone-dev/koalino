@@ -96,7 +96,13 @@ it would orphan every paired device.
 It also implements `TrustedPeerStore`. The table
 `p2p_trusted_peers(peer_id PRIMARY KEY, device_name, paired_at_ms)` is the sync allowlist. Pairing
 again upserts the name and time, and revoking deletes the row. Peer IDs and names are not
-secret, so these rows are not sealed.
+secret, so these rows are not sealed. The `sealed_pair_key` column (Issue #50, added to older
+tables on open) holds the key agreed with that device, sealed under
+`p2p_trusted_peers:pair_key:<peer id>`. `pin_pair_key` writes it only while the column is empty,
+so the first key stays pinned; re-pairing keeps it and revoking deletes it with the row.
+It also implements `PairAgreementSecretStore`: the singleton table
+`p2p_pair_agreement_secret(singleton, sealed_secret)` keeps this device's X25519 secret, sealed
+under `p2p_pair_agreement_secret` and inserted like the node identity.
 
 `sqlite_voice_vector_db.rs` implements `VoiceVectorDB` on the same SQLite file as the note
 repository, through its own connection with a 5 s busy timeout:

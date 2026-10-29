@@ -3,7 +3,11 @@
 //! The rule under test: a device becomes trusted only after its owner confirmed matching codes on
 //! this device. The initiating side additionally waits for the other device's acceptance.
 
-use std::{collections::VecDeque, sync::Mutex, time::Duration};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::Mutex,
+    time::Duration,
+};
 
 use super::pairing_manager::{
     IncomingPairingRequest, OutgoingPairingStatus, PairingError, PairingManager, PairingUpdate,
@@ -12,9 +16,9 @@ use crate::{
     domain::{
         errors::{NetworkError, StorageError},
         models::DeviceId,
-        peer_trust::{DeviceName, PairingCode, TrustedPeer},
+        peer_trust::{DeviceName, PairKey, PairingCode, TrustedPeer},
     },
-    ports::peer_trust::{PairingEvent, PairingTransport, TrustedPeerStore},
+    ports::peer_trust::{PairKeyPinning, PairingEvent, PairingTransport, TrustedPeerStore},
 };
 
 /// The peer ID of the device under test.
@@ -80,9 +84,9 @@ impl PairingTransport for ScriptedTransport {
     }
 }
 
-/// An allowlist kept in memory.
+/// An allowlist kept in memory, with the pair keys pinned per peer.
 #[derive(Default)]
-struct MemoryTrustStore(Mutex<Vec<TrustedPeer>>);
+struct MemoryTrustStore(Mutex<Vec<TrustedPeer>>, Mutex<HashMap<DeviceId, [u8; 32]>>);
 
 impl MemoryTrustStore {
     /// Returns the stored peers.
@@ -102,6 +106,10 @@ impl TrustedPeerStore for MemoryTrustStore {
         let mut peers = self.0.lock().map_err(|_| StorageError::Unavailable)?;
         let before = peers.len();
         peers.retain(|existing| existing.peer_id() != peer_id);
+        self.1
+            .lock()
+            .map_err(|_| StorageError::Unavailable)?
+            .remove(peer_id);
         Ok(peers.len() != before)
     }
     fn trusted_peers(&self) -> Result<Vec<TrustedPeer>, StorageError> {
@@ -109,6 +117,33 @@ impl TrustedPeerStore for MemoryTrustStore {
     }
     fn is_trusted(&self, peer_id: &DeviceId) -> Result<bool, StorageError> {
         Ok(self.peers().iter().any(|peer| peer.peer_id() == peer_id))
+    }
+    fn pin_pair_key(
+        &self,
+        peer_id: &DeviceId,
+        key: &PairKey,
+    ) -> Result<PairKeyPinning, StorageError> {
+        if !self.is_trusted(peer_id)? {
+            return Ok(PairKeyPinning::UnknownPeer);
+        }
+        let mut keys = self.1.lock().map_err(|_| StorageError::Unavailable)?;
+        Ok(match keys.get(peer_id) {
+            None => {
+                keys.insert(peer_id.clone(), *key.as_bytes());
+                PairKeyPinning::Stored
+            }
+            Some(pinned) if pinned == key.as_bytes() => PairKeyPinning::AlreadyPinned,
+            Some(_) => PairKeyPinning::Mismatch,
+        })
+    }
+    fn pair_key(&self, peer_id: &DeviceId) -> Result<Option<PairKey>, StorageError> {
+        Ok(self
+            .1
+            .lock()
+            .map_err(|_| StorageError::Unavailable)?
+            .get(peer_id)
+            .copied()
+            .map(PairKey::from_bytes))
     }
 }
 

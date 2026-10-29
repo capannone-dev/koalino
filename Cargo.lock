@@ -1873,11 +1873,29 @@ dependencies = [
 
 [[package]]
 name = "hkdf"
+version = "0.12.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b5f8eb2ad728638ea2c7d47a21db23b7b58a72ed6a38256b8a1849f15fbbdf7"
+dependencies = [
+ "hmac 0.12.1",
+]
+
+[[package]]
+name = "hkdf"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4aaa26c720c68b866f2c96ef5c1264b3e6f473fe5d4ce61cd44bbe913e553018"
 dependencies = [
- "hmac",
+ "hmac 0.13.0",
+]
+
+[[package]]
+name = "hmac"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
+dependencies = [
+ "digest 0.10.7",
 ]
 
 [[package]]
@@ -2543,7 +2561,7 @@ checksum = "4af6ad75465f6bf26a1001ddbf6f2b6b84a4673bf6de289f68cdbb1430098627"
 dependencies = [
  "bs58",
  "ed25519-dalek",
- "hkdf",
+ "hkdf 0.13.0",
  "multihash",
  "prost",
  "rand 0.10.3",
@@ -3109,6 +3127,7 @@ dependencies = [
  "clap",
  "cpal",
  "futures",
+ "hkdf 0.12.4",
  "jni",
  "keyring",
  "keyring-core",
@@ -3133,6 +3152,7 @@ dependencies = [
  "uuid",
  "webrtc-vad",
  "whisper-rs",
+ "x25519-dalek",
  "zeroize",
 ]
 
@@ -4203,7 +4223,7 @@ dependencies = [
  "cbc",
  "futures-util",
  "getrandom 0.4.3",
- "hkdf",
+ "hkdf 0.13.0",
  "hybrid-array",
  "num",
  "once_cell",

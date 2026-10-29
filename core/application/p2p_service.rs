@@ -12,6 +12,11 @@
 //! its CPU cores, GPU memory, and the transcription models it can run. Manifests received from
 //! paired devices are kept while they stay connected and paired, for the Devices screens and,
 //! later, workload routing.
+//!
+//! When configured with a pair-agreement secret, the service also sends every connected paired
+//! device its X25519 public key (`NTK1`, Issue #50). The public key received from a paired device
+//! yields the pair key, which is pinned in the allowlist the first time; review clips sent to that
+//! device are encrypted with it.
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -20,7 +25,11 @@ use std::{
 
 use crate::{
     application::{
+        crypto::pair_key::PairAgreementSecret,
         device_manifest_exchange::{decode_manifest_message, encode_manifest_message},
+        pair_key_exchange::{
+            PairKeyMessageError, decode_pair_key_message, encode_pair_key_message,
+        },
         pairing_manager::{
             IncomingPairingRequest, OutgoingPairingStatus, PairingError, PairingManager,
             PairingUpdate,
@@ -33,7 +42,7 @@ use crate::{
     },
     ports::{
         network::{NetworkEvent, P2pNetwork},
-        peer_trust::{PairingTransport, TrustedPeerStore},
+        peer_trust::{PairKeyPinning, PairingTransport, TrustedPeerStore},
         storage::NoteRepository,
     },
 };
@@ -202,6 +211,8 @@ pub struct P2pService<Transport, Store, Repository> {
     local_manifest: DeviceManifest,
     /// Manifests of connected paired devices, by peer.
     peer_manifests: HashMap<DeviceId, DeviceManifest>,
+    /// This device's X25519 secret; without it no pair keys are agreed.
+    pair_agreement_secret: Option<PairAgreementSecret>,
 }
 
 impl<Transport, Store, Repository> P2pService<Transport, Store, Repository>
@@ -231,7 +242,17 @@ where
             last_seen_revision: 0,
             local_manifest,
             peer_manifests: HashMap::new(),
+            pair_agreement_secret: None,
         }
+    }
+
+    /// Agrees pair keys with paired devices using `secret` (Issue #50).
+    ///
+    /// Inputs: This device's stored X25519 secret.
+    /// Outputs: The service. Side effects: None; public keys are sent as devices connect.
+    pub fn with_pair_agreement_secret(mut self, secret: PairAgreementSecret) -> Self {
+        self.pair_agreement_secret = Some(secret);
+        self
     }
 
     /// Sets what this device advertises to its paired devices.
@@ -359,11 +380,13 @@ where
         self.run_scheduled_restarts();
     }
 
-    /// Routes one network event: manifests are kept here, everything else goes to sync.
+    /// Routes one network event: manifests and pair keys are handled here, everything else goes
+    /// to sync.
     ///
-    /// Side effects: On a connected peer, starts sync and sends this device's manifest; on an
-    /// expired peer, forgets its manifest; on a manifest message, stores it when it names its
-    /// sender. Failures are logged without payload contents.
+    /// Side effects: On a connected peer, starts sync and sends this device's manifest and public
+    /// key; on an expired peer, forgets its manifest; on a manifest message, stores it when it
+    /// names its sender; on a public key, pins the pair key. Failures are logged without payload
+    /// contents.
     fn handle_network_event(&mut self, network_event: NetworkEvent) {
         let connected_peer = match &network_event {
             NetworkEvent::MessageReceived {
@@ -372,6 +395,10 @@ where
             } => {
                 if let Some(decoded) = decode_manifest_message(payload) {
                     self.accept_manifest(peer_device_id, decoded);
+                    return;
+                }
+                if let Some(decoded) = decode_pair_key_message(payload) {
+                    self.accept_pair_public_key(peer_device_id, decoded);
                     return;
                 }
                 None
@@ -391,6 +418,74 @@ where
         }
         if let Some(peer_device_id) = connected_peer {
             self.send_manifest(&peer_device_id);
+            self.send_pair_public_key(&peer_device_id);
+        }
+    }
+
+    /// Derives and pins the pair key from a public key `peer_device_id` sent.
+    ///
+    /// Side effects: May store the sealed key in the allowlist. A malformed or low-order key, a
+    /// key from an unpaired device, and a key that differs from the pinned one are logged (peer ID
+    /// only) and ignored; the pinned key stays.
+    fn accept_pair_public_key(
+        &mut self,
+        peer_device_id: &DeviceId,
+        decoded: Result<[u8; 32], PairKeyMessageError>,
+    ) {
+        let Some(secret) = &self.pair_agreement_secret else {
+            return;
+        };
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        let pinning = decoded
+            .map_err(|error| error.to_string())
+            .and_then(|public_key| {
+                secret
+                    .derive_pair_key(&local_peer_id, peer_device_id, &public_key)
+                    .map_err(|error| error.to_string())
+            })
+            .and_then(|pair_key| {
+                self.pairing_manager
+                    .store()
+                    .pin_pair_key(peer_device_id, &pair_key)
+                    .map_err(|error| error.to_string())
+            });
+        match pinning {
+            Ok(PairKeyPinning::Stored | PairKeyPinning::AlreadyPinned) => {}
+            Ok(PairKeyPinning::Mismatch) => tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                "a paired device sent a different agreement key; the pinned pair key is kept"
+            ),
+            Ok(PairKeyPinning::UnknownPeer) => tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                "an agreement key from an unpaired device was ignored"
+            ),
+            Err(error) => tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                error = %error,
+                "an agreement key was rejected"
+            ),
+        }
+    }
+
+    /// Sends this device's X25519 public key to one connected paired device.
+    ///
+    /// Side effects: Sends one encrypted message when a secret is configured; a failure is
+    /// logged, and the key is sent again at the peer's next connection.
+    fn send_pair_public_key(&mut self, peer_device_id: &DeviceId) {
+        let Some(secret) = &self.pair_agreement_secret else {
+            return;
+        };
+        let message = encode_pair_key_message(&secret.public_key());
+        if let Err(error) = self
+            .pairing_manager
+            .transport_mut()
+            .send_encrypted(peer_device_id, &message)
+        {
+            tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                error = %error,
+                "this device's agreement key could not be sent"
+            );
         }
     }
 

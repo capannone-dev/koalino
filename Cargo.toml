@@ -41,6 +41,9 @@ axum = { version = "0.8.6", features = ["json", "ws"] }
 chrono = { version = "0.4.42", default-features = false, features = ["clock", "std"] }
 clap = { version = "4.5.53", features = ["derive"] }
 futures = "0.3.31"
+# HKDF-SHA256 turns a paired devices' X25519 agreement into their pair key (approved by the
+# owner, #50). 0.12 matches the `sha2` 0.10 used directly here.
+hkdf = "0.12.4"
 # Platform keychain for the random embedding key (Issue #40): macOS Keychain, Windows Credential
 # Manager, and the pure-Rust (zbus) Secret Service client on Linux/BSD, so no libdbus is needed.
 keyring = "4.2.0"
@@ -70,6 +73,9 @@ tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "json"] }
 # `v5` derives stable local meeting UUIDs from Teams meeting IDs (Issue #33).
 uuid = { version = "1.18.1", features = ["v4", "v5"] }
+# X25519 agreement of a per-pair key between paired devices (approved by the owner, #50); the
+# same version libp2p's Noise transport already builds.
+x25519-dalek = { version = "3.0.0", features = ["static_secrets"] }
 # Wipes encryption keys and passphrases from memory when dropped.
 zeroize = "1.8.1"
 # Cross-platform microphone capture for the `microphone` feature (approved by the owner, #45).

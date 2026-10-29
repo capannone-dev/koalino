@@ -13,6 +13,10 @@ The initial public contracts are Rust traits, not a network protocol:
   `note_taker_p2p_status` show this device's `capabilities` and each connected paired device's
   (`cpu_cores`, `gpu_vram_megabytes`, `transcription_models` such as `whisper`/`openai`,
   `supports_vad`; `null` while a device is not connected).
+- Each node with a pair-agreement secret also sends every connected paired device its X25519
+  public key: `NTK1` followed by exactly 32 bytes, on the same encrypted stream
+  (`core/application/pair_key_exchange.rs`). The pair key derived from it protects review clips
+  sent between the two devices (Issue #50); see `core/application/crypto/README.md`.
 - `ComputeDispatcher` accepts `LocalOnly`, `SpecificPeer`, or `Automatic` preferences. Automatic routing considers only model-compatible manifests and chooses the highest deterministic GPU-VRAM-then-CPU capacity score.
 - `NoteRepository` creates a meeting with opaque CRDT bytes, persists and loads a `Transcript`, and atomically replaces or reads a serialized CRDT document. It returns only domain values and `StorageError`; it never exposes SQLite types.
 - `P2pNetwork` permits only encrypted opaque-payload transport.

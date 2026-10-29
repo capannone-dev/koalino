@@ -3,7 +3,9 @@
 //!
 //! The libp2p adapter encodes its keypair as opaque bytes and asks this port to keep it, so peer
 //! IDs stay stable across restarts (a prerequisite for remembering paired devices, Issue #43).
-//! Implementations seal the bytes at rest; callers never see the stored form.
+//! Implementations seal the bytes at rest; callers never see the stored form. The same holds for
+//! the X25519 secret and the per-pair keys that protect review clips between paired devices
+//! (Issue #50).
 
 use zeroize::Zeroizing;
 
@@ -12,7 +14,7 @@ use std::time::Duration;
 use crate::domain::{
     errors::{NetworkError, StorageError},
     models::DeviceId,
-    peer_trust::{DeviceName, TrustedPeer},
+    peer_trust::{DeviceName, PairKey, TrustedPeer},
 };
 
 /// Stores the single P2P identity of the node that owns a database.
@@ -28,6 +30,33 @@ pub trait NodeIdentityStore {
         &self,
         candidate: &[u8],
     ) -> Result<Zeroizing<Vec<u8>>, StorageError>;
+}
+
+/// Stores this node's single X25519 pair-agreement secret (Issue #50).
+pub trait PairAgreementSecretStore {
+    /// Returns the stored secret, first storing `candidate` when none exists yet.
+    ///
+    /// Inputs: Freshly generated secret bytes, kept only when the database has none.
+    /// Outputs: The stored secret in memory that is wiped on drop, or a storage error; a sealed
+    /// secret that cannot be opened is an error, never replaced.
+    /// Side effects: May insert one sealed row.
+    fn load_or_insert_pair_agreement_secret(
+        &self,
+        candidate: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>, StorageError>;
+}
+
+/// What happened when a pair key was offered for a paired device.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PairKeyPinning {
+    /// The device had no key; this one is now stored.
+    Stored,
+    /// The device already has this exact key.
+    AlreadyPinned,
+    /// The device already has a different key, which is kept; the offered one is discarded.
+    Mismatch,
+    /// The device is not paired, so nothing was stored.
+    UnknownPeer,
 }
 
 /// Stores the allowlist of devices paired with this node; only they may sync.
@@ -54,6 +83,24 @@ pub trait TrustedPeerStore {
     ///
     /// Outputs: `true` for a trusted peer, or a storage error. Side effects: None.
     fn is_trusted(&self, peer_id: &DeviceId) -> Result<bool, StorageError>;
+
+    /// Pins the key agreed with a paired device, the first time one is agreed (Issue #50).
+    ///
+    /// Inputs: The paired device and the key derived from its public key.
+    /// Outputs: What happened (see `PairKeyPinning`), or a storage error.
+    /// Side effects: Stores the key sealed in the device's row when it has none. Re-pairing keeps
+    /// the key; revoking deletes it with the row.
+    fn pin_pair_key(
+        &self,
+        peer_id: &DeviceId,
+        key: &PairKey,
+    ) -> Result<PairKeyPinning, StorageError>;
+
+    /// Returns the key pinned for a paired device.
+    ///
+    /// Outputs: The key, `None` when the device is unpaired or has not sent its public key yet, or
+    /// a storage error (including a sealed key that cannot be opened). Side effects: None.
+    fn pair_key(&self, peer_id: &DeviceId) -> Result<Option<PairKey>, StorageError>;
 }
 
 /// Something that happened during pairing, reported by the transport.
