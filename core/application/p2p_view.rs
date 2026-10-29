@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::{
     application::{p2p_service::P2pSnapshot, pairing_manager::PairingUpdate},
-    domain::models::DeviceId,
+    domain::models::{DeviceId, DeviceManifest},
 };
 
 /// Longest accepted peer ID; libp2p Ed25519 peer IDs are 52 characters.
@@ -42,6 +42,8 @@ pub struct P2pStatusDetails {
     pub local_peer_id: String,
     pub device_name: String,
     pub listen_addresses: Vec<String>,
+    /// What this device advertises to its paired devices (REQUIREMENTS 3.4).
+    pub capabilities: CapabilitiesView,
     pub trusted_devices: Vec<TrustedDeviceView>,
     pub nearby_devices: Vec<NearbyDeviceView>,
     pub incoming_requests: Vec<IncomingRequestView>,
@@ -55,6 +57,33 @@ pub struct TrustedDeviceView {
     pub peer_id: String,
     pub device_name: String,
     pub paired_at_ms: u64,
+    /// The device's manifest while it is connected; `None` (JSON `null`) otherwise.
+    pub capabilities: Option<CapabilitiesView>,
+}
+
+/// A device's advertised capacity, from its `DeviceManifest`.
+#[derive(Serialize)]
+pub struct CapabilitiesView {
+    pub cpu_cores: u16,
+    pub gpu_vram_megabytes: u32,
+    /// Model labels such as `whisper` or `openai`.
+    pub transcription_models: Vec<String>,
+    pub supports_vad: bool,
+}
+
+impl From<&DeviceManifest> for CapabilitiesView {
+    fn from(manifest: &DeviceManifest) -> Self {
+        Self {
+            cpu_cores: manifest.cpu_cores(),
+            gpu_vram_megabytes: manifest.gpu_vram_megabytes(),
+            transcription_models: manifest
+                .available_transcription_models()
+                .iter()
+                .map(|model| model.as_str().to_owned())
+                .collect(),
+            supports_vad: manifest.supports_vad,
+        }
+    }
 }
 
 /// An unpaired device on the local network.
@@ -154,6 +183,7 @@ pub fn status_view(snapshot: Option<&P2pSnapshot>) -> P2pStatusView {
             local_peer_id: status.local_peer_id.as_str().to_owned(),
             device_name: status.device_name.as_str().to_owned(),
             listen_addresses: snapshot.listen_addresses.clone(),
+            capabilities: CapabilitiesView::from(&status.local_manifest),
             trusted_devices: status
                 .trusted_devices
                 .iter()
@@ -161,6 +191,11 @@ pub fn status_view(snapshot: Option<&P2pSnapshot>) -> P2pStatusView {
                     peer_id: device.peer_id().as_str().to_owned(),
                     device_name: device.device_name().as_str().to_owned(),
                     paired_at_ms: device.paired_at_ms(),
+                    capabilities: status
+                        .peer_manifests
+                        .iter()
+                        .find(|manifest| manifest.device_id() == device.peer_id())
+                        .map(CapabilitiesView::from),
                 })
                 .collect(),
             nearby_devices: status

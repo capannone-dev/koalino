@@ -100,6 +100,16 @@ writes from any connection or process: the recording pipeline, HTTP, the CLI, an
 sees documents merged from one peer, which it forwards to the others, so a device connected only
 through another still gets changes at once.
 
+`device_manifest_exchange.rs` frames this device's `DeviceManifest` as `NTM1` + JSON and
+validates received ones (at most 16 KiB and 16 models; model labels 1–64 characters without
+control characters). `P2pService` routes network events itself: a manifest message is stored
+for its sender (only when the manifest names that sender), every other event goes to
+`RepositorySyncManager::handle_network_event`. Each paired device that connects is sent this
+device's manifest, built from `LocalCapabilities` (CPU cores, GPU memory, and the models the
+pipeline is configured to run, `PipelineConfig::advertised_transcription_models`). A device's
+manifest is forgotten when it disconnects or is unpaired, so the status only lists devices that
+could take work now (REQUIREMENTS 3.4).
+
 `poll_trust_changes`, on the same tick, calls `PairingManager::reconcile_trusted_peers`. The
 stored allowlist is authoritative: a device another process removed from it (the CLI's `devices
 revoke`) is dropped from the transport's gate and disconnected, a stored device not yet admitted

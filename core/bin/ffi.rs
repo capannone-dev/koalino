@@ -1499,7 +1499,7 @@ fn start_p2p(
     device_id: &crate::domain::models::DeviceId,
     embedding_cipher: &Arc<dyn crate::ports::crypto::EmbeddingCipher>,
 ) -> Option<Arc<P2pHandle>> {
-    let config = match P2pConfig::from_lookup(setting) {
+    let mut config = match P2pConfig::from_lookup(setting) {
         Ok(Some(config)) => config,
         Ok(None) => return None,
         Err(error) => {
@@ -1507,6 +1507,11 @@ fn start_p2p(
             return None;
         }
     };
+    // The manifest advertises what the pipeline can run; an invalid pipeline setting is
+    // reported by the pipeline itself, so it advertises no models here.
+    config.capabilities.transcription_models = PipelineConfig::from_lookup(setting)
+        .map(|pipeline_config| pipeline_config.advertised_transcription_models())
+        .unwrap_or_default();
     match spawn_p2p_task(
         database_path,
         device_id.clone(),

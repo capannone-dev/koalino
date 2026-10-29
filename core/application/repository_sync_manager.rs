@@ -110,6 +110,20 @@ where
         let Some(network_event) = p2p_network.poll_event()? else {
             return Ok(false);
         };
+        self.handle_network_event(p2p_network, network_event)?;
+        Ok(true)
+    }
+
+    /// Handles one event already taken from `p2p_network`, for callers that route other message
+    /// kinds (such as device manifests) themselves.
+    ///
+    /// Outputs: Success, or an error for this event only.
+    /// Side effects: As `process_next_network_event`.
+    pub fn handle_network_event(
+        &mut self,
+        p2p_network: &mut impl P2pNetwork,
+        network_event: NetworkEvent,
+    ) -> Result<(), RepositorySyncManagerError> {
         match network_event {
             NetworkEvent::PeerDiscovered(peer_device_id) => {
                 self.peer_connected(p2p_network, peer_device_id)?;
@@ -125,7 +139,7 @@ where
                 }
             }
         }
-        Ok(true)
+        Ok(())
     }
 
     /// Sends a local change of `meeting_id`, or a new local meeting, to every connected peer.

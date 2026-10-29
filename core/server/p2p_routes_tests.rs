@@ -23,7 +23,7 @@ use crate::{
         pairing_manager::{IncomingPairingRequest, OutgoingPairingStatus, PairingUpdate},
     },
     domain::{
-        models::{DeviceId, MeetingId},
+        models::{DeviceId, DeviceManifest, MeetingId, TranscriptionModel},
         peer_trust::{DeviceName, PairingCode, TrustedPeer},
     },
     server::api::{ServerAppState, build_router},
@@ -93,6 +93,16 @@ fn snapshot() -> P2pSnapshot {
                 locally_confirmed: false,
             }],
             recent_updates: vec![PairingUpdate::Rejected { peer_id: tablet }],
+            local_manifest: DeviceManifest::new(
+                laptop.clone(),
+                8,
+                4_096,
+                vec![
+                    TranscriptionModel::Whisper,
+                    TranscriptionModel::ThirdParty("openai".to_owned()),
+                ],
+            ),
+            peer_manifests: vec![DeviceManifest::new(phone.clone(), 4, 0, Vec::new())],
         },
         listen_addresses: vec!["/ip4/127.0.0.1/tcp/4001".to_owned()],
     }
@@ -193,8 +203,24 @@ async fn status_lists_devices_pairings_and_updates() {
             "local_peer_id": "12D3KooWLaptop",
             "device_name": "Laptop",
             "listen_addresses": ["/ip4/127.0.0.1/tcp/4001"],
+            "capabilities": {
+                "cpu_cores": 8,
+                "gpu_vram_megabytes": 4096,
+                "transcription_models": ["whisper", "openai"],
+                "supports_vad": cfg!(feature = "vad")
+            },
             "trusted_devices": [
-                { "peer_id": PHONE, "device_name": "Phone", "paired_at_ms": 1700 }
+                {
+                    "peer_id": PHONE,
+                    "device_name": "Phone",
+                    "paired_at_ms": 1700,
+                    "capabilities": {
+                        "cpu_cores": 4,
+                        "gpu_vram_megabytes": 0,
+                        "transcription_models": [],
+                        "supports_vad": cfg!(feature = "vad")
+                    }
+                }
             ],
             "nearby_devices": [{ "peer_id": "12D3KooWTablet" }],
             "incoming_requests": [

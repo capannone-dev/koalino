@@ -18,6 +18,10 @@ pub mod compute_router;
 mod compute_router_tests;
 /// Encrypts voice embeddings at rest and resolves the key protecting them.
 pub mod crypto;
+/// Encodes and validates the `DeviceManifest` messages paired devices exchange (Issue #43).
+pub mod device_manifest_exchange;
+#[cfg(test)]
+mod device_manifest_exchange_tests;
 /// Coordinates diarization, identity matching, and manual-review clip preservation through ports.
 pub mod diarization_processor;
 #[cfg(test)]

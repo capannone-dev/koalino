@@ -41,7 +41,8 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
 - `/api/p2p/*` (Issue #43, `p2p_routes.rs`) drives the daemon's P2P task through the
   `P2pControl` port, which `ServerAppState::with_p2p_control` attaches:
   - `GET /api/p2p/status` returns this device (`local_peer_id`, `device_name`,
-    `listen_addresses`), `trusted_devices`, `nearby_devices`, `incoming_requests` and
+    `listen_addresses`, and the `capabilities` of its manifest), `trusted_devices` (each with
+    its manifest's `capabilities` while connected, otherwise `null`), `nearby_devices`, `incoming_requests` and
     `outgoing_pairings` with their six-digit `code`, and `recent_updates` tagged by `kind`.
     Without P2P it returns `{"enabled":false}`.
   - `POST /api/p2p/pairable`, `POST /api/p2p/pairings` (`{"peer_id"}`, returns `{"code"}`),

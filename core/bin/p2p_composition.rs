@@ -38,7 +38,8 @@ use crate::{
     },
     application::{
         p2p_service::{
-            P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError, P2pService, P2pSnapshot,
+            LocalCapabilities, P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError,
+            P2pService, P2pSnapshot,
         },
         pairing_manager::PairingManager,
         repository_sync_manager::RepositorySyncManager,
@@ -85,6 +86,9 @@ pub struct P2pConfig {
     pub device_name: DeviceName,
     /// Addresses of peers that mDNS cannot find, each ending in `/p2p/<peer id>`.
     pub static_peers: Vec<String>,
+    /// What this device advertises in its manifest; `from_lookup` leaves the default (no
+    /// models), and callers set the models their pipeline configuration can run.
+    pub capabilities: LocalCapabilities,
 }
 
 impl P2pConfig {
@@ -138,6 +142,7 @@ impl P2pConfig {
             listen_address,
             device_name,
             static_peers,
+            capabilities: LocalCapabilities::default(),
         }))
     }
 }
@@ -375,7 +380,8 @@ fn open_service(
             Box::new(unix_millis),
         ),
         RepositorySyncManager::new(note_repository),
-    );
+    )
+    .with_local_capabilities(config.capabilities);
     service
         .start()
         .context("unable to load the paired devices")?;

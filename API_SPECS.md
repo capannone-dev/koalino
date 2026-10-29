@@ -7,7 +7,12 @@
 The initial public contracts are Rust traits, not a network protocol:
 
 - `TranscriptionEngine` receives `AudioRecording` metadata and returns a `Transcript`. `ComputeDispatcher` invokes this trait only; model-specific and remote-proxy adapters are composed outside the application layer.
-- `DeviceManifest` advertises a node ID, CPU core count, GPU VRAM, and supported `TranscriptionModel` values. It contains no raw audio, model weights, credentials, or hardware serial numbers. A future encrypted P2P adapter broadcasts these manifests.
+- `DeviceManifest` advertises a node ID, CPU core count, GPU VRAM, and supported `TranscriptionModel` values. It contains no raw audio, model weights, credentials, or hardware serial numbers. Every node sends its manifest to each paired device when it connects
+  (`NTM1` followed by the manifest's JSON, over the same encrypted stream as `NTS1` sync
+  envelopes; see `core/application/device_manifest_exchange.rs`). `GET /api/p2p/status` and
+  `note_taker_p2p_status` show this device's `capabilities` and each connected paired device's
+  (`cpu_cores`, `gpu_vram_megabytes`, `transcription_models` such as `whisper`/`openai`,
+  `supports_vad`; `null` while a device is not connected).
 - `ComputeDispatcher` accepts `LocalOnly`, `SpecificPeer`, or `Automatic` preferences. Automatic routing considers only model-compatible manifests and chooses the highest deterministic GPU-VRAM-then-CPU capacity score.
 - `NoteRepository` creates a meeting with opaque CRDT bytes, persists and loads a `Transcript`, and atomically replaces or reads a serialized CRDT document. It returns only domain values and `StorageError`; it never exposes SQLite types.
 - `P2pNetwork` permits only encrypted opaque-payload transport.

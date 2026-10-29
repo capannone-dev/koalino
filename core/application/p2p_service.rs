@@ -7,6 +7,11 @@
 //!
 //! A device whose pairing completes starts syncing at once: the transport reports the connected,
 //! newly trusted peer, so meetings flow without waiting for the next discovery announcement.
+//!
+//! Every connected paired device is also sent this device's `DeviceManifest` (REQUIREMENTS 3.4):
+//! its CPU cores, GPU memory, and the transcription models it can run. Manifests received from
+//! paired devices are kept while they stay connected and paired, for the Devices screens and,
+//! later, workload routing.
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -15,6 +20,7 @@ use std::{
 
 use crate::{
     application::{
+        device_manifest_exchange::{decode_manifest_message, encode_manifest_message},
         pairing_manager::{
             IncomingPairingRequest, OutgoingPairingStatus, PairingError, PairingManager,
             PairingUpdate,
@@ -22,11 +28,11 @@ use crate::{
         repository_sync_manager::{RepositorySyncManager, RepositorySyncManagerError},
     },
     domain::{
-        models::{DeviceId, MeetingId},
+        models::{DeviceId, DeviceManifest, MeetingId, TranscriptionModel},
         peer_trust::{DeviceName, PairingCode, TrustedPeer},
     },
     ports::{
-        network::P2pNetwork,
+        network::{NetworkEvent, P2pNetwork},
         peer_trust::{PairingTransport, TrustedPeerStore},
         storage::NoteRepository,
     },
@@ -107,6 +113,34 @@ pub struct P2pStatus {
     pub outgoing_pairings: Vec<OutgoingPairingStatus>,
     /// The latest pairing updates, newest last.
     pub recent_updates: Vec<PairingUpdate>,
+    /// The manifest this device sends to its paired devices.
+    pub local_manifest: DeviceManifest,
+    /// Manifests received from connected paired devices, ordered by peer ID.
+    pub peer_manifests: Vec<DeviceManifest>,
+}
+
+/// What this device can run, advertised in its manifest.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalCapabilities {
+    /// CPU cores available to the app.
+    pub cpu_cores: u16,
+    /// GPU memory usable for AI work, in megabytes; 0 when none is known.
+    pub gpu_vram_megabytes: u32,
+    /// Transcription models this device's pipeline is configured to run.
+    pub transcription_models: Vec<TranscriptionModel>,
+}
+
+impl Default for LocalCapabilities {
+    /// A device that runs no models: the available CPU cores and no GPU, as a "dumb" node.
+    fn default() -> Self {
+        let cpu_cores = std::thread::available_parallelism()
+            .map_or(1, |cores| u16::try_from(cores.get()).unwrap_or(u16::MAX));
+        Self {
+            cpu_cores,
+            gpu_vram_megabytes: 0,
+            transcription_models: Vec::new(),
+        }
+    }
 }
 
 /// What the Devices screens show, plus the node's listen addresses.
@@ -164,6 +198,10 @@ pub struct P2pService<Transport, Store, Repository> {
     scheduled_restarts: HashMap<DeviceId, Instant>,
     /// The newest document revision already sent to connected peers.
     last_seen_revision: u64,
+    /// This device's manifest, sent to every paired device when it connects.
+    local_manifest: DeviceManifest,
+    /// Manifests of connected paired devices, by peer.
+    peer_manifests: HashMap<DeviceId, DeviceManifest>,
 }
 
 impl<Transport, Store, Repository> P2pService<Transport, Store, Repository>
@@ -179,6 +217,10 @@ where
         pairing_manager: PairingManager<Transport, Store>,
         sync_manager: RepositorySyncManager<Repository>,
     ) -> Self {
+        let local_manifest = local_manifest(
+            pairing_manager.transport().local_peer_id(),
+            LocalCapabilities::default(),
+        );
         Self {
             pairing_manager,
             sync_manager,
@@ -187,7 +229,21 @@ where
             retry_delay: DEFAULT_RETRY_DELAY,
             scheduled_restarts: HashMap::new(),
             last_seen_revision: 0,
+            local_manifest,
+            peer_manifests: HashMap::new(),
         }
+    }
+
+    /// Sets what this device advertises to its paired devices.
+    ///
+    /// Inputs: The capabilities (normally from the pipeline configuration).
+    /// Outputs: The service. Side effects: None; the manifest is sent as devices connect.
+    pub fn with_local_capabilities(mut self, capabilities: LocalCapabilities) -> Self {
+        self.local_manifest = local_manifest(
+            self.pairing_manager.transport().local_peer_id(),
+            capabilities,
+        );
+        self
     }
 
     /// Replaces `DEFAULT_RETRY_DELAY`, for example with a short delay in tests.
@@ -290,16 +346,102 @@ where
             Err(error) => tracing::warn!(error = %error, "a pairing event could not be applied"),
         }
         for _ in 0..MAX_EVENTS_PER_PASS {
-            match self
-                .sync_manager
-                .process_next_network_event(self.pairing_manager.transport_mut())
-            {
-                Ok(true) => {}
-                Ok(false) => break,
-                Err(error) => tracing::warn!(error = %error, "a sync message could not be applied"),
-            }
+            let network_event = match self.pairing_manager.transport_mut().poll_event() {
+                Ok(Some(network_event)) => network_event,
+                Ok(None) => break,
+                Err(error) => {
+                    tracing::warn!(error = %error, "a network event could not be read");
+                    break;
+                }
+            };
+            self.handle_network_event(network_event);
         }
         self.run_scheduled_restarts();
+    }
+
+    /// Routes one network event: manifests are kept here, everything else goes to sync.
+    ///
+    /// Side effects: On a connected peer, starts sync and sends this device's manifest; on an
+    /// expired peer, forgets its manifest; on a manifest message, stores it when it names its
+    /// sender. Failures are logged without payload contents.
+    fn handle_network_event(&mut self, network_event: NetworkEvent) {
+        let connected_peer = match &network_event {
+            NetworkEvent::MessageReceived {
+                peer_device_id,
+                payload,
+            } => {
+                if let Some(decoded) = decode_manifest_message(payload) {
+                    self.accept_manifest(peer_device_id, decoded);
+                    return;
+                }
+                None
+            }
+            NetworkEvent::PeerDiscovered(peer_device_id) => Some(peer_device_id.clone()),
+            NetworkEvent::PeerExpired(peer_device_id) => {
+                self.peer_manifests.remove(peer_device_id);
+                None
+            }
+            NetworkEvent::DeliveryFailed(_) => None,
+        };
+        if let Err(error) = self
+            .sync_manager
+            .handle_network_event(self.pairing_manager.transport_mut(), network_event)
+        {
+            tracing::warn!(error = %error, "a sync message could not be applied");
+        }
+        if let Some(peer_device_id) = connected_peer {
+            self.send_manifest(&peer_device_id);
+        }
+    }
+
+    /// Stores a manifest received from `peer_device_id`.
+    ///
+    /// Side effects: Replaces that peer's manifest. A rejected manifest, or one naming another
+    /// device, is logged and ignored.
+    fn accept_manifest(
+        &mut self,
+        peer_device_id: &DeviceId,
+        decoded: Result<
+            DeviceManifest,
+            crate::application::device_manifest_exchange::ManifestMessageError,
+        >,
+    ) {
+        match decoded {
+            Ok(manifest) if manifest.device_id() == peer_device_id => {
+                self.peer_manifests.insert(peer_device_id.clone(), manifest);
+            }
+            Ok(_) => tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                "a manifest naming another device was ignored"
+            ),
+            Err(error) => tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                error = %error,
+                "a manifest was rejected"
+            ),
+        }
+    }
+
+    /// Sends this device's manifest to one connected paired device.
+    ///
+    /// Side effects: Sends one encrypted message; a failure is logged, and the manifest is sent
+    /// again at the peer's next connection.
+    fn send_manifest(&mut self, peer_device_id: &DeviceId) {
+        let sent = encode_manifest_message(&self.local_manifest)
+            .map_err(|error| error.to_string())
+            .and_then(|message| {
+                self.pairing_manager
+                    .transport_mut()
+                    .send_encrypted(peer_device_id, &message)
+                    .map_err(|error| error.to_string())
+            });
+        if let Err(error) = sent {
+            tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                error = %error,
+                "this device's manifest could not be sent"
+            );
+        }
     }
 
     /// Schedules a restart for each peer whose delivery failed, then runs the restarts that are
@@ -396,6 +538,15 @@ where
             incoming_requests: self.pairing_manager.incoming_requests(),
             outgoing_pairings: self.pairing_manager.outgoing_pairings(),
             recent_updates: self.recent_updates.iter().cloned().collect(),
+            local_manifest: self.local_manifest.clone(),
+            peer_manifests: {
+                let mut peer_manifests: Vec<DeviceManifest> =
+                    self.peer_manifests.values().cloned().collect();
+                peer_manifests.sort_by(|first, second| {
+                    first.device_id().as_str().cmp(second.device_id().as_str())
+                });
+                peer_manifests
+            },
         }
     }
 
@@ -444,6 +595,23 @@ where
     /// Side effects: Reads the trusted-peer store.
     fn refresh_trusted_devices(&mut self) -> Result<(), P2pServiceError> {
         self.trusted_devices = self.pairing_manager.trusted_devices()?;
+        // A device no longer paired is no longer a routing candidate.
+        let trusted_devices = &self.trusted_devices;
+        self.peer_manifests.retain(|peer_id, _| {
+            trusted_devices
+                .iter()
+                .any(|device| device.peer_id() == peer_id)
+        });
         Ok(())
     }
+}
+
+/// Builds this device's manifest under its peer ID.
+fn local_manifest(local_peer_id: DeviceId, capabilities: LocalCapabilities) -> DeviceManifest {
+    DeviceManifest::new(
+        local_peer_id,
+        capabilities.cpu_cores,
+        capabilities.gpu_vram_megabytes,
+        capabilities.transcription_models,
+    )
 }

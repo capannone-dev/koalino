@@ -19,12 +19,12 @@ use crate::{
         crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
         meeting_crdt::MeetingCrdtService,
         meeting_document::AutomergeMeetingDocumentCodec,
-        p2p_service::{P2pCommand, P2pCommandOutcome, P2pService},
+        p2p_service::{LocalCapabilities, P2pCommand, P2pCommandOutcome, P2pService},
         pairing_manager::PairingManager,
         repository_sync_manager::RepositorySyncManager,
     },
     domain::{
-        models::{DeviceId, MeetingId, MeetingTitle, Transcript},
+        models::{DeviceId, MeetingId, MeetingTitle, Transcript, TranscriptionModel},
         peer_trust::DeviceName,
     },
     ports::{
@@ -499,6 +499,34 @@ async fn a_device_coming_online_later_gets_meetings_from_whoever_is_online() {
     );
 }
 
+/// Pairs `laptop` with `phone` (listening on `phone_address`), confirming the code on both, and
+/// drives them until each lists the other as paired.
+async fn pair(laptop: &mut Service, phone: &mut Service, phone_address: Multiaddr) {
+    let laptop_id = laptop.transport().local_peer_id();
+    let phone_id = phone.transport().local_peer_id();
+    run(phone, P2pCommand::MakePairable);
+    laptop
+        .transport_mut()
+        .allow_pairing_dial(&phone_id)
+        .and_then(|()| laptop.transport_mut().dial_memory(phone_address))
+        .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
+    drive(laptop, phone, |laptop, _| {
+        laptop.transport().is_connected_to(&phone_id)
+    })
+    .await;
+    run(laptop, P2pCommand::StartPairing(phone_id.clone()));
+    drive(laptop, phone, |_, phone| {
+        !phone.status().incoming_requests.is_empty()
+    })
+    .await;
+    run(laptop, P2pCommand::ConfirmCode(phone_id));
+    run(phone, P2pCommand::AcceptIncoming(laptop_id));
+    drive(laptop, phone, |laptop, phone| {
+        !laptop.status().trusted_devices.is_empty() && !phone.status().trusted_devices.is_empty()
+    })
+    .await;
+}
+
 /// A device removed from the allowlist by another process (the CLI's `devices revoke`) is dropped
 /// by the running service on its next trust poll: it leaves the paired devices and is
 /// disconnected, without a restart.
@@ -516,29 +544,8 @@ async fn a_revocation_made_by_another_process_takes_effect_on_the_next_poll() {
         .unwrap_or_else(|error| panic!("phone must listen: {error}"));
     let (mut laptop, laptop_database) = service_with_database("Laptop", laptop_adapter);
     let mut phone = service("Phone", phone_adapter);
-    let laptop_id = laptop.transport().local_peer_id();
     let phone_id = phone.transport().local_peer_id();
-    run(&mut phone, P2pCommand::MakePairable);
-    laptop
-        .transport_mut()
-        .allow_pairing_dial(&phone_id)
-        .and_then(|()| laptop.transport_mut().dial_memory(phone_address))
-        .unwrap_or_else(|error| panic!("dial must be scheduled: {error}"));
-    drive(&mut laptop, &mut phone, |laptop, _| {
-        laptop.transport().is_connected_to(&phone_id)
-    })
-    .await;
-    run(&mut laptop, P2pCommand::StartPairing(phone_id.clone()));
-    drive(&mut laptop, &mut phone, |_, phone| {
-        !phone.status().incoming_requests.is_empty()
-    })
-    .await;
-    run(&mut laptop, P2pCommand::ConfirmCode(phone_id.clone()));
-    run(&mut phone, P2pCommand::AcceptIncoming(laptop_id));
-    drive(&mut laptop, &mut phone, |laptop, _| {
-        !laptop.status().trusted_devices.is_empty()
-    })
-    .await;
+    pair(&mut laptop, &mut phone, phone_address).await;
     laptop.poll_trust_changes();
     assert_eq!(
         laptop.status().trusted_devices.len(),
@@ -557,4 +564,57 @@ async fn a_revocation_made_by_another_process_takes_effect_on_the_next_poll() {
         !laptop.transport().is_connected_to(&phone_id)
     })
     .await;
+}
+
+/// Paired devices exchange their manifests once connected (REQUIREMENTS 3.4): each status shows
+/// the other's capabilities under its peer ID, and a revoked device's manifest is forgotten.
+#[tokio::test]
+async fn paired_devices_exchange_manifests_and_forget_revoked_ones() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9401"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let mut laptop = service("Laptop", laptop_adapter).with_local_capabilities(LocalCapabilities {
+        cpu_cores: 8,
+        gpu_vram_megabytes: 4_096,
+        transcription_models: vec![TranscriptionModel::Whisper],
+    });
+    let mut phone = service("Phone", phone_adapter).with_local_capabilities(LocalCapabilities {
+        cpu_cores: 4,
+        gpu_vram_megabytes: 0,
+        transcription_models: Vec::new(),
+    });
+    let laptop_id = laptop.transport().local_peer_id();
+    let phone_id = phone.transport().local_peer_id();
+    assert_eq!(laptop.status().local_manifest.cpu_cores(), 8);
+    assert_eq!(laptop.status().local_manifest.device_id(), &laptop_id);
+
+    pair(&mut laptop, &mut phone, phone_address).await;
+    drive(&mut laptop, &mut phone, |laptop, phone| {
+        !laptop.status().peer_manifests.is_empty() && !phone.status().peer_manifests.is_empty()
+    })
+    .await;
+
+    let phone_manifest_on_laptop = &laptop.status().peer_manifests[0];
+    assert_eq!(phone_manifest_on_laptop.device_id(), &phone_id);
+    assert_eq!(phone_manifest_on_laptop.cpu_cores(), 4);
+    assert!(
+        phone_manifest_on_laptop
+            .available_transcription_models()
+            .is_empty()
+    );
+    let laptop_manifest_on_phone = &phone.status().peer_manifests[0];
+    assert_eq!(laptop_manifest_on_phone.device_id(), &laptop_id);
+    assert_eq!(laptop_manifest_on_phone.gpu_vram_megabytes(), 4_096);
+    assert!(laptop_manifest_on_phone.supports_transcription_model(&TranscriptionModel::Whisper));
+
+    run(&mut laptop, P2pCommand::Revoke(phone_id));
+    laptop.process_pending_events();
+    assert!(laptop.status().peer_manifests.is_empty());
 }

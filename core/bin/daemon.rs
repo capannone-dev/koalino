@@ -205,7 +205,7 @@ async fn start_p2p_task(
     device_id: DeviceId,
     embedding_cipher: Arc<dyn note_taker_core::ports::crypto::EmbeddingCipher>,
 ) -> Option<Arc<P2pHandle>> {
-    let config = match P2pConfig::from_environment() {
+    let mut config = match P2pConfig::from_environment() {
         Ok(Some(config)) => config,
         Ok(None) => {
             tracing::info!("P2P sync disabled");
@@ -216,6 +216,11 @@ async fn start_p2p_task(
             return None;
         }
     };
+    // The manifest advertises what the pipeline can run; an invalid pipeline setting is
+    // reported by the pipeline itself, so it advertises no models here.
+    config.capabilities.transcription_models = PipelineConfig::from_environment()
+        .map(|pipeline_config| pipeline_config.advertised_transcription_models())
+        .unwrap_or_default();
     let started = tokio::task::spawn_blocking(move || {
         spawn_p2p_task(&database_path, device_id, embedding_cipher, config)
     })

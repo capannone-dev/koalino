@@ -44,7 +44,7 @@ use crate::{
         errors::TranscriptionError,
         models::{
             AudioRecording, DeviceId, ExternalMediaChunk, TaskType, Transcript,
-            TranscriptionContext,
+            TranscriptionContext, TranscriptionModel,
         },
     },
     ports::{ai::TranscriptionEngine, crypto::EmbeddingCipher},
@@ -175,6 +175,30 @@ impl PipelineConfig {
     /// Returns the local Whisper language: `auto` (detect per chunk) or a lowercase language code.
     pub fn whisper_language(&self) -> &str {
         &self.whisper_language
+    }
+
+    /// Lists the transcription models this configuration can run, for the device manifest
+    /// (REQUIREMENTS 3.4): local Whisper when a model is set in a local-ai build, and `openai`
+    /// when an API key is set, as allowed by the selected provider.
+    ///
+    /// Inputs: None. Outputs: The models, local first. Side effects: None; no model is loaded,
+    /// so a model file that fails to load is still advertised.
+    pub fn advertised_transcription_models(&self) -> Vec<TranscriptionModel> {
+        let local_available = cfg!(feature = "local-ai") && self.whisper_model_path.is_some();
+        let cloud_available = self.openai_api_key.is_some();
+        let (allow_local, allow_cloud) = match self.transcription_provider {
+            TranscriptionProvider::Auto => (true, true),
+            TranscriptionProvider::Local => (true, false),
+            TranscriptionProvider::OpenAi => (false, true),
+        };
+        let mut models = Vec::new();
+        if allow_local && local_available {
+            models.push(TranscriptionModel::Whisper);
+        }
+        if allow_cloud && cloud_available {
+            models.push(TranscriptionModel::ThirdParty(String::from("openai")));
+        }
+        models
     }
 
     /// Returns the selected transcription provider.

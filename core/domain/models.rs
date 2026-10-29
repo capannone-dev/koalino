@@ -1268,7 +1268,8 @@ impl TranscriptionModel {
 
 /// Advertises a node's non-sensitive AI capacity for decentralized workload selection.
 ///
-/// A future encrypted P2P adapter broadcasts this portable value. It intentionally contains no
+/// Paired devices exchange it over the encrypted P2P transport
+/// (`application::device_manifest_exchange`). It intentionally contains no
 /// credentials, model weights, raw audio, or hardware serial numbers.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DeviceManifest {
@@ -1309,6 +1310,20 @@ impl DeviceManifest {
     /// Side effects: None.
     pub fn device_id(&self) -> &DeviceId {
         &self.device_id
+    }
+
+    /// Returns the advertised number of CPU cores.
+    ///
+    /// Inputs: None. Outputs: The core count. Side effects: None.
+    pub fn cpu_cores(&self) -> u16 {
+        self.cpu_cores
+    }
+
+    /// Returns the transcription models this node can run.
+    ///
+    /// Inputs: None. Outputs: The advertised models, in the order given. Side effects: None.
+    pub fn available_transcription_models(&self) -> &[TranscriptionModel] {
+        &self.available_transcription_models
     }
 
     /// Returns advertised GPU VRAM for telemetry's coarse CPU/GPU power heuristic.

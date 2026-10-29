@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::{
     adapters::audio::chunk_audio_store::ChunkAudioStore,
     application::{crypto::voice_encryptor::ephemeral_cipher, pipeline::task_metrics::TaskProfile},
-    domain::models::{DeviceId, TaskType},
+    domain::models::{DeviceId, TaskType, TranscriptionModel},
 };
 
 use super::{
@@ -259,4 +259,50 @@ fn spawning_without_an_engine_fails() {
 
     assert!(result.is_err());
     let _ = std::fs::remove_file(&database_path);
+}
+
+/// The manifest advertises only engines the pipeline could build: local Whisper with a model
+/// (in local-ai builds), OpenAI with a key, both under `auto`, and nothing without either.
+#[test]
+fn advertised_models_follow_the_configured_engines() {
+    let whisper = || {
+        if cfg!(feature = "local-ai") {
+            vec![TranscriptionModel::Whisper]
+        } else {
+            Vec::new()
+        }
+    };
+    let openai = TranscriptionModel::ThirdParty(String::from("openai"));
+    let model = ("NOTE_TAKER_WHISPER_MODEL", "/models/ggml-base.bin");
+    let key = ("OPENAI_API_KEY", "sk-test");
+
+    assert!(
+        valid_config(&[])
+            .advertised_transcription_models()
+            .is_empty()
+    );
+    assert_eq!(
+        valid_config(&[model]).advertised_transcription_models(),
+        whisper()
+    );
+    assert_eq!(
+        valid_config(&[key]).advertised_transcription_models(),
+        vec![openai.clone()]
+    );
+    let mut both = whisper();
+    both.push(openai.clone());
+    assert_eq!(
+        valid_config(&[model, key]).advertised_transcription_models(),
+        both
+    );
+    assert_eq!(
+        valid_config(&[model, key, ("NOTE_TAKER_TRANSCRIPTION_PROVIDER", "local")])
+            .advertised_transcription_models(),
+        whisper()
+    );
+    assert_eq!(
+        valid_config(&[model, key, ("NOTE_TAKER_TRANSCRIPTION_PROVIDER", "openai")])
+            .advertised_transcription_models(),
+        vec![openai]
+    );
 }
