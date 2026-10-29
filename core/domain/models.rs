@@ -2275,6 +2275,55 @@ impl ClusterShare {
     }
 }
 
+/// What an unresolved cluster holds, so a device can tell which clusters changed since it last
+/// shared them (Issue #50). Chunks and clips are only ever added while a cluster is unresolved.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ClusterDigest {
+    cluster_id: Uuid,
+    chunk_count: usize,
+    clip_count: usize,
+}
+
+impl ClusterDigest {
+    /// Creates a digest.
+    ///
+    /// Inputs: The cluster and how many member chunks and review clips it holds.
+    /// Outputs: The digest. Side effects: None.
+    pub fn new(cluster_id: Uuid, chunk_count: usize, clip_count: usize) -> Self {
+        Self {
+            cluster_id,
+            chunk_count,
+            clip_count,
+        }
+    }
+
+    /// The cluster.
+    pub fn cluster_id(&self) -> Uuid {
+        self.cluster_id
+    }
+
+    /// How many member chunks it holds.
+    pub fn chunk_count(&self) -> usize {
+        self.chunk_count
+    }
+
+    /// How many review clips it holds.
+    pub fn clip_count(&self) -> usize {
+        self.clip_count
+    }
+}
+
+/// What importing a `ClusterShare` from a paired device did.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ClusterShareImport {
+    /// The cluster and whatever chunks and clips were new are stored.
+    Imported,
+    /// The cluster is already resolved here; nothing was stored, so no audio comes back.
+    AlreadyResolved,
+    /// The meeting has not synced to this device yet; nothing was stored.
+    UnknownMeeting,
+}
+
 impl Transcript {
     /// Creates transcript content associated with its owning meeting.
     ///

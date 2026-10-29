@@ -36,6 +36,10 @@ keeps the identity.
 admission (a pairing window, nearby unpaired devices, trust and revoke) and the
 request/answer exchange.
 
+`NoteRepository` also exports and imports unresolved unknown-speaker clusters for paired devices
+(`unresolved_cluster_digests`, `load_cluster_share`, `import_cluster_share`, Issue #50); the
+defaults report none and refuse imports.
+
 `EmbeddingCipher` (`crypto.rs`) seals and opens embeddings for a named row context. It also seals
 arbitrary secrets (`seal_secret`/`open_secret`), such as the P2P node key. Storage
 adapters call it for every embedding BLOB and never see keys or cipher types. The implementation

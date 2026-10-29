@@ -3,8 +3,9 @@
 use crate::domain::{
     errors::StorageError,
     models::{
-        Attachment, MeetingId, MeetingMetadata, MeetingTitle, MeetingWindow, Transcript,
-        TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
+        Attachment, ClusterDigest, ClusterShare, ClusterShareImport, MeetingId, MeetingMetadata,
+        MeetingTitle, MeetingWindow, Transcript, TranscriptSegment, UnassignedVoiceClip,
+        UnknownSpeakerChunk, UnknownSpeakerCluster,
     },
 };
 use chrono::{DateTime, Utc};
@@ -221,6 +222,36 @@ pub trait NoteRepository {
     ) -> Result<(), StorageError> {
         Err(StorageError::Unavailable)
     }
+
+    /// Lists every unresolved cluster with at least one member, with what it holds (Issue #50).
+    ///
+    /// Outputs: Digests in creation order, or a storage error. Side effects: Reads row counts only.
+    fn unresolved_cluster_digests(&self) -> Result<Vec<ClusterDigest>, StorageError> {
+        Ok(Vec::new())
+    }
+
+    /// Builds the share of one unresolved cluster: the cluster, its chunks, and all its clips.
+    ///
+    /// Inputs: `cluster_id` identifies the cluster.
+    /// Outputs: The share, `None` for an unknown or resolved cluster, or a storage error.
+    /// Side effects: Reads and decrypts biometric data and raw audio; callers must not log it.
+    fn load_cluster_share(&self, _cluster_id: Uuid) -> Result<Option<ClusterShare>, StorageError> {
+        Ok(None)
+    }
+
+    /// Stores a share received from a paired device, sealed with this device's key.
+    ///
+    /// Inputs: A decoded, validated share.
+    /// Outputs: What the import did (see `ClusterShareImport`), or a storage error, including a
+    /// rejection when this device keeps the cluster under another meeting.
+    /// Side effects: Upserts the cluster and inserts chunks and clips not stored yet, in one
+    /// transaction; never for a resolved cluster or a missing meeting.
+    fn import_cluster_share(
+        &self,
+        _share: &ClusterShare,
+    ) -> Result<ClusterShareImport, StorageError> {
+        Err(StorageError::Unavailable)
+    }
 }
 
 /// Persists attachment metadata independently from filesystem metadata extraction.
@@ -384,5 +415,20 @@ where
         identity_id: Uuid,
     ) -> Result<(), StorageError> {
         (*self).resolve_unknown_speaker_cluster(cluster_id, identity_id)
+    }
+
+    fn unresolved_cluster_digests(&self) -> Result<Vec<ClusterDigest>, StorageError> {
+        (*self).unresolved_cluster_digests()
+    }
+
+    fn load_cluster_share(&self, cluster_id: Uuid) -> Result<Option<ClusterShare>, StorageError> {
+        (*self).load_cluster_share(cluster_id)
+    }
+
+    fn import_cluster_share(
+        &self,
+        share: &ClusterShare,
+    ) -> Result<ClusterShareImport, StorageError> {
+        (*self).import_cluster_share(share)
     }
 }

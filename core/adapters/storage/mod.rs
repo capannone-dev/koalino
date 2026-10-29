@@ -19,8 +19,11 @@ pub mod slide_attachment_store;
 mod slide_attachment_store_tests;
 /// Implements the note repository port using SQLite tables and CRDT byte blobs.
 pub mod sqlite_adapter;
-/// Seals embedding BLOBs through the cipher port and re-encrypts legacy plaintext rows.
+/// Seals review-clip audio through the cipher port and seals legacy plaintext clips once.
 mod sqlite_clip_audio_encryption;
+#[cfg(test)]
+mod sqlite_cluster_share_tests;
+/// Seals embedding BLOBs through the cipher port and re-encrypts legacy plaintext rows.
 mod sqlite_embedding_encryption;
 /// Persists the database's encryption metadata (key source, Argon2id salt, key check).
 pub mod sqlite_encryption_metadata;

@@ -2,7 +2,9 @@
 //!
 //! Voice embeddings in `unassigned_voice_clips`, `unknown_speaker_clusters`, and `cluster_chunks`
 //! are sealed through the injected `EmbeddingCipher` (Issue #31); opening the repository
-//! re-encrypts plaintext embeddings left by older databases.
+//! re-encrypts plaintext embeddings left by older databases. Review-clip audio is sealed the
+//! same way (Issue #50), and unresolved clusters can be exported to and imported from paired
+//! devices as `ClusterShare`s.
 //!
 //! Meeting titles (Issue #35) live in the nullable `meetings.title` column; opening a database
 //! created earlier adds that column, leaving existing meetings untitled (`NULL`). Untitled
@@ -13,6 +15,9 @@ use std::{path::Path, sync::Arc};
 
 use rusqlite::{Connection, OptionalExtension, params};
 
+/// Exports and imports the cluster shares copied between paired devices (Issue #50).
+#[path = "sqlite_cluster_share.rs"]
+mod cluster_share;
 /// Persists unknown-speaker clusters and their member chunks (Issue #28).
 #[path = "sqlite_unknown_speaker_clusters.rs"]
 mod unknown_speaker_clusters;
@@ -28,9 +33,9 @@ use crate::{
     domain::{
         errors::StorageError,
         models::{
-            AggregatedStats, Attachment, DeviceId, MeetingId, MeetingMetadata, MeetingTitle,
-            TaskMetrics, TaskType, Transcript, TranscriptSegment, UnassignedVoiceClip,
-            UnknownSpeakerChunk, UnknownSpeakerCluster,
+            AggregatedStats, Attachment, ClusterDigest, ClusterShare, ClusterShareImport, DeviceId,
+            MeetingId, MeetingMetadata, MeetingTitle, TaskMetrics, TaskType, Transcript,
+            TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
         },
     },
     ports::{
@@ -1029,6 +1034,27 @@ impl NoteRepository for SqliteNoteRepository {
         identity_id: uuid::Uuid,
     ) -> Result<(), StorageError> {
         self.resolve_cluster(cluster_id, identity_id)
+    }
+
+    /// Counts the chunks and clips of every unresolved cluster.
+    fn unresolved_cluster_digests(&self) -> Result<Vec<ClusterDigest>, StorageError> {
+        self.cluster_digests()
+    }
+
+    /// Loads and opens one unresolved cluster with its chunks and clips.
+    fn load_cluster_share(
+        &self,
+        cluster_id: uuid::Uuid,
+    ) -> Result<Option<ClusterShare>, StorageError> {
+        self.cluster_share(cluster_id)
+    }
+
+    /// Re-seals and stores a share from a paired device.
+    fn import_cluster_share(
+        &self,
+        share: &ClusterShare,
+    ) -> Result<ClusterShareImport, StorageError> {
+        self.import_share(share)
     }
 }
 

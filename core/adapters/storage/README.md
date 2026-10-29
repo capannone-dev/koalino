@@ -147,6 +147,17 @@ and marks it in `audio_format` (`0` plaintext from before #50, `1` sealed). Open
 adds the column when missing and seals format `0` clips once, in one transaction. Reads accept
 only sealed audio.
 
+`sqlite_cluster_share.rs`, a child module of `sqlite_adapter`, exports and imports the cluster
+shares copied to paired devices (Issue #50):
+- `unresolved_cluster_digests` counts each unresolved cluster's chunks and clips, so the P2P task
+  can tell which changed;
+- `load_cluster_share` returns one unresolved cluster with its chunks and all its clips;
+- `import_cluster_share` seals everything again with this database's cipher in one transaction.
+  It keeps chunks and clips already stored, and lets the representative embedding be replaced
+  only by a share with at least as many members. It stores nothing for a missing meeting
+  (`UnknownMeeting`, retried later) or a cluster already resolved here (`AlreadyResolved`), so a
+  named speaker's audio never comes back, and it refuses a cluster kept under another meeting.
+
 `sqlite_encryption_metadata.rs` implements `EncryptionMetadataRepository` with the single-row
 `encryption_meta` table: `key_source` (`key_file` or `passphrase`), `salt`,
 `argon2_memory_kib`, `argon2_iterations`, `argon2_parallelism`, `key_check`, and `created_at`.
