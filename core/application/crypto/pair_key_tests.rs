@@ -1,8 +1,9 @@
 //! Specifies the per-pair key agreement (Issue #50): both devices of a pair derive the same key,
 //! every pair gets its own key, low-order public keys are refused, and secrets stay out of logs.
+//! Values sealed with a pair key open only with that key and in the direction they were sent.
 
-use super::pair_key::PairAgreementSecret;
-use crate::domain::{errors::CryptoError, models::DeviceId};
+use super::pair_key::{PairAgreementSecret, open_from_peer, seal_for_peer};
+use crate::domain::{errors::CryptoError, models::DeviceId, peer_trust::PairKey};
 
 /// Restores a secret from fixed bytes, so the tests are deterministic.
 fn secret(fill_byte: u8) -> PairAgreementSecret {
@@ -105,4 +106,75 @@ fn secrets_and_keys_are_redacted_in_debug_output() {
     assert!(printed.contains("redacted"));
     assert!(!printed.contains("1, 1"));
     assert!(!printed.contains(&format!("{:?}", pair_key.as_bytes())));
+}
+
+/// A value sealed by the laptop for the phone opens on the phone with the same pair key.
+#[test]
+fn a_sealed_value_opens_with_the_pair_key() {
+    let pair_key = PairKey::from_bytes([6; 32]);
+    let laptop_id = DeviceId::new("peer-laptop");
+    let phone_id = DeviceId::new("peer-phone");
+
+    let sealed = seal_for_peer(&pair_key, b"NTC1", &laptop_id, &phone_id, b"clip audio")
+        .unwrap_or_else(|error| panic!("value must seal: {error}"));
+    let opened = open_from_peer(&pair_key, b"NTC1", &laptop_id, &phone_id, &sealed)
+        .unwrap_or_else(|error| panic!("value must open: {error}"));
+
+    assert_eq!(opened.as_slice(), b"clip audio");
+    assert!(!sealed.windows(10).any(|window| window == b"clip audio"));
+}
+
+/// A sealed value does not open with another key, reflected back to its sender, under another
+/// purpose, or after any byte changed.
+#[test]
+fn a_sealed_value_is_bound_to_key_direction_purpose_and_content() {
+    let pair_key = PairKey::from_bytes([6; 32]);
+    let laptop_id = DeviceId::new("peer-laptop");
+    let phone_id = DeviceId::new("peer-phone");
+    let sealed = seal_for_peer(&pair_key, b"NTC1", &laptop_id, &phone_id, b"clip audio")
+        .unwrap_or_else(|error| panic!("value must seal: {error}"));
+    let mut tampered = sealed.clone();
+    if let Some(last_byte) = tampered.last_mut() {
+        *last_byte ^= 1;
+    }
+
+    for (key, purpose, sender, receiver, value) in [
+        (
+            PairKey::from_bytes([7; 32]),
+            &b"NTC1"[..],
+            &laptop_id,
+            &phone_id,
+            &sealed,
+        ),
+        (
+            PairKey::from_bytes([6; 32]),
+            &b"NTC1"[..],
+            &phone_id,
+            &laptop_id,
+            &sealed,
+        ),
+        (
+            PairKey::from_bytes([6; 32]),
+            &b"NTX1"[..],
+            &laptop_id,
+            &phone_id,
+            &sealed,
+        ),
+        (
+            PairKey::from_bytes([6; 32]),
+            &b"NTC1"[..],
+            &laptop_id,
+            &phone_id,
+            &tampered,
+        ),
+    ] {
+        assert!(matches!(
+            open_from_peer(&key, purpose, sender, receiver, value),
+            Err(CryptoError::AuthenticationFailed)
+        ));
+    }
+    assert!(matches!(
+        open_from_peer(&pair_key, b"NTC1", &laptop_id, &phone_id, &sealed[..20]),
+        Err(CryptoError::MalformedCiphertext)
+    ));
 }

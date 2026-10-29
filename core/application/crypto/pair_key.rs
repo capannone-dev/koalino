@@ -11,9 +11,18 @@
 //!
 //! The secret is static, so the key stays the same across reconnections and re-pairing and
 //! needs no coordination. Forward secrecy for traffic comes from the Noise transport underneath.
+//!
+//! `seal_for_peer` encrypts a message for the other device with AES-256-GCM. Its key is derived
+//! from the pair key with HKDF-SHA256 (salt `note-taker/pair-message/v1`, info: the message
+//! purpose, such as `NTC1`), so each purpose has its own key. Layout: random nonce (12 bytes) ‖
+//! ciphertext ‖ tag (16). The purpose, the sender's and the receiver's peer IDs are authenticated
+//! as associated data, so a message cannot be reflected back or replayed as another kind.
 //! Nothing here logs.
 
-use aes_gcm::aead::{OsRng, rand_core::RngCore};
+use aes_gcm::{
+    Aes256Gcm, Nonce,
+    aead::{Aead, AeadCore, KeyInit, OsRng, Payload, rand_core::RngCore},
+};
 use hkdf::Hkdf;
 use sha2::Sha256;
 use x25519_dalek::{PublicKey, StaticSecret};
@@ -23,6 +32,12 @@ use crate::domain::{errors::CryptoError, models::DeviceId, peer_trust::PairKey};
 
 /// HKDF salt, versioned so a future derivation cannot collide with this one.
 const PAIR_KEY_SALT: &[u8] = b"note-taker/pair-key/v1";
+/// HKDF salt of the per-purpose message keys derived from a pair key.
+const PAIR_MESSAGE_SALT: &[u8] = b"note-taker/pair-message/v1";
+/// Length of the random AES-GCM nonce.
+const NONCE_LENGTH: usize = 12;
+/// Length of the AES-GCM authentication tag.
+const TAG_LENGTH: usize = 16;
 
 /// This device's static X25519 secret; wiped on drop and never printed.
 pub struct PairAgreementSecret(StaticSecret);
@@ -107,4 +122,88 @@ impl std::fmt::Debug for PairAgreementSecret {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str("PairAgreementSecret(redacted)")
     }
+}
+
+/// Encrypts `plaintext` for the other device of a pair.
+///
+/// Inputs: The pair key, the message purpose (its four-byte header), this device's peer ID, the
+/// receiving device's peer ID, and the plaintext.
+/// Outputs: Nonce ‖ ciphertext ‖ tag, or `EncryptionFailed`.
+/// Side effects: Draws a random nonce.
+pub fn seal_for_peer(
+    pair_key: &PairKey,
+    purpose: &[u8],
+    sender: &DeviceId,
+    receiver: &DeviceId,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
+    let cipher = message_cipher(pair_key, purpose)?;
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let ciphertext = cipher
+        .encrypt(
+            &nonce,
+            Payload {
+                msg: plaintext,
+                aad: &associated_data(purpose, sender, receiver),
+            },
+        )
+        .map_err(|_| CryptoError::EncryptionFailed)?;
+    let mut sealed = Vec::with_capacity(NONCE_LENGTH + ciphertext.len());
+    sealed.extend_from_slice(&nonce);
+    sealed.extend_from_slice(&ciphertext);
+    Ok(sealed)
+}
+
+/// Decrypts a value `sender` sealed for `receiver` with `seal_for_peer`.
+///
+/// Inputs: The pair key, the expected purpose, the sending and receiving peer IDs, and the
+/// sealed bytes.
+/// Outputs: The plaintext, wiped on drop; `MalformedCiphertext` for a value too short to hold a
+/// nonce and tag; `AuthenticationFailed` for a wrong key, direction, purpose, or any change.
+/// Side effects: None.
+pub fn open_from_peer(
+    pair_key: &PairKey,
+    purpose: &[u8],
+    sender: &DeviceId,
+    receiver: &DeviceId,
+    sealed: &[u8],
+) -> Result<Zeroizing<Vec<u8>>, CryptoError> {
+    if sealed.len() < NONCE_LENGTH + TAG_LENGTH {
+        return Err(CryptoError::MalformedCiphertext);
+    }
+    let (nonce, ciphertext) = sealed.split_at(NONCE_LENGTH);
+    message_cipher(pair_key, purpose)?
+        .decrypt(
+            Nonce::from_slice(nonce),
+            Payload {
+                msg: ciphertext,
+                aad: &associated_data(purpose, sender, receiver),
+            },
+        )
+        .map(Zeroizing::new)
+        .map_err(|_| CryptoError::AuthenticationFailed)
+}
+
+/// Derives the AES-256-GCM cipher for one message purpose.
+///
+/// Outputs: The cipher, or `KeyAgreement` if HKDF refuses the length (it never does for 32 bytes).
+/// Side effects: None.
+fn message_cipher(pair_key: &PairKey, purpose: &[u8]) -> Result<Aes256Gcm, CryptoError> {
+    let mut key_bytes = Zeroizing::new([0_u8; 32]);
+    Hkdf::<Sha256>::new(Some(PAIR_MESSAGE_SALT), pair_key.as_bytes())
+        .expand(purpose, key_bytes.as_mut())
+        .map_err(|_| CryptoError::KeyAgreement)?;
+    Aes256Gcm::new_from_slice(key_bytes.as_ref()).map_err(|_| CryptoError::EncryptionFailed)
+}
+
+/// Builds the associated data: purpose ‖ 0 ‖ sender ‖ 0 ‖ receiver.
+fn associated_data(purpose: &[u8], sender: &DeviceId, receiver: &DeviceId) -> Vec<u8> {
+    let mut associated_data =
+        Vec::with_capacity(purpose.len() + sender.as_str().len() + receiver.as_str().len() + 2);
+    associated_data.extend_from_slice(purpose);
+    associated_data.push(0);
+    associated_data.extend_from_slice(sender.as_str().as_bytes());
+    associated_data.push(0);
+    associated_data.extend_from_slice(receiver.as_str().as_bytes());
+    associated_data
 }

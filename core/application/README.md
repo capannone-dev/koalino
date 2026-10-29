@@ -117,6 +117,13 @@ the one it receives, pinning it with `TrustedPeerStore::pin_pair_key`. Malformed
 keys, keys from unpaired devices, and keys that differ from the pinned one are logged and
 ignored. See `crypto/README.md`.
 
+`cluster_share_exchange.rs` encodes a `ClusterShare` (an unresolved unknown-speaker cluster, its
+member embeddings, and its review clips) as sealed `NTC1` messages for one paired device
+(Issue #50). The body is JSON with the clip audio appended raw, sealed with the pair key and bound
+to sender and receiver. Clips are split so each message stays within an audio budget, and every
+message repeats the cluster and its chunks, so each can be imported alone. Decoding bounds and
+checks everything a peer controls.
+
 `poll_trust_changes`, on the same tick, calls `PairingManager::reconcile_trusted_peers`. The
 stored allowlist is authoritative: a device another process removed from it (the CLI's `devices
 revoke`) is dropped from the transport's gate and disconnected, a stored device not yet admitted

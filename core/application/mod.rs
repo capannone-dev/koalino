@@ -12,6 +12,11 @@ mod attachment_manager_tests;
 pub mod cluster_review;
 #[cfg(test)]
 mod cluster_review_tests;
+/// Encodes the sealed `NTC1` messages that copy unknown-speaker clusters to paired devices
+/// (Issue #50).
+pub mod cluster_share_exchange;
+#[cfg(test)]
+mod cluster_share_exchange_tests;
 /// Defines compute-routing policy seams for future distributed AI selection.
 pub mod compute_router;
 #[cfg(test)]

@@ -139,3 +139,15 @@ secrets are static, so the key survives reconnections and re-pairing, and device
 #50 agree theirs at their next connection. The first key is pinned in the allowlist; a different
 one later is logged and ignored. `PairAgreementSecret` and `PairKey` are wiped on drop and print
 as redacted.
+
+`seal_for_peer` and `open_from_peer` encrypt messages between the two devices:
+
+```text
+message key = HKDF-SHA256(salt = "note-taker/pair-message/v1", ikm = pair key, info = purpose)
+sealed      = random nonce (12 B) ‖ AES-256-GCM ciphertext ‖ tag (16 B)
+AAD         = purpose ‖ 0 ‖ sender peer ID ‖ 0 ‖ receiver peer ID
+```
+
+The purpose is the message header (`NTC1` for cluster shares). A message opens only with the
+pair key, for that purpose, and in the direction it was sent, so it cannot be reflected back to
+its sender.

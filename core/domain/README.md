@@ -6,6 +6,9 @@ Domain types encode meetings, recordings, transcripts, device identities, voice 
 
 Voice-signature values retain only UUID metadata and model-derived floating-point embeddings. They
 never retain raw audio; persistence and similarity calculation remain outside this layer.
+Review clips (`UnassignedVoiceClip`) are the exception: temporary audio kept only until the
+speaker is named. `ClusterShare` groups an unresolved cluster with its member chunks and clips
+for copying to a paired device (Issue #50).
 
 Attachment values retain only a user-selected local path and declared metadata. Metadata extraction,
 file access, and attachment persistence remain behind ports; meeting suggestions are immutable

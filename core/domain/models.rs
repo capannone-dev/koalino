@@ -2229,6 +2229,52 @@ impl UnknownSpeakerChunk {
     }
 }
 
+/// An unresolved unknown-speaker cluster as copied to a paired device (Issue #50): the cluster,
+/// its member chunks with their embeddings, and some or all of its review clips.
+///
+/// It holds biometric embeddings and raw audio; callers must never log it, and it only travels
+/// sealed with the pair key.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClusterShare {
+    cluster: UnknownSpeakerCluster,
+    chunks: Vec<UnknownSpeakerChunk>,
+    clips: Vec<UnassignedVoiceClip>,
+}
+
+impl ClusterShare {
+    /// Groups a cluster with its members and clips.
+    ///
+    /// Inputs: An unresolved cluster, its member chunks in insertion order, and review clips
+    /// linked to it (a share may carry only some clips; others travel in further shares).
+    /// Outputs: The share. Side effects: Takes ownership of sensitive data.
+    pub fn new(
+        cluster: UnknownSpeakerCluster,
+        chunks: Vec<UnknownSpeakerChunk>,
+        clips: Vec<UnassignedVoiceClip>,
+    ) -> Self {
+        Self {
+            cluster,
+            chunks,
+            clips,
+        }
+    }
+
+    /// Borrows the cluster.
+    pub fn cluster(&self) -> &UnknownSpeakerCluster {
+        &self.cluster
+    }
+
+    /// Borrows the member chunks.
+    pub fn chunks(&self) -> &[UnknownSpeakerChunk] {
+        &self.chunks
+    }
+
+    /// Borrows the review clips this share carries.
+    pub fn clips(&self) -> &[UnassignedVoiceClip] {
+        &self.clips
+    }
+}
+
 impl Transcript {
     /// Creates transcript content associated with its owning meeting.
     ///
