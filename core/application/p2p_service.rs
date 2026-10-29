@@ -17,14 +17,25 @@
 //! device its X25519 public key (`NTK1`, Issue #50). The public key received from a paired device
 //! yields the pair key, which is pinned in the allowlist the first time; review clips sent to that
 //! device are encrypted with it.
+//!
+//! On the same one-second tick as local changes, unresolved unknown-speaker clusters are copied
+//! to connected paired devices whose pair key is agreed (`NTC1`, Issue #50), so their speakers
+//! can be named there. Each device is sent only the chunks and clips it has not been sent and has
+//! not sent here, so copies never echo. A share whose meeting has not synced yet is held (bounded
+//! in size and time) and retried on later ticks.
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     time::{Duration, Instant},
 };
 
+use uuid::Uuid;
+
 use crate::{
     application::{
+        cluster_share_exchange::{
+            decode_cluster_share_message, encode_cluster_share_messages, is_cluster_share_message,
+        },
         crypto::pair_key::PairAgreementSecret,
         device_manifest_exchange::{decode_manifest_message, encode_manifest_message},
         pair_key_exchange::{
@@ -37,7 +48,10 @@ use crate::{
         repository_sync_manager::{RepositorySyncManager, RepositorySyncManagerError},
     },
     domain::{
-        models::{DeviceId, DeviceManifest, MeetingId, TranscriptionModel},
+        models::{
+            ClusterDigest, ClusterShare, ClusterShareImport, DeviceId, DeviceManifest, MeetingId,
+            TranscriptionModel,
+        },
         peer_trust::{DeviceName, PairingCode, TrustedPeer},
     },
     ports::{
@@ -60,6 +74,34 @@ const MAX_RECENT_UPDATES: usize = 16;
 /// Most queued network events handled per `process_pending_events` call, so one call always ends.
 const MAX_EVENTS_PER_PASS: usize = 1024;
 
+/// Most review-clip audio one cluster-share message carries, well under the transport's limit.
+const CLUSTER_SHARE_AUDIO_BUDGET: usize = 8 * 1024 * 1024;
+
+/// Most clip audio held in memory for shares whose meeting has not synced yet.
+const MAX_HELD_SHARE_AUDIO_BYTES: usize = 32 * 1024 * 1024;
+
+/// How long a held share is retried before it is dropped (the sender sends it again at the next
+/// connection).
+const HELD_SHARE_LIFETIME: Duration = Duration::from_secs(5 * 60);
+
+/// What one paired device already has of one cluster, as far as this device knows.
+#[derive(Default)]
+struct SharedCluster {
+    /// The local digest when the device was last brought up to date.
+    digest: Option<ClusterDigest>,
+    /// Member chunks sent to or received from the device.
+    chunk_ids: HashSet<String>,
+    /// Review clips sent to or received from the device.
+    clip_ids: HashSet<Uuid>,
+}
+
+/// A share received for a meeting that has not synced here yet.
+struct HeldShare {
+    /// The share; it holds raw audio and embeddings and is never logged.
+    share: ClusterShare,
+    /// When it arrived.
+    received_at: Instant,
+}
 /// One request from the owner, or from a local writer, to the P2P task.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum P2pCommand {
@@ -211,8 +253,14 @@ pub struct P2pService<Transport, Store, Repository> {
     local_manifest: DeviceManifest,
     /// Manifests of connected paired devices, by peer.
     peer_manifests: HashMap<DeviceId, DeviceManifest>,
-    /// This device's X25519 secret; without it no pair keys are agreed.
+    /// This device's X25519 secret; without it no pair keys are agreed and no clusters shared.
     pair_agreement_secret: Option<PairAgreementSecret>,
+    /// Paired devices currently connected.
+    connected_peers: HashSet<DeviceId>,
+    /// What each connected device has of each cluster.
+    shared_clusters: HashMap<DeviceId, HashMap<Uuid, SharedCluster>>,
+    /// Shares waiting for their meeting, oldest first.
+    held_shares: Vec<HeldShare>,
 }
 
 impl<Transport, Store, Repository> P2pService<Transport, Store, Repository>
@@ -243,6 +291,9 @@ where
             local_manifest,
             peer_manifests: HashMap::new(),
             pair_agreement_secret: None,
+            connected_peers: HashSet::new(),
+            shared_clusters: HashMap::new(),
+            held_shares: Vec::new(),
         }
     }
 
@@ -304,9 +355,22 @@ where
     /// documents this task merged from one peer, so they are forwarded to the other connected
     /// peers. A merge that adds nothing writes nothing, so devices never echo each other.
     ///
-    /// Side effects: Reads document revisions and sends sync messages. Failures are logged and
-    /// retried on the next call, or at the peer's next connection.
+    /// It also copies new unknown-speaker clusters, members, and clips to connected paired devices
+    /// and retries shares held for meetings that have since synced.
+    ///
+    /// Side effects: Reads document revisions and sends sync messages; reads clusters and sends
+    /// sealed shares; may store held shares. Failures are logged and retried on the next call, or
+    /// at the peer's next connection.
     pub fn poll_local_changes(&mut self) {
+        self.send_document_changes();
+        self.share_clusters();
+        self.retry_held_shares();
+    }
+
+    /// Sends every meeting document written since the last call to the connected peers.
+    ///
+    /// Side effects: Reads document revisions and sends sync messages; failures are logged.
+    fn send_document_changes(&mut self) {
         let changes = match self
             .sync_manager
             .repository()
@@ -401,11 +465,23 @@ where
                     self.accept_pair_public_key(peer_device_id, decoded);
                     return;
                 }
+                if is_cluster_share_message(payload) {
+                    self.accept_cluster_share(peer_device_id, payload);
+                    return;
+                }
                 None
             }
-            NetworkEvent::PeerDiscovered(peer_device_id) => Some(peer_device_id.clone()),
+            NetworkEvent::PeerDiscovered(peer_device_id) => {
+                // A (re)connected device may have lost nothing, but sending again is idempotent
+                // and covers shares it could not store before.
+                self.connected_peers.insert(peer_device_id.clone());
+                self.shared_clusters.remove(peer_device_id);
+                Some(peer_device_id.clone())
+            }
             NetworkEvent::PeerExpired(peer_device_id) => {
                 self.peer_manifests.remove(peer_device_id);
+                self.connected_peers.remove(peer_device_id);
+                self.shared_clusters.remove(peer_device_id);
                 None
             }
             NetworkEvent::DeliveryFailed(_) => None,
@@ -464,6 +540,277 @@ where
                 error = %error,
                 "an agreement key was rejected"
             ),
+        }
+    }
+
+    /// Copies each changed unresolved cluster to every connected device with an agreed pair key.
+    ///
+    /// Side effects: Reads cluster digests, and for changed clusters their shares (decrypting
+    /// embeddings and audio); sends sealed messages. Failures are logged and retried next tick.
+    fn share_clusters(&mut self) {
+        if self.connected_peers.is_empty() || self.pair_agreement_secret.is_none() {
+            return;
+        }
+        let digests = match self.sync_manager.repository().unresolved_cluster_digests() {
+            Ok(digests) => digests,
+            Err(error) => {
+                tracing::warn!(error = %error, "unknown-speaker clusters could not be listed");
+                return;
+            }
+        };
+        let mut peers: Vec<DeviceId> = self.connected_peers.iter().cloned().collect();
+        peers.sort_by(|first, second| first.as_str().cmp(second.as_str()));
+        for peer_device_id in peers {
+            let known_clusters = self.shared_clusters.get(&peer_device_id);
+            let changed: Vec<ClusterDigest> = digests
+                .iter()
+                .filter(|digest| {
+                    known_clusters
+                        .and_then(|clusters| clusters.get(&digest.cluster_id()))
+                        .and_then(|cluster| cluster.digest)
+                        != Some(**digest)
+                })
+                .copied()
+                .collect();
+            if changed.is_empty() {
+                continue;
+            }
+            let pair_key = match self.pairing_manager.store().pair_key(&peer_device_id) {
+                Ok(Some(pair_key)) => pair_key,
+                Ok(None) => continue,
+                Err(error) => {
+                    tracing::warn!(
+                        peer = %peer_device_id.as_str(),
+                        error = %error,
+                        "the pair key could not be loaded"
+                    );
+                    continue;
+                }
+            };
+            for digest in changed {
+                self.share_cluster(&peer_device_id, &pair_key, digest);
+            }
+        }
+    }
+
+    /// Sends one device the chunks and clips of one cluster it does not have yet.
+    ///
+    /// Side effects: Reads the cluster's share; sends sealed messages; records what was sent.
+    /// A failure is logged and leaves the record unchanged, so the next tick retries.
+    fn share_cluster(
+        &mut self,
+        peer_device_id: &DeviceId,
+        pair_key: &crate::domain::peer_trust::PairKey,
+        digest: ClusterDigest,
+    ) {
+        let cluster_id = digest.cluster_id();
+        let share = match self
+            .sync_manager
+            .repository()
+            .load_cluster_share(cluster_id)
+        {
+            Ok(Some(share)) => share,
+            Ok(None) => return,
+            Err(error) => {
+                tracing::warn!(
+                    cluster_id = %cluster_id,
+                    error = %error,
+                    "an unknown-speaker cluster could not be loaded for sharing"
+                );
+                return;
+            }
+        };
+        let known = self
+            .shared_clusters
+            .get(peer_device_id)
+            .and_then(|clusters| clusters.get(&cluster_id));
+        let has_new_chunks = share
+            .chunks()
+            .iter()
+            .any(|chunk| known.is_none_or(|known| !known.chunk_ids.contains(chunk.chunk_id())));
+        let new_clips: Vec<_> = share
+            .clips()
+            .iter()
+            .filter(|clip| known.is_none_or(|known| !known.clip_ids.contains(&clip.clip_id())))
+            .cloned()
+            .collect();
+        if has_new_chunks || !new_clips.is_empty() {
+            let outgoing =
+                ClusterShare::new(share.cluster().clone(), share.chunks().to_vec(), new_clips);
+            let local_peer_id = self.pairing_manager.transport().local_peer_id();
+            let sent = encode_cluster_share_messages(
+                &outgoing,
+                pair_key,
+                &local_peer_id,
+                peer_device_id,
+                CLUSTER_SHARE_AUDIO_BUDGET,
+            )
+            .map_err(|error| error.to_string())
+            .and_then(|messages| {
+                messages.iter().try_for_each(|message| {
+                    self.pairing_manager
+                        .transport_mut()
+                        .send_encrypted(peer_device_id, message)
+                        .map_err(|error| error.to_string())
+                })
+            });
+            if let Err(error) = sent {
+                tracing::warn!(
+                    peer = %peer_device_id.as_str(),
+                    cluster_id = %cluster_id,
+                    error = %error,
+                    "an unknown-speaker cluster could not be shared"
+                );
+                return;
+            }
+            self.remember_shared(peer_device_id, &outgoing);
+            tracing::debug!(
+                peer = %peer_device_id.as_str(),
+                cluster_id = %cluster_id,
+                clip_count = outgoing.clips().len(),
+                "unknown-speaker cluster shared"
+            );
+        }
+        self.shared_clusters
+            .entry(peer_device_id.clone())
+            .or_default()
+            .entry(cluster_id)
+            .or_default()
+            .digest = Some(digest);
+    }
+
+    /// Records that `peer_device_id` has the chunks and clips of `share`.
+    ///
+    /// Side effects: Updates the in-memory record only.
+    fn remember_shared(&mut self, peer_device_id: &DeviceId, share: &ClusterShare) {
+        let known = self
+            .shared_clusters
+            .entry(peer_device_id.clone())
+            .or_default()
+            .entry(share.cluster().cluster_id())
+            .or_default();
+        known.chunk_ids.extend(
+            share
+                .chunks()
+                .iter()
+                .map(|chunk| chunk.chunk_id().to_owned()),
+        );
+        known
+            .clip_ids
+            .extend(share.clips().iter().map(|clip| clip.clip_id()));
+    }
+
+    /// Opens and imports a share `peer_device_id` sent.
+    ///
+    /// Side effects: May store the cluster, chunks, and clips, or hold the share until its
+    /// meeting syncs. A share from a device without an agreed pair key, or one that fails to
+    /// open or validate, is logged (peer ID only) and dropped.
+    fn accept_cluster_share(&mut self, peer_device_id: &DeviceId, payload: &[u8]) {
+        let pair_key = match self.pairing_manager.store().pair_key(peer_device_id) {
+            Ok(Some(pair_key)) => pair_key,
+            Ok(None) => {
+                tracing::warn!(
+                    peer = %peer_device_id.as_str(),
+                    "a cluster share arrived before the pair key was agreed and was dropped"
+                );
+                return;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    peer = %peer_device_id.as_str(),
+                    error = %error,
+                    "the pair key could not be loaded"
+                );
+                return;
+            }
+        };
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        match decode_cluster_share_message(payload, &pair_key, peer_device_id, &local_peer_id) {
+            Ok(share) => {
+                self.remember_shared(peer_device_id, &share);
+                if let Some(held) = self.import_share(share) {
+                    self.hold_share(held);
+                }
+            }
+            Err(error) => tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                error = %error,
+                "a cluster share was rejected"
+            ),
+        }
+    }
+
+    /// Imports a share into the local repository.
+    ///
+    /// Outputs: The share back when its meeting has not synced yet, so it can be held.
+    /// Side effects: May store the cluster, chunks, and clips; logs failures without content.
+    fn import_share(&mut self, share: ClusterShare) -> Option<ClusterShare> {
+        match self.sync_manager.repository().import_cluster_share(&share) {
+            Ok(ClusterShareImport::Imported | ClusterShareImport::AlreadyResolved) => None,
+            Ok(ClusterShareImport::UnknownMeeting) => Some(share),
+            Err(error) => {
+                tracing::warn!(
+                    cluster_id = %share.cluster().cluster_id(),
+                    error = %error,
+                    "a cluster share could not be imported"
+                );
+                None
+            }
+        }
+    }
+
+    /// Holds a share until its meeting syncs, within `MAX_HELD_SHARE_AUDIO_BYTES`.
+    ///
+    /// Side effects: Keeps the share in memory, or drops it with a warning when the bound is hit.
+    fn hold_share(&mut self, share: ClusterShare) {
+        let audio_bytes = |share: &ClusterShare| -> usize {
+            share
+                .clips()
+                .iter()
+                .map(|clip| clip.audio_bytes().len())
+                .sum()
+        };
+        let held_audio_bytes: usize = self
+            .held_shares
+            .iter()
+            .map(|held| audio_bytes(&held.share))
+            .sum();
+        if held_audio_bytes + audio_bytes(&share) > MAX_HELD_SHARE_AUDIO_BYTES {
+            tracing::warn!(
+                cluster_id = %share.cluster().cluster_id(),
+                "a cluster share for a meeting not synced yet was dropped: too many are waiting"
+            );
+            return;
+        }
+        self.held_shares.push(HeldShare {
+            share,
+            received_at: Instant::now(),
+        });
+    }
+
+    /// Imports held shares whose meeting has synced, and drops expired ones.
+    ///
+    /// Side effects: May store clusters, chunks, and clips; frees expired shares.
+    fn retry_held_shares(&mut self) {
+        if self.held_shares.is_empty() {
+            return;
+        }
+        let now = Instant::now();
+        let held_shares = std::mem::take(&mut self.held_shares);
+        for held in held_shares {
+            if now.duration_since(held.received_at) > HELD_SHARE_LIFETIME {
+                tracing::debug!(
+                    cluster_id = %held.share.cluster().cluster_id(),
+                    "a held cluster share expired before its meeting synced"
+                );
+                continue;
+            }
+            if let Some(share) = self.import_share(held.share) {
+                self.held_shares.push(HeldShare {
+                    share,
+                    received_at: held.received_at,
+                });
+            }
         }
     }
 

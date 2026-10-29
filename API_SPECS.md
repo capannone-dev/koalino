@@ -17,6 +17,11 @@ The initial public contracts are Rust traits, not a network protocol:
   public key: `NTK1` followed by exactly 32 bytes, on the same encrypted stream
   (`core/application/pair_key_exchange.rs`). The pair key derived from it protects review clips
   sent between the two devices (Issue #50); see `core/application/crypto/README.md`.
+- Unresolved unknown-speaker clusters travel as `NTC1` followed by a value sealed with the pair
+  key (purpose `NTC1`, bound to sender and receiver). Inside: a big-endian `u32` JSON length, the
+  JSON body (meeting and cluster IDs, creation time, total duration, representative embedding,
+  member chunks with embeddings, clip metadata with each clip's `audio_length`), then the clips'
+  raw audio in order. See `core/application/cluster_share_exchange.rs`.
 - `ComputeDispatcher` accepts `LocalOnly`, `SpecificPeer`, or `Automatic` preferences. Automatic routing considers only model-compatible manifests and chooses the highest deterministic GPU-VRAM-then-CPU capacity score.
 - `NoteRepository` creates a meeting with opaque CRDT bytes, persists and loads a `Transcript`, and atomically replaces or reads a serialized CRDT document. It returns only domain values and `StorageError`; it never exposes SQLite types.
 - `P2pNetwork` permits only encrypted opaque-payload transport.

@@ -124,6 +124,13 @@ to sender and receiver. Clips are split so each message stays within an audio bu
 message repeats the cluster and its chunks, so each can be imported alone. Decoding bounds and
 checks everything a peer controls.
 
+`P2pService::poll_local_changes` also shares clusters: for each connected paired device with an
+agreed pair key, it compares the repository's `unresolved_cluster_digests` with what that device
+was last brought up to and sends only the chunks and clips it has not been sent and has not sent
+here (8 MiB of audio per message), so copies never echo. Received shares are imported with
+`import_cluster_share`; one whose meeting has not synced yet is held in memory (32 MiB of audio at
+most, 5 minutes) and retried each tick. The record of a device is reset when it reconnects.
+
 `poll_trust_changes`, on the same tick, calls `PairingManager::reconcile_trusted_peers`. The
 stored allowlist is authoritative: a device another process removed from it (the CLI's `devices
 revoke`) is dropped from the transport's gate and disconnected, a stored device not yet admitted

@@ -27,7 +27,10 @@ use crate::{
         repository_sync_manager::RepositorySyncManager,
     },
     domain::{
-        models::{DeviceId, MeetingId, MeetingTitle, Transcript, TranscriptionModel},
+        models::{
+            DeviceId, MeetingId, MeetingTitle, Transcript, TranscriptionModel, UnassignedVoiceClip,
+            UnknownSpeakerChunk, UnknownSpeakerCluster,
+        },
         peer_trust::DeviceName,
     },
     ports::{
@@ -664,4 +667,102 @@ async fn paired_devices_agree_the_same_pair_key() {
         .flatten()
         .unwrap_or_else(|| panic!("phone must hold the pair key"));
     assert!(on_laptop.matches(&on_phone));
+}
+
+/// Saves review clip `number` of `cluster_id` on `service`'s device.
+fn record_clip(service: &Service, meeting_id: &MeetingId, cluster_id: Uuid, number: u8) {
+    service
+        .repository()
+        .save_unassigned_clip(
+            UnassignedVoiceClip::with_review_context(
+                Uuid::from_u128(0x100 + u128::from(number)),
+                meeting_id.clone(),
+                u64::from(number) * 1_000,
+                u64::from(number) * 1_000 + 900,
+                vec![number; 64],
+                vec![0.5, 0.25, -0.25],
+                None,
+            )
+            .with_cluster_id(Some(cluster_id)),
+        )
+        .unwrap_or_else(|error| panic!("clip must be recorded: {error}"));
+}
+
+/// Counts the review clips of `meeting_id` stored on `service`'s device.
+fn clip_count(service: &Service, meeting_id: &MeetingId) -> usize {
+    service
+        .repository()
+        .get_unassigned_clips(meeting_id)
+        .map(|clips| clips.len())
+        .unwrap_or_default()
+}
+
+/// A meeting's unknown speakers can be named on another paired device (Issue #50): its clusters,
+/// member embeddings, and review clips reach the phone once the pair key is agreed, even though
+/// they are recorded before the meeting itself syncs, and a clip recorded later follows.
+#[tokio::test]
+async fn unknown_speaker_clusters_reach_paired_devices() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9412"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let mut laptop = service("Laptop", laptop_adapter)
+        .with_pair_agreement_secret(PairAgreementSecret::generate());
+    let mut phone =
+        service("Phone", phone_adapter).with_pair_agreement_secret(PairAgreementSecret::generate());
+    let meeting_id = MeetingId::new("meeting-with-guests");
+    let cluster_id = Uuid::from_u128(0xC1);
+    MeetingCrdtService::new(laptop.repository())
+        .create_titled_meeting(&meeting_id, &title("Guests"))
+        .and_then(|()| {
+            laptop.repository().save_unknown_speaker_cluster_chunk(
+                &UnknownSpeakerCluster::new(
+                    cluster_id,
+                    meeting_id.clone(),
+                    vec![0.5, 0.25, -0.25],
+                    vec![String::from("chunk-a")],
+                    1_000,
+                    chrono::Utc::now(),
+                    None,
+                ),
+                &UnknownSpeakerChunk::new("chunk-a", vec![0.5, 0.25, -0.25], 1_000),
+            )
+        })
+        .unwrap_or_else(|error| panic!("cluster must be recorded: {error}"));
+    record_clip(&laptop, &meeting_id, cluster_id, 1);
+    record_clip(&laptop, &meeting_id, cluster_id, 2);
+
+    pair(&mut laptop, &mut phone, phone_address).await;
+    drive(&mut laptop, &mut phone, |_, phone| {
+        clip_count(phone, &meeting_id) == 2
+    })
+    .await;
+
+    let phone_clusters = phone
+        .repository()
+        .load_unknown_speaker_clusters(&meeting_id)
+        .unwrap_or_else(|error| panic!("clusters must load: {error}"));
+    assert_eq!(phone_clusters.len(), 1);
+    assert_eq!(phone_clusters[0].cluster_id(), cluster_id);
+    assert_eq!(
+        phone
+            .repository()
+            .load_unknown_speaker_chunks(cluster_id)
+            .unwrap_or_else(|error| panic!("chunks must load: {error}"))
+            .len(),
+        1
+    );
+
+    record_clip(&laptop, &meeting_id, cluster_id, 3);
+    drive(&mut laptop, &mut phone, |_, phone| {
+        clip_count(phone, &meeting_id) == 3
+    })
+    .await;
+    assert_eq!(clip_count(&laptop, &meeting_id), 3);
 }
