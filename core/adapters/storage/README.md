@@ -135,6 +135,12 @@ other formats are never touched. Reads always decrypt, so a plaintext or tampere
 error, never silently accepted. The adapters contain no cryptography; see
 `core/application/crypto/README.md`.
 
+Review-clip audio is sealed the same way (Issue #50). `sqlite_clip_audio_encryption.rs` seals
+`unassigned_voice_clips.audio_bytes` with the context `unassigned_voice_clips:audio:<clip id>`
+and marks it in `audio_format` (`0` plaintext from before #50, `1` sealed). Opening the adapter
+adds the column when missing and seals format `0` clips once, in one transaction. Reads accept
+only sealed audio.
+
 `sqlite_encryption_metadata.rs` implements `EncryptionMetadataRepository` with the single-row
 `encryption_meta` table: `key_source` (`key_file` or `passphrase`), `salt`,
 `argon2_memory_kib`, `argon2_iterations`, `argon2_parallelism`, `key_check`, and `created_at`.

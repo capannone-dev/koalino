@@ -282,6 +282,17 @@ fn old_unencrypted_database_is_reencrypted_on_first_open() {
             })
             .unwrap_or_else(|error| panic!("{table} must be rewritten as legacy: {error}"));
     }
+    // Pre-#50 clips also kept their audio as plaintext, without a format column.
+    legacy_connection
+        .execute(
+            "UPDATE unassigned_voice_clips SET audio_bytes = ?1",
+            params![vec![9_u8, 9]],
+        )
+        .and_then(|_| {
+            legacy_connection
+                .execute_batch("ALTER TABLE unassigned_voice_clips DROP COLUMN audio_format")
+        })
+        .unwrap_or_else(|error| panic!("clip audio must be rewritten as legacy: {error}"));
     drop(legacy_connection);
 
     let cipher = storage
@@ -440,4 +451,85 @@ fn encryption_metadata_is_stored_once_and_survives_reopening() {
         in_memory.load_encryption_metadata().ok(),
         Some(Some(key_file_metadata))
     );
+}
+
+/// Reads `(audio_format, audio_bytes)` of every review clip, straight from the file.
+fn stored_clip_audio(storage: &TemporaryStorage) -> Vec<(i64, Vec<u8>)> {
+    let connection = storage.raw_connection();
+    let mut statement = connection
+        .prepare("SELECT audio_format, audio_bytes FROM unassigned_voice_clips ORDER BY rowid")
+        .unwrap_or_else(|error| panic!("clip audio query must prepare: {error}"));
+    statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .and_then(Iterator::collect)
+        .unwrap_or_else(|error| panic!("clip audio must load: {error}"))
+}
+
+/// Review clips are raw audio (Issue #50): they are sealed on disk like embeddings and come back
+/// unchanged through the repository.
+#[test]
+fn review_clip_audio_is_sealed_on_disk() {
+    let storage = TemporaryStorage::new();
+    let cipher = ephemeral_cipher();
+    let note_repository = storage.note_repository(&cipher);
+    let voice_store = storage.voice_store(&cipher);
+    let fixture = write_fixture(&note_repository, &voice_store);
+
+    let stored = stored_clip_audio(&storage);
+
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].0, 1, "clip audio must be marked sealed");
+    assert_ne!(stored[0].1, vec![9, 9], "clip audio is stored in plaintext");
+    let clips = note_repository
+        .get_unassigned_clips(&fixture.meeting_id)
+        .unwrap_or_else(|error| panic!("clips must load: {error}"));
+    assert_eq!(clips[0].audio_bytes(), &[9, 9]);
+}
+
+/// A database whose clip audio predates Issue #50 is sealed on first open, once.
+#[test]
+fn old_plaintext_clip_audio_is_sealed_on_first_open() {
+    let storage = TemporaryStorage::new();
+    let fixture = {
+        let setup_cipher = ephemeral_cipher();
+        write_fixture(
+            &storage.note_repository(&setup_cipher),
+            &storage.voice_store(&setup_cipher),
+        )
+    };
+    // Rewrite the clip into the pre-#50 layout: plaintext audio and no format column. Its
+    // embedding was sealed with the setup key, so make it plaintext too for the new key.
+    let legacy_connection = storage.raw_connection();
+    legacy_connection
+        .execute(
+            "UPDATE unassigned_voice_clips SET audio_bytes = ?1, derived_embedding = ?2, embedding_format = 0",
+            params![vec![9_u8, 9], plaintext_bytes(&CLIP_EMBEDDING)],
+        )
+        .and_then(|_| {
+            legacy_connection
+                .execute_batch("ALTER TABLE unassigned_voice_clips DROP COLUMN audio_format")
+        })
+        .unwrap_or_else(|error| panic!("clip must be rewritten as legacy: {error}"));
+    drop(legacy_connection);
+
+    let cipher = storage
+        .unlock(None)
+        .unwrap_or_else(|error| panic!("key must unlock: {error}"));
+    let note_repository = storage.note_repository(&cipher);
+    let migrated = stored_clip_audio(&storage);
+    let clips = note_repository
+        .get_unassigned_clips(&fixture.meeting_id)
+        .unwrap_or_else(|error| panic!("clips must load: {error}"));
+    drop(note_repository);
+    let reopened_repository = storage.note_repository(&cipher);
+    let after_second_open = stored_clip_audio(&storage);
+
+    assert_eq!(migrated[0].0, 1);
+    assert_ne!(migrated[0].1, vec![9, 9]);
+    assert_eq!(clips[0].audio_bytes(), &[9, 9]);
+    assert_eq!(
+        migrated, after_second_open,
+        "a second open must not re-seal"
+    );
+    drop(reopened_repository);
 }

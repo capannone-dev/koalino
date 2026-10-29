@@ -17,6 +17,9 @@ use rusqlite::{Connection, OptionalExtension, params};
 #[path = "sqlite_unknown_speaker_clusters.rs"]
 mod unknown_speaker_clusters;
 
+use super::sqlite_clip_audio_encryption::{
+    SEALED_AUDIO_FORMAT, open_clip_audio, prepare_clip_audio, seal_clip_audio,
+};
 use super::sqlite_embedding_encryption::{
     CLIP_EMBEDDINGS, CLUSTER_CHUNK_EMBEDDINGS, CLUSTER_REPRESENTATIVE_EMBEDDINGS,
     SEALED_EMBEDDING_FORMAT,
@@ -185,6 +188,7 @@ impl SqliteNoteRepository {
         ] {
             embedding_column.prepare(&sqlite_connection, embedding_cipher.as_ref())?;
         }
+        prepare_clip_audio(&sqlite_connection, embedding_cipher.as_ref())?;
         tracing::info!(device_id = %device_id.as_str(), "SQLite meeting repository initialized");
         Ok(Self {
             connection: sqlite_connection,
@@ -852,8 +856,8 @@ impl NoteRepository for SqliteNoteRepository {
     ///
     /// Inputs: `clip` must reference a meeting created through this repository.
     /// Outputs: Success or an unknown-meeting/SQLite storage error.
-    /// Side effects: Stores temporary review audio and the encrypted derived embedding without
-    /// logging either.
+    /// Side effects: Stores the temporary review audio and the derived embedding, both sealed
+    /// with the database cipher, without logging either.
     fn save_unassigned_clip(&self, clip: UnassignedVoiceClip) -> Result<(), StorageError> {
         let clip_id = clip.clip_id().to_string();
         let sealed_embedding = CLIP_EMBEDDINGS.seal(
@@ -861,10 +865,12 @@ impl NoteRepository for SqliteNoteRepository {
             &[&clip_id],
             clip.derived_embedding(),
         )?;
+        let sealed_audio =
+            seal_clip_audio(self.embedding_cipher.as_ref(), &clip_id, clip.audio_bytes())?;
         let inserted_row_count = self.connection.execute(
-            "INSERT INTO unassigned_voice_clips (clip_id, meeting_id, start_time_ms, end_time_ms, audio_bytes, derived_embedding, weak_match_identity_id, weak_match_confidence_score, cluster_id, embedding_format)
-             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
-            params![clip_id, clip.meeting_id().as_str(), clip.start_time_ms(), clip.end_time_ms(), clip.audio_bytes(), sealed_embedding, clip.weak_match_candidate().map(|candidate| candidate.identity_id().to_string()), clip.weak_match_candidate().map(|candidate| candidate.confidence_score()), clip.cluster_id().map(|cluster_id| cluster_id.to_string()), SEALED_EMBEDDING_FORMAT],
+            "INSERT INTO unassigned_voice_clips (clip_id, meeting_id, start_time_ms, end_time_ms, audio_bytes, derived_embedding, weak_match_identity_id, weak_match_confidence_score, cluster_id, embedding_format, audio_format)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
+            params![clip_id, clip.meeting_id().as_str(), clip.start_time_ms(), clip.end_time_ms(), sealed_audio, sealed_embedding, clip.weak_match_candidate().map(|candidate| candidate.identity_id().to_string()), clip.weak_match_candidate().map(|candidate| candidate.confidence_score()), clip.cluster_id().map(|cluster_id| cluster_id.to_string()), SEALED_EMBEDDING_FORMAT, SEALED_AUDIO_FORMAT],
         ).map_err(|error| sqlite_error("unable to save unassigned voice clip", error))?;
         ensure_meeting_was_updated(inserted_row_count, clip.meeting_id())?;
         self.log_operation("save_unassigned_clip", clip.meeting_id());
@@ -948,7 +954,7 @@ impl NoteRepository for SqliteNoteRepository {
                     meeting_id.clone(),
                     start_time_ms,
                     end_time_ms,
-                    audio_bytes,
+                    open_clip_audio(self.embedding_cipher.as_ref(), &clip_id, &audio_bytes)?,
                     CLIP_EMBEDDINGS.open(
                         self.embedding_cipher.as_ref(),
                         &[&clip_id],
