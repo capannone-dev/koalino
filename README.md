@@ -10,8 +10,9 @@ store. Voice embeddings are encrypted at rest. The Rust core uses hexagonal arch
 without touching domain logic.
 
 > **Status: pre-1.0.** Recording, transcription, the meetings workflow, export, telemetry, and
-> structured logging work today. P2P sync between devices (#43), real speaker diarization (#44),
-> and microphone capture in the Flutter app (#45) are **not** working yet. See
+> structured logging work today, as do P2P sync between devices (#43), microphone capture (#45),
+> and on-device speaker diarization (#44), which is opt-in: a `diarization` build with exported
+> models. The apps do not ship those models yet. See
 > [AUDIT_V1.md](AUDIT_V1.md) for the full compliance matrix and readiness assessment.
 
 ## Components
@@ -44,6 +45,7 @@ features:
 
 ```sh
 cargo build --features local-ai,vad   # whisper.cpp (needs cmake and a C++ toolchain) + WebRTC VAD
+cargo build --features diarization    # speaker diarization; downloads ONNX Runtime at build time
 ```
 
 Run with `NOTE_TAKER_WHISPER_MODEL` set to a GGML model, such as whisper.cpp's multilingual
@@ -94,7 +96,9 @@ repository.
 | `NOTE_TAKER_OPENAI_WHISPER_MODEL` | `whisper-1` | OpenAI transcription model |
 | `NOTE_TAKER_OPENAI_LANGUAGE` | unset (auto) | Language hint for the OpenAI API |
 | `NOTE_TAKER_VAD_ENABLED` | `true` | Voice-activity chunking. `false` cuts near every 15 s |
-| `NOTE_TAKER_ENABLE_DIARIZATION` | `false` | Speaker diarization. No real engine exists yet (#44) |
+| `NOTE_TAKER_ENABLE_DIARIZATION` | `false` | Speaker diarization (`diarization` builds, with both models below). Otherwise segments are unattributed |
+| `NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL` | unset | Path to `segmentation.onnx`, from [`tools/diarization`](tools/diarization/README.md) |
+| `NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL` | unset | Path to `embedding.onnx`, from the same tool |
 | `NOTE_TAKER_REVIEW_CLIP_DIR` | `voice_review_clips` | Temporary clips of unknown voices, kept until resolved |
 | `NOTE_TAKER_EXPORT_DIR` | `~/Documents/NoteTaker/exports` | Export destination |
 | `NOTE_TAKER_PDF_FONT_DIR` | unset | Extra fallback fonts for PDF export |

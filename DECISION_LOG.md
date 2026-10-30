@@ -1225,3 +1225,33 @@ the comment on #49.
   back. The identity's name and voice variants stay in the device that named it until the voice
   library syncs (#56); until then other devices show those segments as an unknown speaker, and on
   a concurrent naming the losing device keeps the variants it enrolled under its own identity.
+
+## 2026-10-30 — #44 diarization: runtime, models, and thresholds
+
+- **ONNX Runtime is downloaded at build time** (`ort` `=2.0.0-rc.13`, its `download-binaries`), the
+  owner's choice. rc.13 is the last release within our Rust 1.88 MSRV; rc.14 needs 1.92.
+- **Models come from a Python export script in the repo** (`tools/diarization/export_models.py`),
+  the owner's choice. Python runs only at export time; the app never needs it. The filterbank is
+  inside the ECAPA graph, so no feature extraction had to be written in Rust.
+- **Requested without models means unattributed, not a failure**: transcription keeps working on a
+  device without models. Named models that cannot load are an error, because that is a mistake
+  to fix rather than a state to run in.
+- **Thresholds, measured with the exported ECAPA on Mini LibriSpeech dev-clean-2** (cosine,
+  different utterances, 26 speakers):
+
+  | Segment | Same speaker: 5th / 50th percentile | Different: 99th percentile |
+  | --- | --- | --- |
+  | 1 s | 0.09 / 0.30 | 0.27 |
+  | 2 s | 0.29 / 0.50 | 0.31 |
+  | 4 s | 0.49 / 0.68 | 0.33 |
+  | 8 s | 0.58 / 0.80 | 0.32 |
+
+  The clustering threshold moved from 0.70 to **0.40**, since at 0.70 only 41% of same-speaker
+  4 s pairs would join. The window link threshold is **0.35**; turn error was flat from 0.2 to 0.4
+  on 40 spliced 15 s chunks.
+- **The matcher's 0.80/0.50 cutoffs are unchanged.** At 0.80 only long audio reaches a strong
+  match, so most recognized voices will ask for confirmation. That errs on the safe side, and
+  retuning needs measurements with real enrolled voices; it is left as a policy decision.
+- **Measured quality is limited**: spliced clean recordings, not real meetings with overlap, noise
+  or far-field microphones. On the 40 chunks, mean speaker confusion was 3.5% (median 0), and 4
+  chunks merged both speakers into one in segmentation. Short turns give weak embeddings.

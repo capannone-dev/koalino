@@ -112,7 +112,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | Priority | Issue | Work | Requirement |
 | --- | --- | --- | --- |
 | P0 | #43 | Done (2026-10-29): pairing with an allowlist, Automerge sync in the daemon and apps, `/api/p2p/*`, Flutter and web Devices screens, CLI `devices list`/`revoke` (applied by a running daemon within a second), and `DeviceManifest` exchange shown on the Devices screens. Follow-ups: #55 relay, #56 voice-library sync, #57 attachment sync, #58 Nearby during pairing, #59 routing by manifests | 3.3, 3.4, 4.1 |
-| P0 | #44 | Real diarization adapter (Pyannote/SpeechBrain behind a Cargo feature); retune the 0.70 clustering threshold on its embeddings | 3.2 |
+| P0 | #44 | Done (2026-10-30): real diarization adapter (pyannote segmentation-3.0 and SpeechBrain ECAPA on ONNX Runtime, `diarization` feature); clustering threshold retuned from 0.70 to 0.40 | 3.2 |
 | P0 | #45 | Microphone capture: `cpal` in the Rust core (`microphone` feature), Android `RECORD_AUDIO`; done | 3.1 |
 | P1 | #46 | Settings on Linux, Windows, Android, and the web: runtime log level and Share/Export Logs; done | 6.1, 6.2 |
 | P1 | #47 | Android foreground service and lock-screen/notification Start/Pause/Stop; done | 2.1 |

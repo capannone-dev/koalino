@@ -13,7 +13,7 @@ filed 7 issues (#43–#49) for gaps that are too large to fix in an audit or nee
 **v1.0 readiness: not ready.** Three core requirements are not met end to end:
 
 1. Devices do not sync with each other (#43).
-2. Speakers are not distinguished (#44).
+2. Speakers are distinguished only in `diarization` builds with exported models (#44).
 3. The Flutter app records no microphone audio (#45).
 
 Everything else is either working or is a contained, tracked gap. Section 5 lists the release
@@ -59,7 +59,7 @@ variable), and `TASK_BOARD.md`, `DECISION_LOG.md`, and `CONTEXT.md` were updated
 | 3.1 | Screen-share detection and slide capture | ⚠️ | Teams slides only; no local detection (#49) |
 | 3.1 | Delete raw audio after processing | ✅ | Chunk PCM lives only in memory and is wiped when consumed or on stop (#32) |
 | 3.1 | Attachments with metadata-based meeting suggestion | ✅ | `AttachmentLinker`, CLI/FFI, Flutter import screen |
-| 3.2 | Diarization | ❌ | Only `NoDiarizationEngine` exists (#44) |
+| 3.2 | Diarization | ✅ opt-in | `diarization` feature with exported models (#44); the apps do not ship the models yet |
 | 3.2 | Voice signature library, multiple per identity | ✅ | Encrypted `SqliteVoiceVectorDB`, multiple variants |
 | 3.2 | Manual assignment, low-confidence prompts, new variant on confirm, clip preservation | ✅ (no real input) | Implemented and tested; receives real data only once #44 lands |
 | 3.2 | Voice Gallery | ✅ | Flutter and web |
@@ -143,7 +143,7 @@ Totals: 19 ✅ · 12 ⚠️ · 6 ❌, across 37 rows.
 | Builds, lint, and tests green in CI | ✅ Met |
 | Single-device CLI/daemon workflow (record WAV/stdin → transcript → review → export) | ✅ Met |
 | Single-device desktop/Android app workflow | ❌ Blocked by #45 (no mic audio) |
-| Speaker attribution | ❌ Blocked by #44 |
+| Speaker attribution | ⚠️ Opt-in: `diarization` builds with exported models (#44) |
 | Multi-device sync, the product's defining feature | ❌ Blocked by #43, which includes peer authorization and a libp2p upgrade |
 | Mobile background and lock-screen operation | ❌ #47 |
 | Log export for QA | ❌ #46 |
