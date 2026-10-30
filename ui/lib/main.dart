@@ -16,6 +16,7 @@ import 'package:note_taker_ui/controllers/live_transcript_controller.dart';
 import 'package:note_taker_ui/controllers/log_settings_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
+import 'package:note_taker_ui/controllers/network_settings_controller.dart';
 import 'package:note_taker_ui/controllers/photo_capture_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
@@ -379,17 +380,22 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
   final TranscriptionRouteController _transcriptionRouteController =
       TranscriptionRouteController(p2pBridge: const RustP2pBridge());
 
+  final NetworkSettingsController _networkSettingsController =
+      NetworkSettingsController(p2pBridge: const RustP2pBridge());
+
   @override
   void initState() {
     super.initState();
     unawaited(_logSettingsController.load());
     unawaited(_transcriptionRouteController.load());
+    unawaited(_networkSettingsController.load());
   }
 
   @override
   void dispose() {
     _logSettingsController.dispose();
     _transcriptionRouteController.dispose();
+    _networkSettingsController.dispose();
     super.dispose();
   }
 
@@ -401,6 +407,7 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
             const _TelemetryDestination(),
         transcriptionRouteController: _transcriptionRouteController,
         languageController: widget.languageController,
+        networkSettingsController: _networkSettingsController,
       );
 }
 

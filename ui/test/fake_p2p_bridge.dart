@@ -28,6 +28,19 @@ final class FakeP2pBridge implements P2pBridge {
   /// Transcription routes chosen, in order.
   final List<String> routes = <String>[];
 
+  /// Addresses saved through `setNetworkAddresses`, in order.
+  final List<({String? relay, List<String> peers})> savedAddresses =
+      <({String? relay, List<String> peers})>[];
+
+  /// Invite text passed to `joinInvite`, in order.
+  final List<String> joinedInvites = <String>[];
+
+  /// What `createInvite` returns.
+  PairingInviteLink invite = PairingInviteLink(
+    text: 'note-taker-invite:1;12D3KooWLocal;5000;/ip4/203.0.113.5/tcp/4001',
+    expiresAt: DateTime(2026, 10, 30, 15, 7),
+  );
+
   /// Number of `getStatus` calls.
   int statusRequestCount = 0;
 
@@ -57,6 +70,45 @@ final class FakeP2pBridge implements P2pBridge {
       nextCommandError = null;
       throw error;
     }
+  }
+
+  @override
+  Future<void> setNetworkAddresses({
+    required String? relay,
+    required List<String> peers,
+  }) async {
+    if (nextCommandError case final Object error) {
+      nextCommandError = null;
+      throw error;
+    }
+    savedAddresses.add((relay: relay, peers: peers));
+    status = P2pStatus(
+      enabled: status.enabled,
+      network: NetworkRoutes(
+        relayAddress: relay,
+        relayState: relay == null ? 'not_configured' : 'not_paired',
+        peers: peers,
+      ),
+    );
+  }
+
+  @override
+  Future<PairingInviteLink> createInvite() async {
+    if (nextCommandError case final Object error) {
+      nextCommandError = null;
+      throw error;
+    }
+    return invite;
+  }
+
+  @override
+  Future<String> joinInvite(String inviteText) async {
+    if (nextCommandError case final Object error) {
+      nextCommandError = null;
+      throw error;
+    }
+    joinedInvites.add(inviteText);
+    return '12D3KooWInviter';
   }
 }
 

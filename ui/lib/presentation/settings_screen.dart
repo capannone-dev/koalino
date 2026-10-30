@@ -6,6 +6,7 @@
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
+import 'package:note_taker_ui/controllers/network_settings_controller.dart';
 import 'package:note_taker_ui/controllers/log_settings_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_route_controller.dart';
@@ -15,6 +16,12 @@ import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 /// Finds the default language selector in tests.
 const Key defaultLanguageSelectorKey = Key('default-language-selector');
 
+/// Finds the relay address field in tests.
+const Key relayAddressFieldKey = ValueKey<String>('relay-address');
+
+/// Finds the device addresses field in tests.
+const Key peerAddressesFieldKey = ValueKey<String>('peer-addresses');
+
 /// Renders the settings over their controllers; it holds no logic of its own.
 final class SettingsScreen extends StatelessWidget {
   /// Creates the screen.
@@ -22,7 +29,8 @@ final class SettingsScreen extends StatelessWidget {
   /// Inputs: The log settings controller, already loaded by the composition root, and the
   /// app-lock controller where the platform has App lock (Android), already initialized, and
   /// the Telemetry page, which adds a Telemetry entry that opens it, and the transcription
-  /// choice, shown only when device sync is on, and the default transcription language.
+  /// choice, shown only when device sync is on, the default transcription language, and the
+  /// network addresses, also shown only when device sync is on.
   /// Outputs: A Material 3 settings list.
   /// Side effects: None; the controls ask their controllers, and Telemetry pushes its page.
   const SettingsScreen({
@@ -31,6 +39,7 @@ final class SettingsScreen extends StatelessWidget {
     this.telemetryScreenBuilder,
     this.transcriptionRouteController,
     this.languageController,
+    this.networkSettingsController,
     super.key,
   });
 
@@ -39,12 +48,14 @@ final class SettingsScreen extends StatelessWidget {
   final WidgetBuilder? telemetryScreenBuilder;
   final TranscriptionRouteController? transcriptionRouteController;
   final TranscriptionLanguageController? languageController;
+  final NetworkSettingsController? networkSettingsController;
 
   @override
   Widget build(BuildContext context) {
     final AppLockController? appLock = appLockController;
     final TranscriptionRouteController? route = transcriptionRouteController;
     final TranscriptionLanguageController? language = languageController;
+    final NetworkSettingsController? network = networkSettingsController;
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListenableBuilder(
@@ -53,6 +64,7 @@ final class SettingsScreen extends StatelessWidget {
           appLock,
           route,
           language,
+          network,
         ]),
         builder: (BuildContext context, Widget? child) => ListView(
           children: <Widget>[
@@ -66,6 +78,10 @@ final class SettingsScreen extends StatelessWidget {
             ],
             if (route != null && route.available) ...<Widget>[
               ..._transcriptionTiles(route),
+              const Divider(),
+            ],
+            if (network != null && network.available) ...<Widget>[
+              NetworkAddressesSection(controller: network),
               const Divider(),
             ],
             ..._diagnosticsTiles(context),
@@ -241,4 +257,94 @@ final class _ErrorText extends StatelessWidget {
         child: Text(message,
             style: TextStyle(color: Theme.of(context).colorScheme.error)),
       );
+}
+
+/// The relay and static peer fields (Issue #64). It only holds the typed text; the controller does
+/// the rest.
+final class NetworkAddressesSection extends StatefulWidget {
+  /// Creates the section over `controller`, which has loaded.
+  const NetworkAddressesSection({required this.controller, super.key});
+
+  /// Reads and saves the addresses.
+  final NetworkSettingsController controller;
+
+  @override
+  State<NetworkAddressesSection> createState() =>
+      _NetworkAddressesSectionState();
+}
+
+/// Holds the fields' text, filled from what is in effect.
+final class _NetworkAddressesSectionState
+    extends State<NetworkAddressesSection> {
+  late final TextEditingController _relayField =
+      TextEditingController(text: widget.controller.relayAddress);
+  late final TextEditingController _peersField =
+      TextEditingController(text: widget.controller.peerAddresses);
+
+  @override
+  void dispose() {
+    _relayField.dispose();
+    _peersField.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final NetworkSettingsController controller = widget.controller;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text('Other networks',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 4),
+          const Text(
+              'A relay on your own always-on device lets your devices reach each other away '
+              'from the same Wi-Fi. Syncing on the same network keeps working without it.'),
+          const SizedBox(height: 12),
+          TextField(
+            key: relayAddressFieldKey,
+            controller: _relayField,
+            decoration: const InputDecoration(
+              labelText: 'Relay address',
+              hintText: '/ip4/203.0.113.5/tcp/4001/p2p/12D3Koo…',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if (controller.relayStatus case final String relayStatus)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(relayStatus),
+            ),
+          const SizedBox(height: 12),
+          TextField(
+            key: peerAddressesFieldKey,
+            controller: _peersField,
+            minLines: 2,
+            maxLines: 5,
+            decoration: const InputDecoration(
+              labelText: 'Device addresses (optional, one per line)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: controller.isSaving
+                ? null
+                : () => controller.save(
+                      relay: _relayField.text,
+                      peers: _peersField.text,
+                    ),
+            child: const Text('Save addresses'),
+          ),
+          if (controller.message case final String message)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(message),
+            ),
+        ],
+      ),
+    );
+  }
 }

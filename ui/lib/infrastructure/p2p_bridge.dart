@@ -101,6 +101,7 @@ final class P2pStatus {
     this.nearbyPeerIds = const <String>[],
     this.incomingRequests = const <IncomingPairingRequest>[],
     this.outgoingPairings = const <OutgoingPairing>[],
+    this.network = const NetworkRoutes(),
   });
 
   /// Whether the P2P task runs; every list is empty when it does not.
@@ -129,6 +130,9 @@ final class P2pStatus {
 
   /// Pairings this device started that have not finished.
   final List<OutgoingPairing> outgoingPairings;
+
+  /// Routes to other networks.
+  final NetworkRoutes network;
 }
 
 /// The successful answer to a P2P command.
@@ -146,13 +150,51 @@ final class P2pCommandResult {
   final bool? revoked;
 }
 
+/// This device's routes to other networks (Issue #64).
+final class NetworkRoutes {
+  /// Creates the routes; nothing is configured by default.
+  const NetworkRoutes({
+    this.relayAddress,
+    this.relayState = 'not_configured',
+    this.peers = const <String>[],
+    this.offersRelay = false,
+  });
+
+  /// The relay in effect, or `null`.
+  final String? relayAddress;
+
+  /// `not_configured`, `not_paired`, `connecting`, `connected`, or `reserved`.
+  final String relayState;
+
+  /// Static peer addresses in effect.
+  final List<String> peers;
+
+  /// Whether this device is itself a relay.
+  final bool offersRelay;
+
+  /// Whether other devices can be reached through a relay, or are through this one.
+  bool get hasRelay => relayAddress != null || offersRelay;
+}
+
+/// An invite to show on another device (Issue #65).
+final class PairingInviteLink {
+  /// Creates an invite.
+  const PairingInviteLink({required this.text, required this.expiresAt});
+
+  /// The invite text, for a link or a QR code.
+  final String text;
+
+  /// When it ends, as a local time.
+  final DateTime expiresAt;
+}
+
 /// A refused P2P request, an unavailable task, or an unreadable answer.
 final class P2pException implements Exception {
   /// Creates an exception with Rust's machine-readable `errorCode`.
   const P2pException(this.errorCode, this.message);
 
-  /// `invalid_request`, `invalid_peer_id`, `unavailable`, `refused`, `runtime_unavailable`, or
-  /// `malformed_response`.
+  /// `invalid_request`, `invalid_peer_id`, `unavailable`, `refused`, `runtime_unavailable`,
+  /// `malformed_response`, or a network code such as `invalid_relay_address` or `invite_expired`.
   final String errorCode;
 
   /// Rust's explanation; it can contain paths, so widgets never show it.
@@ -176,6 +218,25 @@ abstract interface class P2pBridge {
   ///
   /// Throws `P2pException` with Rust's error code when the choice is refused.
   Future<void> setTranscriptionRoute(String route);
+
+  /// Replaces the relay and static peers; they apply at once.
+  ///
+  /// Throws `P2pException` with `invalid_relay_address` or `invalid_peer_address`, changing nothing.
+  Future<void> setNetworkAddresses({
+    required String? relay,
+    required List<String> peers,
+  });
+
+  /// Opens the pairing window and returns an invite that lasts as long.
+  ///
+  /// Throws `P2pException`, for example with `no_addresses`.
+  Future<PairingInviteLink> createInvite();
+
+  /// Lists the device an invite names as nearby, and returns its peer ID.
+  ///
+  /// Throws `P2pException` with `invite_malformed`, `invite_expired`, `invite_from_this_device`, or
+  /// `already_paired`, changing nothing. No trust is granted.
+  Future<String> joinInvite(String inviteText);
 }
 
 /// Builds the JSON request for `note_taker_p2p_command`.
@@ -219,6 +280,7 @@ P2pStatus decodeP2pStatus(String json) {
                 capabilities: _capabilities(device['capabilities']),
               ))
           .toList(growable: false),
+      network: _networkRoutes(object['network']),
       nearbyPeerIds: _list(object['nearby_devices'])
           .map((Map<String, Object?> device) => device['peer_id']! as String)
           .toList(growable: false),
@@ -259,6 +321,58 @@ P2pCommandResult decodeP2pCommandResult(String json) {
     updateKind:
         update is Map<String, Object?> ? update['kind'] as String? : null,
     revoked: object['revoked'] as bool?,
+  );
+}
+
+/// Decodes the `create_invite` answer.
+///
+/// Throws `P2pException` for a refusal or an answer of the wrong shape.
+PairingInviteLink decodePairingInvite(String json) {
+  final Map<String, Object?> object = _decodeObject(json);
+  if (object['ok'] != true) {
+    throw _exceptionFrom(object);
+  }
+  final Object? text = object['invite'];
+  final Object? expiresAtMs = object['expires_at_ms'];
+  if (text is! String || expiresAtMs is! num) {
+    throw const P2pException(
+        'malformed_response', 'The invite answer is incomplete.');
+  }
+  return PairingInviteLink(
+    text: text,
+    expiresAt: DateTime.fromMillisecondsSinceEpoch(expiresAtMs.toInt()),
+  );
+}
+
+/// Decodes the `join_invite` answer into the invited device's peer ID.
+///
+/// Throws `P2pException` for a refusal or an answer of the wrong shape.
+String decodeJoinedInvite(String json) {
+  final Map<String, Object?> object = _decodeObject(json);
+  if (object['ok'] != true) {
+    throw _exceptionFrom(object);
+  }
+  final Object? peerId = object['peer_id'];
+  if (peerId is! String) {
+    throw const P2pException(
+        'malformed_response', 'The invite answer is incomplete.');
+  }
+  return peerId;
+}
+
+/// Decodes the routes object; an older core's missing one means nothing is configured.
+///
+/// Throws `TypeError` for an object of the wrong shape (reported as `malformed_response`).
+NetworkRoutes _networkRoutes(Object? value) {
+  if (value == null) {
+    return const NetworkRoutes();
+  }
+  final Map<String, Object?> routes = value as Map<String, Object?>;
+  return NetworkRoutes(
+    relayAddress: routes['relay_address'] as String?,
+    relayState: routes['relay_state']! as String,
+    peers: (routes['peers']! as List<Object?>).cast<String>(),
+    offersRelay: routes['offers_relay']! as bool,
   );
 }
 
@@ -324,6 +438,30 @@ final class RustP2pBridge implements P2pBridge {
       'route': route,
     })));
   }
+
+  @override
+  Future<void> setNetworkAddresses({
+    required String? relay,
+    required List<String> peers,
+  }) async {
+    decodeP2pCommandResult(await _runCommand(jsonEncode(<String, Object?>{
+      'command': 'set_network_addresses',
+      'relay': relay,
+      'peers': peers,
+    })));
+  }
+
+  @override
+  Future<PairingInviteLink> createInvite() async =>
+      decodePairingInvite(await _runCommand(
+          jsonEncode(<String, String>{'command': 'create_invite'})));
+
+  @override
+  Future<String> joinInvite(String inviteText) async =>
+      decodeJoinedInvite(await _runCommand(jsonEncode(<String, String>{
+        'command': 'join_invite',
+        'invite': inviteText,
+      })));
 }
 
 /// Calls `note_taker_p2p_status` on a background isolate.

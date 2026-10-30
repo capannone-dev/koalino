@@ -1,10 +1,12 @@
 // Shows this device, pairing requests and codes, paired devices, and nearby devices, and
-// forwards the owner's choices to `DevicesController` (Issue #43).
+// forwards the owner's choices to `DevicesController` (Issue #43). It also explains why devices on
+// other networks are not found (Issue #66) and offers pairing invites (Issue #65).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
+import 'package:note_taker_ui/presentation/pairing_invite_dialogs.dart';
 
 /// The Devices screen; it renders the controller's state and holds no logic of its own.
 ///
@@ -164,7 +166,8 @@ final class _DevicesList extends StatelessWidget {
                 '${switch (device.capabilities) {
               final DeviceCapabilities capabilities =>
                 describeCapabilities(capabilities),
-              null => 'Not connected',
+              null =>
+                describeDisconnectedDevice(hasRelay: status.network.hasRelay),
             }}'),
             trailing: IconButton(
               tooltip: 'Remove ${device.deviceName}',
@@ -174,9 +177,7 @@ final class _DevicesList extends StatelessWidget {
           ),
         const _SectionTitle('Nearby devices'),
         if (status.nearbyPeerIds.isEmpty)
-          const _EmptyText(
-              'No other devices found. Open Note Taker on another device on this network '
-              'and make it discoverable.'),
+          _EmptyText(describeEmptyNearby(hasRelay: status.network.hasRelay)),
         for (final String peerId in status.nearbyPeerIds)
           ListTile(
             leading: const Icon(Icons.wifi),
@@ -186,6 +187,29 @@ final class _DevicesList extends StatelessWidget {
               child: const Text('Pair'),
             ),
           ),
+        const _SectionTitle('Another network'),
+        const _EmptyText(
+            'Show an invite here and use it on the other device. You still compare a code '
+            'before they pair.'),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: <Widget>[
+              OutlinedButton.icon(
+                onPressed: () => showInviteDialog(context, controller),
+                icon: const Icon(Icons.qr_code_2),
+                label: const Text('Show invite'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => showJoinInviteDialog(context, controller),
+                icon: const Icon(Icons.link),
+                label: const Text('Use invite'),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -298,6 +322,22 @@ final class _EmptyText extends StatelessWidget {
             style: TextStyle(color: Theme.of(context).colorScheme.outline)),
       );
 }
+
+/// Explains an empty Nearby list: it only covers this network, and what to do otherwise.
+///
+/// Inputs: Whether a relay is set. Outputs: The message. Side effects: None.
+String describeEmptyNearby({required bool hasRelay}) => hasRelay
+    ? 'No other devices found on this network. Nearby only finds devices on the same Wi-Fi. '
+        'For a device on another network, use an invite.'
+    : 'No other devices found on this network. Nearby only finds devices on the same Wi-Fi. '
+        'For a device on another network, use an invite or set a relay in Settings.';
+
+/// Explains what a paired device that is not connected needs to reconnect.
+///
+/// Inputs: Whether a relay is set. Outputs: The message. Side effects: None.
+String describeDisconnectedDevice({required bool hasRelay}) => hasRelay
+    ? 'Not connected. It reconnects when it is online and can reach your relay.'
+    : 'Not connected. Put both devices on the same Wi-Fi, or set a relay in Settings.';
 
 /// Splits a six-digit code into two groups of three, such as `639 210`, for reading aloud.
 ///

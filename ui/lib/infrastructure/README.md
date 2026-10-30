@@ -84,7 +84,8 @@ key and hand it to Rust over JNI; no key bytes cross the channel. `startCoreWith
 any failure as status 6.
 `appConfigurationJson` builds the JSON and is unit-tested; it also passes peer addresses compiled
 in with `--dart-define=NOTE_TAKER_P2P_PEERS`, and a relay address with
-`--dart-define=NOTE_TAKER_P2P_RELAY`. After `runApp`, `startCore` calls
+`--dart-define=NOTE_TAKER_P2P_RELAY`, for development builds; addresses saved in Settings replace
+both (Issue #64). After `runApp`, `startCore` calls
 `note_taker_start_runtime` on an isolate, so sync starts with the app. `CoreStartupController`
 holds the screens back until it returns 0. Status 6 means the keychain is missing, locked, or
 refused.

@@ -9,6 +9,9 @@ refused) and shows "Unable to open the microphone" for status 7 (Issue #45). It 
 through `RecordingNotifier` and follows pause, resume, and stop made from the Android notification
 without calling the bridge again (Issue #47).
 
+`NetworkSettingsController` (Issue #64) reads and saves the relay and static peers for Settings,
+and words the relay's state. `DevicesController` also makes and reads pairing invites (Issue #65).
+
 `MeetingAttachmentsController` (Issue #54) picks several files and attaches them at once. It
 reports `Attached N files`, plus how many could not be attached.
 

@@ -13,11 +13,11 @@ import 'package:path_provider/path_provider.dart';
 
 /// Peer addresses compiled in with `--dart-define=NOTE_TAKER_P2P_PEERS=<a>,<b>`, for development
 /// builds that must reach devices mDNS cannot see (such as VMs behind an `adb reverse` tunnel).
-/// Empty in normal builds; addresses are not secrets.
+/// Empty in normal builds; addresses are not secrets. Saved Settings replace it (Issue #64).
 const String p2pPeersDefine = String.fromEnvironment('NOTE_TAKER_P2P_PEERS');
 
 /// Address of the owner's relay, compiled in with `--dart-define=NOTE_TAKER_P2P_RELAY=<address>`,
-/// until the Settings screen lets the owner enter it.
+/// for development builds. It applies until the owner saves addresses in Settings (Issue #64).
 const String p2pRelayDefine = String.fromEnvironment('NOTE_TAKER_P2P_RELAY');
 
 /// Builds the JSON for `note_taker_configure`.

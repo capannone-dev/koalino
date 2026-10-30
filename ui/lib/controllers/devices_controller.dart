@@ -106,6 +106,53 @@ final class DevicesController extends ChangeNotifier {
   /// Removes the paired device `peerId`; it stops syncing with this device.
   Future<void> removeDevice(String peerId) => _runAndRefresh('revoke', peerId);
 
+  /// Makes an invite to show on another device, and opens this device to pairing for as long.
+  ///
+  /// Outputs: The invite, or `null` with `errorMessage` set.
+  /// Side effects: Opens the pairing window, records its end, and refreshes.
+  Future<PairingInviteLink?> createInvite() async {
+    try {
+      final PairingInviteLink invite = await _bridge.createInvite();
+      _discoverableUntil = invite.expiresAt;
+      await refresh();
+      return invite;
+    } on P2pException catch (error) {
+      errorMessage = error.errorCode == 'no_addresses'
+          ? 'This device is not on a network yet. Connect it and try again.'
+          : 'That did not work. Try again.';
+    } on Object {
+      errorMessage = 'That did not work. Try again.';
+    }
+    _notify();
+    return null;
+  }
+
+  /// Reads an invite from another device, which then appears under Nearby devices.
+  ///
+  /// Inputs: Text as pasted; it is untrusted, and Rust checks it.
+  /// Outputs: `null` on success, or a message for the owner. Nothing changes on failure.
+  /// Side effects: Refreshes on success. No trust is granted: pairing still needs the code.
+  Future<String?> joinInvite(String inviteText) async {
+    try {
+      await _bridge.joinInvite(inviteText);
+    } on P2pException catch (error) {
+      return switch (error.errorCode) {
+        'invite_expired' =>
+          'This invite has expired. Make a new one on the other device.',
+        'invite_from_this_device' =>
+          'This invite was made on this device. Use it on the other one.',
+        'already_paired' => 'That device is already paired.',
+        'invite_malformed' => 'That is not a valid invite. Copy it again.',
+        'unavailable' => 'Device sync is not running.',
+        _ => 'That did not work. Try again.',
+      };
+    } on Object {
+      return 'That did not work. Try again.';
+    }
+    await refresh();
+    return null;
+  }
+
   /// Runs a peer command and refreshes when it succeeds.
   Future<void> _runAndRefresh(String command, String peerId) async {
     if (await _run(command, peerId: peerId)) {
