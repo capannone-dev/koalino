@@ -74,7 +74,7 @@ variable), and `TASK_BOARD.md`, `DECISION_LOG.md`, and `CONTEXT.md` were updated
 | 3.4 | "Dumb" capture-only nodes | ⚠️ | The architecture allows them (ports); they need #43 |
 | 3.5 | Telemetry per device and task (time, power, latency, load) | ✅ | CLI, HTTP, FFI, and both dashboards |
 | 4.1 | Strictly P2P, no central server | ✅ (by design) | No central component; the P2P path itself is not composed yet |
-| 4.1 | LAN mDNS and NAT traversal | ⚠️ | mDNS is in the adapter; NAT traversal is not built; none of it runs (#43) |
+| 4.1 | LAN mDNS and NAT traversal | ⚠️ | mDNS runs (#43). A relay on the owner's daemon with hole punching exists (#55); tested through a firewall, not yet across a real NAT |
 | 4.1 | E2EE between devices | ⚠️ | Noise is configured, but no peer authorization exists yet, a prerequisite in #43 |
 | 4.1 | Voice signatures encrypted at rest | ✅ | AES-256-GCM, with the key from Argon2id or the keychain (#31, #40) |
 | 4.2 | Italian and English | ✅ | Whisper language auto-detection (200b9f9) |

@@ -1255,3 +1255,20 @@ the comment on #49.
 - **Measured quality is limited**: spliced clean recordings, not real meetings with overlap, noise
   or far-field microphones. On the 40 chunks, mean speaker confusion was 3.5% (median 0), and 4
   chunks merged both speakers into one in segmentation. Short turns give weak embeddings.
+
+## 2026-10-30 — #55 relay through the owner's daemon
+
+- **Circuit Relay v2 plus DCUtR and Identify.** AutoNAT and QUIC, also named in the approved route,
+  are left out: the relay does not need to detect reachability, because its address is configured,
+  and hole punching works over TCP. They can follow if TCP punching proves too weak.
+- **Access is the existing allowlist.** The gate already refuses unpaired peers. The pairing window
+  is the one gap, closed by disconnecting an untrusted peer as soon as it uses the relay, since
+  libp2p's relay has no per-peer filter. The stranger could never get further than the destination's
+  own gate.
+- **The relay's address is configured, not detected**, because reservations need an address to hand
+  out and an always-on host knows its own.
+- **The daemon stays a normal paired device.** Relayed traffic is ciphertext to it, but pairing it
+  also means it syncs and stores the owner's meetings, like any other paired device. A relay-only
+  mode was not built: the issue names the owner's own daemon, which is meant to hold them.
+- **The apps take the relay address at build time** (`--dart-define`), like static peers, until
+  Settings has a field for it.

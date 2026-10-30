@@ -96,6 +96,8 @@ repository.
 | `NOTE_TAKER_OPENAI_WHISPER_MODEL` | `whisper-1` | OpenAI transcription model |
 | `NOTE_TAKER_OPENAI_LANGUAGE` | unset (auto) | Language hint for the OpenAI API |
 | `NOTE_TAKER_VAD_ENABLED` | `true` | Voice-activity chunking. `false` cuts near every 15 s |
+| `NOTE_TAKER_P2P_RELAY` | unset | `…/p2p/<peer id>` address of your relay, to reach devices across NATs. It must be paired with this device |
+| `NOTE_TAKER_P2P_RELAY_SERVER_ADDRESS` | unset | On your always-on daemon: its public address (`/ip4/203.0.113.5/tcp/4001`), which turns the relay on. Use a fixed port in `NOTE_TAKER_P2P_LISTEN` |
 | `NOTE_TAKER_ENABLE_DIARIZATION` | `false` | Speaker diarization (`diarization` builds, with both models below). Otherwise segments are unattributed |
 | `NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL` | unset | Path to `segmentation.onnx`, from [`tools/diarization`](tools/diarization/README.md) |
 | `NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL` | unset | Path to `embedding.onnx`, from the same tool |
