@@ -1559,8 +1559,9 @@ where
 
     /// Stores a manifest received from `peer_device_id`.
     ///
-    /// Side effects: Replaces that peer's manifest. A rejected manifest, or one naming another
-    /// device, is logged and ignored.
+    /// Side effects: Replaces that peer's manifest. The first one from a peer is answered with this
+    /// device's, because the peer dropped any it received before the owner confirmed the pairing
+    /// there. A rejected manifest, or one naming another device, is logged and ignored.
     fn accept_manifest(
         &mut self,
         peer_device_id: &DeviceId,
@@ -1571,7 +1572,13 @@ where
     ) {
         match decoded {
             Ok(manifest) if manifest.device_id() == peer_device_id => {
-                self.peer_manifests.insert(peer_device_id.clone(), manifest);
+                let first_from_peer = self
+                    .peer_manifests
+                    .insert(peer_device_id.clone(), manifest)
+                    .is_none();
+                if first_from_peer {
+                    self.send_manifest(peer_device_id);
+                }
             }
             Ok(_) => tracing::warn!(
                 peer = %peer_device_id.as_str(),

@@ -535,14 +535,20 @@ fn an_invite_finds_a_device_but_pairing_still_needs_the_code() {
         &inviter,
         &format!(r#"{{"command":"accept_request","peer_id":"{joiner_id}"}}"#),
     );
+    // The owner takes a moment to confirm, so what the inviter sends once paired is dropped here.
+    std::thread::sleep(Duration::from_secs(1));
     command(
         &joiner,
         &format!(r#"{{"command":"confirm_code","peer_id":"{inviter_id}"}}"#),
     );
     let paired = wait_for_status(&joiner, |status| {
-        status["trusted_devices"][0]["peer_id"] == inviter_id.as_str()
+        !status["trusted_devices"][0]["capabilities"].is_null()
     });
     assert_eq!(paired["trusted_devices"][0]["peer_id"], inviter_id.as_str());
+    assert!(
+        !paired["trusted_devices"][0]["capabilities"].is_null(),
+        "a connected device must not read as not connected"
+    );
 
     // The invited address must be stored by the next tick, so a restart can reconnect.
     std::thread::sleep(Duration::from_millis(1_500));
