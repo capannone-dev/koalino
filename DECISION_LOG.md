@@ -1212,3 +1212,16 @@ the comment on #49.
   first key is pinned in the allowlist row and a different one is ignored, so a later message
   cannot swap it. The owner approved `x25519-dalek` (3.0, already built by libp2p-noise) and
   `hkdf` (0.12, matching the direct `sha2` 0.10).
+- **Clusters travel as sealed shares, not in the meeting document.** Clusters hold embeddings
+  and raw audio, which must be deletable; an Automerge document keeps its history forever. So
+  `NTC1` shares carry them, sealed with the pair key, and each device re-seals them at rest with
+  its own key. Each device is sent only what it lacks, and a share whose meeting has not synced
+  yet is held briefly in memory.
+- **Resolutions travel in the meeting document.** Naming a cluster writes
+  `cluster_resolutions/<cluster> = <identity>` into the document; projecting it, on any device,
+  resolves the cluster, deletes its clips, and sets the speaker of the cluster's segments. One
+  register per cluster makes concurrent namings converge on Automerge's winner everywhere, and
+  a share arriving after the resolution stores nothing, so a named speaker's audio never comes
+  back. The identity's name and voice variants stay in the device that named it until the voice
+  library syncs (#56); until then other devices show those segments as an unknown speaker, and on
+  a concurrent naming the losing device keeps the variants it enrolled under its own identity.

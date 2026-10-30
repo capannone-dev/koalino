@@ -1,12 +1,14 @@
 //! Declares how meeting data is read from and written into the meeting's CRDT document.
 //!
 //! Since Issue #43 the Automerge document is the source of truth for everything that syncs: the
-//! meeting's origin, the transcript, and the transcript segments. The SQLite rows are an index
+//! meeting's origin, the transcript, the transcript segments, and (Issue #50) which identity each
+//! unknown-speaker cluster was named as. The SQLite rows are an index
 //! derived from the document. Storage adapters receive an implementation of this port (as they
 //! receive `EmbeddingCipher`). They call it inside their own transactions, so the document and the
 //! index never diverge, and they never depend on the CRDT library.
 
 use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 use crate::domain::{
     errors::StorageError,
@@ -30,8 +32,12 @@ pub struct MeetingProjection {
     pub origin: Option<MeetingOrigin>,
     /// The full transcript text.
     pub transcript: Option<String>,
-    /// The speaker-attributed segments, ordered by start time.
+    /// The speaker-attributed segments, ordered by start time. A segment of a resolved cluster
+    /// carries the resolution's identity.
     pub segments: Option<Vec<TranscriptSegment>>,
+    /// Unknown-speaker clusters named on any device, as (cluster, identity), ordered by cluster
+    /// (Issue #50).
+    pub cluster_resolutions: Vec<(Uuid, Uuid)>,
 }
 
 /// Reads and edits serialized meeting documents without exposing the CRDT library.
@@ -58,6 +64,19 @@ pub trait MeetingDocumentCodec: Send + Sync {
         &self,
         document: &[u8],
         segments: &[TranscriptSegment],
+    ) -> Result<Vec<u8>, StorageError>;
+
+    /// Records that the owner named unknown-speaker cluster `cluster_id` as `identity_id`.
+    ///
+    /// Inputs: The serialized document, the cluster, and the identity.
+    /// Outputs: The updated document bytes (unchanged when that resolution is already recorded),
+    /// or a storage error. Concurrent resolutions of one cluster converge on one identity.
+    /// Side effects: None.
+    fn with_cluster_resolution(
+        &self,
+        document: &[u8],
+        cluster_id: Uuid,
+        identity_id: Uuid,
     ) -> Result<Vec<u8>, StorageError>;
 
     /// Reads the index-relevant fields of a document.

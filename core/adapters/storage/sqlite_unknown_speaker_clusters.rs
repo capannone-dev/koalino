@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use super::{
     CLUSTER_CHUNK_EMBEDDINGS, CLUSTER_REPRESENTATIVE_EMBEDDINGS, SEALED_EMBEDDING_FORMAT,
-    SqliteNoteRepository, sqlite_error, sqlite_milliseconds,
+    SqliteNoteRepository, read_document, sqlite_error, sqlite_milliseconds, write_document,
 };
 use crate::domain::{
     errors::StorageError,
@@ -265,6 +265,8 @@ impl SqliteNoteRepository {
     /// Inputs: `cluster_id` must exist; `identity_id` is the assigned identity.
     /// Outputs: Success, a rejection for an unknown cluster, or another SQLite failure.
     /// Side effects: Updates one cluster row and deletes the cluster's temporary review audio.
+    /// With a document codec, also records the resolution in the meeting document, so paired
+    /// devices resolve their copies (Issue #50).
     pub(super) fn resolve_cluster(
         &self,
         cluster_id: Uuid,
@@ -274,6 +276,24 @@ impl SqliteNoteRepository {
             .connection
             .unchecked_transaction()
             .map_err(|error| sqlite_error("unable to begin cluster resolution", error))?;
+        if let Some(document_codec) = self.document_codec.as_deref() {
+            let meeting_id: Option<String> = transaction
+                .query_row(
+                    "SELECT meeting_id FROM unknown_speaker_clusters WHERE cluster_id = ?1",
+                    params![cluster_id.to_string()],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|error| sqlite_error("unable to look up the cluster's meeting", error))?;
+            if let Some(meeting_id) = meeting_id.map(MeetingId::new) {
+                let document = document_codec.with_cluster_resolution(
+                    &read_document(&transaction, &meeting_id)?,
+                    cluster_id,
+                    identity_id,
+                )?;
+                write_document(&transaction, &meeting_id, &document)?;
+            }
+        }
         let updated_rows = transaction
             .execute(
                 "UPDATE unknown_speaker_clusters SET resolved_identity_id = ?1 WHERE cluster_id = ?2",

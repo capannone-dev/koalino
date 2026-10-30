@@ -1,7 +1,9 @@
 //! Specifies how the SQLite repository exports and imports unknown-speaker cluster shares
 //! (Issue #50): a share carries one unresolved cluster with its chunks and clips, the receiver
 //! stores it sealed with its own key and can review it, imports are idempotent, and nothing is
-//! imported for a missing meeting or a cluster already resolved.
+//! imported for a missing meeting or a cluster already resolved. A resolution travels in the
+//! meeting document: it resolves the cluster on the receiving device, deletes its clips there,
+//! and keeps later shares of the cluster from bringing audio back.
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -11,7 +13,10 @@ use uuid::Uuid;
 
 use super::sqlite_adapter::SqliteNoteRepository;
 use crate::{
-    application::crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
+    application::{
+        crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
+        meeting_document::AutomergeMeetingDocumentCodec,
+    },
     domain::{
         errors::StorageError,
         models::{
@@ -19,7 +24,7 @@ use crate::{
             UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
         },
     },
-    ports::storage::NoteRepository,
+    ports::{meeting_document::MeetingDocumentCodec, storage::NoteRepository},
 };
 
 /// The meeting both devices know.
@@ -40,6 +45,21 @@ struct Device {
 impl Device {
     /// Opens a repository sealed with `key_byte`, holding `meeting_id()`.
     fn new(key_byte: u8) -> Self {
+        Self::open(key_byte, None)
+    }
+
+    /// Opens a repository that keeps meeting documents, holding `meeting_id()` created from
+    /// `document` (a new, empty document when `None`).
+    fn with_documents(key_byte: u8, document: Option<&[u8]>) -> Self {
+        Self::open(
+            key_byte,
+            Some(document.map_or_else(|| automerge::AutoCommit::new().save(), <[u8]>::to_vec)),
+        )
+    }
+
+    /// Opens a repository sealed with `key_byte`; with a document, it uses the document codec and
+    /// creates `meeting_id()` from it.
+    fn open(key_byte: u8, document: Option<Vec<u8>>) -> Self {
         let directory = std::env::temp_dir().join(format!("cluster-share-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&directory)
             .unwrap_or_else(|error| panic!("scratch directory must be created: {error}"));
@@ -50,9 +70,13 @@ impl Device {
                 [key_byte; 32],
             ))),
         )
+        .and_then(|repository| match &document {
+            Some(_) => repository.with_document_codec(Arc::new(AutomergeMeetingDocumentCodec)),
+            None => Ok(repository),
+        })
         .unwrap_or_else(|error| panic!("repository must open: {error}"));
         repository
-            .create_meeting(&meeting_id(), &[1])
+            .create_meeting(&meeting_id(), document.as_deref().unwrap_or(&[1]))
             .unwrap_or_else(|error| panic!("meeting must be created: {error}"));
         Self {
             directory,
@@ -358,4 +382,107 @@ fn a_share_moving_a_cluster_to_another_meeting_is_refused() {
         receiver.repository.import_cluster_share(&share),
         Err(StorageError::Rejected { .. })
     ));
+}
+
+/// The meeting document `device` holds.
+fn document(device: &Device) -> Vec<u8> {
+    device
+        .repository
+        .load_crdt_document(&meeting_id())
+        .unwrap_or_else(|error| panic!("document must load: {error}"))
+}
+
+/// The identity the owner names the cluster as.
+const IDENTITY: Uuid = Uuid::from_u128(0x1D);
+
+/// Resolving a cluster records the resolution in its meeting's document, so it syncs.
+#[test]
+fn resolving_a_cluster_records_it_in_the_meeting_document() {
+    let device = Device::with_documents(1, None);
+    record_clusters(&device);
+
+    device
+        .repository
+        .resolve_unknown_speaker_cluster(CLUSTER, IDENTITY)
+        .unwrap_or_else(|error| panic!("cluster must resolve: {error}"));
+    let projection = AutomergeMeetingDocumentCodec
+        .project(&meeting_id(), &document(&device))
+        .unwrap_or_else(|error| panic!("document must project: {error}"));
+
+    assert_eq!(projection.cluster_resolutions, vec![(CLUSTER, IDENTITY)]);
+    assert!(cluster_clips(&device).is_empty());
+}
+
+/// A resolution arriving in the document from a paired device resolves the copied cluster and
+/// deletes its copied clips here; the other cluster is untouched.
+#[test]
+fn a_resolution_from_a_paired_device_resolves_the_cluster_here() {
+    let recorder = Device::with_documents(1, None);
+    record_clusters(&recorder);
+    let receiver = Device::with_documents(2, Some(&document(&recorder)));
+    import(&receiver, &load_share(&recorder));
+    let other_share = recorder
+        .repository
+        .load_cluster_share(OTHER_CLUSTER)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| panic!("the other cluster must have a share"));
+    import(&receiver, &other_share);
+    assert_eq!(cluster_clips(&receiver).len(), 2);
+
+    recorder
+        .repository
+        .resolve_unknown_speaker_cluster(CLUSTER, IDENTITY)
+        .and_then(|()| {
+            receiver
+                .repository
+                .save_crdt_document(&meeting_id(), &document(&recorder))
+        })
+        .unwrap_or_else(|error| panic!("resolution must sync: {error}"));
+
+    assert!(cluster_clips(&receiver).is_empty());
+    assert_eq!(
+        receiver
+            .repository
+            .load_unknown_speaker_cluster(CLUSTER)
+            .unwrap_or_else(|error| panic!("cluster must load: {error}"))
+            .and_then(|cluster| cluster.resolved_identity_id()),
+        Some(IDENTITY)
+    );
+    assert_eq!(
+        receiver
+            .repository
+            .unresolved_cluster_digests()
+            .unwrap_or_else(|error| panic!("digests must list: {error}"))
+            .iter()
+            .map(ClusterDigest::cluster_id)
+            .collect::<Vec<_>>(),
+        vec![OTHER_CLUSTER]
+    );
+}
+
+/// A share that arrives after the resolution reached this device stores nothing.
+#[test]
+fn a_share_arriving_after_its_resolution_brings_nothing_back() {
+    let recorder = Device::with_documents(1, None);
+    record_clusters(&recorder);
+    let share = load_share(&recorder);
+    recorder
+        .repository
+        .resolve_unknown_speaker_cluster(CLUSTER, IDENTITY)
+        .unwrap_or_else(|error| panic!("cluster must resolve: {error}"));
+    let receiver = Device::with_documents(2, Some(&document(&recorder)));
+
+    assert_eq!(
+        import(&receiver, &share),
+        ClusterShareImport::AlreadyResolved
+    );
+    assert!(cluster_clips(&receiver).is_empty());
+    assert_eq!(
+        receiver
+            .repository
+            .load_unknown_speaker_cluster(CLUSTER)
+            .unwrap_or_else(|error| panic!("cluster lookup must answer: {error}")),
+        None
+    );
 }

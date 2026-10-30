@@ -7,7 +7,8 @@
 //! and clip is sealed again here with this database's cipher. Imports are idempotent: chunks and
 //! clips already stored are kept, and the representative embedding is only replaced by a share
 //! holding at least as many members. Nothing is stored for a meeting that has not synced yet or a
-//! cluster already resolved here, so a resolved speaker's audio never comes back. This child
+//! cluster already resolved here (in its row, or in the meeting document when the resolution
+//! synced before the share), so a resolved speaker's audio never comes back. This child
 //! module of `sqlite_adapter` never logs embeddings or audio.
 
 use rusqlite::{OptionalExtension, params};
@@ -15,8 +16,8 @@ use uuid::Uuid;
 
 use super::{
     CLIP_EMBEDDINGS, CLUSTER_CHUNK_EMBEDDINGS, CLUSTER_REPRESENTATIVE_EMBEDDINGS,
-    SEALED_AUDIO_FORMAT, SEALED_EMBEDDING_FORMAT, SqliteNoteRepository, seal_clip_audio,
-    sqlite_error, sqlite_milliseconds,
+    SEALED_AUDIO_FORMAT, SEALED_EMBEDDING_FORMAT, SqliteNoteRepository, read_document,
+    seal_clip_audio, sqlite_error, sqlite_milliseconds,
 };
 use crate::{
     domain::{
@@ -181,6 +182,20 @@ impl SqliteNoteRepository {
             })?;
         if !meeting_exists {
             return Ok(ClusterShareImport::UnknownMeeting);
+        }
+        // The resolution may have synced before the share: then the cluster is already named.
+        if let Some(document_codec) = self.document_codec.as_deref() {
+            let resolved_in_document = document_codec
+                .project(
+                    cluster.meeting_id(),
+                    &read_document(&transaction, cluster.meeting_id())?,
+                )?
+                .cluster_resolutions
+                .iter()
+                .any(|(resolved_cluster, _)| *resolved_cluster == cluster.cluster_id());
+            if resolved_in_document {
+                return Ok(ClusterShareImport::AlreadyResolved);
+            }
         }
         let stored_cluster: Option<(String, Option<String>)> = transaction
             .query_row(

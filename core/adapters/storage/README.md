@@ -47,7 +47,10 @@ unknown voices:
 transaction, and rejects unknown meetings or a cluster ID owned by another meeting.
 `load_unknown_speaker_clusters` lists only unresolved clusters with at least one member, in
 creation order. `resolve_unknown_speaker_cluster` sets `resolved_identity_id` and deletes the
-cluster's `unassigned_voice_clips` rows in one transaction. `unassigned_voice_clips.cluster_id`
+cluster's `unassigned_voice_clips` rows in one transaction. With a document codec it also
+records the resolution in the meeting document (Issue #50); projecting a document, local or from
+a peer, resolves each cluster it names to the document's identity and deletes its clips, so
+naming a speaker on one device resolves it on all of them. `unassigned_voice_clips.cluster_id`
 and `transcript_segments.unknown_cluster_id` link clips and segments to their cluster. Databases
 created before Issue #28 gain both columns on open through `ALTER TABLE ... ADD COLUMN`.
 Embeddings are encrypted at rest (see below) and never logged.

@@ -1,5 +1,7 @@
 //! Specifies the meeting-document schema: transcript, origin, and segments round-trip, segment
-//! replacement is minimal, and concurrent edits from two devices merge without loss.
+//! replacement is minimal, and concurrent edits from two devices merge without loss. Cluster
+//! resolutions (Issue #50) round-trip, decide the speaker of their segments, and converge when
+//! two devices name the same cluster at once.
 
 use automerge::{AutoCommit, ROOT, ReadDoc, transaction::Transactable};
 use chrono::{TimeZone, Utc};
@@ -196,4 +198,101 @@ fn a_corrupt_document_is_an_error() {
             .project(&meeting(), b"not automerge")
             .is_err()
     );
+}
+
+/// Records that `cluster` was named as `identity`, panicking with context on failure.
+fn with_resolution(document: &[u8], cluster: u128, identity: u128) -> Vec<u8> {
+    AutomergeMeetingDocumentCodec
+        .with_cluster_resolution(
+            document,
+            Uuid::from_u128(cluster),
+            Uuid::from_u128(identity),
+        )
+        .unwrap_or_else(|error| panic!("resolution must be written: {error}"))
+}
+
+/// A resolution round-trips and sets the speaker of every segment of its cluster, whatever the
+/// segment's own speaker field says; other segments keep theirs.
+#[test]
+fn a_cluster_resolution_names_the_speaker_of_its_segments() {
+    let cluster = Uuid::from_u128(0xC1);
+    let document = with_segments(
+        &empty_document(),
+        &[
+            segment(0, 1_000, None, "Hi").with_unknown_cluster_id(Some(cluster)),
+            segment(2_000, 3_000, Some(5), "Bye").with_unknown_cluster_id(Some(cluster)),
+            segment(4_000, 5_000, Some(6), "Other"),
+        ],
+    );
+
+    let projection = project(&with_resolution(&document, 0xC1, 9));
+
+    assert_eq!(
+        projection.cluster_resolutions,
+        vec![(cluster, Uuid::from_u128(9))]
+    );
+    assert_eq!(
+        projection.segments,
+        Some(vec![
+            segment(0, 1_000, Some(9), "Hi").with_unknown_cluster_id(Some(cluster)),
+            segment(2_000, 3_000, Some(9), "Bye").with_unknown_cluster_id(Some(cluster)),
+            segment(4_000, 5_000, Some(6), "Other"),
+        ])
+    );
+}
+
+/// When two devices name the same cluster at once, both merge orders pick the same identity, and
+/// every segment of the cluster follows it.
+#[test]
+fn concurrent_cluster_resolutions_converge() {
+    let cluster = Uuid::from_u128(0xC1);
+    let shared = with_segments(
+        &empty_document(),
+        &[
+            segment(0, 1_000, None, "Hi").with_unknown_cluster_id(Some(cluster)),
+            segment(2_000, 3_000, None, "Bye").with_unknown_cluster_id(Some(cluster)),
+        ],
+    );
+    let laptop_edit = with_resolution(&shared, 0xC1, 1);
+    let phone_edit = with_resolution(&shared, 0xC1, 2);
+    let merge = |first: &[u8], second: &[u8]| {
+        let mut merged = AutoCommit::load(first)
+            .unwrap_or_else(|error| panic!("first document must load: {error}"));
+        let mut other = AutoCommit::load(second)
+            .unwrap_or_else(|error| panic!("second document must load: {error}"));
+        merged
+            .merge(&mut other)
+            .unwrap_or_else(|error| panic!("documents must merge: {error}"));
+        project(&merged.save())
+    };
+
+    let on_laptop = merge(&laptop_edit, &phone_edit);
+    let on_phone = merge(&phone_edit, &laptop_edit);
+
+    assert_eq!(on_laptop, on_phone);
+    assert_eq!(on_laptop.cluster_resolutions.len(), 1);
+    let winner = on_laptop.cluster_resolutions[0].1;
+    assert!(winner == Uuid::from_u128(1) || winner == Uuid::from_u128(2));
+    assert!(
+        on_laptop
+            .segments
+            .unwrap_or_default()
+            .iter()
+            .all(|segment| segment.speaker_identity_id() == Some(winner))
+    );
+}
+
+/// A resolution entry that is not a UUID pair is skipped.
+#[test]
+fn malformed_cluster_resolutions_are_skipped() {
+    let mut document = AutoCommit::new();
+    let resolutions = document
+        .put_object(ROOT, "cluster_resolutions", automerge::ObjType::Map)
+        .unwrap_or_else(|error| panic!("map must be written: {error}"));
+    document
+        .put(&resolutions, "not-a-uuid", Uuid::from_u128(1).to_string())
+        .and_then(|()| document.put(&resolutions, Uuid::from_u128(2).to_string(), "not-a-uuid"))
+        .unwrap_or_else(|error| panic!("entries must be written: {error}"));
+
+    assert!(project(&document.save()).cluster_resolutions.is_empty());
 }

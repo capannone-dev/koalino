@@ -348,7 +348,10 @@ identity UUID. On success it returns `200`:
 ```
 
 The call stores one voice variant per member embedding, relinks the cluster's transcript segments,
-resolves the cluster, and deletes its review clips. A non-UUID `cluster_id` or a blank name
+resolves the cluster, and deletes its review clips. The resolution is recorded in the meeting's
+synced document, so every paired device holding a copy of the cluster resolves it and deletes its
+copies of the clips (Issue #50). When two devices name the same cluster at once, all of them
+settle on the same identity. A non-UUID `cluster_id` or a blank name
 returns `400`, an unknown cluster `404`, an already-resolved cluster `409`, and storage failures
 `500`. The identity and its name are persisted in the voice store, so they appear in
 `GET /api/voice-gallery` and survive a daemon restart.

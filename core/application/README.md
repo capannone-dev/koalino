@@ -16,6 +16,9 @@ Automerge document the source of truth for everything that syncs:
 - **`segments`:** a map keyed by `<start_ms:012>-<end_ms:012>[-n]`. Each segment's fields are
   separate CRDT registers, so a speaker relink on one device and a text fix on another both
   survive a merge.
+- **`cluster_resolutions`** (Issue #50): a map from unknown-speaker cluster ID to the identity
+  it was named as. Concurrent namings of one cluster converge on Automerge's winner, and a
+  segment of a resolved cluster projects with that identity as its speaker on every device.
 - **`with_segments`:** writes only the fields that changed and deletes segments that are gone.
 - **`project`:** skips malformed peer entries with a warning, and a field the document lacks
   projects as `None`.

@@ -1289,7 +1289,9 @@ fn write_segment_rows(
 
 /// Rewrites the index fields the document holds; fields it lacks keep their rows.
 ///
-/// Side effects: Updates the transcript column and segment rows; callers provide the transaction.
+/// Side effects: Updates the transcript column and segment rows; marks each cluster the document
+/// resolves as resolved (to the document's identity) and deletes its review clips (Issue #50).
+/// Callers provide the transaction.
 fn apply_projection(
     connection: &Connection,
     meeting_id: &MeetingId,
@@ -1305,6 +1307,23 @@ fn apply_projection(
     }
     if let Some(segments) = &projection.segments {
         write_segment_rows(connection, meeting_id, segments)?;
+    }
+    for (cluster_id, identity_id) in &projection.cluster_resolutions {
+        let cluster_key = cluster_id.to_string();
+        connection
+            .execute(
+                "UPDATE unknown_speaker_clusters SET resolved_identity_id = ?1
+                 WHERE cluster_id = ?2 AND meeting_id = ?3
+                   AND resolved_identity_id IS NOT ?1",
+                params![identity_id.to_string(), cluster_key, meeting_id.as_str()],
+            )
+            .map_err(|error| sqlite_error("unable to project a cluster resolution", error))?;
+        connection
+            .execute(
+                "DELETE FROM unassigned_voice_clips WHERE cluster_id = ?1 AND meeting_id = ?2",
+                params![cluster_key, meeting_id.as_str()],
+            )
+            .map_err(|error| sqlite_error("unable to delete a resolved cluster's clips", error))?;
     }
     Ok(())
 }

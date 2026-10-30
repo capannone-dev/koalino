@@ -13,9 +13,13 @@ use uuid::Uuid;
 use crate::{
     adapters::{
         network::libp2p_adapter::Libp2pNetworkAdapter,
-        storage::{sqlite_adapter::SqliteNoteRepository, sqlite_peer_store::SqlitePeerStore},
+        storage::{
+            in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
+            sqlite_peer_store::SqlitePeerStore,
+        },
     },
     application::{
+        cluster_review::assign_cluster_to_named_identity,
         crypto::{
             pair_key::PairAgreementSecret,
             voice_encryptor::{EncryptionKey, VoiceEncryptor},
@@ -699,7 +703,8 @@ fn clip_count(service: &Service, meeting_id: &MeetingId) -> usize {
 
 /// A meeting's unknown speakers can be named on another paired device (Issue #50): its clusters,
 /// member embeddings, and review clips reach the phone once the pair key is agreed, even though
-/// they are recorded before the meeting itself syncs, and a clip recorded later follows.
+/// they are recorded before the meeting itself syncs, and a clip recorded later follows. Naming
+/// the speaker on the phone then resolves the laptop's cluster and deletes its clips there.
 #[tokio::test]
 async fn unknown_speaker_clusters_reach_paired_devices() {
     let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
@@ -765,4 +770,25 @@ async fn unknown_speaker_clusters_reach_paired_devices() {
     })
     .await;
     assert_eq!(clip_count(&laptop, &meeting_id), 3);
+
+    let assignment = assign_cluster_to_named_identity(
+        phone.repository(),
+        &InMemoryVoiceVectorDB::new(),
+        cluster_id,
+        "Giulia",
+    )
+    .unwrap_or_else(|error| panic!("the phone must name the speaker: {error}"));
+    assert_eq!(clip_count(&phone, &meeting_id), 0);
+    drive(&mut laptop, &mut phone, |laptop, _| {
+        clip_count(laptop, &meeting_id) == 0
+    })
+    .await;
+    assert_eq!(
+        laptop
+            .repository()
+            .load_unknown_speaker_cluster(cluster_id)
+            .unwrap_or_else(|error| panic!("cluster must load: {error}"))
+            .and_then(|cluster| cluster.resolved_identity_id()),
+        Some(assignment.identity_id())
+    );
 }

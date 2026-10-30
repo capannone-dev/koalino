@@ -12,6 +12,12 @@
 //! unknown_cluster_id?: str }`, with UUIDs in hyphenated form. Keys are derived from the span, so
 //! both devices address the same segment, and each field is its own CRDT register: a speaker
 //! relink and a text fix made on different devices merge.
+//!
+//! `cluster_resolutions` (Issue #50) maps an unknown-speaker cluster ID to the identity ID it was
+//! named as, both hyphenated UUID strings. One register per cluster, so two devices naming the
+//! same cluster at once converge on Automerge's winner. A segment whose `unknown_cluster_id` is
+//! resolved projects with that identity as its speaker, whatever its own `speaker_identity_id`
+//! says, so every segment of the cluster follows the winner on every device.
 
 use std::collections::{HashMap, HashSet};
 
@@ -35,6 +41,8 @@ const ORIGIN_KEY: &str = "origin";
 const TRANSCRIPT_KEY: &str = "transcript";
 /// Root key of the segments map.
 const SEGMENTS_KEY: &str = "segments";
+/// Root key of the cluster-resolutions map.
+const CLUSTER_RESOLUTIONS_KEY: &str = "cluster_resolutions";
 
 /// The Automerge implementation of `MeetingDocumentCodec`.
 #[derive(Clone, Copy, Debug, Default)]
@@ -117,6 +125,34 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
         Ok(automerge_document.save())
     }
 
+    fn with_cluster_resolution(
+        &self,
+        document: &[u8],
+        cluster_id: Uuid,
+        identity_id: Uuid,
+    ) -> Result<Vec<u8>, StorageError> {
+        let mut automerge_document = load(document)?;
+        let resolutions_object = match automerge_document
+            .get(ROOT, CLUSTER_RESOLUTIONS_KEY)
+            .map_err(|error| crdt_error("unable to read the cluster resolutions", error))?
+        {
+            Some((Value::Object(ObjType::Map), object_id)) => object_id,
+            _ => automerge_document
+                .put_object(ROOT, CLUSTER_RESOLUTIONS_KEY, ObjType::Map)
+                .map_err(|error| crdt_error("unable to create the cluster resolutions", error))?,
+        };
+        let cluster_key = cluster_id.to_string();
+        let identity_text = identity_id.to_string();
+        if read_string(&automerge_document, &resolutions_object, &cluster_key).as_deref()
+            != Some(identity_text.as_str())
+        {
+            automerge_document
+                .put(&resolutions_object, cluster_key.as_str(), identity_text)
+                .map_err(|error| crdt_error("unable to write a cluster resolution", error))?;
+        }
+        Ok(automerge_document.save())
+    }
+
     fn project(
         &self,
         meeting_id: &MeetingId,
@@ -130,18 +166,37 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
             _ => None,
         };
         let transcript = read_string(&automerge_document, &ROOT, TRANSCRIPT_KEY);
+        let cluster_resolutions = match automerge_document.get(ROOT, CLUSTER_RESOLUTIONS_KEY) {
+            Ok(Some((Value::Object(ObjType::Map), resolutions_object))) => {
+                read_cluster_resolutions(&automerge_document, &resolutions_object)
+            }
+            _ => Vec::new(),
+        };
+        let resolved_speakers: HashMap<Uuid, Uuid> = cluster_resolutions.iter().copied().collect();
         let segments = match automerge_document.get(ROOT, SEGMENTS_KEY) {
-            Ok(Some((Value::Object(ObjType::Map), segments_object))) => Some(read_segments(
-                &automerge_document,
-                &segments_object,
-                meeting_id,
-            )),
+            Ok(Some((Value::Object(ObjType::Map), segments_object))) => Some(
+                read_segments(&automerge_document, &segments_object, meeting_id)
+                    .into_iter()
+                    .map(|segment| {
+                        match segment
+                            .unknown_cluster_id()
+                            .and_then(|cluster_id| resolved_speakers.get(&cluster_id))
+                        {
+                            Some(identity_id) => {
+                                segment.with_speaker_identity_id(Some(*identity_id))
+                            }
+                            None => segment,
+                        }
+                    })
+                    .collect(),
+            ),
             _ => None,
         };
         Ok(MeetingProjection {
             origin,
             transcript,
             segments,
+            cluster_resolutions,
         })
     }
 }
@@ -292,6 +347,29 @@ fn read_segments(
         .into_iter()
         .map(|(_, segment)| segment)
         .collect()
+}
+
+/// Reads the cluster-resolutions map, ordered by cluster; malformed entries are skipped with a
+/// warning.
+fn read_cluster_resolutions(
+    automerge_document: &AutoCommit,
+    resolutions_object: &ObjId,
+) -> Vec<(Uuid, Uuid)> {
+    let mut resolutions: Vec<(Uuid, Uuid)> = automerge_document
+        .keys(resolutions_object)
+        .filter_map(|cluster_key| {
+            let resolution = Uuid::parse_str(&cluster_key).ok().zip(
+                read_string(automerge_document, resolutions_object, &cluster_key)
+                    .and_then(|identity_text| Uuid::parse_str(&identity_text).ok()),
+            );
+            if resolution.is_none() {
+                tracing::warn!("skipped a malformed cluster resolution in a meeting document");
+            }
+            resolution
+        })
+        .collect();
+    resolutions.sort();
+    resolutions
 }
 
 /// Reads one segment map, or `None` when a required field is missing or malformed.
