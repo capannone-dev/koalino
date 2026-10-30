@@ -15,18 +15,20 @@ final voiceGalleryControllerProvider = ChangeNotifierProvider.autoDispose
 
 /// Owns displayable Voice Gallery state while keeping widgets free of native calls.
 final class VoiceGalleryController extends ChangeNotifier {
-  /// Creates a controller that loads clusters for one stable meeting identifier.
+  /// Creates a controller for the whole gallery, or for one meeting's voices when `meetingId` is
+  /// given.
   VoiceGalleryController({
     required VoiceGalleryBridge voiceGalleryBridge,
-    required this.meetingId,
+    this.meetingId,
   }) : _voiceGalleryBridge = voiceGalleryBridge;
 
   final VoiceGalleryBridge _voiceGalleryBridge;
 
-  /// The meeting whose unresolved unknown-speaker clusters this controller presents.
-  final String meetingId;
+  /// The one meeting whose voices are shown, or null for every meeting's (Issue #63).
+  final String? meetingId;
 
   List<UnknownSpeakerCluster> _clusters = const <UnknownSpeakerCluster>[];
+  List<SavedPerson> _savedPeople = const <SavedPerson>[];
   bool _isLoading = false;
   String? _errorMessage;
   String? _statusMessage;
@@ -34,22 +36,32 @@ final class VoiceGalleryController extends ChangeNotifier {
   /// Returns unresolved cluster metadata in creation order.
   List<UnknownSpeakerCluster> get clusters => _clusters;
 
+  /// Returns the saved people, sorted by name.
+  List<SavedPerson> get savedPeople => _savedPeople;
+
   /// Indicates whether an asynchronous gallery operation is active.
   bool get isLoading => _isLoading;
 
   /// Returns a display-safe loading failure, if any.
   String? get errorMessage => _errorMessage;
 
-  /// Returns feedback about the most recent assignment attempt, if any.
+  /// Returns feedback about the most recent assignment or playback attempt, if any.
   String? get statusMessage => _statusMessage;
 
-  /// Loads the meeting's unresolved clusters from the native boundary.
+  /// Loads the gallery from the native boundary.
+  ///
+  /// Side effects: Replaces the lists and notifies listeners; a failure sets `errorMessage`.
   Future<void> load() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      _clusters = await _voiceGalleryBridge.getUnknownClusters(meetingId);
+      final VoiceLibrary library = await _voiceGalleryBridge.getVoiceLibrary();
+      _clusters = library.unknownClusters
+          .where((UnknownSpeakerCluster cluster) =>
+              meetingId == null || cluster.meetingId == meetingId)
+          .toList(growable: false);
+      _savedPeople = library.savedPeople;
     } on Object {
       _errorMessage = 'Unable to load Voice Gallery';
     } finally {
@@ -58,11 +70,20 @@ final class VoiceGalleryController extends ChangeNotifier {
     }
   }
 
-  /// Plays a cluster's sample clip when Rust supplied one.
+  /// Plays a cluster's sample clip when it has one.
+  ///
+  /// Side effects: Asks Rust to write the clip to a private file, then plays that file. A failure
+  /// reports a status message.
   Future<void> play(UnknownSpeakerCluster cluster) async {
-    final String? reviewClipPath = cluster.reviewClipPath;
-    if (reviewClipPath != null) {
-      await _voiceGalleryBridge.playLocalFile(reviewClipPath);
+    if (!cluster.hasReviewClip) {
+      return;
+    }
+    try {
+      await _voiceGalleryBridge.playLocalFile(
+          await _voiceGalleryBridge.prepareReviewClip(cluster.clusterId));
+    } on Object {
+      _statusMessage = 'Unable to play this voice';
+      notifyListeners();
     }
   }
 

@@ -19,6 +19,8 @@ Future<void> pumpHomeShell(WidgetTester tester, Size size,
             const Text('Recording screen'),
         meetingsScreenBuilder: (BuildContext context) =>
             const Text('Meetings screen'),
+        voicesScreenBuilder: (BuildContext context) =>
+            const Text('Voices screen'),
         devicesScreenBuilder: (BuildContext context) =>
             const Text('Devices screen'),
         settingsScreenBuilder: withSettings
@@ -74,6 +76,25 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Devices screen'), findsOneWidget);
+  });
+
+  testWidgets(
+      'the voice gallery opens from the top level on phones and desktops',
+      (WidgetTester tester) async {
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1280, 800),
+    ]) {
+      await pumpHomeShell(tester, size, withSettings: true);
+
+      await tester.tap(find.text('Voices'));
+      await tester.pumpAndSettle();
+      expect(find.text('Voices screen'), findsOneWidget);
+
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Settings screen'), findsOneWidget);
+    }
   });
 
   testWidgets('Telemetry is not a destination; it lives in Settings',

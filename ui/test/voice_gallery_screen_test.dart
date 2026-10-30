@@ -10,13 +10,21 @@ import 'package:note_taker_ui/presentation/voice_gallery_screen.dart';
 /// Captures native-boundary requests while keeping widget tests independent of Rust.
 final class FakeVoiceGalleryBridge implements VoiceGalleryBridge {
   /// Creates a fake serving `clusters` until a cluster is assigned.
-  FakeVoiceGalleryBridge({required List<UnknownSpeakerCluster> clusters})
-      : _clusters = List<UnknownSpeakerCluster>.of(clusters);
+  FakeVoiceGalleryBridge({
+    required List<UnknownSpeakerCluster> clusters,
+    this.savedPeople = const <SavedPerson>[],
+  }) : _clusters = List<UnknownSpeakerCluster>.of(clusters);
 
   final List<UnknownSpeakerCluster> _clusters;
 
-  /// Meeting IDs requested through `getUnknownClusters`.
-  final List<String> requestedMeetings = <String>[];
+  /// People returned with the library.
+  final List<SavedPerson> savedPeople;
+
+  /// How many times the library was loaded.
+  int libraryLoads = 0;
+
+  /// When set, `getVoiceLibrary` throws this error.
+  Object? loadError;
 
   /// Paths sent to native audio playback.
   final List<String> playedPaths = <String>[];
@@ -28,11 +36,21 @@ final class FakeVoiceGalleryBridge implements VoiceGalleryBridge {
   Object? assignmentError;
 
   @override
-  Future<List<UnknownSpeakerCluster>> getUnknownClusters(
-      String meetingId) async {
-    requestedMeetings.add(meetingId);
-    return List<UnknownSpeakerCluster>.unmodifiable(_clusters);
+  Future<VoiceLibrary> getVoiceLibrary() async {
+    libraryLoads += 1;
+    final Object? error = loadError;
+    if (error != null) {
+      throw error;
+    }
+    return VoiceLibrary(
+      unknownClusters: List<UnknownSpeakerCluster>.unmodifiable(_clusters),
+      savedPeople: savedPeople,
+    );
   }
+
+  @override
+  Future<String> prepareReviewClip(String clusterId) async =>
+      '/private/clips/$clusterId.wav';
 
   @override
   Future<ClusterAssignmentResult> assignCluster({
@@ -69,7 +87,8 @@ void main() {
     meetingId: 'meeting-1',
     totalDurationMs: 12500,
     chunkCount: 3,
-    reviewClipPath: '/private/clips/clip-1.wav',
+    meetingTitle: 'Project Sync',
+    hasReviewClip: true,
   );
   const UnknownSpeakerCluster secondCluster = UnknownSpeakerCluster(
     clusterId: 'cluster-2',
@@ -78,14 +97,26 @@ void main() {
     chunkCount: 1,
   );
 
-  /// Pumps the screen over `bridge` and waits for the initial load.
-  Future<void> pumpGallery(
-      WidgetTester tester, FakeVoiceGalleryBridge bridge) async {
+  const UnknownSpeakerCluster otherMeetingCluster = UnknownSpeakerCluster(
+    clusterId: 'cluster-3',
+    meetingId: 'meeting-2',
+    totalDurationMs: 2000,
+    chunkCount: 2,
+  );
+  const SavedPerson savedAda = SavedPerson(
+    identityId: 'identity-1',
+    displayName: 'Ada Lovelace',
+    voiceVariantCount: 3,
+  );
+
+  /// Pumps the screen for `meetingId` (the whole gallery when null) and waits for the first load.
+  Future<void> pumpGallery(WidgetTester tester, FakeVoiceGalleryBridge bridge,
+      {String? meetingId = 'meeting-1'}) async {
     await tester.pumpWidget(MaterialApp(
       home: VoiceGalleryScreen(
         voiceGalleryController: VoiceGalleryController(
           voiceGalleryBridge: bridge,
-          meetingId: 'meeting-1',
+          meetingId: meetingId,
         ),
       ),
     ));
@@ -100,7 +131,6 @@ void main() {
 
     await pumpGallery(tester, bridge);
 
-    expect(bridge.requestedMeetings, <String>['meeting-1']);
     expect(find.text('Unknown speaker 1'), findsOneWidget);
     expect(find.text('12.5 s · 3 chunks'), findsOneWidget);
     expect(find.text('Unknown speaker 2'), findsOneWidget);
@@ -118,7 +148,7 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Play'));
     await tester.pump();
 
-    expect(bridge.playedPaths, <String>['/private/clips/clip-1.wav']);
+    expect(bridge.playedPaths, <String>['/private/clips/cluster-1.wav']);
   });
 
   testWidgets('Assign sends the typed name for that cluster and refreshes',
@@ -137,7 +167,7 @@ void main() {
     expect(bridge.assignedClusters, <(String, String)>[
       ('cluster-2', 'Grace Hopper'),
     ]);
-    expect(bridge.requestedMeetings.length, 2);
+    expect(bridge.libraryLoads, 2);
     expect(find.text('Unknown speaker 2'), findsNothing);
     expect(find.text('Assigned to Grace Hopper'), findsOneWidget);
   });
@@ -182,34 +212,118 @@ void main() {
     expect(find.text('No unknown speakers to review'), findsOneWidget);
   });
 
+  testWidgets('from a meeting, shows only its voices and no saved people',
+      (WidgetTester tester) async {
+    await pumpGallery(
+        tester,
+        FakeVoiceGalleryBridge(
+          clusters: <UnknownSpeakerCluster>[firstCluster, otherMeetingCluster],
+          savedPeople: <SavedPerson>[savedAda],
+        ));
+
+    expect(find.text('12.5 s · 3 chunks'), findsOneWidget);
+    expect(find.text('2.0 s · 2 chunks'), findsNothing);
+    expect(find.text('Saved people'), findsNothing);
+  });
+
+  testWidgets('the whole gallery spans meetings and lists saved people',
+      (WidgetTester tester) async {
+    await pumpGallery(
+        tester,
+        FakeVoiceGalleryBridge(
+          clusters: <UnknownSpeakerCluster>[firstCluster, otherMeetingCluster],
+          savedPeople: <SavedPerson>[savedAda],
+        ),
+        meetingId: null);
+
+    expect(find.text('Project Sync'), findsOneWidget);
+    expect(find.text('Untitled meeting'), findsOneWidget);
+    expect(find.text('Ada Lovelace'), findsOneWidget);
+    expect(find.text('3 voice samples'), findsOneWidget);
+  });
+
+  testWidgets('a voice can be assigned to a saved person',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[firstCluster],
+      savedPeople: <SavedPerson>[savedAda],
+    );
+
+    await pumpGallery(tester, bridge, meetingId: null);
+    await tester.tap(find.byTooltip('Choose a saved person'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ada Lovelace').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('assign-cluster-1')));
+    await tester.pumpAndSettle();
+
+    expect(bridge.assignedClusters, <(String, String)>[
+      ('cluster-1', 'Ada Lovelace'),
+    ]);
+  });
+
+  testWidgets('the whole gallery explains when both lists are empty',
+      (WidgetTester tester) async {
+    await pumpGallery(
+        tester, FakeVoiceGalleryBridge(clusters: <UnknownSpeakerCluster>[]),
+        meetingId: null);
+
+    expect(find.text('No unknown speakers to review'), findsOneWidget);
+    expect(find.text('No saved people yet. Name a voice to add someone.'),
+        findsOneWidget);
+  });
+
+  testWidgets('a load failure offers Try again, which reloads',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge =
+        FakeVoiceGalleryBridge(clusters: <UnknownSpeakerCluster>[firstCluster])
+          ..loadError = StateError('no database');
+
+    await pumpGallery(tester, bridge);
+    expect(find.text('Unable to load Voice Gallery'), findsOneWidget);
+
+    bridge.loadError = null;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Unknown speaker 1'), findsOneWidget);
+  });
+
   group('FFI JSON decoding', () {
-    test(
-        'decodes the cluster array returned by note_taker_get_unknown_clusters',
-        () {
-      final List<UnknownSpeakerCluster> clusters = decodeUnknownClusters(
-        '[{"cluster_id":"c1","meeting_id":"m1","total_duration_ms":2500,'
-        '"chunk_count":2,"created_at":"2026-10-27T09:15:00+00:00",'
-        '"review_clip_path":"/abs/clip.wav"},'
-        '{"cluster_id":"c2","meeting_id":"m1","total_duration_ms":400,'
-        '"chunk_count":1,"created_at":"2026-10-27T09:16:00+00:00"}]',
+    test('decodes the note_taker_get_voice_library response', () {
+      final VoiceLibrary library = decodeVoiceLibrary(
+        '{"ok":true,"unknown_clusters":[{"cluster_id":"c1","meeting_id":"m1",'
+        '"meeting_title":"Sync","total_duration_ms":2500,"chunk_count":2,'
+        '"created_at":"2026-10-27T09:15:00+00:00","has_review_clip":true},'
+        '{"cluster_id":"c2","meeting_id":"m1","meeting_title":null,'
+        '"total_duration_ms":400,"chunk_count":1,'
+        '"created_at":"2026-10-27T09:16:00+00:00","has_review_clip":false}],'
+        '"saved_people":[{"identity_id":"i1","display_name":"Ada",'
+        '"voice_variant_count":3}]}',
       );
 
-      expect(clusters.length, 2);
-      expect(clusters[0].clusterId, 'c1');
-      expect(clusters[0].meetingId, 'm1');
-      expect(clusters[0].totalDurationMs, 2500);
-      expect(clusters[0].chunkCount, 2);
-      expect(clusters[0].reviewClipPath, '/abs/clip.wav');
-      expect(clusters[1].reviewClipPath, isNull);
+      expect(library.unknownClusters.length, 2);
+      expect(library.unknownClusters[0].clusterId, 'c1');
+      expect(library.unknownClusters[0].meetingTitle, 'Sync');
+      expect(library.unknownClusters[0].totalDurationMs, 2500);
+      expect(library.unknownClusters[0].hasReviewClip, isTrue);
+      expect(library.unknownClusters[1].meetingTitle, isNull);
+      expect(library.savedPeople.single.displayName, 'Ada');
+      expect(library.savedPeople.single.voiceVariantCount, 3);
     });
 
-    test('turns a cluster listing error object into an exception', () {
+    test('turns a library error object into an exception', () {
       expect(
-        () => decodeUnknownClusters(
+        () => decodeVoiceLibrary(
             '{"ok":false,"error_code":"list_failed","error":"boom"}'),
         throwsA(isA<StateError>().having(
             (StateError error) => error.message, 'message', contains('boom'))),
       );
+    });
+
+    test('decodes the review clip path', () {
+      expect(decodeReviewClipPath('{"ok":true,"review_clip_path":"/a/c.wav"}'),
+          '/a/c.wav');
     });
 
     test('decodes a successful note_taker_assign_cluster response', () {

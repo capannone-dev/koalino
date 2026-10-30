@@ -89,6 +89,8 @@ period, the prompt's PIN screen not relocking, and changing the setting.
 Unlock after a cancel, app state kept across a lock, pushed routes covered, the lifecycle) and
 the Settings switch. `fake_app_lock_bridge.dart` holds the scripted bridge.
 `meeting_list_screen_test.dart` also covers Name speakers on phones and desktops.
+`voice_gallery_screen_test.dart` covers both the per-meeting and all-meetings gallery, and
+`home_shell_test.dart` its top-level entry.
 
 `meeting_export_test.dart` covers export (Issue #48): decoding the core's answer, safe file
 names, the desktop save path, cancel, and the default-folder fallback, the phone save with the

@@ -20,7 +20,7 @@ Meeting attachments (Issue #54):
   - thumbnails of the photos taken so far;
   - Done.
 
-`HomeShell` switches between the Record, Meetings, Devices, and Settings destinations, with a bottom
+`HomeShell` switches between the Record, Meetings, Voices, Devices, and Settings destinations, with a bottom
 `NavigationBar` below 840 px and a `NavigationRail` above it. `RecordingScreen` adds an optional,
 width-capped meeting title field. `MeetingListScreen` renders titles above their date and
 duration, and pushes `MeetingDetailScreen` on phones or shows `MeetingDetailView` beside the list
@@ -67,6 +67,9 @@ a builder, which the app always gives.
 The meeting detail's app bar has Name speakers (`NameSpeakersButton`), which opens the voice
 gallery (`voice_gallery_screen.dart`) for that meeting and reloads the meeting on return so the
 transcript shows the new names. The desktop two-pane layout shows it once a meeting is selected.
+The Voices destination opens the same screen for all meetings, with each voice's meeting and the
+Saved people section (Issue #63). The name field's menu picks a saved person, and Rust writes a
+clip to a file only when Play is pressed.
 
 Beside it, Export (`ExportMeetingButton`, Issue #48) offers Markdown, PDF, and JSON, shows a
 spinner while exporting, and reports the result in a snack bar.

@@ -1,11 +1,12 @@
-// Renders a meeting's unknown-speaker clusters with sample playback and name assignment.
+// Renders unknown voices with sample playback and name assignment, and the saved people. Opens
+// from the Voices destination for all meetings, or from a meeting for that meeting's (Issue #63).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
 
-/// Displays unknown-speaker clusters for one meeting using controller-owned state.
+/// Displays the voice gallery using controller-owned state.
 final class VoiceGalleryScreen extends StatefulWidget {
   /// Creates a Voice Gallery bound to an injected controller.
   const VoiceGalleryScreen({required this.voiceGalleryController, super.key});
@@ -47,25 +48,29 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
         builder: (BuildContext context, Widget? child) {
           final VoiceGalleryController controller =
               widget.voiceGalleryController;
-          if (controller.isLoading && controller.clusters.isEmpty) {
+          if (controller.isLoading &&
+              controller.clusters.isEmpty &&
+              controller.savedPeople.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
           if (controller.errorMessage case final String errorMessage) {
-            return Center(child: Text(errorMessage));
-          }
-          _pruneNameControllers(controller.clusters);
-          final String? statusMessage = controller.statusMessage;
-          if (controller.clusters.isEmpty) {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  if (statusMessage != null) Text(statusMessage),
-                  const Text('No unknown speakers to review'),
+                  Text(errorMessage),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: controller.load,
+                    child: const Text('Try again'),
+                  ),
                 ],
               ),
             );
           }
+          _pruneNameControllers(controller.clusters);
+          final String? statusMessage = controller.statusMessage;
+          final bool showsSavedPeople = controller.meetingId == null;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: <Widget>[
@@ -77,15 +82,49 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                 ),
+              if (showsSavedPeople) _sectionTitle(context, 'Unknown voices'),
+              if (controller.clusters.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text('No unknown speakers to review'),
+                ),
               for (final (int index, UnknownSpeakerCluster cluster)
                   in controller.clusters.indexed)
                 _buildClusterCard(context, controller, index, cluster),
+              if (showsSavedPeople) ...<Widget>[
+                _sectionTitle(context, 'Saved people'),
+                if (controller.savedPeople.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                        'No saved people yet. Name a voice to add someone.'),
+                  ),
+                for (final SavedPerson person in controller.savedPeople)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.person_outline),
+                    title: Text(person.displayName),
+                    subtitle: Text(person.voiceVariantCount == 1
+                        ? '1 voice sample'
+                        : '${person.voiceVariantCount} voice samples'),
+                  ),
+              ],
             ],
           );
         },
       ),
     );
   }
+
+  /// Builds a section heading.
+  Widget _sectionTitle(BuildContext context, String title) => Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 8),
+        child: Text(title,
+            style: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(color: Theme.of(context).colorScheme.primary)),
+      );
 
   /// Builds one cluster card with its summary, optional Play action, and name assignment row.
   Widget _buildClusterCard(
@@ -106,8 +145,15 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text('Unknown speaker ${index + 1}'),
-              subtitle: Text(_formatSummary(cluster)),
-              trailing: cluster.reviewClipPath == null
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(_formatSummary(cluster)),
+                  if (controller.meetingId == null)
+                    Text(cluster.meetingTitle ?? 'Untitled meeting'),
+                ],
+              ),
+              trailing: !cluster.hasReviewClip
                   ? null
                   : TextButton(
                       onPressed: () => controller.play(cluster),
@@ -120,9 +166,26 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                   child: TextField(
                     key: ValueKey<String>('identity-name-${cluster.clusterId}'),
                     controller: nameController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Name',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: controller.savedPeople.isEmpty
+                          ? null
+                          : PopupMenuButton<String>(
+                              tooltip: 'Choose a saved person',
+                              icon: const Icon(Icons.people_outline),
+                              onSelected: (String name) =>
+                                  nameController.text = name,
+                              itemBuilder: (BuildContext context) =>
+                                  <PopupMenuEntry<String>>[
+                                for (final SavedPerson person
+                                    in controller.savedPeople)
+                                  PopupMenuItem<String>(
+                                    value: person.displayName,
+                                    child: Text(person.displayName),
+                                  ),
+                              ],
+                            ),
                     ),
                     textInputAction: TextInputAction.done,
                     onSubmitted: (String typedName) =>

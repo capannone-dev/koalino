@@ -16,7 +16,8 @@ final class UnknownSpeakerCluster {
     required this.meetingId,
     required this.totalDurationMs,
     required this.chunkCount,
-    this.reviewClipPath,
+    this.meetingTitle,
+    this.hasReviewClip = false,
   });
 
   /// Stable cluster UUID sent back when assigning an identity.
@@ -25,26 +26,62 @@ final class UnknownSpeakerCluster {
   /// Meeting that owns the cluster.
   final String meetingId;
 
+  /// The meeting's title, or null when it is untitled.
+  final String? meetingTitle;
+
   /// Summed speech duration of every chunk in the cluster.
   final int totalDurationMs;
 
   /// Number of voice chunks grouped into the cluster.
   final int chunkCount;
 
-  /// Absolute native path of the cluster's sample clip, when one is still stored. Audio bytes
-  /// never cross the FFI boundary.
-  final String? reviewClipPath;
+  /// Whether a sample clip can still be played. Rust writes the clip to a file only on request,
+  /// and audio bytes never cross the FFI boundary.
+  final bool hasReviewClip;
 
-  /// Decodes one element of the `note_taker_get_unknown_clusters` JSON array.
+  /// Decodes one element of the library's `unknown_clusters` array.
   factory UnknownSpeakerCluster.fromJson(Map<String, Object?> json) {
     return UnknownSpeakerCluster(
       clusterId: json['cluster_id']! as String,
       meetingId: json['meeting_id']! as String,
+      meetingTitle: json['meeting_title'] as String?,
       totalDurationMs: (json['total_duration_ms']! as num).toInt(),
       chunkCount: (json['chunk_count']! as num).toInt(),
-      reviewClipPath: json['review_clip_path'] as String?,
+      hasReviewClip: json['has_review_clip'] as bool? ?? false,
     );
   }
+}
+
+/// Describes one saved person: how much voice data is held, but none of the data itself.
+final class SavedPerson {
+  /// Creates immutable person metadata returned by the Rust boundary.
+  const SavedPerson({
+    required this.identityId,
+    required this.displayName,
+    required this.voiceVariantCount,
+  });
+
+  /// Stable identity UUID.
+  final String identityId;
+
+  /// The person's name.
+  final String displayName;
+
+  /// Number of voice samples stored for this person.
+  final int voiceVariantCount;
+}
+
+/// The Voice Gallery's contents: voices to name and people already saved.
+final class VoiceLibrary {
+  /// Creates an immutable library snapshot.
+  const VoiceLibrary(
+      {required this.unknownClusters, required this.savedPeople});
+
+  /// Unresolved clusters across all meetings.
+  final List<UnknownSpeakerCluster> unknownClusters;
+
+  /// Saved people, sorted by name.
+  final List<SavedPerson> savedPeople;
 }
 
 /// Summarizes a completed cluster-to-identity assignment.
@@ -78,24 +115,49 @@ final class ClusterAssignmentResult {
   final int segmentsUpdated;
 }
 
-/// Decodes the `note_taker_get_unknown_clusters` response.
-///
-/// Returns the clusters for a JSON array; throws `StateError` carrying the Rust error for an
-/// `{"ok":false,...}` object and `FormatException` for any other shape.
-List<UnknownSpeakerCluster> decodeUnknownClusters(String responseJson) {
+/// Throws for a Rust error object, or returns `responseJson` decoded as a successful object.
+Map<String, Object?> _decodeOkObject(String responseJson) {
   final Object? decodedResponse = jsonDecode(responseJson);
-  if (decodedResponse is List) {
-    return decodedResponse
-        .cast<Map<Object?, Object?>>()
-        .map((Map<Object?, Object?> json) =>
-            UnknownSpeakerCluster.fromJson(json.cast<String, Object?>()))
-        .toList(growable: false);
+  if (decodedResponse is! Map) {
+    throw const FormatException(
+        'Voice Gallery response must be a JSON object.');
   }
-  if (decodedResponse is Map) {
-    throw _nativeError(decodedResponse.cast<String, Object?>());
+  final Map<String, Object?> json = decodedResponse.cast<String, Object?>();
+  if (json['ok'] != true) {
+    throw _nativeError(json);
   }
-  throw const FormatException('Cluster response must be a JSON array.');
+  return json;
 }
+
+/// Decodes the `note_taker_get_voice_library` response.
+///
+/// Returns the library for `{"ok":true,...}`; throws `StateError` carrying the Rust error for
+/// `{"ok":false,...}` and `FormatException` for any other shape.
+VoiceLibrary decodeVoiceLibrary(String responseJson) {
+  final Map<String, Object?> json = _decodeOkObject(responseJson);
+  return VoiceLibrary(
+    unknownClusters: (json['unknown_clusters']! as List<Object?>)
+        .cast<Map<Object?, Object?>>()
+        .map((Map<Object?, Object?> cluster) =>
+            UnknownSpeakerCluster.fromJson(cluster.cast<String, Object?>()))
+        .toList(growable: false),
+    savedPeople: (json['saved_people']! as List<Object?>)
+        .cast<Map<Object?, Object?>>()
+        .map((Map<Object?, Object?> person) => SavedPerson(
+              identityId: person['identity_id']! as String,
+              displayName: person['display_name']! as String,
+              voiceVariantCount:
+                  (person['voice_variant_count']! as num).toInt(),
+            ))
+        .toList(growable: false),
+  );
+}
+
+/// Decodes the `note_taker_prepare_cluster_review_clip` response into the clip's file path.
+///
+/// Throws `StateError` carrying the Rust error for `{"ok":false,...}`.
+String decodeReviewClipPath(String responseJson) =>
+    _decodeOkObject(responseJson)['review_clip_path']! as String;
 
 /// Decodes the `note_taker_assign_cluster` response.
 ///
@@ -127,8 +189,11 @@ StateError _nativeError(Map<String, Object?> json) =>
 
 /// Declares Voice Gallery operations available to presentation and controller code.
 abstract interface class VoiceGalleryBridge {
-  /// Loads the unresolved unknown-speaker clusters belonging to `meetingId`.
-  Future<List<UnknownSpeakerCluster>> getUnknownClusters(String meetingId);
+  /// Loads every meeting's unresolved clusters and the saved people.
+  Future<VoiceLibrary> getVoiceLibrary();
+
+  /// Writes `clusterId`'s sample clip to a private file and returns its path.
+  Future<String> prepareReviewClip(String clusterId);
 
   /// Assigns every chunk of `clusterId` to the identity named `identityName`.
   Future<ClusterAssignmentResult> assignCluster({
@@ -152,10 +217,12 @@ final class RustVoiceGalleryBridge implements VoiceGalleryBridge {
   final AudioPlayer _audioPlayer;
 
   @override
-  Future<List<UnknownSpeakerCluster>> getUnknownClusters(
-      String meetingId) async {
-    return decodeUnknownClusters(await _fetchUnknownClustersJson(meetingId));
-  }
+  Future<VoiceLibrary> getVoiceLibrary() async =>
+      decodeVoiceLibrary(await _fetchVoiceLibraryJson());
+
+  @override
+  Future<String> prepareReviewClip(String clusterId) async =>
+      decodeReviewClipPath(await _prepareReviewClipJson(clusterId));
 
   @override
   Future<ClusterAssignmentResult> assignCluster({
@@ -172,13 +239,17 @@ final class RustVoiceGalleryBridge implements VoiceGalleryBridge {
   }
 }
 
-/// Calls `note_taker_get_unknown_clusters` on a background isolate.
+/// Calls `note_taker_get_voice_library` on a background isolate.
+Future<String> _fetchVoiceLibraryJson() => Isolate.run(
+    () => _callNativeJson('note_taker_get_voice_library', const <String>[]));
+
+/// Calls `note_taker_prepare_cluster_review_clip` on a background isolate.
 ///
-/// Declared at top level so the isolate closure captures only the meeting ID string.
-Future<String> _fetchUnknownClustersJson(String meetingId) =>
+/// Declared at top level so the isolate closure captures only the cluster ID string.
+Future<String> _prepareReviewClipJson(String clusterId) =>
     Isolate.run(() => _callNativeJson(
-          'note_taker_get_unknown_clusters',
-          <String>[meetingId],
+          'note_taker_prepare_cluster_review_clip',
+          <String>[clusterId],
         ));
 
 /// Calls `note_taker_assign_cluster` on a background isolate.
@@ -190,7 +261,7 @@ Future<String> _assignClusterJson(String clusterId, String identityName) =>
           <String>[clusterId, identityName],
         ));
 
-/// Invokes a one- or two-string C command that returns caller-freed JSON and copies it out.
+/// Invokes a zero-, one- or two-string C command that returns caller-freed JSON and copies it out.
 ///
 /// Throws `StateError` when Rust returns null (the response could not be allocated).
 String _callNativeJson(String symbolName, List<String> arguments) {
@@ -203,6 +274,9 @@ String _callNativeJson(String symbolName, List<String> arguments) {
       .toList(growable: false);
   try {
     final Pointer<Utf8> responsePointer = switch (nativeArguments) {
+      [] =>
+        coreLibrary.lookupFunction<_NativeNoArgumentJson, _DartNoArgumentJson>(
+            symbolName)(),
       [final Pointer<Utf8> onlyArgument] =>
         coreLibrary.lookupFunction<_NativeOneStringJson, _DartOneStringJson>(
             symbolName)(onlyArgument),
@@ -210,7 +284,7 @@ String _callNativeJson(String symbolName, List<String> arguments) {
         coreLibrary.lookupFunction<_NativeTwoStringJson, _DartTwoStringJson>(
             symbolName)(firstArgument, secondArgument),
       _ => throw ArgumentError.value(
-          arguments.length, 'arguments', 'expected one or two arguments'),
+          arguments.length, 'arguments', 'expected at most two arguments'),
     };
     if (responsePointer == nullptr) {
       throw StateError('Rust returned no response from $symbolName.');
@@ -238,6 +312,8 @@ DynamicLibrary _openCoreLibrary() {
   throw UnsupportedError('The Rust Voice Gallery bridge is unavailable here.');
 }
 
+typedef _NativeNoArgumentJson = Pointer<Utf8> Function();
+typedef _DartNoArgumentJson = Pointer<Utf8> Function();
 typedef _NativeOneStringJson = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _DartOneStringJson = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _NativeTwoStringJson = Pointer<Utf8> Function(

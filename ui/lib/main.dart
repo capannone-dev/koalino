@@ -162,6 +162,8 @@ final class NoteTakerApp extends StatelessWidget {
       ),
       meetingsScreenBuilder: (BuildContext context) =>
           const _MeetingsDestination(),
+      voicesScreenBuilder: (BuildContext context) =>
+          const _VoiceGalleryDestination(),
       devicesScreenBuilder: (BuildContext context) =>
           const _DevicesDestination(),
       settingsScreenBuilder: (BuildContext context) => _SettingsDestination(
@@ -288,11 +290,12 @@ final class _PhotoCaptureDestinationState
       PhotoCaptureScreen(controller: _controller);
 }
 
-/// Owns a voice gallery controller for one meeting while its speakers screen is shown.
+/// Owns a voice gallery controller while the gallery is shown: for one meeting when `meetingId`
+/// is given, otherwise for all of them.
 final class _VoiceGalleryDestination extends StatefulWidget {
-  const _VoiceGalleryDestination({required this.meetingId});
+  const _VoiceGalleryDestination({this.meetingId});
 
-  final String meetingId;
+  final String? meetingId;
 
   @override
   State<_VoiceGalleryDestination> createState() =>
