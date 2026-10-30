@@ -17,7 +17,11 @@
 //! Environment: `NOTE_TAKER_P2P_ENABLED` (`true` by default, `false` turns P2P off),
 //! `NOTE_TAKER_P2P_LISTEN` (default `/ip4/0.0.0.0/tcp/0`), `NOTE_TAKER_DEVICE_NAME` (default: the
 //! host name), and `NOTE_TAKER_P2P_PEERS` (comma-separated `…/p2p/<peer id>` addresses of devices
-//! mDNS cannot find, redialed every 10 s). Unpaired devices on the LAN can see this node's peer ID through mDNS, but they
+//! mDNS cannot find, redialed every 10 s), `NOTE_TAKER_P2P_RELAY` (the `…/p2p/<peer id>` address of
+//! the owner's relay, for reaching devices across NATs; it must be paired with this device), and
+//! `NOTE_TAKER_P2P_RELAY_SERVER_ADDRESS` (on the always-on daemon: its public address, such as
+//! `/ip4/203.0.113.5/tcp/4001`, which also turns the relay service on; use a fixed port in
+//! `NOTE_TAKER_P2P_LISTEN`). Unpaired devices on the LAN can see this node's peer ID through mDNS, but they
 //! cannot connect except while the owner keeps a pairing window open, and even then they cannot
 //! sync.
 
@@ -87,6 +91,10 @@ pub struct P2pConfig {
     pub device_name: DeviceName,
     /// Addresses of peers that mDNS cannot find, each ending in `/p2p/<peer id>`.
     pub static_peers: Vec<String>,
+    /// Address of the relay this device uses, ending in `/p2p/<relay id>`.
+    pub relay_address: Option<String>,
+    /// Public address of this device's relay service; `None` means it offers none.
+    pub relay_server_address: Option<String>,
     /// What this device advertises in its manifest; `from_lookup` leaves the default (no
     /// models), and callers set the models their pipeline configuration can run.
     pub capabilities: LocalCapabilities,
@@ -143,6 +151,9 @@ impl P2pConfig {
             listen_address,
             device_name,
             static_peers,
+            relay_address: lookup("NOTE_TAKER_P2P_RELAY").map(|address| address.trim().to_owned()),
+            relay_server_address: lookup("NOTE_TAKER_P2P_RELAY_SERVER_ADDRESS")
+                .map(|address| address.trim().to_owned()),
             capabilities: LocalCapabilities::default(),
         }))
     }
@@ -371,8 +382,17 @@ fn open_service(
             PairAgreementSecret::from_bytes(&secret_bytes)
                 .context("the stored pair-agreement secret is malformed")
         })?;
-    let mut adapter =
-        Libp2pNetworkAdapter::new(node_identity).context("unable to configure libp2p")?;
+    let mut adapter = if config.relay_server_address.is_some() {
+        Libp2pNetworkAdapter::new_relay_server(node_identity)
+    } else {
+        Libp2pNetworkAdapter::new(node_identity)
+    }
+    .context("unable to configure libp2p")?;
+    if let Some(public_address) = &config.relay_server_address {
+        adapter
+            .advertise_relay_address(public_address)
+            .context("NOTE_TAKER_P2P_RELAY_SERVER_ADDRESS is invalid")?;
+    }
     adapter
         .listen_on(&config.listen_address)
         .context("unable to listen for P2P connections")?;
@@ -380,6 +400,11 @@ fn open_service(
         adapter
             .add_static_peer(peer_address)
             .context("NOTE_TAKER_P2P_PEERS contains an invalid peer address")?;
+    }
+    if let Some(relay_address) = &config.relay_address {
+        adapter
+            .use_relay(relay_address)
+            .context("NOTE_TAKER_P2P_RELAY is invalid")?;
     }
     let mut service = P2pService::new(
         PairingManager::new(

@@ -50,7 +50,7 @@ fn optional_fields_map_to_the_core_s_settings() {
     let settings = parsed(
         r#"{"data_directory":"/home/user/.local/share/note_taker","device_name":"Pixel 9",
             "whisper_model_path":"/models/ggml-base.bin","keychain_enabled":false,
-            "p2p_enabled":true,"p2p_peers":["/ip4/10.0.0.2/tcp/4001/p2p/12D3KooWA","/dns4/home.example/tcp/4001/p2p/12D3KooWB"],
+            "p2p_enabled":true,"p2p_relay":"/ip4/203.0.113.5/tcp/4001/p2p/12D3KooWR","p2p_peers":["/ip4/10.0.0.2/tcp/4001/p2p/12D3KooWA","/dns4/home.example/tcp/4001/p2p/12D3KooWB"],
             "export_directory":"/storage/emulated/0/Documents/NoteTaker"}"#,
     );
 
@@ -69,6 +69,10 @@ fn optional_fields_map_to_the_core_s_settings() {
     assert_eq!(
         value(&settings, "NOTE_TAKER_P2P_ENABLED").as_deref(),
         Some("true")
+    );
+    assert_eq!(
+        value(&settings, "NOTE_TAKER_P2P_RELAY").as_deref(),
+        Some("/ip4/203.0.113.5/tcp/4001/p2p/12D3KooWR")
     );
     assert_eq!(
         value(&settings, "NOTE_TAKER_P2P_PEERS").as_deref(),

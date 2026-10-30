@@ -128,6 +128,24 @@ void main() {
       });
     });
 
+    test(
+        'a build-time relay address is passed trimmed, and left out when blank',
+        () {
+      Map<String, Object?> configurationWith(String relay) =>
+          jsonDecode(appConfigurationJson(
+            dataDirectory: '/data/note_taker',
+            deviceName: 'Android device',
+            whisperModelPath: null,
+            p2pRelayDefine: relay,
+          )) as Map<String, Object?>;
+
+      expect(
+          configurationWith(
+              ' /ip4/203.0.113.5/tcp/4001/p2p/12D3KooWR ')['p2p_relay'],
+          '/ip4/203.0.113.5/tcp/4001/p2p/12D3KooWR');
+      expect(configurationWith('  ').containsKey('p2p_relay'), isFalse);
+    });
+
     test('build-time peer addresses are passed as a list, blanks dropped', () {
       final Map<String, Object?> configuration =
           jsonDecode(appConfigurationJson(

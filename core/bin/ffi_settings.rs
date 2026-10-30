@@ -43,6 +43,8 @@ struct AppConfiguration {
     p2p_enabled: Option<bool>,
     /// `.../p2p/<peer id>` addresses of the owner's devices that mDNS cannot find.
     p2p_peers: Option<Vec<String>>,
+    /// `.../p2p/<peer id>` address of the owner's relay, for reaching devices across NATs.
+    p2p_relay: Option<String>,
     /// Absolute directory for exports; defaults to `exports` in the data directory.
     export_directory: Option<PathBuf>,
 }
@@ -104,6 +106,9 @@ impl ConfiguredSettings {
                 ));
             }
             values.insert("NOTE_TAKER_P2P_PEERS", peers.join(","));
+        }
+        if let Some(relay) = configuration.p2p_relay {
+            values.insert("NOTE_TAKER_P2P_RELAY", relay);
         }
         Ok(Self { values })
     }

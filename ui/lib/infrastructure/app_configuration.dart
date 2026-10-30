@@ -15,6 +15,10 @@ import 'package:path_provider/path_provider.dart';
 /// Empty in normal builds; addresses are not secrets.
 const String p2pPeersDefine = String.fromEnvironment('NOTE_TAKER_P2P_PEERS');
 
+/// Address of the owner's relay, compiled in with `--dart-define=NOTE_TAKER_P2P_RELAY=<address>`,
+/// until the Settings screen lets the owner enter it.
+const String p2pRelayDefine = String.fromEnvironment('NOTE_TAKER_P2P_RELAY');
+
 /// Builds the JSON for `note_taker_configure`.
 ///
 /// Inputs: The absolute app-private data directory, this device's name, and the model path when
@@ -28,6 +32,7 @@ String appConfigurationJson({
   required String deviceName,
   required String? whisperModelPath,
   String p2pPeersDefine = '',
+  String p2pRelayDefine = '',
 }) {
   final List<String> peers = p2pPeersDefine
       .split(',')
@@ -39,6 +44,7 @@ String appConfigurationJson({
     'device_name': deviceName,
     if (whisperModelPath != null) 'whisper_model_path': whisperModelPath,
     if (peers.isNotEmpty) 'p2p_peers': peers,
+    if (p2pRelayDefine.trim().isNotEmpty) 'p2p_relay': p2pRelayDefine.trim(),
   });
 }
 
@@ -91,6 +97,7 @@ Future<int> configureCore() async {
     deviceName: defaultDeviceName(),
     whisperModelPath: whisperModelPath,
     p2pPeersDefine: p2pPeersDefine,
+    p2pRelayDefine: p2pRelayDefine,
   );
   return Isolate.run(() {
     final DynamicLibrary coreLibrary = _openCoreLibrary();

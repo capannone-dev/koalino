@@ -59,6 +59,33 @@ fn configured_peer_addresses_are_split_and_trimmed() {
     );
 }
 
+/// The relay settings are optional, and absent they change nothing.
+#[test]
+fn relay_settings_are_read_when_present() {
+    let unset = enabled_config(&[]);
+    assert_eq!(unset.relay_address, None);
+    assert_eq!(unset.relay_server_address, None);
+
+    let config = enabled_config(&[
+        (
+            "NOTE_TAKER_P2P_RELAY",
+            " /ip4/203.0.113.5/tcp/4001/p2p/12D3KooWA ",
+        ),
+        (
+            "NOTE_TAKER_P2P_RELAY_SERVER_ADDRESS",
+            " /ip4/203.0.113.5/tcp/4001 ",
+        ),
+    ]);
+    assert_eq!(
+        config.relay_address.as_deref(),
+        Some("/ip4/203.0.113.5/tcp/4001/p2p/12D3KooWA")
+    );
+    assert_eq!(
+        config.relay_server_address.as_deref(),
+        Some("/ip4/203.0.113.5/tcp/4001")
+    );
+}
+
 /// Explicit values win, and `NOTE_TAKER_P2P_ENABLED=false` turns P2P off.
 #[test]
 fn explicit_values_are_used_and_p2p_can_be_disabled() {
@@ -110,6 +137,24 @@ async fn the_task_serves_status_and_commands_until_shutdown() {
         refused_start.is_err(),
         "a peer address without a peer ID must stop start-up"
     );
+    for (name, relay_address, server_address) in [
+        ("bad-relay", Some("/ip4/127.0.0.1/tcp/4001"), None),
+        ("bad-relay-server", None, Some("not an address")),
+    ] {
+        let mut misconfigured = config.clone();
+        misconfigured.relay_address = relay_address.map(str::to_owned);
+        misconfigured.relay_server_address = server_address.map(str::to_owned);
+        assert!(
+            spawn_p2p_task(
+                &directory.join(format!("{name}.sqlite3")),
+                DeviceId::new("device-test"),
+                Arc::clone(&cipher) as Arc<dyn crate::ports::crypto::EmbeddingCipher>,
+                misconfigured,
+            )
+            .is_err(),
+            "{name} must stop start-up"
+        );
+    }
     let handle = spawn_p2p_task(
         &directory.join("notes.sqlite3"),
         DeviceId::new("device-test"),
