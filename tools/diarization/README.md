@@ -38,7 +38,7 @@ pyannote.audio 4.0.7, and onnxruntime 1.31.
 
 ## In the apps
 
-The Linux and Windows apps and the server build include the `diarization` feature. The desktop
+The Linux, Windows and Android apps and the server build include the `diarization` feature. The desktop
 installers ship both models and their licences in `data/models/diarization/` beside the executable.
 The apps turn diarization on by themselves, preferring models in
 `<data directory>/models/diarization/`. The daemon still reads the variables above.
@@ -48,7 +48,9 @@ has no prebuilt library for `x86_64-pc-windows-gnu`. Windows 11 has an older cop
 `ort` refuses, so the DLL must be the one in the bundle. The Windows bundle also carries the Visual C++ runtime the
 DLL needs. If the DLL cannot load, the core reports diarization as unavailable.
 
-Android does not include the feature yet (#60): the library links, and the app can install the
-models from its APK, but it has not been run on a device.
+Android includes the feature too. The APK ships the models uncompressed and the app copies them to
+the data directory on first start, because ONNX Runtime reads them by path. This adds about 110 MB to
+the APK. Measured on a Galaxy S23 (SM-S911W): a 53 s recording with Whisper base finished about 43 s
+after it stopped, with the app at up to about 790 MB and near full CPU.
 
 `licenses/` holds the licence texts shipped with the models.

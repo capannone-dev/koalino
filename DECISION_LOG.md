@@ -1351,7 +1351,8 @@ measuring and retuning moves to #61.
   too old, so the DLL beside the executable is the one that must load.
 - **The Windows bundle ships the Visual C++ runtime** (`InstallRequiredSystemLibraries`): a clean
   Windows 11 does not have it, and `onnxruntime.dll` fails to load without it.
-- **Android stays off until run on a device.** The plumbing is in place, but no phone was connected.
-  Shipping 90 MB more and an untested native library would risk the app for no verified gain.
+- **Android ships it too, after a run on a Galaxy S23.** A real recording produced separate unknown
+  speakers. Models are uncompressed APK assets copied to the data directory on first start. The APK
+  grows from 221 MB to 332 MB. Mobile quantization was not needed to run; #61 can revisit it.
 - **Export is not pinned by hash.** `fetch.sh` exports the models, and export may not be
   byte-reproducible; the export script validates them with onnxruntime instead.

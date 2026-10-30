@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds the Rust core's shared library with whisper.cpp, microphone capture, speech-pause
-# chunking and, on desktops, diarization (`--features local-ai,microphone,vad,diarization`; Issues #51, #60) and stages it where the Flutter
+# chunking and diarization (`--features local-ai,microphone,vad,diarization`; Issues #51, #60) and stages it where the Flutter
 # app's builds pick it up:
 #   linux   -> ui/native/linux/libnote_taker_core.so (installed into the bundle's lib/ by CMake)
 #   android -> ui/android/app/src/main/jniLibs/arm64-v8a/ (with the NDK's libc++_shared.so)
@@ -11,8 +11,7 @@
 #   android        -> ui/native/android-assets/models/ggml-base.bin (an uncompressed APK asset)
 # It stages the diarization models and their licences too (fetch.sh; Issue #60):
 #   linux, windows -> ui/native/models/diarization/ (installed into data/models/diarization)
-# Android stays without diarization until it has been run on a device: the app already installs
-# models from ui/native/android-assets/models/diarization/ when the APK ships them.
+#   android        -> ui/native/android-assets/models/diarization/ (uncompressed APK assets)
 # Windows also stages Microsoft's ONNX Runtime, which the core loads at run time:
 #   windows -> ui/native/windows/onnxruntime/ (its contents are installed beside the runner)
 # The staging directories are gitignored. Usage: build-flutter-native.sh linux|android|windows ...
@@ -68,12 +67,13 @@ for platform in "$@"; do
       stage_diarization_models ui/native/models
       ;;
     android)
-      cargo build --release --features local-ai,microphone,vad --lib --target aarch64-linux-android
+      cargo build --release --features local-ai,microphone,vad,diarization --lib --target aarch64-linux-android
       jni=ui/android/app/src/main/jniLibs/arm64-v8a
       mkdir -p "$jni"
       cp "$CARGO_TARGET_DIR/aarch64-linux-android/release/libnote_taker_core.so" "$jni/"
       cp "$NDK_BIN/../sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$jni/"
       stage_model ui/native/android-assets/models
+      stage_diarization_models ui/native/android-assets/models
       ;;
     windows)
       cargo zigbuild --release --features local-ai,microphone,vad,diarization --lib --target x86_64-pc-windows-gnu
