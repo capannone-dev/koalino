@@ -26,7 +26,11 @@ documented nonzero status codes distinguishable from lifecycle states.
   reads `NOTE_TAKER_TRANSCRIPTION_PROVIDER` (`auto`, `local`, `openai`), `NOTE_TAKER_WHISPER_MODEL`,
   `NOTE_TAKER_WHISPER_LANGUAGE` (`auto` by default; whisper.cpp would otherwise force English),
   `OPENAI_API_KEY` (redacted from `Debug`), `NOTE_TAKER_OPENAI_WHISPER_MODEL`,
-  `NOTE_TAKER_OPENAI_LANGUAGE`, `NOTE_TAKER_ENABLE_DIARIZATION`, and `NOTE_TAKER_VAD_ENABLED`.
+  `NOTE_TAKER_OPENAI_LANGUAGE`, `NOTE_TAKER_ENABLE_DIARIZATION`,
+  `NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL`, `NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL`, and
+  `NOTE_TAKER_VAD_ENABLED`. Diarization requested without both models, or in a build without the
+  `diarization` feature, logs why and leaves segments unattributed; named models that cannot load
+  are an error.
   `auto` prefers a local whisper.cpp model and uses OpenAI only when a key is set (logged, since
   chunk audio then leaves the device). `spawn_recording_controller` builds the pipeline on the
   worker thread, with its own SQLite connections sharing the verified cipher and the encrypted

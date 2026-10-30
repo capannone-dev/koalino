@@ -13,8 +13,8 @@ use crate::{
 
 use super::{
     CLOUD_TRANSCRIPTION_POWER_MILLIWATTS, PipelineConfig, SelectedTranscriptionEngine,
-    TranscriptionProvider, local_model_label, select_transcription_engine,
-    spawn_recording_controller, transcription_task_profile,
+    TranscriptionProvider, local_model_label, select_diarization_engine,
+    select_transcription_engine, spawn_recording_controller, transcription_task_profile,
 };
 
 /// Builds a config from literal variables, ignoring the real environment.
@@ -217,8 +217,50 @@ fn local_models_are_labelled_by_file_stem() {
     assert_eq!(local_model_label(std::path::Path::new("")), "whisper.cpp");
 }
 
+/// Verifies no engine is composed unless diarization is requested and both models are named, so
+/// transcription keeps working (unattributed) on a device without models.
+#[test]
+fn diarization_engine_needs_a_request_and_both_models() {
+    let unrequested = valid_config(&[
+        (
+            "NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL",
+            "/missing/s.onnx",
+        ),
+        ("NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL", "/missing/e.onnx"),
+    ]);
+    let without_embedding = valid_config(&[
+        ("NOTE_TAKER_ENABLE_DIARIZATION", "true"),
+        (
+            "NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL",
+            "/missing/s.onnx",
+        ),
+    ]);
+
+    for config in [&unrequested, &without_embedding] {
+        let engine = select_diarization_engine(config)
+            .unwrap_or_else(|error| panic!("nothing should load: {error:#}"));
+        assert!(engine.is_none());
+    }
+}
+
+/// Verifies named models that cannot load are an error, not silently unattributed meetings.
+#[cfg(feature = "diarization")]
+#[test]
+fn unloadable_diarization_models_are_an_error() {
+    let config = valid_config(&[
+        ("NOTE_TAKER_ENABLE_DIARIZATION", "true"),
+        (
+            "NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL",
+            "/missing/s.onnx",
+        ),
+        ("NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL", "/missing/e.onnx"),
+    ]);
+
+    assert!(select_diarization_engine(&config).is_err());
+}
+
 /// Verifies the composed controller opens its own stores on the database and reports that a
-/// voice library is available while diarization is not (no adapter exists yet).
+/// voice library is available while diarization is not (no models are configured).
 #[test]
 fn spawned_controller_reports_pipeline_availability() {
     let database_path = std::env::temp_dir().join(format!(

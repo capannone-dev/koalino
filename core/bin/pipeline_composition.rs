@@ -4,8 +4,9 @@
 //! selects a transcription engine (whisper.cpp in `local-ai` builds, or OpenAI when a key is
 //! configured), and spawns a `RecordingController` whose worker owns its own SQLite connections
 //! (sharing the already-unlocked embedding cipher) and the encrypted voice library as matcher.
-//! No diarization adapter exists yet, so segments are `Unattributed`; requesting diarization only
-//! logs that. Model loading happens on the worker thread, never on the caller's.
+//! Diarization runs when requested, in a `diarization` build, with both ONNX models configured;
+//! otherwise it logs why not and segments are `Unattributed`. Model loading happens on the worker
+//! thread, never on the caller's.
 //!
 //! | Variable | Values | Default |
 //! | --- | --- | --- |
@@ -15,6 +16,7 @@
 //! | `OPENAI_API_KEY` | OpenAI key (never logged) | unset |
 //! | `NOTE_TAKER_OPENAI_WHISPER_MODEL`, `NOTE_TAKER_OPENAI_LANGUAGE` | OpenAI model and language | `whisper-1`, auto |
 //! | `NOTE_TAKER_ENABLE_DIARIZATION` | boolean | `false` |
+//! | `NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL`, `NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL` | paths to the exported ONNX models (`diarization` builds) | unset |
 //! | `NOTE_TAKER_VAD_ENABLED` | boolean; `false` cuts near every 15 s | `true` |
 
 use std::{
@@ -34,7 +36,7 @@ use crate::{
     },
     application::{
         pipeline::{
-            pipeline_factory::{NoDiarizationEngine, PipelineFactory},
+            pipeline_factory::PipelineFactory,
             task_metrics::{TaskMetricsRecorder, TaskProfile},
         },
         recording_manager::RecordingManager,
@@ -78,8 +80,25 @@ pub const WHISPER_LANGUAGE_VARIABLE: &str = "NOTE_TAKER_WHISPER_LANGUAGE";
 pub const OPENAI_LANGUAGE_VARIABLE: &str = "NOTE_TAKER_OPENAI_LANGUAGE";
 /// Requests speaker diarization.
 pub const ENABLE_DIARIZATION_VARIABLE: &str = "NOTE_TAKER_ENABLE_DIARIZATION";
+/// Path of the exported segmentation model.
+pub const DIARIZATION_SEGMENTATION_MODEL_VARIABLE: &str =
+    "NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL";
+/// Path of the exported speaker-embedding model.
+pub const DIARIZATION_EMBEDDING_MODEL_VARIABLE: &str = "NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL";
 /// Enables speech-pause chunking.
 pub const VAD_ENABLED_VARIABLE: &str = "NOTE_TAKER_VAD_ENABLED";
+
+/// The diarization engine this build composes.
+#[cfg(feature = "diarization")]
+pub type ComposedDiarizationEngine =
+    crate::adapters::ai::diarization::windowed_engine::WindowedDiarizationEngine<
+        crate::adapters::ai::diarization::onnx_models::OnnxSegmentationModel,
+        crate::adapters::ai::diarization::onnx_models::OnnxSpeakerEmbeddingModel,
+    >;
+/// The diarization engine this build composes: none without the `diarization` feature.
+#[cfg(not(feature = "diarization"))]
+pub type ComposedDiarizationEngine =
+    crate::application::pipeline::pipeline_factory::NoDiarizationEngine;
 
 /// Which transcription engine the pipeline should use.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -104,6 +123,8 @@ pub struct PipelineConfig {
     openai_model: String,
     openai_language: Option<String>,
     diarization_requested: bool,
+    diarization_segmentation_model_path: Option<PathBuf>,
+    diarization_embedding_model_path: Option<PathBuf>,
     vad_enabled: bool,
 }
 
@@ -122,6 +143,14 @@ impl std::fmt::Debug for PipelineConfig {
             .field("openai_model", &self.openai_model)
             .field("openai_language", &self.openai_language)
             .field("diarization_requested", &self.diarization_requested)
+            .field(
+                "diarization_segmentation_model_path",
+                &self.diarization_segmentation_model_path,
+            )
+            .field(
+                "diarization_embedding_model_path",
+                &self.diarization_embedding_model_path,
+            )
             .field("vad_enabled", &self.vad_enabled)
             .finish()
     }
@@ -168,6 +197,10 @@ impl PipelineConfig {
                 read(ENABLE_DIARIZATION_VARIABLE),
                 false,
             )?,
+            diarization_segmentation_model_path: read(DIARIZATION_SEGMENTATION_MODEL_VARIABLE)
+                .map(PathBuf::from),
+            diarization_embedding_model_path: read(DIARIZATION_EMBEDDING_MODEL_VARIABLE)
+                .map(PathBuf::from),
             vad_enabled: parse_flag(VAD_ENABLED_VARIABLE, read(VAD_ENABLED_VARIABLE), true)?,
         })
     }
@@ -464,13 +497,74 @@ fn local_engine(
     )
 }
 
+/// Selects the diarization engine.
+///
+/// Inputs: The configuration.
+/// Outputs: The engine; `None` when diarization was not requested or cannot run here (no
+/// `diarization` feature, or a model path missing), so meetings stay unattributed; or an error
+/// when the named models cannot load.
+/// Side effects: Loads the models into memory; logs why a requested engine is absent.
+pub fn select_diarization_engine(
+    config: &PipelineConfig,
+) -> Result<Option<ComposedDiarizationEngine>> {
+    if !config.diarization_requested {
+        return Ok(None);
+    }
+    load_diarization_engine(config)
+}
+
+/// Loads the ONNX models named by the configuration.
+///
+/// Inputs: The configuration. Outputs: The engine, `None` when a path is missing, or a load error.
+/// Side effects: Loads the models into memory.
+#[cfg(feature = "diarization")]
+fn load_diarization_engine(config: &PipelineConfig) -> Result<Option<ComposedDiarizationEngine>> {
+    use crate::adapters::ai::diarization::{
+        onnx_models::{OnnxSegmentationModel, OnnxSpeakerEmbeddingModel},
+        windowed_engine::DiarizationTuning,
+    };
+
+    let (Some(segmentation_path), Some(embedding_path)) = (
+        config.diarization_segmentation_model_path.as_deref(),
+        config.diarization_embedding_model_path.as_deref(),
+    ) else {
+        tracing::warn!(
+            "Diarization was requested, but {DIARIZATION_SEGMENTATION_MODEL_VARIABLE} and \
+             {DIARIZATION_EMBEDDING_MODEL_VARIABLE} must both be set; segments will be unattributed"
+        );
+        return Ok(None);
+    };
+    let segmentation_model = OnnxSegmentationModel::load(segmentation_path)
+        .context("unable to load the diarization segmentation model")?;
+    let embedding_model = OnnxSpeakerEmbeddingModel::load(embedding_path)
+        .context("unable to load the diarization embedding model")?;
+    tracing::info!("Diarization models loaded");
+    Ok(Some(ComposedDiarizationEngine::new(
+        segmentation_model,
+        embedding_model,
+        DiarizationTuning::default(),
+    )))
+}
+
+/// Reports that this build cannot diarize.
+///
+/// Inputs: Ignored. Outputs: Always `None`. Side effects: Logs a warning.
+#[cfg(not(feature = "diarization"))]
+fn load_diarization_engine(_config: &PipelineConfig) -> Result<Option<ComposedDiarizationEngine>> {
+    tracing::warn!(
+        "Diarization was requested, but this build was compiled without the diarization \
+         feature; segments will be unattributed"
+    );
+    Ok(None)
+}
+
 /// Starts the pipeline worker and returns an idle recording controller.
 ///
 /// Inputs: The SQLite path (the same database the caller already opened), the device ID, the
 /// verified embedding cipher from `open_encrypted_stores`, and the pipeline configuration.
 /// Outputs: The controller, or an error explaining which dependency is missing.
-/// Side effects: Spawns the worker thread, which selects (and may load) the transcription
-/// engine and opens its own note-repository, telemetry and voice-store connections; every
+/// Side effects: Spawns the worker thread, which selects (and may load) the transcription and
+/// diarization engines and opens its own note-repository, telemetry and voice-store connections; every
 /// transcribed chunk then saves one telemetry row. Blocks until ready.
 pub fn spawn_recording_controller(
     database_path: &Path,
@@ -505,14 +599,9 @@ pub fn spawn_recording_controller(
         );
         let voice_store = SqliteVoiceVectorDB::open(&worker_database_path, embedding_cipher)
             .context("unable to open the pipeline voice store")?;
-        if config.diarization_requested {
-            tracing::warn!(
-                "Diarization was requested, but no diarization engine is available in this \
-                 build; segments will be unattributed"
-            );
-        }
+        let diarization_engine = select_diarization_engine(&config)?;
         Ok(PipelineFactory::new(transcription_engine, note_repository)
-            .with_diarization_engine(None::<NoDiarizationEngine>)
+            .with_diarization_engine(diarization_engine)
             .with_voice_matcher(Some(VoiceIdentityManager::new(voice_store)))
             .with_task_metrics(task_metrics))
     })?;
