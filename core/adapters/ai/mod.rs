@@ -1,5 +1,7 @@
 //! Groups opt-in local AI adapters and their feature-gated contract tests.
 
+/// Local speaker diarization: windowed segmentation, speaker embeddings, and turn assembly.
+pub mod diarization;
 /// Implements the portable transcription port with a locally loaded whisper.cpp model.
 #[cfg(feature = "local-ai")]
 pub mod local_whisper_cpp;
