@@ -15,7 +15,7 @@ use crate::{
         network::libp2p_adapter::Libp2pNetworkAdapter,
         storage::{
             in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
-            sqlite_peer_store::SqlitePeerStore,
+            sqlite_peer_store::SqlitePeerStore, sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
     },
     application::{
@@ -32,14 +32,15 @@ use crate::{
     },
     domain::{
         models::{
-            DeviceId, MeetingId, MeetingTitle, Transcript, TranscriptionModel, UnassignedVoiceClip,
-            UnknownSpeakerChunk, UnknownSpeakerCluster,
+            DeviceId, MeetingId, MeetingTitle, SpeakerIdentity, Transcript, TranscriptionModel,
+            UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster, VoiceEmbedding,
         },
         peer_trust::DeviceName,
     },
     ports::{
         peer_trust::{PairingTransport, TrustedPeerStore},
         storage::NoteRepository,
+        voice::VoiceVectorDB,
     },
 };
 
@@ -791,4 +792,90 @@ async fn unknown_speaker_clusters_reach_paired_devices() {
             .and_then(|cluster| cluster.resolved_identity_id()),
         Some(assignment.identity_id())
     );
+}
+
+/// Opens another connection to a service's voice library, as the daemon's routes do.
+fn voice_store(database_path: &PathBuf) -> SqliteVoiceVectorDB {
+    SqliteVoiceVectorDB::open(
+        database_path,
+        Arc::new(VoiceEncryptor::new(&EncryptionKey::from_bytes([3; 32]))),
+    )
+    .unwrap_or_else(|error| panic!("voice store must open: {error}"))
+}
+
+/// The display names in a voice store.
+fn voice_names(store: &SqliteVoiceVectorDB) -> Vec<String> {
+    let mut names: Vec<String> = store
+        .list_speaker_identities()
+        .unwrap_or_else(|error| panic!("identities must list: {error}"))
+        .iter()
+        .map(|identity| identity.display_name().to_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// Enrolls `name` with one variant.
+fn enroll(store: &SqliteVoiceVectorDB, identity_id: Uuid, name: &str, variant_id: Uuid) {
+    store
+        .save_speaker_identity(&SpeakerIdentity::new(identity_id, name))
+        .and_then(|()| {
+            store.store_embedding(VoiceEmbedding::new(identity_id, variant_id, vec![0.6, 0.8]))
+        })
+        .unwrap_or_else(|error| panic!("enrollment must succeed: {error}"));
+}
+
+/// A speaker named on one device is known on the others (Issue #56): libraries merge when devices
+/// pair, a later rename and a later deletion follow, and a deleted voice does not come back.
+#[tokio::test]
+async fn the_voice_library_reaches_paired_devices() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9431"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let (laptop, laptop_database) = service_with_database("Laptop", laptop_adapter);
+    let (phone, phone_database) = service_with_database("Phone", phone_adapter);
+    let mut laptop = laptop
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_voice_library(Box::new(voice_store(&laptop_database)));
+    let mut phone = phone
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_voice_library(Box::new(voice_store(&phone_database)));
+    let (on_laptop, on_phone) = (voice_store(&laptop_database), voice_store(&phone_database));
+    let (alice, bruno) = (Uuid::from_u128(0xA1), Uuid::from_u128(0xB1));
+    enroll(&on_laptop, alice, "Alice", Uuid::from_u128(0xA2));
+    enroll(&on_phone, bruno, "Bruno", Uuid::from_u128(0xB2));
+
+    pair(&mut laptop, &mut phone, phone_address).await;
+    let both = vec!["Alice".to_owned(), "Bruno".to_owned()];
+    drive(&mut laptop, &mut phone, |_, _| {
+        voice_names(&on_laptop) == both && voice_names(&on_phone) == both
+    })
+    .await;
+    assert_eq!(on_phone.voice_variant_count(alice).ok(), Some(1));
+    assert_eq!(on_laptop.voice_variant_count(bruno).ok(), Some(1));
+
+    on_phone
+        .save_speaker_identity(&SpeakerIdentity::new(alice, "Alice Rossi"))
+        .unwrap_or_else(|error| panic!("rename must succeed: {error}"));
+    drive(&mut laptop, &mut phone, |_, _| {
+        voice_names(&on_laptop).contains(&"Alice Rossi".to_owned())
+    })
+    .await;
+
+    on_laptop
+        .delete_identity(alice)
+        .unwrap_or_else(|error| panic!("deletion must succeed: {error}"));
+    drive(&mut laptop, &mut phone, |_, _| {
+        voice_names(&on_phone) == vec!["Bruno".to_owned()]
+    })
+    .await;
+    assert_eq!(on_phone.voice_variant_count(alice).ok(), Some(0));
+    assert_eq!(voice_names(&on_laptop), vec!["Bruno".to_owned()]);
 }

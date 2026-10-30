@@ -38,7 +38,10 @@ use tokio::sync::{mpsc, oneshot, watch};
 use crate::{
     adapters::{
         network::libp2p_adapter::{Libp2pNetworkAdapter, NodeIdentity},
-        storage::{sqlite_adapter::SqliteNoteRepository, sqlite_peer_store::SqlitePeerStore},
+        storage::{
+            sqlite_adapter::SqliteNoteRepository, sqlite_peer_store::SqlitePeerStore,
+            sqlite_voice_vector_db::SqliteVoiceVectorDB,
+        },
     },
     application::{
         crypto::pair_key::PairAgreementSecret,
@@ -371,7 +374,7 @@ fn open_service(
 ) -> Result<DaemonP2pService> {
     let note_repository =
         open_note_repository(database_path, device_id, Arc::clone(&embedding_cipher))?;
-    let peer_store = SqlitePeerStore::open(database_path, embedding_cipher)
+    let peer_store = SqlitePeerStore::open(database_path, Arc::clone(&embedding_cipher))
         .context("unable to open the peer store")?;
     let node_identity =
         NodeIdentity::load_or_create(&peer_store).context("unable to load the node identity")?;
@@ -406,6 +409,8 @@ fn open_service(
             .use_relay(relay_address)
             .context("NOTE_TAKER_P2P_RELAY is invalid")?;
     }
+    let voice_library = SqliteVoiceVectorDB::open(database_path, embedding_cipher)
+        .context("unable to open the voice library for sync")?;
     let mut service = P2pService::new(
         PairingManager::new(
             adapter,
@@ -416,7 +421,8 @@ fn open_service(
         RepositorySyncManager::new(note_repository),
     )
     .with_local_capabilities(config.capabilities)
-    .with_pair_agreement_secret(pair_agreement_secret);
+    .with_pair_agreement_secret(pair_agreement_secret)
+    .with_voice_library(Box::new(voice_library));
     service
         .start()
         .context("unable to load the paired devices")?;

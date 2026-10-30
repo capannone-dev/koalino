@@ -46,6 +46,9 @@ use crate::{
             PairingUpdate,
         },
         repository_sync_manager::{RepositorySyncManager, RepositorySyncManagerError},
+        voice_library_exchange::{
+            decode_voice_library_message, encode_voice_library_messages, is_voice_library_message,
+        },
     },
     domain::{
         models::{
@@ -58,6 +61,7 @@ use crate::{
         network::{NetworkEvent, P2pNetwork},
         peer_trust::{PairKeyPinning, PairingTransport, TrustedPeerStore},
         storage::NoteRepository,
+        voice::VoiceLibrarySync,
     },
 };
 
@@ -261,6 +265,10 @@ pub struct P2pService<Transport, Store, Repository> {
     shared_clusters: HashMap<DeviceId, HashMap<Uuid, SharedCluster>>,
     /// Shares waiting for their meeting, oldest first.
     held_shares: Vec<HeldShare>,
+    /// The voice library to keep in step with paired devices; `None` leaves it on this device.
+    voice_library: Option<Box<dyn VoiceLibrarySync>>,
+    /// The library digest each connected device was last sent.
+    shared_voice_digests: HashMap<DeviceId, [u8; 32]>,
 }
 
 impl<Transport, Store, Repository> P2pService<Transport, Store, Repository>
@@ -294,6 +302,8 @@ where
             connected_peers: HashSet::new(),
             shared_clusters: HashMap::new(),
             held_shares: Vec::new(),
+            voice_library: None,
+            shared_voice_digests: HashMap::new(),
         }
     }
 
@@ -303,6 +313,15 @@ where
     /// Outputs: The service. Side effects: None; public keys are sent as devices connect.
     pub fn with_pair_agreement_secret(mut self, secret: PairAgreementSecret) -> Self {
         self.pair_agreement_secret = Some(secret);
+        self
+    }
+
+    /// Keeps `voice_library` in step with paired devices (Issue #56). It needs a pair agreement
+    /// secret too, since embeddings travel only under a pair key.
+    ///
+    /// Inputs: The voice library. Outputs: The service. Side effects: None until devices connect.
+    pub fn with_voice_library(mut self, voice_library: Box<dyn VoiceLibrarySync>) -> Self {
+        self.voice_library = Some(voice_library);
         self
     }
 
@@ -365,6 +384,7 @@ where
         self.send_document_changes();
         self.share_clusters();
         self.retry_held_shares();
+        self.share_voice_library();
     }
 
     /// Sends every meeting document written since the last call to the connected peers.
@@ -465,6 +485,10 @@ where
                     self.accept_pair_public_key(peer_device_id, decoded);
                     return;
                 }
+                if is_voice_library_message(payload) {
+                    self.accept_voice_library(peer_device_id, payload);
+                    return;
+                }
                 if is_cluster_share_message(payload) {
                     self.accept_cluster_share(peer_device_id, payload);
                     return;
@@ -476,15 +500,21 @@ where
                 // and covers shares it could not store before.
                 self.connected_peers.insert(peer_device_id.clone());
                 self.shared_clusters.remove(peer_device_id);
+                self.shared_voice_digests.remove(peer_device_id);
                 Some(peer_device_id.clone())
             }
             NetworkEvent::PeerExpired(peer_device_id) => {
                 self.peer_manifests.remove(peer_device_id);
                 self.connected_peers.remove(peer_device_id);
                 self.shared_clusters.remove(peer_device_id);
+                self.shared_voice_digests.remove(peer_device_id);
                 None
             }
-            NetworkEvent::DeliveryFailed(_) => None,
+            // The device may have missed the voice library, so it is sent again.
+            NetworkEvent::DeliveryFailed(peer_device_id) => {
+                self.shared_voice_digests.remove(peer_device_id);
+                None
+            }
         };
         if let Err(error) = self
             .sync_manager
@@ -540,6 +570,131 @@ where
                 error = %error,
                 "an agreement key was rejected"
             ),
+        }
+    }
+
+    /// Sends the voice library to every connected device that was not sent this version of it.
+    ///
+    /// Side effects: Reads the digest each call and, when a device needs it, decrypts the library
+    /// and sends sealed messages. Failures are logged without content and retried next call.
+    fn share_voice_library(&mut self) {
+        if self.connected_peers.is_empty() || self.pair_agreement_secret.is_none() {
+            return;
+        }
+        let Some(voice_library) = self.voice_library.as_ref() else {
+            return;
+        };
+        let digest = match voice_library.voice_library_digest() {
+            Ok(digest) => digest,
+            Err(error) => {
+                tracing::warn!(error = %error, "the voice library could not be read");
+                return;
+            }
+        };
+        let waiting: Vec<DeviceId> = self
+            .connected_peers
+            .iter()
+            .filter(|peer| self.shared_voice_digests.get(*peer) != Some(&digest))
+            .cloned()
+            .collect();
+        if waiting.is_empty() {
+            return;
+        }
+        let library = match voice_library.export_voice_library() {
+            Ok(library) => library,
+            Err(error) => {
+                tracing::warn!(error = %error, "the voice library could not be exported");
+                return;
+            }
+        };
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        for peer_device_id in waiting {
+            let pair_key = match self.pairing_manager.store().pair_key(&peer_device_id) {
+                Ok(Some(pair_key)) => pair_key,
+                Ok(None) => continue,
+                Err(error) => {
+                    tracing::warn!(
+                        peer = %peer_device_id.as_str(),
+                        error = %error,
+                        "the pair key could not be loaded"
+                    );
+                    continue;
+                }
+            };
+            let messages = match encode_voice_library_messages(
+                &library,
+                &pair_key,
+                &local_peer_id,
+                &peer_device_id,
+            ) {
+                Ok(messages) => messages,
+                Err(error) => {
+                    tracing::warn!(error = %error, "the voice library could not be sealed");
+                    continue;
+                }
+            };
+            let transport = self.pairing_manager.transport_mut();
+            let all_sent = messages.iter().all(|message| {
+                match transport.send_encrypted(&peer_device_id, message) {
+                    Ok(()) => true,
+                    Err(error) => {
+                        tracing::warn!(
+                            peer = %peer_device_id.as_str(),
+                            error = %error,
+                            "the voice library could not be sent"
+                        );
+                        false
+                    }
+                }
+            });
+            if all_sent {
+                self.shared_voice_digests.insert(peer_device_id, digest);
+            }
+        }
+    }
+
+    /// Opens and merges a voice library `peer_device_id` sent.
+    ///
+    /// Side effects: May write identities and variants and delete others. A message from a device
+    /// without an agreed pair key, or one that fails to open or merge, is logged (peer ID only) and
+    /// dropped.
+    fn accept_voice_library(&mut self, peer_device_id: &DeviceId, payload: &[u8]) {
+        let Some(voice_library) = self.voice_library.as_ref() else {
+            return;
+        };
+        let pair_key = match self.pairing_manager.store().pair_key(peer_device_id) {
+            Ok(Some(pair_key)) => pair_key,
+            Ok(None) => {
+                tracing::warn!(
+                    peer = %peer_device_id.as_str(),
+                    "a voice library arrived before the pair key was agreed and was dropped"
+                );
+                return;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    peer = %peer_device_id.as_str(),
+                    error = %error,
+                    "the pair key could not be loaded"
+                );
+                return;
+            }
+        };
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        let merged =
+            decode_voice_library_message(payload, &pair_key, peer_device_id, &local_peer_id)
+                .map_err(|error| error.to_string())
+                .and_then(|library| {
+                    voice_library
+                        .import_voice_library(&library)
+                        .map_err(|error| error.to_string())
+                });
+        if let Err(error) = merged {
+            tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                error = %error,
+                "a voice library was rejected"
+            );
         }
     }
 
