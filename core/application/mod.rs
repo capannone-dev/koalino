@@ -114,3 +114,7 @@ mod unknown_speaker_clusterer_tests;
 pub mod voice_identity_manager;
 #[cfg(test)]
 mod voice_identity_manager_tests;
+/// Encodes the sealed `NTV1` messages that copy the voice library to paired devices (Issue #56).
+pub mod voice_library_exchange;
+#[cfg(test)]
+mod voice_library_exchange_tests;
