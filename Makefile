@@ -20,4 +20,4 @@ build-desktop:
 	cd ui && flutter build linux
 
 build-server:
-	cargo build --bin daemon
+	cargo build --features diarization --bin daemon

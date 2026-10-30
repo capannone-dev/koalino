@@ -60,7 +60,8 @@ impl ConfiguredSettings {
     /// Inputs: JSON matching `AppConfiguration`; paths must be absolute, a device name must not be
     /// blank, and a peer address must not contain a comma (the list is stored comma-separated).
     /// Outputs: The settings, or `Invalid` naming the offending field.
-    /// Side effects: None; directories are created when the runtime opens its stores.
+    /// Side effects: Checks whether the diarization models exist in the data folder; directories
+    /// are created when the runtime opens its stores.
     pub fn from_json(json: &str) -> Result<Self, SettingsError> {
         let configuration: AppConfiguration = serde_json::from_str(json)
             .map_err(|error| SettingsError::Invalid(format!("unreadable JSON: {error}")))?;
@@ -81,6 +82,23 @@ impl ConfiguredSettings {
             values.insert(
                 "NOTE_TAKER_EXPORT_DIR",
                 export_directory.display().to_string(),
+            );
+        }
+        // Models placed in the data folder turn diarization on with no further setting (#60).
+        let model_directory = data_directory.join("models").join("diarization");
+        let (segmentation_model, embedding_model) = (
+            model_directory.join("segmentation.onnx"),
+            model_directory.join("embedding.onnx"),
+        );
+        if segmentation_model.is_file() && embedding_model.is_file() {
+            values.insert("NOTE_TAKER_ENABLE_DIARIZATION", "true".to_owned());
+            values.insert(
+                "NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL",
+                segmentation_model.display().to_string(),
+            );
+            values.insert(
+                "NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL",
+                embedding_model.display().to_string(),
             );
         }
         if let Some(device_name) = configuration.device_name {

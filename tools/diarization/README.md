@@ -35,3 +35,11 @@ export NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL=models/diarization/embedding.onnx
 
 The models are not committed or shipped with the app. Tested with torch 2.15, speechbrain 1.1.2,
 pyannote.audio 4.0.7, and onnxruntime 1.31.
+
+## In the apps
+
+The Linux desktop and server builds include the `diarization` feature. The apps turn diarization on
+by themselves when both files are in `<data directory>/models/diarization/`. The daemon still reads
+the variables above. Windows and Android builds do not include the feature yet (#60): `ort` has no
+prebuilt ONNX Runtime for `x86_64-pc-windows-gnu`, and the Android build links but has not been run
+on a device.

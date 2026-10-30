@@ -1328,3 +1328,10 @@ the comment on #49.
   back at once.
 - **Known limits.** An answer waits for the host's next 1 s tick. Teams bridge audio stays local.
   Telemetry records a remote chunk's time against this device.
+
+## 2026-10-30 — #60 diarization in builds (partial)
+
+- **Enabled only on Linux**, the one platform where `ort` has been run. `x86_64-pc-windows-gnu` has
+  no prebuilt ONNX Runtime; the Android library links but has not been run on a device.
+- **Models in `<data directory>/models/diarization/` turn the feature on**, so no setting is needed
+  once a device has them. How they get there is still the owner's decision (see #60).

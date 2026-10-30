@@ -146,3 +146,41 @@ fn a_cell_accepts_one_configuration() {
         Some("First")
     );
 }
+
+/// Diarization turns on by itself only when both models are in the data folder.
+#[test]
+fn diarization_turns_on_when_both_models_are_in_the_data_folder() {
+    let data_directory =
+        std::env::temp_dir().join(format!("ffi-settings-{}", uuid::Uuid::new_v4()));
+    let model_directory = data_directory.join("models").join("diarization");
+    std::fs::create_dir_all(&model_directory)
+        .unwrap_or_else(|error| panic!("folders must be created: {error}"));
+    let json = format!(r#"{{"data_directory":"{}"}}"#, data_directory.display());
+
+    assert_eq!(value(&parsed(&json), "NOTE_TAKER_ENABLE_DIARIZATION"), None);
+
+    std::fs::write(model_directory.join("segmentation.onnx"), b"x")
+        .unwrap_or_else(|error| panic!("file must be written: {error}"));
+    assert_eq!(value(&parsed(&json), "NOTE_TAKER_ENABLE_DIARIZATION"), None);
+
+    std::fs::write(model_directory.join("embedding.onnx"), b"x")
+        .unwrap_or_else(|error| panic!("file must be written: {error}"));
+    let settings = parsed(&json);
+    assert_eq!(
+        value(&settings, "NOTE_TAKER_ENABLE_DIARIZATION").as_deref(),
+        Some("true")
+    );
+    assert_eq!(
+        value(&settings, "NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL"),
+        Some(
+            model_directory
+                .join("segmentation.onnx")
+                .display()
+                .to_string()
+        )
+    );
+    assert_eq!(
+        value(&settings, "NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL"),
+        Some(model_directory.join("embedding.onnx").display().to_string())
+    );
+}

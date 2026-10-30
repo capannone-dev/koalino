@@ -30,7 +30,7 @@ stage_model() {
 for platform in "$@"; do
   case $platform in
     linux)
-      cargo build --release --features local-ai,microphone,vad --lib
+      cargo build --release --features local-ai,microphone,vad,diarization --lib
       mkdir -p ui/native/linux
       cp "$CARGO_TARGET_DIR/release/libnote_taker_core.so" ui/native/linux/
       stage_model ui/native/models
