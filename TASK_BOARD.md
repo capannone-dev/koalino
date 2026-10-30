@@ -132,6 +132,10 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P3 | #59 | Done (2026-10-30): transcription on a paired device, chosen in Settings, falling back to local | 3.4 |
 | P3 | #60 | Done (2026-10-30): diarization and its models in the Linux, Windows and Android installers and the server build; Windows loads `onnxruntime.dll` at run time | 3.4 |
 | P3 | #62 | Done (2026-10-30): choose the transcription language before and during a recording, with a default in Settings and AUTO | 3.4 |
+| P2 | #63 | Implemented (2026-10-30), still open: Voices destination in the apps and web. Naming and Play on real voices at this build still need a run on the phone | 3.2 |
+| P2 | #64 | Done (2026-10-30): relay and device addresses in Settings, applied live, in release builds with no defines | 4.1 |
+| P2 | #65 | Done (2026-10-30): pairing invites as a link and QR display; the code comparison is still required | 4.1 |
+| P3 | #66 | Done (2026-10-30): Nearby and disconnected devices explain what they need | 4.1 |
 | P3 | #61 | Open: measure on real meetings and retune the voice matcher cutoffs; needs the owner's recordings | 3.4 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |

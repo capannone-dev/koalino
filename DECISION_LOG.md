@@ -1371,3 +1371,41 @@ measuring and retuning moves to #61.
   build ignores them, the request times out, and this device transcribes locally.
 - **Apps only.** The CLI and daemon keep `NOTE_TAKER_WHISPER_LANGUAGE`, and the web dashboard has no
   recording controls to add a selector to.
+
+## 2026-10-30 — #63 the voice library has its own destination
+
+- **Voices sits in the main navigation**, between Meetings and Devices, so naming a voice no longer
+  starts from one meeting. Unknown voices from every meeting and all saved people appear together.
+- **Review clips are written only when Play is pressed.** Listing the library decrypts no audio, and
+  clip deletion keeps working as before. The web dashboard reads the same clip through
+  `GET /api/clusters/{id}/review-clip`.
+- **Raw embeddings never leave the core.** The new views carry counts and labels only.
+
+## 2026-10-30 — #64 relay and device addresses at run time
+
+- **Settings applies addresses live**, with no restart. A release build needs no compile-time define.
+- **Saved values replace the environment and defines entirely**, rather than merging, so what Settings
+  shows is what the device uses. They are stored in SQLite (`p2p_network_addresses`).
+- **Removing the relay does not affect the local network.** Checked with a restart on the VMs.
+
+## 2026-10-30 — #65 pairing invites
+
+- **Format:** `note-taker-invite:1;<peer>;<expires_ms>;<addr>,<addr>`. It holds no secret and is treated
+  as untrusted input.
+- **An invite only finds a device.** It puts the peer under Nearby, and the owner still compares the
+  code on both sides. It grants no trust.
+- **It lasts for the 5-minute pairing window**, and may end sooner when a pairing closes the window. It
+  is reusable until then.
+- **Invited addresses are kept after pairing and removed on revoke**, so the pair can reconnect.
+- **A relay refuses strangers**, so using a circuit address requires the joining device to be paired
+  with that relay first. The relay remains a device the owner controls.
+- **`qr_flutter` is the only new dependency** (approved by the owner). The apps display a QR code but do
+  not scan one, since a scanner would need a further dependency: a camera app copies the link. The web
+  dashboard shows the link only, because the approved library is Flutter only.
+
+## 2026-10-30 — #66 explaining Nearby and disconnected devices
+
+- **Nearby states that it covers this network only**, and points to invites, and to relay settings when
+  no relay is configured. A disconnected device says what it needs in order to reconnect.
+- **A device answers a peer's first manifest with its own.** Otherwise the side still waiting for its
+  owner to confirm drops the other's manifest, and shows a connected device as "Not connected".
