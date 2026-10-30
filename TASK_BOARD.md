@@ -123,6 +123,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P1 | #52 | Live transcript on the Record screen, chunk by chunk (chunks at most 15 s); per-speaker colours wait for #44; done | 3.1 |
 | P1 | #53 | Telemetry recorded per transcribed chunk; Telemetry moved into Settings (app and web); done | 6 |
 | P2 | #49 | Local screen-share slides outside Teams: harness done (detector/capturer/sink ports, no-op adapters, slide-change heuristic, per-recording watcher); a conferencing-app adapter waits for the owner's choice of app | 3.1 |
+| P2 | #50 | Name unknown speakers on any paired device: clusters, embeddings and review clips shared sealed with a per-pair X25519/HKDF key, clip audio encrypted at rest, resolutions synced in the meeting document; done | 3.2, 3.3 |
 | P1 | #54 | In-app camera (multi-shot, `camera` plugin; Android, iOS, Windows) and multi-file attachments during and after a meeting, placed in the transcript by meeting time; Linux attaches files only; done | 3.1 |
 | P1 | #55 | Relay through the owner's own daemon (circuit relay v2 + hole punching) for devices that cannot connect directly | 4.1 |
 | P1 | #56 | Voice-library sync between paired devices (union merge, embeddings re-sealed on receipt) | 3.3 |
