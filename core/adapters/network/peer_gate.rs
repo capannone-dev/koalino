@@ -95,6 +95,16 @@ impl PeerGate {
         }
     }
 
+    /// Closes `peer`'s connections unless it is trusted, for a stranger admitted only to pair that
+    /// asked for something else.
+    ///
+    /// Side effects: Queues a disconnect and wakes the swarm.
+    pub(super) fn disconnect_if_untrusted(&mut self, peer: PeerId) {
+        if !self.is_trusted(&peer) && self.connections.contains_key(&peer) {
+            self.queue_disconnect(peer);
+        }
+    }
+
     /// Admits inbound connections from unknown peers for `duration`.
     pub(super) fn open_pairing_window(&mut self, duration: Duration) {
         self.pairing_window_ends_at = Instant::now().checked_add(duration);

@@ -40,6 +40,22 @@ that comes back online reconnects. The
 address is only a hint: Noise still authenticates the peer ID, and the gate still decides
 admission. The trusted set is loaded from `TrustedPeerStore` by the composition layer.
 
+**Relay.** A node built with `new_relay_server` and given `advertise_relay_address` offers Circuit
+Relay v2 to its paired devices. `use_relay` makes a device hold a reservation there and teaches the
+swarm a `<relay>/p2p-circuit/p2p/<peer>` address for each paired peer; `redial_paired_peers` keeps
+both up, so a relay that returns is used again and one that is gone costs only this route. DCUtR
+then tries to turn a relayed connection into a direct one, using addresses Identify observed.
+
+- **The relay reads nothing.** Noise runs end to end through the circuit, so it forwards ciphertext.
+  The daemon that hosts it is still a paired device, and syncs meetings as one.
+- **Paired devices only.** The gate refuses everyone else. A pairing window admits strangers to the
+  node, so the adapter disconnects any untrusted peer the moment it reserves or opens a circuit.
+- **The destination decides.** A relayed connection passes the destination's gate like any other.
+- **Limits** are one hour and 1 GiB per circuit, after which the devices dial again; libp2p's
+  defaults (2 minutes, 128 KiB) would not fit one sync message.
+- **Pairing still needs a direct route**: `nearby_unpaired_peers` comes from mDNS or configured
+  addresses, and the relay address serves paired devices.
+
 `pairing_behaviour.rs` defines `/note-taker/pairing/1`, which carries version-1 JSON in 4 KiB
 length-prefixed frames. The initiator sends `PairingRequest { device_name }`. The responder replies
 `PairingResponse { accepted_as: Some(name) | None }` once its owner has compared the codes. The

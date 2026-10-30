@@ -54,7 +54,7 @@ keyring = "4.2.0"
 # Already pulled in by `keyring`; used directly for per-platform entry modifiers (the Windows
 # target name) and the in-memory mock credential in adapter tests.
 keyring-core = "1.0.1"
-libp2p = { version = "0.57.1", features = ["macros", "mdns", "noise", "request-response", "tcp", "tokio", "yamux"] }
+libp2p = { version = "0.57.1", features = ["dcutr", "identify", "macros", "mdns", "noise", "relay", "request-response", "tcp", "tokio", "yamux"] }
 # Teams bridge wire format (Issue #33): rust-protobuf 3.x runtime for the generated messages.
 protobuf = "=3.7.2"
 # `font_subsetting` (Issue #37) embeds only the glyphs a PDF uses, which keeps exports with large

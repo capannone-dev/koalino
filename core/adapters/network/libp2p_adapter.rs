@@ -1,4 +1,10 @@
 //! Builds and drives a Noise-encrypted libp2p swarm while exposing only portable P2P port values.
+//!
+//! Besides direct TCP connections, a device can reach its peers through a relay on the owner's own
+//! daemon (Circuit Relay v2) and upgrade to a direct connection by hole punching (DCUtR, with
+//! Identify supplying the observed addresses). Noise runs end to end over a relayed connection, so
+//! the relay forwards only ciphertext, and the destination's connection gate still decides who
+//! gets in. Only peers paired with the relay may use it.
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -7,13 +13,26 @@ use std::{
 
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, StreamExt};
 use libp2p::{
-    PeerId, SwarmBuilder, mdns, noise, request_response,
+    Multiaddr, PeerId, SwarmBuilder,
+    core::transport::ListenerId,
+    dcutr, identify, mdns,
+    multiaddr::Protocol,
+    noise, relay, request_response,
     swarm::{NetworkBehaviour, Swarm, SwarmEvent, behaviour::toggle::Toggle},
     tcp, yamux,
 };
 
 /// Limits one framed application payload to a bounded amount of adapter memory.
 const MAX_SYNC_PAYLOAD_BYTES: usize = 16 * 1024 * 1024;
+
+/// Identifies this application to peers in the Identify exchange.
+const IDENTIFY_PROTOCOL_VERSION: &str = "/note-taker/identify/1";
+/// How long one relayed connection lasts before the devices dial again. libp2p's default, two
+/// minutes, suits public relays; this one serves only the owner's devices.
+const MAX_RELAYED_CIRCUIT_DURATION: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+/// How many bytes one relayed connection carries before the devices dial again; libp2p's default
+/// of 128 KiB would not fit one sync message (`MAX_SYNC_PAYLOAD_BYTES`).
+const MAX_RELAYED_CIRCUIT_BYTES: u64 = 1024 * 1024 * 1024;
 
 /// Names the versioned libp2p substream protocol that carries opaque sync payloads.
 #[derive(Clone)]
@@ -173,6 +192,14 @@ struct NoteTakerBehaviour {
     file_transfers: request_response::Behaviour<file_transfer_behaviour::FileTransferCodec>,
     /// Carries the pairing exchange, the only protocol an unpaired peer may use.
     pairing: request_response::Behaviour<PairingCodec>,
+    /// Forwards encrypted circuits between paired devices, on the node chosen as relay.
+    relay_server: Toggle<relay::Behaviour>,
+    /// Holds a reservation on the owner's relay and opens circuits through it.
+    relay_client: Toggle<relay::client::Behaviour>,
+    /// Upgrades a relayed connection to a direct one by hole punching where the NAT allows.
+    hole_punching: Toggle<dcutr::Behaviour>,
+    /// Learns this node's observed addresses, which hole punching tries.
+    identify: Toggle<identify::Behaviour>,
 }
 
 /// Normalizes individual behaviour events for the swarm event loop.
@@ -186,6 +213,42 @@ enum NoteTakerBehaviourEvent {
     FileTransfer(request_response::Event<FileTransferRequestPayload, FileTransferResponsePayload>),
     /// Carries a pairing request, answer, or failure.
     Pairing(request_response::Event<PairingRequest, PairingResponse>),
+    /// Carries what the relay service did for a client.
+    RelayServer(Box<relay::Event>),
+    /// Carries the state of this node's reservation and circuits.
+    RelayClient(relay::client::Event),
+    /// Carries a hole-punching result.
+    HolePunching(dcutr::Event),
+    /// Marks an Identify exchange; Identify reports observed addresses to the swarm itself.
+    Identify,
+}
+
+impl From<relay::Event> for NoteTakerBehaviourEvent {
+    /// Wraps a relay service event.
+    fn from(relay_event: relay::Event) -> Self {
+        Self::RelayServer(Box::new(relay_event))
+    }
+}
+
+impl From<relay::client::Event> for NoteTakerBehaviourEvent {
+    /// Wraps a relay client event.
+    fn from(relay_event: relay::client::Event) -> Self {
+        Self::RelayClient(relay_event)
+    }
+}
+
+impl From<dcutr::Event> for NoteTakerBehaviourEvent {
+    /// Wraps a hole-punching event.
+    fn from(hole_punching_event: dcutr::Event) -> Self {
+        Self::HolePunching(hole_punching_event)
+    }
+}
+
+impl From<identify::Event> for NoteTakerBehaviourEvent {
+    /// Wraps an Identify event.
+    fn from(_identify_event: identify::Event) -> Self {
+        Self::Identify
+    }
 }
 
 impl From<request_response::Event<PairingRequest, PairingResponse>> for NoteTakerBehaviourEvent {
@@ -307,6 +370,23 @@ pub struct Libp2pNetworkAdapter {
     pending_pairing_answers: HashMap<PeerId, request_response::ResponseChannel<PairingResponse>>,
     /// Pairing events not yet taken by the application.
     pending_pairing_events: VecDeque<PairingEvent>,
+    /// The relay this device reaches its peers through, when one is configured.
+    relay: Option<RelayRoute>,
+    /// Circuits this node's relay service has accepted.
+    relayed_circuit_count: u64,
+    /// Strangers admitted for pairing that this node's relay service disconnected.
+    refused_relay_client_count: u64,
+}
+
+/// The relay a device uses and the state of its reservation there.
+struct RelayRoute {
+    /// The relay's address, ending in `/p2p/<relay id>`.
+    address: Multiaddr,
+    peer_id: PeerId,
+    /// The listener holding the reservation, while one is being held or requested.
+    listener: Option<ListenerId>,
+    /// The relay accepted the reservation, so peers can reach this device through it.
+    reservation_active: bool,
 }
 
 /// How long a connection with nothing keeping it open survives; libp2p's own default.
@@ -320,6 +400,38 @@ impl Libp2pNetworkAdapter {
     /// Outputs: A configured adapter or a portable security-policy error if mDNS cannot initialize.
     /// Side effects: Allocates libp2p state. It neither listens on a TCP address nor sends data.
     pub fn new(node_identity: NodeIdentity) -> Result<Self, NetworkError> {
+        Self::build(node_identity, true, false)
+    }
+
+    /// Like `new`, and also offers a relay service to the devices paired with this one.
+    ///
+    /// Inputs: `node_identity`, as for `new`. Call `advertise_relay_address` too: without an
+    /// address to hand out, the service cannot grant reservations.
+    /// Outputs: A configured adapter or a portable security-policy error.
+    /// Side effects: Allocates libp2p state.
+    pub fn new_relay_server(node_identity: NodeIdentity) -> Result<Self, NetworkError> {
+        Self::build(node_identity, true, true)
+    }
+
+    /// Like `new`, without mDNS, so that tests choose every route between their nodes.
+    #[cfg(test)]
+    fn without_mdns_for_tests(
+        node_identity: NodeIdentity,
+        relay_server: bool,
+    ) -> Result<Self, NetworkError> {
+        Self::build(node_identity, false, relay_server)
+    }
+
+    /// Builds the swarm.
+    ///
+    /// Inputs: The identity; whether to discover peers with mDNS and to offer a relay service.
+    /// Outputs: The adapter, or a portable security-policy error.
+    /// Side effects: Allocates libp2p state.
+    fn build(
+        node_identity: NodeIdentity,
+        use_mdns: bool,
+        relay_server: bool,
+    ) -> Result<Self, NetworkError> {
         let local_identity_keypair = node_identity.0;
         let local_peer_id = local_identity_keypair.public().to_peer_id();
         let swarm = SwarmBuilder::with_existing_identity(local_identity_keypair)
@@ -332,16 +444,41 @@ impl Libp2pNetworkAdapter {
             .map_err(|error| NetworkError::SecurityPolicy {
                 reason: format!("cannot configure Noise-encrypted TCP transport: {error}"),
             })?
-            .with_behaviour(|_| {
-                Ok(NoteTakerBehaviour {
-                    peer_gate: PeerGate::default(),
-                    mdns: Toggle::from(Some(mdns::tokio::Behaviour::new(
+            .with_relay_client(noise::Config::new, yamux::Config::default)
+            .map_err(|error| NetworkError::SecurityPolicy {
+                reason: format!("cannot configure the relay transport: {error}"),
+            })?
+            .with_behaviour(|keypair, relay_client| {
+                let mdns = if use_mdns {
+                    Some(mdns::tokio::Behaviour::new(
                         mdns::Config::default(),
                         local_peer_id,
-                    )?)),
+                    )?)
+                } else {
+                    None
+                };
+                Ok(NoteTakerBehaviour {
+                    peer_gate: PeerGate::default(),
+                    mdns: Toggle::from(mdns),
                     sync_payloads: Self::sync_payload_behaviour(),
                     file_transfers: file_transfer_behaviour::new_file_transfer_behaviour(),
                     pairing: new_pairing_behaviour(),
+                    relay_server: Toggle::from(relay_server.then(|| {
+                        relay::Behaviour::new(
+                            local_peer_id,
+                            relay::Config {
+                                max_circuit_duration: MAX_RELAYED_CIRCUIT_DURATION,
+                                max_circuit_bytes: MAX_RELAYED_CIRCUIT_BYTES,
+                                ..relay::Config::default()
+                            },
+                        )
+                    })),
+                    relay_client: Toggle::from(Some(relay_client)),
+                    hole_punching: Toggle::from(Some(dcutr::Behaviour::new(local_peer_id))),
+                    identify: Toggle::from(Some(identify::Behaviour::new(identify::Config::new(
+                        IDENTIFY_PROTOCOL_VERSION.to_owned(),
+                        keypair.public(),
+                    )))),
                 })
             })
             .map_err(|error| NetworkError::SecurityPolicy {
@@ -349,7 +486,12 @@ impl Libp2pNetworkAdapter {
             })?
             .build();
 
-        Ok(Self {
+        Ok(Self::around_swarm(swarm))
+    }
+
+    /// Wraps a built swarm with empty adapter state.
+    fn around_swarm(swarm: Swarm<NoteTakerBehaviour>) -> Self {
+        Self {
             swarm,
             reachable_peer_device_ids: HashSet::new(),
             static_peer_ids: HashSet::new(),
@@ -358,7 +500,151 @@ impl Libp2pNetworkAdapter {
             nearby_unpaired_peer_ids: HashSet::new(),
             pending_pairing_answers: HashMap::new(),
             pending_pairing_events: VecDeque::new(),
-        })
+            relay: None,
+            relayed_circuit_count: 0,
+            refused_relay_client_count: 0,
+        }
+    }
+
+    /// Declares the public address this node's relay service hands to its clients.
+    ///
+    /// Inputs: A multiaddress reachable from the clients' networks, without `/p2p/`, such as
+    /// `/ip4/203.0.113.5/tcp/4001`.
+    /// Outputs: Success, or `SecurityPolicy` for an address that does not parse.
+    /// Side effects: Records it as this node's external address.
+    pub fn advertise_relay_address(&mut self, public_address: &str) -> Result<(), NetworkError> {
+        let parsed_address: Multiaddr =
+            public_address
+                .parse()
+                .map_err(|error| NetworkError::SecurityPolicy {
+                    reason: format!("invalid P2P relay address: {error}"),
+                })?;
+        self.swarm.add_external_address(parsed_address);
+        Ok(())
+    }
+
+    /// Reaches this device's peers through the relay at `relay_address`, and lets them reach it.
+    ///
+    /// Inputs: A multiaddress ending in `/p2p/<relay id>`. The relay must be paired with this
+    /// device; until then it is only listed as nearby, as `add_static_peer` does.
+    /// Outputs: Success, or `SecurityPolicy` for an address that does not parse, lacks the peer
+    /// ID, or names this node.
+    /// Side effects: Records the relay. `redial_paired_peers` keeps the reservation and dials
+    /// paired peers through it; direct routes keep working, so losing the relay costs only this
+    /// route.
+    pub fn use_relay(&mut self, relay_address: &str) -> Result<(), NetworkError> {
+        let relay_device_id = self.add_static_peer(relay_address)?;
+        let peer_id = Self::peer_id_from_device_id(&relay_device_id)?;
+        let address = relay_address
+            .parse()
+            .map_err(|error| NetworkError::SecurityPolicy {
+                reason: format!("invalid P2P relay address: {error}"),
+            })?;
+        self.relay = Some(RelayRoute {
+            address,
+            peer_id,
+            listener: None,
+            reservation_active: false,
+        });
+        self.maintain_relay_route();
+        Ok(())
+    }
+
+    /// Reports whether the relay holds a reservation for this device.
+    pub fn has_relay_reservation(&self) -> bool {
+        self.relay
+            .as_ref()
+            .is_some_and(|relay| relay.reservation_active)
+    }
+
+    /// Counts the circuits this node's relay service has accepted.
+    pub fn relayed_circuits(&self) -> u64 {
+        self.relayed_circuit_count
+    }
+
+    /// Counts the strangers this node's relay service disconnected.
+    pub fn refused_relay_clients(&self) -> u64 {
+        self.refused_relay_client_count
+    }
+
+    /// Requests a reservation once connected to the relay, and teaches the swarm the relayed
+    /// address of each paired peer that is not connected.
+    ///
+    /// Side effects: May start a listener on the relay circuit and record peer addresses. A
+    /// failed request closes the listener, so the next call tries again.
+    fn maintain_relay_route(&mut self) {
+        let Some(relay) = self.relay.as_ref() else {
+            return;
+        };
+        let (relay_peer_id, relay_address) = (relay.peer_id, relay.address.clone());
+        let circuit_address = relay_address.with(Protocol::P2pCircuit);
+        if relay.listener.is_none()
+            && self.swarm.is_connected(&relay_peer_id)
+            && self.swarm.behaviour().peer_gate.is_trusted(&relay_peer_id)
+        {
+            match self.swarm.listen_on(circuit_address.clone()) {
+                Ok(listener) => {
+                    if let Some(relay) = self.relay.as_mut() {
+                        relay.listener = Some(listener);
+                    }
+                }
+                Err(_) => tracing::debug!("could not request a relay reservation"),
+            }
+        }
+        let unconnected_peers: Vec<PeerId> = self
+            .swarm
+            .behaviour()
+            .peer_gate
+            .trusted_peers()
+            .filter(|peer_id| **peer_id != relay_peer_id && !self.swarm.is_connected(peer_id))
+            .copied()
+            .collect();
+        for peer_id in unconnected_peers {
+            self.swarm.add_peer_address(
+                peer_id,
+                circuit_address.clone().with(Protocol::P2p(peer_id)),
+            );
+        }
+    }
+
+    /// Forgets the reservation when its listener is gone or the relay's last connection closed.
+    ///
+    /// Inputs: The closed listener, if that is what happened.
+    /// Side effects: Removes the listener, so `maintain_relay_route` requests a new reservation.
+    fn forget_relay_reservation(&mut self, closed_listener: Option<ListenerId>) {
+        let Some(relay) = self.relay.as_mut() else {
+            return;
+        };
+        if closed_listener.is_some() && closed_listener != relay.listener {
+            return;
+        }
+        relay.reservation_active = false;
+        if let Some(listener) = relay.listener.take() {
+            self.swarm.remove_listener(listener);
+        }
+    }
+
+    /// Applies what the relay service did for a client: only paired devices may use it, though a
+    /// pairing window also admits strangers to this node.
+    ///
+    /// Side effects: Disconnects a stranger, and counts refusals and circuits.
+    fn translate_relay_server_event(&mut self, relay_event: relay::Event) {
+        let client = match relay_event {
+            relay::Event::ReservationReqAccepted { src_peer_id, .. } => src_peer_id,
+            relay::Event::CircuitReqAccepted { src_peer_id, .. } => {
+                self.relayed_circuit_count = self.relayed_circuit_count.saturating_add(1);
+                src_peer_id
+            }
+            _ => return,
+        };
+        if !self.swarm.behaviour().peer_gate.is_trusted(&client) {
+            self.refused_relay_client_count = self.refused_relay_client_count.saturating_add(1);
+            tracing::warn!("disconnected an unpaired device that tried to use the relay");
+            self.swarm
+                .behaviour_mut()
+                .peer_gate
+                .disconnect_if_untrusted(client);
+        }
     }
 
     /// Starts listening for encrypted TCP connections on `listen_address`.
@@ -436,6 +722,7 @@ impl Libp2pNetworkAdapter {
     /// Side effects: May schedule dials to the addresses mDNS or the configuration supplied; a
     /// peer with no known address fails to dial quietly. The P2P task calls it periodically.
     pub fn redial_paired_peers(&mut self) {
+        self.maintain_relay_route();
         let static_peer_ids: Vec<PeerId> = self.static_peer_ids.iter().copied().collect();
         for peer_id in static_peer_ids {
             self.record_discovered_peer(peer_id);
@@ -540,12 +827,31 @@ impl Libp2pNetworkAdapter {
         match swarm_event {
             SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                 self.record_connected_peer(peer_id);
+                if self
+                    .relay
+                    .as_ref()
+                    .is_some_and(|relay| relay.peer_id == peer_id)
+                {
+                    self.maintain_relay_route();
+                }
             }
             SwarmEvent::ConnectionClosed {
                 peer_id,
                 num_established: 0,
                 ..
-            } => self.record_disconnected_peer(peer_id),
+            } => {
+                self.record_disconnected_peer(peer_id);
+                if self
+                    .relay
+                    .as_ref()
+                    .is_some_and(|relay| relay.peer_id == peer_id)
+                {
+                    self.forget_relay_reservation(None);
+                }
+            }
+            SwarmEvent::ListenerClosed { listener_id, .. } => {
+                self.forget_relay_reservation(Some(listener_id));
+            }
             SwarmEvent::Behaviour(behaviour_event) => match behaviour_event {
                 NoteTakerBehaviourEvent::Mdns(mdns_event) => self.translate_mdns_event(mdns_event),
                 NoteTakerBehaviourEvent::SyncPayload(sync_payload_event) => {
@@ -557,6 +863,25 @@ impl Libp2pNetworkAdapter {
                 NoteTakerBehaviourEvent::Pairing(pairing_event) => {
                     self.translate_pairing_event(pairing_event);
                 }
+                NoteTakerBehaviourEvent::RelayServer(relay_event) => {
+                    self.translate_relay_server_event(*relay_event);
+                }
+                NoteTakerBehaviourEvent::RelayClient(
+                    relay::client::Event::ReservationReqAccepted { .. },
+                ) => {
+                    if let Some(relay) = self.relay.as_mut() {
+                        if !relay.reservation_active {
+                            tracing::info!("the relay accepted this device's reservation");
+                        }
+                        relay.reservation_active = true;
+                    }
+                }
+                NoteTakerBehaviourEvent::HolePunching(hole_punching_event) => {
+                    if hole_punching_event.result.is_ok() {
+                        tracing::info!("a relayed connection became direct");
+                    }
+                }
+                NoteTakerBehaviourEvent::RelayClient(_) | NoteTakerBehaviourEvent::Identify => {}
             },
             _ => {}
         }
@@ -870,20 +1195,15 @@ impl Libp2pNetworkAdapter {
                 sync_payloads: Self::sync_payload_behaviour(),
                 file_transfers: file_transfer_behaviour::new_file_transfer_behaviour(),
                 pairing: new_pairing_behaviour(),
+                relay_server: Toggle::from(None),
+                relay_client: Toggle::from(None),
+                hole_punching: Toggle::from(None),
+                identify: Toggle::from(None),
             },
             local_peer_id,
             Config::with_tokio_executor().with_idle_connection_timeout(idle_connection_timeout),
         );
-        Ok(Self {
-            swarm,
-            reachable_peer_device_ids: HashSet::new(),
-            static_peer_ids: HashSet::new(),
-            pending_network_events: VecDeque::new(),
-            pending_file_transfer_payloads: VecDeque::new(),
-            nearby_unpaired_peer_ids: HashSet::new(),
-            pending_pairing_answers: HashMap::new(),
-            pending_pairing_events: VecDeque::new(),
-        })
+        Ok(Self::around_swarm(swarm))
     }
 
     /// Starts the test-only swarm on a libp2p memory address.
@@ -1132,6 +1452,10 @@ impl PeerDiscovery for Libp2pNetworkAdapter {
         Ok(reachable_peer_device_ids)
     }
 }
+
+#[cfg(test)]
+#[path = "libp2p_adapter_relay_tests.rs"]
+mod relay_tests;
 
 #[cfg(test)]
 mod tests {
