@@ -23,6 +23,7 @@ without a device or Rust):
 
 `whisper_model_test.dart` covers where the app finds its Whisper model: the data directory
 first, then the bundle's `data/models` on desktops; Android installs the APK's copy.
+`diarization_models_test.dart` covers the same for the two diarization models.
 
 Meeting-title tests (Issue #36):
 

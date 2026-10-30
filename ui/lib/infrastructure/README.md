@@ -55,6 +55,10 @@ changes made from its notification (Issue #47); desktops use `NoRecordingNotifie
 (channel `note_taker/whisper_model`) copies the APK's model into the data directory on first
 start, or when an update ships a model of a different size.
 
+`diarization_models.dart` does the same for the two diarization models: on desktops it passes the
+bundle's `data/models/diarization` when both files are there (the core prefers a pair in the data
+directory), and on Android it asks `WhisperModel.kt` to copy them into the data directory.
+
 `export_bridge.dart` exports a meeting through `note_taker_export_meeting` on a background
 isolate and decodes the core's JSON answer into `MeetingExportSuccess` or `MeetingExportFailure`
 (Issue #48). Formats are Markdown, PDF, and JSON. `FilePickerExportSaver` shows the save dialog:

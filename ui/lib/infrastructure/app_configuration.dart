@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:note_taker_ui/infrastructure/diarization_models.dart';
 import 'package:note_taker_ui/infrastructure/whisper_model.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -21,8 +22,8 @@ const String p2pRelayDefine = String.fromEnvironment('NOTE_TAKER_P2P_RELAY');
 
 /// Builds the JSON for `note_taker_configure`.
 ///
-/// Inputs: The absolute app-private data directory, this device's name, and the model path when
-/// the model is present. The keychain stays enabled everywhere; on Android it is the Keystore key
+/// Inputs: The absolute app-private data directory, this device's name, the model path when the
+/// model is present, and the shipped diarization folder when it has both models. The keychain stays enabled everywhere; on Android it is the Keystore key
 /// that `startCoreWithHostKey` hands over. `p2pPeersDefine` is a comma-separated list of
 /// `…/p2p/<peer id>` addresses to dial; blank entries are dropped.
 /// Outputs: The JSON object text; absent options are omitted, so Rust's defaults apply.
@@ -31,6 +32,7 @@ String appConfigurationJson({
   required String dataDirectory,
   required String deviceName,
   required String? whisperModelPath,
+  String? diarizationModelDirectory,
   String p2pPeersDefine = '',
   String p2pRelayDefine = '',
 }) {
@@ -43,6 +45,8 @@ String appConfigurationJson({
     'data_directory': dataDirectory,
     'device_name': deviceName,
     if (whisperModelPath != null) 'whisper_model_path': whisperModelPath,
+    if (diarizationModelDirectory != null)
+      'diarization_model_directory': diarizationModelDirectory,
     if (peers.isNotEmpty) 'p2p_peers': peers,
     if (p2pRelayDefine.trim().isNotEmpty) 'p2p_relay': p2pRelayDefine.trim(),
   });
@@ -82,7 +86,7 @@ Future<String> appKeyDirectory() async =>
 /// Outputs: Completes with Rust's status: 0 on success, 1 for invalid settings, 2 when the core
 /// was already configured or started.
 /// Side effects: Creates `<support>/note_taker`, finds or installs the Whisper model (see
-/// `whisper_model.dart`), and stores the settings in the native process.
+/// `whisper_model.dart`) and the diarization models (see `diarization_models.dart`), and stores the settings in the native process.
 Future<int> configureCore() async {
   final Directory dataDirectory = await appDataDirectory();
   await dataDirectory.create(recursive: true);
@@ -92,10 +96,18 @@ Future<int> configureCore() async {
     isAndroid: Platform.isAndroid,
     installAndroidModel: installAndroidWhisperModel,
   );
+  final String? diarizationModelDirectory =
+      await resolveDiarizationModelDirectory(
+    dataDirectory: dataDirectory.path,
+    executablePath: Platform.resolvedExecutable,
+    isAndroid: Platform.isAndroid,
+    installAndroidModel: installAndroidDiarizationModel,
+  );
   final String configurationJson = appConfigurationJson(
     dataDirectory: dataDirectory.path,
     deviceName: defaultDeviceName(),
     whisperModelPath: whisperModelPath,
+    diarizationModelDirectory: diarizationModelDirectory,
     p2pPeersDefine: p2pPeersDefine,
     p2pRelayDefine: p2pRelayDefine,
   );

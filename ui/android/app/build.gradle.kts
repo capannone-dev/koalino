@@ -34,7 +34,7 @@ android {
     // read its length and copy it quickly; it compresses poorly anyway.
     sourceSets["main"].assets.srcDir("../../native/android-assets")
     androidResources {
-        noCompress += "bin"
+        noCompress += listOf("bin", "onnx")
     }
 
     buildTypes {
