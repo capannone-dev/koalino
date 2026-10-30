@@ -509,3 +509,37 @@ fn pairings_in_progress_are_listed_with_their_codes() {
         }]
     );
 }
+
+/// A device leaves Nearby while a pairing with it is in progress, in either direction, so it
+/// cannot be paired twice, and comes back when the pairing is cancelled.
+#[test]
+fn a_device_being_paired_is_not_listed_as_nearby() {
+    let nearby = DeviceId::new("peer-nearby");
+    let mut pairing = manager();
+    assert_eq!(pairing.nearby_devices(), vec![nearby.clone()]);
+
+    pairing
+        .start_pairing(&nearby)
+        .unwrap_or_else(|error| panic!("pairing must start: {error}"));
+    assert!(pairing.nearby_devices().is_empty());
+    pairing
+        .cancel(&nearby)
+        .unwrap_or_else(|error| panic!("pairing must cancel: {error}"));
+    assert_eq!(pairing.nearby_devices(), vec![nearby.clone()]);
+
+    pairing
+        .transport_mut()
+        .events
+        .push_back(PairingEvent::Requested {
+            peer_id: nearby.clone(),
+            device_name: name("Phone"),
+        });
+    pairing
+        .process_events()
+        .unwrap_or_else(|error| panic!("events must process: {error}"));
+    assert!(pairing.nearby_devices().is_empty());
+    pairing
+        .cancel(&nearby)
+        .unwrap_or_else(|error| panic!("request must be declined: {error}"));
+    assert_eq!(pairing.nearby_devices(), vec![nearby]);
+}

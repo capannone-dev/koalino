@@ -128,7 +128,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P1 | #55 | Done (2026-10-30): relay through the owner's own daemon (circuit relay v2 + hole punching) for devices that cannot connect directly | 4.1 |
 | P1 | #56 | Done (2026-10-30): voice-library sync between paired devices (union merge, embeddings re-sealed on receipt) | 3.3 |
 | P2 | #57 | Done (2026-10-30): sealed attachment lists, files pulled over `FileTransferNetwork`, verified by SHA-256, fetched again after reconnecting | 3.3 |
-| P3 | #58 | Leave devices with a pending pairing out of Nearby | 4.1 |
+| P3 | #58 | Done (2026-10-30): devices with a pending pairing are left out of Nearby | 4.1 |
 | P2 | #59 | Route transcription to a paired device using the exchanged manifests | 3.4 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |

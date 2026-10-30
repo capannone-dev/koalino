@@ -215,9 +215,19 @@ where
         self.transport.open_pairing_window(duration);
     }
 
-    /// Lists unpaired devices visible on the local network.
+    /// Lists unpaired devices visible on the local network that can be paired now.
+    ///
+    /// Outputs: The devices, without those in `incoming_requests` or `outgoing_pairings`, which
+    /// come back if that pairing ends without trust.
+    /// Side effects: None.
     pub fn nearby_devices(&self) -> Vec<DeviceId> {
-        self.transport.nearby_unpaired_peers()
+        self.transport
+            .nearby_unpaired_peers()
+            .into_iter()
+            .filter(|peer_id| {
+                !self.outgoing.contains_key(peer_id) && !self.incoming.contains_key(peer_id)
+            })
+            .collect()
     }
 
     /// Lists the paired devices, oldest first.
