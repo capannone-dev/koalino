@@ -1310,3 +1310,21 @@ the comment on #49.
   them locally. The issue asks for the same treatment; encrypting attachments would be a separate
   change on every device.
 - **Unlinked attachments stay on their device** until the owner links them to a meeting.
+
+## 2026-10-30 — #59 transcription on a paired device
+
+- **The choice starts as Local.** Raw audio is the most sensitive thing the app holds, so it leaves
+  a device only after the owner picks another option. Auto is opt-in too.
+- **Sealed messages over the sync channel, not a new protocol** (`NTT1`/`NTT2`, like cluster
+  shares). Audio is under the pair key as well as Noise, and a chunk fits the 16 MiB payload limit;
+  a longer one is refused and transcribed locally.
+- **Every remote failure falls back to local**, without retrying another device. The chunk is only
+  copied for the attempt and deleted after success. A device with no engine reports the chunk as
+  failed, and the audio is deleted at stop like any untranscribed chunk.
+- **A dispatcher is built per chunk** from the latest manifests, rather than kept in step with
+  connection events: it stays correct by construction, and it costs a few allocations per chunk.
+- **Hosting has a queue of 4 and a lazily built engine.** A device nobody asks loads no second
+  model; a device that hosts while recording holds two. Past the queue, a device is told to fall
+  back at once.
+- **Known limits.** An answer waits for the host's next 1 s tick. Teams bridge audio stays local.
+  Telemetry records a remote chunk's time against this device.

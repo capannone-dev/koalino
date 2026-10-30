@@ -95,6 +95,7 @@ final class P2pStatus {
     required this.enabled,
     this.localPeerId = '',
     this.deviceName = '',
+    this.transcriptionRoute = 'local',
     this.capabilities,
     this.pairedDevices = const <PairedDevice>[],
     this.nearbyPeerIds = const <String>[],
@@ -110,6 +111,9 @@ final class P2pStatus {
 
   /// The name this device announces.
   final String deviceName;
+
+  /// Where this device's chunks are transcribed: `local`, `auto`, or a paired device's peer ID.
+  final String transcriptionRoute;
 
   /// What this device advertises to its paired devices; `null` from an older core.
   final DeviceCapabilities? capabilities;
@@ -167,6 +171,11 @@ abstract interface class P2pBridge {
   ///
   /// Throws `P2pException` with Rust's error code when the command is refused.
   Future<P2pCommandResult> runCommand(String command, {String? peerId});
+
+  /// Chooses where this device's chunks are transcribed.
+  ///
+  /// Throws `P2pException` with Rust's error code when the choice is refused.
+  Future<void> setTranscriptionRoute(String route);
 }
 
 /// Builds the JSON request for `note_taker_p2p_command`.
@@ -198,6 +207,7 @@ P2pStatus decodeP2pStatus(String json) {
       enabled: true,
       localPeerId: object['local_peer_id']! as String,
       deviceName: object['device_name']! as String,
+      transcriptionRoute: object['transcription_route'] as String? ?? 'local',
       capabilities: _capabilities(object['capabilities']),
       pairedDevices: _list(object['trusted_devices'])
           .map((Map<String, Object?> device) => PairedDevice(
@@ -306,6 +316,14 @@ final class RustP2pBridge implements P2pBridge {
   Future<P2pCommandResult> runCommand(String command, {String? peerId}) async =>
       decodeP2pCommandResult(
           await _runCommand(p2pCommandJson(command, peerId: peerId)));
+
+  @override
+  Future<void> setTranscriptionRoute(String route) async {
+    decodeP2pCommandResult(await _runCommand(jsonEncode(<String, String>{
+      'command': 'set_transcription_route',
+      'route': route,
+    })));
+  }
 }
 
 /// Calls `note_taker_p2p_status` on a background isolate.

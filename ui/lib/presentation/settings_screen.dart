@@ -1,11 +1,13 @@
 // The Settings destination, on every platform (Issue #46). Android adds the App lock switch; every
 // platform has Diagnostics: the Telemetry page (Issue #53), the log level and exporting the logs
-// (saved through a dialog on desktops, shared through the share sheet on Android).
+// (saved through a dialog on desktops, shared through the share sheet on Android). With device sync
+// on, it also chooses where recordings are transcribed (Issue #59).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/log_settings_controller.dart';
+import 'package:note_taker_ui/controllers/transcription_route_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 
@@ -15,34 +17,43 @@ final class SettingsScreen extends StatelessWidget {
   ///
   /// Inputs: The log settings controller, already loaded by the composition root, and the
   /// app-lock controller where the platform has App lock (Android), already initialized, and
-  /// the Telemetry page, which adds a Telemetry entry that opens it.
+  /// the Telemetry page, which adds a Telemetry entry that opens it, and the transcription
+  /// choice, shown only when device sync is on.
   /// Outputs: A Material 3 settings list.
   /// Side effects: None; the controls ask their controllers, and Telemetry pushes its page.
   const SettingsScreen({
     required this.logSettingsController,
     this.appLockController,
     this.telemetryScreenBuilder,
+    this.transcriptionRouteController,
     super.key,
   });
 
   final LogSettingsController logSettingsController;
   final AppLockController? appLockController;
   final WidgetBuilder? telemetryScreenBuilder;
+  final TranscriptionRouteController? transcriptionRouteController;
 
   @override
   Widget build(BuildContext context) {
     final AppLockController? appLock = appLockController;
+    final TranscriptionRouteController? route = transcriptionRouteController;
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListenableBuilder(
         listenable: Listenable.merge(<Listenable?>[
           logSettingsController,
           appLock,
+          route,
         ]),
         builder: (BuildContext context, Widget? child) => ListView(
           children: <Widget>[
             if (appLock != null) ...<Widget>[
               ..._appLockTiles(context, appLock),
+              const Divider(),
+            ],
+            if (route != null && route.available) ...<Widget>[
+              ..._transcriptionTiles(route),
               const Divider(),
             ],
             ..._diagnosticsTiles(context),
@@ -69,6 +80,36 @@ final class SettingsScreen extends StatelessWidget {
       ),
       if (appLock.message case final String message)
         _ErrorText(message: message),
+    ];
+  }
+
+  /// The transcription choice and its message.
+  List<Widget> _transcriptionTiles(TranscriptionRouteController route) {
+    return <Widget>[
+      ListTile(
+        leading: const Icon(Icons.devices_outlined),
+        title: const Text('Transcribe on'),
+        subtitle: const Text('Another device receives the recording\'s audio, '
+            'encrypted, and deletes it once transcribed. '
+            'If it is unavailable, this device transcribes instead.'),
+        trailing: DropdownButton<String>(
+          value: route.route,
+          underline: const SizedBox.shrink(),
+          onChanged: route.isSaving
+              ? null
+              : (String? chosen) {
+                  if (chosen != null) {
+                    route.choose(chosen);
+                  }
+                },
+          items: <DropdownMenuItem<String>>[
+            for (final TranscriptionRouteChoice choice in route.choices)
+              DropdownMenuItem<String>(
+                  value: choice.route, child: Text(choice.label)),
+          ],
+        ),
+      ),
+      if (route.message case final String message) _ErrorText(message: message),
     ];
   }
 

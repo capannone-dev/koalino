@@ -63,3 +63,6 @@ has a screen lock. A failure to read the setting keeps the app locked. The promp
 per lock automatically, and again from Unlock. The app being hidden by the prompt's own PIN
 screen does not lock it again. Turning the setting on or off needs a successful prompt first.
 Only the UI is locked: the Rust core, recording, and sync keep running.
+
+`transcription_route_controller.dart` (Issue #59) holds the Settings choice of where recordings are
+transcribed; the core stores and applies it.

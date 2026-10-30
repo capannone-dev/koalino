@@ -83,6 +83,9 @@ documented nonzero status codes distinguishable from lifecycle states.
 
 ## P2P pairing and sync (Issue #43)
 
+`transcription_host.rs` runs paired devices' transcriptions on its own thread (#59), loading the
+engine on the first job and deleting each job's audio when it ends.
+
 `p2p_composition.rs` runs the daemon's P2P task on its own `note-taker-p2p` thread, with a
 single-threaded Tokio runtime. libp2p's event loop and document merges therefore never run on the
 HTTP runtime.

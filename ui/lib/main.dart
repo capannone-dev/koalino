@@ -18,6 +18,7 @@ import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/photo_capture_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
+import 'package:note_taker_ui/controllers/transcription_route_controller.dart';
 import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
 import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_configuration.dart';
@@ -350,15 +351,20 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         Directory('${(await getTemporaryDirectory()).path}/shared'),
   );
 
+  final TranscriptionRouteController _transcriptionRouteController =
+      TranscriptionRouteController(p2pBridge: const RustP2pBridge());
+
   @override
   void initState() {
     super.initState();
     unawaited(_logSettingsController.load());
+    unawaited(_transcriptionRouteController.load());
   }
 
   @override
   void dispose() {
     _logSettingsController.dispose();
+    _transcriptionRouteController.dispose();
     super.dispose();
   }
 
@@ -368,6 +374,7 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         appLockController: widget.appLockController,
         telemetryScreenBuilder: (BuildContext context) =>
             const _TelemetryDestination(),
+        transcriptionRouteController: _transcriptionRouteController,
       );
 }
 

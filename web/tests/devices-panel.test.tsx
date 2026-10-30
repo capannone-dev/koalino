@@ -26,6 +26,7 @@ const pairedPeerId = "12D3KooWPairedPeer000000000000000000000000000123456";
 function runningStatus(overrides: Partial<Extract<P2pStatus, { enabled: true }>> = {}): P2pStatus {
   return {
     enabled: true,
+    transcription_route: "local",
     local_peer_id: "12D3KooWLocal",
     device_name: "Office server",
     listen_addresses: [],

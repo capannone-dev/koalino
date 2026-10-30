@@ -31,6 +31,10 @@ The initial public contracts are Rust traits, not a network protocol:
 - `AttachmentLibrary` is the local side: it lists linked attachments, reads chunks of linked files
   only, and stores arriving files once verified. It exposes no SQLite or libp2p values.
 
+- `PUT /api/p2p/transcription-route` (body `{"route": ...}`) and the FFI command
+  `set_transcription_route` choose where chunks are transcribed: `local`, `auto`, or a paired
+  device's peer ID. `transcription_route` in the P2P status shows the choice.
+
 ## Attachment file-transfer framing
 
 An attachment transfer frame has the explicit header `{ hash, total_size, chunk_size, offset,

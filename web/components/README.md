@@ -15,6 +15,8 @@ heading with a pencil button. Both open `rename-meeting-dialog.tsx`, the shared 
 validates the title locally, calls `renameMeeting`, and maps failures to plain messages; they
 replace the title from the response without reloading (Issue #42).
 
+`transcription-route-settings.tsx` (Issue #59) chooses where recordings are transcribed.
+
 `log-settings.tsx` (Issue #46) renders the Settings page's level selector (a directive set
 elsewhere, such as `info,note_taker_core=debug`, shows as "Custom") and **Export logs**, which
 downloads the file through `fetchLogExport` and saves it with a temporary link. Failures map to

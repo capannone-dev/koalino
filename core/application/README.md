@@ -180,6 +180,11 @@ synced the file is pulled one 64 KiB chunk at a time, at most two files at once,
 only after verification. Nothing is persisted: lists are sent again on each connection, so a device
 fetches what it missed when it reconnects, restarting any file that was cut off.
 
+`transcription_exchange.rs` encodes the sealed `NTT1`/`NTT2` messages that transcribe on a paired
+device, and `transcription_routing.rs` is the pipeline's engine (#59): per chunk it registers the
+connected manifests with `ComputeDispatcher`, follows the owner's choice, and falls back to the local
+engine on any remote failure, with the audio intact.
+
 `ai_config.rs` keeps per-device defaults and optional task overrides provider-neutral. `ai_registry.rs`
 registers only `TranscriptionEngine` trait objects and selects an explicit provider or its fallback
 chain; local is preferred when configured. OpenAI remains adapter-only, while Anthropic is reserved

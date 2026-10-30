@@ -25,6 +25,9 @@ final class FakeP2pBridge implements P2pBridge {
   /// Commands received, in order.
   final List<P2pCommandCall> commands = <P2pCommandCall>[];
 
+  /// Transcription routes chosen, in order.
+  final List<String> routes = <String>[];
+
   /// Number of `getStatus` calls.
   int statusRequestCount = 0;
 
@@ -45,6 +48,15 @@ final class FakeP2pBridge implements P2pBridge {
       throw error;
     }
     return commandResult;
+  }
+
+  @override
+  Future<void> setTranscriptionRoute(String route) async {
+    routes.add(route);
+    if (nextCommandError case final Object error) {
+      nextCommandError = null;
+      throw error;
+    }
   }
 }
 

@@ -95,3 +95,6 @@ unclustered review clips.
 `NoteRepository` (like `VoiceVectorDB`) is implemented for `&T` where `T: NoteRepository + ?Sized`,
 forwarding every method. Application services can therefore borrow an adapter or a `dyn` port
 object, such as the HTTP server's `dyn ServerRepository`, without owning it.
+
+`file_transfer.rs` moves attachments between paired devices (#57), and `remote_transcription.rs`
+declares the host, stored choice and sample access behind transcription on a paired device (#59).

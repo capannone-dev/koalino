@@ -42,6 +42,8 @@ export type P2pStatus =
       enabled: true;
       local_peer_id: string;
       device_name: string;
+      /** Where recordings are transcribed: `local`, `auto`, or a paired device's peer ID. */
+      transcription_route: string;
       listen_addresses: string[];
       capabilities: DeviceCapabilities;
       trusted_devices: TrustedDevice[];
@@ -178,4 +180,18 @@ export async function rejectPairingRequest(peerId: string): Promise<void> {
  */
 export async function removeDevice(peerId: string): Promise<void> {
   await p2pRequest(`/api/p2p/devices/${segment(peerId)}`, { method: "DELETE" });
+}
+
+/**
+ * Chooses where recordings are transcribed (`PUT /api/p2p/transcription-route`).
+ *
+ * Inputs: `local`, `auto`, or a paired device's peer ID. Outputs: nothing.
+ * Side effects: one HTTP request; throws `P2pRequestError` when it is refused.
+ */
+export async function setTranscriptionRoute(route: string): Promise<void> {
+  await p2pRequest("/api/p2p/transcription-route", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ route })
+  });
 }
