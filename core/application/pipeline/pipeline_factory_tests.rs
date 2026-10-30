@@ -329,7 +329,7 @@ async fn cluster_ids_with(clustering_config: Option<ClusteringConfig>) -> Vec<Op
 }
 
 /// Verifies sessions use the factory's clustering policy: 0.8 similarity joins one cluster under
-/// the default 0.70 threshold but founds two clusters under a 0.90 threshold.
+/// the default 0.40 threshold but founds two clusters under a 0.90 threshold.
 #[tokio::test]
 async fn sessions_use_the_factory_clustering_policy() {
     let default_clusters = cluster_ids_with(None).await;

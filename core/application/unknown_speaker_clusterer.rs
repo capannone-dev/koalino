@@ -3,7 +3,7 @@
 //! When the pipeline produces an "Unknown" or "Unknown (pending review)" speaker segment, its
 //! derived embedding is compared with the representative embedding of every unresolved cluster of
 //! the same meeting. The best cluster whose cosine similarity is strictly above the configured
-//! threshold (default 0.70) absorbs the chunk and its representative becomes the running mean of
+//! threshold (default 0.40) absorbs the chunk and its representative becomes the running mean of
 //! its members; otherwise a new cluster is created. Assigning an identity to a cluster enrolls
 //! every member embedding as a voice variant, relinks the cluster's transcript segments, and
 //! resolves the cluster (deleting its temporary review audio).
@@ -28,8 +28,10 @@ use crate::{
 /// Default minimum cosine similarity (exclusive) for a chunk to join an existing cluster.
 ///
 /// Higher values split one person across more clusters (more review work, fewer merges of
-/// different people); lower values merge similar-sounding people into one cluster.
-pub const DEFAULT_CLUSTER_SIMILARITY_THRESHOLD: f32 = 0.70;
+/// different people); lower values merge similar-sounding people into one cluster. Tuned on ECAPA embeddings of
+/// LibriSpeech (#44): different speakers stay below about 0.33 (99th percentile), while the same
+/// speaker's 4 s segments stay above about 0.49 (5th percentile).
+pub const DEFAULT_CLUSTER_SIMILARITY_THRESHOLD: f32 = 0.40;
 
 /// Configures unknown-speaker clustering.
 #[derive(Clone, Copy, Debug, PartialEq)]

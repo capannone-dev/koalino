@@ -348,13 +348,13 @@ assign_identity_to_cluster(cluster, identity)
   4. resolve_unknown_speaker_cluster: mark resolved + delete its review clips (raw audio)
 ```
 
-**Threshold.** `ClusteringConfig` defaults to `DEFAULT_CLUSTER_SIMILARITY_THRESHOLD = 0.70`; a
+**Threshold.** `ClusteringConfig` defaults to `DEFAULT_CLUSTER_SIMILARITY_THRESHOLD = 0.40`; a
 chunk joins only when its similarity is strictly greater. The value must be finite and in
 `(0, 1]`. Raising it splits one person across more clusters, which means more review work but
 fewer wrong merges. Lowering it merges more aggressively, risking two similar-sounding people in
-one cluster, so one label would mis-attribute the other person. 0.70 sits below the matcher's
-0.80 strong-match cutoff because within-meeting voices share a microphone and room, so
-same-speaker similarity is usually high. It is a starting point to tune against real embeddings.
+one cluster, so one label would mis-attribute the other person. 0.40 was tuned on ECAPA embeddings
+of LibriSpeech (#44): different speakers stay below about 0.33 (99th percentile), while the same
+speaker's 4 s segments stay above about 0.49 (5th percentile).
 Configure it with `MeetingSession::with_clustering_config`.
 
 **Identity creation.** `assign_identity_to_cluster` takes a `SpeakerIdentity`. It saves the

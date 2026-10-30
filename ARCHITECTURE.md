@@ -48,7 +48,7 @@
  │      └ missing/error → "Unattributed"          (diarization skipped)              │
  │ 3 VoiceIdentityMatcher.match_embedding         └ error → "Unknown"                │
  │      strong → Known · weak → pending review · none/error → Unknown                │
- │   3b UnknownSpeakerClusterer (weak/none/error): cosine > 0.70 joins the meeting's │
+ │   3b UnknownSpeakerClusterer (weak/none/error): cosine > 0.40 joins the meeting's │
  │      best cluster (running-mean representative), else new cluster + review clip   │
  │ 4 alignment: clamp → merge same speaker → tile VAD chunk → split words by time    │
  │ 5 NoteRepository.save_transcript_segments (whole meeting timeline)                │
@@ -100,7 +100,7 @@ loaded once and reused across recordings. Stop is graceful: it waits for in-flig
 ```text
  MeetingSession ──unknown voice──▶ application::UnknownSpeakerClusterer ──▶ NoteRepository
                                      cosine vs. meeting clusters             unknown_speaker_clusters
-                                     > 0.70 join (running mean) / new        cluster_chunks
+                                     > 0.40 join (running mean) / new        cluster_chunks
  CLI / HTTP / FFI ─▶ application::cluster_review  (list summaries · name → identity, Issue #29)
  CLI / HTTP / FFI ─▶ application::meeting_rename  (MeetingTitle::parse → exists? → MeetingCrdtService::set_meeting_title, Issue #38)
  user assigns identity to cluster ─▶ assign_identity_to_cluster

@@ -184,7 +184,7 @@ where
         })
     }
 
-    /// Replaces the default unknown-speaker clustering policy (threshold 0.70).
+    /// Replaces the default unknown-speaker clustering policy (threshold 0.40).
     ///
     /// Inputs: `clustering_config` holds a validated similarity threshold.
     /// Outputs: The session using that policy for subsequent chunks.

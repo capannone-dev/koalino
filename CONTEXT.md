@@ -169,7 +169,7 @@ has no word timestamps. Nothing wires sessions into the daemon, CLI, or `TeamsPr
 
 Issue #28 clusters unknown speakers per meeting. `application/unknown_speaker_clusterer.rs`
 compares each weak or unmatched voice embedding with the meeting's unresolved clusters by cosine
-similarity. A score strictly above the configurable threshold (default 0.70) joins the best
+similarity. A score strictly above the configurable threshold (default 0.40) joins the best
 cluster and updates its running-mean representative; anything else founds a new cluster.
 `MeetingSession` saves one review clip per cluster, carrying `cluster_id`, and persists the link
 on every segment as `TranscriptSegment::unknown_cluster_id`. A clustering failure falls back to the

@@ -63,12 +63,12 @@ fn clusters_of(
         .unwrap_or_else(|error| panic!("clusters should load: {error}"))
 }
 
-/// Verifies the default threshold matches the documented 0.70 policy.
+/// Verifies the default threshold matches the documented 0.40 policy.
 #[test]
-fn default_threshold_is_seventy_percent() {
-    assert!((DEFAULT_CLUSTER_SIMILARITY_THRESHOLD - 0.70).abs() < f32::EPSILON);
+fn default_threshold_is_forty_percent() {
+    assert!((DEFAULT_CLUSTER_SIMILARITY_THRESHOLD - 0.40).abs() < f32::EPSILON);
     assert!(
-        (ClusteringConfig::default().similarity_threshold() - 0.70).abs() < f32::EPSILON,
+        (ClusteringConfig::default().similarity_threshold() - 0.40).abs() < f32::EPSILON,
         "default config should use the documented threshold"
     );
 }
@@ -117,7 +117,7 @@ fn first_unknown_chunk_creates_new_cluster() {
     assert!(!clusters[0].is_resolved());
 }
 
-/// Verifies a chunk whose cosine similarity exceeds 0.70 joins the existing cluster.
+/// Verifies a chunk whose cosine similarity exceeds 0.40 joins the existing cluster.
 #[test]
 fn similar_unknown_chunk_joins_existing_cluster() {
     let meeting_id = MeetingId::new("meeting-a");
@@ -125,7 +125,7 @@ fn similar_unknown_chunk_joins_existing_cluster() {
     let clusterer = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default());
 
     let (first_cluster_id, _) = add_chunk(&clusterer, &meeting_id, &[1.0, 0.0], "c1", 1_000);
-    // cos([1,0],[0.9,0.3]) ≈ 0.949 > 0.70
+    // cos([1,0],[0.9,0.3]) ≈ 0.949 > 0.40
     let (second_cluster_id, is_new_cluster) =
         add_chunk(&clusterer, &meeting_id, &[0.9, 0.3], "c2", 2_000);
 
@@ -137,7 +137,7 @@ fn similar_unknown_chunk_joins_existing_cluster() {
     assert_eq!(clusters[0].total_duration_ms(), 3_000);
 }
 
-/// Verifies a chunk whose cosine similarity is below 0.70 starts another cluster.
+/// Verifies a chunk whose cosine similarity is below 0.40 starts another cluster.
 #[test]
 fn different_unknown_chunk_creates_another_cluster() {
     let meeting_id = MeetingId::new("meeting-a");
@@ -146,9 +146,9 @@ fn different_unknown_chunk_creates_another_cluster() {
 
     let (first_cluster_id, _) = add_chunk(&clusterer, &meeting_id, &[1.0, 0.0], "c1", 1_000);
     add_chunk(&clusterer, &meeting_id, &[0.9, 0.3], "c2", 1_000);
-    // cos([1,0],[0.5,0.8]) ≈ 0.53 < 0.70
+    // cos([1,0],[0.2,0.9]) ≈ 0.22 < 0.40
     let (third_cluster_id, is_new_cluster) =
-        add_chunk(&clusterer, &meeting_id, &[0.5, 0.8], "c3", 1_000);
+        add_chunk(&clusterer, &meeting_id, &[0.2, 0.9], "c3", 1_000);
 
     assert!(is_new_cluster);
     assert_ne!(third_cluster_id, first_cluster_id);
@@ -178,13 +178,13 @@ fn similarity_equal_to_threshold_creates_new_cluster() {
 fn configured_threshold_controls_grouping() {
     let meeting_id = MeetingId::new("meeting-a");
     let note_repository = repository_with_meetings(&[&meeting_id]);
-    let lenient_config = ClusteringConfig::new(0.5)
+    let lenient_config = ClusteringConfig::new(0.1)
         .unwrap_or_else(|error| panic!("threshold should be valid: {error}"));
     let clusterer = UnknownSpeakerClusterer::new(&note_repository, lenient_config);
 
     add_chunk(&clusterer, &meeting_id, &[1.0, 0.0], "c1", 1_000);
-    // ≈ 0.53: below the default 0.70 but above the lenient 0.50
-    let (_, is_new_cluster) = add_chunk(&clusterer, &meeting_id, &[0.5, 0.8], "c2", 1_000);
+    // ≈ 0.22: below the default 0.40 but above the lenient 0.10
+    let (_, is_new_cluster) = add_chunk(&clusterer, &meeting_id, &[0.2, 0.9], "c2", 1_000);
 
     assert!(!is_new_cluster);
 }

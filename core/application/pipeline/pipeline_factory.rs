@@ -195,7 +195,7 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
         }
     }
 
-    /// Replaces the unknown-speaker clustering policy (default threshold 0.70).
+    /// Replaces the unknown-speaker clustering policy (default threshold 0.40).
     ///
     /// Inputs: A validated clustering configuration.
     /// Outputs: The factory applying it to every later session.

@@ -106,7 +106,7 @@ distribution is a heuristic. Word-level timestamps from the transcription port w
 
 ## Unknown-speaker clusters
 
-Weak and unmatched voices are clustered per meeting by cosine similarity (threshold 0.70, see
+Weak and unmatched voices are clustered per meeting by cosine similarity (threshold 0.40, see
 `../README.md`). `SpeakerAttribution::{PendingReview, Unknown}` carry the `cluster_id`, which is
 persisted as `TranscriptSegment::unknown_cluster_id`. Only the chunk that founds a cluster saves a
 review clip, so the Voice Gallery shows one clip per unknown person rather than one per chunk.
