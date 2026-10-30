@@ -3,6 +3,7 @@
 // of the meeting (Issue #54).
 
 // ignore: deprecated_member_use
+import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/live_transcript_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
@@ -19,12 +20,16 @@ const double _maxContentWidth = 480;
 /// Tallest the live transcript grows before it scrolls, in logical pixels.
 const double _maxTranscriptHeight = 320;
 
+/// Finds the language selector in tests.
+const Key recordingLanguageSelectorKey = Key('recording-language-selector');
+
 /// Displays recording state and an optional title field, delegating actions to a controller.
 final class RecordingScreen extends StatefulWidget {
   /// Creates a screen that observes `recordingController` for its displayable state.
   ///
   /// Inputs: `recordingController` must outlive this widget or be disposed by its owner;
-  /// `liveTranscriptController`, when given, adds the live transcript below the controls;
+  /// `languageController`, when given, adds the language selector, usable before and during a
+  /// recording; `liveTranscriptController`, when given, adds the live transcript below the controls;
   /// `photoScreenBuilder` and `attachmentsController`, each with `activeMeetingId` (which reads
   /// the recorded meeting from Rust), add Take photos and Attach files while recording or
   /// paused; what they add is placed at that point of the transcript.
@@ -32,6 +37,7 @@ final class RecordingScreen extends StatefulWidget {
   /// Side effects: Registers an animated listener while the widget is mounted.
   const RecordingScreen({
     required this.recordingController,
+    this.languageController,
     this.liveTranscriptController,
     this.photoScreenBuilder,
     this.attachmentsController,
@@ -40,6 +46,7 @@ final class RecordingScreen extends StatefulWidget {
   });
 
   final RecordingController recordingController;
+  final TranscriptionLanguageController? languageController;
   final LiveTranscriptController? liveTranscriptController;
   final MeetingScreenBuilder? photoScreenBuilder;
   final MeetingAttachmentsController? attachmentsController;
@@ -199,6 +206,15 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                           border: OutlineInputBorder(),
                         ),
                       ),
+                      if (widget.languageController
+                          case final TranscriptionLanguageController
+                              languageController) ...<Widget>[
+                        const SizedBox(height: 8),
+                        _LanguageSelector(
+                          controller: languageController,
+                          isRecordingActive: isBusy,
+                        ),
+                      ],
                       const SizedBox(height: 16),
                       Text(
                         statusLabel,
@@ -293,6 +309,56 @@ final class _RecordingScreenState extends State<RecordingScreen> {
       ),
     );
   }
+}
+
+/// Chooses the recording's language, before it starts and while it runs.
+final class _LanguageSelector extends StatelessWidget {
+  const _LanguageSelector({
+    required this.controller,
+    required this.isRecordingActive,
+  });
+
+  final TranscriptionLanguageController controller;
+
+  /// Whether a recording is running, when a change applies to what is said next.
+  final bool isRecordingActive;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: controller,
+        builder: (BuildContext context, Widget? child) => InputDecorator(
+          decoration: InputDecoration(
+            labelText: 'Language',
+            helperText: isRecordingActive
+                ? 'A change applies to what is said next'
+                : null,
+            errorText: controller.message,
+            prefixIcon: const Icon(Icons.translate),
+            border: const OutlineInputBorder(),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              key: recordingLanguageSelectorKey,
+              value: controller.recordingLanguage,
+              isDense: true,
+              isExpanded: true,
+              menuMaxHeight: 400,
+              onChanged: controller.isSaving
+                  ? null
+                  : (String? chosen) {
+                      if (chosen != null) {
+                        controller.chooseForRecording(chosen);
+                      }
+                    },
+              items: <DropdownMenuItem<String>>[
+                for (final LanguageChoice choice in controller.choices)
+                  DropdownMenuItem<String>(
+                      value: choice.code, child: Text(choice.label)),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 /// The transcript of the meeting being recorded, newest line kept in view.

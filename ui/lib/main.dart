@@ -18,12 +18,14 @@ import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/photo_capture_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
+import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_route_controller.dart';
 import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
 import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_configuration.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/host_key.dart';
+import 'package:note_taker_ui/infrastructure/language_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_attachment_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
@@ -67,6 +69,13 @@ Future<void> main() async {
     microphonePermission: platformMicrophonePermission(),
     recordingNotifier: platformRecordingNotifier(),
   );
+  // Lives as long as the app, so a choice survives switching destinations.
+  final TranscriptionLanguageController languageController =
+      TranscriptionLanguageController(
+    languageBridge: const RustLanguageBridge(),
+    recordingController: recordingController,
+  );
+  unawaited(languageController.load());
   // Lives as long as the recording, so the transcript keeps growing on any destination.
   final LiveTranscriptController liveTranscriptController =
       LiveTranscriptController(
@@ -95,6 +104,7 @@ Future<void> main() async {
     activeMeetingId: recordingBridge.activeMeetingId,
     coreStartupController: coreStartupController,
     appLockController: appLockController,
+    languageController: languageController,
   ));
   unawaited(appLockController?.initialize());
   // Starts after the first frame, so the waiting message shows during a keychain prompt.
@@ -111,7 +121,8 @@ final class NoteTakerApp extends StatelessWidget {
   /// `liveTranscriptController`, when given, shows the transcript growing on the Record screen;
   /// `activeMeetingId` adds Take photos there on platforms with a camera.
   /// `appLockController`, when given (Android), covers every screen while the app is locked
-  /// and adds the App lock switch to Settings.
+  /// and adds the App lock switch to Settings. `languageController`, when given, adds the language
+  /// selector to the Record screen and the default language to Settings.
   /// Outputs: A configured Material application.
   /// Side effects: None.
   const NoteTakerApp({
@@ -120,10 +131,12 @@ final class NoteTakerApp extends StatelessWidget {
     this.activeMeetingId,
     this.coreStartupController,
     this.appLockController,
+    this.languageController,
     super.key,
   });
 
   final RecordingController recordingController;
+  final TranscriptionLanguageController? languageController;
   final LiveTranscriptController? liveTranscriptController;
 
   /// Reads the meeting being recorded, for Take photos on the Record screen (Issue #54).
@@ -141,6 +154,7 @@ final class NoteTakerApp extends StatelessWidget {
     final Widget shell = HomeShell(
       recordingScreenBuilder: (BuildContext context) => RecordingScreen(
         recordingController: recordingController,
+        languageController: languageController,
         liveTranscriptController: liveTranscriptController,
         photoScreenBuilder: _photoScreenBuilder,
         attachmentsController: _recordingAttachmentsController,
@@ -150,8 +164,10 @@ final class NoteTakerApp extends StatelessWidget {
           const _MeetingsDestination(),
       devicesScreenBuilder: (BuildContext context) =>
           const _DevicesDestination(),
-      settingsScreenBuilder: (BuildContext context) =>
-          _SettingsDestination(appLockController: appLockController),
+      settingsScreenBuilder: (BuildContext context) => _SettingsDestination(
+        appLockController: appLockController,
+        languageController: languageController,
+      ),
     );
     final CoreStartupController? startup = coreStartupController;
     final AppLockController? appLock = appLockController;
@@ -331,10 +347,16 @@ final class _TelemetryDestinationState extends State<_TelemetryDestination> {
 
 /// Owns the log settings controller while Settings is shown.
 final class _SettingsDestination extends StatefulWidget {
-  const _SettingsDestination({required this.appLockController});
+  const _SettingsDestination({
+    required this.appLockController,
+    required this.languageController,
+  });
 
   /// Android's app lock, or `null` on platforms without it.
   final AppLockController? appLockController;
+
+  /// The transcription language, owned by the app.
+  final TranscriptionLanguageController? languageController;
 
   @override
   State<_SettingsDestination> createState() => _SettingsDestinationState();
@@ -375,6 +397,7 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         telemetryScreenBuilder: (BuildContext context) =>
             const _TelemetryDestination(),
         transcriptionRouteController: _transcriptionRouteController,
+        languageController: widget.languageController,
       );
 }
 

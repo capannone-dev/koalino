@@ -7,9 +7,13 @@
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/log_settings_controller.dart';
+import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_route_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
+
+/// Finds the default language selector in tests.
+const Key defaultLanguageSelectorKey = Key('default-language-selector');
 
 /// Renders the settings over their controllers; it holds no logic of its own.
 final class SettingsScreen extends StatelessWidget {
@@ -18,7 +22,7 @@ final class SettingsScreen extends StatelessWidget {
   /// Inputs: The log settings controller, already loaded by the composition root, and the
   /// app-lock controller where the platform has App lock (Android), already initialized, and
   /// the Telemetry page, which adds a Telemetry entry that opens it, and the transcription
-  /// choice, shown only when device sync is on.
+  /// choice, shown only when device sync is on, and the default transcription language.
   /// Outputs: A Material 3 settings list.
   /// Side effects: None; the controls ask their controllers, and Telemetry pushes its page.
   const SettingsScreen({
@@ -26,6 +30,7 @@ final class SettingsScreen extends StatelessWidget {
     this.appLockController,
     this.telemetryScreenBuilder,
     this.transcriptionRouteController,
+    this.languageController,
     super.key,
   });
 
@@ -33,11 +38,13 @@ final class SettingsScreen extends StatelessWidget {
   final AppLockController? appLockController;
   final WidgetBuilder? telemetryScreenBuilder;
   final TranscriptionRouteController? transcriptionRouteController;
+  final TranscriptionLanguageController? languageController;
 
   @override
   Widget build(BuildContext context) {
     final AppLockController? appLock = appLockController;
     final TranscriptionRouteController? route = transcriptionRouteController;
+    final TranscriptionLanguageController? language = languageController;
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListenableBuilder(
@@ -45,11 +52,16 @@ final class SettingsScreen extends StatelessWidget {
           logSettingsController,
           appLock,
           route,
+          language,
         ]),
         builder: (BuildContext context, Widget? child) => ListView(
           children: <Widget>[
             if (appLock != null) ...<Widget>[
               ..._appLockTiles(context, appLock),
+              const Divider(),
+            ],
+            if (language != null) ...<Widget>[
+              ..._languageTiles(language),
               const Divider(),
             ],
             if (route != null && route.available) ...<Widget>[
@@ -84,6 +96,38 @@ final class SettingsScreen extends StatelessWidget {
   }
 
   /// The transcription choice and its message.
+  List<Widget> _languageTiles(TranscriptionLanguageController language) {
+    return <Widget>[
+      ListTile(
+        leading: const Icon(Icons.translate),
+        title: const Text('Default language'),
+        subtitle: const Text('Used for new recordings. '
+            'Auto detects the language as people speak.'),
+        trailing: DropdownButton<String>(
+          key: defaultLanguageSelectorKey,
+          value: language.defaultLanguage,
+          underline: const SizedBox.shrink(),
+          menuMaxHeight: 400,
+          onChanged: language.isSaving
+              ? null
+              : (String? chosen) {
+                  if (chosen != null) {
+                    language.chooseDefault(chosen);
+                  }
+                },
+          items: <DropdownMenuItem<String>>[
+            for (final LanguageChoice choice in language.choices)
+              DropdownMenuItem<String>(
+                  value: choice.code, child: Text(choice.label)),
+          ],
+        ),
+      ),
+      if (language.message case final String message)
+        _ErrorText(message: message),
+    ];
+  }
+
+  /// Where recordings are transcribed.
   List<Widget> _transcriptionTiles(TranscriptionRouteController route) {
     return <Widget>[
       ListTile(

@@ -25,6 +25,9 @@ without a device or Rust):
 first, then the bundle's `data/models` on desktops; Android installs the APK's copy.
 `diarization_models_test.dart` covers the same for the two diarization models.
 
+`transcription_language_test.dart` covers choosing the language in Settings and on the Record
+screen, over `fake_language_bridge.dart`.
+
 Meeting-title tests (Issue #36):
 
 - `recording_screen_test.dart` covers the title field, its hint, sending a trimmed title or
