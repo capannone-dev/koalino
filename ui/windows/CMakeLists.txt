@@ -108,6 +108,32 @@ else()
   message(WARNING "Whisper model not staged; run tools/cross/build-flutter-native.sh windows")
 endif()
 
+# Bundle the diarization models and their licences into data/models/diarization (Issue #60).
+# Without them the app runs but recordings get no speaker turns.
+set(NOTE_TAKER_DIARIZATION_MODELS "${CMAKE_CURRENT_SOURCE_DIR}/../native/models/diarization")
+if(EXISTS "${NOTE_TAKER_DIARIZATION_MODELS}")
+  install(DIRECTORY "${NOTE_TAKER_DIARIZATION_MODELS}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/models"
+    COMPONENT Runtime)
+else()
+  message(WARNING "Diarization models not staged; run tools/cross/build-flutter-native.sh windows")
+endif()
+
+# Install the Visual C++ runtime beside the executable: ONNX Runtime needs it and a fresh Windows
+# does not have it. Microsoft allows redistributing these files with an application.
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION "${INSTALL_BUNDLE_LIB_DIR}")
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT Runtime)
+include(InstallRequiredSystemLibraries)
+
+# Install Microsoft's ONNX Runtime beside the executable, where the core loads it at run time for
+# diarization, with its licence notices. Without it recordings simply get no speaker turns.
+set(NOTE_TAKER_ONNX_RUNTIME "${CMAKE_CURRENT_SOURCE_DIR}/../native/windows/onnxruntime")
+if(EXISTS "${NOTE_TAKER_ONNX_RUNTIME}")
+  install(DIRECTORY "${NOTE_TAKER_ONNX_RUNTIME}/" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+else()
+  message(WARNING "ONNX Runtime not staged; run tools/cross/build-flutter-native.sh windows")
+endif()
+
 # Copy the native assets provided by the hook/build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
