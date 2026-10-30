@@ -120,6 +120,11 @@ the one it receives, pinning it with `TrustedPeerStore::pin_pair_key`. Malformed
 keys, keys from unpaired devices, and keys that differ from the pinned one are logged and
 ignored. See `crypto/README.md`.
 
+`voice_library_exchange.rs` encodes the `NTV1` messages that copy the voice library (identities,
+variants, deletion records) to a paired device, sealed with the pair key and split to fit the
+transport. `P2pService` sends the library when its digest differs from what a device was last sent;
+`SqliteVoiceVectorDB` merges it (#56).
+
 `cluster_share_exchange.rs` encodes a `ClusterShare` (an unresolved unknown-speaker cluster, its
 member embeddings, and its review clips) as sealed `NTC1` messages for one paired device
 (Issue #50). The body is JSON with the clip audio appended raw, sealed with the pair key and bound

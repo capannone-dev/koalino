@@ -54,7 +54,7 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
     with `{"error"}`; disabled or stopped P2P `503`.
   - A successful `POST /api/meetings` or `PATCH /api/meetings/{meeting_id}` reports the meeting
     through `P2pControl::notify_local_change`, so connected devices get it at once. Cluster
-    assignments are not reported yet: speaker identities stay local until the voice library syncs.
+    assignments are not reported here: the voice library syncs by its own digest (#56).
 - Settings (Issue #46, `log_routes.rs`) work through the `LogControl` port, which
   `ServerAppState::with_log_control` attaches:
   - `GET /api/settings/log-level` returns `{"level"}`, the level in effect.

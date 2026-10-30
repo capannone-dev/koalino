@@ -1272,3 +1272,20 @@ the comment on #49.
   mode was not built: the issue names the owner's own daemon, which is meant to hold them.
 - **The apps take the relay address at build time** (`--dart-define`), like static peers, until
   Settings has a field for it.
+
+## 2026-10-30 — #56 voice-library sync
+
+- **Sealed messages, not the Automerge document.** Embeddings must be deletable, and a document keeps
+  its history forever. `NTV1` messages carry them under the pair key, and each device reseals them
+  with its own key, as with cluster shares (#50).
+- **Variants union by ID; names follow the newest `updated_at`**, with the greater name winning at
+  the same instant, so every device converges in any order. It relies on device clocks: a device with
+  a wrong clock can win or lose a concurrent rename, which is harmless compared with coordination.
+- **Deletions always win and their records are kept forever.** Deleting a voice is a privacy promise,
+  so a stale device must not restore it, whatever its timestamps say. Records hold only a UUID and a
+  time. The cost is that a deleted UUID can never be used again; new enrollments get new UUIDs.
+- **The whole library is sent when its digest changes**, rather than per-variant deltas: a personal
+  library is small, and it needs no per-device state to survive restarts.
+- **Merging two people is not built**, despite the issue's wording: no device has such an operation
+  to sync. Concurrent namings of one cluster keep the behaviour from #50: both identities sync, and the
+  document's winner is the name segments show.
