@@ -126,7 +126,7 @@ impl AttachmentFileStore {
 ///
 /// Inputs: The source path. Outputs: The MIME type, or a rejection for any other extension.
 /// Side effects: None.
-fn supported_mime_type(source_path: &Path) -> Result<&'static str, StorageError> {
+pub(super) fn supported_mime_type(source_path: &Path) -> Result<&'static str, StorageError> {
     let extension = source_path
         .extension()
         .and_then(|extension| extension.to_str())
@@ -179,7 +179,7 @@ fn open_regular_file(source_path: &Path) -> Result<File, StorageError> {
 /// survives.
 ///
 /// Inputs: The source path. Outputs: A plain file name. Side effects: None.
-fn kept_file_name(source_path: &Path) -> String {
+pub(super) fn kept_file_name(source_path: &Path) -> String {
     let safe_name: Vec<char> = source_path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())

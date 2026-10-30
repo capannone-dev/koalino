@@ -765,135 +765,61 @@ pub struct Attachment {
     meeting_time_ms: Option<u64>,
 }
 
-/// Identifies one meeting attachment stored by SHA-256 content address rather than a mutable path.
+/// One linked attachment as paired devices describe it: metadata only, never a local path.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FileReference {
-    hash: String,
-    size_bytes: u64,
-    mime_type: String,
-    meeting_id: MeetingId,
-    filename: String,
+pub struct SharedAttachment {
+    /// The ID shared by every copy of this attachment.
+    pub attachment_id: Uuid,
+    /// The meeting it belongs to.
+    pub meeting_id: MeetingId,
+    /// The file's name, without any folder.
+    pub file_name: String,
+    /// The file's MIME type.
+    pub mime_type: String,
+    /// The lowercase hexadecimal SHA-256 of the file.
+    pub content_hash: String,
+    /// The file's length in bytes.
+    pub size_bytes: u64,
+    /// When the attachment was added.
+    pub original_timestamp: DateTime<Utc>,
+    /// The device that added it.
+    pub original_device_id: String,
+    /// Where it sits in the meeting's transcript, if placed.
+    pub meeting_time_ms: Option<u64>,
 }
 
-impl FileReference {
-    /// Creates immutable attachment-transfer metadata without retaining file contents.
-    ///
-    /// Inputs: `hash` is the lowercase SHA-256 content address; `size_bytes` is the exact file size.
-    /// Outputs: A reference suitable for CRDT metadata or availability announcements.
-    /// Side effects: Takes ownership of metadata only and never reads file content.
-    pub fn new(
-        hash: impl Into<String>,
-        size_bytes: u64,
-        mime_type: impl Into<String>,
-        meeting_id: MeetingId,
-        filename: impl Into<String>,
-    ) -> Self {
-        Self {
-            hash: hash.into(),
-            size_bytes,
-            mime_type: mime_type.into(),
-            meeting_id,
-            filename: filename.into(),
-        }
-    }
-    /// Borrows the expected SHA-256 content address.
-    pub fn hash(&self) -> &str {
-        &self.hash
-    }
-    /// Returns the exact expected byte count.
-    pub fn size_bytes(&self) -> u64 {
-        self.size_bytes
-    }
-    /// Borrows the media type declared for display and handling.
-    pub fn mime_type(&self) -> &str {
-        &self.mime_type
-    }
-    /// Borrows the meeting that authorizes this attachment.
-    pub fn meeting_id(&self) -> &MeetingId {
-        &self.meeting_id
-    }
-    /// Borrows the original safe display filename.
-    pub fn filename(&self) -> &str {
-        &self.filename
-    }
-}
-
-/// Requests an authorized content-addressed attachment from one authenticated portable peer.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FileTransferRequest {
-    hash: String,
-    requester_peer: DeviceId,
-}
-
-impl FileTransferRequest {
-    /// Creates one request for an exact SHA-256 hash.
-    pub fn new(hash: impl Into<String>, requester_peer: DeviceId) -> Self {
-        Self {
-            hash: hash.into(),
-            requester_peer,
-        }
-    }
-    /// Borrows the requested SHA-256 hash.
-    pub fn hash(&self) -> &str {
-        &self.hash
-    }
-    /// Borrows the authenticated requester identity.
-    pub fn requester_peer(&self) -> &DeviceId {
-        &self.requester_peer
-    }
-}
-
-/// Carries one explicitly bounded binary file-transfer frame.
+/// One bounded piece of an attachment file on its way to a paired device.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FileChunk {
     hash: String,
     total_size: u64,
-    chunk_size: u32,
     offset: u64,
-    is_final: bool,
     data: Vec<u8>,
 }
 
 impl FileChunk {
-    /// Creates an explicit-header transfer frame; validation is performed by the receiver.
-    pub fn new(
-        hash: impl Into<String>,
-        total_size: u64,
-        chunk_size: u32,
-        offset: u64,
-        is_final: bool,
-        data: Vec<u8>,
-    ) -> Self {
+    /// Creates a chunk; the receiver validates every field.
+    pub fn new(hash: impl Into<String>, total_size: u64, offset: u64, data: Vec<u8>) -> Self {
         Self {
             hash: hash.into(),
             total_size,
-            chunk_size,
             offset,
-            is_final,
             data,
         }
     }
-    /// Borrows the expected content address.
+    /// Borrows the file's content address.
     pub fn hash(&self) -> &str {
         &self.hash
     }
-    /// Returns the announced complete file size.
+    /// Returns the complete file's size.
     pub fn total_size(&self) -> u64 {
         self.total_size
     }
-    /// Returns the declared maximum chunk size.
-    pub fn chunk_size(&self) -> u32 {
-        self.chunk_size
-    }
-    /// Returns this frame's zero-based byte offset.
+    /// Returns this chunk's zero-based byte offset.
     pub fn offset(&self) -> u64 {
         self.offset
     }
-    /// Reports whether this explicitly marks the final frame.
-    pub fn is_final(&self) -> bool {
-        self.is_final
-    }
-    /// Borrows the file bytes for this frame.
+    /// Borrows the file bytes in this chunk.
     pub fn data(&self) -> &[u8] {
         &self.data
     }

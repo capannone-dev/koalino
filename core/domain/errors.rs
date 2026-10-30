@@ -191,23 +191,6 @@ pub enum NetworkError {
     SecurityPolicy { reason: String },
 }
 
-/// Describes a rejected attachment transfer without retaining file bytes.
-#[derive(Debug, thiserror::Error)]
-pub enum FileTransferError {
-    /// The transfer metadata or stream violates the bounded protocol contract.
-    #[error("invalid file transfer: {reason}")]
-    Invalid { reason: String },
-    /// The requested or received object is not authorized for its meeting.
-    #[error("file transfer authorization denied")]
-    Unauthorized,
-    /// A network operation failed while queuing or serving transfer data.
-    #[error(transparent)]
-    Network(#[from] NetworkError),
-    /// Content-addressed local persistence failed.
-    #[error(transparent)]
-    Storage(#[from] StorageError),
-}
-
 /// Describes an at-rest encryption, decryption, or key-management failure.
 ///
 /// Messages never contain key material, passphrases, plaintext embeddings, or ciphertext.

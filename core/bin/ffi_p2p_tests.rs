@@ -10,16 +10,19 @@ use uuid::Uuid;
 
 use super::{p2p_command_json, p2p_status_json};
 use crate::{
-    adapters::storage::sqlite_voice_vector_db::SqliteVoiceVectorDB,
+    adapters::storage::{
+        attachment_file_store::AttachmentFileStore, sqlite_voice_vector_db::SqliteVoiceVectorDB,
+    },
     application::{
         crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
+        meeting_crdt::MeetingCrdtService,
         p2p_service::P2pControl,
     },
-    domain::models::DeviceId,
-    domain::models::{SpeakerIdentity, VoiceEmbedding},
+    domain::models::{DeviceId, MeetingId, SpeakerIdentity, VoiceEmbedding},
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
     ports::crypto::EmbeddingCipher,
-    ports::voice::VoiceVectorDB,
+    ports::{storage::AttachmentRepository, voice::VoiceVectorDB},
+    storage_composition::open_note_repository,
 };
 
 /// Parses a JSON answer.
@@ -212,26 +215,15 @@ fn two_devices_pair_through_the_json_commands() {
     assert_eq!(revoked, serde_json::json!({"ok": true, "revoked": true}));
 }
 
-/// The composed task keeps the voice library in step (Issue #56): a speaker enrolled before pairing
-/// reaches the other device over real TCP, sealed in its database.
-#[test]
-fn the_composed_task_syncs_the_voice_library() {
-    let laptop_database = fresh_database("laptop");
-    let phone_database = fresh_database("phone");
-    let alice = Uuid::from_u128(0xA1);
-    let on_laptop = SqliteVoiceVectorDB::open(&laptop_database, test_cipher())
-        .unwrap_or_else(|error| panic!("voice store must open: {error}"));
-    on_laptop
-        .save_speaker_identity(&SpeakerIdentity::new(alice, "Alice"))
-        .and_then(|()| {
-            on_laptop.store_embedding(VoiceEmbedding::new(
-                alice,
-                Uuid::from_u128(0xA2),
-                vec![0.6, 0.8],
-            ))
-        })
-        .unwrap_or_else(|error| panic!("enrollment must succeed: {error}"));
-    let laptop = start_task_at(&laptop_database, "laptop", &[]);
+/// Starts two tasks over the given databases and pairs them through the JSON commands.
+///
+/// Outputs: The laptop's and the phone's handles, with pairing confirmed on both sides.
+/// Side effects: Binds loopback sockets and writes to both databases.
+fn pair_tasks(
+    laptop_database: &std::path::Path,
+    phone_database: &std::path::Path,
+) -> (P2pHandle, P2pHandle) {
+    let laptop = start_task_at(laptop_database, "laptop", &[]);
     let laptop_status = wait_for_status(&laptop, |status| {
         status["listen_addresses"]
             .as_array()
@@ -247,7 +239,7 @@ fn the_composed_task_syncs_the_voice_library() {
             .as_str()
             .unwrap_or_default()
     );
-    let phone = start_task_at(&phone_database, "phone", &[laptop_address]);
+    let phone = start_task_at(phone_database, "phone", &[laptop_address]);
     let phone_id = json(&p2p_status_json(Some(&phone as &dyn P2pControl)))["local_peer_id"]
         .as_str()
         .unwrap_or_default()
@@ -277,6 +269,29 @@ fn the_composed_task_syncs_the_voice_library() {
         &laptop,
         &format!(r#"{{"command":"accept_request","peer_id":"{phone_id}"}}"#),
     );
+    (laptop, phone)
+}
+
+/// The composed task keeps the voice library in step (Issue #56): a speaker enrolled before pairing
+/// reaches the other device over real TCP, sealed in its database.
+#[test]
+fn the_composed_task_syncs_the_voice_library() {
+    let laptop_database = fresh_database("laptop");
+    let phone_database = fresh_database("phone");
+    let alice = Uuid::from_u128(0xA1);
+    let on_laptop = SqliteVoiceVectorDB::open(&laptop_database, test_cipher())
+        .unwrap_or_else(|error| panic!("voice store must open: {error}"));
+    on_laptop
+        .save_speaker_identity(&SpeakerIdentity::new(alice, "Alice"))
+        .and_then(|()| {
+            on_laptop.store_embedding(VoiceEmbedding::new(
+                alice,
+                Uuid::from_u128(0xA2),
+                vec![0.6, 0.8],
+            ))
+        })
+        .unwrap_or_else(|error| panic!("enrollment must succeed: {error}"));
+    let (laptop, phone) = pair_tasks(&laptop_database, &phone_database);
 
     let on_phone = SqliteVoiceVectorDB::open(&phone_database, test_cipher())
         .unwrap_or_else(|error| panic!("voice store must open: {error}"));
@@ -296,4 +311,69 @@ fn the_composed_task_syncs_the_voice_library() {
         .search_similar(&[0.6, 0.8], 1)
         .unwrap_or_else(|error| panic!("the phone must open what it stored: {error}"));
     assert_eq!(found[0].0.identity_id(), alice);
+}
+
+/// A photo attached on the laptop reaches the phone through the composed tasks over TCP, stored in
+/// the folder beside the phone's database.
+#[test]
+fn the_composed_task_syncs_attachments() {
+    let laptop_database = fresh_database("laptop");
+    let phone_database = fresh_database("phone");
+    let laptop_folder = laptop_database
+        .parent()
+        .unwrap_or_else(|| panic!("the database has a folder"));
+    let meeting_id = MeetingId::new("meeting-photo");
+    let on_laptop = open_note_repository(
+        &laptop_database,
+        DeviceId::new("device-laptop"),
+        test_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("laptop repository must open: {error:#}"));
+    MeetingCrdtService::new(&on_laptop)
+        .create_meeting(&meeting_id)
+        .unwrap_or_else(|error| panic!("meeting must be created: {error}"));
+    let photo: Vec<u8> = (0..150_000_u32)
+        .map(|value| value.to_le_bytes()[1])
+        .collect();
+    let source = laptop_folder.join("photo.jpg");
+    std::fs::write(&source, &photo)
+        .unwrap_or_else(|error| panic!("source must be written: {error}"));
+    AttachmentFileStore::new(
+        laptop_folder.join("attachments"),
+        DeviceId::new("device-laptop"),
+    )
+    .import_file(&on_laptop, &meeting_id, &source, Some(7_000))
+    .unwrap_or_else(|error| panic!("the photo must attach: {error}"));
+
+    let (laptop, phone) = pair_tasks(&laptop_database, &phone_database);
+    let on_phone = open_note_repository(
+        &phone_database,
+        DeviceId::new("device-phone"),
+        test_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("phone repository must open: {error:#}"));
+    let mut received = Vec::new();
+    for _ in 0..300 {
+        received = on_phone
+            .get_attachments_for_meeting(&meeting_id)
+            .unwrap_or_default();
+        if !received.is_empty() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    laptop.shutdown();
+    phone.shutdown();
+
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].meeting_time_ms(), Some(7_000));
+    assert!(
+        std::path::Path::new(received[0].file_path()).starts_with(
+            phone_database
+                .parent()
+                .unwrap_or_else(|| panic!("the database has a folder"))
+                .join("attachments")
+        )
+    );
+    assert_eq!(std::fs::read(received[0].file_path()).ok(), Some(photo));
 }

@@ -1,34 +1,115 @@
-//! Declares portable content-addressed file-transfer and CAS storage contracts.
-
-use std::path::PathBuf;
+//! Declares how attachments travel between paired devices (Issue #57).
+//!
+//! `FileTransferNetwork` moves chunks over the dedicated encrypted protocol, and
+//! `AttachmentLibrary` is the local side: what can be shared, and where arriving files go.
 
 use crate::domain::{
     errors::{NetworkError, StorageError},
-    models::{DeviceId, FileChunk, FileReference},
+    models::{DeviceId, FileChunk, MeetingId, SharedAttachment},
 };
+use uuid::Uuid;
 
-/// Exchanges attachment-transfer control and data frames without exposing libp2p types.
-pub trait FileTransferNetwork {
-    /// Queues a request for one verified hash from an authenticated peer.
-    fn request_file(&mut self, hash: &str, from_peer: &DeviceId) -> Result<(), NetworkError>;
-    /// Broadcasts safe attachment availability metadata to currently connected peers.
-    fn broadcast_availability(
-        &mut self,
-        file_references: Vec<FileReference>,
-    ) -> Result<(), NetworkError>;
-    /// Queues one explicit-header binary frame for an authenticated peer.
-    fn send_chunk(&mut self, to_peer: &DeviceId, file_chunk: FileChunk)
-    -> Result<(), NetworkError>;
+/// The most file bytes one chunk carries.
+pub const FILE_TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
+/// The largest attachment file accepted, matching what can be attached locally.
+pub const MAX_FILE_TRANSFER_BYTES: u64 = 100 * 1024 * 1024;
+
+/// What arrived on the file-transfer protocol from an authenticated, paired device.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FileTransferEvent {
+    /// A device asks for the chunk of the file `hash` starting at `offset`.
+    ChunkRequested {
+        /// The device asking.
+        peer: DeviceId,
+        /// The file's content address.
+        hash: String,
+        /// Where the chunk starts.
+        offset: u64,
+    },
+    /// A device sent a chunk.
+    ChunkReceived {
+        /// The device that sent it.
+        peer: DeviceId,
+        /// The chunk, not yet validated.
+        chunk: FileChunk,
+    },
 }
 
-/// Persists complete files in a verified content-addressed local store.
-pub trait FileStorage {
-    /// Atomically validates and commits `data` under its expected SHA-256 hash.
-    fn save_file(&self, hash: &str, data: &[u8]) -> Result<PathBuf, StorageError>;
-    /// Loads the exact bytes for an already-authorized content hash.
-    fn load_file(&self, hash: &str) -> Result<Vec<u8>, StorageError>;
-    /// Reports whether a verified object already exists locally.
-    fn has_file(&self, hash: &str) -> bool;
-    /// Lists verified hashes during startup availability-registry reconstruction.
-    fn list_available_hashes(&self) -> Result<Vec<String>, StorageError>;
+/// Exchanges attachment chunks without exposing libp2p types. The receiver asks for one chunk at
+/// a time, so a large file cannot flood the connection or time out while queued.
+pub trait FileTransferNetwork {
+    /// Asks a paired device for the chunk of `hash` starting at `offset`.
+    ///
+    /// Outputs: Success once queued, or an error when the device is unpaired or disconnected.
+    /// Side effects: Queues one encrypted frame.
+    fn request_file_chunk(
+        &mut self,
+        hash: &str,
+        offset: u64,
+        from_peer: &DeviceId,
+    ) -> Result<(), NetworkError>;
+
+    /// Sends one chunk to a paired device.
+    ///
+    /// Outputs: Success once queued, or an error when the device is unpaired or disconnected.
+    /// Side effects: Queues one encrypted frame.
+    fn send_file_chunk(
+        &mut self,
+        to_peer: &DeviceId,
+        chunk: &FileChunk,
+    ) -> Result<(), NetworkError>;
+
+    /// Takes the next received event, if any. Side effects: Removes it from the queue.
+    fn poll_file_transfer(&mut self) -> Option<FileTransferEvent>;
+}
+
+/// The attachments this device holds, and where files from paired devices are stored.
+pub trait AttachmentLibrary {
+    /// Computes the content hash of one linked attachment that has none yet.
+    ///
+    /// Outputs: Success (also when there is nothing to do), or a storage error.
+    /// Side effects: Reads one file and writes its hash. A file that cannot be read is skipped.
+    fn hash_next_attachment(&mut self) -> Result<(), StorageError>;
+
+    /// Lists the attachments linked to a meeting whose content hash is known.
+    ///
+    /// Outputs: Metadata ordered by attachment ID, or a storage error. Side effects: Reads rows.
+    fn shared_attachments(&self) -> Result<Vec<SharedAttachment>, StorageError>;
+
+    /// Tells whether this attachment is already stored here. Side effects: Reads one row.
+    fn has_attachment(&self, attachment_id: Uuid) -> Result<bool, StorageError>;
+
+    /// Tells whether this meeting has synced here. Side effects: Reads one row.
+    fn has_meeting(&self, meeting_id: &MeetingId) -> Result<bool, StorageError>;
+
+    /// Reads the chunk of a file linked to a meeting.
+    ///
+    /// Outputs: The chunk, `None` when no linked attachment has this hash or `offset` is past the
+    /// end (so nothing else on disk can be asked for), or a storage error.
+    /// Side effects: Reads part of one file.
+    fn read_chunk(&self, hash: &str, offset: u64) -> Result<Option<FileChunk>, StorageError>;
+
+    /// Starts receiving a file, discarding any earlier partial copy.
+    ///
+    /// Outputs: Success, or a rejection for an unusable meeting ID, type, or size.
+    /// Side effects: Creates private folders and an empty partial file.
+    fn begin_incoming(&mut self, attachment: &SharedAttachment) -> Result<(), StorageError>;
+
+    /// Adds received bytes at the end of the partial file.
+    ///
+    /// Side effects: Writes to the partial file.
+    fn append_incoming(
+        &mut self,
+        attachment: &SharedAttachment,
+        data: &[u8],
+    ) -> Result<(), StorageError>;
+
+    /// Verifies the complete partial file and stores it as an attachment of its meeting.
+    ///
+    /// Outputs: Success, or a rejection when the size or SHA-256 differs from the metadata.
+    /// Side effects: Moves the file to its place and writes the row; removes the file on failure.
+    fn finish_incoming(&mut self, attachment: &SharedAttachment) -> Result<(), StorageError>;
+
+    /// Drops a partial file. Side effects: Removes it; a failure is only logged.
+    fn discard_incoming(&mut self, attachment: &SharedAttachment);
 }

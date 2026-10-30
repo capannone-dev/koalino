@@ -26,7 +26,7 @@
 //! sync.
 
 use std::{
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, PoisonError},
     thread::JoinHandle,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -39,8 +39,8 @@ use crate::{
     adapters::{
         network::libp2p_adapter::{Libp2pNetworkAdapter, NodeIdentity},
         storage::{
-            sqlite_adapter::SqliteNoteRepository, sqlite_peer_store::SqlitePeerStore,
-            sqlite_voice_vector_db::SqliteVoiceVectorDB,
+            attachment_sync_store::AttachmentSyncStore, sqlite_adapter::SqliteNoteRepository,
+            sqlite_peer_store::SqlitePeerStore, sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
     },
     application::{
@@ -98,6 +98,8 @@ pub struct P2pConfig {
     pub relay_address: Option<String>,
     /// Public address of this device's relay service; `None` means it offers none.
     pub relay_server_address: Option<String>,
+    /// Where attachments are kept; `None` means an `attachments` folder beside the database.
+    pub attachment_directory: Option<PathBuf>,
     /// What this device advertises in its manifest; `from_lookup` leaves the default (no
     /// models), and callers set the models their pipeline configuration can run.
     pub capabilities: LocalCapabilities,
@@ -157,6 +159,7 @@ impl P2pConfig {
             relay_address: lookup("NOTE_TAKER_P2P_RELAY").map(|address| address.trim().to_owned()),
             relay_server_address: lookup("NOTE_TAKER_P2P_RELAY_SERVER_ADDRESS")
                 .map(|address| address.trim().to_owned()),
+            attachment_directory: lookup("NOTE_TAKER_ATTACHMENT_DIR").map(PathBuf::from),
             capabilities: LocalCapabilities::default(),
         }))
     }
@@ -372,8 +375,11 @@ fn open_service(
     embedding_cipher: Arc<dyn EmbeddingCipher>,
     config: P2pConfig,
 ) -> Result<DaemonP2pService> {
-    let note_repository =
-        open_note_repository(database_path, device_id, Arc::clone(&embedding_cipher))?;
+    let note_repository = open_note_repository(
+        database_path,
+        device_id.clone(),
+        Arc::clone(&embedding_cipher),
+    )?;
     let peer_store = SqlitePeerStore::open(database_path, Arc::clone(&embedding_cipher))
         .context("unable to open the peer store")?;
     let node_identity =
@@ -409,6 +415,16 @@ fn open_service(
             .use_relay(relay_address)
             .context("NOTE_TAKER_P2P_RELAY is invalid")?;
     }
+    let attachment_directory = config.attachment_directory.unwrap_or_else(|| {
+        database_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("attachments")
+    });
+    let attachment_library = AttachmentSyncStore::new(
+        open_note_repository(database_path, device_id, Arc::clone(&embedding_cipher))?,
+        attachment_directory,
+    );
     let voice_library = SqliteVoiceVectorDB::open(database_path, embedding_cipher)
         .context("unable to open the voice library for sync")?;
     let mut service = P2pService::new(
@@ -422,7 +438,8 @@ fn open_service(
     )
     .with_local_capabilities(config.capabilities)
     .with_pair_agreement_secret(pair_agreement_secret)
-    .with_voice_library(Box::new(voice_library));
+    .with_voice_library(Box::new(voice_library))
+    .with_attachment_library(Box::new(attachment_library));
     service
         .start()
         .context("unable to load the paired devices")?;

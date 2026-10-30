@@ -33,6 +33,10 @@ use uuid::Uuid;
 
 use crate::{
     application::{
+        attachment_exchange::{
+            decode_attachment_manifest, encode_attachment_manifests, is_attachment_manifest,
+        },
+        attachment_sync::AttachmentSync,
         cluster_share_exchange::{
             decode_cluster_share_message, encode_cluster_share_messages, is_cluster_share_message,
         },
@@ -58,6 +62,7 @@ use crate::{
         peer_trust::{DeviceName, PairingCode, TrustedPeer},
     },
     ports::{
+        file_transfer::{AttachmentLibrary, FileTransferNetwork},
         network::{NetworkEvent, P2pNetwork},
         peer_trust::{PairKeyPinning, PairingTransport, TrustedPeerStore},
         storage::NoteRepository,
@@ -265,6 +270,8 @@ pub struct P2pService<Transport, Store, Repository> {
     shared_clusters: HashMap<DeviceId, HashMap<Uuid, SharedCluster>>,
     /// Shares waiting for their meeting, oldest first.
     held_shares: Vec<HeldShare>,
+    /// Attachment exchange with paired devices; `None` leaves attachments on this device.
+    attachment_sync: Option<AttachmentSync>,
     /// The voice library to keep in step with paired devices; `None` leaves it on this device.
     voice_library: Option<Box<dyn VoiceLibrarySync>>,
     /// The library digest each connected device was last sent.
@@ -273,7 +280,7 @@ pub struct P2pService<Transport, Store, Repository> {
 
 impl<Transport, Store, Repository> P2pService<Transport, Store, Repository>
 where
-    Transport: PairingTransport + P2pNetwork,
+    Transport: PairingTransport + P2pNetwork + FileTransferNetwork,
     Store: TrustedPeerStore,
     Repository: NoteRepository,
 {
@@ -302,6 +309,7 @@ where
             connected_peers: HashSet::new(),
             shared_clusters: HashMap::new(),
             held_shares: Vec::new(),
+            attachment_sync: None,
             voice_library: None,
             shared_voice_digests: HashMap::new(),
         }
@@ -322,6 +330,16 @@ where
     /// Inputs: The voice library. Outputs: The service. Side effects: None until devices connect.
     pub fn with_voice_library(mut self, voice_library: Box<dyn VoiceLibrarySync>) -> Self {
         self.voice_library = Some(voice_library);
+        self
+    }
+
+    /// Exchanges attachments with paired devices (Issue #57). It needs a pair agreement secret
+    /// too, since the lists of attachments travel only under a pair key.
+    ///
+    /// Inputs: The local attachments. Outputs: The service. Side effects: None until devices
+    /// connect.
+    pub fn with_attachment_library(mut self, library: Box<dyn AttachmentLibrary>) -> Self {
+        self.attachment_sync = Some(AttachmentSync::new(library));
         self
     }
 
@@ -385,6 +403,7 @@ where
         self.share_clusters();
         self.retry_held_shares();
         self.share_voice_library();
+        self.share_attachments();
     }
 
     /// Sends every meeting document written since the last call to the connected peers.
@@ -461,6 +480,7 @@ where
             };
             self.handle_network_event(network_event);
         }
+        self.process_file_transfers();
         self.run_scheduled_restarts();
     }
 
@@ -485,6 +505,10 @@ where
                     self.accept_pair_public_key(peer_device_id, decoded);
                     return;
                 }
+                if is_attachment_manifest(payload) {
+                    self.accept_attachment_manifest(peer_device_id, payload);
+                    return;
+                }
                 if is_voice_library_message(payload) {
                     self.accept_voice_library(peer_device_id, payload);
                     return;
@@ -501,6 +525,9 @@ where
                 self.connected_peers.insert(peer_device_id.clone());
                 self.shared_clusters.remove(peer_device_id);
                 self.shared_voice_digests.remove(peer_device_id);
+                if let Some(attachment_sync) = self.attachment_sync.as_mut() {
+                    attachment_sync.forget_shared(peer_device_id);
+                }
                 Some(peer_device_id.clone())
             }
             NetworkEvent::PeerExpired(peer_device_id) => {
@@ -508,11 +535,18 @@ where
                 self.connected_peers.remove(peer_device_id);
                 self.shared_clusters.remove(peer_device_id);
                 self.shared_voice_digests.remove(peer_device_id);
+                if let Some(attachment_sync) = self.attachment_sync.as_mut() {
+                    attachment_sync.peer_lost(peer_device_id);
+                }
                 None
             }
-            // The device may have missed the voice library, so it is sent again.
+            // The device may have missed the voice library or attachment list, so they are sent
+            // again.
             NetworkEvent::DeliveryFailed(peer_device_id) => {
                 self.shared_voice_digests.remove(peer_device_id);
+                if let Some(attachment_sync) = self.attachment_sync.as_mut() {
+                    attachment_sync.forget_shared(peer_device_id);
+                }
                 None
             }
         };
@@ -695,6 +729,119 @@ where
                 error = %error,
                 "a voice library was rejected"
             );
+        }
+    }
+
+    /// Tells connected devices which attachments exist, then advances transfers.
+    ///
+    /// Side effects: May hash one new attachment file; sends sealed lists to devices that were
+    /// not sent the current one; may queue chunk requests. Failures are logged without names and
+    /// retried on the next call.
+    fn share_attachments(&mut self) {
+        if self.pair_agreement_secret.is_none() {
+            return;
+        }
+        let Some(attachment_sync) = self.attachment_sync.as_mut() else {
+            return;
+        };
+        if let Some(pending) = attachment_sync.pending_manifest(&self.connected_peers) {
+            let local_peer_id = self.pairing_manager.transport().local_peer_id();
+            for peer_device_id in pending.peers {
+                let pair_key = match self.pairing_manager.store().pair_key(&peer_device_id) {
+                    Ok(Some(pair_key)) => pair_key,
+                    Ok(None) => continue,
+                    Err(error) => {
+                        tracing::warn!(
+                            peer = %peer_device_id.as_str(),
+                            error = %error,
+                            "the pair key could not be loaded"
+                        );
+                        continue;
+                    }
+                };
+                let messages = match encode_attachment_manifests(
+                    &pending.attachments,
+                    &pair_key,
+                    &local_peer_id,
+                    &peer_device_id,
+                ) {
+                    Ok(messages) => messages,
+                    Err(error) => {
+                        tracing::warn!(error = %error, "an attachment list could not be sealed");
+                        continue;
+                    }
+                };
+                let transport = self.pairing_manager.transport_mut();
+                let all_sent = messages.iter().all(|message| {
+                    transport
+                        .send_encrypted(&peer_device_id, message)
+                        .map_err(|error| {
+                            tracing::warn!(
+                                peer = %peer_device_id.as_str(),
+                                error = %error,
+                                "an attachment list could not be sent"
+                            );
+                        })
+                        .is_ok()
+                });
+                if all_sent {
+                    attachment_sync.mark_shared(peer_device_id, pending.digest);
+                }
+            }
+        }
+        attachment_sync.pump(self.pairing_manager.transport_mut(), Instant::now());
+    }
+
+    /// Opens an attachment list `peer_device_id` sent and notes what this device lacks.
+    ///
+    /// Side effects: Reads rows and updates the wanted list; transfers start on the next tick. A
+    /// message that does not open or validate is logged (peer ID only) and dropped.
+    fn accept_attachment_manifest(&mut self, peer_device_id: &DeviceId, payload: &[u8]) {
+        let Some(attachment_sync) = self.attachment_sync.as_mut() else {
+            return;
+        };
+        let pair_key = match self.pairing_manager.store().pair_key(peer_device_id) {
+            Ok(Some(pair_key)) => pair_key,
+            Ok(None) => {
+                tracing::warn!(
+                    peer = %peer_device_id.as_str(),
+                    "an attachment list arrived before the pair key was agreed and was dropped"
+                );
+                return;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    peer = %peer_device_id.as_str(),
+                    error = %error,
+                    "the pair key could not be loaded"
+                );
+                return;
+            }
+        };
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        match decode_attachment_manifest(payload, &pair_key, peer_device_id, &local_peer_id) {
+            Ok(attachments) => attachment_sync.accept_manifest(peer_device_id, attachments),
+            Err(error) => tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                error = %error,
+                "an attachment list was rejected"
+            ),
+        }
+    }
+
+    /// Serves and absorbs what arrived on the file-transfer protocol.
+    ///
+    /// Side effects: Reads and writes attachment files and queues frames. Without attachment sync
+    /// the frames are dropped.
+    fn process_file_transfers(&mut self) {
+        for _ in 0..MAX_EVENTS_PER_PASS {
+            let transport = self.pairing_manager.transport_mut();
+            let Some(event) = transport.poll_file_transfer() else {
+                return;
+            };
+            if let Some(attachment_sync) = self.attachment_sync.as_mut() {
+                attachment_sync.handle_event(transport, event);
+            }
         }
     }
 

@@ -96,12 +96,12 @@ struct TombstoneBody {
 }
 
 /// Writes times as RFC 3339 text, keeping the full precision that library digests depend on.
-mod rfc3339 {
+pub(super) mod rfc3339 {
     use chrono::{DateTime, Utc};
     use serde::{Deserialize, Deserializer, Serializer, de::Error};
 
     /// Writes `time` as text.
-    pub(super) fn serialize<S: Serializer>(
+    pub(in crate::application) fn serialize<S: Serializer>(
         time: &DateTime<Utc>,
         serializer: S,
     ) -> Result<S::Ok, S::Error> {
@@ -109,7 +109,7 @@ mod rfc3339 {
     }
 
     /// Reads a time from text.
-    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+    pub(in crate::application) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<DateTime<Utc>, D::Error> {
         let text = String::deserialize(deserializer)?;

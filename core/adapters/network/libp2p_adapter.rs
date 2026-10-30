@@ -166,12 +166,19 @@ impl request_response::Codec for SyncPayloadCodec {
 
 use crate::{
     adapters::network::{
-        file_transfer_behaviour::{self, FileTransferRequestPayload, FileTransferResponsePayload},
+        file_transfer_behaviour::{
+            self, FileTransferFrame, FileTransferRequestPayload, FileTransferResponsePayload,
+        },
         pairing_behaviour::{PairingCodec, PairingRequest, PairingResponse, new_pairing_behaviour},
         peer_gate::PeerGate,
     },
-    domain::{errors::NetworkError, models::DeviceId, peer_trust::DeviceName},
+    domain::{
+        errors::NetworkError,
+        models::{DeviceId, FileChunk},
+        peer_trust::DeviceName,
+    },
     ports::{
+        file_transfer::{FileTransferEvent, FileTransferNetwork},
         network::{NetworkEvent, P2pNetwork, PeerDiscovery},
         peer_trust::{NodeIdentityStore, PairingEvent, PairingTransport},
     },
@@ -363,7 +370,7 @@ pub struct Libp2pNetworkAdapter {
     static_peer_ids: HashSet<PeerId>,
     pending_network_events: VecDeque<NetworkEvent>,
     /// Retains adapter-private attachment frames separately from CRDT network events.
-    pending_file_transfer_payloads: VecDeque<Vec<u8>>,
+    pending_file_transfer_events: VecDeque<FileTransferEvent>,
     /// Unpaired peers advertising themselves on the LAN, offered as pairing candidates.
     nearby_unpaired_peer_ids: HashSet<DeviceId>,
     /// Pairing requests awaiting the owner's answer, by requesting peer.
@@ -496,7 +503,7 @@ impl Libp2pNetworkAdapter {
             reachable_peer_device_ids: HashSet::new(),
             static_peer_ids: HashSet::new(),
             pending_network_events: VecDeque::new(),
-            pending_file_transfer_payloads: VecDeque::new(),
+            pending_file_transfer_events: VecDeque::new(),
             nearby_unpaired_peer_ids: HashSet::new(),
             pending_pairing_answers: HashMap::new(),
             pending_pairing_events: VecDeque::new(),
@@ -948,7 +955,7 @@ impl Libp2pNetworkAdapter {
     ///
     /// Inputs: `file_transfer_event` is emitted only by `/note-taker/file-transfer/1`.
     /// Outputs: None.
-    /// Side effects: queues its opaque adapter-private bytes and acknowledges the substream.
+    /// Side effects: queues the decoded frame as a port event and acknowledges the substream.
     fn translate_file_transfer_event(
         &mut self,
         file_transfer_event: request_response::Event<
@@ -969,7 +976,26 @@ impl Libp2pNetworkAdapter {
                 tracing::warn!("dropped a file-transfer frame from an unpaired peer");
                 return;
             }
-            self.pending_file_transfer_payloads.push_back(request.0);
+            let device_id = Self::device_id_from_peer_id(peer);
+            match file_transfer_behaviour::decode_frame(&request.0) {
+                Some(FileTransferFrame::ChunkRequest { hash, offset }) => {
+                    self.pending_file_transfer_events.push_back(
+                        FileTransferEvent::ChunkRequested {
+                            peer: device_id,
+                            hash,
+                            offset,
+                        },
+                    );
+                }
+                Some(FileTransferFrame::Chunk(chunk)) => {
+                    self.pending_file_transfer_events
+                        .push_back(FileTransferEvent::ChunkReceived {
+                            peer: device_id,
+                            chunk,
+                        });
+                }
+                None => tracing::warn!("dropped a malformed file-transfer frame"),
+            }
             let _ = self
                 .swarm
                 .behaviour_mut()
@@ -1277,18 +1303,32 @@ impl Libp2pNetworkAdapter {
             .is_ok_and(|peer_id| self.swarm.is_connected(&peer_id))
     }
 
-    /// Queues an adapter-private attachment frame on the dedicated protocol for integration testing.
+    /// Drops the connections to a device without changing whether it is trusted.
     ///
-    /// Inputs: `peer_device_id` is connected and `payload` is a bounded already-framed attachment message.
-    /// Outputs: Success after queuing, or a portable disconnected/policy error.
-    /// Side effects: Opens an encrypted file-transfer substream, never the CRDT sync behaviour.
+    /// Inputs: The device. Outputs: None. Side effects: Closes its connections.
     #[cfg(test)]
+    pub(crate) fn disconnect_for_tests(&mut self, peer_device_id: &DeviceId) {
+        if let Ok(peer_id) = Self::peer_id_from_device_id(peer_device_id) {
+            let _ = self.swarm.disconnect_peer_id(peer_id);
+        }
+    }
+
+    /// Queues one frame on the dedicated attachment protocol for a paired, connected device.
+    ///
+    /// Inputs: The device and a frame within the protocol's size limit.
+    /// Outputs: Success after queuing, or a portable policy or disconnected error.
+    /// Side effects: Opens an encrypted file-transfer substream, never the CRDT sync behaviour.
     fn send_file_transfer_frame(
         &mut self,
         peer_device_id: &DeviceId,
         payload: Vec<u8>,
     ) -> Result<(), NetworkError> {
         let peer_id = Self::peer_id_from_device_id(peer_device_id)?;
+        if !self.swarm.behaviour().peer_gate.is_trusted(&peer_id) {
+            return Err(NetworkError::SecurityPolicy {
+                reason: "attachments are only sent to paired peers".to_owned(),
+            });
+        }
         if !self.swarm.is_connected(&peer_id) {
             return Err(NetworkError::Disconnected);
         }
@@ -1298,15 +1338,31 @@ impl Libp2pNetworkAdapter {
             .send_request(&peer_id, FileTransferRequestPayload(payload));
         Ok(())
     }
+}
 
-    /// Removes one adapter-private attachment frame observed by the test swarm driver.
-    ///
-    /// Inputs: None.
-    /// Outputs: The next attachment frame, if available.
-    /// Side effects: Removes it from the attachment-only queue.
-    #[cfg(test)]
-    fn poll_file_transfer_frame(&mut self) -> Option<Vec<u8>> {
-        self.pending_file_transfer_payloads.pop_front()
+impl FileTransferNetwork for Libp2pNetworkAdapter {
+    fn request_file_chunk(
+        &mut self,
+        hash: &str,
+        offset: u64,
+        from_peer: &DeviceId,
+    ) -> Result<(), NetworkError> {
+        self.send_file_transfer_frame(
+            from_peer,
+            file_transfer_behaviour::encode_chunk_request(hash, offset),
+        )
+    }
+
+    fn send_file_chunk(
+        &mut self,
+        to_peer: &DeviceId,
+        chunk: &FileChunk,
+    ) -> Result<(), NetworkError> {
+        self.send_file_transfer_frame(to_peer, file_transfer_behaviour::encode_chunk(chunk))
+    }
+
+    fn poll_file_transfer(&mut self) -> Option<FileTransferEvent> {
+        self.pending_file_transfer_events.pop_front()
     }
 }
 
@@ -1469,8 +1525,9 @@ mod tests {
     use crate::{
         adapters::storage::sqlite_peer_store::SqlitePeerStore,
         application::crypto::voice_encryptor::ephemeral_cipher,
-        domain::{errors::StorageError, peer_trust::DeviceName},
+        domain::{errors::StorageError, models::FileChunk, peer_trust::DeviceName},
         ports::{
+            file_transfer::{FileTransferEvent, FileTransferNetwork},
             network::{NetworkEvent, P2pNetwork},
             peer_trust::{NodeIdentityStore, PairingEvent, PairingTransport},
         },
@@ -2093,9 +2150,9 @@ mod tests {
                 }
             }
         }).await.unwrap_or_else(|_| panic!("memory swarms should connect"));
-        let file_chunk_frame = vec![7_u8; 64 * 1024];
+        let file_chunk = FileChunk::new("a".repeat(64), 200_000, 64 * 1024, vec![7_u8; 64 * 1024]);
         sender
-            .send_file_transfer_frame(&receiver_device_id, file_chunk_frame.clone())
+            .send_file_chunk(&receiver_device_id, &file_chunk)
             .unwrap_or_else(|error| panic!("file frame should queue: {error}"));
         let received = tokio::time::timeout(Duration::from_secs(5), async {
             loop {
@@ -2103,12 +2160,18 @@ mod tests {
                     result = sender.drive_next_swarm_event() => result.unwrap_or_else(|error| panic!("sender drive failure: {error}")),
                     result = receiver.drive_next_swarm_event() => {
                         result.unwrap_or_else(|error| panic!("receiver drive failure: {error}"));
-                        if let Some(frame) = receiver.poll_file_transfer_frame() { break frame; }
+                        if let Some(event) = receiver.poll_file_transfer() { break event; }
                     }
                 }
             }
         }).await.unwrap_or_else(|_| panic!("file frame should arrive"));
-        assert_eq!(received, file_chunk_frame);
+        assert_eq!(
+            received,
+            FileTransferEvent::ChunkReceived {
+                peer: sender.local_device_id(),
+                chunk: file_chunk,
+            }
+        );
         // Only the connection is reported on the sync queue; the file frame never appears there.
         assert_eq!(
             drain_events(&mut receiver),

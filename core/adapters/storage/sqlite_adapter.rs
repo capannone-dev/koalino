@@ -15,6 +15,9 @@ use std::{path::Path, sync::Arc};
 
 use rusqlite::{Connection, OptionalExtension, params};
 
+/// Lists and stores the attachments exchanged with paired devices (Issue #57).
+#[path = "sqlite_attachment_sync.rs"]
+mod attachment_sync;
 /// Exports and imports the cluster shares copied between paired devices (Issue #50).
 #[path = "sqlite_cluster_share.rs"]
 mod cluster_share;
@@ -185,6 +188,7 @@ impl SqliteNoteRepository {
         add_meeting_title_column(&sqlite_connection)?;
         add_document_revision_column(&sqlite_connection)?;
         add_attachment_meeting_time_column(&sqlite_connection)?;
+        attachment_sync::add_attachment_content_columns(&sqlite_connection)?;
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
         for embedding_column in [
             &CLIP_EMBEDDINGS,

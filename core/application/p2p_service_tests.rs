@@ -14,6 +14,7 @@ use crate::{
     adapters::{
         network::libp2p_adapter::Libp2pNetworkAdapter,
         storage::{
+            attachment_file_store::AttachmentFileStore, attachment_sync_store::AttachmentSyncStore,
             in_memory_voice_vector_db::InMemoryVoiceVectorDB, sqlite_adapter::SqliteNoteRepository,
             sqlite_peer_store::SqlitePeerStore, sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
@@ -32,14 +33,15 @@ use crate::{
     },
     domain::{
         models::{
-            DeviceId, MeetingId, MeetingTitle, SpeakerIdentity, Transcript, TranscriptionModel,
-            UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster, VoiceEmbedding,
+            Attachment, DeviceId, MeetingId, MeetingTitle, SpeakerIdentity, Transcript,
+            TranscriptionModel, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
+            VoiceEmbedding,
         },
         peer_trust::DeviceName,
     },
     ports::{
         peer_trust::{PairingTransport, TrustedPeerStore},
-        storage::NoteRepository,
+        storage::{AttachmentRepository, NoteRepository},
         voice::VoiceVectorDB,
     },
 };
@@ -536,6 +538,127 @@ async fn pair(laptop: &mut Service, phone: &mut Service, phone_address: Multiadd
         !laptop.status().trusted_devices.is_empty() && !phone.status().trusted_devices.is_empty()
     })
     .await;
+}
+
+/// Adds a file to `meeting_id` through the same store the app uses.
+fn attach_file(
+    database_path: &PathBuf,
+    meeting_id: &MeetingId,
+    name: &str,
+    contents: &[u8],
+    meeting_time_ms: u64,
+) -> Attachment {
+    let directory = database_path
+        .parent()
+        .unwrap_or_else(|| panic!("the database has a folder"));
+    let source = directory.join(name);
+    std::fs::write(&source, contents)
+        .unwrap_or_else(|error| panic!("source must be written: {error}"));
+    AttachmentFileStore::new(directory.join("attachments"), DeviceId::new("Laptop"))
+        .import_file(
+            &pipeline_connection(database_path, "Laptop"),
+            meeting_id,
+            &source,
+            Some(meeting_time_ms),
+        )
+        .unwrap_or_else(|error| panic!("the file must attach: {error}"))
+}
+
+/// A library over `database_path` keeping files in `attachments` beside it.
+fn attachment_library(database_path: &PathBuf) -> Box<AttachmentSyncStore> {
+    Box::new(AttachmentSyncStore::new(
+        pipeline_connection(database_path, "sync"),
+        database_path
+            .parent()
+            .unwrap_or_else(|| panic!("the database has a folder"))
+            .join("attachments"),
+    ))
+}
+
+/// The attachments of a meeting, as the app reads them.
+fn attachments_of(database_path: &PathBuf, meeting_id: &MeetingId) -> Vec<Attachment> {
+    pipeline_connection(database_path, "reader")
+        .get_attachments_for_meeting(meeting_id)
+        .unwrap_or_default()
+}
+
+/// An attachment added on one device reaches the other with its file and its place in the
+/// transcript; one added while they are apart arrives after they reconnect.
+#[tokio::test]
+async fn attachments_reach_paired_devices_even_after_being_apart() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9457"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let (laptop, laptop_database) = service_with_database("Laptop", laptop_adapter);
+    let (phone, phone_database) = service_with_database("Phone", phone_adapter);
+    let mut laptop = laptop
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_attachment_library(attachment_library(&laptop_database));
+    let mut phone = phone
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_attachment_library(attachment_library(&phone_database));
+    let meeting_id = MeetingId::new("meeting-attached");
+    MeetingCrdtService::new(pipeline_connection(&laptop_database, "Laptop"))
+        .create_meeting(&meeting_id)
+        .unwrap_or_else(|error| panic!("meeting must be created: {error}"));
+    // Larger than one chunk, so the transfer takes several round trips.
+    let photo: Vec<u8> = (0..200_000_u32)
+        .map(|value| value.to_le_bytes()[0])
+        .collect();
+    let sent = attach_file(&laptop_database, &meeting_id, "board.png", &photo, 42_000);
+
+    pair(&mut laptop, &mut phone, phone_address.clone()).await;
+    drive(&mut laptop, &mut phone, |_, _| {
+        !attachments_of(&phone_database, &meeting_id).is_empty()
+    })
+    .await;
+
+    let received = attachments_of(&phone_database, &meeting_id);
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].attachment_id(), sent.attachment_id());
+    assert_eq!(received[0].meeting_time_ms(), Some(42_000));
+    assert_eq!(received[0].mime_type(), "image/png");
+    assert_ne!(received[0].file_path(), sent.file_path());
+    assert_eq!(std::fs::read(received[0].file_path()).ok(), Some(photo));
+
+    // Apart: the phone goes away and the laptop gets another attachment.
+    let phone_id = phone.transport().local_peer_id();
+    laptop.transport_mut().disconnect_for_tests(&phone_id);
+    drive(&mut laptop, &mut phone, |laptop, _| {
+        !laptop.transport().is_connected_to(&phone_id)
+    })
+    .await;
+    let later = attach_file(&laptop_database, &meeting_id, "notes.txt", b"later", 50_000);
+    for _ in 0..3 {
+        laptop.poll_local_changes();
+    }
+    assert_eq!(attachments_of(&phone_database, &meeting_id).len(), 1);
+
+    laptop
+        .transport_mut()
+        .dial_memory(phone_address)
+        .unwrap_or_else(|error| panic!("the laptop must redial: {error}"));
+    drive(&mut laptop, &mut phone, |_, _| {
+        attachments_of(&phone_database, &meeting_id).len() == 2
+    })
+    .await;
+    let received = attachments_of(&phone_database, &meeting_id);
+    let arrived = received
+        .iter()
+        .find(|attachment| attachment.attachment_id() == later.attachment_id())
+        .unwrap_or_else(|| panic!("the later attachment must arrive"));
+    assert_eq!(
+        std::fs::read(arrived.file_path()).ok(),
+        Some(b"later".to_vec())
+    );
+    assert_eq!(arrived.mime_type(), "text/plain");
 }
 
 /// A device removed from the allowlist by another process (the CLI's `devices revoke`) is dropped

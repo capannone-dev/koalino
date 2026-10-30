@@ -4,10 +4,18 @@
 pub mod ai_config;
 /// Selects registered adapter-neutral AI engines from provider configuration.
 pub mod ai_registry;
+/// Encodes the sealed `NTA1` messages listing the attachments a device holds (Issue #57).
+pub mod attachment_exchange;
+#[cfg(test)]
+mod attachment_exchange_tests;
 /// Suggests meeting ownership for externally acquired files through metadata and storage ports.
 pub mod attachment_manager;
 #[cfg(test)]
 mod attachment_manager_tests;
+/// Decides which attachments to fetch from paired devices and drives each transfer (Issue #57).
+pub mod attachment_sync;
+#[cfg(test)]
+mod attachment_sync_tests;
 /// Lists unknown-speaker clusters and assigns them to named identities for driving adapters.
 pub mod cluster_review;
 #[cfg(test)]
@@ -35,10 +43,6 @@ mod diarization_processor_tests;
 pub mod export_manager;
 #[cfg(test)]
 mod export_manager_tests;
-/// Coordinates content-addressed attachment availability and binary transfers through ports.
-pub mod file_sync_manager;
-#[cfg(test)]
-mod file_sync_manager_tests;
 /// The daemon's runtime log level and log location, as a port for the HTTP routes (Issue #46).
 pub mod log_control;
 /// Coordinates Automerge meeting documents through storage ports.
