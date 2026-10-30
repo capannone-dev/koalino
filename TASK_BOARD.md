@@ -130,6 +130,8 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P2 | #57 | Done (2026-10-30): sealed attachment lists, files pulled over `FileTransferNetwork`, verified by SHA-256, fetched again after reconnecting | 3.3 |
 | P3 | #58 | Done (2026-10-30): devices with a pending pairing are left out of Nearby | 4.1 |
 | P3 | #59 | Done (2026-10-30): transcription on a paired device, chosen in Settings, falling back to local | 3.4 |
+| P3 | #60 | In progress (2026-10-30): models in the Linux and Windows installers, Windows loads `onnxruntime.dll` at run time; Android still needs a run on a device | 3.4 |
+| P3 | #61 | Open: measure on real meetings and retune the voice matcher cutoffs; needs the owner's recordings | 3.4 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |
 | P3 | — | Decide how the Voice Galleries surface unclustered fallback clips | 3.2 |

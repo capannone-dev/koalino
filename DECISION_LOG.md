@@ -1335,3 +1335,23 @@ the comment on #49.
   no prebuilt ONNX Runtime; the Android library links but has not been run on a device.
 - **Models in `<data directory>/models/diarization/` turn the feature on**, so no setting is needed
   once a device has them. How they get there is still the owner's decision (see #60).
+
+## 2026-10-30 — #60 diarization models in the installers
+
+Owner's decisions: ship the models in the installer; Windows loads `onnxruntime.dll` at run time;
+measuring and retuning moves to #61.
+
+- **Bundled models live beside the executable** (`data/models/diarization`), passed to the core as
+  `diarization_model_directory`. A pair in the data folder still wins, as with Whisper.
+- **Windows uses `ort`'s `load-dynamic`** through target-specific dependencies, so other platforms
+  keep the linked prebuilt. `load_session` calls `ort::init_from` first, because `ort` panics on
+  first use if the library cannot load; a failed load now means "diarization unavailable".
+- **ONNX Runtime 1.28.0 on Windows**, the version `ort` builds against elsewhere, from Microsoft's
+  release with a recorded SHA-256. Windows 11 has its own 1.17 in System32, which `ort` refuses as
+  too old, so the DLL beside the executable is the one that must load.
+- **The Windows bundle ships the Visual C++ runtime** (`InstallRequiredSystemLibraries`): a clean
+  Windows 11 does not have it, and `onnxruntime.dll` fails to load without it.
+- **Android stays off until run on a device.** The plumbing is in place, but no phone was connected.
+  Shipping 90 MB more and an untested native library would risk the app for no verified gain.
+- **Export is not pinned by hash.** `fetch.sh` exports the models, and export may not be
+  byte-reproducible; the export script validates them with onnxruntime instead.
