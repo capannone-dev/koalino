@@ -37,6 +37,8 @@ struct AppConfiguration {
     device_name: Option<String>,
     /// Absolute path of the GGML Whisper model for on-device transcription.
     whisper_model_path: Option<PathBuf>,
+    /// Absolute folder of the diarization models the app ships; a pair in the data folder wins.
+    diarization_model_directory: Option<PathBuf>,
     /// Whether to keep the encryption key in the platform keychain (unavailable on Android).
     keychain_enabled: Option<bool>,
     /// Whether to run P2P sync; on by default.
@@ -60,8 +62,8 @@ impl ConfiguredSettings {
     /// Inputs: JSON matching `AppConfiguration`; paths must be absolute, a device name must not be
     /// blank, and a peer address must not contain a comma (the list is stored comma-separated).
     /// Outputs: The settings, or `Invalid` naming the offending field.
-    /// Side effects: Checks whether the diarization models exist in the data folder; directories
-    /// are created when the runtime opens its stores.
+    /// Side effects: Checks whether the diarization models exist in the data folder or the shipped
+    /// folder; directories are created when the runtime opens its stores.
     pub fn from_json(json: &str) -> Result<Self, SettingsError> {
         let configuration: AppConfiguration = serde_json::from_str(json)
             .map_err(|error| SettingsError::Invalid(format!("unreadable JSON: {error}")))?;
@@ -84,13 +86,25 @@ impl ConfiguredSettings {
                 export_directory.display().to_string(),
             );
         }
-        // Models placed in the data folder turn diarization on with no further setting (#60).
-        let model_directory = data_directory.join("models").join("diarization");
-        let (segmentation_model, embedding_model) = (
-            model_directory.join("segmentation.onnx"),
-            model_directory.join("embedding.onnx"),
-        );
-        if segmentation_model.is_file() && embedding_model.is_file() {
+        // Models in the data folder, else the ones the app ships, turn diarization on (#60).
+        let shipped_directory = configuration
+            .diarization_model_directory
+            .as_deref()
+            .map(|directory| absolute(directory, "diarization_model_directory"))
+            .transpose()?;
+        let own_directory = data_directory.join("models").join("diarization");
+        let model_directories = [Some(own_directory.as_path()), shipped_directory];
+        if let Some((segmentation_model, embedding_model)) = model_directories
+            .into_iter()
+            .flatten()
+            .map(|directory| {
+                (
+                    directory.join("segmentation.onnx"),
+                    directory.join("embedding.onnx"),
+                )
+            })
+            .find(|(segmentation, embedding)| segmentation.is_file() && embedding.is_file())
+        {
             values.insert("NOTE_TAKER_ENABLE_DIARIZATION", "true".to_owned());
             values.insert(
                 "NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL",

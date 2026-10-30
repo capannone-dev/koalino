@@ -184,3 +184,69 @@ fn diarization_turns_on_when_both_models_are_in_the_data_folder() {
         Some(model_directory.join("embedding.onnx").display().to_string())
     );
 }
+
+/// Models shipped in the app's bundle turn diarization on, but a pair in the data folder wins.
+#[test]
+fn diarization_uses_the_bundled_models_unless_the_data_folder_has_its_own() {
+    let root = std::env::temp_dir().join(format!("ffi-settings-{}", uuid::Uuid::new_v4()));
+    let (data_directory, bundled_directory) = (root.join("data"), root.join("bundle"));
+    let own_directory = data_directory.join("models").join("diarization");
+    for directory in [&own_directory, &bundled_directory] {
+        std::fs::create_dir_all(directory)
+            .unwrap_or_else(|error| panic!("folders must be created: {error}"));
+    }
+    let json = format!(
+        r#"{{"data_directory":"{}","diarization_model_directory":"{}"}}"#,
+        data_directory.display(),
+        bundled_directory.display()
+    );
+
+    assert_eq!(value(&parsed(&json), "NOTE_TAKER_ENABLE_DIARIZATION"), None);
+
+    for file in ["segmentation.onnx", "embedding.onnx"] {
+        std::fs::write(bundled_directory.join(file), b"x")
+            .unwrap_or_else(|error| panic!("file must be written: {error}"));
+    }
+    let settings = parsed(&json);
+    assert_eq!(
+        value(&settings, "NOTE_TAKER_ENABLE_DIARIZATION").as_deref(),
+        Some("true")
+    );
+    assert_eq!(
+        value(&settings, "NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL"),
+        Some(
+            bundled_directory
+                .join("embedding.onnx")
+                .display()
+                .to_string()
+        )
+    );
+
+    for file in ["segmentation.onnx", "embedding.onnx"] {
+        std::fs::write(own_directory.join(file), b"x")
+            .unwrap_or_else(|error| panic!("file must be written: {error}"));
+    }
+    assert_eq!(
+        value(&parsed(&json), "NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL"),
+        Some(
+            own_directory
+                .join("segmentation.onnx")
+                .display()
+                .to_string()
+        )
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// A relative bundled directory is refused like any other relative path.
+#[test]
+fn a_relative_diarization_directory_is_refused() {
+    let refused = ConfiguredSettings::from_json(
+        r#"{"data_directory":"/data","diarization_model_directory":"models"}"#,
+    );
+
+    assert!(matches!(
+        refused,
+        Err(SettingsError::Invalid(message)) if message.contains("diarization_model_directory")
+    ));
+}
