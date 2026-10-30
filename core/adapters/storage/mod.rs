@@ -35,6 +35,8 @@ mod sqlite_meeting_document_tests;
 pub mod sqlite_peer_store;
 #[cfg(test)]
 mod sqlite_peer_store_tests;
+#[cfg(test)]
+mod sqlite_voice_library_sync_tests;
 /// Implements the voice-vector port with SQLite-persisted speaker names and voice variants.
 pub mod sqlite_voice_vector_db;
 #[cfg(test)]

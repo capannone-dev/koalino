@@ -1634,6 +1634,52 @@ impl AggregatedStats {
     }
 }
 
+/// A speaker identity as paired devices exchange it (Issue #56).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SharedSpeakerIdentity {
+    /// The person's stable UUID, shared across devices.
+    pub identity_id: Uuid,
+    /// The user-visible name; the newest rename wins.
+    pub display_name: String,
+    /// When the identity was created.
+    pub created_at: DateTime<Utc>,
+    /// When the name last changed.
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A voice variant as paired devices exchange it; the vector is biometric and never logged.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SharedVoiceVariant {
+    /// The person this variant belongs to.
+    pub identity_id: Uuid,
+    /// The variant's stable UUID, shared across devices.
+    pub variant_id: Uuid,
+    /// The derived embedding, never raw audio.
+    pub vector: Vec<f32>,
+    /// When the variant was enrolled.
+    pub created_at: DateTime<Utc>,
+}
+
+/// Records that an identity was deleted, so no paired device brings its voice back.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IdentityTombstone {
+    /// The deleted person.
+    pub identity_id: Uuid,
+    /// When it was first deleted.
+    pub deleted_at: DateTime<Utc>,
+}
+
+/// The voice library, or the part of it one message carries.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct VoiceLibrary {
+    /// The people.
+    pub identities: Vec<SharedSpeakerIdentity>,
+    /// Their voice variants.
+    pub variants: Vec<SharedVoiceVariant>,
+    /// The people deleted.
+    pub tombstones: Vec<IdentityTombstone>,
+}
+
 /// Identifies a person whose voice signatures may have multiple acoustic variants.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SpeakerIdentity {

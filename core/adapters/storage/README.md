@@ -114,6 +114,7 @@ repository, through its own connection with a 5 s busy timeout:
 | --- | --- |
 | `speaker_identities` | `id` (UUID PK), `display_name` (non-blank), `created_at`, `updated_at` (RFC 3339) |
 | `voice_variants` | `id` (UUID PK), `identity_id` (FK → `speaker_identities`), `embedding` BLOB, `created_at` |
+| `voice_identity_tombstones` | `identity_id` (UUID PK), `deleted_at` (RFC 3339) | Deleted people, kept forever so no paired device brings their voices back (#56) |
 | `external_identity_mappings` | `external_id` (PK, e.g. a Teams user ID), `identity_id` (FK → `speaker_identities`), `created_at` (Issue #33) |
 
 Saving an existing identity ID renames it. Identities list in creation order. `store_embedding`

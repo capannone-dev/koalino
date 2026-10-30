@@ -14,6 +14,9 @@
 //! `external_identity_mappings` (Issue #33) maps stable external-participant IDs, such as Teams
 //! user IDs, to identities; see `sqlite_external_identities.rs`.
 //!
+//! `voice_identity_tombstones` and the merge between paired devices (Issue #56) are in
+//! `sqlite_voice_library_sync.rs`.
+//!
 //! Embeddings are encrypted at rest (Issue #31) and never logged. Opening the store re-encrypts
 //! any plaintext variant written before #31 (see `sqlite_embedding_encryption`).
 
@@ -26,6 +29,9 @@ use uuid::Uuid;
 /// Maps external-participant IDs (Teams) to stored identities (Issue #33).
 #[path = "sqlite_external_identities.rs"]
 mod external_identities;
+/// Exports and merges the voice library for paired devices (Issue #56).
+#[path = "sqlite_voice_library_sync.rs"]
+mod voice_library_sync;
 
 use super::{
     in_memory_voice_vector_db::{cosine_similarity, validate_vector},
@@ -113,6 +119,7 @@ impl SqliteVoiceVectorDB {
             )
             .map_err(|error| sqlite_error("unable to initialize voice store schema", error))?;
         external_identities::initialize_external_identity_schema(&sqlite_connection)?;
+        voice_library_sync::initialize_tombstone_schema(&sqlite_connection)?;
         VOICE_VARIANT_EMBEDDINGS.prepare(&sqlite_connection, embedding_cipher.as_ref())?;
         tracing::info!("SQLite voice store initialized");
         Ok(Self {
@@ -324,7 +331,8 @@ impl VoiceVectorDB for SqliteVoiceVectorDB {
     ///
     /// Inputs: `identity_id` identifies the person; an unknown identity is a no-op.
     /// Outputs: Success or a portable storage error.
-    /// Side effects: Irreversibly deletes biometric variants and the identity row. Transcript
+    /// Side effects: Irreversibly deletes biometric variants and the identity row, and leaves a
+    /// deletion record so paired devices delete it too and cannot bring it back. Transcript
     /// segments that referenced the identity keep its UUID and show as unknown afterwards.
     fn delete_identity(&self, identity_id: Uuid) -> Result<(), StorageError> {
         let transaction = self
@@ -343,6 +351,7 @@ impl VoiceVectorDB for SqliteVoiceVectorDB {
                 params![identity_id.to_string()],
             )
             .map_err(|error| sqlite_error("unable to delete speaker identity", error))?;
+        voice_library_sync::record_tombstone(&transaction, identity_id, Utc::now())?;
         transaction
             .commit()
             .map_err(|error| sqlite_error("unable to commit identity deletion", error))?;

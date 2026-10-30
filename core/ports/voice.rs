@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::domain::{
     errors::StorageError,
-    models::{SpeakerIdentity, VoiceEmbedding, VoiceMatchResult},
+    models::{SpeakerIdentity, VoiceEmbedding, VoiceLibrary, VoiceMatchResult},
 };
 
 /// Classifies a derived speaker embedding without exposing vector-search implementation details.
@@ -97,6 +97,28 @@ pub trait VoiceVectorDB {
     /// Outputs: Success or a portable storage failure.
     /// Side effects: Deletes sensitive biometric data from the adapter-owned store.
     fn delete_identity(&self, identity_id: Uuid) -> Result<(), StorageError>;
+}
+
+/// Copies the voice library between paired devices (Issue #56).
+pub trait VoiceLibrarySync {
+    /// Summarizes the library without opening any embedding.
+    ///
+    /// Inputs: None. Outputs: A digest equal on devices holding the same library, or a storage
+    /// error. Side effects: Reads metadata only.
+    fn voice_library_digest(&self) -> Result<[u8; 32], StorageError>;
+
+    /// Reads the whole library to send to a paired device.
+    ///
+    /// Inputs: None. Outputs: The library with decrypted embeddings (biometric; never log them),
+    /// or a storage error. Side effects: Decrypts stored embeddings in memory.
+    fn export_voice_library(&self) -> Result<VoiceLibrary, StorageError>;
+
+    /// Merges a library received from a paired device.
+    ///
+    /// Inputs: A decoded library. Outputs: Whether anything changed, or a storage error (then
+    /// nothing is stored). Side effects: Writes identities and variants sealed with this device's
+    /// key, and applies deletions, which remove biometric data and are never undone.
+    fn import_voice_library(&self, library: &VoiceLibrary) -> Result<bool, StorageError>;
 }
 
 /// Forwards immutable voice-storage calls through references for application-service composition.
