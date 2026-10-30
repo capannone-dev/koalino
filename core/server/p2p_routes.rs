@@ -27,7 +27,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use serde::{Deserialize, Serialize};
 
@@ -51,6 +51,7 @@ pub(super) fn routes() -> Router<ServerAppState> {
         .route("/api/p2p/requests/{peer_id}/accept", post(accept_request))
         .route("/api/p2p/requests/{peer_id}/reject", post(reject_request))
         .route("/api/p2p/devices/{peer_id}", delete(revoke_device))
+        .route("/api/p2p/transcription-route", put(set_transcription_route))
 }
 
 /// Why a P2P route failed, mapped to its status code.
@@ -103,6 +104,23 @@ struct StartPairingRequest {
 struct PairingCodeResponse {
     /// The six-digit code both devices show.
     code: String,
+}
+
+/// Body of `PUT /api/p2p/transcription-route`.
+#[derive(Deserialize)]
+struct TranscriptionRouteRequest {
+    /// `local`, `auto`, or a paired device's peer ID.
+    route: String,
+}
+
+/// Chooses where this device's chunks are transcribed.
+async fn set_transcription_route(
+    State(application_state): State<ServerAppState>,
+    Json(request): Json<TranscriptionRouteRequest>,
+) -> Result<StatusCode, P2pRouteFailure> {
+    let route = p2p_view::parse_route_request(&request.route).ok_or(P2pRouteFailure::BadPeerId)?;
+    run(&application_state, P2pCommand::SetTranscriptionRoute(route)).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Returns the snapshot, or `{"enabled": false}` without a P2P task.

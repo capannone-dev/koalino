@@ -8,6 +8,7 @@ use note_taker_core::{
         LOG_LEVEL_POLL_INTERVAL, LiveLogControl, LogLevelControlFile, LogLevelWatcher,
         LoggingConfiguration, initialize_logging,
     },
+    application::transcription_routing::RemoteTranscriptionGateway,
     application::{
         crypto::key_manager::KeyManagerConfig, log_control::LogControl, p2p_service::P2pControl,
     },
@@ -72,16 +73,20 @@ async fn main() -> Result<()> {
         device_id.clone(),
         KeyManagerConfig::from_environment(),
     )?;
-    let recording_controller = compose_recording_pipeline(
+    // P2P first: the pipeline routes transcription through its task.
+    let p2p_task = start_p2p_task(
         database_path.clone(),
         device_id.clone(),
         Arc::clone(&embedding_cipher),
     )
     .await;
-    let p2p_task = start_p2p_task(
+    let recording_controller = compose_recording_pipeline(
         database_path.clone(),
         device_id.clone(),
         Arc::clone(&embedding_cipher),
+        p2p_task
+            .clone()
+            .map(|task| task as Arc<dyn RemoteTranscriptionGateway>),
     )
     .await;
     let teams_bridge = start_teams_bridge_from_environment(
@@ -162,6 +167,7 @@ async fn compose_recording_pipeline(
     database_path: PathBuf,
     device_id: DeviceId,
     embedding_cipher: Arc<dyn note_taker_core::ports::crypto::EmbeddingCipher>,
+    remote_gateway: Option<Arc<dyn RemoteTranscriptionGateway>>,
 ) -> Option<RecordingController> {
     let composition = tokio::task::spawn_blocking(move || {
         spawn_recording_controller(
@@ -169,6 +175,7 @@ async fn compose_recording_pipeline(
             device_id,
             embedding_cipher,
             PipelineConfig::from_environment()?,
+            remote_gateway,
         )
     })
     .await;
@@ -218,11 +225,22 @@ async fn start_p2p_task(
     };
     // The manifest advertises what the pipeline can run; an invalid pipeline setting is
     // reported by the pipeline itself, so it advertises no models here.
-    config.capabilities.transcription_models = PipelineConfig::from_environment()
-        .map(|pipeline_config| pipeline_config.advertised_transcription_models())
-        .unwrap_or_default();
+    let mut hosted_pipeline = None;
+    if let Ok(pipeline_config) = PipelineConfig::from_environment() {
+        config.capabilities.transcription_models =
+            pipeline_config.advertised_transcription_models();
+        if !config.capabilities.transcription_models.is_empty() {
+            hosted_pipeline = Some(pipeline_config);
+        }
+    }
     let started = tokio::task::spawn_blocking(move || {
-        spawn_p2p_task(&database_path, device_id, embedding_cipher, config)
+        spawn_p2p_task(
+            &database_path,
+            device_id,
+            embedding_cipher,
+            config,
+            hosted_pipeline,
+        )
     })
     .await;
     match started {

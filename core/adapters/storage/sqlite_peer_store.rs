@@ -25,6 +25,7 @@ use crate::{
         peer_trust::{
             NodeIdentityStore, PairAgreementSecretStore, PairKeyPinning, TrustedPeerStore,
         },
+        remote_transcription::TranscriptionRouteStore,
     },
 };
 
@@ -87,7 +88,11 @@ impl SqlitePeerStore {
             .map_err(|error| sqlite_error("unable to configure peer store busy timeout", error))?;
         connection
             .execute_batch(
-                "CREATE TABLE IF NOT EXISTS p2p_node_identity (
+                "CREATE TABLE IF NOT EXISTS p2p_transcription_route (
+                    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                    route TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS p2p_node_identity (
                     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
                     sealed_identity BLOB NOT NULL
                 );
@@ -117,6 +122,36 @@ impl SqlitePeerStore {
                 .map_err(|error| sqlite_error("unable to add the pair-key column", error))?;
         }
         Ok(Self { connection, cipher })
+    }
+}
+
+impl TranscriptionRouteStore for SqlitePeerStore {
+    /// Reads the stored choice.
+    ///
+    /// Outputs: Its text, `None` if never set, or a storage error. Side effects: Reads one row.
+    fn load_transcription_route(&self) -> Result<Option<String>, StorageError> {
+        self.connection
+            .query_row(
+                "SELECT route FROM p2p_transcription_route WHERE singleton = 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| sqlite_error("unable to read the transcription choice", error))
+    }
+
+    /// Stores the choice.
+    ///
+    /// Outputs: Success or a storage error. Side effects: Writes one row.
+    fn save_transcription_route(&self, route: &str) -> Result<(), StorageError> {
+        self.connection
+            .execute(
+                "INSERT INTO p2p_transcription_route (singleton, route) VALUES (1, ?1)
+                 ON CONFLICT (singleton) DO UPDATE SET route = excluded.route",
+                params![route],
+            )
+            .map_err(|error| sqlite_error("unable to store the transcription choice", error))?;
+        Ok(())
     }
 }
 

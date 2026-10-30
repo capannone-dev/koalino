@@ -132,6 +132,7 @@ async fn the_task_serves_status_and_commands_until_shutdown() {
         DeviceId::new("device-test"),
         Arc::clone(&cipher) as Arc<dyn crate::ports::crypto::EmbeddingCipher>,
         misconfigured,
+        None,
     );
     assert!(
         refused_start.is_err(),
@@ -150,6 +151,7 @@ async fn the_task_serves_status_and_commands_until_shutdown() {
                 DeviceId::new("device-test"),
                 Arc::clone(&cipher) as Arc<dyn crate::ports::crypto::EmbeddingCipher>,
                 misconfigured,
+                None,
             )
             .is_err(),
             "{name} must stop start-up"
@@ -160,6 +162,7 @@ async fn the_task_serves_status_and_commands_until_shutdown() {
         DeviceId::new("device-test"),
         cipher,
         config,
+        None,
     )
     .unwrap_or_else(|error| panic!("task must start: {error:#}"));
     let mut listening = false;

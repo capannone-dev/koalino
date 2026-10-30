@@ -6,7 +6,12 @@
 use serde::Serialize;
 
 use crate::{
-    application::{p2p_service::P2pSnapshot, pairing_manager::PairingUpdate},
+    application::{
+        compute_router::ComputePreference,
+        p2p_service::P2pSnapshot,
+        pairing_manager::PairingUpdate,
+        transcription_routing::{parse_route, route_text},
+    },
     domain::models::{DeviceId, DeviceManifest},
 };
 
@@ -41,6 +46,8 @@ pub struct P2pStatusView {
 pub struct P2pStatusDetails {
     pub local_peer_id: String,
     pub device_name: String,
+    /// Where this device's chunks are transcribed: `local`, `auto`, or a device's peer ID.
+    pub transcription_route: String,
     pub listen_addresses: Vec<String>,
     /// What this device advertises to its paired devices (REQUIREMENTS 3.4).
     pub capabilities: CapabilitiesView,
@@ -182,6 +189,7 @@ pub fn status_view(snapshot: Option<&P2pSnapshot>) -> P2pStatusView {
         details: Some(P2pStatusDetails {
             local_peer_id: status.local_peer_id.as_str().to_owned(),
             device_name: status.device_name.as_str().to_owned(),
+            transcription_route: route_text(&status.transcription_route),
             listen_addresses: snapshot.listen_addresses.clone(),
             capabilities: CapabilitiesView::from(&status.local_manifest),
             trusted_devices: status
@@ -229,5 +237,15 @@ pub fn status_view(snapshot: Option<&P2pSnapshot>) -> P2pStatusView {
                 .map(PairingUpdateView::from)
                 .collect(),
         }),
+    }
+}
+
+/// Reads a requested transcription route: `local`, `auto`, or a well-formed peer ID.
+///
+/// Inputs: Text from a screen. Outputs: The route, or `None` for anything else. Side effects: None.
+pub fn parse_route_request(raw_route: &str) -> Option<ComputePreference> {
+    match raw_route {
+        "local" | "auto" => Some(parse_route(raw_route)),
+        peer_id => parse_peer_id(peer_id).map(ComputePreference::SpecificPeer),
     }
 }

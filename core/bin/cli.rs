@@ -75,6 +75,7 @@ fn main() -> Result<()> {
                 store_device_id.clone(),
                 Arc::clone(&embedding_cipher),
                 PipelineConfig::from_environment()?,
+                None,
             )
         }),
     );

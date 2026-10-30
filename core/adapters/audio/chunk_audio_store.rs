@@ -22,6 +22,7 @@ use crate::{
         errors::TranscriptionError,
         models::{AudioRecording, RecordingId},
     },
+    ports::remote_transcription::ChunkSamples,
 };
 
 /// Sample rate of every stored chunk.
@@ -142,6 +143,23 @@ impl ChunkAudioStore {
         self.chunk_samples
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl ChunkSamples for ChunkAudioStore {
+    /// Copies a chunk's samples for a remote attempt, leaving them stored for a fallback.
+    ///
+    /// Inputs: The chunk's ID. Outputs: The samples, or `None` when unknown.
+    /// Side effects: None.
+    fn copy_samples(&self, recording_id: &RecordingId) -> Option<Vec<i16>> {
+        self.lock_entries().get(recording_id.as_str()).cloned()
+    }
+
+    /// Deletes and wipes a chunk's samples after a remote success.
+    ///
+    /// Inputs: The chunk's ID. Outputs: None. Side effects: Removes them from the store.
+    fn delete_samples(&self, recording_id: &RecordingId) {
+        self.discard(recording_id);
     }
 }
 

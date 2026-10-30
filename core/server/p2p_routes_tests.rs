@@ -78,6 +78,7 @@ fn snapshot() -> P2pSnapshot {
     let tablet = DeviceId::new("12D3KooWTablet");
     P2pSnapshot {
         status: P2pStatus {
+            transcription_route: crate::application::compute_router::ComputePreference::LocalOnly,
             local_peer_id: laptop.clone(),
             device_name: name("Laptop"),
             trusted_devices: vec![TrustedPeer::new(phone.clone(), name("Phone"), 1_700)],
@@ -200,6 +201,7 @@ async fn status_lists_devices_pairings_and_updates() {
         status,
         serde_json::json!({
             "enabled": true,
+            "transcription_route": "local",
             "local_peer_id": "12D3KooWLaptop",
             "device_name": "Laptop",
             "listen_addresses": ["/ip4/127.0.0.1/tcp/4001"],

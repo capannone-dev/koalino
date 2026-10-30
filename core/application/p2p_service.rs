@@ -40,6 +40,7 @@ use crate::{
         cluster_share_exchange::{
             decode_cluster_share_message, encode_cluster_share_messages, is_cluster_share_message,
         },
+        compute_router::ComputePreference,
         crypto::pair_key::PairAgreementSecret,
         device_manifest_exchange::{decode_manifest_message, encode_manifest_message},
         pair_key_exchange::{
@@ -50,21 +51,32 @@ use crate::{
             PairingUpdate,
         },
         repository_sync_manager::{RepositorySyncManager, RepositorySyncManagerError},
+        transcription_exchange::{
+            TranscriptionRequest, TranscriptionResponse, decode_transcription_request,
+            decode_transcription_response, encode_transcription_request,
+            encode_transcription_response, is_transcription_request, is_transcription_response,
+            wipe_request,
+        },
+        transcription_routing::{parse_route, route_text},
         voice_library_exchange::{
             decode_voice_library_message, encode_voice_library_messages, is_voice_library_message,
         },
     },
     domain::{
+        errors::{StorageError, TranscriptionError},
         models::{
             ClusterDigest, ClusterShare, ClusterShareImport, DeviceId, DeviceManifest, MeetingId,
             TranscriptionModel,
         },
-        peer_trust::{DeviceName, PairingCode, TrustedPeer},
+        peer_trust::{DeviceName, PairKey, PairingCode, TrustedPeer},
     },
     ports::{
         file_transfer::{AttachmentLibrary, FileTransferNetwork},
         network::{NetworkEvent, P2pNetwork},
         peer_trust::{PairKeyPinning, PairingTransport, TrustedPeerStore},
+        remote_transcription::{
+            FinishedTranscription, HostedTranscription, TranscriptionHost, TranscriptionRouteStore,
+        },
         storage::NoteRepository,
         voice::VoiceLibrarySync,
     },
@@ -82,6 +94,8 @@ const MAX_RECENT_UPDATES: usize = 16;
 
 /// Most queued network events handled per `process_pending_events` call, so one call always ends.
 const MAX_EVENTS_PER_PASS: usize = 1024;
+/// How long a paired device may take to transcribe one chunk before this device gives up on it.
+pub const REMOTE_TRANSCRIPTION_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// Most review-clip audio one cluster-share message carries, well under the transport's limit.
 const CLUSTER_SHARE_AUDIO_BUDGET: usize = 8 * 1024 * 1024;
@@ -130,6 +144,8 @@ pub enum P2pCommand {
     Revoke(DeviceId),
     /// Sends a meeting that was just written locally to connected paired devices.
     LocalChange(MeetingId),
+    /// Chooses where this device's chunks are transcribed.
+    SetTranscriptionRoute(ComputePreference),
 }
 
 /// The result of one `P2pCommand`.
@@ -154,6 +170,31 @@ pub enum P2pServiceError {
     /// Syncing a local change failed.
     #[error(transparent)]
     Sync(#[from] RepositorySyncManagerError),
+    /// The chosen transcription device is not paired.
+    #[error("the chosen transcription device is not paired")]
+    RouteDeviceNotPaired,
+    /// The transcription choice could not be stored.
+    #[error(transparent)]
+    RouteStorage(#[from] StorageError),
+}
+
+/// A chunk this device wants a paired device to transcribe, and where the answer goes.
+pub struct RemoteTranscriptionJob {
+    /// The device to ask.
+    pub peer: DeviceId,
+    /// 16 kHz mono samples; wiped once sealed.
+    pub samples: Vec<i16>,
+    /// The previous chunk's text.
+    pub previous_text: Option<String>,
+    /// Receives the text, or `Unavailable` on any failure.
+    pub reply: std::sync::mpsc::Sender<Result<String, TranscriptionError>>,
+}
+
+/// A job waiting for its answer.
+struct PendingTranscription {
+    peer: DeviceId,
+    reply: std::sync::mpsc::Sender<Result<String, TranscriptionError>>,
+    deadline: Instant,
 }
 
 /// What the Devices screens show.
@@ -163,6 +204,8 @@ pub struct P2pStatus {
     pub local_peer_id: DeviceId,
     /// This device's announced name.
     pub device_name: DeviceName,
+    /// Where this device's chunks are transcribed.
+    pub transcription_route: ComputePreference,
     /// Paired devices, oldest first.
     pub trusted_devices: Vec<TrustedPeer>,
     /// Unpaired devices visible on the local network.
@@ -270,6 +313,14 @@ pub struct P2pService<Transport, Store, Repository> {
     shared_clusters: HashMap<DeviceId, HashMap<Uuid, SharedCluster>>,
     /// Shares waiting for their meeting, oldest first.
     held_shares: Vec<HeldShare>,
+    /// Where this device's chunks are transcribed.
+    transcription_route: ComputePreference,
+    /// Keeps the choice across restarts; `None` keeps it in memory only.
+    transcription_route_store: Option<Box<dyn TranscriptionRouteStore>>,
+    /// Runs paired devices' transcriptions; `None` refuses them.
+    transcription_host: Option<Box<dyn TranscriptionHost>>,
+    /// Chunks sent to paired devices, by job ID.
+    pending_transcriptions: HashMap<Uuid, PendingTranscription>,
     /// Attachment exchange with paired devices; `None` leaves attachments on this device.
     attachment_sync: Option<AttachmentSync>,
     /// The voice library to keep in step with paired devices; `None` leaves it on this device.
@@ -309,6 +360,10 @@ where
             connected_peers: HashSet::new(),
             shared_clusters: HashMap::new(),
             held_shares: Vec::new(),
+            transcription_route: ComputePreference::LocalOnly,
+            transcription_route_store: None,
+            transcription_host: None,
+            pending_transcriptions: HashMap::new(),
             attachment_sync: None,
             voice_library: None,
             shared_voice_digests: HashMap::new(),
@@ -340,6 +395,35 @@ where
     /// connect.
     pub fn with_attachment_library(mut self, library: Box<dyn AttachmentLibrary>) -> Self {
         self.attachment_sync = Some(AttachmentSync::new(library));
+        self
+    }
+
+    /// Runs paired devices' transcriptions on `host` (Issue #59). It needs a pair agreement secret
+    /// too, since audio travels only under a pair key.
+    ///
+    /// Inputs: The host. Outputs: The service. Side effects: None until a device asks.
+    pub fn with_transcription_host(mut self, host: Box<dyn TranscriptionHost>) -> Self {
+        self.transcription_host = Some(host);
+        self
+    }
+
+    /// Keeps the transcription choice in `store` and starts from what it holds (Issue #59).
+    ///
+    /// Inputs: The store. Outputs: The service.
+    /// Side effects: Reads the store; a failure is logged and the device stays on Local, the
+    /// choice that sends no audio anywhere.
+    pub fn with_transcription_route_store(
+        mut self,
+        store: Box<dyn TranscriptionRouteStore>,
+    ) -> Self {
+        match store.load_transcription_route() {
+            Ok(Some(route)) => self.transcription_route = parse_route(&route),
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(error = %error, "the transcription choice could not be read");
+            }
+        }
+        self.transcription_route_store = Some(store);
         self
     }
 
@@ -404,6 +488,7 @@ where
         self.retry_held_shares();
         self.share_voice_library();
         self.share_attachments();
+        self.expire_pending_transcriptions();
     }
 
     /// Sends every meeting document written since the last call to the connected peers.
@@ -481,6 +566,7 @@ where
             self.handle_network_event(network_event);
         }
         self.process_file_transfers();
+        self.send_finished_transcriptions();
         self.run_scheduled_restarts();
     }
 
@@ -503,6 +589,14 @@ where
                 }
                 if let Some(decoded) = decode_pair_key_message(payload) {
                     self.accept_pair_public_key(peer_device_id, decoded);
+                    return;
+                }
+                if is_transcription_request(payload) {
+                    self.accept_transcription_request(peer_device_id, payload);
+                    return;
+                }
+                if is_transcription_response(payload) {
+                    self.accept_transcription_response(peer_device_id, payload);
                     return;
                 }
                 if is_attachment_manifest(payload) {
@@ -538,6 +632,7 @@ where
                 if let Some(attachment_sync) = self.attachment_sync.as_mut() {
                     attachment_sync.peer_lost(peer_device_id);
                 }
+                self.fail_pending_transcriptions(peer_device_id);
                 None
             }
             // The device may have missed the voice library or attachment list, so they are sent
@@ -547,6 +642,8 @@ where
                 if let Some(attachment_sync) = self.attachment_sync.as_mut() {
                     attachment_sync.forget_shared(peer_device_id);
                 }
+                // A request may be what was lost, so nobody would ever answer it.
+                self.fail_pending_transcriptions(peer_device_id);
                 None
             }
         };
@@ -730,6 +827,219 @@ where
                 "a voice library was rejected"
             );
         }
+    }
+
+    /// Sends a chunk to a paired device.
+    ///
+    /// Inputs: The job, whose answer goes to its `reply`.
+    /// Side effects: Seals and sends the audio, then wipes this copy. A device that is not
+    /// connected, or has no agreed pair key, gets nothing and the reply is `Unavailable`.
+    pub fn request_remote_transcription(&mut self, job: RemoteTranscriptionJob) {
+        let RemoteTranscriptionJob {
+            peer,
+            samples,
+            previous_text,
+            reply,
+        } = job;
+        let job_id = Uuid::new_v4();
+        let mut request = TranscriptionRequest {
+            job_id,
+            previous_text,
+            samples,
+        };
+        let sent = self.seal_and_send_request(&peer, &request);
+        wipe_request(&mut request);
+        if sent {
+            self.pending_transcriptions.insert(
+                job_id,
+                PendingTranscription {
+                    peer,
+                    reply,
+                    deadline: Instant::now() + REMOTE_TRANSCRIPTION_TIMEOUT,
+                },
+            );
+        } else {
+            let _ = reply.send(Err(TranscriptionError::Unavailable));
+        }
+    }
+
+    /// Seals and sends a request.
+    ///
+    /// Outputs: Whether it was queued. Side effects: Reads the pair key, sends; failures logged.
+    fn seal_and_send_request(&mut self, peer: &DeviceId, request: &TranscriptionRequest) -> bool {
+        if !self.connected_peers.contains(peer) {
+            return false;
+        }
+        let Some(pair_key) = self.usable_pair_key(peer) else {
+            return false;
+        };
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        let sent = encode_transcription_request(request, &pair_key, &local_peer_id, peer)
+            .map_err(|error| error.to_string())
+            .and_then(|message| {
+                self.pairing_manager
+                    .transport_mut()
+                    .send_encrypted(peer, &message)
+                    .map_err(|error| error.to_string())
+            });
+        if let Err(error) = &sent {
+            tracing::warn!(peer = %peer.as_str(), error = %error, "a chunk could not be sent for transcription");
+        }
+        sent.is_ok()
+    }
+
+    /// Loads the pair key for `peer`.
+    ///
+    /// Outputs: The key, or `None` when none is agreed or it cannot be read (logged, peer ID only).
+    /// Side effects: Reads the store.
+    fn usable_pair_key(&self, peer: &DeviceId) -> Option<PairKey> {
+        match self.pairing_manager.store().pair_key(peer) {
+            Ok(pair_key) => pair_key,
+            Err(error) => {
+                tracing::warn!(peer = %peer.as_str(), error = %error, "the pair key could not be loaded");
+                None
+            }
+        }
+    }
+
+    /// Opens a chunk a paired device sent and queues it on the host.
+    ///
+    /// Side effects: Holds the audio in the host's queue. A device without an agreed key, or a
+    /// message that does not open, is logged and dropped; a device this one cannot serve (no
+    /// host, or a full queue) is told so at once and its audio is wiped.
+    fn accept_transcription_request(&mut self, peer: &DeviceId, payload: &[u8]) {
+        let Some(pair_key) = self.usable_pair_key(peer) else {
+            tracing::warn!(peer = %peer.as_str(), "a chunk arrived without an agreed pair key and was dropped");
+            return;
+        };
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        let mut request =
+            match decode_transcription_request(payload, &pair_key, peer, &local_peer_id) {
+                Ok(request) => request,
+                Err(error) => {
+                    tracing::warn!(peer = %peer.as_str(), error = %error, "a chunk was rejected");
+                    return;
+                }
+            };
+        let job_id = request.job_id;
+        let accepted = match self.transcription_host.as_mut() {
+            Some(host) => host.submit(HostedTranscription {
+                peer: peer.clone(),
+                job_id,
+                samples: std::mem::take(&mut request.samples),
+                previous_text: request.previous_text.take(),
+            }),
+            None => {
+                wipe_request(&mut request);
+                false
+            }
+        };
+        if !accepted {
+            self.send_transcription_response(FinishedTranscription {
+                peer: peer.clone(),
+                job_id,
+                text: None,
+            });
+        }
+    }
+
+    /// Sends the answers of finished hosted jobs.
+    ///
+    /// Side effects: Seals and sends each; a device that left simply misses it.
+    fn send_finished_transcriptions(&mut self) {
+        for _ in 0..MAX_EVENTS_PER_PASS {
+            let Some(finished) = self
+                .transcription_host
+                .as_mut()
+                .and_then(|host| host.poll_finished())
+            else {
+                return;
+            };
+            self.send_transcription_response(finished);
+        }
+    }
+
+    /// Seals and sends one answer.
+    ///
+    /// Side effects: Reads the pair key and sends; failures are logged without text.
+    fn send_transcription_response(&mut self, finished: FinishedTranscription) {
+        let FinishedTranscription { peer, job_id, text } = finished;
+        let Some(pair_key) = self.usable_pair_key(&peer) else {
+            return;
+        };
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        let sent = encode_transcription_response(
+            &TranscriptionResponse { job_id, text },
+            &pair_key,
+            &local_peer_id,
+            &peer,
+        )
+        .map_err(|error| error.to_string())
+        .and_then(|message| {
+            self.pairing_manager
+                .transport_mut()
+                .send_encrypted(&peer, &message)
+                .map_err(|error| error.to_string())
+        });
+        if let Err(error) = sent {
+            tracing::warn!(peer = %peer.as_str(), error = %error, "a transcript could not be sent back");
+        }
+    }
+
+    /// Hands a paired device's answer to whoever waits for it.
+    ///
+    /// Side effects: Ends the pending job. An answer from a device that was not asked, or to an
+    /// unknown job, is ignored.
+    fn accept_transcription_response(&mut self, peer: &DeviceId, payload: &[u8]) {
+        let Some(pair_key) = self.usable_pair_key(peer) else {
+            return;
+        };
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        let response = match decode_transcription_response(payload, &pair_key, peer, &local_peer_id)
+        {
+            Ok(response) => response,
+            Err(error) => {
+                tracing::warn!(peer = %peer.as_str(), error = %error, "a transcript was rejected");
+                return;
+            }
+        };
+        if self
+            .pending_transcriptions
+            .get(&response.job_id)
+            .is_none_or(|pending| pending.peer != *peer)
+        {
+            return;
+        }
+        if let Some(pending) = self.pending_transcriptions.remove(&response.job_id) {
+            let _ = pending
+                .reply
+                .send(response.text.ok_or(TranscriptionError::Unavailable));
+        }
+    }
+
+    /// Fails every job waiting on `peer`, so the pipeline falls back at once.
+    ///
+    /// Side effects: Answers those jobs with `Unavailable`.
+    fn fail_pending_transcriptions(&mut self, peer: &DeviceId) {
+        self.pending_transcriptions.retain(|_, pending| {
+            let keep = pending.peer != *peer;
+            if !keep {
+                let _ = pending.reply.send(Err(TranscriptionError::Unavailable));
+            }
+            keep
+        });
+    }
+
+    /// Fails jobs past their deadline. Side effects: Answers them with `Unavailable`.
+    fn expire_pending_transcriptions(&mut self) {
+        let now = Instant::now();
+        self.pending_transcriptions.retain(|_, pending| {
+            let keep = pending.deadline > now;
+            if !keep {
+                let _ = pending.reply.send(Err(TranscriptionError::Unavailable));
+            }
+            keep
+        });
     }
 
     /// Tells connected devices which attachments exist, then advances transfers.
@@ -1262,6 +1572,21 @@ where
                 self.refresh_trusted_devices()?;
                 Ok(P2pCommandOutcome::Revoked(was_paired))
             }
+            P2pCommand::SetTranscriptionRoute(route) => {
+                if let ComputePreference::SpecificPeer(peer_id) = &route
+                    && !self
+                        .trusted_devices
+                        .iter()
+                        .any(|device| device.peer_id() == peer_id)
+                {
+                    return Err(P2pServiceError::RouteDeviceNotPaired);
+                }
+                if let Some(store) = &self.transcription_route_store {
+                    store.save_transcription_route(&route_text(&route))?;
+                }
+                self.transcription_route = route;
+                Ok(P2pCommandOutcome::Done)
+            }
             P2pCommand::LocalChange(meeting_id) => {
                 self.sync_manager
                     .notify_local_change(self.pairing_manager.transport_mut(), &meeting_id)?;
@@ -1277,6 +1602,7 @@ where
         P2pStatus {
             local_peer_id: self.pairing_manager.transport().local_peer_id(),
             device_name: self.pairing_manager.local_name().clone(),
+            transcription_route: self.transcription_route.clone(),
             trusted_devices: self.trusted_devices.clone(),
             nearby_devices: self.pairing_manager.nearby_devices(),
             incoming_requests: self.pairing_manager.incoming_requests(),

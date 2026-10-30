@@ -275,6 +275,7 @@ fn spawned_controller_reports_pipeline_availability() {
             ("OPENAI_API_KEY", "sk-test"),
             ("NOTE_TAKER_ENABLE_DIARIZATION", "true"),
         ]),
+        None,
     )
     .unwrap_or_else(|error| panic!("controller should compose: {error:#}"));
 
@@ -297,6 +298,7 @@ fn spawning_without_an_engine_fails() {
         DeviceId::new("device-test"),
         ephemeral_cipher(),
         valid_config(&[]),
+        None,
     );
 
     assert!(result.is_err());

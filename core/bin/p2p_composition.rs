@@ -44,20 +44,25 @@ use crate::{
         },
     },
     application::{
+        compute_router::ComputePreference,
         crypto::pair_key::PairAgreementSecret,
         p2p_service::{
             LocalCapabilities, P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError,
-            P2pService, P2pSnapshot,
+            P2pService, P2pSnapshot, REMOTE_TRANSCRIPTION_TIMEOUT, RemoteTranscriptionJob,
         },
         pairing_manager::PairingManager,
         repository_sync_manager::RepositorySyncManager,
+        transcription_routing::RemoteTranscriptionGateway,
     },
     domain::{
-        models::{DeviceId, MeetingId},
+        errors::TranscriptionError,
+        models::{DeviceId, DeviceManifest, MeetingId},
         peer_trust::DeviceName,
     },
+    pipeline_composition::{PipelineConfig, select_transcription_engine},
     ports::{crypto::EmbeddingCipher, peer_trust::PairAgreementSecretStore},
     storage_composition::open_note_repository,
+    transcription_host::ThreadedTranscriptionHost,
 };
 
 #[cfg(test)]
@@ -69,6 +74,9 @@ const DEFAULT_LISTEN_ADDRESS: &str = "/ip4/0.0.0.0/tcp/0";
 
 /// Device name used when neither `NOTE_TAKER_DEVICE_NAME` nor a usable host name is available.
 const FALLBACK_DEVICE_NAME: &str = "Note Taker device";
+
+/// How many chunks may wait to be sent; the pipeline handles one at a time.
+const REMOTE_TRANSCRIPTION_QUEUE_CAPACITY: usize = 4;
 
 /// Longest host name used as a default device name, matching `DeviceName`'s limit.
 const MAX_DEFAULT_NAME_CHARACTERS: usize = 64;
@@ -196,6 +204,8 @@ pub struct P2pHandle {
     commands: mpsc::Sender<P2pRequest>,
     /// Latest snapshot published by the task.
     snapshots: watch::Receiver<P2pSnapshot>,
+    /// Queue of chunks to send to paired devices.
+    remote_transcriptions: mpsc::Sender<RemoteTranscriptionJob>,
     /// Tells the task to stop; taken by `shutdown`.
     stop: Mutex<Option<oneshot::Sender<()>>>,
     /// The task's thread; taken by `shutdown`.
@@ -272,6 +282,46 @@ impl Drop for P2pHandle {
     }
 }
 
+impl RemoteTranscriptionGateway for P2pHandle {
+    /// Reads the choice from the latest snapshot.
+    fn route(&self) -> ComputePreference {
+        self.snapshots.borrow().status.transcription_route.clone()
+    }
+
+    /// Reads this device's manifest from the latest snapshot.
+    fn local_manifest(&self) -> DeviceManifest {
+        self.snapshots.borrow().status.local_manifest.clone()
+    }
+
+    /// Reads the connected devices' manifests from the latest snapshot.
+    fn connected_manifests(&self) -> Vec<DeviceManifest> {
+        self.snapshots.borrow().status.peer_manifests.clone()
+    }
+
+    /// Hands the chunk to the P2P task and blocks until the answer or the deadline.
+    ///
+    /// Side effects: See the trait. A full queue or a stopped task is `Unavailable` at once.
+    fn transcribe_on_peer(
+        &self,
+        peer: &DeviceId,
+        samples: Vec<i16>,
+        previous_text: Option<String>,
+    ) -> Result<String, TranscriptionError> {
+        let (reply, answer) = std::sync::mpsc::channel();
+        self.remote_transcriptions
+            .try_send(RemoteTranscriptionJob {
+                peer: peer.clone(),
+                samples,
+                previous_text,
+                reply,
+            })
+            .map_err(|_| TranscriptionError::Unavailable)?;
+        answer
+            .recv_timeout(REMOTE_TRANSCRIPTION_TIMEOUT + Duration::from_secs(5))
+            .map_err(|_| TranscriptionError::Unavailable)?
+    }
+}
+
 #[async_trait::async_trait]
 impl P2pControl for P2pHandle {
     fn snapshot(&self) -> P2pSnapshot {
@@ -301,8 +351,8 @@ type DaemonP2pService = P2pService<Libp2pNetworkAdapter, SqlitePeerStore, Sqlite
 /// Starts the P2P task and returns once it listens, or with the reason it could not start.
 ///
 /// Inputs: The database path (the task opens its own connections), this device's ID, the
-/// verified embedding cipher (it seals the node identity and the pair-agreement secret), and the
-/// settings.
+/// verified embedding cipher (it seals the node identity and the pair-agreement secret), the
+/// settings, and how to transcribe for paired devices (`None` refuses their chunks).
 /// Outputs: The handle, or an error naming the failed step.
 /// Side effects: Spawns the `note-taker-p2p` thread, opens SQLite connections, creates or loads the
 /// node identity and the pair-agreement secret, and binds the listen address. Blocks the caller while starting, so async callers
@@ -312,10 +362,12 @@ pub fn spawn_p2p_task(
     device_id: DeviceId,
     embedding_cipher: Arc<dyn EmbeddingCipher>,
     config: P2pConfig,
+    hosted_pipeline: Option<PipelineConfig>,
 ) -> Result<P2pHandle> {
     let (startup_sender, startup_receiver) = std::sync::mpsc::sync_channel(1);
     let (command_sender, command_receiver) = mpsc::channel(COMMAND_QUEUE_CAPACITY);
     let (stop_sender, stop_receiver) = oneshot::channel();
+    let (remote_sender, remote_receiver) = mpsc::channel(REMOTE_TRANSCRIPTION_QUEUE_CAPACITY);
     let database_path = database_path.to_path_buf();
     let worker = std::thread::Builder::new()
         .name("note-taker-p2p".to_owned())
@@ -331,7 +383,13 @@ pub fn spawn_p2p_task(
                 }
             };
             runtime.block_on(async move {
-                let started = open_service(&database_path, device_id, embedding_cipher, config);
+                let started = open_service(
+                    &database_path,
+                    device_id,
+                    embedding_cipher,
+                    config,
+                    hosted_pipeline,
+                );
                 let mut service = match started {
                     Ok(service) => service,
                     Err(error) => {
@@ -347,6 +405,7 @@ pub fn spawn_p2p_task(
                     &mut service,
                     snapshot_sender,
                     command_receiver,
+                    remote_receiver,
                     stop_receiver,
                 )
                 .await;
@@ -359,6 +418,7 @@ pub fn spawn_p2p_task(
     tracing::info!("P2P sync started");
     Ok(P2pHandle {
         commands: command_sender,
+        remote_transcriptions: remote_sender,
         snapshots,
         stop: Mutex::new(Some(stop_sender)),
         worker: Mutex::new(Some(worker)),
@@ -374,6 +434,7 @@ fn open_service(
     device_id: DeviceId,
     embedding_cipher: Arc<dyn EmbeddingCipher>,
     config: P2pConfig,
+    hosted_pipeline: Option<PipelineConfig>,
 ) -> Result<DaemonP2pService> {
     let note_repository = open_note_repository(
         database_path,
@@ -425,6 +486,8 @@ fn open_service(
         open_note_repository(database_path, device_id, Arc::clone(&embedding_cipher))?,
         attachment_directory,
     );
+    let route_store = SqlitePeerStore::open(database_path, Arc::clone(&embedding_cipher))
+        .context("unable to open the transcription choice")?;
     let voice_library = SqliteVoiceVectorDB::open(database_path, embedding_cipher)
         .context("unable to open the voice library for sync")?;
     let mut service = P2pService::new(
@@ -439,7 +502,15 @@ fn open_service(
     .with_local_capabilities(config.capabilities)
     .with_pair_agreement_secret(pair_agreement_secret)
     .with_voice_library(Box::new(voice_library))
-    .with_attachment_library(Box::new(attachment_library));
+    .with_attachment_library(Box::new(attachment_library))
+    .with_transcription_route_store(Box::new(route_store));
+    if let Some(pipeline_config) = hosted_pipeline {
+        let host = ThreadedTranscriptionHost::spawn(move |store| {
+            select_transcription_engine(&pipeline_config, store)
+        })
+        .context("unable to start transcribing for paired devices")?;
+        service = service.with_transcription_host(Box::new(host));
+    }
     service
         .start()
         .context("unable to load the paired devices")?;
@@ -453,6 +524,7 @@ async fn run_service(
     service: &mut DaemonP2pService,
     snapshot_sender: watch::Sender<P2pSnapshot>,
     mut command_receiver: mpsc::Receiver<P2pRequest>,
+    mut remote_receiver: mpsc::Receiver<RemoteTranscriptionJob>,
     mut stop: oneshot::Receiver<()>,
 ) {
     let mut change_poll = tokio::time::interval(LOCAL_CHANGE_POLL_INTERVAL);
@@ -484,6 +556,7 @@ async fn run_service(
                     break;
                 }
             }
+            Some(job) = remote_receiver.recv() => service.request_remote_transcription(job),
             request = command_receiver.recv() => {
                 let Some((command, reply_sender)) = request else {
                     break;

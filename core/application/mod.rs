@@ -110,6 +110,14 @@ mod teams_processor_tests;
 /// Defines telemetry requirements before dispatcher and storage implementation.
 #[cfg(test)]
 mod telemetry_tests;
+/// Encodes the sealed `NTT1`/`NTT2` messages that transcribe on a paired device (Issue #59).
+pub mod transcription_exchange;
+#[cfg(test)]
+mod transcription_exchange_tests;
+/// Routes each chunk to this device or a paired one, falling back to local (Issue #59).
+pub mod transcription_routing;
+#[cfg(test)]
+mod transcription_routing_tests;
 /// Groups unknown voices within a meeting by cosine similarity and resolves clusters to identities.
 pub mod unknown_speaker_clusterer;
 #[cfg(test)]

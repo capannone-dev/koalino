@@ -153,15 +153,7 @@ impl ComputeDispatcher {
         transcription_model: TranscriptionModel,
         compute_preference: &ComputePreference,
     ) -> Result<Transcript, ComputeDispatchError> {
-        let selected_target = match compute_preference {
-            ComputePreference::LocalOnly => {
-                self.require_model(&self.local_target, &transcription_model)?
-            }
-            ComputePreference::SpecificPeer(device_id) => {
-                self.select_specific_peer(device_id, &transcription_model)?
-            }
-            ComputePreference::Automatic => self.select_automatic_target(&transcription_model)?,
-        };
+        let selected_target = self.select_target(&transcription_model, compute_preference)?;
 
         let execution_started_at = Instant::now();
         let transcription_context = self.transcription_context_for(audio_recording.meeting_id())?;
@@ -176,6 +168,44 @@ impl ComputeDispatcher {
             execution_started_at,
         )?;
         Ok(transcript)
+    }
+
+    /// Selects a compatible port and transcribes with context the caller already holds.
+    ///
+    /// Inputs: As `dispatch_transcription`, with `transcription_context` from the caller, whose
+    /// pipeline keeps the previous chunk's text.
+    /// Outputs: A generated transcript or a portable routing/transcription failure.
+    /// Side effects: Invokes exactly one selected transcription port; keeps no context or metrics.
+    pub fn dispatch_with_context(
+        &self,
+        audio_recording: &AudioRecording,
+        transcription_model: TranscriptionModel,
+        compute_preference: &ComputePreference,
+        transcription_context: &TranscriptionContext,
+    ) -> Result<Transcript, ComputeDispatchError> {
+        Ok(self
+            .select_target(&transcription_model, compute_preference)?
+            .transcription_engine
+            .transcribe(audio_recording, transcription_context)?)
+    }
+
+    /// Picks the target a preference allows.
+    ///
+    /// Outputs: The target, or a routing error. Side effects: None.
+    fn select_target(
+        &self,
+        transcription_model: &TranscriptionModel,
+        compute_preference: &ComputePreference,
+    ) -> Result<&ComputeTarget, ComputeDispatchError> {
+        match compute_preference {
+            ComputePreference::LocalOnly => {
+                self.require_model(&self.local_target, transcription_model)
+            }
+            ComputePreference::SpecificPeer(device_id) => {
+                self.select_specific_peer(device_id, transcription_model)
+            }
+            ComputePreference::Automatic => self.select_automatic_target(transcription_model),
+        }
     }
 
     /// Builds portable context from the prior successful chunk of one meeting.

@@ -14,6 +14,7 @@
 //! | `accept_request` | `peer_id` | `{"ok":true,"update":{"kind":...}}` |
 //! | `reject_request` | `peer_id` | `{"ok":true}` |
 //! | `revoke` | `peer_id` | `{"ok":true,"revoked":true|false}` |
+//! | `set_transcription_route` | `route` (`local`, `auto`, or a peer ID) | `{"ok":true}` |
 //!
 //! Failures are `{"ok":false,"error_code":...,"error":...}`, where `error_code` is
 //! `invalid_request` (unreadable JSON, an unknown command or field, a missing `peer_id`),
@@ -28,7 +29,7 @@ use serde_json::{Value, json};
 
 use crate::application::{
     p2p_service::{P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError},
-    p2p_view::{PairingUpdateView, parse_peer_id, status_view},
+    p2p_view::{PairingUpdateView, parse_peer_id, parse_route_request, status_view},
 };
 
 /// A command request, tagged by `command`.
@@ -55,6 +56,9 @@ enum CommandRequest {
     },
     Revoke {
         peer_id: String,
+    },
+    SetTranscriptionRoute {
+        route: String,
     },
 }
 
@@ -125,6 +129,9 @@ fn command_for(request: CommandRequest) -> Option<P2pCommand> {
             P2pCommand::RejectIncoming(parse_peer_id(&peer_id)?)
         }
         CommandRequest::Revoke { peer_id } => P2pCommand::Revoke(parse_peer_id(&peer_id)?),
+        CommandRequest::SetTranscriptionRoute { route } => {
+            P2pCommand::SetTranscriptionRoute(parse_route_request(&route)?)
+        }
     })
 }
 

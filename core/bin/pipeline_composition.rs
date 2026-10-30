@@ -35,11 +35,13 @@ use crate::{
         storage::sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
     application::{
+        compute_router::ComputePreference,
         pipeline::{
             pipeline_factory::PipelineFactory,
             task_metrics::{TaskMetricsRecorder, TaskProfile},
         },
         recording_manager::RecordingManager,
+        transcription_routing::{RemoteTranscriptionGateway, RoutedTranscriptionEngine},
         voice_identity_manager::VoiceIdentityManager,
     },
     domain::{
@@ -49,7 +51,7 @@ use crate::{
             TranscriptionContext, TranscriptionModel,
         },
     },
-    ports::{ai::TranscriptionEngine, crypto::EmbeddingCipher},
+    ports::{ai::TranscriptionEngine, crypto::EmbeddingCipher, remote_transcription::ChunkSamples},
     recording_controller::{ChunkingMode, RecordingController},
     storage_composition::open_note_repository,
 };
@@ -561,7 +563,8 @@ fn load_diarization_engine(_config: &PipelineConfig) -> Result<Option<ComposedDi
 /// Starts the pipeline worker and returns an idle recording controller.
 ///
 /// Inputs: The SQLite path (the same database the caller already opened), the device ID, the
-/// verified embedding cipher from `open_encrypted_stores`, and the pipeline configuration.
+/// verified embedding cipher from `open_encrypted_stores`, the pipeline configuration, and the
+/// P2P task to route transcription through (`None` keeps it on this device).
 /// Outputs: The controller, or an error explaining which dependency is missing.
 /// Side effects: Spawns the worker thread, which selects (and may load) the transcription and
 /// diarization engines and opens its own note-repository, telemetry and voice-store connections; every
@@ -571,6 +574,7 @@ pub fn spawn_recording_controller(
     device_id: DeviceId,
     embedding_cipher: Arc<dyn EmbeddingCipher>,
     config: PipelineConfig,
+    remote_gateway: Option<Arc<dyn RemoteTranscriptionGateway>>,
 ) -> Result<RecordingController> {
     let chunk_audio_store = Arc::new(ChunkAudioStore::new());
     let engine_audio_store = Arc::clone(&chunk_audio_store);
@@ -578,7 +582,38 @@ pub fn spawn_recording_controller(
     let worker_database_path = database_path.to_path_buf();
     let worker_device_id = device_id.clone();
     let recording_manager = RecordingManager::spawn(move || -> Result<_> {
-        let transcription_engine = select_transcription_engine(&config, &engine_audio_store)?;
+        let selected_engine = match select_transcription_engine(&config, &engine_audio_store) {
+            Ok(engine) => Some(engine),
+            // A device without an engine can still record when the owner chose another device.
+            Err(error)
+                if remote_gateway
+                    .as_ref()
+                    .is_some_and(|gateway| gateway.route() != ComputePreference::LocalOnly) =>
+            {
+                tracing::warn!(error = %format!("{error:#}"), "no local transcription engine; using paired devices only");
+                None
+            }
+            Err(error) => return Err(error),
+        };
+        let task_profile = selected_engine.as_ref().map_or_else(
+            || {
+                TaskProfile::new(
+                    TaskType::Transcription,
+                    "paired-device".to_owned(),
+                    LOCAL_TRANSCRIPTION_POWER_MILLIWATTS,
+                )
+            },
+            |engine| transcription_task_profile(engine, &config),
+        );
+        let transcription_engine = match (remote_gateway, selected_engine) {
+            (Some(gateway), selected_engine) => RoutedTranscriptionEngine::routed(
+                selected_engine,
+                gateway,
+                Arc::clone(&engine_audio_store) as Arc<dyn ChunkSamples>,
+            ),
+            (None, Some(selected_engine)) => RoutedTranscriptionEngine::local(selected_engine),
+            (None, None) => bail!("no transcription engine is available"),
+        };
         let note_repository = open_note_repository(
             &worker_database_path,
             worker_device_id.clone(),
@@ -592,11 +627,8 @@ pub fn spawn_recording_controller(
             Arc::clone(&embedding_cipher),
         )
         .context("unable to open the pipeline telemetry store")?;
-        let task_metrics = TaskMetricsRecorder::new(
-            Box::new(metrics_repository),
-            worker_device_id,
-            transcription_task_profile(&transcription_engine, &config),
-        );
+        let task_metrics =
+            TaskMetricsRecorder::new(Box::new(metrics_repository), worker_device_id, task_profile);
         let voice_store = SqliteVoiceVectorDB::open(&worker_database_path, embedding_cipher)
             .context("unable to open the pipeline voice store")?;
         let diarization_engine = select_diarization_engine(&config)?;

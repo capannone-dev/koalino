@@ -34,7 +34,6 @@ pub mod ffi_p2p;
 /// Holds the settings the Flutter app passes to `note_taker_configure`, over the environment.
 #[path = "bin/ffi_settings.rs"]
 pub mod ffi_settings;
-/// Composes and runs the daemon's P2P pairing and sync task (Issue #43).
 #[path = "bin/p2p_composition.rs"]
 pub mod p2p_composition;
 /// Composes the live meeting pipeline from environment configuration.
@@ -57,6 +56,9 @@ pub mod storage_composition;
 /// Composes the Teams bot bridge (WebSocket server, buffer, and meeting pump) for the daemon.
 #[path = "bin/teams_bridge_composition.rs"]
 pub mod teams_bridge_composition;
+/// Composes and runs the daemon's P2P pairing and sync task (Issue #43).
+#[path = "bin/transcription_host.rs"]
+pub mod transcription_host;
 
 #[cfg(test)]
 mod scaffold_contract_tests {

@@ -14,11 +14,16 @@ use crate::{
         attachment_file_store::AttachmentFileStore, sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
     application::{
+        compute_router::ComputePreference,
         crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
         meeting_crdt::MeetingCrdtService,
         p2p_service::P2pControl,
+        transcription_routing::RemoteTranscriptionGateway,
     },
-    domain::models::{DeviceId, MeetingId, SpeakerIdentity, VoiceEmbedding},
+    domain::{
+        errors::TranscriptionError,
+        models::{DeviceId, MeetingId, SpeakerIdentity, VoiceEmbedding},
+    },
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
     ports::crypto::EmbeddingCipher,
     ports::{storage::AttachmentRepository, voice::VoiceVectorDB},
@@ -105,6 +110,7 @@ fn start_task_at(
         DeviceId::new(format!("device-{name}")),
         test_cipher(),
         config,
+        None,
     )
     .unwrap_or_else(|error| panic!("task must start: {error:#}"))
 }
@@ -376,4 +382,53 @@ fn the_composed_task_syncs_attachments() {
         )
     );
     assert_eq!(std::fs::read(received[0].file_path()).ok(), Some(photo));
+}
+
+/// The choice goes through the JSON commands and shows in the status; asking a paired device with
+/// no transcription engine fails quickly, so the pipeline can fall back.
+#[test]
+fn the_composed_task_routes_transcription_and_reports_a_refusal() {
+    let laptop_database = fresh_database("laptop");
+    let phone_database = fresh_database("phone");
+    let (laptop, phone) = pair_tasks(&laptop_database, &phone_database);
+    let laptop_id = laptop.snapshot().status.local_peer_id;
+
+    let status = wait_for_status(&phone, |status| {
+        status["trusted_devices"]
+            .as_array()
+            .is_some_and(|devices| !devices.is_empty())
+    });
+    assert_eq!(status["transcription_route"], "local");
+    let chosen = command(
+        &phone,
+        &format!(
+            r#"{{"command":"set_transcription_route","route":"{}"}}"#,
+            laptop_id.as_str()
+        ),
+    );
+    assert_eq!(chosen["ok"], true, "{chosen}");
+    assert_eq!(
+        command(
+            &phone,
+            r#"{"command":"set_transcription_route","route":"../bad"}"#
+        )["error_code"],
+        "invalid_peer_id"
+    );
+    wait_for_status(&phone, |status| {
+        status["transcription_route"] == laptop_id.as_str()
+            && status["trusted_devices"][0]["capabilities"].is_object()
+    });
+    assert_eq!(
+        RemoteTranscriptionGateway::route(&phone),
+        ComputePreference::SpecificPeer(laptop_id.clone())
+    );
+
+    // The pair key is agreed moments after pairing; until then the answer is also a refusal.
+    let started = std::time::Instant::now();
+    let answer = phone.transcribe_on_peer(&laptop_id, vec![1, 2, 3], None);
+    laptop.shutdown();
+    phone.shutdown();
+
+    assert!(matches!(answer, Err(TranscriptionError::Unavailable)));
+    assert!(started.elapsed() < Duration::from_secs(30));
 }

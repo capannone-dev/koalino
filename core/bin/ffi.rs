@@ -20,6 +20,7 @@ use crate::{
             sqlite_voice_vector_db::SqliteVoiceVectorDB,
         },
     },
+    application::transcription_routing::RemoteTranscriptionGateway,
     application::{
         attachment_manager::AttachmentManager,
         cluster_review::{
@@ -384,6 +385,7 @@ impl FfiRuntime {
         let p2p = start_p2p(setting, &database_path, &device_id, &embedding_cipher);
         let pipeline_config = PipelineConfig::from_lookup(setting);
         let pipeline_database_path = database_path.clone();
+        let remote_gateway = p2p.clone();
         let recording_controller_builder: RecordingControllerBuilder = Box::new(move || {
             spawn_recording_controller(
                 &pipeline_database_path,
@@ -393,6 +395,9 @@ impl FfiRuntime {
                     Ok(pipeline_config) => pipeline_config.clone(),
                     Err(error) => return Err(anyhow::anyhow!("{error:#}")),
                 },
+                remote_gateway
+                    .clone()
+                    .map(|task| task as Arc<dyn RemoteTranscriptionGateway>),
             )
         });
         let mut runtime = Self::from_parts(
@@ -1509,14 +1514,20 @@ fn start_p2p(
     };
     // The manifest advertises what the pipeline can run; an invalid pipeline setting is
     // reported by the pipeline itself, so it advertises no models here.
-    config.capabilities.transcription_models = PipelineConfig::from_lookup(setting)
-        .map(|pipeline_config| pipeline_config.advertised_transcription_models())
-        .unwrap_or_default();
+    let mut hosted_pipeline = None;
+    if let Ok(pipeline_config) = PipelineConfig::from_lookup(setting) {
+        config.capabilities.transcription_models =
+            pipeline_config.advertised_transcription_models();
+        if !config.capabilities.transcription_models.is_empty() {
+            hosted_pipeline = Some(pipeline_config);
+        }
+    }
     match spawn_p2p_task(
         database_path,
         device_id.clone(),
         Arc::clone(embedding_cipher),
         config,
+        hosted_pipeline,
     ) {
         Ok(handle) => Some(Arc::new(handle)),
         Err(error) => {

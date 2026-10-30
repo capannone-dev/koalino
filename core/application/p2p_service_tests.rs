@@ -5,7 +5,11 @@
 //! `P2pCommand`s, as the HTTP routes will issue them, and the tests check what the status snapshot
 //! shows and what reaches the other device's repository.
 
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex, PoisonError},
+    time::Duration,
+};
 
 use libp2p::Multiaddr;
 use uuid::Uuid;
@@ -21,17 +25,21 @@ use crate::{
     },
     application::{
         cluster_review::assign_cluster_to_named_identity,
+        compute_router::ComputePreference,
         crypto::{
             pair_key::PairAgreementSecret,
             voice_encryptor::{EncryptionKey, VoiceEncryptor},
         },
         meeting_crdt::MeetingCrdtService,
         meeting_document::AutomergeMeetingDocumentCodec,
-        p2p_service::{LocalCapabilities, P2pCommand, P2pCommandOutcome, P2pService},
+        p2p_service::{
+            LocalCapabilities, P2pCommand, P2pCommandOutcome, P2pService, RemoteTranscriptionJob,
+        },
         pairing_manager::PairingManager,
         repository_sync_manager::RepositorySyncManager,
     },
     domain::{
+        errors::TranscriptionError,
         models::{
             Attachment, DeviceId, MeetingId, MeetingTitle, SpeakerIdentity, Transcript,
             TranscriptionModel, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
@@ -41,6 +49,7 @@ use crate::{
     },
     ports::{
         peer_trust::{PairingTransport, TrustedPeerStore},
+        remote_transcription::{FinishedTranscription, HostedTranscription, TranscriptionHost},
         storage::{AttachmentRepository, NoteRepository},
         voice::VoiceVectorDB,
     },
@@ -538,6 +547,222 @@ async fn pair(laptop: &mut Service, phone: &mut Service, phone_address: Multiadd
         !laptop.status().trusted_devices.is_empty() && !phone.status().trusted_devices.is_empty()
     })
     .await;
+}
+
+/// The samples and context a host was given.
+type ReceivedChunk = (Vec<i16>, Option<String>);
+
+/// A host that answers from a script, or holds jobs when told to stay silent.
+#[derive(Clone, Default)]
+struct FakeHost {
+    answer: Option<String>,
+    silent: bool,
+    finished: Arc<Mutex<Vec<FinishedTranscription>>>,
+    received: Arc<Mutex<Vec<ReceivedChunk>>>,
+}
+
+impl TranscriptionHost for FakeHost {
+    fn submit(&mut self, job: HostedTranscription) -> bool {
+        self.received
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push((job.samples, job.previous_text));
+        if !self.silent {
+            self.finished
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(FinishedTranscription {
+                    peer: job.peer,
+                    job_id: job.job_id,
+                    text: self.answer.clone(),
+                });
+        }
+        true
+    }
+    fn poll_finished(&mut self) -> Option<FinishedTranscription> {
+        self.finished
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .pop()
+    }
+}
+
+/// Pairs a phone and a laptop whose host is `host`, with agreed pair keys.
+async fn paired_with_host(memory_address: &str, host: FakeHost) -> (Service, Service) {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = memory_address
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let mut laptop = service("Laptop", laptop_adapter)
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_transcription_host(Box::new(host));
+    let (phone, phone_database) = service_with_database("Phone", phone_adapter);
+    let mut phone = phone.with_pair_agreement_secret(PairAgreementSecret::generate());
+    let phone_store = trust_store_connection(&phone_database);
+    pair(&mut laptop, &mut phone, phone_address).await;
+    let laptop_id = laptop.transport().local_peer_id();
+    drive(&mut laptop, &mut phone, |_, phone| {
+        phone.status().peer_manifests.len() == 1
+            && phone_store.pair_key(&laptop_id).ok().flatten().is_some()
+    })
+    .await;
+    (laptop, phone)
+}
+
+/// Sends a chunk from the phone to the laptop and returns where the answer arrives.
+fn ask(
+    phone: &mut Service,
+    laptop: &Service,
+) -> std::sync::mpsc::Receiver<Result<String, TranscriptionError>> {
+    let (reply, answer) = std::sync::mpsc::channel();
+    phone.request_remote_transcription(RemoteTranscriptionJob {
+        peer: laptop.transport().local_peer_id(),
+        samples: vec![1, -2, 3],
+        previous_text: Some("before".to_owned()),
+        reply,
+    });
+    answer
+}
+
+/// A chunk reaches the paired device with its context, and the text comes back.
+#[tokio::test]
+async fn a_paired_device_transcribes_a_chunk() {
+    let host = FakeHost {
+        answer: Some("words from the laptop".to_owned()),
+        ..FakeHost::default()
+    };
+    let received = Arc::clone(&host.received);
+    let (mut laptop, mut phone) = paired_with_host("/memory/9471", host).await;
+
+    let answer = ask(&mut phone, &laptop);
+    let mut result = None;
+    drive(&mut laptop, &mut phone, |_, _| {
+        result = answer.try_recv().ok();
+        result.is_some()
+    })
+    .await;
+
+    assert_eq!(
+        result.map(|text| text.ok()),
+        Some(Some("words from the laptop".to_owned()))
+    );
+    assert_eq!(
+        *received.lock().unwrap_or_else(PoisonError::into_inner),
+        vec![(vec![1, -2, 3], Some("before".to_owned()))]
+    );
+}
+
+/// A device that cannot transcribe says so, and the phone hears it as a failure at once.
+#[tokio::test]
+async fn a_failed_hosted_job_is_reported() {
+    let (mut laptop, mut phone) = paired_with_host("/memory/9472", FakeHost::default()).await;
+
+    let answer = ask(&mut phone, &laptop);
+    let mut result = None;
+    drive(&mut laptop, &mut phone, |_, _| {
+        result = answer.try_recv().ok();
+        result.is_some()
+    })
+    .await;
+
+    assert!(matches!(result, Some(Err(TranscriptionError::Unavailable))));
+}
+
+/// A device that disconnects while transcribing fails the wait without any timeout.
+#[tokio::test]
+async fn a_disconnection_mid_task_fails_the_wait_at_once() {
+    let host = FakeHost {
+        silent: true,
+        ..FakeHost::default()
+    };
+    let received = Arc::clone(&host.received);
+    let (mut laptop, mut phone) = paired_with_host("/memory/9473", host).await;
+    let answer = ask(&mut phone, &laptop);
+    drive(&mut laptop, &mut phone, |_, _| {
+        !received
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .is_empty()
+    })
+    .await;
+
+    let laptop_id = laptop.transport().local_peer_id();
+    phone.transport_mut().disconnect_for_tests(&laptop_id);
+    let mut result = None;
+    drive(&mut laptop, &mut phone, |_, _| {
+        result = answer.try_recv().ok();
+        result.is_some()
+    })
+    .await;
+
+    assert!(matches!(result, Some(Err(TranscriptionError::Unavailable))));
+}
+
+/// A device that is not connected gets nothing, and the failure is immediate.
+#[tokio::test]
+async fn a_chunk_for_an_absent_device_fails_at_once() {
+    let adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone = service("Phone", adapter);
+    let (reply, answer) = std::sync::mpsc::channel();
+
+    phone.request_remote_transcription(RemoteTranscriptionJob {
+        peer: DeviceId::new("12D3KooWAway"),
+        samples: vec![1],
+        previous_text: None,
+        reply,
+    });
+
+    assert!(matches!(
+        answer.try_recv(),
+        Ok(Err(TranscriptionError::Unavailable))
+    ));
+}
+
+/// The choice starts as Local, accepts only paired devices, shows in the status, and survives a
+/// restart.
+#[tokio::test]
+async fn the_transcription_choice_is_validated_and_kept() {
+    let adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let (phone, database) = service_with_database("Phone", adapter);
+    let mut phone =
+        phone.with_transcription_route_store(Box::new(trust_store_connection(&database)));
+    assert_eq!(
+        phone.status().transcription_route,
+        ComputePreference::LocalOnly
+    );
+
+    assert!(
+        phone
+            .handle_command(P2pCommand::SetTranscriptionRoute(
+                ComputePreference::SpecificPeer(DeviceId::new("12D3KooWStranger"))
+            ))
+            .is_err()
+    );
+    run(
+        &mut phone,
+        P2pCommand::SetTranscriptionRoute(ComputePreference::Automatic),
+    );
+    assert_eq!(
+        phone.status().transcription_route,
+        ComputePreference::Automatic
+    );
+
+    let adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let restarted = service("Phone", adapter)
+        .with_transcription_route_store(Box::new(trust_store_connection(&database)));
+    assert_eq!(
+        restarted.status().transcription_route,
+        ComputePreference::Automatic
+    );
 }
 
 /// Adds a file to `meeting_id` through the same store the app uses.
