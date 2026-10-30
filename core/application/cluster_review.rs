@@ -18,7 +18,7 @@ use crate::{
     application::unknown_speaker_clusterer::{
         ClusterAssignment, ClusteringConfig, ClusteringError, UnknownSpeakerClusterer,
     },
-    domain::models::{MeetingId, SpeakerIdentity, UnknownSpeakerCluster},
+    domain::models::{MeetingId, SpeakerIdentity, UnassignedVoiceClip, UnknownSpeakerCluster},
     ports::{storage::NoteRepository, voice::VoiceVectorDB},
 };
 
@@ -81,6 +81,75 @@ impl UnknownClusterSummary {
     }
 }
 
+/// One unresolved cluster as the voice gallery shows it, across all meetings (Issue #63).
+#[derive(Clone, Debug, PartialEq)]
+pub struct VoiceLibraryCluster {
+    summary: UnknownClusterSummary,
+    meeting_title: Option<String>,
+    has_review_clip: bool,
+}
+
+impl VoiceLibraryCluster {
+    /// Borrows the cluster's display-safe summary.
+    pub fn summary(&self) -> &UnknownClusterSummary {
+        &self.summary
+    }
+
+    /// Returns the owning meeting's title, when it has one.
+    pub fn meeting_title(&self) -> Option<&str> {
+        self.meeting_title.as_deref()
+    }
+
+    /// Reports whether a review clip can still be played for this cluster.
+    pub fn has_review_clip(&self) -> bool {
+        self.has_review_clip
+    }
+}
+
+/// One saved person, with how much voice data is held but none of it exposed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SavedPersonSummary {
+    identity_id: Uuid,
+    display_name: String,
+    voice_variant_count: usize,
+}
+
+impl SavedPersonSummary {
+    /// Returns the identity UUID.
+    pub fn identity_id(&self) -> Uuid {
+        self.identity_id
+    }
+
+    /// Borrows the stored display name.
+    pub fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
+    /// Returns how many voice variants are stored for this person.
+    pub fn voice_variant_count(&self) -> usize {
+        self.voice_variant_count
+    }
+}
+
+/// Everything the voice gallery shows: voices to name and people already saved.
+#[derive(Clone, Debug, PartialEq)]
+pub struct VoiceLibrary {
+    unknown_clusters: Vec<VoiceLibraryCluster>,
+    saved_people: Vec<SavedPersonSummary>,
+}
+
+impl VoiceLibrary {
+    /// Borrows the unresolved clusters, in the repository's meeting order, then creation order.
+    pub fn unknown_clusters(&self) -> &[VoiceLibraryCluster] {
+        &self.unknown_clusters
+    }
+
+    /// Borrows the saved people, sorted by name ignoring case.
+    pub fn saved_people(&self) -> &[SavedPersonSummary] {
+        &self.saved_people
+    }
+}
+
 /// Summarizes a cluster assignment to a named, persisted identity.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NamedClusterAssignment {
@@ -139,6 +208,93 @@ where
             .map(UnknownClusterSummary::from_cluster)
             .collect(),
     )
+}
+
+/// Loads the voice gallery: unresolved clusters of every meeting and every saved person.
+///
+/// Inputs: The persistence ports (either may be a `dyn` port).
+/// Outputs: The library, or a storage error. No embedding or audio is included.
+/// Side effects: Reads meetings, clusters, clips, identities, and variant counts. Nothing is
+/// written to disk: a clip is only turned into a playable file when the owner asks to hear it.
+pub fn load_voice_library<RepositoryPort, VectorDatabase>(
+    note_repository: &RepositoryPort,
+    voice_vector_database: &VectorDatabase,
+) -> Result<VoiceLibrary, ClusterReviewError>
+where
+    RepositoryPort: NoteRepository + ?Sized,
+    VectorDatabase: VoiceVectorDB + ?Sized,
+{
+    let mut unknown_clusters = Vec::new();
+    for meeting_id in note_repository
+        .list_meeting_ids()
+        .map_err(ClusteringError::from)?
+    {
+        let summaries = list_unknown_clusters(note_repository, &meeting_id)?;
+        if summaries.is_empty() {
+            continue;
+        }
+        let meeting_title = note_repository
+            .load_meeting_metadata(&meeting_id)
+            .map_err(ClusteringError::from)?
+            .and_then(|metadata| metadata.title().map(|title| title.as_str().to_owned()));
+        let review_clips = note_repository
+            .get_unassigned_clips(&meeting_id)
+            .map_err(ClusteringError::from)?;
+        unknown_clusters.extend(summaries.into_iter().map(|summary| {
+            let has_review_clip = review_clips
+                .iter()
+                .any(|clip| clip.cluster_id() == Some(summary.cluster_id()));
+            VoiceLibraryCluster {
+                summary,
+                meeting_title: meeting_title.clone(),
+                has_review_clip,
+            }
+        }));
+    }
+    let mut saved_people = voice_vector_database
+        .list_speaker_identities()
+        .map_err(ClusteringError::from)?
+        .iter()
+        .map(|identity| {
+            Ok(SavedPersonSummary {
+                identity_id: identity.identity_id(),
+                display_name: identity.display_name().to_owned(),
+                voice_variant_count: voice_vector_database
+                    .voice_variant_count(identity.identity_id())
+                    .map_err(ClusteringError::from)?,
+            })
+        })
+        .collect::<Result<Vec<_>, ClusterReviewError>>()?;
+    saved_people.sort_by_key(|person| person.display_name.to_lowercase());
+    Ok(VoiceLibrary {
+        unknown_clusters,
+        saved_people,
+    })
+}
+
+/// Finds the review clip of one cluster, for playback on request.
+///
+/// Inputs: `cluster_id` names any cluster; an unknown one simply has no clip.
+/// Outputs: The clip, `None` when there is none, or a storage error.
+/// Side effects: Reads and decrypts the meeting's clips.
+pub fn find_cluster_review_clip<RepositoryPort>(
+    note_repository: &RepositoryPort,
+    cluster_id: Uuid,
+) -> Result<Option<UnassignedVoiceClip>, ClusterReviewError>
+where
+    RepositoryPort: NoteRepository + ?Sized,
+{
+    let Some(cluster) = note_repository
+        .load_unknown_speaker_cluster(cluster_id)
+        .map_err(ClusteringError::from)?
+    else {
+        return Ok(None);
+    };
+    Ok(note_repository
+        .get_unassigned_clips(cluster.meeting_id())
+        .map_err(ClusteringError::from)?
+        .into_iter()
+        .find(|clip| clip.cluster_id() == Some(cluster_id)))
 }
 
 /// Assigns every chunk of a cluster to the identity named `identity_name`.

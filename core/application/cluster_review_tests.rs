@@ -12,11 +12,15 @@ use crate::{
     },
     application::{
         cluster_review::{
-            ClusterReviewError, assign_cluster_to_named_identity, list_unknown_clusters,
+            ClusterReviewError, assign_cluster_to_named_identity, find_cluster_review_clip,
+            list_unknown_clusters, load_voice_library,
         },
         unknown_speaker_clusterer::{ClusteringConfig, ClusteringError, UnknownSpeakerClusterer},
     },
-    domain::models::{DeviceId, MeetingId, SpeakerIdentity, TranscriptSegment, VoiceEmbedding},
+    domain::models::{
+        DeviceId, MeetingId, SpeakerIdentity, TranscriptSegment, UnassignedVoiceClip,
+        VoiceEmbedding,
+    },
     ports::{storage::NoteRepository, voice::VoiceVectorDB},
 };
 
@@ -332,4 +336,77 @@ fn assigned_names_survive_a_restart_and_are_reused_case_insensitively() {
         first_cluster.and_then(|cluster| cluster.resolved_identity_id()),
         Some(first_assignment.identity_id())
     );
+}
+
+/// Verifies the library lists clusters across meetings, with titles and clip availability, and
+/// saved people with their variant counts, without biometric data.
+#[test]
+fn voice_library_spans_meetings_and_lists_saved_people() {
+    let (note_repository, meeting_id, large_cluster_id, small_cluster_id) =
+        repository_with_two_clusters();
+    let other_meeting_id = MeetingId::new("meeting-other");
+    note_repository
+        .create_meeting(&other_meeting_id, &[])
+        .unwrap_or_else(|error| panic!("meeting should be created: {error}"));
+    let other_cluster_id =
+        UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default())
+            .find_or_create_cluster(&other_meeting_id, &[1.0, 0.0], String::from("o1"), 900)
+            .unwrap_or_else(|error| panic!("chunk should be clustered: {error}"))
+            .cluster_id();
+    note_repository
+        .save_unassigned_clip(
+            UnassignedVoiceClip::new(Uuid::new_v4(), meeting_id.clone(), 0, 500, vec![1, 2])
+                .with_cluster_id(Some(large_cluster_id)),
+        )
+        .unwrap_or_else(|error| panic!("clip should be saved: {error}"));
+    let voice_database = InMemoryVoiceVectorDB::default();
+    assign_cluster_to_named_identity(
+        &note_repository,
+        &voice_database,
+        small_cluster_id,
+        "Grace Hopper",
+    )
+    .unwrap_or_else(|error| panic!("cluster should be assigned: {error}"));
+
+    let library = load_voice_library(&note_repository, &voice_database)
+        .unwrap_or_else(|error| panic!("library should load: {error}"));
+
+    let listed_clusters = library
+        .unknown_clusters()
+        .iter()
+        .map(|cluster| (cluster.summary().cluster_id(), cluster.has_review_clip()))
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(
+        listed_clusters,
+        std::collections::HashSet::from([(large_cluster_id, true), (other_cluster_id, false)])
+    );
+    assert_eq!(library.saved_people().len(), 1);
+    assert_eq!(library.saved_people()[0].display_name(), "Grace Hopper");
+    assert_eq!(library.saved_people()[0].voice_variant_count(), 1);
+}
+
+/// Verifies a cluster's review clip is found by cluster alone, and that none is reported for a
+/// cluster without one or for an unknown cluster.
+#[test]
+fn finds_a_review_clip_by_cluster() {
+    let (note_repository, meeting_id, large_cluster_id, small_cluster_id) =
+        repository_with_two_clusters();
+    note_repository
+        .save_unassigned_clip(
+            UnassignedVoiceClip::new(Uuid::new_v4(), meeting_id, 0, 500, vec![1, 2])
+                .with_cluster_id(Some(large_cluster_id)),
+        )
+        .unwrap_or_else(|error| panic!("clip should be saved: {error}"));
+
+    let review_clip = |cluster_id| {
+        find_cluster_review_clip(&note_repository, cluster_id)
+            .unwrap_or_else(|error| panic!("lookup should work: {error}"))
+    };
+
+    assert_eq!(
+        review_clip(large_cluster_id).map(|clip| clip.audio_bytes().to_vec()),
+        Some(vec![1, 2])
+    );
+    assert!(review_clip(small_cluster_id).is_none());
+    assert!(review_clip(Uuid::new_v4()).is_none());
 }

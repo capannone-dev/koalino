@@ -947,6 +947,44 @@ fn file_backed_stores(
     .unwrap_or_else(|error| panic!("encrypted stores must open: {error:#}"))
 }
 
+/// Verifies the gallery lists every meeting's clusters without embeddings, and that a review clip
+/// is served only for a cluster that has one.
+#[tokio::test]
+async fn voice_gallery_lists_clusters_and_serves_review_clips() {
+    let (router, large_cluster_id, _) = cluster_router();
+
+    let (status, gallery) = send_json(&router, "GET", "/api/voice-gallery", None).await;
+    let clip_status = |cluster_id: uuid::Uuid| {
+        let router = router.clone();
+        async move {
+            router
+                .oneshot(
+                    Request::builder()
+                        .uri(format!("/api/clusters/{cluster_id}/review-clip"))
+                        .body(Body::empty())
+                        .unwrap_or_else(|error| panic!("test request must build: {error}")),
+                )
+                .await
+                .unwrap_or_else(|error| panic!("router must serve the test request: {error}"))
+                .status()
+        }
+    };
+
+    assert_eq!(status, StatusCode::OK);
+    let clusters = gallery["unknown_clusters"]
+        .as_array()
+        .unwrap_or_else(|| panic!("clusters must be an array: {gallery}"));
+    assert_eq!(clusters.len(), 2);
+    assert_eq!(clusters[0]["cluster_id"], large_cluster_id.to_string());
+    assert_eq!(clusters[0]["has_review_clip"], false);
+    assert!(clusters[0].get("representative_embedding").is_none());
+    assert_eq!(clip_status(large_cluster_id).await, StatusCode::NOT_FOUND);
+    assert_eq!(
+        clip_status(uuid::Uuid::new_v4()).await,
+        StatusCode::NOT_FOUND
+    );
+}
+
 /// Verifies a cluster assigned over HTTP appears by name in the voice gallery, including after
 /// the daemon restarts on the same database file.
 #[tokio::test]

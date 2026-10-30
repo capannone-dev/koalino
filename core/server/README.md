@@ -33,8 +33,10 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
   `application::meeting_transcript`), and linked
   attachment metadata (`attachment_id`, `file_path`, `mime_type`, `original_timestamp_utc`). It
   returns `404` for an unknown meeting and never returns CRDT bytes or attachment contents.
-- `GET /api/voice-gallery` returns display-safe identity labels and unresolved clip ID/time-range
-  metadata. It never returns raw audio or voice embedding vectors.
+- `GET /api/voice-gallery` returns saved people with their voice sample counts, every meeting's
+  unresolved clusters, and unresolved clip ID/time-range metadata. It never returns raw audio or
+  voice embedding vectors.
+- `GET /api/clusters/{id}/review-clip` serves a cluster's review clip for playback, uncached.
 - `POST /api/voice/assign` accepts `{"clip_id":"uuid","identity_id":"uuid"}` and returns `204`
   after `VoiceIdentityManager` stores a derived signature variant. It validates both UUIDs and
   never serializes the clip's temporary raw audio or embedding.

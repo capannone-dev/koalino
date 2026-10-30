@@ -25,8 +25,9 @@ use crate::{
     adapters::export::default_exporters,
     application::{
         cluster_review::{
-            ClusterReviewError, NamedClusterAssignment, UnknownClusterSummary,
-            assign_cluster_to_named_identity, list_unknown_clusters,
+            ClusterReviewError, NamedClusterAssignment, SavedPersonSummary, UnknownClusterSummary,
+            VoiceLibraryCluster, assign_cluster_to_named_identity, find_cluster_review_clip,
+            list_unknown_clusters, load_voice_library,
         },
         export_manager::{ExportManager, ExportWriter},
         log_control::LogControl,
@@ -40,7 +41,7 @@ use crate::{
         errors::{ExportError, StorageError},
         models::{
             AggregatedStats, Attachment, ExportFormat, ExportOptions, MeetingId, MeetingMetadata,
-            MeetingTitle, SpeakerIdentity, TaskMetrics, TaskType, UnassignedVoiceClip,
+            MeetingTitle, TaskMetrics, TaskType, UnassignedVoiceClip,
         },
     },
     ports::{
@@ -175,6 +176,10 @@ pub fn build_router(application_state: ServerAppState) -> Router {
             get(get_unknown_clusters),
         )
         .route("/api/clusters/{cluster_id}/assign", post(assign_cluster))
+        .route(
+            "/api/clusters/{cluster_id}/review-clip",
+            get(get_cluster_review_clip),
+        )
         .route("/api/voice-gallery", get(get_voice_gallery))
         .route("/api/voice/assign", post(assign_voice_clip))
         .route("/api/telemetry", get(get_telemetry))
@@ -512,13 +517,11 @@ async fn get_voice_gallery(
         endpoint = "/api/voice-gallery",
         "headless API request received"
     );
-    let identities = application_state
-        .voice_database
-        .lock()
-        .await
-        .list_speaker_identities()
-        .map_err(storage_error_status)?;
     let repositories = application_state.repositories.lock().await;
+    let voice_database = application_state.voice_database.lock().await;
+    let library = load_voice_library(&**repositories, &**voice_database)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    drop(voice_database);
     let meeting_ids = repositories
         .list_meeting_ids()
         .map_err(storage_error_status)?;
@@ -531,7 +534,16 @@ async fn get_voice_gallery(
         );
     }
     Ok(Json(VoiceGalleryResponse {
-        identities: identities.iter().map(IdentitySummary::from).collect(),
+        identities: library
+            .saved_people()
+            .iter()
+            .map(IdentitySummary::from)
+            .collect(),
+        unknown_clusters: library
+            .unknown_clusters()
+            .iter()
+            .map(LibraryClusterResponse::from)
+            .collect(),
         unassigned_clips: clips.iter().map(UnassignedClipSummary::from).collect(),
     }))
 }
@@ -678,6 +690,32 @@ async fn assign_cluster(
         &assignment_request.identity_name,
     ) {
         Ok(assignment) => Json(ClusterAssignmentResponse::from(&assignment)).into_response(),
+        Err(error) => cluster_review_error_response(&error),
+    }
+}
+
+/// Serves a cluster's review clip so the dashboard can play it (Issue #63).
+///
+/// Inputs: `cluster_id` path segment (a UUID; anything else is rejected with `400` by Axum).
+/// Outputs: `200` with the WAV bytes and `Cache-Control: no-store`; `404` when the cluster has no
+/// clip; `500` for storage failures.
+/// Side effects: Reads and decrypts the clip; nothing is written, and its bytes are never logged.
+async fn get_cluster_review_clip(
+    Path(cluster_id): Path<uuid::Uuid>,
+    State(application_state): State<ServerAppState>,
+) -> Response {
+    tracing::info!(endpoint = "/api/clusters/:cluster_id/review-clip", cluster_id = %cluster_id, "headless API request received");
+    let repositories = application_state.repositories.lock().await;
+    match find_cluster_review_clip(&**repositories, cluster_id) {
+        Ok(Some(clip)) => (
+            [
+                (axum::http::header::CONTENT_TYPE, "audio/wav"),
+                (axum::http::header::CACHE_CONTROL, "no-store"),
+            ],
+            clip.audio_bytes().to_vec(),
+        )
+            .into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(error) => cluster_review_error_response(&error),
     }
 }
@@ -859,18 +897,42 @@ impl From<&Attachment> for AttachmentSummary {
 #[derive(Serialize)]
 struct VoiceGalleryResponse {
     identities: Vec<IdentitySummary>,
+    /// Unresolved clusters of every meeting, without embeddings (Issue #63).
+    unknown_clusters: Vec<LibraryClusterResponse>,
     unassigned_clips: Vec<UnassignedClipSummary>,
 }
 #[derive(Serialize)]
 struct IdentitySummary {
     identity_id: String,
     display_name: String,
+    /// How many voice variants are stored; the variants themselves are never serialized.
+    voice_variant_count: usize,
 }
-impl From<&SpeakerIdentity> for IdentitySummary {
-    fn from(identity: &SpeakerIdentity) -> Self {
+impl From<&SavedPersonSummary> for IdentitySummary {
+    fn from(person: &SavedPersonSummary) -> Self {
         Self {
-            identity_id: identity.identity_id().to_string(),
-            display_name: String::from(identity.display_name()),
+            identity_id: person.identity_id().to_string(),
+            display_name: String::from(person.display_name()),
+            voice_variant_count: person.voice_variant_count(),
+        }
+    }
+}
+/// One unresolved cluster with what the gallery shows beside it.
+#[derive(Serialize)]
+struct LibraryClusterResponse {
+    #[serde(flatten)]
+    cluster: UnknownClusterResponse,
+    /// The meeting's title; `null` for an untitled meeting.
+    meeting_title: Option<String>,
+    /// Whether `GET /api/clusters/{id}/review-clip` has audio to serve.
+    has_review_clip: bool,
+}
+impl From<&VoiceLibraryCluster> for LibraryClusterResponse {
+    fn from(library_cluster: &VoiceLibraryCluster) -> Self {
+        Self {
+            cluster: UnknownClusterResponse::from(library_cluster.summary()),
+            meeting_title: library_cluster.meeting_title().map(String::from),
+            has_review_clip: library_cluster.has_review_clip(),
         }
     }
 }

@@ -231,11 +231,13 @@ shared `ExportManager` and returns caller-freed JSON describing the written file
 error (see `API_SPECS.md`). The CLI binary composes an `ExportWriter` from
 `adapters::export::default_exporters()` and `NOTE_TAKER_EXPORT_DIR`.
 
-`ffi.rs` exports two Voice Gallery commands that call `application::cluster_review`, the same use
+`ffi.rs` exports the Voice Gallery commands, which call `application::cluster_review`, the same use
 case as the CLI and HTTP API. `note_taker_get_unknown_clusters(meeting_id)` returns unresolved
 unknown-speaker clusters with optional local review-clip paths. `note_taker_assign_cluster(
 cluster_id, identity_name)` assigns a cluster to a named identity and deletes its review audio.
-Both return caller-freed JSON; see `API_SPECS.md`.
+`note_taker_get_voice_library()` lists every meeting's clusters and the saved people, writing no
+audio, and `note_taker_prepare_cluster_review_clip(cluster_id)` writes one clip when it is played.
+All return caller-freed JSON; see `API_SPECS.md`.
 
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.

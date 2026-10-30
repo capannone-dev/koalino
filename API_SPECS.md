@@ -130,7 +130,7 @@ streams audio bytes to Dart.
 
 ### Unknown-speaker cluster C ABI
 
-Both functions call `application::cluster_review`, the same use case as the CLI and HTTP API.
+These functions call `application::cluster_review`, the same use case as the CLI and HTTP API.
 They always return caller-freed JSON (release it with `note_taker_free_string`), and they return
 `NULL` only if the response cannot be allocated. They run synchronously, so Dart should call them
 from a background isolate.
@@ -150,6 +150,16 @@ from a background isolate.
   it returns `{"ok":false,"error_code","error"}`, where `error_code` is `invalid_argument` (bad UUID
   or blank name), `cluster_not_found`, `cluster_already_resolved`, `assignment_failed`, or
   `runtime_unavailable`.
+
+- `char *note_taker_get_voice_library(void)` returns every meeting's unresolved clusters and the
+  saved people (Issue #63):
+  `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title":"…|null","total_duration_ms","chunk_count","created_at","has_review_clip":true}],"saved_people":[{"identity_id","display_name","voice_variant_count"}]}`,
+  or `{"ok":false,"error_code":"list_failed|runtime_unavailable","error":"…"}`. It writes no audio.
+- `char *note_taker_prepare_cluster_review_clip(const char *cluster_id)` writes that cluster's clip
+  to `NOTE_TAKER_REVIEW_CLIP_DIR` when the owner asks to hear it, and returns
+  `{"ok":true,"review_clip_path":"/abs/<clip>.wav"}`, or `{"ok":false,"error_code","error"}` with
+  `invalid_argument`, `clip_not_found`, `clip_unavailable`, or `runtime_unavailable`. Assigning the
+  cluster deletes the file.
 
 ### Attachment import C ABI
 
@@ -254,8 +264,11 @@ The headless daemon binds locally by default. `GET /api/meetings` returns
 is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting. `POST
 /api/meetings` with `{"title":"..."}` (or `{}`) creates an empty meeting and returns `201` with
 its summary. An invalid title returns `400` (Issue #35). `GET /api/voice-gallery` returns
-speaker labels and unresolved review-clip identifiers/timing only; voice vectors and raw audio are
-never serialized. `GET /api/telemetry` returns aggregate task count, duration, and latency.
+`identities` (`identity_id`, `display_name`, `voice_variant_count`), `unknown_clusters` (the summary
+below plus `meeting_title` and `has_review_clip`, for every meeting), and `unassigned_clips`
+(identifiers and timing only); voice vectors and raw audio are never serialized.
+`GET /api/clusters/{id}/review-clip` returns `200` with the clip as `audio/wav` and
+`Cache-Control: no-store`, or `404` when the cluster has none (Issue #63). `GET /api/telemetry` returns aggregate task count, duration, and latency.
 
 ### Settings (Issue #46)
 
