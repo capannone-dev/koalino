@@ -2,7 +2,10 @@
 
 # Local AI adapters
 
-This directory contains opt-in local AI infrastructure. It is compiled only with
+`diarization/` holds the local speaker diarization adapter; see its README. Its ONNX Runtime
+models are compiled only with `--features diarization`.
+
+The rest of this directory contains opt-in local AI infrastructure. It is compiled only with
 `--features local-ai`; the default crate, `make rust-test`, and application layer remain free of
 Whisper/whisper.cpp types and native model initialization.
 

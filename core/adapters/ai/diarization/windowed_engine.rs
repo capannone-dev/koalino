@@ -18,7 +18,7 @@
 //! Each turn carries its speaker's mean embedding (unit length). Linking speakers across chunks
 //! and meetings is left to the voice matcher and the unknown-speaker clusterer. The models sit
 //! behind `SegmentationModel` and `SpeakerEmbeddingModel`, so the logic is tested with fakes, and
-//! inference runs on a blocking thread, never on the async runtime. Audio and embeddings are
+//! inference runs on its own thread, never on the async runtime. Audio and embeddings are
 //! never logged.
 
 use std::sync::Arc;
@@ -61,7 +61,9 @@ pub trait SpeakerEmbeddingModel: Send + Sync {
 /// Thresholds of the turn assembly.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DiarizationTuning {
-    /// Least cosine similarity at which two windows' speakers are the same person.
+    /// Least cosine similarity at which two windows' speakers are the same person. Measured on
+    /// LibriSpeech with ECAPA: different speakers stay below about 0.33 (99th percentile), and
+    /// turn error is flat from 0.2 to 0.4 (see `DECISION_LOG.md`).
     pub speaker_link_threshold: f32,
     /// Shortest turn kept, in milliseconds.
     pub min_turn_ms: u64,
@@ -74,7 +76,7 @@ pub struct DiarizationTuning {
 impl Default for DiarizationTuning {
     fn default() -> Self {
         Self {
-            speaker_link_threshold: 0.5,
+            speaker_link_threshold: 0.35,
             min_turn_ms: 250,
             max_merge_gap_ms: 500,
             min_embedding_ms: 400,
@@ -403,13 +405,26 @@ where
     Segmentation: SegmentationModel + 'static,
     Embedding: SpeakerEmbeddingModel + 'static,
 {
-    /// Decodes the chunk's WAV and diarizes it on a blocking thread.
+    /// Decodes the chunk's WAV and diarizes it on its own thread.
     ///
-    /// Side effects: Runs inference off the async runtime; never logs audio or embeddings.
+    /// The pipeline worker drives this future without a Tokio runtime and other callers run on
+    /// one, so the work takes a plain thread and a channel, which suit both.
+    ///
+    /// Outputs: The chunk's turns, `InvalidAudio` for another format, or `Unavailable` when the
+    /// thread cannot start or dies.
+    /// Side effects: Runs inference off the calling thread; never logs audio or embeddings.
     async fn diarize(&self, audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
         let samples = decode_wav_pcm16_mono(audio_bytes)?;
         let engine = self.clone();
-        tokio::task::spawn_blocking(move || engine.diarize_samples(&samples))
+        let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
+        std::thread::Builder::new()
+            .name(String::from("diarization"))
+            .spawn(move || {
+                // The receiver is gone only when the caller dropped the future.
+                let _ = result_sender.send(engine.diarize_samples(&samples));
+            })
+            .map_err(|_| DiarizationError::Unavailable)?;
+        result_receiver
             .await
             .map_err(|_| DiarizationError::Unavailable)?
     }

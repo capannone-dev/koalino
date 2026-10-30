@@ -244,3 +244,23 @@ async fn the_port_takes_recorder_wav() {
         Err(DiarizationError::InvalidAudio { .. })
     ));
 }
+
+/// The pipeline worker drives the port with `futures::executor::block_on`, not a Tokio runtime,
+/// so the engine must not need one.
+#[test]
+fn the_port_works_without_a_tokio_runtime() {
+    let engine = WindowedDiarizationEngine::new(
+        AmplitudeSegmentation::default(),
+        AmplitudeEmbedding::default(),
+        DiarizationTuning::default(),
+    );
+    let pcm: Vec<i16> = audio(&[(VOICE_A, 2.0)])
+        .iter()
+        .map(|sample| (sample * 32_768.0) as i16)
+        .collect();
+
+    let segments = futures::executor::block_on(engine.diarize(&encode_wav_pcm16(&pcm, 16_000)))
+        .unwrap_or_else(|error| panic!("WAV must diarize: {error}"));
+
+    assert_eq!(turns(&segments), vec![(0, 2_000, vec![1.0, 0.0])]);
+}
