@@ -1356,3 +1356,18 @@ measuring and retuning moves to #61.
   grows from 221 MB to 332 MB. Mobile quantization was not needed to run; #61 can revisit it.
 - **Export is not pinned by hash.** `fetch.sh` exports the models, and export may not be
   byte-reproducible; the export script validates them with onnxruntime instead.
+
+## 2026-10-30 — #62 choosing the transcription language
+
+- **The language is stamped on each chunk when it is cut.** Phones can fall behind a live recording,
+  so reading it at transcription time would apply a change to audio spoken before it.
+- **The list is whisper.cpp's own 100 codes plus `auto`.** whisper.cpp fails every chunk on an unknown
+  code, so the core refuses anything else, including in messages from paired devices.
+- **The default lives in `<db>.transcription-language`**, like the log level: not secret, and readable
+  without the database. Order: stored choice, `NOTE_TAKER_WHISPER_LANGUAGE`, AUTO.
+- **A recording's language ends with it.** The next recording starts on the default, and changing the
+  default during a recording does not change that recording.
+- **Requests to paired devices are now `NTT3`**, because they carry the language. A device on an older
+  build ignores them, the request times out, and this device transcribes locally.
+- **Apps only.** The CLI and daemon keep `NOTE_TAKER_WHISPER_LANGUAGE`, and the web dashboard has no
+  recording controls to add a selector to.
