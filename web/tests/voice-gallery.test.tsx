@@ -7,9 +7,9 @@ import * as api from "@/lib/api";
 
 vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<typeof api>("@/lib/api")), assignCluster: vi.fn() }));
 
-const clusters: api.UnknownCluster[] = [
-  { cluster_id: "cluster-1", meeting_id: "meeting-1", total_duration_ms: 12_500, chunk_count: 3, created_at: "2026-10-27T09:15:00+00:00" },
-  { cluster_id: "cluster-2", meeting_id: "meeting-1", total_duration_ms: 700, chunk_count: 1, created_at: "2026-10-27T09:16:00+00:00" }
+const clusters: api.LibraryCluster[] = [
+  { cluster_id: "cluster-1", meeting_id: "meeting-1", total_duration_ms: 12_500, chunk_count: 3, created_at: "2026-10-27T09:15:00+00:00", meeting_title: "Project Sync", has_review_clip: true },
+  { cluster_id: "cluster-2", meeting_id: "meeting-1", total_duration_ms: 700, chunk_count: 1, created_at: "2026-10-27T09:16:00+00:00", meeting_title: null, has_review_clip: false }
 ];
 
 beforeEach(() => {
@@ -17,7 +17,7 @@ beforeEach(() => {
 });
 
 test("renders one card per unresolved cluster", () => {
-  render(<VoiceGallery clusters={clusters} />);
+  render(<VoiceGallery clusters={clusters} people={[]} />);
   expect(screen.getByText("12.5 s · 3 chunks")).toBeInTheDocument();
   expect(screen.getByText("0.7 s · 1 chunk")).toBeInTheDocument();
   expect(screen.getAllByRole("button", { name: "Assign" })).toHaveLength(2);
@@ -25,7 +25,7 @@ test("renders one card per unresolved cluster", () => {
 
 test("Assign sends the typed name for that cluster and removes it", async () => {
   vi.mocked(api.assignCluster).mockResolvedValue({ cluster_id: "cluster-2", identity_id: "identity-1", identity_name: "Grace Hopper", identity_created: true, variants_stored: 1, segments_updated: 2 });
-  render(<VoiceGallery clusters={clusters} />);
+  render(<VoiceGallery clusters={clusters} people={[]} />);
 
   fireEvent.change(screen.getByLabelText("Name for unknown speaker 2"), { target: { value: "  Grace Hopper " } });
   fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[1]);
@@ -34,10 +34,11 @@ test("Assign sends the typed name for that cluster and removes it", async () => 
   expect(api.assignCluster).toHaveBeenCalledWith("cluster-2", "Grace Hopper");
   expect(screen.queryByText("0.7 s · 1 chunk")).not.toBeInTheDocument();
   expect(screen.getByText("12.5 s · 3 chunks")).toBeInTheDocument();
+  expect(screen.getByText("Grace Hopper: 1 voice sample")).toBeInTheDocument();
 });
 
 test("a blank name is rejected without calling the API", async () => {
-  render(<VoiceGallery clusters={clusters} />);
+  render(<VoiceGallery clusters={clusters} people={[]} />);
 
   fireEvent.change(screen.getByLabelText("Name for unknown speaker 1"), { target: { value: "   " } });
   fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
@@ -48,7 +49,7 @@ test("a blank name is rejected without calling the API", async () => {
 
 test("a rejected assignment keeps the cluster and reports the failure", async () => {
   vi.mocked(api.assignCluster).mockRejectedValue(new Error("Cluster assignment failed: 409"));
-  render(<VoiceGallery clusters={clusters} />);
+  render(<VoiceGallery clusters={clusters} people={[]} />);
 
   fireEvent.change(screen.getByLabelText("Name for unknown speaker 1"), { target: { value: "Ada" } });
   fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
@@ -57,7 +58,20 @@ test("a rejected assignment keeps the cluster and reports the failure", async ()
   expect(screen.getByText("12.5 s · 3 chunks")).toBeInTheDocument();
 });
 
-test("shows an empty state when nothing needs review", () => {
-  render(<VoiceGallery clusters={[]} />);
+test("shows meeting titles, playable clips, and saved people offered as names", () => {
+  const { container } = render(<VoiceGallery clusters={clusters} people={[{ identity_id: "identity-1", display_name: "Ada Lovelace", voice_variant_count: 3 }]} />);
+
+  expect(screen.getByText("Project Sync")).toBeInTheDocument();
+  expect(screen.getByText("Untitled meeting")).toBeInTheDocument();
+  expect(screen.getByLabelText("Listen to unknown speaker 1")).toHaveAttribute("src", expect.stringContaining("/api/clusters/cluster-1/review-clip"));
+  expect(screen.queryByLabelText("Listen to unknown speaker 2")).not.toBeInTheDocument();
+  expect(screen.getByText("Ada Lovelace: 3 voice samples")).toBeInTheDocument();
+  expect(container.querySelector('datalist option[value="Ada Lovelace"]')).not.toBeNull();
+});
+
+test("explains when there are no saved people", () => {
+  render(<VoiceGallery clusters={[]} people={[]} />);
+
   expect(screen.getByText("No unknown speakers to review.")).toBeInTheDocument();
+  expect(screen.getByText("No saved people yet. Name a voice to add someone.")).toBeInTheDocument();
 });

@@ -2,6 +2,7 @@
 
 # Voice gallery route
 
-This server route lists meetings, fetches each meeting's unresolved unknown-speaker clusters, and
-passes them to the `VoiceGallery` client component, which assigns clusters to typed names. Cluster
-DTOs carry no raw audio or embedding data.
+This server route reads `GET /api/voice-gallery` and passes every meeting's unresolved clusters and
+the saved people to the `VoiceGallery` client component, which assigns clusters to new or saved
+names. These DTOs carry no raw audio or embedding data; a clip's audio is fetched only when the
+owner plays it.

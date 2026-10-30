@@ -8,6 +8,8 @@ the cluster-assignment form, meeting renaming, the log settings, and the Devices
 `voice-gallery.tsx` renders one card per unknown-speaker cluster with a name field and an
 **Assign** button. A blank name is rejected without a request. A successful assignment removes the
 card and reports the resolved name. A failed request keeps the card and shows an error message.
+Each card names its meeting and has an audio player when a review clip exists; the name field
+suggests saved people, who are listed below with their sample counts (Issue #63).
 
 `meeting-list.tsx` renders the meeting index with a "⋯" actions menu per row (also opened by
 right-click) offering **Rename**. `meeting-title-header.tsx` renders a meeting detail page's

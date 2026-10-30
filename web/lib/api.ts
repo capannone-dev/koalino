@@ -7,10 +7,11 @@ export type TelemetrySummary = { total_transcription_time_ms: number; average_la
 export type MeetingSummary = { meeting_id: string; title: string; created_at: string };
 export type Attachment = { attachment_id: string; file_path: string; mime_type: string; original_timestamp_utc: string };
 export type MeetingDetail = { meeting_id: string; title: string; created_at: string; transcript: string | null; attachments: Attachment[] };
-export type VoiceIdentity = { identity_id: string; display_name: string };
+export type VoiceIdentity = { identity_id: string; display_name: string; voice_variant_count: number };
 export type UnassignedClip = { clip_id: string; meeting_id: string; start_time_ms: number; end_time_ms: number; audio_url?: string };
-export type VoiceGalleryResponse = { identities: VoiceIdentity[]; unassigned_clips: UnassignedClip[] };
 export type UnknownCluster = { cluster_id: string; meeting_id: string; total_duration_ms: number; chunk_count: number; created_at: string };
+export type LibraryCluster = UnknownCluster & { meeting_title: string | null; has_review_clip: boolean };
+export type VoiceGalleryResponse = { identities: VoiceIdentity[]; unknown_clusters: LibraryCluster[]; unassigned_clips: UnassignedClip[] };
 export type ClusterAssignment = { cluster_id: string; identity_id: string; identity_name: string; identity_created: boolean; variants_stored: number; segments_updated: number };
 
 export const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8080";
@@ -26,6 +27,7 @@ export const getDeviceTelemetry = (deviceId: string) => apiGet<DeviceTelemetry>(
 export const getTelemetrySummary = () => apiGet<TelemetrySummary>("/api/telemetry/summary");
 export const getMeetings = () => apiGet<MeetingSummary[]>("/api/meetings");
 export const getMeeting = (meetingId: string) => apiGet<MeetingDetail>(`/api/meetings/${encodeURIComponent(meetingId)}`);
+export const reviewClipUrl = (clusterId: string) => `${apiBaseUrl}/api/clusters/${encodeURIComponent(clusterId)}/review-clip`;
 export const getVoiceGallery = () => apiGet<VoiceGalleryResponse>("/api/voice-gallery");
 export const getUnknownClusters = (meetingId: string) => apiGet<UnknownCluster[]>(`/api/meetings/${encodeURIComponent(meetingId)}/unknown-clusters`);
 
