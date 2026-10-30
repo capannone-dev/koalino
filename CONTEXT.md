@@ -126,10 +126,8 @@ values. A feature-gated contract test runs real local inference only when both `
 `NOTE_TAKER_WHISPER_MODEL` are explicitly set; no model is downloaded or initialized by default.
 
 Issue #21 adds a separate `/note-taker/file-transfer/1` behaviour alongside CRDT synchronization.
-`FileSyncManager` uses only file-network and content-addressed-storage ports, keeps an expiring
-peer availability registry, and queues best-effort attachment fetches after CRDT metadata is
-persisted. Explicit 64 KiB frames are SHA-256 verified before atomic CAS commit; integration tests
-use Noise over libp2p memory transport only.
+Issue #57 replaced its first manager with pull-based sync (`attachment_sync.rs`): the receiver asks
+for one 64 KiB chunk at a time and verifies the whole file by SHA-256 before storing it.
 
 Issue #22 adds the default-build OpenAI Whisper adapter with a reqwest multipart boundary and
 adapter-owned WAV source. It implements only `TranscriptionEngine`; API keys are loaded from
@@ -374,7 +372,7 @@ The v1.0 audit (2026-10-28, `AUDIT_V1.md`) leaves the system in this state:
   titles, and rename across CLI, HTTP, FFI, Flutter, and web; the voice gallery and unknown-cluster
   review; export (Markdown, Unicode PDF, JSON); telemetry; the Teams bridge; encrypted
   embeddings; and structured, redacted JSON logs whose level can be changed at runtime.
-- **Implemented but not composed:** the libp2p swarm, `SyncManager`, `FileSyncManager`, and
+- **Implemented but not composed:** the libp2p swarm, `SyncManager`, and
   manifest broadcast are exercised only by tests. Composing them needs peer pairing first (#43).
 - **Missing:** a real diarization engine (#44), Flutter microphone capture (#45), Flutter Settings and
   log export (#46), Android background/lock-screen controls (#47), Flutter export (#48), and local

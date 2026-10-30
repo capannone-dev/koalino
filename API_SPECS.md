@@ -26,8 +26,10 @@ The initial public contracts are Rust traits, not a network protocol:
 - `NoteRepository` creates a meeting with opaque CRDT bytes, persists and loads a `Transcript`, and atomically replaces or reads a serialized CRDT document. It returns only domain values and `StorageError`; it never exposes SQLite types.
 - `P2pNetwork` permits only encrypted opaque-payload transport.
 - `FileTransferNetwork` is a separate encrypted attachment transport port. Its private libp2p
-  behaviour negotiates `/note-taker/file-transfer/1`, not the CRDT sync protocol. `FileStorage`
-  stores verified content by SHA-256 and exposes no SQLite or libp2p values.
+  behaviour negotiates `/note-taker/file-transfer/1`, not the CRDT sync protocol. Its frames are a
+  request (`NTFQ`, hash, offset) and a chunk (`NTFC`, hash, total size, offset, up to 64 KiB of data).
+- `AttachmentLibrary` is the local side: it lists linked attachments, reads chunks of linked files
+  only, and stores arriving files once verified. It exposes no SQLite or libp2p values.
 
 ## Attachment file-transfer framing
 

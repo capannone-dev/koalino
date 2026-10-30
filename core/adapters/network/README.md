@@ -78,7 +78,7 @@ and driving the asynchronous swarm are composition-root responsibilities. The ad
 integration contract uses Noise over libp2p `MemoryTransport`, never TCP or UDP sockets, to
 verify directed and broadcast payload delivery.
 
-`file_transfer/` and `file_transfer_behaviour.rs` carry content-addressed attachment transfers
+`file_transfer_behaviour.rs` carries attachment chunks, requested one at a time,
 between peers.
 
 `teams_bridge/` (Issue #33) is a separate, local-only inbound channel. A Teams bot process

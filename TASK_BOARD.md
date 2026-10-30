@@ -127,7 +127,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P1 | #54 | In-app camera (multi-shot, `camera` plugin; Android, iOS, Windows) and multi-file attachments during and after a meeting, placed in the transcript by meeting time; Linux attaches files only; done | 3.1 |
 | P1 | #55 | Done (2026-10-30): relay through the owner's own daemon (circuit relay v2 + hole punching) for devices that cannot connect directly | 4.1 |
 | P1 | #56 | Done (2026-10-30): voice-library sync between paired devices (union merge, embeddings re-sealed on receipt) | 3.3 |
-| P2 | #57 | Attachment sync (metadata with the meeting, files over `FileTransferNetwork`) | 3.3 |
+| P2 | #57 | Done (2026-10-30): sealed attachment lists, files pulled over `FileTransferNetwork`, verified by SHA-256, fetched again after reconnecting | 3.3 |
 | P3 | #58 | Leave devices with a pending pairing out of Nearby | 4.1 |
 | P2 | #59 | Route transcription to a paired device using the exchanged manifests | 3.4 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |

@@ -174,11 +174,11 @@ for fast list and detail reads. Every merged peer change (`apply_sync_message`,
 - **Cost:** a rename is one `put`; a no-op rename adds no change. Tests measure about 250 bytes for
   the change-carrying message and 720 bytes for a whole fresh handshake.
 
-`file_sync_manager.rs` handles attachment references after CRDT persistence, records
-meeting-scoped serving authorization, and makes a best-effort content-addressed fetch only when a
-peer advertises the SHA-256 hash. It never imports libp2p or waits in the CRDT apply path. Explicit
-64 KiB frames, a 100 MiB limit, two concurrent transfers, and final SHA-256 validation protect the
-local CAS commit.
+`attachment_exchange.rs` encodes the sealed `NTA1` lists of attachments a device holds, and
+`attachment_sync.rs` acts on them (#57): what a device lacks becomes wanted, and once its meeting has
+synced the file is pulled one 64 KiB chunk at a time, at most two files at once, with a row written
+only after verification. Nothing is persisted: lists are sent again on each connection, so a device
+fetches what it missed when it reconnects, restarting any file that was cut off.
 
 `ai_config.rs` keeps per-device defaults and optional task overrides provider-neutral. `ai_registry.rs`
 registers only `TranscriptionEngine` trait objects and selects an explicit provider or its fallback

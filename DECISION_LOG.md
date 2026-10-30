@@ -1289,3 +1289,24 @@ the comment on #49.
 - **Merging two people is not built**, despite the issue's wording: no device has such an operation
   to sync. Concurrent namings of one cluster keep the behaviour from #50: both identities sync, and the
   document's winner is the name segments show.
+
+## 2026-10-30 — #57 attachment sync
+
+- **The receiver pulls one chunk at a time.** The first `FileSyncManager` pushed a whole file at
+  once and held it in memory; it was never wired in. With up to 1,600 queued 64 KiB requests on a
+  transport with a 10 s request timeout, large files could fail on slow links. Pulling bounds memory
+  to one chunk, and a lost chunk is simply asked for again. It costs one round trip per chunk. The
+  manager, its content-addressed store and the port's availability broadcast were removed.
+- **Metadata goes in sealed `NTA1` lists, not the Automerge document.** Attachments never change and
+  have no deletion yet, so a list needs no merge rules, and the document stays free of local files'
+  metadata. Lists are sent on connection and when they change.
+- **A row exists only with its verified file**, so the app has no "file still missing" state to show.
+  The cost is that an attachment appears only when its file has arrived.
+- **Interrupted transfers restart from the beginning.** Files are at most 100 MiB and nothing about
+  a transfer needs persisting; a device fetches what it lacks whenever a list arrives.
+- **Existing attachments are hashed lazily**, one per tick on the P2P thread (a short pause even for the
+  100 MiB maximum), and the hash is kept in the row, instead of a blocking migration at start-up.
+- **Files stay unencrypted at rest**, private to the user, as `AttachmentFileStore` already keeps
+  them locally. The issue asks for the same treatment; encrypting attachments would be a separate
+  change on every device.
+- **Unlinked attachments stay on their device** until the owner links them to a meeting.

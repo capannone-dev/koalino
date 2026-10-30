@@ -175,9 +175,12 @@ simple cosine-similarity loop. It is suitable for deterministic unit tests and d
 It does not provide persistence or AES-256-GCM encryption, and it accepts variants for unsaved
 identities, so it must never be selected as the production biometric store.
 
-`file_storage_adapter.rs` implements `FileStorage` as a SHA-256 content-addressed store. It writes
-each verified object through a unique `.transfer-*.tmp` staging file and atomically renames it to
-its hash path, so duplicate content consumes one local object and failed writes are cleaned up.
+`attachment_sync_store.rs` implements `AttachmentLibrary`, the local side of attachment sync (#57),
+with `sqlite_attachment_sync.rs` for its rows. It hashes linked attachments one at a time, serves
+chunks only of files linked to a meeting, and writes arriving files to a private partial file. The
+file moves into the meeting's folder, and its row is written, only after the size and SHA-256 match.
+Peer names are reduced to safe characters; a type must match its extension among those that can be
+attached locally; a meeting ID must be a plain folder name.
 
 The same SQLite adapter implements `MetricsRepository`. Its `task_metrics` table stores only task
 and device identifiers, model labels, timings, coarse power estimates, and timestamps; it contains
