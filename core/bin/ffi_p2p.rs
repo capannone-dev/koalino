@@ -15,11 +15,15 @@
 //! | `reject_request` | `peer_id` | `{"ok":true}` |
 //! | `revoke` | `peer_id` | `{"ok":true,"revoked":true|false}` |
 //! | `set_transcription_route` | `route` (`local`, `auto`, or a peer ID) | `{"ok":true}` |
+//! | `set_network_addresses` | `relay` (optional), `peers` | `{"ok":true}` |
+//! | `create_invite` | none | `{"ok":true,"invite":"note-taker-invite:…","expires_at_ms":…}` |
+//! | `join_invite` | `invite` | `{"ok":true,"peer_id":…}` |
 //!
 //! Failures are `{"ok":false,"error_code":...,"error":...}`, where `error_code` is
 //! `invalid_request` (unreadable JSON, an unknown command or field, a missing `peer_id`),
 //! `invalid_peer_id`, `unavailable` (no P2P task), or `refused` (the task declined, for example a
-//! pairing that is not in progress). Nothing here logs peer IDs or device names.
+//! pairing that is not in progress). The network commands add the codes of
+//! `NetworkCommandError`, such as `invalid_relay_address` or `invite_expired`. Nothing here logs peer IDs or device names.
 //!
 //! Commands block the calling thread until the task answers, so Dart calls them on a worker
 //! isolate, like every other FFI call.
@@ -28,9 +32,13 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use crate::application::{
-    p2p_service::{P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError},
+    p2p_service::{
+        NetworkCommand, NetworkCommandOutcome, P2pCommand, P2pCommandOutcome, P2pControl,
+        P2pControlError,
+    },
     p2p_view::{PairingUpdateView, parse_peer_id, parse_route_request, status_view},
 };
+use crate::domain::network_addresses::NetworkAddresses;
 
 /// A command request, tagged by `command`.
 #[derive(Deserialize)]
@@ -59,6 +67,14 @@ enum CommandRequest {
     },
     SetTranscriptionRoute {
         route: String,
+    },
+    SetNetworkAddresses {
+        relay: Option<String>,
+        peers: Vec<String>,
+    },
+    CreateInvite {},
+    JoinInvite {
+        invite: String,
     },
 }
 
@@ -95,6 +111,15 @@ fn run_command(control: Option<&dyn P2pControl>, request: &str) -> Value {
         Ok(request) => request,
         Err(_) => return failure("invalid_request", "the request is not a known P2P command"),
     };
+    if let Some(command) = network_command_for(&request) {
+        let Some(control) = control else {
+            return failure("unavailable", "P2P sync is not running");
+        };
+        return match futures::executor::block_on(control.network_command(command)) {
+            Ok(outcome) => network_success(outcome),
+            Err(error) => failure(error.code(), &error.to_string()),
+        };
+    }
     let command = match command_for(request) {
         Some(command) => command,
         None => return failure("invalid_peer_id", "the peer ID is malformed"),
@@ -132,7 +157,52 @@ fn command_for(request: CommandRequest) -> Option<P2pCommand> {
         CommandRequest::SetTranscriptionRoute { route } => {
             P2pCommand::SetTranscriptionRoute(parse_route_request(&route)?)
         }
+        // `network_command_for` takes these first, so they never get here.
+        CommandRequest::SetNetworkAddresses { .. }
+        | CommandRequest::CreateInvite {}
+        | CommandRequest::JoinInvite { .. } => return None,
     })
+}
+
+/// Maps a request to its network command, or `None` for every other request.
+///
+/// Side effects: None. Blank relay and peer text counts as not set, and addresses are checked by
+/// the P2P task.
+fn network_command_for(request: &CommandRequest) -> Option<NetworkCommand> {
+    match request {
+        CommandRequest::SetNetworkAddresses { relay, peers } => {
+            Some(NetworkCommand::SetAddresses(NetworkAddresses {
+                relay: relay
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|relay| !relay.is_empty())
+                    .map(str::to_owned),
+                peers: peers
+                    .iter()
+                    .map(|peer| peer.trim())
+                    .filter(|peer| !peer.is_empty())
+                    .map(str::to_owned)
+                    .collect(),
+            }))
+        }
+        CommandRequest::CreateInvite {} => Some(NetworkCommand::CreateInvite),
+        CommandRequest::JoinInvite { invite } => Some(NetworkCommand::JoinInvite(invite.clone())),
+        _ => None,
+    }
+}
+
+/// Builds the success object for a network outcome.
+fn network_success(outcome: NetworkCommandOutcome) -> Value {
+    match outcome {
+        NetworkCommandOutcome::Done => json!({ "ok": true }),
+        NetworkCommandOutcome::Invite {
+            text,
+            expires_at_ms,
+        } => json!({ "ok": true, "invite": text, "expires_at_ms": expires_at_ms }),
+        NetworkCommandOutcome::Joined(peer_id) => {
+            json!({ "ok": true, "peer_id": peer_id.as_str() })
+        }
+    }
 }
 
 /// Builds the success object for an outcome.

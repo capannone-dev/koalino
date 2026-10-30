@@ -15,12 +15,14 @@ use crate::{
     application::crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
     domain::{
         models::DeviceId,
+        network_addresses::{NetworkAddresses, StoredNetworkAddresses},
         peer_trust::{DeviceName, PairKey, TrustedPeer},
     },
     ports::{
         crypto::EmbeddingCipher,
         peer_trust::{
-            NodeIdentityStore, PairAgreementSecretStore, PairKeyPinning, TrustedPeerStore,
+            NetworkAddressStore, NodeIdentityStore, PairAgreementSecretStore, PairKeyPinning,
+            TrustedPeerStore,
         },
     },
 };
@@ -346,4 +348,32 @@ fn an_older_peer_table_gains_the_pair_key_column() {
             .unwrap_or_else(|error| panic!("peers must list: {error}")),
         vec![trusted_peer("peer-phone", "Phone", 1)]
     );
+}
+
+/// Verifies network addresses start empty, and that a saved value survives reopening.
+#[test]
+fn network_addresses_survive_reopening() {
+    let scratch = ScratchDirectory::new();
+    let database_path = scratch.database_path();
+    let saved = StoredNetworkAddresses {
+        configured: Some(NetworkAddresses {
+            relay: Some("/ip4/203.0.113.5/tcp/4001/p2p/12D3KooWRelay".to_owned()),
+            peers: vec!["/ip4/203.0.113.6/tcp/4001/p2p/12D3KooWPeer".to_owned()],
+        }),
+        invited_peers: vec!["/ip4/203.0.113.7/tcp/4001/p2p/12D3KooWInvited".to_owned()],
+    };
+    let open = || open_store(&database_path);
+
+    let first_read = open()
+        .load_network_addresses()
+        .unwrap_or_else(|error| panic!("addresses must load: {error}"));
+    open()
+        .save_network_addresses(&saved)
+        .unwrap_or_else(|error| panic!("addresses must save: {error}"));
+    let second_read = open()
+        .load_network_addresses()
+        .unwrap_or_else(|error| panic!("addresses must load: {error}"));
+
+    assert_eq!(first_read, StoredNetworkAddresses::default());
+    assert_eq!(second_read, saved);
 }

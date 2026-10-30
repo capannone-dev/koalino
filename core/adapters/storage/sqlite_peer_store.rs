@@ -18,12 +18,14 @@ use crate::{
     domain::{
         errors::StorageError,
         models::DeviceId,
+        network_addresses::StoredNetworkAddresses,
         peer_trust::{DeviceName, PairKey, TrustedPeer},
     },
     ports::{
         crypto::EmbeddingCipher,
         peer_trust::{
-            NodeIdentityStore, PairAgreementSecretStore, PairKeyPinning, TrustedPeerStore,
+            NetworkAddressStore, NodeIdentityStore, PairAgreementSecretStore, PairKeyPinning,
+            TrustedPeerStore,
         },
         remote_transcription::TranscriptionRouteStore,
     },
@@ -88,7 +90,11 @@ impl SqlitePeerStore {
             .map_err(|error| sqlite_error("unable to configure peer store busy timeout", error))?;
         connection
             .execute_batch(
-                "CREATE TABLE IF NOT EXISTS p2p_transcription_route (
+                "CREATE TABLE IF NOT EXISTS p2p_network_addresses (
+                    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+                    addresses_json TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS p2p_transcription_route (
                     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
                     route TEXT NOT NULL
                 );
@@ -151,6 +157,47 @@ impl TranscriptionRouteStore for SqlitePeerStore {
                 params![route],
             )
             .map_err(|error| sqlite_error("unable to store the transcription choice", error))?;
+        Ok(())
+    }
+}
+
+impl NetworkAddressStore for SqlitePeerStore {
+    /// Reads the stored addresses. They are not secret, and only name the owner's own routes.
+    ///
+    /// Outputs: The addresses, empty if never saved, or a storage error, including for a row that
+    /// cannot be read. Side effects: Reads one row.
+    fn load_network_addresses(&self) -> Result<StoredNetworkAddresses, StorageError> {
+        let stored_json: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT addresses_json FROM p2p_network_addresses WHERE singleton = 1",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| sqlite_error("unable to read the network addresses", error))?;
+        stored_json.map_or_else(
+            || Ok(StoredNetworkAddresses::default()),
+            |stored_json| serde_json::from_str(&stored_json).map_err(|_| StorageError::Unavailable),
+        )
+    }
+
+    /// Replaces the stored addresses.
+    ///
+    /// Outputs: Success or a storage error. Side effects: Writes one row.
+    fn save_network_addresses(
+        &self,
+        addresses: &StoredNetworkAddresses,
+    ) -> Result<(), StorageError> {
+        let addresses_json =
+            serde_json::to_string(addresses).map_err(|_| StorageError::Unavailable)?;
+        self.connection
+            .execute(
+                "INSERT INTO p2p_network_addresses (singleton, addresses_json) VALUES (1, ?1)
+                 ON CONFLICT (singleton) DO UPDATE SET addresses_json = excluded.addresses_json",
+                params![addresses_json],
+            )
+            .map_err(|error| sqlite_error("unable to store the network addresses", error))?;
         Ok(())
     }
 }

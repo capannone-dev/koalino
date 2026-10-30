@@ -241,3 +241,7 @@ All return caller-freed JSON; see `API_SPECS.md`.
 
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.
+
+`p2p_network_routes.rs` owns the P2P task's routes to other networks (Issues #64 and #65): Settings'
+relay and peers, applied live and stored in SQLite, and devices found through invites, whose addresses
+are stored once they are paired so they can reconnect after a restart.

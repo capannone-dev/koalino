@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use super::{Libp2pNetworkAdapter, NodeIdentity};
 use crate::{
-    domain::models::DeviceId,
+    domain::{models::DeviceId, network_addresses::RelayState},
     ports::network::{NetworkEvent, P2pNetwork},
 };
 
@@ -261,4 +261,26 @@ async fn relay_addresses_must_name_the_relay() {
         laptop.local_device_id().as_str()
     );
     assert!(laptop.use_relay(&own_address).is_err());
+}
+
+/// Verifies Settings can replace and remove the relay while running, forgetting its candidate.
+#[tokio::test]
+async fn the_relay_can_be_replaced_and_removed_while_running() {
+    let mut adapter = device();
+    let relay_id = device().local_device_id();
+    let relay_address = format!("/ip4/192.0.2.1/tcp/4001/p2p/{}", relay_id.as_str());
+
+    adapter
+        .replace_network_addresses(Some(&relay_address), &[])
+        .unwrap_or_else(|error| panic!("address must apply: {error}"));
+    let state_with_relay = adapter.relay_state();
+    let nearby_with_relay = adapter.nearby_unpaired_peers();
+    adapter
+        .replace_network_addresses(None, &[])
+        .unwrap_or_else(|error| panic!("removal must apply: {error}"));
+
+    assert_eq!(state_with_relay, RelayState::NotPaired);
+    assert_eq!(nearby_with_relay, vec![relay_id]);
+    assert_eq!(adapter.relay_state(), RelayState::NotConfigured);
+    assert!(adapter.nearby_unpaired_peers().is_empty());
 }

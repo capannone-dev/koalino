@@ -14,6 +14,7 @@ use std::time::Duration;
 use crate::domain::{
     errors::{NetworkError, StorageError},
     models::DeviceId,
+    network_addresses::StoredNetworkAddresses,
     peer_trust::{DeviceName, PairKey, TrustedPeer},
 };
 
@@ -125,6 +126,23 @@ pub enum PairingEvent {
         /// The peer the request was sent to.
         peer_id: DeviceId,
     },
+}
+
+/// Keeps the relay, static peers, and invited peers between restarts (Issues #64 and #65).
+pub trait NetworkAddressStore {
+    /// Reads what is stored.
+    ///
+    /// Outputs: The addresses, empty if never saved, or a storage error.
+    /// Side effects: Reads one row.
+    fn load_network_addresses(&self) -> Result<StoredNetworkAddresses, StorageError>;
+
+    /// Replaces what is stored.
+    ///
+    /// Outputs: Success or a storage error. Side effects: Writes one row.
+    fn save_network_addresses(
+        &self,
+        addresses: &StoredNetworkAddresses,
+    ) -> Result<(), StorageError>;
 }
 
 /// The network side of pairing: admission control and the pairing exchange.

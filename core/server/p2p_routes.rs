@@ -34,7 +34,10 @@ use serde::{Deserialize, Serialize};
 use super::api::ServerAppState;
 use crate::{
     application::{
-        p2p_service::{P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError},
+        p2p_service::{
+            NetworkCommand, NetworkCommandError, NetworkCommandOutcome, P2pCommand,
+            P2pCommandOutcome, P2pControl, P2pControlError,
+        },
         p2p_view::{self, P2pStatusView, PairingUpdateView, status_view},
     },
     domain::models::DeviceId,
@@ -52,6 +55,8 @@ pub(super) fn routes() -> Router<ServerAppState> {
         .route("/api/p2p/requests/{peer_id}/reject", post(reject_request))
         .route("/api/p2p/devices/{peer_id}", delete(revoke_device))
         .route("/api/p2p/transcription-route", put(set_transcription_route))
+        .route("/api/p2p/invites", post(create_invite))
+        .route("/api/p2p/invites/join", post(join_invite))
 }
 
 /// Why a P2P route failed, mapped to its status code.
@@ -82,6 +87,99 @@ impl IntoResponse for P2pRouteFailure {
                 StatusCode::INTERNAL_SERVER_ERROR.into_response()
             }
         }
+    }
+}
+
+/// Body of `POST /api/p2p/invites/join`.
+#[derive(Deserialize)]
+struct JoinInviteRequest {
+    /// Invite text as pasted; untrusted.
+    invite: String,
+}
+
+/// Answer of `POST /api/p2p/invites`.
+#[derive(Serialize)]
+struct InviteResponse {
+    /// Invite text, for a link or a QR code.
+    invite: String,
+    /// When it ends, in milliseconds since the Unix epoch.
+    expires_at_ms: u64,
+}
+
+/// Answer of `POST /api/p2p/invites/join`.
+#[derive(Serialize)]
+struct JoinedInviteResponse {
+    /// The device now listed as nearby.
+    peer_id: String,
+}
+
+/// Runs a network command on the P2P task.
+///
+/// Outputs: Its outcome or refusal; without a task, `Stopped`. Side effects: Those of the command.
+async fn run_network(
+    application_state: &ServerAppState,
+    command: NetworkCommand,
+) -> Result<NetworkCommandOutcome, NetworkCommandError> {
+    let Some(control) = application_state.p2p_control() else {
+        return Err(NetworkCommandError::Stopped);
+    };
+    control.network_command(command).await
+}
+
+/// Answers a refused network command: `503` when the task is stopped, otherwise `400`, with
+/// `{"error_code": …}`.
+fn network_refusal(error: NetworkCommandError) -> Response {
+    let status = if error == NetworkCommandError::Stopped {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::BAD_REQUEST
+    };
+    (
+        status,
+        Json(serde_json::json!({ "error_code": error.code() })),
+    )
+        .into_response()
+}
+
+/// Opens the pairing window and returns an invite that lasts as long (Issue #65).
+///
+/// Outputs: `200` with the invite, or a refusal as in `network_refusal`.
+/// Side effects: Admits pairing requests for the window; pairing still needs the code.
+async fn create_invite(State(application_state): State<ServerAppState>) -> Response {
+    match run_network(&application_state, NetworkCommand::CreateInvite).await {
+        Ok(NetworkCommandOutcome::Invite {
+            text,
+            expires_at_ms,
+        }) => Json(InviteResponse {
+            invite: text,
+            expires_at_ms,
+        })
+        .into_response(),
+        Ok(_) => P2pRouteFailure::UnexpectedOutcome.into_response(),
+        Err(error) => network_refusal(error),
+    }
+}
+
+/// Lists the device an invite names as a pairing candidate (Issue #65).
+///
+/// Outputs: `200` with the device, or a refusal as in `network_refusal`.
+/// Side effects: Records its addresses until the invite expires; no trust is granted.
+async fn join_invite(
+    State(application_state): State<ServerAppState>,
+    Json(request): Json<JoinInviteRequest>,
+) -> Response {
+    match run_network(
+        &application_state,
+        NetworkCommand::JoinInvite(request.invite),
+    )
+    .await
+    {
+        Ok(NetworkCommandOutcome::Joined(peer_id)) => Json(JoinedInviteResponse {
+            peer_id: peer_id.as_str().to_owned(),
+        })
+        .into_response(),
+        Ok(_) => P2pRouteFailure::UnexpectedOutcome.into_response(),
+        Err(error) => network_refusal(error),
     }
 }
 

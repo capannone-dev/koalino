@@ -50,6 +50,9 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
   - `POST /api/p2p/pairable`, `POST /api/p2p/pairings` (`{"peer_id"}`, returns `{"code"}`),
     `POST /api/p2p/pairings/{peer_id}/confirm|cancel`, and
     `POST /api/p2p/requests/{peer_id}/accept|reject` carry out the pairing steps.
+  - `POST /api/p2p/invites` opens the pairing window and returns `{"invite","expires_at_ms"}`.
+    `POST /api/p2p/invites/join` (`{"invite"}`) lists that device as nearby and returns
+    `{"peer_id"}`. Refusals are `400` with `{"error_code"}` (Issue #65).
   - `DELETE /api/p2p/devices/{peer_id}` revokes a device (`404` when it was not paired). CORS
     allows `DELETE`.
   - Errors: a malformed peer ID returns `400` without reaching the task; a refused command `409`

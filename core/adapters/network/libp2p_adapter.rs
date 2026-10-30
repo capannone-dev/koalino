@@ -164,6 +164,7 @@ impl request_response::Codec for SyncPayloadCodec {
     }
 }
 
+use crate::domain::network_addresses::RelayState;
 use crate::{
     adapters::network::{
         file_transfer_behaviour::{
@@ -555,6 +556,160 @@ impl Libp2pNetworkAdapter {
         });
         self.maintain_relay_route();
         Ok(())
+    }
+
+    /// Replaces the relay and static peers while running (Issue #64).
+    ///
+    /// Inputs: The relay and peer addresses, each ending in `/p2p/<peer id>`. Check them first
+    /// with `check_peer_address`: an invalid one stops here, with earlier ones already applied.
+    /// Outputs: Success, or `SecurityPolicy` as `add_static_peer` reports it.
+    /// Side effects: Gives up the old reservation and forgets the old peers as nearby candidates;
+    /// paired devices stay paired and connections already open stay open.
+    pub fn replace_network_addresses(
+        &mut self,
+        relay_address: Option<&str>,
+        peer_addresses: &[String],
+    ) -> Result<(), NetworkError> {
+        self.forget_relay_reservation(None);
+        self.relay = None;
+        for peer_id in std::mem::take(&mut self.static_peer_ids) {
+            self.nearby_unpaired_peer_ids
+                .remove(&Self::device_id_from_peer_id(peer_id));
+        }
+        for peer_address in peer_addresses {
+            self.add_static_peer(peer_address)?;
+        }
+        if let Some(relay_address) = relay_address {
+            self.use_relay(relay_address)?;
+        }
+        Ok(())
+    }
+
+    /// Checks an address without using it.
+    ///
+    /// Inputs: Untrusted text.
+    /// Outputs: The peer it names, or `SecurityPolicy` for text that does not parse, lacks the
+    /// trailing `/p2p/<peer id>`, or names this node. Side effects: None.
+    pub fn check_peer_address(&self, peer_address: &str) -> Result<DeviceId, NetworkError> {
+        let parsed_address: Multiaddr =
+            peer_address
+                .parse()
+                .map_err(|error| NetworkError::SecurityPolicy {
+                    reason: format!("invalid P2P peer address: {error}"),
+                })?;
+        let Some(Protocol::P2p(peer_id)) = parsed_address.iter().last() else {
+            return Err(NetworkError::SecurityPolicy {
+                reason: "a P2P peer address must end with /p2p/<peer id>".to_owned(),
+            });
+        };
+        if peer_id == *self.swarm.local_peer_id() {
+            return Err(NetworkError::SecurityPolicy {
+                reason: "a P2P peer address must not name this device".to_owned(),
+            });
+        }
+        Ok(Self::device_id_from_peer_id(peer_id))
+    }
+
+    /// Lists a device from an invite as a pairing candidate (Issue #65). Unlike a static peer, it
+    /// stays listed only until `forget_nearby_peer`.
+    ///
+    /// Inputs: The addresses from the invite, each checked by `check_peer_address`.
+    /// Outputs: Success, or `SecurityPolicy` for an address that fails that check.
+    /// Side effects: Records the addresses for dialing and lists the peer as nearby. The peer is
+    /// still authenticated by Noise, and pairing still needs the numeric code.
+    pub fn add_invited_peer(&mut self, peer_addresses: &[String]) -> Result<(), NetworkError> {
+        for peer_address in peer_addresses {
+            self.check_peer_address(peer_address)?;
+            let parsed_address: Multiaddr =
+                peer_address
+                    .parse()
+                    .map_err(|error| NetworkError::SecurityPolicy {
+                        reason: format!("invalid P2P peer address: {error}"),
+                    })?;
+            if let Some(Protocol::P2p(peer_id)) = parsed_address.iter().last() {
+                self.swarm.add_peer_address(peer_id, parsed_address);
+                self.record_discovered_peer(peer_id);
+            }
+        }
+        Ok(())
+    }
+
+    /// Removes a pairing candidate that an expired invite added.
+    ///
+    /// Side effects: Updates the nearby list; mDNS or a static address may list the peer again.
+    pub fn forget_nearby_peer(&mut self, peer_device_id: &DeviceId) {
+        self.nearby_unpaired_peer_ids.remove(peer_device_id);
+    }
+
+    /// Lists addresses another device could use to reach this one, for an invite.
+    ///
+    /// Outputs: Transport addresses without this node's `/p2p/<id>`: public ones first, then relay
+    /// circuits, then the rest. Loopback ones are left out unless there is nothing else.
+    /// Side effects: None.
+    pub fn shareable_addresses(&self) -> Vec<String> {
+        let local_peer_id = *self.swarm.local_peer_id();
+        let without_local_id = |address: &Multiaddr| {
+            let mut address = address.clone();
+            if address.iter().last() == Some(Protocol::P2p(local_peer_id)) {
+                address.pop();
+            }
+            address
+        };
+        let is_circuit =
+            |address: &Multiaddr| address.iter().any(|part| part == Protocol::P2pCircuit);
+        let is_loopback = |address: &Multiaddr| {
+            address.iter().any(|part| match part {
+                Protocol::Ip4(ip) => ip.is_loopback(),
+                Protocol::Ip6(ip) => ip.is_loopback(),
+                _ => false,
+            })
+        };
+        let mut addresses: Vec<Multiaddr> = self
+            .swarm
+            .external_addresses()
+            .map(&without_local_id)
+            .collect();
+        let listening: Vec<Multiaddr> = self.swarm.listeners().map(&without_local_id).collect();
+        addresses.extend(
+            listening
+                .iter()
+                .filter(|address| is_circuit(address))
+                .cloned(),
+        );
+        addresses.extend(
+            listening
+                .iter()
+                .filter(|address| !is_circuit(address))
+                .cloned(),
+        );
+        let mut unique: Vec<Multiaddr> = Vec::new();
+        for address in addresses {
+            if !unique.contains(&address) {
+                unique.push(address);
+            }
+        }
+        if unique.iter().any(|address| !is_loopback(address)) {
+            unique.retain(|address| !is_loopback(address));
+        }
+        unique.iter().map(Multiaddr::to_string).collect()
+    }
+
+    /// Reports how far this device has got with its relay.
+    ///
+    /// Side effects: None.
+    pub fn relay_state(&self) -> RelayState {
+        let Some(relay) = self.relay.as_ref() else {
+            return RelayState::NotConfigured;
+        };
+        if !self.swarm.behaviour().peer_gate.is_trusted(&relay.peer_id) {
+            RelayState::NotPaired
+        } else if relay.reservation_active {
+            RelayState::Reserved
+        } else if self.swarm.is_connected(&relay.peer_id) {
+            RelayState::Connected
+        } else {
+            RelayState::Connecting
+        }
     }
 
     /// Reports whether the relay holds a reservation for this device.

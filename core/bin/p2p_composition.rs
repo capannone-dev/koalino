@@ -14,6 +14,8 @@
 //! - `notify_local_change` reports a local write without waiting;
 //! - `snapshot` reads the latest status.
 //!
+//! Addresses saved in Settings replace the relay and peer variables (`p2p_network_routes`).
+//!
 //! Environment: `NOTE_TAKER_P2P_ENABLED` (`true` by default, `false` turns P2P off),
 //! `NOTE_TAKER_P2P_LISTEN` (default `/ip4/0.0.0.0/tcp/0`), `NOTE_TAKER_DEVICE_NAME` (default: the
 //! host name), and `NOTE_TAKER_P2P_PEERS` (comma-separated `…/p2p/<peer id>` addresses of devices
@@ -48,8 +50,9 @@ use crate::{
         compute_router::ComputePreference,
         crypto::pair_key::PairAgreementSecret,
         p2p_service::{
-            LocalCapabilities, P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError,
-            P2pService, P2pSnapshot, REMOTE_TRANSCRIPTION_TIMEOUT, RemoteTranscriptionJob,
+            LocalCapabilities, NetworkCommand, NetworkCommandError, NetworkCommandOutcome,
+            P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError, P2pService, P2pSnapshot,
+            PAIRING_WINDOW, REMOTE_TRANSCRIPTION_TIMEOUT, RemoteTranscriptionJob,
         },
         pairing_manager::PairingManager,
         repository_sync_manager::RepositorySyncManager,
@@ -58,8 +61,10 @@ use crate::{
     domain::{
         errors::TranscriptionError,
         models::{DeviceId, DeviceManifest, MeetingId},
+        network_addresses::NetworkAddresses,
         peer_trust::DeviceName,
     },
+    p2p_network_routes::{NetworkRoutes, run_network_command},
     pipeline_composition::{PipelineConfig, select_transcription_engine},
     ports::{crypto::EmbeddingCipher, peer_trust::PairAgreementSecretStore},
     storage_composition::open_note_repository,
@@ -194,6 +199,12 @@ fn default_device_name(host_name: Option<&str>) -> Result<DeviceName> {
 }
 
 /// One command and where to send its outcome (errors as text, without peer payloads).
+type NetworkRequest = (
+    NetworkCommand,
+    oneshot::Sender<Result<NetworkCommandOutcome, NetworkCommandError>>,
+);
+
+/// A command for the task and where to send its outcome.
 type P2pRequest = (
     P2pCommand,
     oneshot::Sender<std::result::Result<P2pCommandOutcome, String>>,
@@ -203,6 +214,7 @@ type P2pRequest = (
 pub struct P2pHandle {
     /// Queue of commands to the task.
     commands: mpsc::Sender<P2pRequest>,
+    network_commands: mpsc::Sender<NetworkRequest>,
     /// Latest snapshot published by the task.
     snapshots: watch::Receiver<P2pSnapshot>,
     /// Queue of chunks to send to paired devices.
@@ -331,6 +343,20 @@ impl P2pControl for P2pHandle {
         P2pHandle::snapshot(self)
     }
 
+    async fn network_command(
+        &self,
+        command: NetworkCommand,
+    ) -> Result<NetworkCommandOutcome, NetworkCommandError> {
+        let (reply_sender, reply_receiver) = oneshot::channel();
+        self.network_commands
+            .send((command, reply_sender))
+            .await
+            .map_err(|_| NetworkCommandError::Stopped)?;
+        reply_receiver
+            .await
+            .map_err(|_| NetworkCommandError::Stopped)?
+    }
+
     async fn command(&self, command: P2pCommand) -> Result<P2pCommandOutcome, P2pControlError> {
         let (reply_sender, reply_receiver) = oneshot::channel();
         self.commands
@@ -369,6 +395,7 @@ pub fn spawn_p2p_task(
 ) -> Result<P2pHandle> {
     let (startup_sender, startup_receiver) = std::sync::mpsc::sync_channel(1);
     let (command_sender, command_receiver) = mpsc::channel(COMMAND_QUEUE_CAPACITY);
+    let (network_sender, network_receiver) = mpsc::channel(COMMAND_QUEUE_CAPACITY);
     let (stop_sender, stop_receiver) = oneshot::channel();
     let (remote_sender, remote_receiver) = mpsc::channel(REMOTE_TRANSCRIPTION_QUEUE_CAPACITY);
     let database_path = database_path.to_path_buf();
@@ -393,21 +420,24 @@ pub fn spawn_p2p_task(
                     config,
                     hosted_pipeline,
                 );
-                let mut service = match started {
-                    Ok(service) => service,
+                let (mut service, mut network_routes) = match started {
+                    Ok(started) => started,
                     Err(error) => {
                         let _ = startup_sender.send(Err(error));
                         return;
                     }
                 };
-                let (snapshot_sender, snapshot_receiver) = watch::channel(snapshot_of(&service));
+                let (snapshot_sender, snapshot_receiver) =
+                    watch::channel(snapshot_of(&service, &network_routes));
                 if startup_sender.send(Ok(snapshot_receiver)).is_err() {
                     return;
                 }
                 run_service(
                     &mut service,
+                    &mut network_routes,
                     snapshot_sender,
                     command_receiver,
+                    network_receiver,
                     remote_receiver,
                     stop_receiver,
                 )
@@ -421,6 +451,7 @@ pub fn spawn_p2p_task(
     tracing::info!("P2P sync started");
     Ok(P2pHandle {
         commands: command_sender,
+        network_commands: network_sender,
         remote_transcriptions: remote_sender,
         snapshots,
         stop: Mutex::new(Some(stop_sender)),
@@ -438,7 +469,7 @@ fn open_service(
     embedding_cipher: Arc<dyn EmbeddingCipher>,
     config: P2pConfig,
     hosted_pipeline: Option<PipelineConfig>,
-) -> Result<DaemonP2pService> {
+) -> Result<(DaemonP2pService, NetworkRoutes)> {
     let note_repository = open_note_repository(
         database_path,
         device_id.clone(),
@@ -469,16 +500,17 @@ fn open_service(
     adapter
         .listen_on(&config.listen_address)
         .context("unable to listen for P2P connections")?;
-    for peer_address in &config.static_peers {
-        adapter
-            .add_static_peer(peer_address)
-            .context("NOTE_TAKER_P2P_PEERS contains an invalid peer address")?;
-    }
-    if let Some(relay_address) = &config.relay_address {
-        adapter
-            .use_relay(relay_address)
-            .context("NOTE_TAKER_P2P_RELAY is invalid")?;
-    }
+    let address_store = SqlitePeerStore::open(database_path, Arc::clone(&embedding_cipher))
+        .context("unable to open the network addresses")?;
+    let network_routes = NetworkRoutes::start(
+        Box::new(address_store),
+        NetworkAddresses {
+            relay: config.relay_address.clone(),
+            peers: config.static_peers.clone(),
+        },
+        config.relay_server_address.is_some(),
+        &mut adapter,
+    )?;
     let attachment_directory = config.attachment_directory.unwrap_or_else(|| {
         database_path
             .parent()
@@ -517,7 +549,7 @@ fn open_service(
     service
         .start()
         .context("unable to load the paired devices")?;
-    Ok(service)
+    Ok((service, network_routes))
 }
 
 /// Runs the event loop until `stop` fires, all handles are gone, or the swarm ends.
@@ -525,8 +557,10 @@ fn open_service(
 /// Side effects: Drives the swarm, applies events and commands, and publishes snapshots.
 async fn run_service(
     service: &mut DaemonP2pService,
+    network_routes: &mut NetworkRoutes,
     snapshot_sender: watch::Sender<P2pSnapshot>,
     mut command_receiver: mpsc::Receiver<P2pRequest>,
+    mut network_receiver: mpsc::Receiver<NetworkRequest>,
     mut remote_receiver: mpsc::Receiver<RemoteTranscriptionJob>,
     mut stop: oneshot::Receiver<()>,
 ) {
@@ -536,7 +570,7 @@ async fn run_service(
     paired_peer_redial.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         service.process_pending_events();
-        let snapshot = snapshot_of(service);
+        let snapshot = snapshot_of(service, network_routes);
         snapshot_sender.send_if_modified(|current| {
             let changed = *current != snapshot;
             if changed {
@@ -551,6 +585,7 @@ async fn run_service(
             _ = change_poll.tick() => {
                 service.poll_local_changes();
                 service.poll_trust_changes();
+                settle_invites(service, network_routes);
             }
             _ = paired_peer_redial.tick() => service.transport_mut().redial_paired_peers(),
             swarm_result = service.transport_mut().drive_next_swarm_event() => {
@@ -564,14 +599,80 @@ async fn run_service(
                 let Some((command, reply_sender)) = request else {
                     break;
                 };
+                let revoked_peer = match &command {
+                    P2pCommand::Revoke(peer_id) => Some(peer_id.clone()),
+                    _ => None,
+                };
                 let outcome = service
                     .handle_command(command)
                     .map_err(|error| error.to_string());
+                if let (Some(peer_id), true) = (revoked_peer, outcome.is_ok()) {
+                    network_routes.forget_peer(&peer_id, service.transport_mut());
+                }
                 let _ = reply_sender.send(outcome);
+            }
+            Some((command, reply_sender)) = network_receiver.recv() => {
+                let _ = reply_sender.send(handle_network_command(service, network_routes, command));
             }
         }
     }
     tracing::info!("P2P sync stopped");
+}
+
+/// Runs a network command on the task.
+///
+/// Outputs: Its outcome. `CreateInvite` also opens the pairing window; the invite lasts as long.
+/// Side effects: Those of the command.
+fn handle_network_command(
+    service: &mut DaemonP2pService,
+    network_routes: &mut NetworkRoutes,
+    command: NetworkCommand,
+) -> Result<NetworkCommandOutcome, NetworkCommandError> {
+    let trusted_devices = service.status().trusted_devices;
+    let is_paired = |peer_id: &DeviceId| {
+        trusted_devices
+            .iter()
+            .any(|device| device.peer_id() == peer_id)
+    };
+    let opens_window = command == NetworkCommand::CreateInvite;
+    let invite_lifetime_ms = u64::try_from(PAIRING_WINDOW.as_millis()).unwrap_or(u64::MAX);
+    let outcome = run_network_command(
+        command,
+        network_routes,
+        service.transport_mut(),
+        unix_millis(),
+        invite_lifetime_ms,
+        is_paired,
+    )?;
+    if opens_window {
+        service
+            .handle_command(P2pCommand::MakePairable)
+            .map_err(|_| NetworkCommandError::Stopped)?;
+    }
+    Ok(outcome)
+}
+
+/// Stores invited devices that are now paired, and drops expired invites.
+///
+/// Side effects: See `NetworkRoutes::settle_invites`.
+fn settle_invites(service: &mut DaemonP2pService, network_routes: &mut NetworkRoutes) {
+    let status = service.status();
+    network_routes.settle_invites(
+        unix_millis(),
+        |peer_id| {
+            status
+                .trusted_devices
+                .iter()
+                .any(|device| device.peer_id() == peer_id)
+        },
+        |peer_id| {
+            status
+                .outgoing_pairings
+                .iter()
+                .any(|pairing| pairing.peer_id == *peer_id)
+        },
+        service.transport_mut(),
+    );
 }
 
 /// Sleeps until `retry_at`, or forever when no retry is scheduled.
@@ -583,10 +684,11 @@ async fn sleep_until_retry(retry_at: Option<std::time::Instant>) {
 }
 
 /// Captures the service's status and listen addresses.
-fn snapshot_of(service: &DaemonP2pService) -> P2pSnapshot {
+fn snapshot_of(service: &DaemonP2pService, network_routes: &NetworkRoutes) -> P2pSnapshot {
     P2pSnapshot {
         status: service.status(),
         listen_addresses: service.transport().listen_addresses(),
+        network: network_routes.status(service.transport()),
     }
 }
 

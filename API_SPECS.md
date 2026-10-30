@@ -31,6 +31,17 @@ The initial public contracts are Rust traits, not a network protocol:
 - `AttachmentLibrary` is the local side: it lists linked attachments, reads chunks of linked files
   only, and stores arriving files once verified. It exposes no SQLite or libp2p values.
 
+- **Other networks (Issues #64, #65).** The status has `network`: `relay_address` (or `null`),
+  `relay_state` (`not_configured`, `not_paired`, `connecting`, `connected`, `reserved`), `peers`, and
+  `offers_relay`. The FFI command `set_network_addresses` (`relay`, `peers`) validates, stores, and
+  applies them at once, and refuses with `invalid_relay_address` or `invalid_peer_address`, changing
+  nothing. Saved values replace `NOTE_TAKER_P2P_RELAY` and `NOTE_TAKER_P2P_PEERS`.
+- **Invites.** `POST /api/p2p/invites` and the FFI command `create_invite` open the pairing window
+  and return `{"invite","expires_at_ms"}`. `POST /api/p2p/invites/join` and `join_invite` (`invite`)
+  list the device as nearby and return `{"peer_id"}`. They refuse with `invite_malformed`,
+  `invite_expired`, `invite_from_this_device`, `already_paired`, or `no_addresses` (HTTP `400`,
+  `{"error_code"}`). The text is `note-taker-invite:1;<peer id>;<expires at ms>;<address>,<address>`,
+  has no secret in it, and grants no trust: pairing still needs the numeric code.
 - `PUT /api/p2p/transcription-route` (body `{"route": ...}`) and the FFI command
   `set_transcription_route` choose where chunks are transcribed: `local`, `auto`, or a paired
   device's peer ID. `transcription_route` in the P2P status shows the choice.

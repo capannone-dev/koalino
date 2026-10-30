@@ -32,6 +32,7 @@ use std::{
 
 use uuid::Uuid;
 
+use crate::domain::network_addresses::{NetworkAddresses, RelayState};
 use crate::{
     application::{
         attachment_exchange::{
@@ -179,6 +180,95 @@ pub enum P2pServiceError {
     RouteStorage(#[from] StorageError),
 }
 
+/// A request about this device's routes to other networks (Issues #64 and #65).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NetworkCommand {
+    /// Replaces the relay and static peers, live.
+    SetAddresses(NetworkAddresses),
+    /// Opens the pairing window and makes an invite that lasts as long as it does.
+    CreateInvite,
+    /// Lists the device an invite names as a pairing candidate.
+    JoinInvite(String),
+}
+
+/// The result of one `NetworkCommand`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum NetworkCommandOutcome {
+    /// The command took effect and has nothing to report.
+    Done,
+    /// The invite to show, and when it ends.
+    Invite {
+        /// Invite text, for a link or a QR code.
+        text: String,
+        /// When it ends, in milliseconds since the Unix epoch.
+        expires_at_ms: u64,
+    },
+    /// The device the invite named, now listed as nearby.
+    Joined(DeviceId),
+}
+
+/// Why a `NetworkCommand` was refused; nothing changed in any of these cases.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum NetworkCommandError {
+    /// The relay address does not parse, lacks `/p2p/<id>`, is a circuit, or names this device.
+    #[error("the relay address is invalid")]
+    InvalidRelayAddress,
+    /// A peer address does not parse, lacks `/p2p/<id>`, or names this device.
+    #[error("a peer address is invalid")]
+    InvalidPeerAddress,
+    /// The invite is not one this version understands.
+    #[error("the invite is malformed")]
+    InviteMalformed,
+    /// The invite's time has passed.
+    #[error("the invite has expired")]
+    InviteExpired,
+    /// The invite was made on this device.
+    #[error("the invite was made on this device")]
+    InviteFromThisDevice,
+    /// The invite's device is already paired with this one.
+    #[error("that device is already paired")]
+    AlreadyPaired,
+    /// This device has no address to put in an invite.
+    #[error("this device has no address to share")]
+    NoAddresses,
+    /// The addresses could not be stored.
+    #[error("the addresses could not be stored")]
+    Storage,
+    /// The P2P task is not running.
+    #[error("P2P sync is not running")]
+    Stopped,
+}
+
+impl NetworkCommandError {
+    /// Returns the machine-readable code the apps turn into their own wording.
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::InvalidRelayAddress => "invalid_relay_address",
+            Self::InvalidPeerAddress => "invalid_peer_address",
+            Self::InviteMalformed => "invite_malformed",
+            Self::InviteExpired => "invite_expired",
+            Self::InviteFromThisDevice => "invite_from_this_device",
+            Self::AlreadyPaired => "already_paired",
+            Self::NoAddresses => "no_addresses",
+            Self::Storage => "storage_failed",
+            Self::Stopped => "unavailable",
+        }
+    }
+}
+
+/// This device's routes to other networks, for the status.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct NetworkRouteStatus {
+    /// The relay in effect, ending in `/p2p/<relay id>`.
+    pub relay_address: Option<String>,
+    /// How far this device has got with that relay.
+    pub relay_state: RelayState,
+    /// Static peers in effect; devices paired through invites are not listed.
+    pub peers: Vec<String>,
+    /// Whether this device is itself a relay for the owner's other devices.
+    pub offers_relay: bool,
+}
+
 /// A chunk this device wants a paired device to transcribe, and where the answer goes.
 pub struct RemoteTranscriptionJob {
     /// The device to ask.
@@ -256,6 +346,8 @@ pub struct P2pSnapshot {
     pub status: P2pStatus,
     /// Addresses the node listens on, as multiaddress text.
     pub listen_addresses: Vec<String>,
+    /// Routes to other networks.
+    pub network: NetworkRouteStatus,
 }
 
 /// Why a driving adapter's P2P request failed.
@@ -280,6 +372,17 @@ pub trait P2pControl: Send + Sync {
     /// Outputs: The outcome, `Refused` when the command failed, or `Stopped`.
     /// Side effects: Those of the command.
     async fn command(&self, command: P2pCommand) -> Result<P2pCommandOutcome, P2pControlError>;
+
+    /// Runs a network `command` on the P2P task and returns its outcome.
+    ///
+    /// Outputs: The outcome or why it was refused; by default `Stopped`.
+    /// Side effects: Those of the command.
+    async fn network_command(
+        &self,
+        _command: NetworkCommand,
+    ) -> Result<NetworkCommandOutcome, NetworkCommandError> {
+        Err(NetworkCommandError::Stopped)
+    }
 
     /// Reports that `meeting_id` was just written locally, without waiting.
     ///

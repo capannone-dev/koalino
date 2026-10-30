@@ -77,6 +77,7 @@ fn snapshot() -> P2pSnapshot {
     let phone = DeviceId::new(PHONE);
     let tablet = DeviceId::new("12D3KooWTablet");
     P2pSnapshot {
+        network: Default::default(),
         status: P2pStatus {
             transcription_route: crate::application::compute_router::ComputePreference::LocalOnly,
             local_peer_id: laptop.clone(),
@@ -224,6 +225,12 @@ async fn status_lists_devices_pairings_and_updates() {
                     }
                 }
             ],
+            "network": {
+                "relay_address": null,
+                "relay_state": "not_configured",
+                "peers": [],
+                "offers_relay": false,
+            },
             "nearby_devices": [{ "peer_id": "12D3KooWTablet" }],
             "incoming_requests": [
                 { "peer_id": "12D3KooWTablet", "device_name": "Tablet", "code": tablet_code.as_str() }

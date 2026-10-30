@@ -27,3 +27,6 @@ domain values based on portable UTC meeting windows.
 
 `transcription_language.rs` defines the language a recording is transcribed in (Issue #62): AUTO or a
 code whisper.cpp knows.
+
+`network_addresses.rs` holds the relay and static peer addresses, and the pairing invite's text form.
+Invite text is untrusted, so parsing bounds every part (Issues #64 and #65).

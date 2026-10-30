@@ -56,6 +56,20 @@ pub struct P2pStatusDetails {
     pub incoming_requests: Vec<IncomingRequestView>,
     pub outgoing_pairings: Vec<OutgoingPairingView>,
     pub recent_updates: Vec<PairingUpdateView>,
+    /// Routes to other networks.
+    pub network: NetworkRouteView,
+}
+
+/// This device's relay and static peers (Issue #64).
+#[derive(Serialize)]
+pub struct NetworkRouteView {
+    /// The relay in effect; `null` without one.
+    pub relay_address: Option<String>,
+    /// `not_configured`, `not_paired`, `connecting`, `connected`, or `reserved`.
+    pub relay_state: &'static str,
+    pub peers: Vec<String>,
+    /// Whether this device is itself a relay.
+    pub offers_relay: bool,
 }
 
 /// A paired device.
@@ -191,6 +205,12 @@ pub fn status_view(snapshot: Option<&P2pSnapshot>) -> P2pStatusView {
             device_name: status.device_name.as_str().to_owned(),
             transcription_route: route_text(&status.transcription_route),
             listen_addresses: snapshot.listen_addresses.clone(),
+            network: NetworkRouteView {
+                relay_address: snapshot.network.relay_address.clone(),
+                relay_state: snapshot.network.relay_state.as_str(),
+                peers: snapshot.network.peers.clone(),
+                offers_relay: snapshot.network.offers_relay,
+            },
             capabilities: CapabilitiesView::from(&status.local_manifest),
             trusted_devices: status
                 .trusted_devices

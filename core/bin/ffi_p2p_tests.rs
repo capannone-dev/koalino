@@ -432,3 +432,126 @@ fn the_composed_task_routes_transcription_and_reports_a_refusal() {
     assert!(matches!(answer, Err(TranscriptionError::Unavailable)));
     assert!(started.elapsed() < Duration::from_secs(30));
 }
+
+/// Verifies Settings' addresses are checked, apply live, and survive a restart.
+#[test]
+fn network_addresses_are_validated_and_survive_a_restart() {
+    let database_path = fresh_database("addresses");
+    let relay = "/ip4/192.0.2.1/tcp/4001/p2p/12D3KooWGzBXAxb7K8mqbh3XwXgXzmvGD2QK1ep2zV7EMTwQgbQa";
+    let task = start_task_at(&database_path, "addresses", &[]);
+
+    let bad_relay = command(
+        &task,
+        r#"{"command":"set_network_addresses","relay":"not an address","peers":[]}"#,
+    );
+    let circuit_relay = command(
+        &task,
+        &format!(
+            r#"{{"command":"set_network_addresses","relay":"{relay}/p2p-circuit/p2p/{}","peers":[]}}"#,
+            "12D3KooWGzBXAxb7K8mqbh3XwXgXzmvGD2QK1ep2zV7EMTwQgbQa"
+        ),
+    );
+    let bad_peer = command(
+        &task,
+        r#"{"command":"set_network_addresses","peers":["/ip4/192.0.2.1/tcp/4001"]}"#,
+    );
+    let saved = command(
+        &task,
+        &format!(r#"{{"command":"set_network_addresses","relay":"{relay}","peers":[" "]}}"#),
+    );
+    let live = wait_for_status(&task, |status| {
+        status["network"]["relay_state"] == "not_paired"
+    });
+    task.shutdown();
+    let restarted = start_task_at(&database_path, "addresses", &[]);
+    let after_restart = wait_for_status(&restarted, |status| {
+        status["network"]["relay_address"] == relay
+    });
+
+    assert_eq!(bad_relay["error_code"], "invalid_relay_address");
+    assert_eq!(circuit_relay["error_code"], "invalid_relay_address");
+    assert_eq!(bad_peer["error_code"], "invalid_peer_address");
+    assert_eq!(saved["ok"], true);
+    assert_eq!(live["network"]["relay_address"], relay);
+    assert_eq!(live["network"]["peers"], serde_json::json!([]));
+    assert_eq!(after_restart["network"]["relay_state"], "not_paired");
+}
+
+/// Verifies two devices with no addresses for each other pair with only an invite and the code,
+/// that a stranger's invite grants nothing without the code, and that the route survives a restart.
+#[test]
+fn an_invite_finds_a_device_but_pairing_still_needs_the_code() {
+    let inviter = start_task("inviter", &[]);
+    let joiner_database = fresh_database("joiner");
+    let joiner = start_task_at(&joiner_database, "joiner", &[]);
+
+    let own_invite = command(&inviter, r#"{"command":"create_invite"}"#);
+    let invite = own_invite["invite"].as_str().unwrap_or_default().to_owned();
+    let own_join = command(
+        &inviter,
+        &serde_json::json!({"command":"join_invite","invite":invite}).to_string(),
+    );
+    let malformed = command(&joiner, r#"{"command":"join_invite","invite":"hello"}"#);
+    let expired = command(
+        &joiner,
+        &serde_json::json!({
+            "command": "join_invite",
+            "invite": "note-taker-invite:1;12D3KooWPeer;1;/ip4/192.0.2.1/tcp/4001",
+        })
+        .to_string(),
+    );
+    let unchanged = wait_for_status(&joiner, |_| true);
+    let joined = command(
+        &joiner,
+        &serde_json::json!({"command":"join_invite","invite":invite}).to_string(),
+    );
+    let inviter_id = joined["peer_id"].as_str().unwrap_or_default().to_owned();
+    let listed = wait_for_status(&joiner, |status| {
+        status["nearby_devices"][0]["peer_id"] == inviter_id.as_str()
+    });
+
+    assert_eq!(own_invite["ok"], true);
+    assert!(own_invite["expires_at_ms"].as_u64().is_some());
+    assert_eq!(own_join["error_code"], "invite_from_this_device");
+    assert_eq!(malformed["error_code"], "invite_malformed");
+    assert_eq!(expired["error_code"], "invite_expired");
+    assert_eq!(unchanged["nearby_devices"], serde_json::json!([]));
+    assert_eq!(listed["trusted_devices"], serde_json::json!([]));
+
+    let started = command(
+        &joiner,
+        &format!(r#"{{"command":"start_pairing","peer_id":"{inviter_id}"}}"#),
+    );
+    let requested = wait_for_status(&inviter, |status| {
+        status["incoming_requests"][0]["code"] == started["code"]
+    });
+    let joiner_id = requested["incoming_requests"][0]["peer_id"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert_eq!(started["ok"], true);
+    assert_eq!(requested["trusted_devices"], serde_json::json!([]));
+    command(
+        &inviter,
+        &format!(r#"{{"command":"accept_request","peer_id":"{joiner_id}"}}"#),
+    );
+    command(
+        &joiner,
+        &format!(r#"{{"command":"confirm_code","peer_id":"{inviter_id}"}}"#),
+    );
+    let paired = wait_for_status(&joiner, |status| {
+        status["trusted_devices"][0]["peer_id"] == inviter_id.as_str()
+    });
+    assert_eq!(paired["trusted_devices"][0]["peer_id"], inviter_id.as_str());
+
+    // The invited address must be stored by the next tick, so a restart can reconnect.
+    std::thread::sleep(Duration::from_millis(1_500));
+    joiner.shutdown();
+    let restarted = start_task_at(&joiner_database, "joiner", &[]);
+    let reconnected = wait_for_status(&restarted, |status| {
+        !status["trusted_devices"][0]["capabilities"].is_null()
+    });
+    assert!(!reconnected["trusted_devices"][0]["capabilities"].is_null());
+    inviter.shutdown();
+    restarted.shutdown();
+}

@@ -39,6 +39,8 @@ pub mod ffi_p2p;
 pub mod ffi_settings;
 #[path = "bin/p2p_composition.rs"]
 pub mod p2p_composition;
+#[path = "bin/p2p_network_routes.rs"]
+pub mod p2p_network_routes;
 /// Composes the live meeting pipeline from environment configuration.
 #[path = "bin/pipeline_composition.rs"]
 pub mod pipeline_composition;
