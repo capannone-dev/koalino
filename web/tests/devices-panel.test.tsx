@@ -16,7 +16,9 @@ vi.mock("@/lib/p2p-api", async () => ({
   cancelPairing: vi.fn(),
   acceptPairingRequest: vi.fn(),
   rejectPairingRequest: vi.fn(),
-  removeDevice: vi.fn()
+  removeDevice: vi.fn(),
+  createInvite: vi.fn(),
+  joinInvite: vi.fn()
 }));
 
 const nearbyPeerId = "12D3KooWNearbyPeer000000000000000000000000000abcdef";
@@ -36,6 +38,7 @@ function runningStatus(overrides: Partial<Extract<P2pStatus, { enabled: true }>>
     incoming_requests: [],
     outgoing_pairings: [],
     recent_updates: [],
+    network: { relay_address: null, relay_state: "not_configured", peers: [], offers_relay: false },
     ...overrides
   };
 }
@@ -69,9 +72,7 @@ test("shows this device and the empty sections", () => {
 
   expect(screen.getByText("Office server")).toBeInTheDocument();
   expect(screen.getByText("No paired devices yet.")).toBeInTheDocument();
-  expect(
-    screen.getByText("No other devices found. Open Note Taker on another device on this network and make it discoverable.")
-  ).toBeInTheDocument();
+  expect(screen.getByText(/Nearby only finds devices on the same Wi-Fi.*give this server a relay/)).toBeInTheDocument();
 });
 
 test("Make discoverable opens the pairing window", async () => {
@@ -206,7 +207,7 @@ test("shows what each device can run, and which paired devices are not connected
 
   expect(screen.getByText("8 CPU cores · Whisper (on device)")).toBeInTheDocument();
   expect(screen.getByText("16 CPU cores · 8 GB GPU · Whisper (on device), OpenAI (cloud)")).toBeInTheDocument();
-  expect(screen.getByText("Not connected")).toBeInTheDocument();
+  expect(screen.getByText(/^Not connected\. Put both devices on the same Wi-Fi/)).toBeInTheDocument();
 });
 
 test("a device that runs no models says so", () => {
@@ -219,4 +220,44 @@ test("a device that runs no models says so", () => {
   );
 
   expect(screen.getByText("1 CPU core · 512 MB GPU · No transcription models")).toBeInTheDocument();
+});
+
+test("with a relay, the empty and disconnected messages do not ask for one", () => {
+  render(
+    <DevicesPanel
+      initialStatus={runningStatus({
+        network: { relay_address: "/ip4/203.0.113.5/tcp/4001/p2p/relay", relay_state: "reserved", peers: [], offers_relay: false },
+        trusted_devices: [{ peer_id: pairedPeerId, device_name: "Phone", paired_at_ms: Date.UTC(2026, 9, 28), capabilities: null }]
+      })}
+    />
+  );
+
+  expect(screen.getByText(/Nearby only finds devices on the same Wi-Fi/)).toBeInTheDocument();
+  expect(screen.queryByText(/NOTE_TAKER_P2P_RELAY/)).not.toBeInTheDocument();
+  expect(screen.getByText(/can reach your relay/)).toBeInTheDocument();
+});
+
+test("Show invite displays the link and when it ends", async () => {
+  vi.mocked(p2pApi.createInvite).mockResolvedValue({ invite: "note-taker-invite:1;peer;5;/ip4/1.2.3.4/tcp/1", expires_at_ms: Date.UTC(2026, 9, 30, 12) });
+  render(<DevicesPanel initialStatus={runningStatus()} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Show invite" }));
+
+  expect(await screen.findByText("note-taker-invite:1;peer;5;/ip4/1.2.3.4/tcp/1")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Copy link" })).toBeInTheDocument();
+});
+
+test("using an invite says what comes next, and a refusal says why", async () => {
+  vi.mocked(p2pApi.joinInvite).mockRejectedValueOnce(new p2pApi.InviteError("invite_expired")).mockResolvedValueOnce({ peer_id: "peer" });
+  render(<DevicesPanel initialStatus={runningStatus()} />);
+  const field = screen.getByLabelText("Invite from another device");
+
+  fireEvent.change(field, { target: { value: "old invite" } });
+  fireEvent.click(screen.getByRole("button", { name: "Find device" }));
+  expect(await screen.findByText("This invite has expired. Make a new one on the other device.")).toBeInTheDocument();
+
+  fireEvent.change(field, { target: { value: "new invite" } });
+  fireEvent.click(screen.getByRole("button", { name: "Find device" }));
+  expect(await screen.findByText("Device found. Choose Pair under Nearby devices.")).toBeInTheDocument();
+  expect(p2pApi.joinInvite).toHaveBeenLastCalledWith("new invite");
 });

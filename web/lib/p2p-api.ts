@@ -51,7 +51,30 @@ export type P2pStatus =
       incoming_requests: IncomingPairingRequest[];
       outgoing_pairings: OutgoingPairing[];
       recent_updates: PairingUpdate[];
+      /** Routes to other networks. */
+      network: NetworkRoutes;
     };
+
+/** This device's relay and static peers, from `NOTE_TAKER_P2P_RELAY` and `NOTE_TAKER_P2P_PEERS`. */
+export type NetworkRoutes = {
+  relay_address: string | null;
+  relay_state: "not_configured" | "not_paired" | "connecting" | "connected" | "reserved";
+  peers: string[];
+  /** Whether this server is itself a relay for the owner's other devices. */
+  offers_relay: boolean;
+};
+/** An invite to use on another device, and when it ends in Unix milliseconds. */
+export type PairingInvite = { invite: string; expires_at_ms: number };
+/** Why an invite could not be made or used. */
+export type InviteFailureCode = "invite_malformed" | "invite_expired" | "invite_from_this_device" | "already_paired" | "no_addresses" | "unavailable" | "other";
+
+/** Thrown by the invite calls; its code picks the message. */
+export class InviteError extends Error {
+  constructor(readonly code: InviteFailureCode) {
+    super(`Invite request failed: ${code}`);
+    this.name = "InviteError";
+  }
+}
 
 /**
  * Why a device sync request failed: `invalid_peer` (400), `not_found` (404, not paired), `refused`
@@ -195,3 +218,42 @@ export async function setTranscriptionRoute(route: string): Promise<void> {
     body: JSON.stringify({ route })
   });
 }
+
+/**
+ * Sends an invite request, mapping refusals to `InviteError`.
+ *
+ * Inputs: the route and the JSON body. Outputs: the parsed 2xx answer. Side effects: one HTTP
+ * request.
+ */
+async function inviteRequest<T>(path: string, body: object): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+  } catch {
+    throw new P2pRequestError("network", null);
+  }
+  if (response.ok) return (await response.json()) as T;
+  const known: InviteFailureCode[] = ["invite_malformed", "invite_expired", "invite_from_this_device", "already_paired", "no_addresses", "unavailable"];
+  const code = ((await response.json().catch(() => ({}))) as { error_code?: InviteFailureCode }).error_code;
+  throw new InviteError(code && known.includes(code) ? code : "other");
+}
+
+/**
+ * Makes an invite through `POST /api/p2p/invites`.
+ *
+ * Outputs: the invite. Throws `InviteError` or `P2pRequestError`.
+ * Side effects: the daemon accepts pairing requests until it ends; pairing still needs the code.
+ */
+export const createInvite = () => inviteRequest<PairingInvite>("/api/p2p/invites", {});
+
+/**
+ * Passes another device's invite to `POST /api/p2p/invites/join`.
+ *
+ * Inputs: invite text as pasted, untrusted. Outputs: the device, now listed as nearby. Throws
+ * `InviteError` or `P2pRequestError`. Side effects: no trust is granted.
+ */
+export const joinInvite = (invite: string) => inviteRequest<{ peer_id: string }>("/api/p2p/invites/join", { invite });

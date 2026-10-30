@@ -10,13 +10,18 @@ import {
   acceptPairingRequest,
   cancelPairing,
   confirmPairingCode,
+  createInvite,
   getP2pStatus,
+  InviteError,
+  joinInvite,
   makeDiscoverable,
   P2pRequestError,
   rejectPairingRequest,
   removeDevice,
   startPairing,
   type DeviceCapabilities,
+  type InviteFailureCode,
+  type PairingInvite,
   type P2pFailureKind,
   type P2pStatus,
   type PairingUpdate,
@@ -40,8 +45,33 @@ const failureMessages: Record<P2pFailureKind, string> = {
   server: "That did not work. Try again."
 };
 
+/** Plain messages per invite refusal. */
+const inviteMessages: Record<InviteFailureCode, string> = {
+  invite_malformed: "That is not a valid invite. Copy it again.",
+  invite_expired: "This invite has expired. Make a new one on the other device.",
+  invite_from_this_device: "This invite was made on this device. Use it on the other one.",
+  already_paired: "That device is already paired.",
+  no_addresses: "This server is not on a network yet. Connect it and try again.",
+  unavailable: "Device sync is not running.",
+  other: "That did not work. Try again."
+};
+
+/** Explains an empty Nearby list: it only covers this network, and what to do otherwise. */
+export function describeEmptyNearby(hasRelay: boolean): string {
+  const nextStep = hasRelay ? "use an invite." : "use an invite, or give this server a relay with NOTE_TAKER_P2P_RELAY.";
+  return `No other devices found on this network. Nearby only finds devices on the same Wi-Fi. For a device on another network, ${nextStep}`;
+}
+
+/** Explains what a paired device that is not connected needs to reconnect. */
+export function describeDisconnectedDevice(hasRelay: boolean): string {
+  return hasRelay
+    ? "Not connected. It reconnects when it is online and can reach your relay."
+    : "Not connected. Put both devices on the same Wi-Fi, or give this server a relay with NOTE_TAKER_P2P_RELAY.";
+}
+
 /** Words any thrown value as a failure message. */
 function failureMessage(error: unknown): string {
+  if (error instanceof InviteError) return inviteMessages[error.code];
   return failureMessages[error instanceof P2pRequestError ? error.kind : "server"];
 }
 
@@ -114,6 +144,8 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
   const [isBusy, setIsBusy] = useState(false);
   const [discoverableUntilMs, setDiscoverableUntilMs] = useState<number | null>(null);
   const [deviceToRemove, setDeviceToRemove] = useState<TrustedDevice | null>(null);
+  const [invite, setInvite] = useState<PairingInvite | null>(null);
+  const [inviteText, setInviteText] = useState("");
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -160,6 +192,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
     );
   }
 
+  const hasRelay = status.network.relay_address !== null || status.network.offers_relay;
   const isDiscoverable = discoverableUntilMs !== null && Date.now() < discoverableUntilMs;
 
   return (
@@ -236,7 +269,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
               <div>
                 <p className="font-semibold">{device.device_name}</p>
                 <p className="text-sm text-muted">{`Paired ${formatPairedDate(device.paired_at_ms)}`}</p>
-                <p className="text-sm text-muted">{device.capabilities ? describeCapabilities(device.capabilities) : "Not connected"}</p>
+                <p className="text-sm text-muted">{device.capabilities ? describeCapabilities(device.capabilities) : describeDisconnectedDevice(hasRelay)}</p>
               </div>
               {deviceToRemove?.peer_id !== device.peer_id && (
                 <button type="button" className={secondaryButton} aria-label={`Remove ${device.device_name}`} disabled={isBusy} onClick={() => setDeviceToRemove(device)}>
@@ -274,7 +307,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
 
       <DeviceSection title="Nearby devices">
         {status.nearby_devices.length === 0 && (
-          <p className="text-muted">No other devices found. Open Note Taker on another device on this network and make it discoverable.</p>
+          <p className="text-muted">{describeEmptyNearby(hasRelay)}</p>
         )}
         {status.nearby_devices.map((device) => (
           <div key={device.peer_id} className="card flex items-center justify-between gap-4">
@@ -284,6 +317,53 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
             </button>
           </div>
         ))}
+      </DeviceSection>
+
+      <DeviceSection title="Another network">
+        <p className="text-muted">Show an invite here and use it on the other device. You still compare a code before they pair.</p>
+        <button
+          type="button"
+          className={secondaryButton}
+          disabled={isBusy}
+          onClick={() =>
+            void runStep(async () => {
+              const created = await createInvite();
+              setInvite(created);
+              setDiscoverableUntilMs(created.expires_at_ms);
+              return null;
+            })
+          }
+        >
+          Show invite
+        </button>
+        {invite && (
+          <div className="card space-y-2">
+            <p className="break-all font-mono text-sm">{invite.invite}</p>
+            <p className="text-sm text-muted">{`Works until ${new Date(invite.expires_at_ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}.`}</p>
+            <button type="button" className={secondaryButton} onClick={() => void navigator.clipboard?.writeText(invite.invite)}>
+              Copy link
+            </button>
+          </div>
+        )}
+        <form
+          className="space-y-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void runStep(async () => {
+              await joinInvite(inviteText);
+              setInviteText("");
+              return "Device found. Choose Pair under Nearby devices.";
+            });
+          }}
+        >
+          <label className="block">
+            Invite from another device
+            <input className="w-full" type="text" autoComplete="off" value={inviteText} onChange={(event) => setInviteText(event.target.value)} />
+          </label>
+          <button type="submit" className={secondaryButton} disabled={isBusy || inviteText.trim() === ""}>
+            Find device
+          </button>
+        </form>
       </DeviceSection>
     </div>
   );
