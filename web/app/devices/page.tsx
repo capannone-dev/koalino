@@ -9,7 +9,7 @@ export default async function DevicesPage() {
   return (
     <section className="space-y-4">
       <h1 className="text-2xl font-bold sm:text-3xl">Devices</h1>
-      <p className="max-w-2xl text-muted">Pair your own devices to keep their meetings in sync over the local network.</p>
+      <p className="max-w-2xl text-muted">Pair your own devices to keep their meetings in sync.</p>
       <DevicesPanel initialStatus={status} />
     </section>
   );

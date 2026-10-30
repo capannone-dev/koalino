@@ -43,32 +43,32 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
   }
 
   return (
-    <section>
-      <h1>Voice gallery</h1>
+    <section className="space-y-4">
+      <h1 className="text-3xl font-bold">Voice gallery</h1>
       <datalist id="saved-people">
         {people.map((person) => <option key={person.identity_id} value={person.display_name} />)}
       </datalist>
-      <h2>Unknown speakers</h2>
+      <h2 className="text-lg font-semibold">Unknown speakers</h2>
       {pendingClusters.length === 0 ? <p>No unknown speakers to review.</p> : null}
       {pendingClusters.map((cluster, index) => {
         const speakerLabel = `Unknown speaker ${index + 1}`;
         return (
-          <article className="card" key={cluster.cluster_id}>
-            <h3>{speakerLabel}</h3>
+          <article className="card space-y-2" key={cluster.cluster_id}>
+            <h3 className="font-semibold">{speakerLabel}</h3>
             <p>{formatSummary(cluster)}</p>
             <p>{cluster.meeting_title ?? "Untitled meeting"}</p>
             {cluster.has_review_clip ? <audio controls preload="none" src={reviewClipUrl(cluster.cluster_id)} aria-label={`Listen to ${speakerLabel.toLowerCase()}`} /> : null}
-            <form onSubmit={(event) => submitAssignment(event, cluster)}>
-              <label>Name
-                <input name="identityName" type="text" aria-label={`Name for ${speakerLabel.toLowerCase()}`} autoComplete="off" list="saved-people" />
+            <form className="space-y-2" onSubmit={(event) => submitAssignment(event, cluster)}>
+              <label className="block">Name
+                <input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" name="identityName" type="text" aria-label={`Name for ${speakerLabel.toLowerCase()}`} autoComplete="off" list="saved-people" />
               </label>
-              <button type="submit">Assign</button>
+              <button className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong" type="submit">Assign</button>
             </form>
           </article>
         );
       })}
       <p aria-live="polite">{message}</p>
-      <h2>Saved people</h2>
+      <h2 className="text-lg font-semibold">Saved people</h2>
       {people.length === 0 ? <p>No saved people yet. Name a voice to add someone.</p> : null}
       <ul>
         {people.map((person) => (

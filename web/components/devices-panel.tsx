@@ -358,7 +358,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
         >
           <label className="block">
             Invite from another device
-            <input className="w-full" type="text" autoComplete="off" value={inviteText} onChange={(event) => setInviteText(event.target.value)} />
+            <input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" type="text" autoComplete="off" value={inviteText} onChange={(event) => setInviteText(event.target.value)} />
           </label>
           <button type="submit" className={secondaryButton} disabled={isBusy || inviteText.trim() === ""}>
             Find device
