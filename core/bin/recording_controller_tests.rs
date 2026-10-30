@@ -26,6 +26,7 @@ use crate::{
             AudioRecording, AudioState, DeviceId, MeetingId, MeetingTitle, Transcript,
             TranscriptSegment, TranscriptionContext,
         },
+        transcription_language::TranscriptionLanguage,
     },
     ports::{
         ai::TranscriptionEngine,
@@ -54,7 +55,7 @@ impl TranscriptionEngine for StoreReadingTranscriptionEngine {
     fn transcribe(
         &self,
         audio_recording: &AudioRecording,
-        _transcription_context: &TranscriptionContext,
+        transcription_context: &TranscriptionContext,
     ) -> Result<Transcript, TranscriptionError> {
         if !self.reads_audio {
             return Err(TranscriptionError::Unavailable);
@@ -63,7 +64,10 @@ impl TranscriptionEngine for StoreReadingTranscriptionEngine {
         let duration_ms = (wav_bytes.len() - 44) / 2 * 1_000 / SAMPLES_PER_SECOND;
         Ok(Transcript::new(
             audio_recording.meeting_id().clone(),
-            format!("chunk of {duration_ms} ms"),
+            match transcription_context.language() {
+                Some(language) => format!("chunk of {duration_ms} ms in {}", language.as_str()),
+                None => format!("chunk of {duration_ms} ms"),
+            },
         ))
     }
 }
@@ -559,4 +563,32 @@ fn the_recorded_meeting_reports_its_current_meeting_time() {
         .stop()
         .unwrap_or_else(|error| panic!("stop should succeed: {error}"));
     assert_eq!(controller.current_meeting_time_ms(&meeting_id), None);
+}
+
+/// The language set before a start applies from the first chunk; one set during the recording
+/// applies to chunks cut after it; and the next recording starts without either.
+#[test]
+fn the_language_applies_from_the_next_chunk_and_ends_with_the_recording() {
+    let language = |code: &str| {
+        TranscriptionLanguage::parse(code).unwrap_or_else(|error| panic!("{code}: {error}"))
+    };
+    let (mut controller, _) = controller_with(true, |_| {});
+    controller.set_language(Some(language("it")));
+    let meeting_id = controller
+        .start(Some(MeetingId::new("meeting-languages")))
+        .unwrap_or_else(|error| panic!("recording should start: {error}"));
+    controller
+        .push_pcm(pcm_seconds(16))
+        .unwrap_or_else(|error| panic!("PCM should be accepted: {error}"));
+    controller.set_language(Some(language("en")));
+    controller
+        .stop()
+        .unwrap_or_else(|error| panic!("recording should stop: {error}"));
+
+    let texts: Vec<String> = stored_segments(&controller, &meeting_id)
+        .iter()
+        .map(|segment| segment.text().to_owned())
+        .collect();
+    assert_eq!(texts, ["chunk of 15000 ms in it", "chunk of 1000 ms in en"]);
+    assert_eq!(controller.language(), None);
 }

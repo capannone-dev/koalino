@@ -34,6 +34,7 @@ use crate::{
             RecordingId, SpeakerIdentity, Transcript, TranscriptSegment, TranscriptionContext,
             UnassignedVoiceClip, VoiceEmbedding, VoiceMatchResult,
         },
+        transcription_language::TranscriptionLanguage,
     },
     ports::{
         ai::{DiarizationEngine, SpeakerSegment, TranscriptionEngine},
@@ -51,6 +52,7 @@ struct MockTranscriptionEngine {
     fails: bool,
     /// The previous text each `transcribe` call received, in call order.
     received_previous_texts: RefCell<Vec<Option<String>>>,
+    received_languages: RefCell<Vec<Option<TranscriptionLanguage>>>,
 }
 
 impl MockTranscriptionEngine {
@@ -60,6 +62,7 @@ impl MockTranscriptionEngine {
             scripted_texts: RefCell::new(scripted_texts.iter().rev().copied().collect()),
             fails: false,
             received_previous_texts: RefCell::new(Vec::new()),
+            received_languages: RefCell::new(Vec::new()),
         }
     }
 
@@ -69,6 +72,7 @@ impl MockTranscriptionEngine {
             scripted_texts: RefCell::new(Vec::new()),
             fails: true,
             received_previous_texts: RefCell::new(Vec::new()),
+            received_languages: RefCell::new(Vec::new()),
         }
     }
 
@@ -96,6 +100,9 @@ impl TranscriptionEngine for MockTranscriptionEngine {
         self.received_previous_texts
             .borrow_mut()
             .push(transcription_context.previous_text().map(str::to_owned));
+        self.received_languages
+            .borrow_mut()
+            .push(transcription_context.language());
         self.next_transcript(audio_recording.meeting_id())
     }
 
@@ -1244,5 +1251,37 @@ async fn chunks_are_transcribed_without_the_previous_chunks_text() {
             .received_previous_texts
             .borrow(),
         vec![None, None]
+    );
+}
+
+/// Each chunk is transcribed in the language it was stamped with, so a change during a recording
+/// reaches only the chunks cut after it.
+#[tokio::test]
+async fn a_chunks_language_reaches_the_engine() {
+    let mut session: MockSession = MeetingSession::start(
+        MeetingId::new(MEETING_ID),
+        MockTranscriptionEngine::returning(&["uno", "two"]),
+        None,
+        MockVoiceIdentityMatcher {
+            known_identity_id: Uuid::new_v4(),
+            weak_candidate_id: Uuid::new_v4(),
+        },
+        MockNoteRepository::default(),
+    )
+    .unwrap_or_else(|error| panic!("session should start: {error}"));
+    let italian = TranscriptionLanguage::parse("it").ok();
+
+    session
+        .process_vad_chunk(&vad_chunk(1, 0, 3_000).with_language(italian))
+        .await
+        .unwrap_or_else(|error| panic!("chunk should process: {error}"));
+    session
+        .process_vad_chunk(&vad_chunk(2, 3_000, 6_000))
+        .await
+        .unwrap_or_else(|error| panic!("chunk should process: {error}"));
+
+    assert_eq!(
+        *session.transcription_engine().received_languages.borrow(),
+        vec![italian, None]
     );
 }

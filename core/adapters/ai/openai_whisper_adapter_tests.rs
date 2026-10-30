@@ -10,6 +10,7 @@ use crate::{
     domain::{
         errors::TranscriptionError,
         models::{AudioRecording, DeviceId, MeetingId, RecordingId, TranscriptionContext},
+        transcription_language::TranscriptionLanguage,
     },
     ports::ai::TranscriptionEngine,
 };
@@ -20,12 +21,14 @@ type CapturedRequest = (String, String, String, Vec<u8>, Option<String>);
 struct MockHttpClient {
     responses: Arc<Mutex<Vec<OpenAiHttpResponse>>>,
     requests: Arc<Mutex<Vec<CapturedRequest>>>,
+    languages: Arc<Mutex<Vec<Option<String>>>>,
 }
 impl MockHttpClient {
     fn new(responses: Vec<OpenAiHttpResponse>) -> Self {
         Self {
             responses: Arc::new(Mutex::new(responses)),
             requests: Arc::new(Mutex::new(Vec::new())),
+            languages: Arc::new(Mutex::new(Vec::new())),
         }
     }
 }
@@ -49,6 +52,10 @@ impl OpenAiHttpClient for MockHttpClient {
                 audio_bytes,
                 options.prompt().map(str::to_owned),
             ));
+        self.languages
+            .lock()
+            .map_err(|_| TranscriptionError::Unavailable)?
+            .push(options.language().map(str::to_owned));
         self.responses
             .lock()
             .map_err(|_| TranscriptionError::Unavailable)?
@@ -164,5 +171,42 @@ fn openai_adapter_receives_context_previous_text_and_includes_multipart_prompt_f
     assert_eq!(
         recorded_requests[0].4.as_deref(),
         Some("previous chunk text")
+    );
+}
+
+/// A chunk's language replaces the configured one, and AUTO sends none, so the API detects it.
+#[test]
+fn a_chunks_language_replaces_the_configured_one() {
+    let http = MockHttpClient::new(vec![
+        OpenAiHttpResponse::success(r#"{"text":"c"}"#),
+        OpenAiHttpResponse::success(r#"{"text":"b"}"#),
+        OpenAiHttpResponse::success(r#"{"text":"a"}"#),
+    ]);
+    let languages = http.languages.clone();
+    let engine = OpenAiWhisperTranscriptionEngine::with_dependencies(
+        OpenAiWhisperConfig::new("test-secret", "whisper-1", Some("it".to_owned()))
+            .unwrap_or_else(|error| panic!("config should validate: {error}")),
+        Arc::new(StaticAudioSource(vec![1, 2, 3])),
+        Arc::new(http),
+    );
+
+    for language in [
+        None,
+        TranscriptionLanguage::parse("en").ok(),
+        Some(TranscriptionLanguage::Auto),
+    ] {
+        engine
+            .transcribe(
+                &recording(),
+                &TranscriptionContext::new(None).with_language(language),
+            )
+            .unwrap_or_else(|error| panic!("mock success should transcribe: {error}"));
+    }
+
+    assert_eq!(
+        *languages
+            .lock()
+            .unwrap_or_else(|_| panic!("mock languages should be readable")),
+        vec![Some("it".to_owned()), Some("en".to_owned()), None]
     );
 }

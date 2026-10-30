@@ -12,7 +12,7 @@
 //! | --- | --- | --- |
 //! | `NOTE_TAKER_TRANSCRIPTION_PROVIDER` | `auto`, `local`, `openai` | `auto` (local model, else OpenAI key) |
 //! | `NOTE_TAKER_WHISPER_MODEL` | path to a GGML/GGUF model (`local-ai` builds) | unset |
-//! | `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` or a 2–3 letter Whisper language code (`it`, `en`) | `auto` |
+//! | `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` or a 2–3 letter Whisper language code (`it`, `en`); the apps' choice overrides it per chunk | `auto` |
 //! | `OPENAI_API_KEY` | OpenAI key (never logged) | unset |
 //! | `NOTE_TAKER_OPENAI_WHISPER_MODEL`, `NOTE_TAKER_OPENAI_LANGUAGE` | OpenAI model and language | `whisper-1`, auto |
 //! | `NOTE_TAKER_ENABLE_DIARIZATION` | boolean | `false` |

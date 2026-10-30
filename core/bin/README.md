@@ -236,3 +236,6 @@ case as the CLI and HTTP API. `note_taker_get_unknown_clusters(meeting_id)` retu
 unknown-speaker clusters with optional local review-clip paths. `note_taker_assign_cluster(
 cluster_id, identity_name)` assigns a cluster to a named identity and deletes its review audio.
 Both return caller-freed JSON; see `API_SPECS.md`.
+
+`ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
+(Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.

@@ -24,3 +24,6 @@ domain values based on portable UTC meeting windows.
   as SHA-256 over `note-taker/pairing-code/v1\0`, the smaller peer ID, a NUL, and the larger peer
   ID. The first 8 bytes are read as a big-endian integer, taken modulo 1,000,000, and zero-padded.
   A golden test pins this derivation, so every platform must reproduce it exactly.
+
+`transcription_language.rs` defines the language a recording is transcribed in (Issue #62): AUTO or a
+code whisper.cpp knows.

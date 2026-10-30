@@ -11,6 +11,7 @@
 //! new slides of a running screen share to the recorded meeting at the current meeting time
 //! (Issue #49), only while audio is being captured.
 
+use crate::domain::transcription_language::TranscriptionLanguage;
 use std::{
     sync::{Arc, mpsc::Receiver},
     time::Duration,
@@ -125,6 +126,8 @@ pub struct RecordingController {
     chunking_mode: ChunkingMode,
     device_id: DeviceId,
     active_capture: Option<ActiveCapture>,
+    /// The language for chunks cut from now on; `None` leaves it to the engine's configuration.
+    language: Option<TranscriptionLanguage>,
     /// State reported while no recording is active (`Idle`, then `Stopped` after a stop).
     inactive_state: AudioState,
     /// `None` when the composition configured no screen capture.
@@ -150,9 +153,24 @@ impl RecordingController {
             chunking_mode,
             device_id,
             active_capture: None,
+            language: None,
             inactive_state: AudioState::Idle,
             screen_share: None,
         }
+    }
+
+    /// Chooses the language for the next recording, or for the rest of the current one.
+    ///
+    /// Inputs: The language; `None` leaves it to the engine's configuration.
+    /// Outputs: None. Side effects: Applies to chunks cut from now on, not those already queued.
+    /// A stop clears the choice.
+    pub fn set_language(&mut self, language: Option<TranscriptionLanguage>) {
+        self.language = language;
+    }
+
+    /// Returns the language chosen for chunks cut from now on, if any.
+    pub fn language(&self) -> Option<TranscriptionLanguage> {
+        self.language
     }
 
     /// Captures new slides of a running screen share during every recording (Issue #49).
@@ -330,6 +348,7 @@ impl RecordingController {
                 &self.chunk_audio_store,
                 &self.recording_manager,
                 &self.device_id,
+                self.language,
             )? {
                 submitted_count += 1;
             }
@@ -375,6 +394,7 @@ impl RecordingController {
                 &self.chunk_audio_store,
                 &self.recording_manager,
                 &self.device_id,
+                self.language,
             )?;
         }
         Ok(())
@@ -392,6 +412,8 @@ impl RecordingController {
             .active_capture
             .take()
             .ok_or(RecordingControlError::NotRecording)?;
+        // Audio still buffered keeps the choice; the next recording starts without it.
+        let language = self.language.take();
         // No slide may be captured once Stop was pressed.
         if let Some(watcher) = capture.screen_share_watcher.take()
             && let Some(screen_share) = self.screen_share.as_mut()
@@ -415,6 +437,7 @@ impl RecordingController {
                 &self.chunk_audio_store,
                 &self.recording_manager,
                 &self.device_id,
+                language,
             ) {
                 tracing::warn!(error = %error, "Final audio chunk could not be queued");
             }
@@ -556,6 +579,7 @@ fn submit_chunk(
     chunk_audio_store: &ChunkAudioStore,
     recording_manager: &RecordingManager,
     device_id: &DeviceId,
+    language: Option<TranscriptionLanguage>,
 ) -> Result<bool, RecordingControlError> {
     let contains_speech = finalized_chunk.contains_speech();
     let samples = finalized_chunk.into_audio_chunk().into_samples();
@@ -589,7 +613,8 @@ fn submit_chunk(
     )
     .map_err(|_| AudioError::InvalidConfiguration {
         reason: "chunk bounds are inverted".to_owned(),
-    })?;
+    })?
+    .with_language(language);
     recording_manager.submit_chunk(vad_chunk)?;
     Ok(true)
 }

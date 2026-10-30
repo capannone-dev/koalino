@@ -103,7 +103,7 @@ fn run_job<Engine: TranscriptionEngine>(
         MeetingId::new("hosted"),
         DeviceId::new(job.peer.as_str()),
     );
-    let context = TranscriptionContext::new(job.previous_text.take());
+    let context = TranscriptionContext::new(job.previous_text.take()).with_language(job.language);
     let result = engine.transcribe(&recording, &context);
     store.discard(&recording_id);
     match result {

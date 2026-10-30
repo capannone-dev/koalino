@@ -8,3 +8,7 @@ pub mod models;
 pub mod peer_trust;
 #[cfg(test)]
 mod peer_trust_tests;
+/// Defines the language a recording is transcribed in.
+pub mod transcription_language;
+#[cfg(test)]
+mod transcription_language_tests;

@@ -1,5 +1,6 @@
 //! Defines immutable, strongly typed business values for meetings and recordings.
 
+use crate::domain::transcription_language::TranscriptionLanguage;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
@@ -604,6 +605,7 @@ pub struct AudioChunk {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct TranscriptionContext {
     previous_text: Option<String>,
+    language: Option<TranscriptionLanguage>,
 }
 
 impl TranscriptionContext {
@@ -614,7 +616,36 @@ impl TranscriptionContext {
     /// Outputs: An immutable portable context for a transcription adapter.
     /// Side effects: Takes ownership of the optional transcript text.
     pub fn new(previous_text: Option<String>) -> Self {
-        Self { previous_text }
+        Self {
+            previous_text,
+            language: None,
+        }
+    }
+
+    /// Sets the language this chunk is transcribed in.
+    ///
+    /// Inputs: The language chosen for the chunk; `None` leaves it to the engine's configuration.
+    /// Outputs: The context. Side effects: None.
+    pub fn with_language(mut self, language: Option<TranscriptionLanguage>) -> Self {
+        self.language = language;
+        self
+    }
+
+    /// Returns the language chosen for this chunk, if any. Side effects: None.
+    pub fn language(&self) -> Option<TranscriptionLanguage> {
+        self.language
+    }
+
+    /// Picks the language an engine should use.
+    ///
+    /// Inputs: The engine's configured language, which a choice for this chunk overrides.
+    /// Outputs: The language's text (`auto` included), or `None` when neither is set.
+    /// Side effects: None.
+    pub fn language_or<'text>(&self, configured: Option<&'text str>) -> Option<&'text str> {
+        match self.language {
+            Some(language) => Some(language.as_str()),
+            None => configured,
+        }
     }
 
     /// Borrows the previous chunk transcript when context is available.

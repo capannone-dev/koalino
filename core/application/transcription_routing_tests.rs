@@ -21,6 +21,7 @@ use crate::{
             AudioRecording, DeviceId, DeviceManifest, MeetingId, RecordingId, Transcript,
             TranscriptionContext, TranscriptionModel,
         },
+        transcription_language::TranscriptionLanguage,
     },
     ports::{ai::TranscriptionEngine, remote_transcription::ChunkSamples},
 };
@@ -32,6 +33,7 @@ struct FakeGateway {
     local_models: Vec<TranscriptionModel>,
     answer: Result<String, ()>,
     calls: Mutex<Vec<(DeviceId, Option<String>)>>,
+    languages: Mutex<Vec<Option<TranscriptionLanguage>>>,
 }
 
 impl FakeGateway {
@@ -43,6 +45,7 @@ impl FakeGateway {
             local_models: vec![TranscriptionModel::Whisper],
             answer: Ok("remote words".to_owned()),
             calls: Mutex::new(Vec::new()),
+            languages: Mutex::new(Vec::new()),
         })
     }
 
@@ -72,7 +75,12 @@ impl RemoteTranscriptionGateway for FakeGateway {
         peer: &DeviceId,
         _samples: Vec<i16>,
         previous_text: Option<String>,
+        language: Option<TranscriptionLanguage>,
     ) -> Result<String, TranscriptionError> {
+        self.languages
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(language);
         self.calls
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
@@ -257,4 +265,33 @@ fn routes_read_back_from_their_text() {
     ] {
         assert_eq!(parse_route(&route_text(&route)), route);
     }
+}
+
+/// A paired device transcribes in the language chosen on this device.
+#[test]
+fn the_language_reaches_the_paired_device() {
+    let gateway = FakeGateway::new(ComputePreference::Automatic);
+    let store = samples();
+    let italian = TranscriptionLanguage::parse("it").ok();
+    let local_runs = Rc::new(Cell::new(0));
+    let engine = RoutedTranscriptionEngine::routed(
+        Some(FakeLocal(Rc::clone(&local_runs))),
+        Arc::clone(&gateway) as Arc<dyn RemoteTranscriptionGateway>,
+        store,
+    );
+
+    engine
+        .transcribe(
+            &recording(),
+            &TranscriptionContext::new(None).with_language(italian),
+        )
+        .unwrap_or_else(|error| panic!("the chunk must transcribe: {error}"));
+
+    assert_eq!(
+        *gateway
+            .languages
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner),
+        vec![italian]
+    );
 }

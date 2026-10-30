@@ -15,6 +15,7 @@ use crate::{
     domain::{
         errors::TranscriptionError,
         models::{AudioRecording, DeviceId, Transcript, TranscriptionContext},
+        transcription_language::TranscriptionLanguage,
     },
     ports::{
         ai::TranscriptionEngine,
@@ -33,7 +34,11 @@ impl TranscriptionEngine for EchoEngine {
     ) -> Result<Transcript, TranscriptionError> {
         Ok(Transcript::new(
             audio_recording.meeting_id().clone(),
-            context.previous_text().unwrap_or("no context"),
+            context
+                .language()
+                .map(|language| language.as_str())
+                .or(context.previous_text())
+                .unwrap_or("no context"),
         ))
     }
 }
@@ -45,6 +50,7 @@ fn job(previous_text: Option<&str>) -> HostedTranscription {
         job_id: Uuid::from_u128(5),
         samples: vec![1, 2],
         previous_text: previous_text.map(str::to_owned),
+        language: None,
     }
 }
 
@@ -103,4 +109,17 @@ fn an_engine_that_cannot_be_built_fails_the_job_and_is_tried_again() {
     assert_eq!(wait_finished(&mut host).text, None);
     assert!(host.submit(job(None)));
     assert_eq!(wait_finished(&mut host).text.as_deref(), Some("no context"));
+}
+
+/// A hosted chunk is transcribed in the language the asking device chose.
+#[test]
+fn a_hosted_job_uses_the_requested_language() {
+    let mut host = ThreadedTranscriptionHost::spawn(|_| Ok(EchoEngine))
+        .unwrap_or_else(|error| panic!("the host must start: {error:#}"));
+    assert!(host.submit(HostedTranscription {
+        language: TranscriptionLanguage::parse("it").ok(),
+        ..job(None)
+    }));
+
+    assert_eq!(wait_finished(&mut host).text.as_deref(), Some("it"));
 }

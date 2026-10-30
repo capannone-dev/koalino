@@ -54,6 +54,15 @@ impl<'context> OpenAiTranscriptionOptions<'context> {
     pub fn prompt(&self) -> Option<&str> {
         self.prompt
     }
+
+    /// Borrows the language sent to the API.
+    ///
+    /// Inputs: None.
+    /// Outputs: The Whisper language code; `None` lets the API detect it.
+    /// Side effects: None.
+    pub fn language(&self) -> Option<&str> {
+        self.language
+    }
 }
 impl OpenAiHttpResponse {
     /// Creates a successful mock/provider response body.
@@ -238,7 +247,10 @@ impl TranscriptionEngine for OpenAiWhisperTranscriptionEngine {
             audio_bytes,
             &self.configuration.model,
             OpenAiTranscriptionOptions::new(
-                self.configuration.language.as_deref(),
+                // The API detects the language when none is sent.
+                transcription_context
+                    .language_or(self.configuration.language.as_deref())
+                    .filter(|language| *language != "auto"),
                 transcription_context.previous_text(),
             ),
         )?;

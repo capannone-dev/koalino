@@ -425,7 +425,7 @@ fn the_composed_task_routes_transcription_and_reports_a_refusal() {
 
     // The pair key is agreed moments after pairing; until then the answer is also a refusal.
     let started = std::time::Instant::now();
-    let answer = phone.transcribe_on_peer(&laptop_id, vec![1, 2, 3], None);
+    let answer = phone.transcribe_on_peer(&laptop_id, vec![1, 2, 3], None, None);
     laptop.shutdown();
     phone.shutdown();
 

@@ -1,4 +1,4 @@
-//! Specifies the `NTT1`/`NTT2` messages: they survive a round trip, open only with the pair key in
+//! Specifies the `NTT3`/`NTT2` messages: they survive a round trip, open only with the pair key in
 //! the right direction, hide their contents, and refuse a chunk that does not fit.
 
 use uuid::Uuid;
@@ -8,7 +8,9 @@ use super::transcription_exchange::{
     decode_transcription_request, decode_transcription_response, encode_transcription_request,
     encode_transcription_response, is_transcription_request, is_transcription_response,
 };
-use crate::domain::{models::DeviceId, peer_trust::PairKey};
+use crate::domain::{
+    models::DeviceId, peer_trust::PairKey, transcription_language::TranscriptionLanguage,
+};
 
 /// A pair key.
 fn key() -> PairKey {
@@ -30,6 +32,7 @@ fn request(previous_text: Option<&str>) -> TranscriptionRequest {
     TranscriptionRequest {
         job_id: Uuid::from_u128(7),
         previous_text: previous_text.map(str::to_owned),
+        language: Some(TranscriptionLanguage::Auto),
         samples: vec![1, -2, 3_000, i16::MIN],
     }
 }
@@ -99,6 +102,7 @@ fn a_chunk_that_does_not_fit_one_message_is_refused() {
     let too_long = TranscriptionRequest {
         job_id: Uuid::from_u128(1),
         previous_text: None,
+        language: None,
         samples: vec![0; 8 * 1024 * 1024],
     };
 
@@ -106,4 +110,21 @@ fn a_chunk_that_does_not_fit_one_message_is_refused() {
         encode_transcription_request(&too_long, &key(), &phone(), &laptop()),
         Err(TranscriptionMessageError::TooLarge)
     );
+}
+
+/// The requester's language travels with the chunk, including no choice at all.
+#[test]
+fn a_request_carries_its_language() {
+    for language in [
+        None,
+        Some(TranscriptionLanguage::Auto),
+        TranscriptionLanguage::parse("it").ok(),
+    ] {
+        let message = sealed(&TranscriptionRequest {
+            language,
+            ..request(Some("words"))
+        });
+        let decoded = decode_transcription_request(&message, &key(), &phone(), &laptop());
+        assert_eq!(decoded.map(|request| request.language), Ok(language));
+    }
 }

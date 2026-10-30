@@ -1,6 +1,6 @@
 //! Encodes the messages that ask a paired device to transcribe a chunk (Issue #59).
 //!
-//! A request is `NTT1` and a response `NTT2`, each followed by a body sealed with the pair key and
+//! A request is `NTT3` and a response `NTT2`, each followed by a body sealed with the pair key and
 //! bound to the sender and receiver. Raw audio and transcript text are private, so they travel only
 //! inside the sealed value, are wiped after use, and are never logged. The sender holds the pair
 //! key but is still peer input, so decoding bounds every value.
@@ -10,11 +10,13 @@ use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
     application::crypto::pair_key::{open_from_peer, seal_for_peer},
-    domain::{models::DeviceId, peer_trust::PairKey},
+    domain::{
+        models::DeviceId, peer_trust::PairKey, transcription_language::TranscriptionLanguage,
+    },
 };
 
 /// Marks a request.
-const REQUEST_HEADER: &[u8; 4] = b"NTT1";
+const REQUEST_HEADER: &[u8; 4] = b"NTT3";
 /// Marks a response.
 const RESPONSE_HEADER: &[u8; 4] = b"NTT2";
 /// The largest message, leaving room below the transport's 16 MiB payload limit for sealing.
@@ -48,6 +50,8 @@ pub struct TranscriptionRequest {
     pub job_id: Uuid,
     /// The previous chunk's text.
     pub previous_text: Option<String>,
+    /// The language chosen for the chunk; `None` leaves it to the other device.
+    pub language: Option<TranscriptionLanguage>,
     /// 16 kHz mono samples.
     pub samples: Vec<i16>,
 }
@@ -84,12 +88,18 @@ pub fn encode_transcription_request(
     let previous_text = request.previous_text.as_deref().unwrap_or_default();
     let previous_length =
         u32::try_from(previous_text.len()).map_err(|_| TranscriptionMessageError::TooLarge)?;
-    let body_length = JOB_ID_BYTES + 4 + previous_text.len() + request.samples.len() * 2;
+    let language = request.language.map_or("", TranscriptionLanguage::as_str);
+    let language_length =
+        u8::try_from(language.len()).map_err(|_| TranscriptionMessageError::TooLarge)?;
+    let body_length =
+        JOB_ID_BYTES + 1 + language.len() + 4 + previous_text.len() + request.samples.len() * 2;
     if body_length > MAX_MESSAGE_BYTES || previous_text.len() > MAX_TEXT_BYTES {
         return Err(TranscriptionMessageError::TooLarge);
     }
     let mut body = Zeroizing::new(Vec::with_capacity(body_length));
     body.extend_from_slice(request.job_id.as_bytes());
+    body.push(language_length);
+    body.extend_from_slice(language.as_bytes());
     body.extend_from_slice(&previous_length.to_be_bytes());
     body.extend_from_slice(previous_text.as_bytes());
     for sample in &request.samples {
@@ -109,6 +119,22 @@ pub fn decode_transcription_request(
 ) -> Result<TranscriptionRequest, TranscriptionMessageError> {
     let body = open(REQUEST_HEADER, message, pair_key, from, to)?;
     let (job_id, rest) = split_job_id(&body)?;
+    let (language_length, rest) = rest
+        .split_first()
+        .ok_or(TranscriptionMessageError::Malformed)?;
+    let (language, rest) = rest
+        .split_at_checked(usize::from(*language_length))
+        .ok_or(TranscriptionMessageError::Malformed)?;
+    let language = match language {
+        [] => None,
+        text => {
+            let text =
+                std::str::from_utf8(text).map_err(|_| TranscriptionMessageError::Malformed)?;
+            let language = TranscriptionLanguage::parse(text)
+                .map_err(|_| TranscriptionMessageError::Malformed)?;
+            Some(language)
+        }
+    };
     let (text_length, rest) = rest
         .split_first_chunk::<4>()
         .ok_or(TranscriptionMessageError::Malformed)?;
@@ -127,6 +153,7 @@ pub fn decode_transcription_request(
     Ok(TranscriptionRequest {
         job_id,
         previous_text: (!text.is_empty()).then(|| text.to_owned()),
+        language,
         samples: samples
             .iter()
             .map(|sample| i16::from_le_bytes(*sample))

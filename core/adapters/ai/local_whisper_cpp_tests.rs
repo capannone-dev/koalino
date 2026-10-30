@@ -3,7 +3,10 @@
 use std::{env, path::PathBuf, sync::Arc};
 
 use crate::{
-    domain::models::{AudioRecording, DeviceId, MeetingId, RecordingId, TranscriptionContext},
+    domain::{
+        models::{AudioRecording, DeviceId, MeetingId, RecordingId, TranscriptionContext},
+        transcription_language::TranscriptionLanguage,
+    },
     ports::ai::TranscriptionEngine,
 };
 
@@ -103,5 +106,74 @@ fn non_speech_markers_are_recognized() {
         "",
     ] {
         assert!(!is_non_speech_marker(text), "{text}");
+    }
+}
+
+/// Supplies a 16 kHz mono PCM16 WAV file's samples.
+#[cfg(feature = "local-ai")]
+struct WavFileSource(PathBuf);
+
+#[cfg(feature = "local-ai")]
+impl RecordingPcmSource for WavFileSource {
+    /// Reads the file, skipping its 44-byte header.
+    fn load_pcm_16khz_mono(
+        &self,
+        _audio_recording: &AudioRecording,
+    ) -> Result<Vec<f32>, crate::domain::errors::TranscriptionError> {
+        let bytes = std::fs::read(&self.0)
+            .unwrap_or_else(|error| panic!("the speech file must be readable: {error}"));
+        let (samples, _) = bytes[44..].as_chunks::<2>();
+        Ok(samples
+            .iter()
+            .map(|sample| f32::from(i16::from_le_bytes(*sample)) / 32_768.0)
+            .collect())
+    }
+}
+
+/// Verifies with real speech that a chunk's language overrides the engine's configuration. Needs
+/// `NOTE_TAKER_WHISPER_MODEL` and `NOTE_TAKER_TEST_ENGLISH_SPEECH_WAV`.
+#[test]
+#[ignore = "needs a Whisper model and an English speech file"]
+#[cfg(feature = "local-ai")]
+fn a_chunks_language_overrides_the_configured_one() {
+    let path = |variable: &str| {
+        PathBuf::from(env::var(variable).unwrap_or_else(|_| panic!("set {variable}")))
+    };
+    let configuration = LocalWhisperCppConfig::new(
+        path("NOTE_TAKER_WHISPER_MODEL"),
+        4,
+        false,
+        Some("it".to_owned()),
+    )
+    .unwrap_or_else(|error| panic!("the configuration must be valid: {error}"));
+    let engine = LocalWhisperCppTranscriptionEngine::new(
+        configuration,
+        Arc::new(WavFileSource(path("NOTE_TAKER_TEST_ENGLISH_SPEECH_WAV"))),
+    )
+    .unwrap_or_else(|error| panic!("the model must load: {error}"));
+    let recording = AudioRecording::new(
+        RecordingId::new("language-recording"),
+        MeetingId::new("language-meeting"),
+        DeviceId::new("language-device"),
+    );
+    let transcribe = |language: Option<&str>| {
+        let language = language.map(|text| {
+            TranscriptionLanguage::parse(text)
+                .unwrap_or_else(|error| panic!("{text} is valid: {error}"))
+        });
+        let context = TranscriptionContext::new(None).with_language(language);
+        engine
+            .transcribe(&recording, &context)
+            .unwrap_or_else(|error| panic!("the speech must transcribe: {error}"))
+            .content()
+            .to_lowercase()
+    };
+
+    // Forced to Italian by the configuration, the English words do not come out.
+    let configured = transcribe(None);
+    assert!(!configured.contains("americans"), "{configured}");
+    for language in ["en", "auto"] {
+        let text = transcribe(Some(language));
+        assert!(text.contains("americans"), "{language}: {text}");
     }
 }

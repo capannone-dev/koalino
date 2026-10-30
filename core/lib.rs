@@ -25,6 +25,9 @@ pub mod ffi;
 #[cfg(target_os = "android")]
 #[path = "bin/ffi_android.rs"]
 pub mod ffi_android;
+/// Keeps the owner's default transcription language.
+#[path = "bin/ffi_language.rs"]
+pub mod ffi_language;
 /// The app's log level and log export over the C ABI (Issue #46).
 #[path = "bin/ffi_logging.rs"]
 pub mod ffi_logging;

@@ -25,6 +25,7 @@
 //! cannot connect except while the owner keeps a pairing window open, and even then they cannot
 //! sync.
 
+use crate::domain::transcription_language::TranscriptionLanguage;
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex, PoisonError},
@@ -306,6 +307,7 @@ impl RemoteTranscriptionGateway for P2pHandle {
         peer: &DeviceId,
         samples: Vec<i16>,
         previous_text: Option<String>,
+        language: Option<TranscriptionLanguage>,
     ) -> Result<String, TranscriptionError> {
         let (reply, answer) = std::sync::mpsc::channel();
         self.remote_transcriptions
@@ -313,6 +315,7 @@ impl RemoteTranscriptionGateway for P2pHandle {
                 peer: peer.clone(),
                 samples,
                 previous_text,
+                language,
                 reply,
             })
             .map_err(|_| TranscriptionError::Unavailable)?;

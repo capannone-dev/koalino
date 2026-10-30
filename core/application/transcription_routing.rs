@@ -7,6 +7,7 @@
 //! failure (disconnection, timeout, a busy or refusing device) falls back to the local engine with
 //! the audio intact. Audio and text are never logged.
 
+use crate::domain::transcription_language::TranscriptionLanguage;
 use std::{cell::Cell, rc::Rc, sync::Arc};
 
 use crate::{
@@ -61,7 +62,8 @@ pub trait RemoteTranscriptionGateway: Send + Sync {
 
     /// Asks `peer` to transcribe and waits for the answer.
     ///
-    /// Inputs: 16 kHz mono samples and the previous chunk's text.
+    /// Inputs: 16 kHz mono samples, the previous chunk's text, and the language chosen for the
+    /// chunk (`None` leaves it to the other device's configuration).
     /// Outputs: The text, or `Unavailable` on disconnection, timeout or refusal.
     /// Side effects: Sends the audio sealed to `peer`, wipes this copy, and blocks the caller, so
     /// it must run on the pipeline worker, never on a UI thread or an async runtime.
@@ -70,6 +72,7 @@ pub trait RemoteTranscriptionGateway: Send + Sync {
         peer: &DeviceId,
         samples: Vec<i16>,
         previous_text: Option<String>,
+        language: Option<TranscriptionLanguage>,
     ) -> Result<String, TranscriptionError>;
 }
 
@@ -120,6 +123,7 @@ impl TranscriptionEngine for RemoteTarget {
             &self.peer,
             samples,
             transcription_context.previous_text().map(str::to_owned),
+            transcription_context.language(),
         )?;
         self.chunk_samples
             .delete_samples(audio_recording.recording_id());

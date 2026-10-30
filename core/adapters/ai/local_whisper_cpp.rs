@@ -177,7 +177,7 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
         inference_parameters.set_print_progress(false);
         inference_parameters.set_print_realtime(false);
         inference_parameters.set_print_timestamps(false);
-        if let Some(language) = self.language.as_deref() {
+        if let Some(language) = transcription_context.language_or(self.language.as_deref()) {
             inference_parameters.set_language(Some(language));
         }
         if let Some(previous_text) = transcription_context.previous_text() {

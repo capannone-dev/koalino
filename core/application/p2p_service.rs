@@ -24,6 +24,7 @@
 //! not sent here, so copies never echo. A share whose meeting has not synced yet is held (bounded
 //! in size and time) and retried on later ticks.
 
+use crate::domain::transcription_language::TranscriptionLanguage;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     time::{Duration, Instant},
@@ -186,6 +187,8 @@ pub struct RemoteTranscriptionJob {
     pub samples: Vec<i16>,
     /// The previous chunk's text.
     pub previous_text: Option<String>,
+    /// The language chosen for the chunk.
+    pub language: Option<TranscriptionLanguage>,
     /// Receives the text, or `Unavailable` on any failure.
     pub reply: std::sync::mpsc::Sender<Result<String, TranscriptionError>>,
 }
@@ -839,12 +842,14 @@ where
             peer,
             samples,
             previous_text,
+            language,
             reply,
         } = job;
         let job_id = Uuid::new_v4();
         let mut request = TranscriptionRequest {
             job_id,
             previous_text,
+            language,
             samples,
         };
         let sent = self.seal_and_send_request(&peer, &request);
@@ -928,6 +933,7 @@ where
                 job_id,
                 samples: std::mem::take(&mut request.samples),
                 previous_text: request.previous_text.take(),
+                language: request.language,
             }),
             None => {
                 wipe_request(&mut request);

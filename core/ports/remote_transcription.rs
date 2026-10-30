@@ -7,6 +7,7 @@ use uuid::Uuid;
 use crate::domain::{
     errors::StorageError,
     models::{DeviceId, RecordingId},
+    transcription_language::TranscriptionLanguage,
 };
 
 /// One transcription a paired device asked this device to run.
@@ -19,6 +20,8 @@ pub struct HostedTranscription {
     pub samples: Vec<i16>,
     /// The previous chunk's text, as transcription context.
     pub previous_text: Option<String>,
+    /// The language the asking device chose; `None` uses this device's configuration.
+    pub language: Option<TranscriptionLanguage>,
 }
 
 /// A hosted job's result.

@@ -625,6 +625,7 @@ fn ask(
         peer: laptop.transport().local_peer_id(),
         samples: vec![1, -2, 3],
         previous_text: Some("before".to_owned()),
+        language: None,
         reply,
     });
     answer
@@ -716,6 +717,7 @@ async fn a_chunk_for_an_absent_device_fails_at_once() {
         peer: DeviceId::new("12D3KooWAway"),
         samples: vec![1],
         previous_text: None,
+        language: None,
         reply,
     });
 

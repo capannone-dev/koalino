@@ -8,6 +8,7 @@
 //! `DiarizationEngine`, `VoiceIdentityMatcher`, `IdentityMapper`, `NoteRepository`, and (for
 //! cluster assignment) `VoiceVectorDB` ports. It never logs transcript text, audio, or embeddings.
 
+use crate::domain::transcription_language::TranscriptionLanguage;
 use std::{rc::Rc, time::Instant};
 
 use uuid::Uuid;
@@ -68,6 +69,7 @@ pub struct VadAudioChunk {
     audio_recording: AudioRecording,
     chunk_bounds: ChunkBounds,
     audio_bytes: Vec<u8>,
+    language: Option<TranscriptionLanguage>,
 }
 
 impl VadAudioChunk {
@@ -88,7 +90,23 @@ impl VadAudioChunk {
             audio_recording,
             chunk_bounds: ChunkBounds::new(start_offset_ms, end_offset_ms)?,
             audio_bytes,
+            language: None,
         })
+    }
+
+    /// Stamps the language this chunk is transcribed in, chosen when it was cut, so a later change
+    /// does not reach chunks still waiting in the queue.
+    ///
+    /// Inputs: The language; `None` leaves it to the engine's configuration.
+    /// Outputs: The chunk. Side effects: None.
+    pub fn with_language(mut self, language: Option<TranscriptionLanguage>) -> Self {
+        self.language = language;
+        self
+    }
+
+    /// Returns the language stamped on this chunk, if any.
+    pub fn language(&self) -> Option<TranscriptionLanguage> {
+        self.language
     }
 
     /// Borrows the recording metadata passed to the transcription port.
@@ -266,8 +284,9 @@ where
         let processing_started_at = Instant::now();
         let chunk_bounds = vad_chunk.chunk_bounds();
         // No previous text as a prompt: Whisper then repeated or completed the previous chunk's
-        // last words (Issue #51). The configured language keeps chunks consistent instead.
-        let transcription_context = TranscriptionContext::new(None);
+        // last words (Issue #51). The chosen language keeps chunks consistent instead.
+        let transcription_context =
+            TranscriptionContext::new(None).with_language(vad_chunk.language());
         let transcript = self
             .transcription_engine
             .transcribe(vad_chunk.audio_recording(), &transcription_context)

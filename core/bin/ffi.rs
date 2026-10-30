@@ -36,6 +36,7 @@ use crate::{
         voice_identity_manager::VoiceIdentityManager,
     },
     device_identity::{DEVICE_ID_VARIABLE, resolve_device_id},
+    domain::transcription_language::TranscriptionLanguage,
     domain::{
         errors::ExportError,
         models::{
@@ -44,6 +45,7 @@ use crate::{
             UnassignedVoiceClip,
         },
     },
+    ffi_language::default_language,
     ffi_p2p::{p2p_command_json, p2p_status_json},
     ffi_settings::{APP_SETTINGS, ConfiguredSettings, SettingsError, app_setting},
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
@@ -243,6 +245,8 @@ struct FfiRuntime {
     live_microphone: Option<LiveMicrophone>,
     /// Whether a drain ticker is running for the open microphone.
     microphone_ticker_running: bool,
+    /// The language chosen for the next recording or the current one; a stop clears it.
+    recording_language: Option<TranscriptionLanguage>,
     /// Starts the thread that drains the microphone into the recording (a no-op in tests,
     /// which drain by hand).
     spawn_microphone_ticker: fn(),
@@ -443,6 +447,7 @@ impl FfiRuntime {
             microphone_source: None,
             live_microphone: None,
             microphone_ticker_running: false,
+            recording_language: None,
             spawn_microphone_ticker: || {},
         }
     }
@@ -1052,7 +1057,7 @@ impl FfiRuntime {
     /// Outputs: `FFI_SUCCESS`, `FFI_OPERATION_REJECTED` (e.g. already recording, or the title
     /// could not be stored), or `FFI_PIPELINE_UNAVAILABLE`.
     /// Side effects: Composes the pipeline on first use, opens a meeting session, and stores the
-    /// title in SQLite.
+    /// title in SQLite. Records in the language chosen for it, else the default language.
     fn start_recording_titled(
         &mut self,
         meeting_id: Option<MeetingId>,
@@ -1062,12 +1067,20 @@ impl FfiRuntime {
             Ok(opened_microphone) => opened_microphone,
             Err(status) => return status,
         };
+        let language = self
+            .recording_language
+            .unwrap_or_else(|| default_language(&app_setting));
         let status = match self.recording_controller() {
             Ok(recording_controller) => {
+                recording_controller.set_language(Some(language));
                 recording_status(recording_controller.start_titled(meeting_id, title))
             }
             Err(status) => status,
         };
+        if status == FFI_SUCCESS {
+            // Fixed for this recording: a later change of the default waits for the next one.
+            self.recording_language = Some(language);
+        }
         if status != FFI_SUCCESS && opened_microphone {
             if let Some(microphone) = self.live_microphone.take() {
                 // Nothing is recording, so the captured audio is discarded.
@@ -1078,6 +1091,19 @@ impl FfiRuntime {
             (self.spawn_microphone_ticker)();
         }
         status
+    }
+
+    /// Chooses the language for the next recording, or for the rest of the current one.
+    ///
+    /// Inputs: The language. Outputs: `FFI_SUCCESS`.
+    /// Side effects: Applies to chunks cut from now on. It does not load the pipeline: a start
+    /// applies the choice when no recording controller exists yet.
+    fn set_recording_language(&mut self, language: TranscriptionLanguage) -> c_int {
+        self.recording_language = Some(language);
+        if let Some(recording_controller) = self.recording_controller.as_mut() {
+            recording_controller.set_language(Some(language));
+        }
+        FFI_SUCCESS
     }
 
     /// Opens the microphone for a start or resume, unless the host pushes PCM or it is open.
@@ -1379,6 +1405,7 @@ impl FfiRuntime {
     /// their segments, and deletes unprocessed raw audio. A later start is a new recording.
     fn stop_recording(&mut self) -> c_int {
         self.close_microphone();
+        self.recording_language = None;
         match self.recording_controller.as_mut() {
             Some(recording_controller) => recording_status(recording_controller.stop()),
             None => FFI_OPERATION_REJECTED,
@@ -1823,6 +1850,25 @@ pub extern "C" fn note_taker_pause_recording() -> c_int {
 #[unsafe(no_mangle)]
 pub extern "C" fn note_taker_stop_recording() -> c_int {
     with_runtime(FfiRuntime::stop_recording)
+}
+
+/// Chooses the language for the next recording, or for the rest of the current one.
+///
+/// Inputs: `language` is `auto` or a Whisper code.
+/// Outputs: `FFI_SUCCESS`, or `FFI_INVALID_ARGUMENT` (null, not UTF-8, or unknown).
+/// Side effects: Applies to audio chunks cut from now on; a stop clears the choice, and the next
+/// recording uses the default language.
+///
+/// # Safety
+/// `language` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_set_recording_language(language: *const c_char) -> c_int {
+    let parsed =
+        unsafe { ffi_string(language) }.and_then(|text| TranscriptionLanguage::parse(text).ok());
+    match parsed {
+        Some(language) => with_runtime(|runtime| runtime.set_recording_language(language)),
+        None => FFI_INVALID_ARGUMENT,
+    }
 }
 
 /// Reports an operating-system audio stream suspension from a background service thread.
@@ -2989,6 +3035,28 @@ mod ffi_contract_tests {
 
     /// Verifies a titled start persists the title, and `get_meetings`/`get_meeting` return it
     /// alongside untitled meetings' dated fallback.
+    /// A chosen language lasts until a stop, so the next recording uses the default again.
+    #[test]
+    fn a_stop_clears_the_chosen_language() {
+        let test_directory =
+            std::env::temp_dir().join(format!("ffi-language-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&test_directory)
+            .unwrap_or_else(|error| panic!("test directory must be created: {error}"));
+        let mut runtime =
+            FfiRuntime::open_for_tests(&test_directory.join("notes.sqlite3"), &test_directory)
+                .unwrap_or_else(|status| panic!("file runtime must open: status {status}"));
+        let italian =
+            crate::domain::transcription_language::TranscriptionLanguage::parse("it").ok();
+        let italian = italian.unwrap_or_else(|| panic!("it is valid"));
+
+        assert_eq!(runtime.set_recording_language(italian), FFI_SUCCESS);
+        assert_eq!(runtime.recording_language, Some(italian));
+
+        runtime.stop_recording();
+        assert_eq!(runtime.recording_language, None);
+        let _ = std::fs::remove_dir_all(&test_directory);
+    }
+
     #[test]
     fn start_recording_with_title_persists_it_in_meeting_json() {
         let test_directory =
