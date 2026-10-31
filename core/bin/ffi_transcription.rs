@@ -1,0 +1,418 @@
+//! Settings' Whisper model and OpenAI controls over the C ABI (#67).
+//!
+//! `note_taker_transcription_settings` returns everything Settings shows as JSON, and never the
+//! key: only whether one is saved. Changes take effect at the next recording, because the runtime
+//! rebuilds the pipeline when a recording starts after a change.
+
+use std::{
+    ffi::{CStr, CString, c_char, c_int},
+    path::PathBuf,
+    sync::{
+        Arc, Mutex, OnceLock, PoisonError,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+
+use serde_json::json;
+
+use crate::{
+    adapters::ai::whisper_model_download::{
+        HuggingFaceModelSource, ModelDownloadError, download_whisper_model,
+    },
+    cloud_fallback::cloud_fallback_active,
+    device_resources::{available_disk_bytes, total_memory_bytes},
+    domain::{
+        errors::CryptoError,
+        whisper_catalog::{WHISPER_MODELS, WhisperModelEntry, find_whisper_model},
+    },
+    ffi::provided_encryption_key,
+    ffi_settings::app_setting,
+    pipeline_composition::OPENAI_API_KEY_VARIABLE,
+    transcription_settings::{
+        OpenAiKeyStore, SavedProvider, SavedTranscriptionSettings, TranscriptionPaths,
+        load_settings, save_settings, test_openai_key, validated_key,
+    },
+};
+
+const STATUS_OK: c_int = 0;
+const STATUS_INVALID: c_int = 1;
+const STATUS_FAILED: c_int = 2;
+/// The keychain is missing, so a key can't be saved (no plain-file fallback).
+const STATUS_NO_KEYCHAIN: c_int = 3;
+/// OpenAI was chosen with no key to use.
+const STATUS_NO_KEY: c_int = 4;
+/// Another download is running.
+const STATUS_BUSY: c_int = 5;
+/// The file would not fit on disk.
+const STATUS_NO_SPACE: c_int = 6;
+/// The model is in use or shipped with the app.
+const STATUS_NOT_REMOVABLE: c_int = 7;
+
+/// Share of total memory a model may use before Settings warns about it.
+const MEMORY_WARNING_PERCENT: u64 = 70;
+/// Space kept free beyond the file itself.
+const DISK_MARGIN_BYTES: u64 = 200 * 1024 * 1024;
+
+/// Set when a choice changes, so the next recording rebuilds the pipeline.
+static PIPELINE_STALE: AtomicBool = AtomicBool::new(false);
+
+/// Reports and clears whether the pipeline must be rebuilt. Side effects: Clears the flag.
+pub fn take_pipeline_stale() -> bool {
+    PIPELINE_STALE.swap(false, Ordering::Relaxed)
+}
+
+/// The progress of the current or last download.
+#[derive(Clone, Default)]
+struct DownloadStatus {
+    file_name: Option<String>,
+    received_bytes: u64,
+    total_bytes: u64,
+    /// `downloading`, `done`, `cancelled` or `failed`.
+    state: &'static str,
+    /// `no_network`, `server`, `corrupted` or `storage`.
+    error: Option<&'static str>,
+}
+
+/// The single download slot.
+fn download_slot() -> &'static (Mutex<DownloadStatus>, Arc<AtomicBool>) {
+    static SLOT: OnceLock<(Mutex<DownloadStatus>, Arc<AtomicBool>)> = OnceLock::new();
+    SLOT.get_or_init(|| {
+        (
+            Mutex::new(DownloadStatus::default()),
+            Arc::new(AtomicBool::new(false)),
+        )
+    })
+}
+
+/// Reads the app's paths.
+fn paths() -> TranscriptionPaths {
+    TranscriptionPaths::from_lookup(&app_setting)
+}
+
+/// Opens the key store.
+fn key_store(paths: &TranscriptionPaths) -> OpenAiKeyStore {
+    OpenAiKeyStore::open(paths, provided_encryption_key())
+}
+
+/// Reads, changes and stores the choices, then marks the pipeline stale.
+fn update_settings(change: impl FnOnce(&mut SavedTranscriptionSettings)) -> c_int {
+    let paths = paths();
+    let mut saved = load_settings(&paths.settings_file);
+    change(&mut saved);
+    match save_settings(&paths.settings_file, &saved) {
+        Ok(()) => {
+            PIPELINE_STALE.store(true, Ordering::Relaxed);
+            STATUS_OK
+        }
+        Err(error) => {
+            tracing::warn!(error = %error, "unable to store the transcription settings");
+            STATUS_FAILED
+        }
+    }
+}
+
+/// Reads a C string argument.
+///
+/// # Safety
+/// `text` must be null or a valid NUL-terminated C string for this call.
+unsafe fn text_argument<'a>(text: *const c_char) -> Option<&'a str> {
+    if text.is_null() {
+        return None;
+    }
+    unsafe { CStr::from_ptr(text) }.to_str().ok()
+}
+
+/// Builds one model's row.
+fn model_row(
+    model: &WhisperModelEntry,
+    paths: &TranscriptionPaths,
+    total_memory: Option<u64>,
+) -> serde_json::Value {
+    json!({
+        "file_name": model.file_name(),
+        "name": model.name(),
+        "family": model.family(),
+        "size_bytes": model.size_bytes(),
+        "english_only": model.is_english_only(),
+        "on_device": paths.locate_model(model.file_name()).is_some(),
+        "removable": paths.is_removable(model.file_name()),
+        "too_large_for_memory": total_memory.is_some_and(|total| {
+            model.estimated_memory_bytes() > total / 100 * MEMORY_WARNING_PERCENT
+        }),
+    })
+}
+
+/// Builds the whole Settings view. Side effects: Reads files and the key store.
+fn settings_json() -> String {
+    let paths = paths();
+    let saved = load_settings(&paths.settings_file);
+    let total_memory = total_memory_bytes();
+    let (key_saved, keychain_available) = match key_store(&paths).load() {
+        Ok(key) => (key.is_some(), true),
+        Err(CryptoError::KeychainUnavailable { .. }) => (false, false),
+        Err(_) => (false, true),
+    };
+    let selected = saved
+        .whisper_model
+        .clone()
+        .filter(|file| paths.locate_model(file).is_some())
+        .or_else(|| paths.shipped_file_name().map(str::to_owned));
+    let download = download_slot()
+        .0
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone();
+    let disk_probe = paths.models_directory.parent().map(PathBuf::from);
+    json!({
+        "provider": match saved.provider {
+            Some(SavedProvider::Openai) => "openai",
+            _ => "local",
+        },
+        "openai_model": saved.openai_model.as_deref().unwrap_or("whisper-1"),
+        "key_saved": key_saved,
+        "environment_key": app_setting(OPENAI_API_KEY_VARIABLE).is_some(),
+        "keychain_available": keychain_available,
+        "selected_model": selected,
+        "shipped_model": paths.shipped_file_name(),
+        "available_disk_bytes": disk_probe.as_deref().and_then(available_disk_bytes),
+        "using_local_fallback": cloud_fallback_active(),
+        "models": WHISPER_MODELS.iter()
+            .map(|model| model_row(model, &paths, total_memory))
+            .collect::<Vec<_>>(),
+        "download": {
+            "file_name": download.file_name,
+            "received_bytes": download.received_bytes,
+            "total_bytes": download.total_bytes,
+            "state": download.state,
+            "error": download.error,
+        },
+    })
+    .to_string()
+}
+
+/// Returns what Settings shows as JSON; free it with `note_taker_free_string`.
+///
+/// Outputs: The JSON, or null if it can't be built. The key is never included.
+/// Side effects: Reads files and the key store, which may prompt to unlock.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_transcription_settings() -> *mut c_char {
+    CString::new(settings_json())
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Chooses the Whisper model for the next recording.
+///
+/// Inputs: A catalog file name that is on this device.
+/// Outputs: 0, or 1 when unknown or not on this device. Side effects: Stores the choice.
+///
+/// # Safety
+/// `file_name` must be null or a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_set_whisper_model(file_name: *const c_char) -> c_int {
+    let Some(file_name) = (unsafe { text_argument(file_name) }) else {
+        return STATUS_INVALID;
+    };
+    if paths().locate_model(file_name).is_none() {
+        return STATUS_INVALID;
+    }
+    update_settings(|saved| saved.whisper_model = Some(file_name.to_owned()))
+}
+
+/// Chooses where recordings are transcribed.
+///
+/// Inputs: `local` or `openai`; the app must have had the owner confirm that audio leaves the
+/// device before passing `openai`.
+/// Outputs: 0, 1 when unknown, or 4 when OpenAI has no key. Side effects: Stores the choice.
+///
+/// # Safety
+/// `provider` must be null or a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_set_transcription_provider(provider: *const c_char) -> c_int {
+    let provider = match unsafe { text_argument(provider) } {
+        Some("local") => SavedProvider::Local,
+        Some("openai") => SavedProvider::Openai,
+        _ => return STATUS_INVALID,
+    };
+    if provider == SavedProvider::Openai
+        && !matches!(key_store(&paths()).load(), Ok(Some(_)))
+        && app_setting(OPENAI_API_KEY_VARIABLE).is_none()
+    {
+        return STATUS_NO_KEY;
+    }
+    update_settings(|saved| saved.provider = Some(provider))
+}
+
+/// Chooses the OpenAI model.
+///
+/// Inputs: A model name with no spaces. Outputs: 0 or 1. Side effects: Stores the choice.
+///
+/// # Safety
+/// `model` must be null or a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_set_openai_model(model: *const c_char) -> c_int {
+    let Some(model) = (unsafe { text_argument(model) }).and_then(validated_key) else {
+        return STATUS_INVALID;
+    };
+    update_settings(|saved| saved.openai_model = Some(model.to_owned()))
+}
+
+/// Saves the OpenAI key without selecting OpenAI.
+///
+/// Inputs: The key. Outputs: 0, 1 when malformed, 3 when there is no keychain (nothing is
+/// written anywhere else), or 2. Side effects: Writes the key store. The key is never logged.
+///
+/// # Safety
+/// `key` must be null or a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_save_openai_key(key: *const c_char) -> c_int {
+    let Some(key) = (unsafe { text_argument(key) }).and_then(validated_key) else {
+        return STATUS_INVALID;
+    };
+    match key_store(&paths()).save(key) {
+        Ok(()) => {
+            PIPELINE_STALE.store(true, Ordering::Relaxed);
+            STATUS_OK
+        }
+        Err(CryptoError::KeychainUnavailable { .. }) => STATUS_NO_KEYCHAIN,
+        Err(_) => STATUS_FAILED,
+    }
+}
+
+/// Removes the saved key and returns transcription to this device.
+///
+/// Outputs: 0, or 2 when the store refuses. Side effects: Writes the key store and the choices.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_remove_openai_key() -> c_int {
+    if key_store(&paths()).remove().is_err() {
+        return STATUS_FAILED;
+    }
+    update_settings(|saved| saved.provider = Some(SavedProvider::Local))
+}
+
+/// Tests the saved key without sending audio.
+///
+/// Outputs: `valid`, `invalid`, `quota_used`, `no_network`, `unexpected` or `no_key`; free it with
+/// `note_taker_free_string`. Side effects: One HTTPS request to OpenAI. Blocks: call off the UI.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_test_openai_key() -> *mut c_char {
+    let label = match key_store(&paths()).load() {
+        Ok(Some(key)) => test_openai_key(&key).as_str(),
+        _ => "no_key",
+    };
+    CString::new(label)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Starts downloading a model in the background.
+///
+/// Inputs: A catalog file name. Outputs: 0, 1 when unknown, 5 when another is running, or 6 when
+/// it won't fit. Side effects: Spawns a thread that contacts Hugging Face and writes the file;
+/// progress appears in `note_taker_transcription_settings`.
+///
+/// # Safety
+/// `file_name` must be null or a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_download_whisper_model(file_name: *const c_char) -> c_int {
+    let Some(model) = (unsafe { text_argument(file_name) }).and_then(find_whisper_model) else {
+        return STATUS_INVALID;
+    };
+    let paths = paths();
+    if std::fs::create_dir_all(&paths.models_directory).is_err() {
+        return STATUS_FAILED;
+    }
+    if available_disk_bytes(&paths.models_directory)
+        .is_some_and(|free| free < model.size_bytes() + DISK_MARGIN_BYTES)
+    {
+        return STATUS_NO_SPACE;
+    }
+    let (status, cancel) = download_slot();
+    {
+        let mut status = status.lock().unwrap_or_else(PoisonError::into_inner);
+        if status.state == "downloading" {
+            return STATUS_BUSY;
+        }
+        *status = DownloadStatus {
+            file_name: Some(model.file_name().to_owned()),
+            received_bytes: 0,
+            total_bytes: model.size_bytes(),
+            state: "downloading",
+            error: None,
+        };
+    }
+    cancel.store(false, Ordering::Relaxed);
+    let thread_cancel = Arc::clone(cancel);
+    let spawned = std::thread::Builder::new()
+        .name("whisper-model-download".to_owned())
+        .spawn(move || {
+            let result = HuggingFaceModelSource::new().and_then(|source| {
+                download_whisper_model(
+                    model,
+                    &source,
+                    &paths.models_directory,
+                    &thread_cancel,
+                    &mut |received| {
+                        download_slot()
+                            .0
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .received_bytes = received;
+                    },
+                )
+            });
+            let mut status = download_slot()
+                .0
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner);
+            (status.state, status.error) = match &result {
+                Ok(_) => ("done", None),
+                Err(ModelDownloadError::Cancelled) => ("cancelled", None),
+                Err(ModelDownloadError::Network) => ("failed", Some("no_network")),
+                Err(ModelDownloadError::Server(_)) => ("failed", Some("server")),
+                Err(ModelDownloadError::Corrupted) => ("failed", Some("corrupted")),
+                Err(ModelDownloadError::Storage(_)) => ("failed", Some("storage")),
+            };
+            if let Err(error) = &result {
+                tracing::warn!(error = %error, "Whisper model download did not finish");
+            }
+        });
+    if spawned.is_err() {
+        status.lock().unwrap_or_else(PoisonError::into_inner).state = "failed";
+        return STATUS_FAILED;
+    }
+    STATUS_OK
+}
+
+/// Cancels the running download, if any. Side effects: The partial file gets removed.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_cancel_whisper_download() {
+    download_slot().1.store(true, Ordering::Relaxed);
+}
+
+/// Removes a downloaded model, returning to the shipped one if it was chosen.
+///
+/// Inputs: A catalog file name. Outputs: 0, 7 when shipped or absent, or 2.
+/// Side effects: Deletes the file and may change the choice. A recording that already loaded the
+/// model keeps it in memory until it stops.
+///
+/// # Safety
+/// `file_name` must be null or a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_remove_whisper_model(file_name: *const c_char) -> c_int {
+    let Some(file_name) = (unsafe { text_argument(file_name) }) else {
+        return STATUS_INVALID;
+    };
+    let paths = paths();
+    if !paths.is_removable(file_name) {
+        return STATUS_NOT_REMOVABLE;
+    }
+    if std::fs::remove_file(paths.models_directory.join(file_name)).is_err() {
+        return STATUS_FAILED;
+    }
+    update_settings(|saved| {
+        if saved.whisper_model.as_deref() == Some(file_name) {
+            saved.whisper_model = None;
+        }
+    })
+}

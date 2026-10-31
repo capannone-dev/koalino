@@ -945,11 +945,13 @@ async fn paired_devices_exchange_manifests_and_forget_revoked_ones() {
         cpu_cores: 8,
         gpu_vram_megabytes: 4_096,
         transcription_models: vec![TranscriptionModel::Whisper],
+        local_whisper_model: None,
     });
     let mut phone = service("Phone", phone_adapter).with_local_capabilities(LocalCapabilities {
         cpu_cores: 4,
         gpu_vram_megabytes: 0,
         transcription_models: Vec::new(),
+        local_whisper_model: None,
     });
     let laptop_id = laptop.transport().local_peer_id();
     let phone_id = phone.transport().local_peer_id();

@@ -60,6 +60,9 @@ use crate::{
     },
     recording_controller::{RecordingControlError, RecordingController},
     storage_composition::{EncryptedStores, open_encrypted_stores_with_keychain},
+    transcription_settings::{
+        OpenAiKeyStore, TranscriptionPaths, apply_saved_settings, load_settings,
+    },
 };
 use uuid::Uuid;
 
@@ -389,6 +392,7 @@ impl FfiRuntime {
             .unwrap_or_else(default_export_directory);
         let p2p = start_p2p(setting, &database_path, &device_id, &embedding_cipher);
         let pipeline_config = PipelineConfig::from_lookup(setting);
+        let transcription_paths = TranscriptionPaths::from_lookup(setting);
         let pipeline_database_path = database_path.clone();
         let remote_gateway = p2p.clone();
         let recording_controller_builder: RecordingControllerBuilder = Box::new(move || {
@@ -397,7 +401,9 @@ impl FfiRuntime {
                 device_id.clone(),
                 std::sync::Arc::clone(&embedding_cipher),
                 match &pipeline_config {
-                    Ok(pipeline_config) => pipeline_config.clone(),
+                    Ok(pipeline_config) => {
+                        with_saved_transcription(pipeline_config.clone(), &transcription_paths)
+                    }
                     Err(error) => return Err(anyhow::anyhow!("{error:#}")),
                 },
                 remote_gateway
@@ -1124,6 +1130,7 @@ impl FfiRuntime {
         meeting_id: Option<MeetingId>,
         title: Option<MeetingTitle>,
     ) -> c_int {
+        self.rebuild_pipeline_if_settings_changed();
         let opened_microphone = match self.open_microphone() {
             Ok(opened_microphone) => opened_microphone,
             Err(status) => return status,
@@ -1152,6 +1159,27 @@ impl FfiRuntime {
             (self.spawn_microphone_ticker)();
         }
         status
+    }
+
+    /// Drops an idle pipeline after a Settings change, so this start uses the new model.
+    ///
+    /// Inputs: None. Outputs: None.
+    /// Side effects: Never touches a running or paused recording, whose audio must not be lost;
+    /// the change then waits for the next start. Frees the old model's memory.
+    fn rebuild_pipeline_if_settings_changed(&mut self) {
+        let in_use = self
+            .recording_controller
+            .as_ref()
+            .is_some_and(|controller| {
+                !matches!(controller.state(), AudioState::Idle | AudioState::Stopped)
+            });
+        if in_use {
+            return;
+        }
+        crate::cloud_fallback::reset_cloud_fallback();
+        if crate::ffi_transcription::take_pipeline_stale() {
+            self.recording_controller = None;
+        }
     }
 
     /// Chooses the language for the next recording, or for the rest of the current one.
@@ -1604,8 +1632,13 @@ fn start_p2p(
     // reported by the pipeline itself, so it advertises no models here.
     let mut hosted_pipeline = None;
     if let Ok(pipeline_config) = PipelineConfig::from_lookup(setting) {
+        let pipeline_config =
+            with_saved_transcription(pipeline_config, &TranscriptionPaths::from_lookup(setting));
         config.capabilities.transcription_models =
             pipeline_config.advertised_transcription_models();
+        config.capabilities.local_whisper_model = pipeline_config
+            .local_model_path()
+            .map(crate::pipeline_composition::local_model_label);
         if !config.capabilities.transcription_models.is_empty() {
             hosted_pipeline = Some(pipeline_config);
         }
@@ -1644,11 +1677,28 @@ fn runtime_p2p() -> Result<Option<Arc<P2pHandle>>, c_int> {
 static HOST_ENCRYPTION_KEY: Mutex<Option<zeroize::Zeroizing<Vec<u8>>>> = Mutex::new(None);
 
 /// Returns a copy of the host-provided key, if any.
-fn provided_encryption_key() -> Option<Vec<u8>> {
+pub(crate) fn provided_encryption_key() -> Option<Vec<u8>> {
     HOST_ENCRYPTION_KEY
         .lock()
         .ok()
         .and_then(|guard| guard.as_ref().map(|key| key.to_vec()))
+}
+
+/// Layers the owner's saved transcription choices over the environment's configuration.
+///
+/// Inputs: The configuration and the paths.
+/// Outputs: The configuration to run. An unreadable key store counts as no saved key.
+/// Side effects: Reads the settings file and the key store, which may prompt to unlock.
+fn with_saved_transcription(config: PipelineConfig, paths: &TranscriptionPaths) -> PipelineConfig {
+    let saved = load_settings(&paths.settings_file);
+    let saved_key = match OpenAiKeyStore::open(paths, provided_encryption_key()).load() {
+        Ok(key) => key.map(|key| key.to_string()),
+        Err(error) => {
+            tracing::warn!(error = %error, "unable to read the saved OpenAI key");
+            None
+        }
+    };
+    apply_saved_settings(config, &saved, paths, saved_key)
 }
 
 /// Picks the keychain the runtime unlocks through.

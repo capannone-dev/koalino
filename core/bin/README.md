@@ -239,6 +239,10 @@ cluster_id, identity_name)` assigns a cluster to a named identity and deletes it
 audio, and `note_taker_prepare_cluster_review_clip(cluster_id)` writes one clip when it is played.
 All return caller-freed JSON; see `API_SPECS.md`.
 
+`transcription_settings.rs` keeps Settings' Whisper model, provider and OpenAI key, and `ffi_transcription.rs`
+exposes them over the C ABI (#67). `cloud_fallback.rs` transcribes a chunk locally when OpenAI fails, and
+`device_resources.rs` reads free disk space and total memory.
+
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.
 

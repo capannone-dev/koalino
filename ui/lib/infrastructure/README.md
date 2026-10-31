@@ -59,6 +59,9 @@ start, or when an update ships a model of a different size.
 bundle's `data/models/diarization` when both files are there (the core prefers a pair in the data
 directory), and on Android it asks `WhisperModel.kt` to copy them into the data directory.
 
+`transcription_settings_bridge.dart` reaches the core's Whisper model and OpenAI settings (#67). The key goes
+in once and never comes back.
+
 `language_bridge.dart` reaches the core's default language and the language of the next or current
 recording (`note_taker_get_default_language`, `note_taker_set_default_language`,
 `note_taker_set_recording_language`) on background isolates (Issue #62).

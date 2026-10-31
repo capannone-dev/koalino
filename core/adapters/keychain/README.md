@@ -12,6 +12,7 @@ when to read, write, migrate, or fall back; this adapter only reads and writes o
 | File | Purpose |
 | --- | --- |
 | `platform_keychain.rs` | `PlatformKeychain`, entry names, platform modifiers, error classification |
+| `sealed_file_keychain.rs` | A secret file sealed under a host-protected key, for Android's OpenAI key (#67) |
 | `platform_keychain_tests.rs` | Mock-credential tests, plus two `#[ignore]`d tests against the real OS keychain |
 | `host_provided_keychain.rs` | `HostProvidedKeychain`: serves a key the host app unwrapped (the Android Keystore), refuses writes |
 | `host_provided_keychain_tests.rs` | Load, missing-key, and refused-store tests |

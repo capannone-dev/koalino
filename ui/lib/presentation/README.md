@@ -61,6 +61,9 @@ Unlock; the app's widgets stay mounted but hidden (not painted, tapped, or read 
 readers), so an active recording and every screen keep their state. It forwards the app being
 hidden and shown to `AppLockController`.
 
+`transcription_settings_screen.dart` lists the Whisper models by size, and holds the OpenAI choice and write-only
+key field (#67).
+
 `settings_screen.dart` (`SettingsScreen`) is on every platform (Issue #46). Its diagnostics hold
 a Telemetry entry, which pushes the telemetry dashboard as a page (Issue #53; it used to be a
 destination), the Log level selector (Error to Trace, Info by default; the core keeps the choice across

@@ -1458,3 +1458,23 @@ changed; the design below awaits the owner's decision.
 - **Not covered:** noise, distant microphones, overlapping speech, in-app capture, phone speed, and a Rust
   build of the candidate design.
 
+## 2026-10-31 — #67 choosing the Whisper model and OpenAI in Settings
+
+- **The core owns it.** Choices live in `<db>.transcription-settings.json`, and Flutter only displays
+  them. A saved value replaces the environment's; the daemon and CLI keep using the environment.
+- **Changes apply when the next recording starts.** The idle pipeline is rebuilt then, so a running or
+  paused recording never loses audio. The device manifest and paired-device hosting read the choices at
+  app start, so those need a restart.
+- **Downloads are verified before use.** Bytes go to `<file>.part`, and only a file matching its pinned
+  size and SHA-256 gets its final name. All 33 files from Hugging Face are offered, except `small.en-tdrz`.
+- **A saved key alone selects Local.** Only an explicit choice, after a confirmation, sends audio to OpenAI.
+- **Android has no keychain the core can reach, so its key is in a file sealed with AES-256-GCM** under the
+  database key that the Android Keystore protects. This differs from the issue's wording: refusing would
+  have left Android with no OpenAI option, and the file is useless without the device's Keystore. Desktops
+  use the OS keychain under its own entry, and refuse when there is none.
+- **OpenAI failure falls back per chunk.** A connection failure, refusal or rate limit transcribes that chunk
+  with the local model, which loads only when first needed. Audio is never queued for later upload.
+- **Not on the web dashboard.** It has no recording controls (#62), and a server's key belongs in its
+  environment, so the API has no route that could expose a key.
+- **`libc` became a direct dependency** for free disk space and total memory. It was already in the build.
+

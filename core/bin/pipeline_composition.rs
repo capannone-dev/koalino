@@ -128,6 +128,8 @@ pub struct PipelineConfig {
     diarization_segmentation_model_path: Option<PathBuf>,
     diarization_embedding_model_path: Option<PathBuf>,
     vad_enabled: bool,
+    /// Whether a chunk OpenAI can't transcribe falls back to the local model (Settings only).
+    cloud_fallback: bool,
 }
 
 impl std::fmt::Debug for PipelineConfig {
@@ -204,6 +206,7 @@ impl PipelineConfig {
             diarization_embedding_model_path: read(DIARIZATION_EMBEDDING_MODEL_VARIABLE)
                 .map(PathBuf::from),
             vad_enabled: parse_flag(VAD_ENABLED_VARIABLE, read(VAD_ENABLED_VARIABLE), true)?,
+            cloud_fallback: false,
         })
     }
 
@@ -234,6 +237,45 @@ impl PipelineConfig {
             models.push(TranscriptionModel::ThirdParty(String::from("openai")));
         }
         models
+    }
+
+    /// Replaces values with the ones the owner saved in Settings.
+    ///
+    /// Inputs: The provider, model path, key and OpenAI model, where `None` keeps the current
+    /// value, and whether OpenAI failures fall back to the local model.
+    /// Outputs: The configuration. Side effects: None.
+    pub fn with_saved_transcription(
+        mut self,
+        provider: Option<TranscriptionProvider>,
+        whisper_model_path: Option<PathBuf>,
+        openai_api_key: Option<String>,
+        openai_model: Option<String>,
+        cloud_fallback: bool,
+    ) -> Self {
+        if let Some(provider) = provider {
+            self.transcription_provider = provider;
+        }
+        if whisper_model_path.is_some() {
+            self.whisper_model_path = whisper_model_path;
+        }
+        if openai_api_key.is_some() {
+            self.openai_api_key = openai_api_key;
+        }
+        if let Some(openai_model) = openai_model {
+            self.openai_model = openai_model;
+        }
+        self.cloud_fallback = cloud_fallback;
+        self
+    }
+
+    /// Reports whether OpenAI failures fall back to the local model.
+    pub fn cloud_fallback(&self) -> bool {
+        self.cloud_fallback
+    }
+
+    /// Returns the local model's path, if any.
+    pub fn local_model_path(&self) -> Option<&Path> {
+        self.whisper_model_path.as_deref()
     }
 
     /// Returns the selected transcription provider.
@@ -307,6 +349,14 @@ pub enum SelectedTranscriptionEngine {
     /// Local whisper.cpp inference.
     #[cfg(feature = "local-ai")]
     Local(crate::adapters::ai::local_whisper_cpp::LocalWhisperCppTranscriptionEngine),
+    /// OpenAI, chosen in Settings, using the local model when it can't be reached.
+    #[cfg(feature = "local-ai")]
+    OpenAiWithFallback(
+        crate::cloud_fallback::CloudFallbackEngine<
+            OpenAiWhisperTranscriptionEngine,
+            crate::adapters::ai::local_whisper_cpp::LocalWhisperCppTranscriptionEngine,
+        >,
+    ),
 }
 
 impl TranscriptionEngine for SelectedTranscriptionEngine {
@@ -320,6 +370,10 @@ impl TranscriptionEngine for SelectedTranscriptionEngine {
             Self::OpenAi(engine) => engine.transcribe(audio_recording, transcription_context),
             #[cfg(feature = "local-ai")]
             Self::Local(engine) => engine.transcribe(audio_recording, transcription_context),
+            #[cfg(feature = "local-ai")]
+            Self::OpenAiWithFallback(engine) => {
+                engine.transcribe(audio_recording, transcription_context)
+            }
         }
     }
 
@@ -333,6 +387,10 @@ impl TranscriptionEngine for SelectedTranscriptionEngine {
             Self::OpenAi(engine) => engine.transcribe_external_media(media_chunk, audio_recording),
             #[cfg(feature = "local-ai")]
             Self::Local(engine) => engine.transcribe_external_media(media_chunk, audio_recording),
+            #[cfg(feature = "local-ai")]
+            Self::OpenAiWithFallback(engine) => {
+                engine.transcribe_external_media(media_chunk, audio_recording)
+            }
         }
     }
 }
@@ -349,7 +407,7 @@ pub fn select_transcription_engine(
 ) -> Result<SelectedTranscriptionEngine> {
     match config.transcription_provider {
         TranscriptionProvider::Local => local_engine(config, chunk_audio_store),
-        TranscriptionProvider::OpenAi => openai_engine(config, chunk_audio_store),
+        TranscriptionProvider::OpenAi => openai_with_optional_fallback(config, chunk_audio_store),
         TranscriptionProvider::Auto => {
             if config.whisper_model_path.is_some() {
                 match local_engine(config, chunk_audio_store) {
@@ -384,6 +442,12 @@ pub fn transcription_task_profile(
     config: &PipelineConfig,
 ) -> TaskProfile {
     match engine {
+        #[cfg(feature = "local-ai")]
+        SelectedTranscriptionEngine::OpenAiWithFallback(_) => TaskProfile::new(
+            TaskType::CloudTranscription,
+            config.openai_model.clone(),
+            CLOUD_TRANSCRIPTION_POWER_MILLIWATTS,
+        ),
         SelectedTranscriptionEngine::OpenAi(_) => TaskProfile::new(
             TaskType::CloudTranscription,
             config.openai_model.clone(),
@@ -418,6 +482,41 @@ pub fn local_model_label(model_path: &Path) -> String {
     } else {
         stem.to_owned()
     }
+}
+
+/// Builds the OpenAI engine, wrapped with the local fallback when Settings chose OpenAI.
+///
+/// Inputs: The configuration and the chunk audio store.
+/// Outputs: The engine, or an error naming `OPENAI_API_KEY`.
+/// Side effects: See `openai_engine`; the local model loads only when first needed.
+fn openai_with_optional_fallback(
+    config: &PipelineConfig,
+    chunk_audio_store: &Arc<ChunkAudioStore>,
+) -> Result<SelectedTranscriptionEngine> {
+    let engine = openai_engine(config, chunk_audio_store)?;
+    #[cfg(feature = "local-ai")]
+    if config.cloud_fallback && config.whisper_model_path.is_some() {
+        if let SelectedTranscriptionEngine::OpenAi(cloud) = engine {
+            let local_config = config.clone();
+            let local_store = Arc::clone(chunk_audio_store);
+            return Ok(SelectedTranscriptionEngine::OpenAiWithFallback(
+                crate::cloud_fallback::CloudFallbackEngine::new(
+                    cloud,
+                    Box::new(move || match local_engine(&local_config, &local_store) {
+                        Ok(SelectedTranscriptionEngine::Local(engine)) => Ok(engine),
+                        Ok(_) => Err(TranscriptionError::Unavailable),
+                        Err(error) => {
+                            tracing::warn!(error = %format!("{error:#}"), "the local fallback model could not load");
+                            Err(TranscriptionError::Unavailable)
+                        }
+                    }),
+                    Arc::clone(chunk_audio_store),
+                ),
+            ));
+        }
+        return Ok(engine);
+    }
+    Ok(engine)
 }
 
 /// Builds the OpenAI engine.

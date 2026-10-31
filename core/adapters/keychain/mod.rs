@@ -9,3 +9,8 @@ mod platform_keychain_tests;
 pub mod host_provided_keychain;
 #[cfg(test)]
 mod host_provided_keychain_tests;
+
+/// Implements `KeychainStore` as a file sealed under a host-protected key (Android).
+pub mod sealed_file_keychain;
+#[cfg(test)]
+mod sealed_file_keychain_tests;

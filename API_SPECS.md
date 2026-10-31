@@ -255,6 +255,21 @@ contents, EXIF data, or database-specific values.
 - `int32_t note_taker_get_current_state(void)` returns only state codes: Idle `10`, Recording
   `11`, Paused `12`, Interrupted `13`, Stopped `14`, Error `15`. Runtime error codes remain below
   `10`, so lock-screen hosts can distinguish a state response from an unavailable runtime.
+- `char *note_taker_transcription_settings(void)` returns Settings' view as JSON (free it with
+  `note_taker_free_string`): `provider`, `openai_model`, `key_saved`, `environment_key`,
+  `keychain_available`, `selected_model`, `shipped_model`, `available_disk_bytes`,
+  `using_local_fallback`, `models` and `download`. It never contains the key.
+- `int32_t note_taker_set_whisper_model(const char *file_name)`,
+  `note_taker_set_transcription_provider(const char *provider)` (`local` or `openai`),
+  `note_taker_set_openai_model(const char *model)`, `note_taker_save_openai_key(const char *key)`,
+  `note_taker_remove_openai_key(void)`, `note_taker_download_whisper_model(const char *file_name)`
+  and `note_taker_remove_whisper_model(const char *file_name)` return `0` on success, `1` for an
+  invalid argument, `2` on failure, `3` with no keychain, `4` when OpenAI has no key, `5` when
+  another download runs, `6` when the file would not fit, and `7` for a model that can't be removed.
+  Changes apply when the next recording starts.
+- `void note_taker_cancel_whisper_download(void)` cancels the download and removes its partial file.
+- `char *note_taker_test_openai_key(void)` returns `valid`, `invalid`, `quota_used`, `no_network`,
+  `unexpected` or `no_key`, after one request that lists models and sends no audio.
 
 The core never accepts background-service handles, callbacks, or retained pointers over FFI.
 

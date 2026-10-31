@@ -10,8 +10,11 @@ import 'package:note_taker_ui/controllers/network_settings_controller.dart';
 import 'package:note_taker_ui/controllers/log_settings_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_route_controller.dart';
+import 'package:note_taker_ui/controllers/transcription_settings_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
+import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
+import 'package:note_taker_ui/presentation/transcription_settings_screen.dart';
 
 /// Finds the default language selector in tests.
 const Key defaultLanguageSelectorKey = Key('default-language-selector');
@@ -40,6 +43,7 @@ final class SettingsScreen extends StatelessWidget {
     this.transcriptionRouteController,
     this.languageController,
     this.networkSettingsController,
+    this.transcriptionSettingsBridge,
     super.key,
   });
 
@@ -49,6 +53,9 @@ final class SettingsScreen extends StatelessWidget {
   final TranscriptionRouteController? transcriptionRouteController;
   final TranscriptionLanguageController? languageController;
   final NetworkSettingsController? networkSettingsController;
+
+  /// Adds the Transcription page (Whisper model and OpenAI, Issue #67) when given.
+  final TranscriptionSettingsBridge? transcriptionSettingsBridge;
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +81,24 @@ final class SettingsScreen extends StatelessWidget {
             ],
             if (language != null) ...<Widget>[
               ..._languageTiles(language),
+              const Divider(),
+            ],
+            if (transcriptionSettingsBridge != null) ...<Widget>[
+              ListTile(
+                leading: const Icon(Icons.record_voice_over_outlined),
+                title: const Text('Transcription model'),
+                subtitle:
+                    const Text('Choose the Whisper model, or use OpenAI.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (BuildContext context) => _TranscriptionPage(
+                      bridge: transcriptionSettingsBridge!,
+                      languageCode: language?.defaultLanguage ?? 'auto',
+                    ),
+                  ),
+                ),
+              ),
               const Divider(),
             ],
             if (route != null && route.available) ...<Widget>[
@@ -347,4 +372,33 @@ final class _NetworkAddressesSectionState
       ),
     );
   }
+}
+
+/// Owns the page's controller for as long as the page is open; downloads continue in the core.
+final class _TranscriptionPage extends StatefulWidget {
+  const _TranscriptionPage({required this.bridge, required this.languageCode});
+
+  final TranscriptionSettingsBridge bridge;
+  final String languageCode;
+
+  @override
+  State<_TranscriptionPage> createState() => _TranscriptionPageState();
+}
+
+/// Creates and disposes the controller.
+final class _TranscriptionPageState extends State<_TranscriptionPage> {
+  late final TranscriptionSettingsController _controller =
+      TranscriptionSettingsController(bridge: widget.bridge);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => TranscriptionSettingsScreen(
+        controller: _controller,
+        languageCode: widget.languageCode,
+      );
 }

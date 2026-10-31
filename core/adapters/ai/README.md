@@ -9,6 +9,9 @@ The rest of this directory contains opt-in local AI infrastructure. It is compil
 `--features local-ai`; the default crate, `make rust-test`, and application layer remain free of
 Whisper/whisper.cpp types and native model initialization.
 
+`whisper_word_timing.rs` builds timed words from whisper.cpp tokens (#69), and `whisper_model_download.rs` downloads
+a model from Hugging Face, installing it only when its pinned hash matches (#67). Both compile without `local-ai`.
+
 `local_whisper_cpp.rs` implements `TranscriptionEngine` using `whisper-rs`, the Rust binding for
 whisper.cpp. The adapter owns a `RecordingPcmSource` seam that resolves adapter-local, 16 kHz,
 mono floating-point PCM for portable `AudioRecording` metadata. It returns only the existing

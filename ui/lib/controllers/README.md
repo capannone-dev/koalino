@@ -70,5 +70,7 @@ Only the UI is locked: the Rust core, recording, and sync keep running.
 `transcription_route_controller.dart` (Issue #59) holds the Settings choice of where recordings are
 transcribed; the core stores and applies it.
 
+`transcription_settings_controller.dart` holds the Transcription page: models, downloads and OpenAI (#67).
+
 `transcription_language_controller.dart` holds the default language and the language of the next or
 current recording, and returns to the default when a recording ends (Issue #62).

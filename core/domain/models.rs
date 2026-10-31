@@ -1236,6 +1236,9 @@ pub struct DeviceManifest {
     available_transcription_models: Vec<TranscriptionModel>,
     /// Reports whether this device can run feature-gated local VAD chunking.
     pub supports_vad: bool,
+    /// Which local Whisper model runs here, such as `ggml-small`; absent from older devices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_whisper_model: Option<String>,
 }
 
 impl DeviceManifest {
@@ -1257,6 +1260,7 @@ impl DeviceManifest {
             gpu_vram_megabytes,
             available_transcription_models,
             supports_vad: cfg!(feature = "vad"),
+            local_whisper_model: None,
         }
     }
 

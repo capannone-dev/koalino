@@ -15,3 +15,7 @@ mod peer_trust_tests;
 pub mod transcription_language;
 #[cfg(test)]
 mod transcription_language_tests;
+/// Lists the downloadable Whisper models with their pinned hashes.
+pub mod whisper_catalog;
+#[cfg(test)]
+mod whisper_catalog_tests;

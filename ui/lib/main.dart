@@ -38,6 +38,7 @@ import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recording_notifier.dart';
 import 'package:note_taker_ui/infrastructure/telemetry_bridge.dart';
+import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
 import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
 import 'package:note_taker_ui/presentation/app_lock_gate.dart';
 import 'package:note_taker_ui/presentation/app_theme.dart';
@@ -408,6 +409,7 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         transcriptionRouteController: _transcriptionRouteController,
         languageController: widget.languageController,
         networkSettingsController: _networkSettingsController,
+        transcriptionSettingsBridge: const RustTranscriptionSettingsBridge(),
       );
 }
 

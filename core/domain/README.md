@@ -25,6 +25,8 @@ domain values based on portable UTC meeting windows.
   ID. The first 8 bytes are read as a big-endian integer, taken modulo 1,000,000, and zero-padded.
   A golden test pins this derivation, so every platform must reproduce it exactly.
 
+`whisper_catalog.rs` lists the downloadable Whisper models with pinned sizes and SHA-256 hashes (#67).
+
 `transcription_language.rs` defines the language a recording is transcribed in (Issue #62): AUTO or a
 code whisper.cpp knows.
 

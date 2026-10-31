@@ -324,6 +324,8 @@ pub struct LocalCapabilities {
     pub gpu_vram_megabytes: u32,
     /// Transcription models this device's pipeline is configured to run.
     pub transcription_models: Vec<TranscriptionModel>,
+    /// Which local Whisper model runs here, such as `ggml-small`, for routing and telemetry.
+    pub local_whisper_model: Option<String>,
 }
 
 impl Default for LocalCapabilities {
@@ -335,6 +337,7 @@ impl Default for LocalCapabilities {
             cpu_cores,
             gpu_vram_megabytes: 0,
             transcription_models: Vec::new(),
+            local_whisper_model: None,
         }
     }
 }
@@ -1794,10 +1797,12 @@ where
 
 /// Builds this device's manifest under its peer ID.
 fn local_manifest(local_peer_id: DeviceId, capabilities: LocalCapabilities) -> DeviceManifest {
-    DeviceManifest::new(
+    let mut manifest = DeviceManifest::new(
         local_peer_id,
         capabilities.cpu_cores,
         capabilities.gpu_vram_megabytes,
         capabilities.transcription_models,
-    )
+    );
+    manifest.local_whisper_model = capabilities.local_whisper_model;
+    manifest
 }

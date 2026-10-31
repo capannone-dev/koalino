@@ -92,7 +92,7 @@ repository.
 | `NOTE_TAKER_TRANSCRIPTION_PROVIDER` | `auto` | `auto`, `local` (whisper.cpp), or `openai` |
 | `NOTE_TAKER_WHISPER_MODEL` | unset | Path to the local GGML model (`local-ai` builds) |
 | `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` | Language detection, or a code such as `it` or `en` |
-| `OPENAI_API_KEY` | unset | Enables cloud transcription. Audio leaves the device only when this is set |
+| `OPENAI_API_KEY` | unset | Enables cloud transcription. Audio leaves the device only when this is set. In the app, a key saved in Settings replaces it |
 | `NOTE_TAKER_OPENAI_WHISPER_MODEL` | `whisper-1` | OpenAI transcription model |
 | `NOTE_TAKER_OPENAI_LANGUAGE` | unset (auto) | Language hint for the OpenAI API |
 | `NOTE_TAKER_VAD_ENABLED` | `true` | Voice-activity chunking. `false` cuts near every 15 s |

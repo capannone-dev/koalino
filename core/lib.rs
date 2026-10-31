@@ -13,9 +13,18 @@ pub mod cli;
 /// Runs foreground CLI recordings and coordinates `record stop` across processes.
 #[path = "bin/cli_recording.rs"]
 pub mod cli_recording;
+/// Falls back from cloud to local transcription.
+#[path = "bin/cloud_fallback.rs"]
+pub mod cloud_fallback;
+#[cfg(test)]
+#[path = "bin/cloud_fallback_tests.rs"]
+mod cloud_fallback_tests;
 /// Resolves the acquisition device ID shared by the CLI, daemon, and FFI composition roots.
 #[path = "bin/device_identity.rs"]
 pub mod device_identity;
+/// Reads free disk space and total memory.
+#[path = "bin/device_resources.rs"]
+pub mod device_resources;
 /// Contains pure business types and business failures.
 pub mod domain;
 /// Exposes the C-compatible Flutter bridge without leaking Rust domain types across FFI.
@@ -37,6 +46,9 @@ pub mod ffi_p2p;
 /// Holds the settings the Flutter app passes to `note_taker_configure`, over the environment.
 #[path = "bin/ffi_settings.rs"]
 pub mod ffi_settings;
+/// Settings' Whisper model and OpenAI controls over the C ABI.
+#[path = "bin/ffi_transcription.rs"]
+pub mod ffi_transcription;
 #[path = "bin/p2p_composition.rs"]
 pub mod p2p_composition;
 #[path = "bin/p2p_network_routes.rs"]
@@ -64,6 +76,12 @@ pub mod teams_bridge_composition;
 /// Composes and runs the daemon's P2P pairing and sync task (Issue #43).
 #[path = "bin/transcription_host.rs"]
 pub mod transcription_host;
+/// Keeps the owner's choice of model and provider, and the OpenAI key.
+#[path = "bin/transcription_settings.rs"]
+pub mod transcription_settings;
+#[cfg(test)]
+#[path = "bin/transcription_settings_tests.rs"]
+mod transcription_settings_tests;
 
 #[cfg(test)]
 mod scaffold_contract_tests {
