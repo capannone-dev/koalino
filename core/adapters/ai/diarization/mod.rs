@@ -17,6 +17,8 @@ pub mod windowed_engine;
 mod onnx_models_tests;
 #[cfg(test)]
 mod powerset_tests;
+#[cfg(all(test, feature = "diarization", feature = "local-ai", feature = "vad"))]
+mod recordings_measurement_tests;
 #[cfg(test)]
 mod wav_input_tests;
 #[cfg(test)]

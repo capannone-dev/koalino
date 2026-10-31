@@ -1409,3 +1409,52 @@ measuring and retuning moves to #61.
   no relay is configured. A disconnected device says what it needs in order to reconnect.
 - **A device answers a peer's first manifest with its own.** Otherwise the side still waiting for its
   owner to confirm drops the other's manifest, and shows a connected device as "Not connected".
+
+## 2026-10-30 — #61 first measurement on real voices
+
+Fifteen readings of `tools/diarization/test_scripts` by three people, 72 to 95 s each, through the real
+models with fixed 15 s chunks and `ggml-base`. The reference comes from aligning transcripts with the
+scripts, so figures are approximate and 1.5 s around each change of speaker is not scored. Each of the
+three solo recordings was enrolled as one voice.
+
+- **The right number of speakers in 9 of 15 recordings**, with 8.3% of speech missed and 11.3% given to
+  the wrong speaker at the current cluster threshold (0.40). From 0.40 to 0.50 the results are flat, so
+  it stays.
+- **Merged chunks are the largest source of error.** 28 of 87 chunks found fewer speakers than spoke, and
+  each speaker in a chunk gets one averaged embedding, so a merge mixes voices. Turns in chunks with the
+  right speaker count pick the right person 93% of the time, against 69% in the others.
+- **Raising `speaker_link_threshold` does not fix it.** From 0.35 to 0.65, merged chunks fall only from
+  28 to 21, split chunks rise from 4 to 9, and matching does not improve. It stays at 0.35.
+- **The matcher's cutoffs were not changed.** At the strong cutoff of 0.80 only 12% of a person's turns
+  match automatically, with 1% above it for the wrong person. Lowering it to 0.70 gives 44% but 8%
+  wrong, and a wrong automatic match is silent. The 0.50 suggestion cutoff catches 85%, with 18% wrong.
+  Reassess after merges are reduced.
+- **Not covered:** noise, far-field microphones, overlapping speech, other voices. One session, one
+  microphone and three people cannot settle the cutoffs, so #61 stays open.
+
+## 2026-10-31 — What limits speech-to-text and voice recognition
+
+Same 15 recordings, about 21 minutes in all, one session and three people, with a speaker change about
+every 5 s. Tools: `tools/diarization/evaluate_pipeline.py` and `evaluate_short_windows.py`. No product code
+changed; the design below awaits the owner's decision.
+
+- **The Whisper model is the largest transcription limit.** Word error on chunks: `base` 29.6%, `small`
+  17.0%, `medium` 7.9%, `large-v3-turbo` 5.5%. Auto language and chunking cost little here.
+- **Voices were not the problem.** All 228 cut-out turns with a voice measurement matched the expected
+  reader's solo recording, Ettore and Renzo included.
+- **The 10 s windows were.** Today's confusion is 11.4% and whole-meeting `pyannote` gives no improvement
+  overall (error 16.7% against 15.3%). Embeddings from 2 s windows with one clustering per meeting give 1.8%
+  confusion, 8.8% error and the right speaker count in 14 of 15. Choosing the threshold on this same data
+  flatters this, and error rises sharply below 0.2.
+- **Word timing and per-speaker naming are worth adopting.** With known speaker times, word timing gives
+  98.2% against 91.5%. Per-speaker naming gives 95% right against 77% per turn at cutoff 0.60.
+- **Naming a merged cluster damages the gallery.** At the 0.80 cutoff, wrong automatic names go from 0.3% to
+  7.3% when enrolling from a named cluster.
+- **All inference runs on the CPU.** `use_gpu` is hard-coded off, ONNX Runtime has no other provider, and
+  the Android build has only baseline ARMv8. Vulkan runs turbo about 20 times faster on an RTX 2000 Ada and
+  3.8 times faster on Intel Arc, with the same word error. The S23 is not measured.
+- **Silero through whisper-rs does nothing.** `WhisperState::full` bypasses whisper.cpp's VAD, so the option
+  is silently ignored and WebRTC against Silero remains untested.
+- **Not covered:** noise, distant microphones, overlapping speech, in-app capture, phone speed, and a Rust
+  build of the candidate design.
+

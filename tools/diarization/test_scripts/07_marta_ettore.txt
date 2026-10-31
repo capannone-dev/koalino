@@ -1,0 +1,29 @@
+# Copione di prova per la registrazione. Leggete solo le battute, senza i nomi.
+# Registrazione da salvare come: 07_marta_ettore.<estensione>
+
+
+MARTA: Ettore, hai un minuto per il corso di formazione di novembre?
+ETTORE: Sì, dimmi pure. Hai trovato la sala?
+
+MARTA: Quasi. L'hotel vicino alla stazione ha una sala da quaranta posti a trecento euro al giorno, ma il proiettore è a parte.
+ETTORE: E l'università? L'anno scorso ci aveva fatto un buon prezzo.
+
+MARTA: Quest'anno è occupata fino a dicembre per gli esami. Ho chiesto anche al centro congressi, ma costa quasi il doppio.
+ETTORE: Allora direi l'hotel. Quanti iscritti abbiamo finora?
+
+MARTA: Ventisette, e mancano ancora tre settimane. Pensavo di chiudere le iscrizioni a trentacinque, così c'è spazio per lavorare a gruppi.
+ETTORE: Mi sembra giusto. E i docenti hanno confermato?
+
+MARTA: La professoressa Bianchi sì, tutta la mattina. Il dottor Conti mi ha detto che può venire solo il secondo giorno, quindi devo cambiare il programma.
+ETTORE: Puoi invertire le due sessioni del pomeriggio?
+
+MARTA: Ci ho pensato, ma la sua parte si basa su quella della Bianchi, quindi funzionerebbe anche meglio.
+ETTORE: Ah, ecco, perfetto. Per il pranzo come facciamo?
+
+MARTA: L'hotel propone un buffet a diciotto euro. Devo solo raccogliere le intolleranze, e l'ho già aggiunto al modulo.
+ETTORE: Bene. Serve altro da parte mia?
+
+MARTA: Solo l'introduzione del primo giorno, dieci minuti alle nove in punto.
+ETTORE: D'accordo, la preparo. Mi mandi il programma aggiornato quando è pronto?
+
+MARTA: Entro domani sera, promesso.

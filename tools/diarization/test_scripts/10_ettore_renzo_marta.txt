@@ -1,0 +1,29 @@
+# Copione di prova per la registrazione. Leggete solo le battute, senza i nomi.
+# Registrazione da salvare come: 10_ettore_renzo_marta.<estensione>
+
+
+ETTORE: Bene, ci siamo tutti. Oggi dobbiamo decidere la data di uscita della nuova versione.
+RENZO: Per me il dieci dicembre è ancora possibile, ma solo se blocchiamo le novità questa settimana.
+MARTA: Io non sarei così sicura. Le prove sui telefoni vecchi sono ferme da giorni, e abbiamo ancora undici errori aperti.
+
+ETTORE: Quanti di questi sono gravi?
+MARTA: Tre. Uno fa perdere gli appunti se la batteria si scarica durante il salvataggio.
+RENZO: Quello lo sto già correggendo. Dovrei finire entro domani.
+
+ETTORE: E gli altri due?
+MARTA: Riguardano la sincronizzazione tra dispositivi. Ogni tanto una nota appare due volte.
+RENZO: Sì, è un problema vecchio. Non è banale, mi servono almeno quattro giorni.
+
+ETTORE: Quindi, contando le prove, arriviamo al massimo a metà mese.
+MARTA: Esatto. E io preferirei uscire il diciassette, piuttosto che correre.
+RENZO: Il diciassette è un lunedì, e poi ci sono le feste. Se qualcosa va storto, chi lo sistema?
+
+ETTORE: Buona osservazione. Possiamo fare un'uscita graduale: prima il dieci per cento degli utenti, poi il resto.
+MARTA: Mi piace. Così vediamo i problemi senza coinvolgere tutti.
+RENZO: Allora dieci per cento il dodici, e tutti gli altri il diciassette, se non emerge nulla.
+
+ETTORE: Per me va bene. Marta, ce la fai con le prove?
+MARTA: Sì, se Renzo mi dà la correzione entro giovedì.
+RENZO: Te la do mercoledì sera.
+
+ETTORE: Perfetto. Scrivo io il riepilogo e lo mando a tutti entro stasera.

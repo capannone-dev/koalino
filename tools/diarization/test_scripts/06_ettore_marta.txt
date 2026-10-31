@@ -1,0 +1,29 @@
+# Copione di prova per la registrazione. Leggete solo le battute, senza i nomi.
+# Registrazione da salvare come: 06_ettore_marta.<estensione>
+
+
+ETTORE: Marta, volevo parlarti del nuovo sito. Come sta andando la prova con gli utenti?
+MARTA: Abbastanza bene. Abbiamo fatto otto sessioni e sei persone hanno completato l'acquisto senza aiuto.
+
+ETTORE: E le altre due dove si sono bloccate?
+MARTA: Entrambe nella pagina del pagamento. Il pulsante per confermare finisce sotto il riepilogo e, sul telefono, non si vede senza scorrere.
+
+ETTORE: Questo si sistema in fretta, mi sembra. Basta spostarlo più in alto.
+MARTA: Sì, ma ho notato anche un'altra cosa. Quasi tutti hanno cercato i costi di spedizione prima di mettere qualcosa nel carrello, e non li hanno trovati.
+
+ETTORE: Perché li mostriamo solo alla fine, giusto?
+MARTA: Esatto. E un signore di settant'anni ha detto chiaramente che, di solito, in questi casi chiude il sito.
+
+ETTORE: Capisco. Possiamo aggiungere una riga nella scheda del prodotto, tipo "spedizione gratuita sopra i cinquanta euro".
+MARTA: Sarebbe già molto. Io aggiungerei anche i tempi di consegna, perché due persone li hanno chiesti.
+
+ETTORE: Quanto lavoro sarebbe, secondo te?
+MARTA: Per il testo un paio di giorni, contando anche le traduzioni in inglese e tedesco. Il pulsante è questione di un'ora.
+
+ETTORE: Allora facciamo tutto nella prossima versione, e la pubblichiamo il venti.
+MARTA: Va bene, ma vorrei rifare altre quattro sessioni prima, per essere sicura.
+
+ETTORE: Certo. Ti servono i soldi per i rimborsi ai partecipanti?
+MARTA: Sì, sono trenta euro a persona, quindi centoventi in tutto.
+
+ETTORE: Nessun problema, li approvo oggi.

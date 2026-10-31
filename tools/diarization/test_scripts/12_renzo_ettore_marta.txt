@@ -1,0 +1,29 @@
+# Copione di prova per la registrazione. Leggete solo le battute, senza i nomi.
+# Registrazione da salvare come: 12_renzo_ettore_marta.<estensione>
+
+
+RENZO: Partiamo dal problema principale: da stamattina il server di posta è lentissimo.
+ETTORE: Lo vedo anch'io. Ci ho messo dieci minuti per aprire un messaggio con un allegato.
+MARTA: A me i clienti scrivono che le risposte arrivano dopo un'ora. È già successo tre volte oggi.
+
+RENZO: Il disco è pieno al novantaquattro per cento, e il sistema continua a riorganizzare i dati.
+ETTORE: Ma non avevamo un limite per gli allegati?
+
+RENZO: Sì, venticinque megabyte, ma nessuno cancella mai niente. Ci sono caselle da quaranta gigabyte.
+MARTA: La mia è una di quelle, lo ammetto. Tengo tutti i contratti lì dentro.
+ETTORE: Quelli non dovrebbero stare nell'archivio condiviso?
+MARTA: Sì, ma l'archivio è scomodo, non si riesce a cercare per cliente.
+
+RENZO: Per oggi posso aggiungere spazio: duecento gigabyte in più, in circa un'ora, senza spegnere nulla.
+ETTORE: Fallo subito, poi ragioniamo con calma sul resto.
+MARTA: Avviso io i clienti del ritardo, così smettono di chiamare.
+
+RENZO: Grazie. A lungo termine servirebbe una regola: dopo due anni la posta viene archiviata in automatico.
+ETTORE: Ci sono obblighi legali da rispettare? Non vorrei perdere nulla di importante.
+MARTA: Per i contratti sono dieci anni, lo so per certo. Per il resto chiedo all'ufficio legale.
+
+RENZO: Archiviare non vuol dire cancellare, si potrà sempre recuperare tutto.
+ETTORE: Allora scrivi una proposta. Ne parliamo la settimana prossima con la direzione.
+MARTA: E io intanto sposto i miei contratti, promesso.
+
+RENZO: Così libero già qualche gigabyte. Vi aggiorno appena ho finito.

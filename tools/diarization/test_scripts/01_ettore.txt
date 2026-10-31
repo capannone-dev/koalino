@@ -1,0 +1,15 @@
+# Copione di prova per la registrazione. Leggete solo le battute, senza i nomi.
+# Registrazione da salvare come: 01_ettore.<estensione>
+
+
+ETTORE: Buongiorno a tutti. Oggi vorrei raccontare come organizzo una settimana di lavoro, perché negli ultimi mesi ho cambiato parecchie abitudini.
+
+ETTORE: Il lunedì mattina apro il calendario e scrivo le tre cose più importanti. Non dieci, tre. Se ne scrivo di più, so già che il venerdì ne avrò finite meno della metà. Poi blocco due ore al giorno senza riunioni, di solito dalle nove alle undici, e in quel tempo lavoro su un solo problema.
+
+ETTORE: Il martedì e il giovedì sono i giorni delle riunioni. Cerco di tenerle tutte lì, così gli altri giorni restano più tranquilli. Ogni riunione deve avere uno scopo chiaro e durare al massimo quarantacinque minuti. Alla fine scrivo chi deve fare cosa e entro quando.
+
+ETTORE: Il mercoledì pomeriggio lo dedico a leggere: documentazione, articoli, e il codice scritto dai colleghi. Sembra tempo perso, ma mi ha evitato molti errori.
+
+ETTORE: Il venerdì guardo cosa è successo. Quest'ultima settimana, per esempio, avevo previsto tre attività e ne ho finite due. La terza è saltata perché un fornitore ha consegnato con sei giorni di ritardo. Non è un dramma, però lo annoto, così la prossima volta chiedo la conferma prima di impegnarmi.
+
+ETTORE: Ecco, questo è tutto. Non è un metodo perfetto, ma funziona abbastanza bene e mi lascia libere le sere. Grazie per l'attenzione.

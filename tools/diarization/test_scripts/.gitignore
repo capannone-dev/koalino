@@ -1,0 +1,5 @@
+# Recordings hold people's voices (biometric PII): keep them local, never commit them.
+*
+!.gitignore
+!README.md
+!*.txt

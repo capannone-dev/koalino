@@ -54,3 +54,12 @@ the APK. Measured on a Galaxy S23 (SM-S911W): a 53 s recording with Whisper base
 after it stopped, with the app at up to about 790 MB and near full CPU.
 
 `licenses/` holds the licence texts shipped with the models.
+
+## Measuring on real recordings
+
+`evaluate_pipeline.py` scores transcription, diarization, word-to-speaker assignment and voice naming on
+recordings of the scripts in `test_scripts/`, using the output of the `measure_transcription` and
+`measure_diarization` Rust tests. Its header has the commands. `evaluate_short_windows.py` also checks each
+turn's voice and tries diarization from 2 s windows.
+That output contains voice embeddings, so keep it outside the repository and delete it afterwards.
+The script prints only counts and rates.
