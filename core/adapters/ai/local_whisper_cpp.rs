@@ -15,6 +15,9 @@ use crate::{
     ports::ai::TranscriptionEngine,
 };
 
+use super::compute_resources::{
+    GpuDevice, choose_gpu, missing_cpu_instructions, model_fits_on_gpu,
+};
 use super::whisper_word_timing::{WhisperTokenTiming, words_from_tokens, words_match_text};
 
 /// Resolves adapter-owned, normalized PCM samples for one portable recording identifier.
@@ -84,6 +87,75 @@ impl LocalWhisperCppConfig {
     }
 }
 
+/// Lists the GPUs whisper.cpp can use, in the order its `gpu_device` setting counts them.
+///
+/// Outputs: The GPUs; empty for a build without a GPU backend, or a machine without a usable GPU.
+/// Side effects: Starts whisper.cpp's backends on first use, which may load the Vulkan library.
+pub fn available_gpus() -> Vec<GpuDevice> {
+    use whisper_rs_sys::{
+        ggml_backend_dev_count, ggml_backend_dev_get, ggml_backend_dev_memory,
+        ggml_backend_dev_type, ggml_backend_dev_type_GGML_BACKEND_DEVICE_TYPE_GPU,
+        ggml_backend_dev_type_GGML_BACKEND_DEVICE_TYPE_IGPU,
+    };
+    let mut gpus = Vec::new();
+    // SAFETY: These read ggml's device list, which ggml owns and keeps for the process's lifetime.
+    // The memory pointers are valid for the call.
+    unsafe {
+        for position in 0..ggml_backend_dev_count() {
+            let device = ggml_backend_dev_get(position);
+            let device_type = ggml_backend_dev_type(device);
+            let is_discrete = device_type == ggml_backend_dev_type_GGML_BACKEND_DEVICE_TYPE_GPU;
+            if !is_discrete && device_type != ggml_backend_dev_type_GGML_BACKEND_DEVICE_TYPE_IGPU {
+                continue;
+            }
+            let (mut free_memory_bytes, mut total_memory_bytes) = (0_usize, 0_usize);
+            ggml_backend_dev_memory(device, &mut free_memory_bytes, &mut total_memory_bytes);
+            gpus.push(GpuDevice {
+                index: i32::try_from(gpus.len()).unwrap_or(i32::MAX),
+                is_discrete,
+                total_memory_bytes: total_memory_bytes as u64,
+                free_memory_bytes: free_memory_bytes as u64,
+            });
+        }
+    }
+    gpus
+}
+
+/// Picks the GPU for a model, when one should be used.
+///
+/// Inputs: The configuration; a request for the CPU returns `None` at once.
+/// Outputs: The GPU to try, or `None` when there is none or the model looks too large for it.
+/// Side effects: See `available_gpus`; reads the model file's size.
+fn gpu_for_model(configuration: &LocalWhisperCppConfig) -> Option<GpuDevice> {
+    if !configuration.use_gpu {
+        return None;
+    }
+    let chosen_gpu = choose_gpu(&available_gpus())?;
+    let model_bytes = std::fs::metadata(&configuration.model_path).ok()?.len();
+    if model_fits_on_gpu(model_bytes, chosen_gpu.free_memory_bytes) {
+        Some(chosen_gpu)
+    } else {
+        tracing::info!("the Whisper model is too large for this GPU, using the CPU");
+        None
+    }
+}
+
+/// Loads a model on the chosen GPU and proves it can allocate its working memory there.
+///
+/// Inputs: The model path and the GPU.
+/// Outputs: The context, or `None` when the GPU can't run it.
+/// Side effects: Reads the model and allocates GPU memory.
+fn load_on_gpu(model_path: &str, gpu: GpuDevice) -> Option<WhisperContext> {
+    let context_parameters = WhisperContextParameters {
+        use_gpu: true,
+        gpu_device: gpu.index,
+        ..WhisperContextParameters::default()
+    };
+    let model_context = WhisperContext::new_with_params(model_path, context_parameters).ok()?;
+    model_context.create_state().ok()?;
+    Some(model_context)
+}
+
 /// Implements local transcription with an adapter-owned whisper.cpp model context.
 ///
 /// A mutex serializes native state creation and inference for this one model context. Callers that
@@ -112,12 +184,31 @@ impl LocalWhisperCppTranscriptionEngine {
             .model_path
             .to_str()
             .ok_or(TranscriptionError::Unavailable)?;
-        let context_parameters = WhisperContextParameters {
-            use_gpu: configuration.use_gpu,
-            ..WhisperContextParameters::default()
+        let missing_instructions = missing_cpu_instructions();
+        if !missing_instructions.is_empty() {
+            tracing::warn!(
+                ?missing_instructions,
+                "this CPU cannot run local transcription"
+            );
+            return Err(TranscriptionError::Unavailable);
+        }
+        let gpu_context =
+            gpu_for_model(&configuration).and_then(|gpu| load_on_gpu(model_path, gpu));
+        let model_context = match gpu_context {
+            Some(model_context) => {
+                tracing::info!("local transcription uses the GPU");
+                model_context
+            }
+            None => {
+                tracing::info!("local transcription uses the CPU");
+                let cpu_parameters = WhisperContextParameters {
+                    use_gpu: false,
+                    ..WhisperContextParameters::default()
+                };
+                WhisperContext::new_with_params(model_path, cpu_parameters)
+                    .map_err(|_| TranscriptionError::Unavailable)?
+            }
         };
-        let model_context = WhisperContext::new_with_params(model_path, context_parameters)
-            .map_err(|_| TranscriptionError::Unavailable)?;
 
         Ok(Self {
             model_context: Mutex::new(model_context),

@@ -15,3 +15,8 @@ set(GGML_AVX ON CACHE BOOL "" FORCE)
 set(GGML_AVX2 ON CACHE BOOL "" FORCE)
 set(GGML_FMA ON CACHE BOOL "" FORCE)
 set(GGML_F16C ON CACHE BOOL "" FORCE)
+# The GPU build's headers and empty link library (fetch-vulkan.sh; Issue #71). glslc runs on the
+# build machine, and find_package would otherwise look for it in the target's folders only.
+set(Vulkan_INCLUDE_DIR $ENV{VULKAN_SDK}/include CACHE PATH "" FORCE)
+set(Vulkan_LIBRARY $ENV{VULKAN_SDK}/lib/libvulkan.a CACHE FILEPATH "" FORCE)
+set(Vulkan_GLSLC_EXECUTABLE $ENV{VULKAN_SDK}/bin/glslc CACHE FILEPATH "" FORCE)

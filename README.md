@@ -91,6 +91,7 @@ repository.
 | `NOTE_TAKER_P2P_PEERS` | unset | Comma-separated `…/p2p/<peer-id>` addresses of your devices that mDNS cannot find (another subnet, NAT, VPN). They appear as nearby for pairing. Paired devices, configured or found by mDNS, are redialed every 10 s while disconnected |
 | `NOTE_TAKER_TRANSCRIPTION_PROVIDER` | `auto` | `auto`, `local` (whisper.cpp), or `openai` |
 | `NOTE_TAKER_WHISPER_MODEL` | unset | Path to the local GGML model (`local-ai` builds) |
+| `NOTE_TAKER_WHISPER_GPU` | on | `off` keeps local transcription on the CPU in GPU builds |
 | `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` | Language detection, or a code such as `it` or `en` |
 | `OPENAI_API_KEY` | unset | Enables cloud transcription. Audio leaves the device only when this is set. In the app, a key saved in Settings replaces it |
 | `NOTE_TAKER_OPENAI_WHISPER_MODEL` | `whisper-1` | OpenAI transcription model |

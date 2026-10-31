@@ -127,7 +127,7 @@ impl SpeakerEmbeddingModel for OnnxSpeakerEmbeddingModel {
 fn load_session(model_path: &Path) -> Result<Session, DiarizationError> {
     #[cfg(windows)]
     let _environment = ort::init_from("onnxruntime.dll").map_err(load_failure)?;
-    let thread_count = std::thread::available_parallelism().map_or(1, usize::from);
+    let thread_count = crate::adapters::ai::compute_resources::preferred_inference_threads();
     let mut builder = Session::builder()
         .map_err(load_failure)?
         .with_intra_threads(thread_count)

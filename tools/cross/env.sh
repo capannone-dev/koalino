@@ -15,3 +15,6 @@ export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$NDK_BIN/../sys
 # Flutter app builds (fetch-flutter.sh): Flutter SDK, JDK and Android SDK.
 export JAVA_HOME=$T/jdk ANDROID_HOME=$T/android-sdk ANDROID_SDK_ROOT=$T/android-sdk
 export PATH=$T/flutter/bin:$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH
+# Vulkan headers and an empty link library, for the GPU builds (fetch-vulkan.sh; Issue #71). The
+# core defines the one Vulkan symbol ggml links, so nothing is really linked (vulkan_loader_shim.rs).
+export VULKAN_SDK=$T/vulkan-sdk

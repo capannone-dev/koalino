@@ -229,6 +229,8 @@ async fn start_p2p_task(
     if let Ok(pipeline_config) = PipelineConfig::from_environment() {
         config.capabilities.transcription_models =
             pipeline_config.advertised_transcription_models();
+        config.capabilities.gpu_vram_megabytes =
+            note_taker_core::pipeline_composition::local_gpu_megabytes();
         if !config.capabilities.transcription_models.is_empty() {
             hosted_pipeline = Some(pipeline_config);
         }

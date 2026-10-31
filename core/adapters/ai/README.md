@@ -12,6 +12,11 @@ Whisper/whisper.cpp types and native model initialization.
 `whisper_word_timing.rs` builds timed words from whisper.cpp tokens (#69), and `whisper_model_download.rs` downloads
 a model from Hugging Face, installing it only when its pinned hash matches (#67). Both compile without `local-ai`.
 
+`compute_resources.rs` decides how inference uses the machine: at most 8 threads on fast cores, the minimum CPU
+instructions, and which GPU fits a model (#70, #71). `vulkan_loader_shim.rs` lets a Vulkan build start without Vulkan.
+Set `NOTE_TAKER_WHISPER_GPU=off` to force the CPU. The Vulkan build is selected with `whisper-rs/vulkan` in the
+cross scripts, not a crate feature, so `--all-features` builds don't need its headers.
+
 `local_whisper_cpp.rs` implements `TranscriptionEngine` using `whisper-rs`, the Rust binding for
 whisper.cpp. The adapter owns a `RecordingPcmSource` seam that resolves adapter-local, 16 kHz,
 mono floating-point PCM for portable `AudioRecording` metadata. It returns only the existing

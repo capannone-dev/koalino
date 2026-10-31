@@ -177,3 +177,68 @@ fn a_chunks_language_overrides_the_configured_one() {
         assert!(text.contains("americans"), "{language}: {text}");
     }
 }
+
+/// Supplies one in-memory recording to the engine.
+struct MachineCheckPcm(Vec<f32>);
+
+impl RecordingPcmSource for MachineCheckPcm {
+    /// Returns the held samples. Inputs: unused metadata. Side effects: Copies the buffer.
+    fn load_pcm_16khz_mono(
+        &self,
+        _audio_recording: &AudioRecording,
+    ) -> Result<Vec<f32>, crate::domain::errors::TranscriptionError> {
+        Ok(self.0.clone())
+    }
+}
+
+/// Runs the real engine as the app would, to check a build on a given machine.
+///
+/// Inputs: `NOTE_TAKER_WHISPER_MODEL`, and `NOTE_TAKER_CHECK_WAV` naming a 16 kHz mono PCM file.
+/// `NOTE_TAKER_WHISPER_GPU=off` forces the CPU; `NOTE_TAKER_CHECK_THREADS` overrides the threads. Outputs: Panics when nothing is transcribed.
+/// Side effects: Runs inference and prints the GPUs, thread count, speed and transcript.
+#[test]
+#[ignore = "needs a Whisper model and a speech file"]
+fn engine_runs_on_this_machine() {
+    use crate::adapters::ai::{
+        compute_resources::preferred_inference_threads,
+        diarization::wav_input::decode_wav_pcm16_mono, local_whisper_cpp::available_gpus,
+    };
+    let read_setting = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("set {name}"));
+    let wav_bytes = std::fs::read(read_setting("NOTE_TAKER_CHECK_WAV"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let samples = decode_wav_pcm16_mono(&wav_bytes).unwrap_or_else(|error| panic!("{error}"));
+    let audio_seconds = samples.len() as f64 / 16_000.0;
+    let use_gpu = std::env::var("NOTE_TAKER_WHISPER_GPU").map_or(true, |value| value != "off");
+    let threads = std::env::var("NOTE_TAKER_CHECK_THREADS")
+        .ok()
+        .and_then(|threads| threads.parse().ok())
+        .unwrap_or_else(preferred_inference_threads);
+    println!("gpus: {:?}", available_gpus());
+    let configuration = LocalWhisperCppConfig::new(
+        read_setting("NOTE_TAKER_WHISPER_MODEL").into(),
+        threads,
+        use_gpu,
+        Some("en".to_owned()),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let engine =
+        LocalWhisperCppTranscriptionEngine::new(configuration, Arc::new(MachineCheckPcm(samples)))
+            .unwrap_or_else(|error| panic!("{error}"));
+    let recording = AudioRecording::new(
+        RecordingId::new("recording"),
+        MeetingId::new("meeting"),
+        DeviceId::new("device"),
+    );
+    for pass in 1..=3 {
+        let started = std::time::Instant::now();
+        let transcript = engine
+            .transcribe(&recording, &TranscriptionContext::default())
+            .unwrap_or_else(|error| panic!("{error}"));
+        println!(
+            "pass {pass}, threads {threads}, {:.3} x real time: {}",
+            started.elapsed().as_secs_f64() / audio_seconds,
+            transcript.content()
+        );
+        assert!(!transcript.content().is_empty());
+    }
+}

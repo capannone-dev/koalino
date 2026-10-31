@@ -465,6 +465,38 @@ pub fn transcription_task_profile(
     }
 }
 
+/// Says whether local transcription may try a GPU.
+///
+/// Outputs: True unless `NOTE_TAKER_WHISPER_GPU` is `off`, the way to rule a GPU driver in or out.
+/// Side effects: Reads the environment.
+#[cfg(feature = "local-ai")]
+fn whisper_gpu_allowed() -> bool {
+    std::env::var("NOTE_TAKER_WHISPER_GPU").map_or(true, |value| value != "off")
+}
+
+/// Returns the GPU memory this device should advertise to paired devices.
+///
+/// Outputs: A discrete GPU's memory in megabytes, or zero. Side effects: Starts whisper.cpp's
+/// backends on first use, which may load the Vulkan library.
+#[cfg(feature = "local-ai")]
+pub fn local_gpu_megabytes() -> u32 {
+    use crate::adapters::ai::{compute_resources, local_whisper_cpp};
+    if !whisper_gpu_allowed() {
+        return 0;
+    }
+    compute_resources::advertised_gpu_megabytes(compute_resources::choose_gpu(
+        &local_whisper_cpp::available_gpus(),
+    ))
+}
+
+/// Reports no GPU for a build without local transcription.
+///
+/// Outputs: Zero. Side effects: None.
+#[cfg(not(feature = "local-ai"))]
+pub fn local_gpu_megabytes() -> u32 {
+    0
+}
+
 /// Labels a local model by its file name without folder or extension (`ggml-small`).
 ///
 /// Inputs: The model path, with `/` or `\` separators whatever the host.
@@ -566,13 +598,13 @@ fn local_engine(
     let model_path = config.whisper_model_path.clone().ok_or_else(|| {
         anyhow!("local transcription requires {WHISPER_MODEL_VARIABLE} to name a model file")
     })?;
-    let thread_count = std::thread::available_parallelism().map_or(4, usize::from);
+    let thread_count = crate::adapters::ai::compute_resources::preferred_inference_threads();
     // An explicit language is required: whisper.cpp defaults to English, so Italian meetings
     // would otherwise come out as English text. `auto` makes it detect the language per chunk.
     let local_config = LocalWhisperCppConfig::new(
         model_path,
         thread_count,
-        false,
+        whisper_gpu_allowed(),
         Some(config.whisper_language.clone()),
     )
     .context("invalid local transcription configuration")?;

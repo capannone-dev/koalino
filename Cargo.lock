@@ -3338,6 +3338,7 @@ dependencies = [
  "uuid",
  "webrtc-vad",
  "whisper-rs",
+ "whisper-rs-sys",
  "x25519-dalek",
  "zeroize",
 ]

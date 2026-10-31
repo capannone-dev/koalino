@@ -1639,6 +1639,7 @@ fn start_p2p(
         config.capabilities.local_whisper_model = pipeline_config
             .local_model_path()
             .map(crate::pipeline_composition::local_model_label);
+        config.capabilities.gpu_vram_megabytes = crate::pipeline_composition::local_gpu_megabytes();
         if !config.capabilities.transcription_models.is_empty() {
             hosted_pipeline = Some(pipeline_config);
         }

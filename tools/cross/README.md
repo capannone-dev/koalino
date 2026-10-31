@@ -12,11 +12,13 @@ Android builds of `daemon` and `cli` need, including whisper.cpp for on-device t
 | `fetch-flutter.sh` | Installs the Flutter SDK 3.47.8, a Temurin JDK 21, and the Android SDK (platform 36, build-tools 36.0.0, NDK 28.2) with its licences accepted, plus ninja for the Linux desktop build; run after `fetch.sh` |
 | `build-flutter-native.sh` | Builds the core library with whisper.cpp and stages it for the Flutter app: `linux` into `ui/native/linux/`, `android` into the APK's `jniLibs/arm64-v8a/` with `libc++_shared.so`, `windows` (release, cargo-zigbuild) into `ui/native/windows/note_taker_core.dll`. It also stages the diarization models and licences (`ui/native/models/diarization/`, or `ui/native/android-assets/models/diarization/` on Android), and on Windows `onnxruntime.dll` (`ui/native/windows/onnxruntime/`). It also stages the fetched `ggml-base.bin` so the app transcribes out of the box: `ui/native/models/` (installed into the Linux and Windows bundles' `data/models`) and `ui/native/android-assets/models/` (an uncompressed APK asset, about 148 MB of the APK) |
 | `env.sh` | Source before a cross build or a Flutter build. Uses the rustup toolchain, a separate target directory (`$NOTE_TAKER_TOOLCHAINS/target`, so the host's `target/` is untouched), and the CMake toolchain files below |
+| `fetch-vulkan.sh` | Installs the Vulkan headers (hash-pinned), a link to the system's `glslc` and an empty link library into `vulkan-sdk`, for the Linux and Windows GPU builds. Needs the system's shaderc package |
 | `cmake/` | CMake toolchain files for whisper.cpp; see its README |
 
 ```sh
 tools/cross/fetch.sh                      # once
 tools/cross/fetch-flutter.sh              # once, for the Flutter app
+tools/cross/fetch-vulkan.sh               # once, for the Linux and Windows app builds
 source tools/cross/env.sh
 cargo zigbuild --release --features local-ai --target x86_64-pc-windows-gnu --bin daemon --bin cli
 cargo build    --release --features local-ai --target aarch64-linux-android --bin daemon --bin cli

@@ -15,7 +15,7 @@ crate-type = ["rlib", "cdylib"]
 # Keeps the default core build free of native model dependencies and model initialization.
 default = []
 # Enables the adapter-local whisper.cpp binding for explicitly opted-in local inference.
-local-ai = ["dep:whisper-rs"]
+local-ai = ["dep:whisper-rs", "dep:whisper-rs-sys"]
 vad = ["dep:webrtc-vad"]
 # Captures the default microphone with cpal (ALSA on Linux, WASAPI on Windows, AAudio on Android;
 # Issue #45). Linux builds need the ALSA development package (`libasound2-dev`).
@@ -87,6 +87,8 @@ zeroize = "1.8.1"
 cpal = { version = "0.18.2", optional = true }
 # 0.16.0 provides native binding compatibility and requires the crate's Rust 1.88 MSRV.
 whisper-rs = { version = "=0.16.0", optional = true }
+# whisper-rs's own binding, used directly only to list GPUs, which whisper-rs does not expose.
+whisper-rs-sys = { version = "=0.15.0", optional = true }
 # ONNX Runtime for the `diarization` feature (approved by the owner, #44). rc.13 is the last release
 # within the crate's Rust 1.88 MSRV; ndarray and tracing integrations are not needed.
 # Provides feature-gated 16 kHz speech classification for the VAD adapter and its contract tests.

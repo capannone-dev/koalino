@@ -1478,3 +1478,23 @@ changed; the design below awaits the owner's decision.
   environment, so the API has no route that could expose a key.
 - **`libc` became a direct dependency** for free disk space and total memory. It was already in the build.
 
+## 2026-11-01 — #70 CPU instructions and threads, #71 desktop GPU
+
+- **Vulkan on Linux and Windows, with the CPU as fallback.** Same clip on an RTX 2000 Ada against the CPU, as
+  multiples of audio length: `base` 0.009 against 0.072, `small` 0.019 against 0.245, `large-v3-turbo` 0.039
+  against 1.25. The first run after install took 0.51 for `base`, because the driver compiles its shaders once.
+- **A discrete GPU beats an integrated one**, even when listed second. We advertise only a discrete GPU's memory
+  to routing: an integrated GPU's figure is shared system memory (50 GB here) and would outrank a real GPU.
+- **No build-time link to Vulkan.** A normal link stops the app starting where the Vulkan loader is missing. The
+  core defines the three functions ggml calls directly, and opens the loader on first use
+  (`vulkan_loader_shim.rs`). Checked on `deb-shell` (no loader), `deb-gui` (loader, software renderer only) and
+  `win11` (with and without `vulkan-1.dll`): each transcribes on the CPU. A real GPU on Windows is untested.
+- **A model that won't fit stays on the CPU.** It needs 1.5 times its size plus 256 MB free on the GPU, and a
+  trial allocation at load falls back too. `NOTE_TAKER_WHISPER_GPU=off` forces the CPU.
+- **At most 8 threads, fast cores only.** `small` on a 22-thread Core Ultra 7, CPU: 4 threads 0.32, 8 threads 0.24,
+  16 threads 0.22, 20 threads 0.39, 22 threads (the old setting) 0.33. Above the fast cores it gets worse, and 8
+  is close to the best while leaving the machine usable. A core counts as fast at 70% of the top speed.
+- **Fixed minimum CPUs.** Linux no longer uses `-march=native`: like Windows it needs AVX2, FMA and F16C. Android
+  needs `armv8.2-a+dotprod+fp16` (Cortex-A55 and A75, 2018, on). Without these the engine reports itself unavailable
+  instead of crashing. The ARM build is compiled but **not run: S23 figures for #70 still need the phone**.
+

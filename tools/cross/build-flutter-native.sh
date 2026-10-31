@@ -21,6 +21,19 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 source "$REPO/tools/cross/env.sh"
 cd "$REPO"
 
+# Rebuilds whisper.cpp when its build flags changed, because cargo doesn't notice that by itself.
+# $1 names the platform, $2 the flags or the toolchain file holding them, $3... cargo's target flags.
+refresh_whisper_build() {
+  local stamp=$CARGO_TARGET_DIR/.whisper-flags-$1 flags=$2
+  shift 2
+  [ -f "$flags" ] && flags=$(cat "$flags")
+  if [ "$(cat "$stamp" 2>/dev/null)" != "$flags" ]; then
+    cargo clean --release -p whisper-rs-sys "$@"
+    mkdir -p "$CARGO_TARGET_DIR"
+    printf '%s' "$flags" >"$stamp"
+  fi
+}
+
 # Copies the fetched model to $1/ggml-base.bin unless an identical copy is already there.
 stage_model() {
   local source=$T/models/ggml-base.bin
@@ -60,13 +73,19 @@ stage_onnx_runtime() {
 for platform in "$@"; do
   case $platform in
     linux)
-      cargo build --release --features local-ai,microphone,vad,diarization --lib
+      # A fixed CPU level, because -march=native would tie the app to the build machine's CPU. Vulkan
+      # gives desktop GPUs a large speed-up (#70, #71).
+      export GGML_NATIVE=OFF GGML_AVX=ON GGML_AVX2=ON GGML_FMA=ON GGML_F16C=ON
+      refresh_whisper_build linux "$GGML_NATIVE $GGML_AVX $GGML_AVX2 $GGML_FMA $GGML_F16C"
+      cargo build --release --features local-ai,microphone,vad,diarization,whisper-rs/vulkan --lib
+      unset GGML_NATIVE GGML_AVX GGML_AVX2 GGML_FMA GGML_F16C
       mkdir -p ui/native/linux
       cp "$CARGO_TARGET_DIR/release/libnote_taker_core.so" ui/native/linux/
       stage_model ui/native/models
       stage_diarization_models ui/native/models
       ;;
     android)
+      refresh_whisper_build android "$CROSS_DIR/cmake/android-arm64.cmake" --target aarch64-linux-android
       cargo build --release --features local-ai,microphone,vad,diarization --lib --target aarch64-linux-android
       jni=ui/android/app/src/main/jniLibs/arm64-v8a
       mkdir -p "$jni"
@@ -76,7 +95,10 @@ for platform in "$@"; do
       stage_diarization_models ui/native/android-assets/models
       ;;
     windows)
-      cargo zigbuild --release --features local-ai,microphone,vad,diarization --lib --target x86_64-pc-windows-gnu
+      refresh_whisper_build windows "$(cat "$CROSS_DIR"/cmake/windows-gnu-zig.cmake "$CROSS_DIR"/cmake/mingw-library-names.cmake)" \
+        --target x86_64-pc-windows-gnu
+      RUSTFLAGS="-L native=$VULKAN_SDK/lib" \
+        cargo zigbuild --release --features local-ai,microphone,vad,diarization,whisper-rs/vulkan --lib --target x86_64-pc-windows-gnu
       mkdir -p ui/native/windows
       cp "$CARGO_TARGET_DIR/x86_64-pc-windows-gnu/release/note_taker_core.dll" ui/native/windows/
       stage_model ui/native/models
