@@ -1,12 +1,14 @@
 //! Aligns diarized speaker regions with VAD chunk boundaries and distributes transcript text.
 //!
-//! The `TranscriptionEngine` port returns chunk-level text without word timestamps, so the VAD
-//! chunk is the alignment reference: diarization regions are clamped to the chunk, overlaps and
-//! gaps are resolved so regions tile the chunk exactly, adjacent regions of one speaker are merged
-//! (keeping sentences together), and words are distributed in proportion to region duration.
+//! The VAD chunk is the alignment reference: diarization regions are clamped to the chunk, overlaps
+//! and gaps are resolved so regions tile the chunk exactly, and adjacent regions of one speaker are
+//! merged (keeping sentences together). Each word then goes to the region at its midpoint when the
+//! engine reports word timing. Engines without timing get words in proportion to region duration.
 //! Everything here is pure and side-effect free.
 
 use uuid::Uuid;
+
+use crate::domain::models::{TimedWord, Transcript};
 
 /// Reports VAD boundaries whose end precedes their start.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -205,17 +207,7 @@ pub fn align_chunk_regions(
         return Vec::new();
     }
     let chunk_duration_ms = chunk_bounds.duration_ms();
-    let mut tiled_regions = tile_chunk(normalize_regions(speaker_regions, chunk_duration_ms));
-    if tiled_regions.is_empty() {
-        tiled_regions.push(SpeakerRegion::new(
-            0,
-            chunk_duration_ms,
-            SpeakerAttribution::Unattributed,
-        ));
-    }
-    if let Some(last_region) = tiled_regions.last_mut() {
-        last_region.end_time_ms = chunk_duration_ms;
-    }
+    let tiled_regions = chunk_tiling(speaker_regions, chunk_duration_ms);
 
     let total_word_count = transcript_words.len();
     let last_region_index = tiled_regions.len() - 1;
@@ -241,6 +233,82 @@ pub fn align_chunk_regions(
         });
     }
     aligned_regions
+}
+
+/// Aligns regions and text, using word timing when the engine reported it.
+///
+/// Inputs: Meeting-relative chunk bounds, chunk-relative regions, and the chunk's transcript.
+/// Outputs: The aligned regions, from `align_timed_words` with timing and from
+/// `align_chunk_regions` without it.
+/// Side effects: None.
+pub fn align_transcript(
+    chunk_bounds: ChunkBounds,
+    speaker_regions: Vec<SpeakerRegion>,
+    transcript: &Transcript,
+) -> Vec<AlignedRegion> {
+    if transcript.timed_words().is_empty() {
+        align_chunk_regions(chunk_bounds, speaker_regions, transcript.content())
+    } else {
+        align_timed_words(chunk_bounds, speaker_regions, transcript.timed_words())
+    }
+}
+
+/// Gives each timed word to the region at its midpoint.
+///
+/// Inputs: Meeting-relative chunk bounds, chunk-relative regions in any order, and chunk-relative
+/// words in spoken order.
+/// Outputs: Non-empty-text regions in meeting time, in order. A word never moves back to an earlier
+/// region, so a timing glitch cannot reorder the text. Without usable regions the whole chunk
+/// becomes one `Unattributed` region; no words yield no regions.
+/// Side effects: None.
+pub fn align_timed_words(
+    chunk_bounds: ChunkBounds,
+    speaker_regions: Vec<SpeakerRegion>,
+    timed_words: &[TimedWord],
+) -> Vec<AlignedRegion> {
+    let tiled_regions = chunk_tiling(speaker_regions, chunk_bounds.duration_ms());
+    let mut region_words: Vec<Vec<&str>> = vec![Vec::new(); tiled_regions.len()];
+    let mut current_region_index = 0;
+    for timed_word in timed_words {
+        let midpoint_ms = timed_word.midpoint_ms();
+        while current_region_index + 1 < tiled_regions.len()
+            && midpoint_ms >= tiled_regions[current_region_index].end_time_ms
+        {
+            current_region_index += 1;
+        }
+        region_words[current_region_index].push(timed_word.text());
+    }
+    tiled_regions
+        .into_iter()
+        .zip(region_words)
+        .filter(|(_, words)| !words.is_empty())
+        .map(|(region, words)| AlignedRegion {
+            start_time_ms: chunk_bounds.start_offset_ms() + region.start_time_ms,
+            end_time_ms: chunk_bounds.start_offset_ms() + region.end_time_ms,
+            attribution: region.attribution,
+            text: words.join(" "),
+        })
+        .collect()
+}
+
+/// Turns raw regions into ordered regions that cover the whole chunk.
+///
+/// Inputs: Raw chunk-relative regions and the chunk duration.
+/// Outputs: At least one region, with no gaps; `Unattributed` when none were usable.
+/// Side effects: None.
+fn chunk_tiling(speaker_regions: Vec<SpeakerRegion>, chunk_duration_ms: u64) -> Vec<SpeakerRegion> {
+    let mut tiled_regions = tile_chunk(normalize_regions(speaker_regions, chunk_duration_ms));
+    if tiled_regions.is_empty() {
+        tiled_regions.push(SpeakerRegion::new(
+            0,
+            chunk_duration_ms,
+            SpeakerAttribution::Unattributed,
+        ));
+    }
+    if let Some(last_region) = tiled_regions.last_mut() {
+        last_region.end_time_ms = chunk_duration_ms;
+    }
+    tiled_regions
 }
 
 /// Clamps regions to the chunk, orders them, removes overlaps, and merges same-speaker neighbours.

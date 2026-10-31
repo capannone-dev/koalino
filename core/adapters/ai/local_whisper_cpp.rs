@@ -15,6 +15,8 @@ use crate::{
     ports::ai::TranscriptionEngine,
 };
 
+use super::whisper_word_timing::{WhisperTokenTiming, words_from_tokens, words_match_text};
+
 /// Resolves adapter-owned, normalized PCM samples for one portable recording identifier.
 ///
 /// Implementations may read a temporary local audio store, but they must return exactly 16 kHz,
@@ -177,6 +179,7 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
         inference_parameters.set_print_progress(false);
         inference_parameters.set_print_realtime(false);
         inference_parameters.set_print_timestamps(false);
+        inference_parameters.set_token_timestamps(true);
         if let Some(language) = transcription_context.language_or(self.language.as_deref()) {
             inference_parameters.set_language(Some(language));
         }
@@ -188,6 +191,7 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
             .map_err(|_| TranscriptionError::Unavailable)?;
 
         let mut transcript_content = String::new();
+        let mut spoken_tokens = Vec::new();
         for transcript_segment in inference_state.as_iter() {
             let segment_text = transcript_segment
                 .to_str_lossy()
@@ -196,12 +200,40 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
                 continue;
             }
             transcript_content.push_str(&segment_text);
+            for token_index in 0..transcript_segment.n_tokens() {
+                if let Some(token) = transcript_segment.get_token(token_index)
+                    && let Ok(bytes) = token.to_bytes()
+                {
+                    let timing = token.token_data();
+                    spoken_tokens.push((bytes.to_vec(), timing.t0, timing.t1));
+                }
+            }
         }
+
+        // Timing only steers who said a word: if it ever disagrees with the text, the text wins
+        // and the transcript falls back to splitting by time.
+        let timed_words =
+            words_from_tokens(
+                spoken_tokens
+                    .iter()
+                    .map(|(bytes, t0, t1)| WhisperTokenTiming {
+                        bytes,
+                        start_units: *t0,
+                        end_units: *t1,
+                    }),
+            );
+        let timed_words = if words_match_text(&timed_words, &transcript_content) {
+            timed_words
+        } else {
+            tracing::warn!("whisper word timing does not match its text; ignoring the timing");
+            Vec::new()
+        };
 
         Ok(Transcript::new(
             audio_recording.meeting_id().clone(),
             transcript_content.trim(),
-        ))
+        )
+        .with_timed_words(timed_words))
     }
 }
 

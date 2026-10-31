@@ -19,7 +19,10 @@ use crate::{
     },
     application::{
         pipeline::{
-            alignment::{ChunkBounds, SpeakerRegion, align_chunk_regions},
+            alignment::{
+                ChunkBounds, SpeakerRegion, align_chunk_regions, align_timed_words,
+                align_transcript,
+            },
             meeting_session::{
                 MeetingSession, MeetingSessionError, SpeakerAttribution, VadAudioChunk,
             },
@@ -31,8 +34,8 @@ use crate::{
         errors::{DiarizationError, StorageError, TranscriptionError},
         models::{
             AudioRecording, DeviceId, ExternalMediaChunk, ExternalParticipant, MeetingId,
-            RecordingId, SpeakerIdentity, Transcript, TranscriptSegment, TranscriptionContext,
-            UnassignedVoiceClip, VoiceEmbedding, VoiceMatchResult,
+            RecordingId, SpeakerIdentity, TimedWord, Transcript, TranscriptSegment,
+            TranscriptionContext, UnassignedVoiceClip, VoiceEmbedding, VoiceMatchResult,
         },
         transcription_language::TranscriptionLanguage,
     },
@@ -791,6 +794,105 @@ fn alignment_splits_words_by_region_duration_and_tiles_chunk() {
     assert_eq!(aligned_regions[1].end_time_ms(), 64_000);
     assert_eq!(aligned_regions[1].attribution(), &bob);
     assert_eq!(aligned_regions[1].text(), "three four five six seven eight");
+}
+
+/// Verifies a word goes to the speaker at its midpoint, even when one speaker talks faster.
+#[test]
+fn timed_words_go_to_the_region_at_their_midpoint() {
+    let alice = SpeakerAttribution::Known {
+        identity_id: Uuid::new_v4(),
+    };
+    let bob = SpeakerAttribution::Known {
+        identity_id: Uuid::new_v4(),
+    };
+    let chunk_bounds = ChunkBounds::new(10_000, 14_000)
+        .unwrap_or_else(|error| panic!("bounds should be valid: {error}"));
+    let words = [
+        TimedWord::new("one", 0, 200),
+        TimedWord::new("two", 200, 400),
+        TimedWord::new("three", 400, 600),
+        TimedWord::new("four", 2_900, 3_100),
+    ];
+
+    let aligned_regions = align_timed_words(
+        chunk_bounds,
+        vec![
+            SpeakerRegion::new(0, 2_000, alice.clone()),
+            SpeakerRegion::new(2_000, 4_000, bob.clone()),
+        ],
+        &words,
+    );
+
+    assert_eq!(aligned_regions.len(), 2);
+    assert_eq!(aligned_regions[0].attribution(), &alice);
+    assert_eq!(aligned_regions[0].text(), "one two three");
+    assert_eq!(aligned_regions[0].start_time_ms(), 10_000);
+    assert_eq!(aligned_regions[1].attribution(), &bob);
+    assert_eq!(aligned_regions[1].text(), "four");
+    assert_eq!(aligned_regions[1].end_time_ms(), 14_000);
+}
+
+/// Verifies a timing glitch neither loses a word nor reorders the text.
+#[test]
+fn timed_words_out_of_order_or_past_the_chunk_keep_every_word_in_order() {
+    let alice = SpeakerAttribution::Known {
+        identity_id: Uuid::new_v4(),
+    };
+    let bob = SpeakerAttribution::Known {
+        identity_id: Uuid::new_v4(),
+    };
+    let chunk_bounds = ChunkBounds::new(0, 2_000)
+        .unwrap_or_else(|error| panic!("bounds should be valid: {error}"));
+    let words = [
+        TimedWord::new("late", 1_500, 1_600),
+        TimedWord::new("early", 100, 200),
+        TimedWord::new("beyond", 9_000, 9_100),
+    ];
+
+    let aligned_regions = align_timed_words(
+        chunk_bounds,
+        vec![
+            SpeakerRegion::new(0, 1_000, alice),
+            SpeakerRegion::new(1_000, 2_000, bob.clone()),
+        ],
+        &words,
+    );
+
+    assert_eq!(aligned_regions.len(), 1);
+    assert_eq!(aligned_regions[0].attribution(), &bob);
+    assert_eq!(aligned_regions[0].text(), "late early beyond");
+}
+
+/// Verifies engines without timing still split by time, and engines with timing do not.
+#[test]
+fn align_transcript_uses_timing_only_when_it_exists() {
+    let alice = SpeakerAttribution::Known {
+        identity_id: Uuid::new_v4(),
+    };
+    let bob = SpeakerAttribution::Known {
+        identity_id: Uuid::new_v4(),
+    };
+    let chunk_bounds = ChunkBounds::new(0, 2_000)
+        .unwrap_or_else(|error| panic!("bounds should be valid: {error}"));
+    let regions = vec![
+        SpeakerRegion::new(0, 1_000, alice),
+        SpeakerRegion::new(1_000, 2_000, bob),
+    ];
+    let meeting_id = MeetingId::new("meeting");
+
+    let plain = Transcript::new(meeting_id.clone(), "a b c d");
+    let split_by_time = align_transcript(chunk_bounds, regions.clone(), &plain);
+    assert_eq!(split_by_time[0].text(), "a b");
+
+    let timed = plain.clone().with_timed_words(vec![
+        TimedWord::new("a", 0, 100),
+        TimedWord::new("b", 100, 200),
+        TimedWord::new("c", 200, 300),
+        TimedWord::new("d", 1_500, 1_600),
+    ]);
+    let by_word = align_transcript(chunk_bounds, regions, &timed);
+    assert_eq!(by_word[0].text(), "a b c");
+    assert_eq!(by_word[1].text(), "d");
 }
 
 /// Verifies adjacent regions of one speaker are merged so a sentence is not split.

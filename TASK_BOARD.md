@@ -140,7 +140,6 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |
 | P3 | — | Decide how the Voice Galleries surface unclustered fallback clips | 3.2 |
-| P3 | — | Word-level timestamps instead of proportional word distribution | 3.1 |
 | P3 | — | PDF export: color emoji, weight-400 instancing of variable fallback fonts, macOS/Windows font paths | 3.3.1 |
 
 Done during the audit: core CI benchmark flake, Whisper language default, persistent device ID,

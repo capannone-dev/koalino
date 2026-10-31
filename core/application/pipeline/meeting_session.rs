@@ -35,7 +35,7 @@ use crate::application::unknown_speaker_clusterer::{
 
 use super::task_metrics::TaskMetricsRecorder;
 
-use super::alignment::{AlignedRegion, ChunkBounds, SpeakerRegion, align_chunk_regions};
+use super::alignment::{AlignedRegion, ChunkBounds, SpeakerRegion, align_transcript};
 pub use super::alignment::{ChunkBoundsError, SpeakerAttribution};
 
 /// Reports a failure that prevented a chunk from producing persisted segments.
@@ -296,8 +296,7 @@ where
         }
 
         let speaker_regions = self.diarize_and_attribute(vad_chunk).await;
-        let aligned_regions =
-            align_chunk_regions(chunk_bounds, speaker_regions, transcript.content());
+        let aligned_regions = align_transcript(chunk_bounds, speaker_regions, &transcript);
         let attributed_segments = self.persist_aligned_regions(aligned_regions)?;
         tracing::info!(
             meeting_id = %self.meeting_id.as_str(),
@@ -359,10 +358,10 @@ where
                 }
             }
         };
-        let aligned_regions = align_chunk_regions(
+        let aligned_regions = align_transcript(
             chunk_bounds,
             vec![SpeakerRegion::new(0, duration_ms, attribution)],
-            transcript.content(),
+            &transcript,
         );
         let attributed_segments = self.persist_aligned_regions(aligned_regions)?;
         tracing::info!(

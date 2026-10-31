@@ -1406,6 +1406,41 @@ impl AudioRecording {
 pub struct Transcript {
     meeting_id: MeetingId,
     content: String,
+    timed_words: Vec<TimedWord>,
+}
+
+/// One transcribed word with its time, relative to the start of the transcribed audio.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TimedWord {
+    text: String,
+    start_ms: u64,
+    end_ms: u64,
+}
+
+impl TimedWord {
+    /// Creates a timed word.
+    ///
+    /// Inputs: The word's text and its offsets in milliseconds; an end before the start is raised
+    /// to the start.
+    /// Outputs: An immutable word.
+    /// Side effects: None.
+    pub fn new(text: impl Into<String>, start_ms: u64, end_ms: u64) -> Self {
+        Self {
+            text: text.into(),
+            start_ms,
+            end_ms: end_ms.max(start_ms),
+        }
+    }
+
+    /// Borrows the word's text.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// Returns the moment halfway through the word, in milliseconds.
+    pub fn midpoint_ms(&self) -> u64 {
+        self.start_ms + (self.end_ms - self.start_ms) / 2
+    }
 }
 
 /// Categorizes AI work for privacy-safe telemetry grouping.
@@ -2337,7 +2372,23 @@ impl Transcript {
         Self {
             meeting_id,
             content: content.into(),
+            timed_words: Vec::new(),
         }
+    }
+
+    /// Attaches the timing of each word, for engines that can report it.
+    ///
+    /// Inputs: The transcript's words in spoken order, or nothing when timing is unknown.
+    /// Outputs: The transcript.
+    /// Side effects: None.
+    pub fn with_timed_words(mut self, timed_words: Vec<TimedWord>) -> Self {
+        self.timed_words = timed_words;
+        self
+    }
+
+    /// Borrows the timed words; empty when the engine reported no timing.
+    pub fn timed_words(&self) -> &[TimedWord] {
+        &self.timed_words
     }
 
     /// Returns the meeting that owns this transcript.

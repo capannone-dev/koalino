@@ -88,7 +88,7 @@ clip because there is no embedding to review. Voice auto-enrollment stays in `Te
 
 ## Timestamp alignment
 
-The transcription port returns chunk-level text without word timestamps, so the VAD chunk is the
+The transcription port returns chunk-level text, with word timing when the engine has it. The VAD chunk is the
 alignment reference:
 
 1. Diarization regions, which are relative to the chunk, are clamped to the chunk duration and
@@ -97,12 +97,15 @@ alignment reference:
    but diarization keeps together therefore stays one segment.
 3. Regions are stretched to tile the chunk. The first region starts at 0, the last ends at the
    chunk end, and each gap is split at its midpoint.
-4. Words are distributed in proportion to each region's duration, using rounded cumulative
-   boundaries. Regions that receive no words are dropped. Blank transcripts produce no segment.
+4. With word timing (local whisper.cpp), each word goes to the region at its midpoint and never back
+   to an earlier one. Without it (OpenAI, remote hosts), words are distributed in proportion to each
+   region's duration, using rounded cumulative boundaries. Regions that receive no words are dropped.
+   Blank transcripts produce no segment.
 5. Offsets are shifted by the chunk start into meeting time.
 
-Without usable regions, the whole chunk becomes one `Unattributed` segment. Proportional word
-distribution is a heuristic. Word-level timestamps from the transcription port would replace it.
+Without usable regions, the whole chunk becomes one `Unattributed` segment. On the evaluation
+recordings with known speaker times, word timing puts 98.2% of words right and proportional
+distribution 91.5% (#69).
 
 ## Unknown-speaker clusters
 

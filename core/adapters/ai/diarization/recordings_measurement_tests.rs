@@ -379,3 +379,72 @@ fn measure_diarization() {
     )
     .unwrap_or_else(|error| panic!("the output must be written: {error}"));
 }
+
+/// Supplies one in-memory recording to the real engine.
+struct InMemoryPcm(Vec<f32>);
+
+impl crate::adapters::ai::local_whisper_cpp::RecordingPcmSource for InMemoryPcm {
+    /// Returns the held samples. Inputs: unused metadata. Side effects: Copies the buffer.
+    fn load_pcm_16khz_mono(
+        &self,
+        _audio_recording: &crate::domain::models::AudioRecording,
+    ) -> Result<Vec<f32>, crate::domain::errors::TranscriptionError> {
+        Ok(self.0.clone())
+    }
+}
+
+/// Checks the real engine reports word timing that spells its text, on every local recording.
+///
+/// Inputs: `NOTE_TAKER_MEASURE_WAV_DIR` and `NOTE_TAKER_WHISPER_MODEL`.
+/// Outputs: Panics when a transcript has no timing or times fall outside the recording.
+/// Side effects: Runs inference. It prints only counts.
+#[test]
+#[ignore = "needs a Whisper model and local recordings"]
+fn engine_reports_word_timing_on_real_speech() {
+    use crate::{
+        adapters::ai::local_whisper_cpp::{
+            LocalWhisperCppConfig, LocalWhisperCppTranscriptionEngine,
+        },
+        domain::models::{AudioRecording, DeviceId, MeetingId, RecordingId, TranscriptionContext},
+        ports::ai::TranscriptionEngine,
+    };
+    for (_, samples) in recordings() {
+        let duration_ms = (samples.len() / SAMPLES_PER_MS) as u64;
+        let configuration = LocalWhisperCppConfig::new(
+            path_from_environment("NOTE_TAKER_WHISPER_MODEL"),
+            8,
+            false,
+            Some("it".to_owned()),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        let engine = LocalWhisperCppTranscriptionEngine::new(
+            configuration,
+            std::sync::Arc::new(InMemoryPcm(samples)),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+        let recording = AudioRecording::new(
+            RecordingId::new("recording"),
+            MeetingId::new("meeting"),
+            DeviceId::new("device"),
+        );
+        let transcript = engine
+            .transcribe(&recording, &TranscriptionContext::default())
+            .unwrap_or_else(|error| panic!("{error}"));
+        let words = transcript.timed_words();
+        assert!(
+            !words.is_empty(),
+            "a spoken recording must have timed words"
+        );
+        assert!(words.iter().all(|word| word.midpoint_ms() <= duration_ms));
+        assert_eq!(words.len(), transcript.content().split_whitespace().count());
+        assert!(
+            words
+                .windows(2)
+                .filter(|pair| pair[0].midpoint_ms() > pair[1].midpoint_ms())
+                .count()
+                * 20
+                <= words.len(),
+            "word times must mostly run forward"
+        );
+    }
+}

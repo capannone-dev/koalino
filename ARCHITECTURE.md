@@ -50,7 +50,7 @@
  │      strong → Known · weak → pending review · none/error → Unknown                │
  │   3b UnknownSpeakerClusterer (weak/none/error): cosine > 0.40 joins the meeting's │
  │      best cluster (running-mean representative), else new cluster + review clip   │
- │ 4 alignment: clamp → merge same speaker → tile VAD chunk → split words by time    │
+ │ 4 alignment: clamp → merge same speaker → tile VAD chunk → assign words by time   │
  │ 5 NoteRepository.save_transcript_segments (whole meeting timeline)                │
  └───────────────────────────────────────────────────────────────────────────────────┘
         │
