@@ -203,6 +203,20 @@ void main() {
     expect(bridge.selected, 'ggml-base.bin');
   });
 
+  testWidgets('a proposal replaces the device-based suggestion',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..suggestion = const WhisperSuggestion(
+          fileName: 'ggml-base.bin', efficient: false, reason: 'Safe choice.')
+      ..proposal = const WhisperProposal(
+          fileName: 'ggml-small.bin',
+          reason: 'Room to spare.',
+          measured: false);
+    await _pump(tester, bridge);
+    expect(find.text('Room to spare.'), findsOneWidget);
+    expect(find.text('Safe choice.'), findsNothing);
+  });
+
   testWidgets('a proposal not on the device downloads only when asked',
       (WidgetTester tester) async {
     final _FakeBridge bridge = _FakeBridge()

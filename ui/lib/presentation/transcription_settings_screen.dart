@@ -269,8 +269,11 @@ final class _TranscriptionSettingsScreenState
             'memory. Downloads come from Hugging Face. This choice applies '
             'only to this device.'),
       ),
-      ..._proposalTiles(settings),
-      ..._suggestionTiles(settings),
+      // A proposal rests on this device's own speed, so it replaces the device-based estimate.
+      if (settings.proposal != null)
+        ..._proposalTiles(settings)
+      else
+        ..._suggestionTiles(settings),
       ..._efficientTiles(settings),
     ];
     String? family;
