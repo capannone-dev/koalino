@@ -44,6 +44,9 @@ pub struct SavedTranscriptionSettings {
     pub whisper_model: Option<String>,
     /// The chosen OpenAI model, such as `whisper-1`.
     pub openai_model: Option<String>,
+    /// True when local transcription should use efficient mode, on a phone GPU that supports it.
+    #[serde(default)]
+    pub efficient_gpu: bool,
 }
 
 /// Where the settings, downloaded models and sealed key live.
@@ -57,6 +60,8 @@ pub struct TranscriptionPaths {
     pub sealed_key_file: PathBuf,
     /// The model the app ships or the environment names, which cannot be removed.
     pub shipped_model: Option<PathBuf>,
+    /// Exists while a GPU attempt is unfinished; finding it at the start means a crash (#76).
+    pub gpu_attempt_marker: PathBuf,
 }
 
 impl TranscriptionPaths {
@@ -71,6 +76,8 @@ impl TranscriptionPaths {
         let data_directory = database_path
             .parent()
             .map_or_else(PathBuf::new, Path::to_path_buf);
+        let mut gpu_attempt_marker = database_path.clone().into_os_string();
+        gpu_attempt_marker.push(".gpu-attempt");
         let mut settings_file = database_path.into_os_string();
         settings_file.push(".transcription-settings.json");
         let key_directory = setting("NOTE_TAKER_ENCRYPTION_KEY_DIR")
@@ -80,6 +87,7 @@ impl TranscriptionPaths {
             models_directory: data_directory.join("models"),
             sealed_key_file: key_directory.join("openai_key.sealed"),
             shipped_model: setting(WHISPER_MODEL_VARIABLE).map(PathBuf::from),
+            gpu_attempt_marker: PathBuf::from(gpu_attempt_marker),
         }
     }
 
@@ -170,13 +178,15 @@ pub fn apply_saved_settings(
         (Some(SavedProvider::Local), _) | (None, true) => Some(TranscriptionProvider::Local),
         (None, false) => None,
     };
-    config.with_saved_transcription(
-        provider,
-        model_path,
-        saved_key,
-        saved.openai_model.clone(),
-        saved.provider == Some(SavedProvider::Openai),
-    )
+    config
+        .with_saved_transcription(
+            provider,
+            model_path,
+            saved_key,
+            saved.openai_model.clone(),
+            saved.provider == Some(SavedProvider::Openai),
+        )
+        .with_gpu_choices(saved.efficient_gpu, paths.gpu_attempt_marker.clone())
 }
 
 /// Checks a pasted key's form, without judging whether OpenAI accepts it.

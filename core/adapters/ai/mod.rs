@@ -4,11 +4,23 @@
 pub mod compute_resources;
 /// Local speaker diarization: windowed segmentation, speaker embeddings, and turn assembly.
 pub mod diarization;
+/// Moves a GPU that once crashed the app back to the CPU at the next start.
+pub mod gpu_attempt_guard;
+#[cfg(test)]
+mod gpu_attempt_guard_tests;
+/// Keeps the threads feeding a phone GPU on one CPU cluster while it works.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub mod gpu_thread_affinity;
+#[cfg(all(test, any(target_os = "linux", target_os = "android")))]
+mod gpu_thread_affinity_tests;
 /// Implements the portable transcription port with a locally loaded whisper.cpp model.
 #[cfg(feature = "local-ai")]
 pub mod local_whisper_cpp;
 /// Implements the portable transcription port through OpenAI's multipart Whisper API.
 pub mod openai_whisper_adapter;
+/// Opens the OpenCL library only when called, so the build starts on phones without it.
+#[cfg(all(feature = "mobile-gpu", target_os = "android"))]
+pub mod opencl_loader_shim;
 /// Opens the Vulkan loader only when called, so a Vulkan build starts on machines without it.
 #[cfg(all(feature = "local-ai", not(target_os = "android")))]
 pub mod vulkan_loader_shim;

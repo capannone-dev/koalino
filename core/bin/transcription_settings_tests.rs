@@ -112,6 +112,7 @@ fn settings_round_trip_without_the_key() {
         provider: Some(SavedProvider::Local),
         whisper_model: Some("ggml-small.bin".to_owned()),
         openai_model: None,
+        efficient_gpu: false,
     };
     assert_eq!(load_settings(&paths.settings_file), Default::default());
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
@@ -138,4 +139,20 @@ fn key_test_statuses_map_to_plain_results() {
     assert_eq!(KeyTestResult::from_status(401), KeyTestResult::Invalid);
     assert_eq!(KeyTestResult::from_status(429), KeyTestResult::QuotaUsed);
     assert_eq!(KeyTestResult::from_status(500), KeyTestResult::Unexpected);
+}
+
+/// Efficient mode is off unless chosen, and old settings files still load.
+#[test]
+fn efficient_mode_defaults_to_off_for_older_settings_files() {
+    let settings_file = paths("efficient").settings_file;
+    std::fs::write(
+        &settings_file,
+        br#"{"provider":"local","whisper_model":"ggml-base.bin"}"#,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let mut saved = load_settings(&settings_file);
+    assert!(!saved.efficient_gpu);
+    saved.efficient_gpu = true;
+    save_settings(&settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
+    assert!(load_settings(&settings_file).efficient_gpu);
 }

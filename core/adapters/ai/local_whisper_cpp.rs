@@ -2,7 +2,10 @@
 
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
@@ -15,9 +18,12 @@ use crate::{
     ports::ai::TranscriptionEngine,
 };
 
+#[cfg(all(feature = "mobile-gpu", target_os = "android"))]
+use super::compute_resources::efficient_gpu_label;
 use super::compute_resources::{
     GpuDevice, choose_gpu, missing_cpu_instructions, model_fits_on_gpu,
 };
+use super::gpu_attempt_guard::GpuAttemptGuard;
 use super::whisper_word_timing::{WhisperTokenTiming, words_from_tokens, words_match_text};
 
 /// Resolves adapter-owned, normalized PCM samples for one portable recording identifier.
@@ -45,6 +51,8 @@ pub struct LocalWhisperCppConfig {
     thread_count: i32,
     use_gpu: bool,
     language: Option<String>,
+    efficient_gpu: bool,
+    gpu_attempt_marker: Option<PathBuf>,
 }
 
 impl LocalWhisperCppConfig {
@@ -83,8 +91,55 @@ impl LocalWhisperCppConfig {
             thread_count,
             use_gpu,
             language,
+            efficient_gpu: false,
+            gpu_attempt_marker: None,
         })
     }
+
+    /// Chooses efficient mode: a supported phone GPU, Flash Attention and pinned threads.
+    ///
+    /// Inputs: True to use it. A GPU it doesn't support runs on the CPU instead.
+    /// Outputs: The configuration. Side effects: None.
+    pub fn with_efficient_gpu(mut self, efficient_gpu: bool) -> Self {
+        self.efficient_gpu = efficient_gpu;
+        self
+    }
+
+    /// Sets the file that records an unfinished GPU attempt, so a driver crash isn't repeated.
+    ///
+    /// Inputs: The file's path, in a folder that exists. Outputs: The configuration.
+    /// Side effects: None until a GPU is tried.
+    pub fn with_gpu_attempt_marker(mut self, marker_file: PathBuf) -> Self {
+        self.gpu_attempt_marker = Some(marker_file);
+        self
+    }
+}
+
+/// True while the latest engine runs on a GPU, for Settings to report.
+static ENGINE_USES_GPU: AtomicBool = AtomicBool::new(false);
+
+/// Reports whether the latest engine runs on a GPU.
+///
+/// Outputs: True once one has loaded on a GPU. Side effects: None.
+pub fn engine_uses_gpu() -> bool {
+    ENGINE_USES_GPU.load(Ordering::Relaxed)
+}
+
+/// Names the GPU that efficient mode can use on this device.
+///
+/// Outputs: A short name such as `Adreno 740`, or `None` where it can't run.
+/// Side effects: Loads the phone's OpenCL library if it has one, and reads what the driver reports.
+#[cfg(all(feature = "mobile-gpu", target_os = "android"))]
+pub fn efficient_gpu() -> Option<String> {
+    super::opencl_loader_shim::efficient_gpu_version().map(efficient_gpu_label)
+}
+
+/// Reports no such GPU where the phone GPU backend isn't built.
+///
+/// Outputs: `None`. Side effects: None.
+#[cfg(not(all(feature = "mobile-gpu", target_os = "android")))]
+pub fn efficient_gpu() -> Option<String> {
+    None
 }
 
 /// Lists the GPUs whisper.cpp can use, in the order its `gpu_device` setting counts them.
@@ -130,6 +185,16 @@ fn gpu_for_model(configuration: &LocalWhisperCppConfig) -> Option<GpuDevice> {
     if !configuration.use_gpu {
         return None;
     }
+    if configuration.efficient_gpu {
+        // OpenCL reports no memory figures, and a phone's GPU shares system memory anyway.
+        // OpenCL is the only GPU backend in this build, so it is the first GPU.
+        return efficient_gpu().map(|_| GpuDevice {
+            index: 0,
+            is_discrete: false,
+            total_memory_bytes: 0,
+            free_memory_bytes: 0,
+        });
+    }
     let chosen_gpu = choose_gpu(&available_gpus())?;
     let model_bytes = std::fs::metadata(&configuration.model_path).ok()?.len();
     if model_fits_on_gpu(model_bytes, chosen_gpu.free_memory_bytes) {
@@ -142,13 +207,14 @@ fn gpu_for_model(configuration: &LocalWhisperCppConfig) -> Option<GpuDevice> {
 
 /// Loads a model on the chosen GPU and proves it can allocate its working memory there.
 ///
-/// Inputs: The model path and the GPU.
+/// Inputs: The model path, the GPU, and whether to use Flash Attention.
 /// Outputs: The context, or `None` when the GPU can't run it.
 /// Side effects: Reads the model and allocates GPU memory.
-fn load_on_gpu(model_path: &str, gpu: GpuDevice) -> Option<WhisperContext> {
+fn load_on_gpu(model_path: &str, gpu: GpuDevice, flash_attention: bool) -> Option<WhisperContext> {
     let context_parameters = WhisperContextParameters {
         use_gpu: true,
         gpu_device: gpu.index,
+        flash_attn: flash_attention,
         ..WhisperContextParameters::default()
     };
     let model_context = WhisperContext::new_with_params(model_path, context_parameters).ok()?;
@@ -166,6 +232,11 @@ pub struct LocalWhisperCppTranscriptionEngine {
     thread_count: i32,
     language: Option<String>,
     recording_pcm_source: Arc<dyn RecordingPcmSource>,
+    /// An unfinished GPU attempt, ended by the first chunk that succeeds.
+    gpu_attempt: Mutex<Option<GpuAttemptGuard>>,
+    /// The cores for the threads feeding the GPU; empty when they stay free.
+    #[cfg_attr(windows, allow(dead_code))]
+    pinned_cores: Vec<usize>,
 }
 
 impl LocalWhisperCppTranscriptionEngine {
@@ -192,8 +263,23 @@ impl LocalWhisperCppTranscriptionEngine {
             );
             return Err(TranscriptionError::Unavailable);
         }
-        let gpu_context =
-            gpu_for_model(&configuration).and_then(|gpu| load_on_gpu(model_path, gpu));
+        let gpu = gpu_for_model(&configuration);
+        // Without a marker there's nothing to check. With one, a crashed attempt keeps the CPU.
+        let gpu_attempt = gpu.and_then(|_| {
+            configuration
+                .gpu_attempt_marker
+                .as_deref()
+                .map(GpuAttemptGuard::begin)
+        });
+        let gpu_allowed = !matches!(gpu_attempt, Some(None));
+        if !gpu_allowed {
+            tracing::warn!("a GPU attempt didn't finish last time, so this one uses the CPU");
+        }
+        let gpu_context = gpu
+            .filter(|_| gpu_allowed)
+            .and_then(|gpu| load_on_gpu(model_path, gpu, configuration.efficient_gpu));
+        let uses_gpu = gpu_context.is_some();
+        ENGINE_USES_GPU.store(uses_gpu, Ordering::Relaxed);
         let model_context = match gpu_context {
             Some(model_context) => {
                 tracing::info!("local transcription uses the GPU");
@@ -215,6 +301,14 @@ impl LocalWhisperCppTranscriptionEngine {
             thread_count: configuration.thread_count,
             language: configuration.language,
             recording_pcm_source,
+            gpu_attempt: Mutex::new(gpu_attempt.flatten().filter(|_| uses_gpu)),
+            pinned_cores: if uses_gpu && configuration.efficient_gpu {
+                super::compute_resources::cores_for_gpu_submission(
+                    &super::compute_resources::core_max_speeds(),
+                )
+            } else {
+                Vec::new()
+            },
         })
     }
 
@@ -277,9 +371,21 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
         if let Some(previous_text) = transcription_context.previous_text() {
             inference_parameters.set_initial_prompt(previous_text);
         }
-        inference_state
-            .full(inference_parameters, &pcm_samples)
-            .map_err(|_| TranscriptionError::Unavailable)?;
+        {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            let _pinned_threads = super::gpu_thread_affinity::PinnedThreads::pin(
+                &self.pinned_cores,
+                super::gpu_thread_affinity::ADRENO_DRIVER_THREAD_PREFIX,
+            );
+            inference_state
+                .full(inference_parameters, &pcm_samples)
+                .map_err(|_| TranscriptionError::Unavailable)?;
+        }
+        if let Ok(mut gpu_attempt) = self.gpu_attempt.lock()
+            && let Some(attempt) = gpu_attempt.take()
+        {
+            attempt.confirm();
+        }
 
         let mut transcript_content = String::new();
         let mut spoken_tokens = Vec::new();

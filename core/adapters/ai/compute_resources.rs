@@ -70,35 +70,49 @@ pub fn preferred_inference_threads() -> usize {
 
 /// Reads each core's top speed from the kernel.
 ///
-/// Outputs: The speeds, or nothing when any are unreadable. Side effects: Reads files in `/sys`.
+/// Outputs: The speeds in kHz, in core order, or nothing when any are unreadable.
+/// Side effects: Reads files in `/sys`.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn core_max_speeds() -> Vec<u64> {
+pub fn core_max_speeds() -> Vec<u64> {
     let Ok(entries) = std::fs::read_dir("/sys/devices/system/cpu") else {
         return Vec::new();
     };
-    entries
+    let mut core_numbers: Vec<u32> = entries
         .flatten()
-        .filter(|entry| {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            name.strip_prefix("cpu")
-                .is_some_and(|number| number.parse::<u32>().is_ok())
-        })
-        .map_while(|entry| {
-            std::fs::read_to_string(entry.path().join("cpufreq/cpuinfo_max_freq"))
-                .ok()?
-                .trim()
+        .filter_map(|entry| {
+            entry
+                .file_name()
+                .to_str()?
+                .strip_prefix("cpu")?
                 .parse()
                 .ok()
         })
-        .collect()
+        .collect();
+    core_numbers.sort_unstable();
+    let speeds: Vec<u64> = core_numbers
+        .iter()
+        .map_while(|core| {
+            std::fs::read_to_string(format!(
+                "/sys/devices/system/cpu/cpu{core}/cpufreq/cpuinfo_max_freq"
+            ))
+            .ok()?
+            .trim()
+            .parse()
+            .ok()
+        })
+        .collect();
+    if speeds.len() == core_numbers.len() {
+        speeds
+    } else {
+        Vec::new()
+    }
 }
 
 /// Reports no speeds where the system has no simple way to read them.
 ///
 /// Outputs: An empty list. Side effects: None.
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn core_max_speeds() -> Vec<u64> {
+pub fn core_max_speeds() -> Vec<u64> {
     Vec::new()
 }
 
@@ -169,4 +183,49 @@ pub fn advertised_gpu_megabytes(chosen_gpu: Option<GpuDevice>) -> u32 {
         .map_or(0, |device| {
             u32::try_from(device.total_memory_bytes / (1024 * 1024)).unwrap_or(u32::MAX)
         })
+}
+
+/// Picks the cores that feed a phone GPU, which work best together on one cluster (#75).
+///
+/// Inputs: Each core's top speed, in core order; empty when unknown.
+/// Outputs: The fastest group of at least two equal cores, because a lone prime core can go offline.
+/// Empty when speeds are unknown or all cores are alike, as there is nothing to gain.
+/// Side effects: None.
+pub fn cores_for_gpu_submission(core_max_speeds: &[u64]) -> Vec<usize> {
+    let cores_at = |speed: u64| -> Vec<usize> {
+        (0..core_max_speeds.len())
+            .filter(|&core| core_max_speeds[core] == speed)
+            .collect()
+    };
+    let mut speeds = core_max_speeds.to_vec();
+    speeds.sort_unstable_by(|left, right| right.cmp(left));
+    speeds.dedup();
+    if speeds.len() < 2 {
+        return Vec::new();
+    }
+    speeds
+        .into_iter()
+        .map(cores_at)
+        .find(|cores| cores.len() >= 2)
+        .unwrap_or_default()
+}
+
+/// Says whether efficient mode supports a GPU.
+///
+/// Inputs: The version text OpenCL reports, which names the generation.
+/// Outputs: True for the Adreno generations whisper.cpp has tuned kernels for; only the Adreno 740
+/// has been tested. Side effects: None.
+pub fn is_efficient_gpu(device_version: &str) -> bool {
+    device_version.contains("Adreno")
+        && ["730", "740", "750", "830"]
+            .iter()
+            .any(|generation| device_version.contains(generation))
+}
+
+/// Shortens a supported GPU's version text for Settings.
+///
+/// Inputs: Text such as `OpenCL 3.0 Adreno(TM) 740`. Outputs: `Adreno 740`. Side effects: None.
+pub fn efficient_gpu_label(device_version: &str) -> String {
+    let start = device_version.find("Adreno").unwrap_or(0);
+    device_version[start..].replace("(TM)", "")
 }

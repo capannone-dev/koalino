@@ -1,8 +1,8 @@
 //! Checks the choice of cores and GPU against the machines we measured and made-up edge cases.
 
 use super::compute_resources::{
-    GpuDevice, advertised_gpu_megabytes, choose_gpu, fast_core_count, inference_thread_count,
-    model_fits_on_gpu,
+    GpuDevice, advertised_gpu_megabytes, choose_gpu, cores_for_gpu_submission, efficient_gpu_label,
+    fast_core_count, inference_thread_count, is_efficient_gpu, model_fits_on_gpu,
 };
 
 const GIB: u64 = 1024 * 1024 * 1024;
@@ -76,4 +76,45 @@ fn only_a_discrete_gpu_is_advertised() {
     assert_eq!(advertised_gpu_megabytes(Some(gpu(1, true, 8 * GIB))), 8_192);
     assert_eq!(advertised_gpu_megabytes(Some(gpu(0, false, 30 * GIB))), 0);
     assert_eq!(advertised_gpu_megabytes(None), 0);
+}
+
+/// An S23 has one prime core that can go offline, so its cluster of four is the safe choice.
+#[test]
+fn gpu_submission_uses_the_fastest_cluster_of_at_least_two() {
+    let s23 = [
+        2_016_000, 2_016_000, 2_016_000, 2_803_200, 2_803_200, 2_803_200, 2_803_200, 3_360_000,
+    ];
+    assert_eq!(cores_for_gpu_submission(&s23), vec![3, 4, 5, 6]);
+}
+
+/// A phone with two equal big cores uses them, and one cluster alone offers nothing to choose.
+#[test]
+fn gpu_submission_handles_other_layouts() {
+    assert_eq!(cores_for_gpu_submission(&[1, 1, 2, 2]), vec![2, 3]);
+    assert_eq!(cores_for_gpu_submission(&[1, 1, 1, 1]), Vec::<usize>::new());
+    assert_eq!(cores_for_gpu_submission(&[1, 2, 3]), Vec::<usize>::new());
+    assert_eq!(cores_for_gpu_submission(&[]), Vec::<usize>::new());
+}
+
+/// Only Adreno generations whisper.cpp has kernels tuned for are offered. The generation is in the
+/// driver's version text, as its device name is only "QUALCOMM Adreno(TM)".
+#[test]
+fn efficient_mode_needs_a_known_adreno() {
+    assert!(is_efficient_gpu("OpenCL 3.0 Adreno(TM) 740"));
+    assert!(is_efficient_gpu("OpenCL 3.0 Adreno(TM) 730"));
+    assert!(is_efficient_gpu("OpenCL 3.0 Adreno(TM) 750"));
+    assert!(is_efficient_gpu("OpenCL 3.0 Adreno(TM) 830"));
+    assert!(!is_efficient_gpu("OpenCL 3.0 Adreno(TM) 650"));
+    assert!(!is_efficient_gpu("OpenCL 3.0 Mali-G715"));
+    assert!(!is_efficient_gpu("OpenCL 3.0 NEO Arc 740"));
+}
+
+/// Settings shows a short name.
+#[test]
+fn the_gpu_label_is_readable() {
+    assert_eq!(
+        efficient_gpu_label("OpenCL 3.0 Adreno(TM) 740"),
+        "Adreno 740"
+    );
+    assert_eq!(efficient_gpu_label("Adreno 750"), "Adreno 750");
 }

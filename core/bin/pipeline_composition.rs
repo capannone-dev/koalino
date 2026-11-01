@@ -130,6 +130,10 @@ pub struct PipelineConfig {
     vad_enabled: bool,
     /// Whether a chunk OpenAI can't transcribe falls back to the local model (Settings only).
     cloud_fallback: bool,
+    /// True when local transcription should use efficient mode on a phone GPU.
+    efficient_gpu: bool,
+    /// The file recording an unfinished GPU attempt; `None` skips the crash check.
+    gpu_attempt_marker: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for PipelineConfig {
@@ -207,6 +211,8 @@ impl PipelineConfig {
                 .map(PathBuf::from),
             vad_enabled: parse_flag(VAD_ENABLED_VARIABLE, read(VAD_ENABLED_VARIABLE), true)?,
             cloud_fallback: false,
+            efficient_gpu: false,
+            gpu_attempt_marker: None,
         })
     }
 
@@ -265,6 +271,17 @@ impl PipelineConfig {
             self.openai_model = openai_model;
         }
         self.cloud_fallback = cloud_fallback;
+        self
+    }
+
+    /// Applies the owner's GPU choices.
+    ///
+    /// Inputs: Whether to use efficient mode, and the file recording an unfinished GPU attempt.
+    /// Outputs: The configuration. Side effects: None.
+    #[must_use]
+    pub fn with_gpu_choices(mut self, efficient_gpu: bool, gpu_attempt_marker: PathBuf) -> Self {
+        self.efficient_gpu = efficient_gpu;
+        self.gpu_attempt_marker = Some(gpu_attempt_marker);
         self
     }
 
@@ -497,6 +514,27 @@ pub fn local_gpu_megabytes() -> u32 {
     0
 }
 
+/// Reports the GPU state for Settings.
+///
+/// Outputs: The name of a GPU efficient mode can use, and whether the latest engine uses a GPU.
+/// Side effects: Looks for OpenCL on a phone, which only reads what the driver reports.
+#[cfg(feature = "local-ai")]
+pub fn efficient_gpu_status() -> (Option<String>, bool) {
+    use crate::adapters::ai::local_whisper_cpp;
+    let name = whisper_gpu_allowed()
+        .then(local_whisper_cpp::efficient_gpu)
+        .flatten();
+    (name, local_whisper_cpp::engine_uses_gpu())
+}
+
+/// Reports no GPU for a build without local transcription.
+///
+/// Outputs: No GPU, not in use. Side effects: None.
+#[cfg(not(feature = "local-ai"))]
+pub fn efficient_gpu_status() -> (Option<String>, bool) {
+    (None, false)
+}
+
 /// Labels a local model by its file name without folder or extension (`ggml-small`).
 ///
 /// Inputs: The model path, with `/` or `\` separators whatever the host.
@@ -601,13 +639,19 @@ fn local_engine(
     let thread_count = crate::adapters::ai::compute_resources::preferred_inference_threads();
     // An explicit language is required: whisper.cpp defaults to English, so Italian meetings
     // would otherwise come out as English text. `auto` makes it detect the language per chunk.
-    let local_config = LocalWhisperCppConfig::new(
+    // A phone stays on its CPU unless the owner chose efficient mode.
+    let use_gpu = whisper_gpu_allowed() && (!cfg!(target_os = "android") || config.efficient_gpu);
+    let mut local_config = LocalWhisperCppConfig::new(
         model_path,
         thread_count,
-        whisper_gpu_allowed(),
+        use_gpu,
         Some(config.whisper_language.clone()),
     )
-    .context("invalid local transcription configuration")?;
+    .context("invalid local transcription configuration")?
+    .with_efficient_gpu(config.efficient_gpu);
+    if let Some(marker_file) = &config.gpu_attempt_marker {
+        local_config = local_config.with_gpu_attempt_marker(marker_file.clone());
+    }
     let engine =
         LocalWhisperCppTranscriptionEngine::new(local_config, Arc::clone(chunk_audio_store) as _)
             .context("unable to load the local whisper model")?;

@@ -19,3 +19,7 @@ mod transcription_language_tests;
 pub mod whisper_catalog;
 #[cfg(test)]
 mod whisper_catalog_tests;
+/// Suggests a Whisper model for a device from what it can run.
+pub mod whisper_suggestion;
+#[cfg(test)]
+mod whisper_suggestion_tests;

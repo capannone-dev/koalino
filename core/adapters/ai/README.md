@@ -34,3 +34,16 @@ when the feature is absent or the environment variable is unset.
 When supplied, portable `TranscriptionContext.previous_text` becomes whisper.cpp's initial prompt.
 The OpenAI adapter maps the same value to its documented multipart `prompt` field. Neither adapter
 logs the context text.
+
+## Efficient mode on phones (#75) and the GPU crash guard (#76)
+
+Efficient mode runs a model on a supported Adreno GPU with Flash Attention. It builds with `--features mobile-gpu`, for Android only:
+
+- `opencl_loader_shim.rs` defines the OpenCL functions ggml calls and opens the phone's library when first used. A phone without
+  the library, or with a GPU we don't support, shows ggml no OpenCL at all, so it behaves as a CPU-only build.
+- `gpu_thread_affinity.rs` keeps the transcribing thread and the driver's `AdrenoOsLib` thread on one CPU cluster during
+  inference, which removes most of the decoder's overhead. Every failure there only costs speed.
+- `gpu_attempt_guard.rs` applies to every GPU, desktops too. A marker file written before a GPU attempt, and removed after the first
+  chunk, survives a driver that kills the process, so the next start uses the CPU until the owner tries again.
+
+The patched whisper.cpp is in `third_party/whisper-rs-sys`; its README lists the changes.

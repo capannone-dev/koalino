@@ -194,7 +194,9 @@ impl RecordingPcmSource for MachineCheckPcm {
 /// Runs the real engine as the app would, to check a build on a given machine.
 ///
 /// Inputs: `NOTE_TAKER_WHISPER_MODEL`, and `NOTE_TAKER_CHECK_WAV` naming a 16 kHz mono PCM file.
-/// `NOTE_TAKER_WHISPER_GPU=off` forces the CPU; `NOTE_TAKER_CHECK_THREADS` overrides the threads. Outputs: Panics when nothing is transcribed.
+/// `NOTE_TAKER_WHISPER_GPU=off` forces the CPU; `NOTE_TAKER_CHECK_THREADS` overrides the threads;
+/// `NOTE_TAKER_CHECK_EFFICIENT=1` uses efficient mode; `NOTE_TAKER_CHECK_LANGUAGE` replaces `en`.
+/// Outputs: Panics when nothing is transcribed.
 /// Side effects: Runs inference and prints the GPUs, thread count, speed and transcript.
 #[test]
 #[ignore = "needs a Whisper model and a speech file"]
@@ -218,12 +220,19 @@ fn engine_runs_on_this_machine() {
         read_setting("NOTE_TAKER_WHISPER_MODEL").into(),
         threads,
         use_gpu,
-        Some("en".to_owned()),
+        Some(std::env::var("NOTE_TAKER_CHECK_LANGUAGE").unwrap_or_else(|_| "en".to_owned())),
     )
-    .unwrap_or_else(|error| panic!("{error}"));
+    .unwrap_or_else(|error| panic!("{error}"))
+    .with_efficient_gpu(
+        std::env::var("NOTE_TAKER_CHECK_EFFICIENT").is_ok_and(|value| value == "1"),
+    );
     let engine =
         LocalWhisperCppTranscriptionEngine::new(configuration, Arc::new(MachineCheckPcm(samples)))
             .unwrap_or_else(|error| panic!("{error}"));
+    println!(
+        "engine uses a GPU: {}",
+        super::local_whisper_cpp::engine_uses_gpu()
+    );
     let recording = AudioRecording::new(
         RecordingId::new("recording"),
         MeetingId::new("meeting"),
@@ -235,8 +244,9 @@ fn engine_runs_on_this_machine() {
             .transcribe(&recording, &TranscriptionContext::default())
             .unwrap_or_else(|error| panic!("{error}"));
         println!(
-            "pass {pass}, threads {threads}, {:.3} x real time: {}",
+            "pass {pass}, threads {threads}, {:.3} x real time, {} timed words: {}",
             started.elapsed().as_secs_f64() / audio_seconds,
+            transcript.timed_words().len(),
             transcript.content()
         );
         assert!(!transcript.content().is_empty());

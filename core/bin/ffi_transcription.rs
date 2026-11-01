@@ -16,18 +16,23 @@ use std::{
 use serde_json::json;
 
 use crate::{
-    adapters::ai::whisper_model_download::{
-        HuggingFaceModelSource, ModelDownloadError, download_whisper_model,
+    adapters::ai::{
+        compute_resources::core_max_speeds,
+        gpu_attempt_guard::{clear_gpu_block, gpu_is_blocked},
+        whisper_model_download::{
+            HuggingFaceModelSource, ModelDownloadError, download_whisper_model,
+        },
     },
     cloud_fallback::cloud_fallback_active,
     device_resources::{available_disk_bytes, total_memory_bytes},
     domain::{
         errors::CryptoError,
         whisper_catalog::{WHISPER_MODELS, WhisperModelEntry, find_whisper_model},
+        whisper_suggestion::{DeviceGpu, DeviceProfile, suggest_whisper_model},
     },
     ffi::provided_encryption_key,
     ffi_settings::app_setting,
-    pipeline_composition::OPENAI_API_KEY_VARIABLE,
+    pipeline_composition::{OPENAI_API_KEY_VARIABLE, efficient_gpu_status, local_gpu_megabytes},
     transcription_settings::{
         OpenAiKeyStore, SavedProvider, SavedTranscriptionSettings, TranscriptionPaths,
         load_settings, save_settings, test_openai_key, validated_key,
@@ -142,6 +147,28 @@ fn model_row(
     })
 }
 
+/// Reads what this device offers, for the suggested model.
+///
+/// Inputs: Whether efficient mode can run here. Outputs: The profile.
+/// Side effects: Reads system files; may start whisper.cpp's backends.
+fn device_profile(efficient_gpu_available: bool) -> DeviceProfile {
+    let graphics_card_gib = u64::from(local_gpu_megabytes()) / 1024;
+    DeviceProfile {
+        is_phone: cfg!(target_os = "android"),
+        total_memory_bytes: total_memory_bytes(),
+        gpu: if efficient_gpu_available {
+            DeviceGpu::EfficientPhoneGpu
+        } else if graphics_card_gib > 0 {
+            DeviceGpu::Discrete {
+                memory_gib: graphics_card_gib,
+            }
+        } else {
+            DeviceGpu::None
+        },
+        fastest_core_khz: core_max_speeds().into_iter().max(),
+    }
+}
+
 /// Builds the whole Settings view. Side effects: Reads files and the key store.
 fn settings_json() -> String {
     let paths = paths();
@@ -163,6 +190,8 @@ fn settings_json() -> String {
         .unwrap_or_else(PoisonError::into_inner)
         .clone();
     let disk_probe = paths.models_directory.parent().map(PathBuf::from);
+    let (efficient_gpu_name, gpu_in_use) = efficient_gpu_status();
+    let suggestion = suggest_whisper_model(&device_profile(efficient_gpu_name.is_some()));
     json!({
         "provider": match saved.provider {
             Some(SavedProvider::Openai) => "openai",
@@ -176,6 +205,17 @@ fn settings_json() -> String {
         "shipped_model": paths.shipped_file_name(),
         "available_disk_bytes": disk_probe.as_deref().and_then(available_disk_bytes),
         "using_local_fallback": cloud_fallback_active(),
+        "suggestion": {
+            "file_name": suggestion.file_name,
+            "efficient": suggestion.efficient,
+            "reason": suggestion.reason,
+        },
+        "efficient": {
+            "gpu_name": efficient_gpu_name,
+            "enabled": saved.efficient_gpu,
+            "gpu_blocked": gpu_is_blocked(&paths.gpu_attempt_marker),
+            "gpu_in_use": gpu_in_use,
+        },
         "models": WHISPER_MODELS.iter()
             .map(|model| model_row(model, &paths, total_memory))
             .collect::<Vec<_>>(),
@@ -217,6 +257,32 @@ pub unsafe extern "C" fn note_taker_set_whisper_model(file_name: *const c_char) 
         return STATUS_INVALID;
     }
     update_settings(|saved| saved.whisper_model = Some(file_name.to_owned()))
+}
+
+/// Turns efficient mode on or off for the next recording.
+///
+/// Inputs: Non-zero to turn it on, which needs a GPU it supports; turning it off always works.
+/// Outputs: 0, or 1 when this device has no such GPU. Side effects: Stores the choice.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_set_efficient_gpu(enabled: c_int) -> c_int {
+    let enabled = enabled != 0;
+    if enabled && efficient_gpu_status().0.is_none() {
+        return STATUS_INVALID;
+    }
+    update_settings(|saved| saved.efficient_gpu = enabled)
+}
+
+/// Lets the GPU be tried again after a crash stopped it, for example after a system update.
+///
+/// Outputs: 0, or 2 when the record can't be removed. Side effects: Removes the record, and the
+/// next recording tries the GPU.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_retry_gpu() -> c_int {
+    if clear_gpu_block(&paths().gpu_attempt_marker).is_err() {
+        return STATUS_FAILED;
+    }
+    PIPELINE_STALE.store(true, Ordering::Relaxed);
+    STATUS_OK
 }
 
 /// Chooses where recordings are transcribed.
