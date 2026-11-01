@@ -307,6 +307,12 @@ abstract interface class MeetingBridge {
   /// Side effects: Writes the title to the meeting's CRDT document and SQLite, so it replicates
   /// to peers on the next sync.
   Future<void> renameMeeting(String meetingId, String newTitle);
+
+  /// Deletes a meeting for good, here and on paired devices.
+  ///
+  /// Inputs: The meeting. Outputs: Completes when it is gone, also when it already was.
+  /// Throws `StateError` when Rust refuses, such as while it is being recorded.
+  Future<void> deleteMeeting(String meetingId);
 }
 
 /// Implements meeting reads with the Rust C ABI.
@@ -332,7 +338,29 @@ final class RustMeetingBridge implements MeetingBridge {
       throw meetingRenameExceptionFor(statusCode);
     }
   }
+
+  @override
+  Future<void> deleteMeeting(String meetingId) async {
+    final int statusCode = await _deleteMeeting(meetingId);
+    if (statusCode != 0 && statusCode != 5) {
+      throw StateError('Rust refused the deletion (status $statusCode).');
+    }
+  }
 }
+
+/// Calls `note_taker_delete_meeting` on a background isolate, because it writes to SQLite.
+///
+/// Declared at top level so the isolate closure captures only the string.
+Future<int> _deleteMeeting(String meetingId) => Isolate.run(() {
+      final Pointer<Utf8> nativeMeetingId = meetingId.toNativeUtf8();
+      try {
+        return _openCoreLibrary()
+            .lookupFunction<_NativeDeleteMeeting, _DartDeleteMeeting>(
+                'note_taker_delete_meeting')(nativeMeetingId);
+      } finally {
+        calloc.free(nativeMeetingId);
+      }
+    });
 
 /// Calls `note_taker_rename_meeting` on a background isolate, because it writes to SQLite.
 ///
@@ -425,6 +453,12 @@ typedef _NativeRenameMeeting = Int32 Function(
 /// Represents the Dart callable form of `note_taker_rename_meeting`.
 typedef _DartRenameMeeting = int Function(
     Pointer<Utf8> meetingId, Pointer<Utf8> newTitle);
+
+/// Represents `int note_taker_delete_meeting(const char *meeting_id)`.
+typedef _NativeDeleteMeeting = Int32 Function(Pointer<Utf8> meetingId);
+
+/// Represents the Dart callable form of `note_taker_delete_meeting`.
+typedef _DartDeleteMeeting = int Function(Pointer<Utf8> meetingId);
 
 /// Represents `void note_taker_free_string(char *value)`.
 typedef _NativeFreeString = Void Function(Pointer<Utf8> value);

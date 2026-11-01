@@ -91,6 +91,10 @@ the Settings switch. `fake_app_lock_bridge.dart` holds the scripted bridge.
 `meeting_list_screen_test.dart` also covers Name speakers on phones and desktops.
 `network_settings_test.dart`, `devices_network_test.dart`, and `network_routes_decoding_test.dart`
 cover the relay and peer fields, the Devices screen's explanations, and invites.
+`meeting_list_screen_test.dart` also covers deleting a meeting from the list and from an open
+meeting, cancelling, and a refusal. `voice_gallery_screen_test.dart` covers marking the voice playing
+and deleting unknown voices and saved people.
+
 `voice_gallery_screen_test.dart` covers both the per-meeting and all-meetings gallery, and
 `home_shell_test.dart` its top-level entry.
 

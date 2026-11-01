@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
+import 'package:note_taker_ui/presentation/confirm_delete_dialog.dart';
 
 /// Displays the voice gallery using controller-owned state.
 final class VoiceGalleryScreen extends StatefulWidget {
@@ -107,6 +108,14 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                     subtitle: Text(person.voiceVariantCount == 1
                         ? '1 voice sample'
                         : '${person.voiceVariantCount} voice samples'),
+                    trailing: IconButton(
+                      key: ValueKey<String>(
+                          'delete-person-${person.identityId}'),
+                      tooltip: 'Delete ${person.displayName}',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () =>
+                          _confirmDeletePerson(context, controller, person),
+                    ),
                   ),
               ],
             ],
@@ -135,8 +144,12 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   ) {
     final TextEditingController nameController = _nameControllers.putIfAbsent(
         cluster.clusterId, TextEditingController.new);
+    final bool isPlaying = controller.playingClusterId == cluster.clusterId;
+    final ColorScheme colors = Theme.of(context).colorScheme;
     return Card(
+      key: ValueKey<String>('card-${cluster.clusterId}'),
       margin: const EdgeInsets.only(bottom: 12),
+      color: isPlaying ? colors.primaryContainer : null,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -144,21 +157,41 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
           children: <Widget>[
             ListTile(
               contentPadding: EdgeInsets.zero,
+              leading: isPlaying
+                  ? Icon(Icons.volume_up, color: colors.onPrimaryContainer)
+                  : null,
               title: Text('Unknown speaker ${index + 1}'),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
+                  if (isPlaying)
+                    Text('Playing…',
+                        style: TextStyle(
+                            color: colors.onPrimaryContainer,
+                            fontWeight: FontWeight.bold)),
                   Text(_formatSummary(cluster)),
                   if (controller.meetingId == null)
                     Text(cluster.meetingTitle ?? 'Untitled meeting'),
                 ],
               ),
-              trailing: !cluster.hasReviewClip
-                  ? null
-                  : TextButton(
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (cluster.hasReviewClip)
+                    TextButton(
+                      key: ValueKey<String>('play-${cluster.clusterId}'),
                       onPressed: () => controller.play(cluster),
-                      child: const Text('Play'),
+                      child: Text(isPlaying ? 'Stop' : 'Play'),
                     ),
+                  IconButton(
+                    key: ValueKey<String>('delete-${cluster.clusterId}'),
+                    tooltip: 'Delete this voice',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _confirmDeleteVoice(
+                        context, controller, index, cluster),
+                  ),
+                ],
+              ),
             ),
             Row(
               children: <Widget>[
@@ -207,6 +240,39 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
         ),
       ),
     );
+  }
+
+  /// Asks before deleting an unknown voice, then deletes it.
+  Future<void> _confirmDeleteVoice(
+    BuildContext context,
+    VoiceGalleryController controller,
+    int index,
+    UnknownSpeakerCluster cluster,
+  ) async {
+    if (await confirmDelete(
+      context,
+      title: 'Delete Unknown speaker ${index + 1}?',
+      message: 'Its voice sample goes for good, here and on your paired '
+          'devices. The transcript stays.',
+    )) {
+      await controller.deleteUnknownVoice(cluster);
+    }
+  }
+
+  /// Asks before deleting a saved person, then deletes them.
+  Future<void> _confirmDeletePerson(
+    BuildContext context,
+    VoiceGalleryController controller,
+    SavedPerson person,
+  ) async {
+    if (await confirmDelete(
+      context,
+      title: 'Delete ${person.displayName}?',
+      message: 'Their name and voice samples go for good, here and on your '
+          'paired devices. Transcripts stay and show an unknown speaker.',
+    )) {
+      await controller.deleteSavedPerson(person);
+    }
   }
 
   /// Forgets name fields whose clusters are no longer listed and disposes them after the frame,

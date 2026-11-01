@@ -203,6 +203,22 @@ abstract interface class VoiceGalleryBridge {
 
   /// Delegates file playback to the platform audio package.
   Future<void> playLocalFile(String localFilePath);
+
+  /// Stops the clip playing, if any.
+  Future<void> stopPlayback();
+
+  /// Emits each time a clip plays to its end.
+  Stream<void> get playbackFinished;
+
+  /// Deletes an unknown voice for good, here and on paired devices.
+  ///
+  /// Throws `StateError` when Rust refuses; a voice already gone counts as deleted.
+  Future<void> deleteUnknownVoice(String clusterId);
+
+  /// Deletes a saved person's name and voice samples for good, here and on paired devices.
+  ///
+  /// Throws `StateError` when Rust refuses.
+  Future<void> deleteSavedPerson(String identityId);
 }
 
 /// Implements Voice Gallery operations with C ABI calls and native file playback.
@@ -236,6 +252,39 @@ final class RustVoiceGalleryBridge implements VoiceGalleryBridge {
   @override
   Future<void> playLocalFile(String localFilePath) async {
     await _audioPlayer.play(DeviceFileSource(localFilePath));
+  }
+
+  @override
+  Future<void> stopPlayback() => _audioPlayer.stop();
+
+  @override
+  Stream<void> get playbackFinished => _audioPlayer.onPlayerComplete;
+
+  @override
+  Future<void> deleteUnknownVoice(String clusterId) =>
+      _deleteByStatus('note_taker_delete_unknown_voice', clusterId);
+
+  @override
+  Future<void> deleteSavedPerson(String identityId) =>
+      _deleteByStatus('note_taker_delete_saved_person', identityId);
+}
+
+/// Calls a native delete function on a background isolate, because it writes to SQLite.
+///
+/// Inputs: The symbol and the ID it takes. Outputs: Completes when the item is gone, also when it
+/// was already (status 5). Throws `StateError` for any other refusal.
+Future<void> _deleteByStatus(String symbolName, String itemId) async {
+  final int statusCode = await Isolate.run(() {
+    final Pointer<Utf8> nativeItemId = itemId.toNativeUtf8();
+    try {
+      return _openCoreLibrary()
+          .lookupFunction<_NativeDelete, _DartDelete>(symbolName)(nativeItemId);
+    } finally {
+      calloc.free(nativeItemId);
+    }
+  });
+  if (statusCode != 0 && statusCode != 5) {
+    throw StateError('Rust refused the deletion (status $statusCode).');
   }
 }
 
@@ -312,6 +361,8 @@ DynamicLibrary _openCoreLibrary() {
   throw UnsupportedError('The Rust Voice Gallery bridge is unavailable here.');
 }
 
+typedef _NativeDelete = Int32 Function(Pointer<Utf8>);
+typedef _DartDelete = int Function(Pointer<Utf8>);
 typedef _NativeNoArgumentJson = Pointer<Utf8> Function();
 typedef _DartNoArgumentJson = Pointer<Utf8> Function();
 typedef _NativeOneStringJson = Pointer<Utf8> Function(Pointer<Utf8>);

@@ -1,5 +1,7 @@
 // Defines widget-first requirements for reviewing and naming unknown-speaker clusters.
 
+import 'dart:async';
+
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,7 +20,7 @@ final class FakeVoiceGalleryBridge implements VoiceGalleryBridge {
   final List<UnknownSpeakerCluster> _clusters;
 
   /// People returned with the library.
-  final List<SavedPerson> savedPeople;
+  List<SavedPerson> savedPeople;
 
   /// How many times the library was loaded.
   int libraryLoads = 0;
@@ -28,6 +30,22 @@ final class FakeVoiceGalleryBridge implements VoiceGalleryBridge {
 
   /// Paths sent to native audio playback.
   final List<String> playedPaths = <String>[];
+
+  /// How many times playback was stopped.
+  int stopCount = 0;
+
+  /// Tells listeners a clip played to its end.
+  final StreamController<void> finishedController =
+      StreamController<void>.broadcast();
+
+  /// Clusters sent to `deleteUnknownVoice`.
+  final List<String> deletedClusters = <String>[];
+
+  /// People sent to `deleteSavedPerson`.
+  final List<String> deletedPeople = <String>[];
+
+  /// When set, the delete calls throw this error.
+  Object? deleteError;
 
   /// `(clusterId, identityName)` pairs sent to `assignCluster`.
   final List<(String, String)> assignedClusters = <(String, String)>[];
@@ -77,6 +95,35 @@ final class FakeVoiceGalleryBridge implements VoiceGalleryBridge {
   @override
   Future<void> playLocalFile(String localFilePath) async {
     playedPaths.add(localFilePath);
+  }
+
+  @override
+  Future<void> stopPlayback() async {
+    stopCount += 1;
+  }
+
+  @override
+  Stream<void> get playbackFinished => finishedController.stream;
+
+  @override
+  Future<void> deleteUnknownVoice(String clusterId) async {
+    if (deleteError case final Object error) {
+      throw error;
+    }
+    deletedClusters.add(clusterId);
+    _clusters.removeWhere(
+        (UnknownSpeakerCluster cluster) => cluster.clusterId == clusterId);
+  }
+
+  @override
+  Future<void> deleteSavedPerson(String identityId) async {
+    if (deleteError case final Object error) {
+      throw error;
+    }
+    deletedPeople.add(identityId);
+    savedPeople = savedPeople
+        .where((SavedPerson person) => person.identityId != identityId)
+        .toList(growable: false);
   }
 }
 
@@ -149,6 +196,149 @@ void main() {
     await tester.pump();
 
     expect(bridge.playedPaths, <String>['/private/clips/cluster-1.wav']);
+  });
+
+  testWidgets('the voice playing is marked, and only that one',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[
+        firstCluster,
+        const UnknownSpeakerCluster(
+          clusterId: 'cluster-4',
+          meetingId: 'meeting-1',
+          totalDurationMs: 900,
+          chunkCount: 1,
+          hasReviewClip: true,
+        ),
+      ],
+    );
+    await pumpGallery(tester, bridge);
+    expect(find.text('Playing…'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey<String>('play-cluster-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Playing…'), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey<String>('card-cluster-1')),
+            matching: find.text('Playing…')),
+        findsOneWidget);
+    expect(find.text('Stop'), findsOneWidget);
+    expect(find.text('Play'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('play-cluster-4')));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey<String>('card-cluster-4')),
+            matching: find.text('Playing…')),
+        findsOneWidget);
+    expect(find.text('Playing…'), findsOneWidget);
+    expect(bridge.stopCount, 1);
+  });
+
+  testWidgets('the mark goes when the clip ends or Stop is tapped',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[firstCluster],
+    );
+    await pumpGallery(tester, bridge);
+
+    await tester.tap(find.byKey(const ValueKey<String>('play-cluster-1')));
+    await tester.pumpAndSettle();
+    bridge.finishedController.add(null);
+    await tester.pumpAndSettle();
+    expect(find.text('Playing…'), findsNothing);
+    expect(find.text('Play'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('play-cluster-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('play-cluster-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Playing…'), findsNothing);
+    expect(bridge.playedPaths, hasLength(2));
+    expect(bridge.stopCount, 1);
+  });
+
+  testWidgets('deleting an unknown voice asks first, then removes it',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[firstCluster, secondCluster],
+    );
+    await pumpGallery(tester, bridge);
+
+    await tester.tap(find.byKey(const ValueKey<String>('delete-cluster-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(bridge.deletedClusters, isEmpty);
+
+    await tester.tap(find.byKey(const ValueKey<String>('delete-cluster-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.deletedClusters, <String>['cluster-1']);
+    expect(find.byKey(const ValueKey<String>('card-cluster-1')), findsNothing);
+    expect(
+        find.byKey(const ValueKey<String>('card-cluster-2')), findsOneWidget);
+    expect(find.text('Voice deleted'), findsOneWidget);
+  });
+
+  testWidgets('deleting the voice playing stops it',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[firstCluster],
+    );
+    await pumpGallery(tester, bridge);
+    await tester.tap(find.byKey(const ValueKey<String>('play-cluster-1')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey<String>('delete-cluster-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.stopCount, 1);
+    expect(find.text('Playing…'), findsNothing);
+  });
+
+  testWidgets('a saved person can be deleted, naming them in the question',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: const <UnknownSpeakerCluster>[],
+      savedPeople: const <SavedPerson>[savedAda],
+    );
+    await pumpGallery(tester, bridge, meetingId: null);
+
+    await tester
+        .tap(find.byKey(const ValueKey<String>('delete-person-identity-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Ada Lovelace?'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.deletedPeople, <String>['identity-1']);
+    expect(find.text('Ada Lovelace'), findsNothing);
+  });
+
+  testWidgets('a failed deletion keeps the voice and says so',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[firstCluster],
+    )..deleteError = StateError('rejected');
+    await pumpGallery(tester, bridge);
+
+    await tester.tap(find.byKey(const ValueKey<String>('delete-cluster-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.byKey(const ValueKey<String>('card-cluster-1')), findsOneWidget);
+    expect(find.text('Unable to delete this voice'), findsOneWidget);
   });
 
   testWidgets('Assign sends the typed name for that cluster and refreshes',

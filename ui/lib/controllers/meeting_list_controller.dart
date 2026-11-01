@@ -128,6 +128,29 @@ final class MeetingListController extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  /// Deletes `meetingId` for good and removes it from the list and any open detail.
+  ///
+  /// Outputs: `true` when it is gone; `false` when Rust refused, leaving everything as it was.
+  /// Side effects: Deletes the meeting through the bridge and notifies listeners.
+  Future<bool> deleteMeeting(String meetingId) async {
+    try {
+      await _meetingBridge.deleteMeeting(meetingId);
+    } on Object {
+      return false;
+    }
+    _meetings = _meetings
+        .where((MeetingSummary meeting) => meeting.meetingId != meetingId)
+        .toList(growable: false);
+    if (_selectedMeetingId == meetingId) {
+      _selectedMeetingId = null;
+      _selectedMeeting = null;
+      _isLoadingDetail = false;
+      _detailErrorMessage = null;
+    }
+    notifyListeners();
+    return true;
+  }
 }
 
 /// Returns a copy of `meeting` titled `title`, keeping its ID, creation time, and duration.

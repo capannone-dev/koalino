@@ -174,6 +174,86 @@ void main() {
     expect(selectedTile.selected, isFalse);
   });
 
+  group('deleting a meeting', () {
+    testWidgets('asks first, and Cancel keeps it', (WidgetTester tester) async {
+      final FakeMeetingBridge bridge =
+          FakeMeetingBridge(meetings: <MeetingSummary>[titledMeeting]);
+      await pumpMeetingList(tester, bridge);
+
+      await tester
+          .tap(find.byKey(const ValueKey<String>('delete-meeting-titled')));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete Project Sync?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.deleteRequests, isEmpty);
+      expect(find.text('Project Sync'), findsOneWidget);
+    });
+
+    testWidgets('from the list, removes only that row',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge bridge = FakeMeetingBridge(
+          meetings: <MeetingSummary>[titledMeeting, untitledMeeting]);
+      await pumpMeetingList(tester, bridge);
+
+      await tester
+          .tap(find.byKey(const ValueKey<String>('delete-meeting-titled')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.deleteRequests, <String>['meeting-titled']);
+      expect(find.text('Project Sync'), findsNothing);
+      expect(find.text('Meeting 2026-10-26 18:00 UTC'), findsOneWidget);
+    });
+
+    testWidgets('from an open meeting on a phone, returns to the list',
+        (WidgetTester tester) async {
+      final FakeMeetingBridge bridge = FakeMeetingBridge(
+        meetings: <MeetingSummary>[titledMeeting],
+        details: <String, MeetingDetail>{
+          titledMeeting.meetingId: MeetingDetail(
+            summary: titledMeeting,
+            transcript: '',
+            segments: const <MeetingTranscriptSegment>[],
+          ),
+        },
+      );
+      await pumpMeetingList(tester, bridge);
+      await tester.tap(find.text('Project Sync'));
+      await tester.pumpAndSettle();
+
+      await tester
+          .tap(find.byKey(const ValueKey<String>('delete-open-meeting')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.deleteRequests, <String>['meeting-titled']);
+      expect(find.byType(MeetingDetailScreen), findsNothing);
+      expect(find.text('No meetings yet'), findsOneWidget);
+    });
+
+    testWidgets('a refusal keeps it and explains', (WidgetTester tester) async {
+      final FakeMeetingBridge bridge =
+          FakeMeetingBridge(meetings: <MeetingSummary>[titledMeeting])
+            ..deleteError = StateError('recording');
+      await pumpMeetingList(tester, bridge);
+
+      await tester
+          .tap(find.byKey(const ValueKey<String>('delete-meeting-titled')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Project Sync'), findsOneWidget);
+      expect(
+          find.textContaining('Unable to delete this meeting'), findsOneWidget);
+    });
+  });
+
   testWidgets('explains when there are no meetings yet',
       (WidgetTester tester) async {
     await pumpMeetingList(tester, FakeMeetingBridge());

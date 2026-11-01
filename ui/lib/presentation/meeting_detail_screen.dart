@@ -11,6 +11,7 @@ import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_timeline.dart';
+import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
 /// Builds a screen about one meeting, such as the voice gallery for its unknown speakers.
@@ -348,6 +349,23 @@ final class _MeetingContent extends StatelessWidget {
                     controller: controller,
                     meeting: summary,
                   ),
+                ),
+                IconButton(
+                  key: const ValueKey<String>('delete-open-meeting'),
+                  tooltip: 'Delete meeting',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () async {
+                    final NavigatorState navigator = Navigator.of(context);
+                    final bool deleted = await deleteMeetingAfterAsking(
+                      context,
+                      controller: controller,
+                      meeting: summary,
+                    );
+                    // On a phone the detail is a page of its own; in two panes it empties.
+                    if (deleted && navigator.mounted) {
+                      await navigator.maybePop();
+                    }
+                  },
                 ),
               ],
             ),

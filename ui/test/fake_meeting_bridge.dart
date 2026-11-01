@@ -34,6 +34,12 @@ final class FakeMeetingBridge implements MeetingBridge {
   /// When set, `renameMeeting` records the request and then throws this error.
   Object? renameError;
 
+  /// Meeting IDs sent to `deleteMeeting`.
+  final List<String> deleteRequests = <String>[];
+
+  /// When set, `deleteMeeting` records the request and then throws this error.
+  Object? deleteError;
+
   @override
   Future<List<MeetingSummary>> getMeetings() async {
     meetingListRequestCount += 1;
@@ -55,6 +61,14 @@ final class FakeMeetingBridge implements MeetingBridge {
   Future<void> renameMeeting(String meetingId, String newTitle) async {
     renameRequests.add((meetingId: meetingId, newTitle: newTitle));
     if (renameError case final Object error) {
+      throw error;
+    }
+  }
+
+  @override
+  Future<void> deleteMeeting(String meetingId) async {
+    deleteRequests.add(meetingId);
+    if (deleteError case final Object error) {
       throw error;
     }
   }

@@ -9,6 +9,7 @@ import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
+import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
 /// Window width from which the list and the detail are shown side by side (Material 3
@@ -259,6 +260,16 @@ final class _MeetingList extends StatelessWidget {
                     '${formatMeetingCreatedAt(meeting.createdAt)} · '
                     '${formatMeetingDuration(meeting.durationMs)}',
                   ),
+                  trailing: IconButton(
+                    key: ValueKey<String>('delete-${meeting.meetingId}'),
+                    tooltip: 'Delete meeting',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => deleteMeetingAfterAsking(
+                      context,
+                      controller: controller,
+                      meeting: meeting,
+                    ),
+                  ),
                   onTap: () => onOpenMeeting(meeting),
                 ),
               );
@@ -349,6 +360,12 @@ final class _MeetingRow extends StatelessWidget {
     return Semantics(
       customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
         const CustomSemanticsAction(label: 'Rename'): () => _rename(context),
+        const CustomSemanticsAction(label: 'Delete'): () =>
+            deleteMeetingAfterAsking(
+              context,
+              controller: controller,
+              meeting: meeting,
+            ),
       },
       child: CallbackShortcuts(
         bindings: <ShortcutActivator, VoidCallback>{

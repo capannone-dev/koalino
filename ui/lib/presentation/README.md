@@ -32,6 +32,9 @@ duration, and pushes `MeetingDetailScreen` on phones or shows `MeetingDetailView
 on desktops. The detail view puts the title in a bold `headlineMedium` semantic header
 (Issue #36).
 
+`confirm_delete_dialog.dart` asks before any irreversible deletion, and `delete_meeting_action.dart`
+uses it for the meeting list and detail, reporting a refusal in a snack bar.
+
 `rename_meeting_dialog.dart` holds `RenameMeetingDialog` and `showRenameMeetingDialog`, shared by
 the list's context menu (long-press, right-click, Shift+F10, and a screen-reader action) and the
 detail's pencil button. It validates locally, maps Rust failures to plain messages, and confirms
