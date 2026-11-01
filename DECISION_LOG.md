@@ -1741,6 +1741,18 @@ Measured through the real engine with word timing, on an S23, `small`, 11 s Engl
   later, which the screen did not say. A final voice needs 20 s of speech (`MIN_CLEAN_VOICE_WINDOWS`), so
   a short speaker is named without a saved voice.
 
+## 2026-11-01 — #63 closed: voice gallery checked on each platform
+
+- **Play had never worked on Windows.** `fs::canonicalize` returns `\\?\C:\...` there, and Media Foundation
+  reads that as a network path (`80070035`). Review clip paths now use `std::path::absolute`.
+- **Checked:** Linux and Windows desktops and a daemon, paired over a real network, with public and
+  synthetic audio: Play, naming in both directions, an existing person, a saved voice recognised
+  later on another device, and deleting people and a meeting everywhere. The owner checked Android on
+  an S23 with their own voice: a 28 s recording named, then a 14 s one matched automatically. That fits the
+  20 s rule for saving a final voice. The S23 was not paired, so Android-to-device sync was not run.
+- **espeak voices are not a test of telling people apart.** Two different espeak voices matched saved
+  espeak voices, so these runs say nothing about false matches between real people.
+
 ## 2026-11-01 — Linux builds target a Debian 13 sysroot
 
 - **Cause.** The build with diarization needed glibc 2.43 from this machine, for only seven float

@@ -642,7 +642,8 @@ impl FfiRuntime {
                 .review_clip_directory
                 .join(format!("{}.wav", clip.clip_id()));
             fs::write(&clip_path, clip.audio_bytes()).map_err(|_| FFI_OPERATION_REJECTED)?;
-            let absolute_path = fs::canonicalize(&clip_path).map_err(|_| FFI_OPERATION_REJECTED)?;
+            let absolute_path =
+                review_clip_absolute_path(&clip_path).map_err(|_| FFI_OPERATION_REJECTED)?;
             let weak_match_json = match clip.weak_match_candidate() {
                 Some(candidate) => format!(
                     ",\"weak_match\":{{\"identity_id\":\"{}\",\"confidence_score\":{}}}",
@@ -935,7 +936,7 @@ impl FfiRuntime {
             .review_clip_directory
             .join(format!("{}.wav", clip.clip_id()));
         fs::write(&clip_path, clip.audio_bytes())?;
-        fs::canonicalize(&clip_path)
+        review_clip_absolute_path(&clip_path)
     }
 
     /// Assigns an unknown-speaker cluster to a named identity and describes the outcome as JSON.
@@ -2267,6 +2268,16 @@ pub unsafe extern "C" fn note_taker_rename_meeting(
     with_runtime(|runtime| runtime.rename_meeting(meeting_id, new_title))
 }
 
+/// Makes a review clip's path absolute for the audio player.
+///
+/// Not `fs::canonicalize`: on Windows that returns a `\\?\C:\...` path, which Media Foundation
+/// reads as a network path, so no voice could play there.
+///
+/// Inputs: The clip's path. Outputs: The absolute path, or the I/O error. Side effects: None.
+fn review_clip_absolute_path(clip_path: &std::path::Path) -> std::io::Result<PathBuf> {
+    std::path::absolute(clip_path)
+}
+
 /// Removes review audio left by an earlier run. Each clip is written again when asked for, so this
 /// also clears clips of voices that a paired device deleted while this device was running.
 ///
@@ -3034,6 +3045,17 @@ mod ffi_contract_tests {
     }
 
     /// Verifies cluster listing serializes summaries and a playable review clip path as JSON.
+    /// A clip's path must be plain, because Windows' media stack rejects `\\?\` paths.
+    #[test]
+    fn review_clip_paths_are_absolute_and_plain() {
+        let path = super::review_clip_absolute_path(std::path::Path::new("clips/clip.wav"))
+            .unwrap_or_else(|error| panic!("the path must resolve: {error}"));
+
+        assert!(path.is_absolute());
+        assert!(path.ends_with("clips/clip.wav"));
+        assert!(!path.to_string_lossy().starts_with(r"\\?\"));
+    }
+
     #[test]
     fn unknown_clusters_serialize_summaries_with_review_clip_paths() {
         let (mut ffi_runtime, export_directory) = export_runtime();

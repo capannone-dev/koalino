@@ -133,7 +133,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P3 | #59 | Done (2026-10-30): transcription on a paired device, chosen in Settings, falling back to local | 3.4 |
 | P3 | #60 | Done (2026-10-30): diarization and its models in the Linux, Windows and Android installers and the server build; Windows loads `onnxruntime.dll` at run time | 3.4 |
 | P3 | #62 | Done (2026-10-30): choose the transcription language before and during a recording, with a default in Settings and AUTO | 3.4 |
-| P2 | #63 | Implemented (2026-10-30), still open: Voices destination in the apps and web. Naming checked on Linux across a paired daemon (2026-11-01); naming on Windows and Android still needs a run | 3.2 |
+| P2 | #63 | Done (2026-11-01): Voices destination in the apps and web; naming, Play and recognition checked on Linux, Windows and Android | 3.2 |
 | P2 | #64 | Done (2026-10-30): relay and device addresses in Settings, applied live, in release builds with no defines | 4.1 |
 | P2 | #65 | Done (2026-10-30): pairing invites as a link and QR display; the code comparison is still required | 4.1 |
 | P3 | #66 | Done (2026-10-30): Nearby and disconnected devices explain what they need | 4.1 |
