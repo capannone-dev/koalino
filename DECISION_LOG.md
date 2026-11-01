@@ -1652,3 +1652,40 @@ Figures are multiples of audio length.
   so it isn't clearly better than GPU only: the best setup depends on the model and the differences are small on `medium` and turbo.
 - **What this means for live use.** `small` is comfortable. `medium` is borderline, at about 1.0 once warm and before voice windows,
   which cost about 0.15 more. Turbo is too slow to keep up, but about twice as fast as before for processing after a meeting.
+
+## 2026-11-01 — Adreno decoder overhead is CPU placement, not submission cost (#75)
+Same limits as the entries above: a standalone test on the S23, a patched private copy of whisper.cpp, and one 11 s English clip, encoded
+as a full 30 s window. Not in the app. Battery use, Italian and running alongside recording weren't measured. Flash Attention on, 5 CPU
+threads, cool-downs between runs, order rotated. Transcripts were correct in every run where they were checked.
+
+| Model | Decode step: CPU | GPU, default | GPU, pinned | Encoder: CPU | Encoder: GPU |
+| --- | --- | --- | --- | --- | --- |
+| `base` | 9.3 ms | 17.8 ms | **8.3 ms** | 1.35 s | 0.92 s |
+| `small` | 19.9 ms | 30.5 ms | **16.0 ms** | 4.41 s | 2.75 s |
+| `medium` | 49.5 ms | 60.7 ms | **37.6 ms** | 15.1 s | 8.08 s |
+| `large-v3-turbo` | 14.8 ms | 14.9 ms | **12.1 ms** | 28.3 s | 13.9 s |
+
+Medians of 3 runs. Whole runs, as multiples of audio length, median of 3:
+
+| Model | GPU, default | GPU, pinned |
+| --- | --- | --- |
+| `base` | 0.144 | **0.113** |
+| `small` | 0.352 | **0.303** |
+| `medium` | 0.913 | **0.855** |
+| `large-v3-turbo` | 1.318 | **1.306** |
+
+- **The cause.** Time inside `clEnqueueNDRangeKernel` fell from about 47 ms to about 18 ms per `medium` step when the threads were pinned, with
+  the same 678 submissions. So the earlier "about 40 µs per submission" isn't a fixed driver cost. Merging kernels or recordable queues
+  aren't needed to remove this overhead.
+- **The fix.** During decoding, restrict the calling thread and the driver's `AdrenoOsLib` thread to one cluster, here the big cores 4–6. On
+  `medium`, over 5 rounds: default 63.9 ms, driver thread only 42.0 ms, both 38.3 ms, all threads 38.3 ms. Pinning only the caller doesn't help,
+  and the thread count has no effect. Pinning the whole process to a single little core still gave 42 ms.
+- **Not proven.** Why placement matters. Handoffs between the two threads across clusters is a likely explanation, and the clusters and thread
+  name are specific to this phone. Default runs occasionally reached 41 ms by chance, which fits placement being the cause.
+- **What's left.** On `medium`, about 38 ms a step against about 36 ms of GPU busy time from the earlier profile, so little overhead remains.
+  Further gains need faster kernels. The gain is clear on `small` and `medium`. On `base` and turbo the ranges overlap the CPU's, so call those level.
+- **What this changes.** The GPU decoder no longer loses, so GPU only is now the simplest choice and needs no CPU + GPU split. Turbo barely
+  moves because it has few decoder steps per run, and its encoder dominates. `medium` is still borderline for live use, once voice windows are added.
+- **Before shipping.** The app needs patched whisper.cpp and OpenCL, which needs approval. Pinning must pick cores by capacity rather than
+  a fixed mask, must tolerate a missing thread and offline cores, and should restore affinity afterwards. The prime core can be offline:
+  setting affinity to it alone returned `EINVAL` here.
