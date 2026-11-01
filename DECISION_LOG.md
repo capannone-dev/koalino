@@ -1548,3 +1548,17 @@ changed; the design below awaits the owner's decision.
   this test enrols from solo recordings. Confirming a single weak-match clip still saves that clip's voice, by the
   owner's explicit choice. A final speaker with no live cluster has no review clip, because no audio is kept for it.
 
+## 2026-11-01 — phone GPU trial (#75), voice-window cost, and a VM with a GPU
+
+- **Phones stay on the CPU.** A Vulkan build of whisper.cpp on the S23's Adreno 740 aborts during model setup, with an
+  uncaught C++ exception, for both `small` and `large-v3-turbo`. No speed or battery figures exist as a result. `base` wasn't
+  tried, because USB dropped during the pushes, and the exception's text wasn't captured. Shipped Android builds have no
+  Vulkan, so they aren't affected.
+- **Desktop builds carry the same risk (#76).** The CPU fallback covers a missing GPU, a full GPU and a clean failure. An
+  exception thrown inside ggml aborts the process instead, so a GPU driver that fails this way would crash the app.
+- **Voice windows on the S23 cost about 0.15 times audio length**, including loading the models, on one 11 s clip, so
+  `small` plus windows should stay under real time. This has not been run in a live recording.
+- **`deb-gpu` VM (`vm-gpu`, outside this repo).** Vulkan through Venus reaches the host's GPU from Debian. Our engine there picks
+  the NVIDIA card over the Intel one: `large-v3-turbo` 0.065 on the GPU against 1.22 on the VM's CPU. VFIO passthrough was not
+  done: GNOME and open apps hold the card, it needs `sudo` and a reboot, and RAM snapshots wouldn't work with it.
+
