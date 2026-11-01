@@ -331,7 +331,7 @@ impl VoiceVectorDB for SqliteVoiceVectorDB {
     ///
     /// Inputs: `identity_id` identifies the person; an unknown identity is a no-op.
     /// Outputs: Success or a portable storage error.
-    /// Side effects: Irreversibly deletes biometric variants and the identity row, and leaves a
+    /// Side effects: Irreversibly deletes biometric variants, external account links and the identity row, and leaves a
     /// deletion record so paired devices delete it too and cannot bring it back. Transcript
     /// segments that referenced the identity keep its UUID and show as unknown afterwards.
     fn delete_identity(&self, identity_id: Uuid) -> Result<(), StorageError> {
@@ -345,6 +345,12 @@ impl VoiceVectorDB for SqliteVoiceVectorDB {
                 params![identity_id.to_string()],
             )
             .map_err(|error| sqlite_error("unable to delete voice variants", error))?;
+        transaction
+            .execute(
+                "DELETE FROM external_identity_mappings WHERE identity_id = ?1",
+                params![identity_id.to_string()],
+            )
+            .map_err(|error| sqlite_error("unable to delete external links", error))?;
         transaction
             .execute(
                 "DELETE FROM speaker_identities WHERE id = ?1",

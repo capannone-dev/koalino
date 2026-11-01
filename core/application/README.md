@@ -125,6 +125,10 @@ variants, deletion records) to a paired device, sealed with the pair key and spl
 transport. `P2pService` sends the library when its digest differs from what a device was last sent;
 `SqliteVoiceVectorDB` merges it (#56).
 
+`deletion_exchange.rs` encodes the `NTD1` messages listing deleted meetings and unknown voices. They
+hold identifiers only. `P2pService` sends them whenever a device has not had every record, and
+`RepositorySyncManager` drops sync messages about a deleted meeting.
+
 `cluster_share_exchange.rs` encodes a `ClusterShare` (an unresolved unknown-speaker cluster, its
 member embeddings, and its review clips) as sealed `NTC1` messages for one paired device
 (Issue #50). The body is JSON with the clip audio appended raw, sealed with the pair key and bound

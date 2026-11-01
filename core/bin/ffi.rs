@@ -386,6 +386,7 @@ impl FfiRuntime {
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("voice_review_clips"));
         fs::create_dir_all(&review_clip_directory).map_err(|_| FFI_OPERATION_REJECTED)?;
+        clear_review_clip_files(&review_clip_directory);
         let export_directory = setting("NOTE_TAKER_EXPORT_DIR")
             .filter(|directory| !directory.trim().is_empty())
             .map(PathBuf::from)
@@ -1311,6 +1312,108 @@ impl FfiRuntime {
         }
     }
 
+    /// Deletes a saved meeting, with its transcript, attachments and unknown voices.
+    ///
+    /// Inputs: A non-blank `meeting_id`.
+    /// Outputs: `FFI_SUCCESS`; `FFI_INVALID_ARGUMENT` for a blank ID; `FFI_OPERATION_REJECTED`
+    /// while it is being recorded or for a storage failure; `FFI_MEETING_NOT_FOUND` when unknown.
+    /// Side effects: Irreversibly deletes its rows, leaving a record that also deletes it on paired
+    /// devices, then its private attachment folder and written review audio. Files linked from
+    /// elsewhere stay. Never logs its title or content.
+    fn delete_meeting(&mut self, meeting_id: &str) -> c_int {
+        if meeting_id.trim().is_empty() || meeting_id.contains(['/', '\\']) || meeting_id == ".." {
+            return FFI_INVALID_ARGUMENT;
+        }
+        if self.active_meeting_id().as_deref() == Some(meeting_id) {
+            return FFI_OPERATION_REJECTED;
+        }
+        let meeting = MeetingId::new(meeting_id);
+        let clip_ids: Vec<Uuid> = self
+            .note_repository
+            .get_unassigned_clips(&meeting)
+            .map(|clips| clips.iter().map(UnassignedVoiceClip::clip_id).collect())
+            .unwrap_or_default();
+        match self.note_repository.delete_meeting(&meeting) {
+            Ok(true) => {}
+            Ok(false) => return FFI_MEETING_NOT_FOUND,
+            Err(_) => return FFI_OPERATION_REJECTED,
+        }
+        self.remove_review_clip_files(&clip_ids);
+        if let Err(error) = fs::remove_dir_all(self.attachment_directory.join(meeting_id))
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            tracing::warn!("a deleted meeting's attachment files could not be removed");
+        }
+        FFI_SUCCESS
+    }
+
+    /// Deletes a saved person's name and voice samples.
+    ///
+    /// Inputs: `identity_id` is a UUID string; an unknown person changes nothing.
+    /// Outputs: `FFI_SUCCESS`, `FFI_INVALID_ARGUMENT` for a malformed ID, or
+    /// `FFI_OPERATION_REJECTED` for a storage failure.
+    /// Side effects: Irreversibly deletes biometric data, leaving a record that also deletes it on
+    /// paired devices. Transcript segments that named the person show as unknown afterwards.
+    fn delete_saved_person(&mut self, identity_id: &str) -> c_int {
+        let Ok(parsed_identity_id) = Uuid::parse_str(identity_id) else {
+            return FFI_INVALID_ARGUMENT;
+        };
+        match self
+            .voice_identity_manager
+            .vector_database()
+            .delete_identity(parsed_identity_id)
+        {
+            Ok(()) => FFI_SUCCESS,
+            Err(_) => FFI_OPERATION_REJECTED,
+        }
+    }
+
+    /// Deletes an unknown voice without naming it.
+    ///
+    /// Inputs: `cluster_id` is a UUID string.
+    /// Outputs: `FFI_SUCCESS`; `FFI_INVALID_ARGUMENT` for a malformed ID; `FFI_OPERATION_REJECTED`
+    /// while its meeting is being recorded or for a storage failure; `FFI_MEETING_NOT_FOUND` when
+    /// the voice is unknown.
+    /// Side effects: Irreversibly deletes its embeddings and review audio, in storage and on disk,
+    /// leaving a record that also deletes it on paired devices. Its transcript stays and shows
+    /// `Unknown speaker`.
+    fn delete_unknown_voice(&mut self, cluster_id: &str) -> c_int {
+        let Ok(parsed_cluster_id) = Uuid::parse_str(cluster_id) else {
+            return FFI_INVALID_ARGUMENT;
+        };
+        if let Ok(Some(cluster)) = self
+            .note_repository
+            .load_unknown_speaker_cluster(parsed_cluster_id)
+            && self.active_meeting_id().as_deref() == Some(cluster.meeting_id().as_str())
+        {
+            return FFI_OPERATION_REJECTED;
+        }
+        let clip_ids = self.review_clip_ids_for_cluster(parsed_cluster_id);
+        match self.note_repository.delete_unknown_voice(parsed_cluster_id) {
+            Ok(true) => {
+                self.remove_review_clip_files(&clip_ids);
+                FFI_SUCCESS
+            }
+            Ok(false) => FFI_MEETING_NOT_FOUND,
+            Err(_) => FFI_OPERATION_REJECTED,
+        }
+    }
+
+    /// Forgets review clips and removes any audio written for them.
+    ///
+    /// Side effects: Deletes files in the review-clip directory; a failure is logged by clip ID.
+    fn remove_review_clip_files(&mut self, clip_ids: &[Uuid]) {
+        for clip_id in clip_ids {
+            self.loaded_review_clips.remove(clip_id);
+            let clip_path = self.review_clip_directory.join(format!("{clip_id}.wav"));
+            if let Err(error) = fs::remove_file(&clip_path)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                tracing::warn!(clip_id = %clip_id, "unable to delete a review clip file");
+            }
+        }
+    }
+
     /// Attaches files or photos to a meeting (Issue #54).
     ///
     /// Inputs: A non-blank `meeting_id` and a non-empty JSON array of absolute file paths.
@@ -2159,6 +2262,76 @@ pub unsafe extern "C" fn note_taker_rename_meeting(
         return FFI_INVALID_ARGUMENT;
     };
     with_runtime(|runtime| runtime.rename_meeting(meeting_id, new_title))
+}
+
+/// Removes review audio left by an earlier run. Each clip is written again when asked for, so this
+/// also clears clips of voices that a paired device deleted while this device was running.
+///
+/// Inputs: The review-clip directory. Side effects: Deletes its `.wav` files; failures are ignored,
+/// and the next start tries again.
+fn clear_review_clip_files(review_clip_directory: &std::path::Path) {
+    let Ok(entries) = fs::read_dir(review_clip_directory) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|extension| extension == "wav") {
+            let _ = fs::remove_file(path);
+        }
+    }
+}
+
+/// Deletes a saved meeting, with its transcript, attachments and unknown voices.
+///
+/// Inputs: `meeting_id` is a non-null NUL-terminated UTF-8 string.
+/// Outputs: `FFI_SUCCESS` (0); `FFI_INVALID_ARGUMENT` (1) for a null or non-UTF-8 pointer or an
+/// unusable ID; `FFI_OPERATION_REJECTED` (2) while it is recording or for a storage failure;
+/// `FFI_RUNTIME_UNAVAILABLE` (3); `FFI_MEETING_NOT_FOUND` (5) for an unknown meeting.
+/// Side effects: Irreversible. Paired devices delete it too and cannot restore it.
+///
+/// # Safety
+/// `meeting_id` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_delete_meeting(meeting_id: *const c_char) -> c_int {
+    let Some(meeting_id) = (unsafe { ffi_string(meeting_id) }) else {
+        return FFI_INVALID_ARGUMENT;
+    };
+    with_runtime(|runtime| runtime.delete_meeting(meeting_id))
+}
+
+/// Deletes a saved person's name and voice samples.
+///
+/// Inputs: `identity_id` is a non-null NUL-terminated UTF-8 UUID.
+/// Outputs: `FFI_SUCCESS` (0), also for an unknown person; `FFI_INVALID_ARGUMENT` (1);
+/// `FFI_OPERATION_REJECTED` (2); `FFI_RUNTIME_UNAVAILABLE` (3).
+/// Side effects: Irreversible. Paired devices delete the person too and cannot restore them.
+///
+/// # Safety
+/// `identity_id` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_delete_saved_person(identity_id: *const c_char) -> c_int {
+    let Some(identity_id) = (unsafe { ffi_string(identity_id) }) else {
+        return FFI_INVALID_ARGUMENT;
+    };
+    with_runtime(|runtime| runtime.delete_saved_person(identity_id))
+}
+
+/// Deletes an unknown voice without naming it.
+///
+/// Inputs: `cluster_id` is a non-null NUL-terminated UTF-8 UUID.
+/// Outputs: `FFI_SUCCESS` (0); `FFI_INVALID_ARGUMENT` (1); `FFI_OPERATION_REJECTED` (2) while its
+/// meeting is recording or for a storage failure; `FFI_RUNTIME_UNAVAILABLE` (3);
+/// `FFI_MEETING_NOT_FOUND` (5) for an unknown voice.
+/// Side effects: Irreversible. Paired devices delete it too and cannot restore it.
+///
+/// # Safety
+/// `cluster_id` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_delete_unknown_voice(cluster_id: *const c_char) -> c_int {
+    let Some(cluster_id) = (unsafe { ffi_string(cluster_id) }) else {
+        return FFI_INVALID_ARGUMENT;
+    };
+    with_runtime(|runtime| runtime.delete_unknown_voice(cluster_id))
 }
 
 /// Feeds captured 16 kHz mono signed 16-bit PCM into the active recording.
@@ -3235,6 +3408,90 @@ mod ffi_contract_tests {
         };
 
         assert_eq!(statuses, [FFI_INVALID_ARGUMENT; 3]);
+    }
+
+    /// Verifies deleting a meeting removes it and its private files, refuses a live or unknown
+    /// meeting, and leaves a file linked from elsewhere alone.
+    #[test]
+    fn delete_meeting_removes_it_and_its_private_files() {
+        let (mut ffi_runtime, export_directory) = export_runtime();
+        for meeting_id in ["ffi-doomed", "ffi-kept"] {
+            crate::application::meeting_crdt::MeetingCrdtService::new(&ffi_runtime.note_repository)
+                .create_meeting(&MeetingId::new(meeting_id))
+                .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        }
+        let private_folder = ffi_runtime.attachment_directory.join("ffi-doomed");
+        let kept_folder = ffi_runtime.attachment_directory.join("ffi-kept");
+        for folder in [&private_folder, &kept_folder] {
+            std::fs::create_dir_all(folder)
+                .and_then(|()| std::fs::write(folder.join("photo.jpg"), b"photo"))
+                .unwrap_or_else(|error| panic!("fixture file must be written: {error}"));
+        }
+
+        let invalid: Vec<_> = ["", "  ", "../ffi-kept", ".."]
+            .into_iter()
+            .map(|meeting_id| ffi_runtime.delete_meeting(meeting_id))
+            .collect();
+        let deleted = ffi_runtime.delete_meeting("ffi-doomed");
+        let repeated = ffi_runtime.delete_meeting("ffi-doomed");
+        let gone = parse_response(&ffi_runtime.get_meeting("ffi-doomed"));
+        let kept = parse_response(&ffi_runtime.get_meeting("ffi-kept"));
+        let private_folder_exists = private_folder.exists();
+        let kept_file_exists = kept_folder.join("photo.jpg").exists();
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert_eq!(invalid, vec![FFI_INVALID_ARGUMENT; 4]);
+        assert_eq!(deleted, FFI_SUCCESS);
+        assert_eq!(repeated, FFI_MEETING_NOT_FOUND);
+        assert_eq!(gone["error_code"], "meeting_not_found");
+        assert_eq!(kept["meeting_id"], "ffi-kept");
+        assert!(!private_folder_exists);
+        assert!(kept_file_exists);
+    }
+
+    /// Verifies leftover review audio goes at startup and other files stay.
+    #[test]
+    fn startup_clears_only_review_audio() {
+        let directory =
+            std::env::temp_dir().join(format!("ffi-review-clips-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory)
+            .and_then(|()| std::fs::write(directory.join("clip.wav"), b"audio"))
+            .and_then(|()| std::fs::write(directory.join("note.txt"), b"text"))
+            .unwrap_or_else(|error| panic!("fixture files must be written: {error}"));
+
+        super::clear_review_clip_files(&directory);
+        let (audio_exists, note_exists) = (
+            directory.join("clip.wav").exists(),
+            directory.join("note.txt").exists(),
+        );
+        let _ = std::fs::remove_dir_all(&directory);
+
+        assert!(!audio_exists);
+        assert!(note_exists);
+    }
+
+    /// Verifies a saved person disappears from the library, and bad IDs are refused.
+    #[test]
+    fn delete_saved_person_removes_them_from_the_library() {
+        let (mut ffi_runtime, export_directory) = export_runtime();
+        let identity_id = uuid::Uuid::new_v4();
+        ffi_runtime
+            .voice_identity_manager
+            .vector_database()
+            .save_speaker_identity(&crate::domain::models::SpeakerIdentity::new(
+                identity_id,
+                "Ada",
+            ))
+            .unwrap_or_else(|error| panic!("fixture person must persist: {error}"));
+
+        let invalid = ffi_runtime.delete_saved_person("not-a-uuid");
+        let deleted = ffi_runtime.delete_saved_person(&identity_id.to_string());
+        let library = parse_response(&ffi_runtime.get_voice_library());
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert_eq!(invalid, FFI_INVALID_ARGUMENT);
+        assert_eq!(deleted, FFI_SUCCESS);
+        assert_eq!(library["saved_people"], serde_json::json!([]));
     }
 
     /// Verifies a titled start persists the title, and `get_meetings`/`get_meeting` return it

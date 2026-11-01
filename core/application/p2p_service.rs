@@ -44,6 +44,9 @@ use crate::{
         },
         compute_router::ComputePreference,
         crypto::pair_key::PairAgreementSecret,
+        deletion_exchange::{
+            decode_deletion_message, encode_deletion_messages, is_deletion_message,
+        },
         device_manifest_exchange::{decode_manifest_message, encode_manifest_message},
         pair_key_exchange::{
             PairKeyMessageError, decode_pair_key_message, encode_pair_key_message,
@@ -434,6 +437,8 @@ pub struct P2pService<Transport, Store, Repository> {
     attachment_sync: Option<AttachmentSync>,
     /// The voice library to keep in step with paired devices; `None` leaves it on this device.
     voice_library: Option<Box<dyn VoiceLibrarySync>>,
+    /// How many deletion records each connected device was last sent.
+    shared_deletion_counts: HashMap<DeviceId, usize>,
     /// The library digest each connected device was last sent.
     shared_voice_digests: HashMap<DeviceId, [u8; 32]>,
 }
@@ -475,6 +480,7 @@ where
             pending_transcriptions: HashMap::new(),
             attachment_sync: None,
             voice_library: None,
+            shared_deletion_counts: HashMap::new(),
             shared_voice_digests: HashMap::new(),
         }
     }
@@ -592,6 +598,7 @@ where
     /// sealed shares; may store held shares. Failures are logged and retried on the next call, or
     /// at the peer's next connection.
     pub fn poll_local_changes(&mut self) {
+        self.share_deletions();
         self.send_document_changes();
         self.share_clusters();
         self.retry_held_shares();
@@ -712,6 +719,10 @@ where
                     self.accept_attachment_manifest(peer_device_id, payload);
                     return;
                 }
+                if is_deletion_message(payload) {
+                    self.accept_deletions(peer_device_id, payload);
+                    return;
+                }
                 if is_voice_library_message(payload) {
                     self.accept_voice_library(peer_device_id, payload);
                     return;
@@ -728,6 +739,7 @@ where
                 self.connected_peers.insert(peer_device_id.clone());
                 self.shared_clusters.remove(peer_device_id);
                 self.shared_voice_digests.remove(peer_device_id);
+                self.shared_deletion_counts.remove(peer_device_id);
                 if let Some(attachment_sync) = self.attachment_sync.as_mut() {
                     attachment_sync.forget_shared(peer_device_id);
                 }
@@ -738,6 +750,7 @@ where
                 self.connected_peers.remove(peer_device_id);
                 self.shared_clusters.remove(peer_device_id);
                 self.shared_voice_digests.remove(peer_device_id);
+                self.shared_deletion_counts.remove(peer_device_id);
                 if let Some(attachment_sync) = self.attachment_sync.as_mut() {
                     attachment_sync.peer_lost(peer_device_id);
                 }
@@ -748,6 +761,7 @@ where
             // again.
             NetworkEvent::DeliveryFailed(peer_device_id) => {
                 self.shared_voice_digests.remove(peer_device_id);
+                self.shared_deletion_counts.remove(peer_device_id);
                 if let Some(attachment_sync) = self.attachment_sync.as_mut() {
                     attachment_sync.forget_shared(peer_device_id);
                 }
@@ -809,6 +823,87 @@ where
                 peer = %peer_device_id.as_str(),
                 error = %error,
                 "an agreement key was rejected"
+            ),
+        }
+    }
+
+    /// Sends the deletion records to every connected device that has not had them all.
+    ///
+    /// Records only grow, so their count tells whether a device is up to date.
+    /// Side effects: Reads the records each call and sends messages; failures are logged and
+    /// retried next call.
+    fn share_deletions(&mut self) {
+        if self.connected_peers.is_empty() {
+            return;
+        }
+        let records = match self.sync_manager.repository().deletion_records() {
+            Ok(records) => records,
+            Err(error) => {
+                tracing::warn!(error = %error, "deletion records could not be read");
+                return;
+            }
+        };
+        let record_count = records.meeting_ids.len() + records.cluster_ids.len();
+        if record_count == 0 {
+            return;
+        }
+        let waiting: Vec<DeviceId> = self
+            .connected_peers
+            .iter()
+            .filter(|peer| self.shared_deletion_counts.get(*peer) != Some(&record_count))
+            .cloned()
+            .collect();
+        if waiting.is_empty() {
+            return;
+        }
+        let messages = encode_deletion_messages(&records);
+        let transport = self.pairing_manager.transport_mut();
+        for peer_device_id in waiting {
+            let all_sent = messages.iter().all(|message| {
+                match transport.send_encrypted(&peer_device_id, message) {
+                    Ok(()) => true,
+                    Err(error) => {
+                        tracing::warn!(
+                            peer = %peer_device_id.as_str(),
+                            error = %error,
+                            "deletion records could not be sent"
+                        );
+                        false
+                    }
+                }
+            });
+            if all_sent {
+                self.shared_deletion_counts
+                    .insert(peer_device_id, record_count);
+            }
+        }
+    }
+
+    /// Applies deletion records `peer_device_id` sent.
+    ///
+    /// Side effects: Deletes the named meetings and unknown voices, with the files of those
+    /// meetings. A message that cannot be read or applied is logged (peer ID only) and dropped.
+    fn accept_deletions(&mut self, peer_device_id: &DeviceId, payload: &[u8]) {
+        let applied = decode_deletion_message(payload)
+            .map_err(|error| error.to_string())
+            .and_then(|records| {
+                self.sync_manager
+                    .repository()
+                    .apply_deletion_records(&records)
+                    .map_err(|error| error.to_string())
+            });
+        match applied {
+            Ok(removed_meetings) => {
+                if let Some(attachment_sync) = self.attachment_sync.as_mut() {
+                    for meeting_id in &removed_meetings {
+                        attachment_sync.meeting_deleted(meeting_id);
+                    }
+                }
+            }
+            Err(error) => tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                error = %error,
+                "deletion records were rejected"
             ),
         }
     }
@@ -1470,7 +1565,11 @@ where
     /// Side effects: May store the cluster, chunks, and clips; logs failures without content.
     fn import_share(&mut self, share: ClusterShare) -> Option<ClusterShare> {
         match self.sync_manager.repository().import_cluster_share(&share) {
-            Ok(ClusterShareImport::Imported | ClusterShareImport::AlreadyResolved) => None,
+            Ok(
+                ClusterShareImport::Imported
+                | ClusterShareImport::AlreadyResolved
+                | ClusterShareImport::Deleted,
+            ) => None,
             Ok(ClusterShareImport::UnknownMeeting) => Some(share),
             Err(error) => {
                 tracing::warn!(

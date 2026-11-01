@@ -25,6 +25,8 @@ pub mod sqlite_adapter;
 mod sqlite_clip_audio_encryption;
 #[cfg(test)]
 mod sqlite_cluster_share_tests;
+#[cfg(test)]
+mod sqlite_deletions_tests;
 /// Seals embedding BLOBs through the cipher port and re-encrypts legacy plaintext rows.
 mod sqlite_embedding_encryption;
 /// Persists the database's encryption metadata (key source, Argon2id salt, key check).

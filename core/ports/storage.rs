@@ -3,9 +3,9 @@
 use crate::domain::{
     errors::StorageError,
     models::{
-        Attachment, ClusterDigest, ClusterShare, ClusterShareImport, MeetingId, MeetingMetadata,
-        MeetingTitle, MeetingWindow, Transcript, TranscriptSegment, UnassignedVoiceClip,
-        UnknownSpeakerChunk, UnknownSpeakerCluster,
+        Attachment, ClusterDigest, ClusterShare, ClusterShareImport, DeletionRecords, MeetingId,
+        MeetingMetadata, MeetingTitle, MeetingWindow, Transcript, TranscriptSegment,
+        UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
     },
 };
 use chrono::{DateTime, Utc};
@@ -24,6 +24,59 @@ pub trait NoteRepository {
             meeting_ids: Vec::new(),
             latest_revision: after_revision,
         })
+    }
+
+    /// Deletes a meeting and everything it holds, and records that it was deleted.
+    ///
+    /// Inputs: The meeting; an unknown one changes nothing.
+    /// Outputs: Whether it existed, or a storage error. Repositories that cannot delete refuse.
+    /// Side effects: Irreversibly removes its document, transcript, attachment rows, unknown voices
+    /// and review audio, in one step. Attachment files are the caller's to remove.
+    fn delete_meeting(&self, _meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        Err(StorageError::Rejected {
+            reason: String::from("this repository cannot delete meetings"),
+        })
+    }
+
+    /// Deletes an unknown voice for good, and records that it was deleted. Unlike
+    /// `delete_unknown_speaker_cluster`, which reorganizes clusters, this stops paired devices
+    /// sharing the voice back.
+    ///
+    /// Inputs: The cluster; an unknown one changes nothing.
+    /// Outputs: Whether it existed, or a storage error. Repositories that cannot delete refuse.
+    /// Side effects: Irreversibly removes its embeddings and review audio, in one step.
+    fn delete_unknown_voice(&self, _cluster_id: Uuid) -> Result<bool, StorageError> {
+        Err(StorageError::Rejected {
+            reason: String::from("this repository cannot delete unknown voices"),
+        })
+    }
+
+    /// Tells whether `meeting_id` was deleted here or on a paired device.
+    ///
+    /// Outputs: The answer, or a storage error. Repositories without records answer no.
+    /// Side effects: Reads local records only.
+    fn is_meeting_deleted(&self, _meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        Ok(false)
+    }
+
+    /// Lists every deletion record, for paired devices.
+    ///
+    /// Outputs: The records, or a storage error. Repositories without records list none.
+    /// Side effects: Reads local records only.
+    fn deletion_records(&self) -> Result<DeletionRecords, StorageError> {
+        Ok(DeletionRecords::default())
+    }
+
+    /// Applies deletion records from a paired device; items not held here stay blocked.
+    ///
+    /// Inputs: Records decoded from a paired device; applying them twice changes nothing.
+    /// Outputs: The meetings removed by this call, or a storage error.
+    /// Side effects: As the delete methods, in one step. Attachment files are the caller's.
+    fn apply_deletion_records(
+        &self,
+        _records: &DeletionRecords,
+    ) -> Result<Vec<MeetingId>, StorageError> {
+        Ok(Vec::new())
     }
 
     /// Lists stable identifiers for every locally known meeting.
@@ -316,6 +369,29 @@ impl<T> NoteRepository for &T
 where
     T: NoteRepository + ?Sized,
 {
+    fn delete_meeting(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        (**self).delete_meeting(meeting_id)
+    }
+
+    fn delete_unknown_voice(&self, cluster_id: Uuid) -> Result<bool, StorageError> {
+        (**self).delete_unknown_voice(cluster_id)
+    }
+
+    fn is_meeting_deleted(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        (**self).is_meeting_deleted(meeting_id)
+    }
+
+    fn deletion_records(&self) -> Result<DeletionRecords, StorageError> {
+        (**self).deletion_records()
+    }
+
+    fn apply_deletion_records(
+        &self,
+        records: &DeletionRecords,
+    ) -> Result<Vec<MeetingId>, StorageError> {
+        (**self).apply_deletion_records(records)
+    }
+
     fn list_meeting_ids(&self) -> Result<Vec<MeetingId>, StorageError> {
         (*self).list_meeting_ids()
     }

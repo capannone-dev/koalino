@@ -244,6 +244,18 @@ contents, EXIF data, or database-specific values.
   no control characters such as newlines); `2` for a storage failure; `3` for unavailable
   runtime state; and `5` (`FFI_MEETING_NOT_FOUND`) for an unknown meeting. A rejected call
   writes nothing. Read the new title back with `note_taker_get_meeting`.
+- `int32_t note_taker_delete_meeting(const char *meeting_id)` deletes a meeting with its transcript,
+  attachments and unknown voices, here and on paired devices, for good. Files linked from elsewhere
+  stay. It returns `0`; `1` for a null, non-UTF-8 or unusable ID; `2` while it is being recorded or
+  for a storage failure; `3` for unavailable runtime state; `5` for an unknown meeting.
+- `int32_t note_taker_delete_unknown_voice(const char *cluster_id)` deletes an unknown voice's
+  embeddings and review audio, here and on paired devices, for good. Its transcript stays. It
+  returns `0`; `1` for a malformed UUID; `2` while its meeting is recording or for a storage failure;
+  `3`; `5` for an unknown voice.
+- `int32_t note_taker_delete_saved_person(const char *identity_id)` deletes a saved person's name,
+  voice samples and external account links, here and on paired devices, for good. Transcripts stay
+  and show an unknown speaker. It returns `0`, also for an unknown person; `1` for a malformed UUID;
+  `2` for a storage failure; `3`.
 - `int32_t note_taker_push_audio_pcm(const int16_t *samples, size_t sample_count)` copies 16 kHz
   mono signed 16-bit PCM from the platform capture into the active recording. It returns `0`
   (audio is discarded while paused), `1` for a null pointer with a nonzero count, or `2` when no

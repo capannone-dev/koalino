@@ -113,6 +113,11 @@ impl SqliteNoteRepository {
         let cluster = share.cluster();
         let cluster_key = cluster.cluster_id().to_string();
         let meeting_key = cluster.meeting_id().as_str();
+        if super::deletions::is_meeting_recorded(&self.connection, cluster.meeting_id())?
+            || super::deletions::is_cluster_recorded(&self.connection, cluster.cluster_id())?
+        {
+            return Ok(ClusterShareImport::Deleted);
+        }
         if share.clips().iter().any(|clip| {
             clip.cluster_id() != Some(cluster.cluster_id())
                 || clip.meeting_id() != cluster.meeting_id()

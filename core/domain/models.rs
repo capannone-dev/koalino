@@ -2374,6 +2374,17 @@ pub enum ClusterShareImport {
     AlreadyResolved,
     /// The meeting has not synced to this device yet; nothing was stored.
     UnknownMeeting,
+    /// The voice or its meeting was deleted; nothing was stored, and it never will be.
+    Deleted,
+}
+
+/// What this device knows was deleted, on it or on a paired device. Holds identifiers only.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DeletionRecords {
+    /// Deleted meetings, which sync must not restore.
+    pub meeting_ids: Vec<MeetingId>,
+    /// Deleted unknown voices, which cluster shares must not restore.
+    pub cluster_ids: Vec<Uuid>,
 }
 
 impl Transcript {

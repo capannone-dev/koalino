@@ -65,6 +65,15 @@ pub trait FileTransferNetwork {
 
 /// The attachments this device holds, and where files from paired devices are stored.
 pub trait AttachmentLibrary {
+    /// Removes the files this library stored for a meeting that was deleted.
+    ///
+    /// Inputs: The deleted meeting. Outputs: Success, or a storage error.
+    /// Side effects: Deletes only the meeting's folder in the private attachment store, so a file
+    /// the owner linked from elsewhere stays. Libraries without files do nothing.
+    fn remove_meeting_files(&mut self, _meeting_id: &MeetingId) -> Result<(), StorageError> {
+        Ok(())
+    }
+
     /// Computes the content hash of one linked attachment that has none yet.
     ///
     /// Outputs: Success (also when there is nothing to do), or a storage error.

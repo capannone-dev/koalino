@@ -1725,3 +1725,25 @@ Measured through the real engine with word timing, on an S23, `small`, 11 s Engl
   public clip played from a laptop speaker gave a transcript (0:35), with no crash warning in Settings. With the language set to Italian, the English clip came out in Italian.
 - **Not verified.** Thread pinning in the app: the driver thread was seen only on cores 3 and 5, inside the chosen group, but the app's thread mask can't be read from
   outside. Speed in the app, as Android builds write no logs. Accuracy of that transcript. A real driver crash; the guard is tested with a simulated abort. Battery use.
+
+## 2026-11-01 — Deleting meetings and voices
+
+- **Deleting spreads to paired devices and always wins**, as voices already did (#56). Automerge and
+  cluster shares merge by union, so a device left out would restore the item, and the owner expects
+  deleted notes and biometric data to be gone. There is no "delete on this device only".
+- **Records live in SQLite, not the Automerge document.** A document keeps its history forever, and
+  the point is to erase it. `deleted_items` holds an ID and a time, kept forever; the IDs are never
+  reused. `NTD1` messages carry them. They hold identifiers only, so the encrypted transport is enough
+  and no pair key is needed. Because records only grow, their count tells whether a peer is up to date.
+- **A new revision floor.** Revisions were one past the newest stored, so deleting the newest meeting
+  would reuse its number, and a watcher that had seen it would miss the next write.
+- **Only the private attachment folder is removed.** An attachment linked with
+  `confirm_attachment_link` points at the owner's own file, which must stay.
+- **Deleting a person now removes their external account links.** Foreign keys are enforced, so such a
+  person could not be deleted before. No UI could reach this until now.
+- **Deleting while recording is refused**, because the running pipeline still writes to that meeting.
+- **Not built.** The web dashboard and CLI have no delete yet. Bytes may remain in free SQLite pages
+  until they are reused, as `secure_delete` is not on. An old app version on a paired device drops
+  `NTD1` as malformed and keeps its copy; this device still refuses to take the meeting back.
+- **Which voice is playing:** the card turns the primary colour and shows `Playing…`, and Play becomes
+  Stop. The controller holds one playing ID, so at most one card is marked.

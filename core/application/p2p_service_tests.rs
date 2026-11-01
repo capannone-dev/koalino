@@ -1231,3 +1231,61 @@ async fn the_voice_library_reaches_paired_devices() {
     assert_eq!(on_phone.voice_variant_count(alice).ok(), Some(0));
     assert_eq!(voice_names(&on_laptop), vec!["Bruno".to_owned()]);
 }
+
+/// A meeting deleted on one device goes from the other too, whichever way it is reported, and
+/// neither device's sync brings it back.
+#[tokio::test]
+async fn a_deleted_meeting_goes_from_paired_devices_and_stays_gone() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9441"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let (mut laptop, _) = service_with_database("Laptop", laptop_adapter);
+    let (mut phone, _) = service_with_database("Phone", phone_adapter);
+    let (doomed, kept) = (
+        MeetingId::new("meeting-doomed"),
+        MeetingId::new("meeting-kept"),
+    );
+    for meeting_id in [&doomed, &kept] {
+        MeetingCrdtService::new(laptop.repository())
+            .create_meeting(meeting_id)
+            .unwrap_or_else(|error| panic!("meeting must be created: {error}"));
+    }
+    let lists = |service: &Service, meeting_id: &MeetingId| {
+        service
+            .repository()
+            .list_meeting_ids()
+            .unwrap_or_else(|error| panic!("meetings must list: {error}"))
+            .contains(meeting_id)
+    };
+
+    pair(&mut laptop, &mut phone, phone_address).await;
+    drive(&mut laptop, &mut phone, |_, phone| {
+        lists(phone, &doomed) && lists(phone, &kept)
+    })
+    .await;
+
+    laptop
+        .repository()
+        .delete_meeting(&doomed)
+        .unwrap_or_else(|error| panic!("deletion must succeed: {error}"));
+    drive(&mut laptop, &mut phone, |_, phone| !lists(phone, &doomed)).await;
+
+    // The kept meeting still syncs, and a further round restores nothing on either device.
+    MeetingCrdtService::new(phone.repository())
+        .create_meeting(&MeetingId::new("meeting-later"))
+        .unwrap_or_else(|error| panic!("meeting must be created: {error}"));
+    drive(&mut laptop, &mut phone, |laptop, _| {
+        lists(laptop, &MeetingId::new("meeting-later"))
+    })
+    .await;
+    assert!(!lists(&laptop, &doomed));
+    assert!(!lists(&phone, &doomed));
+    assert!(lists(&phone, &kept));
+}

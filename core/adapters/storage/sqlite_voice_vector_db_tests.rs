@@ -333,3 +333,29 @@ fn note_repository_and_voice_store_share_one_file() {
     );
     assert_eq!(listed_names(&store), vec!["Grace"]);
 }
+
+/// A person linked to an external account can still be deleted, and the link goes with them.
+#[test]
+fn deleting_an_identity_removes_its_external_mappings() {
+    let store = in_memory_store();
+    use crate::ports::external_bridge::ExternalIdentityRepository;
+
+    let identity_id = Uuid::new_v4();
+    let identity = SpeakerIdentity::new(identity_id, "Ada");
+    save(&store, &identity);
+    store
+        .save_external_mapping("teams:ada", &identity)
+        .unwrap_or_else(|error| panic!("mapping must save: {error}"));
+
+    store
+        .delete_identity(identity_id)
+        .unwrap_or_else(|error| panic!("deletion must succeed: {error}"));
+
+    assert!(listed_names(&store).is_empty());
+    assert!(
+        store
+            .find_by_external_id("teams:ada")
+            .unwrap_or_else(|error| panic!("lookup must succeed: {error}"))
+            .is_none()
+    );
+}

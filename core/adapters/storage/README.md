@@ -217,3 +217,8 @@ meeting's ID (`meeting-<uuid>`) as the folder name and the meeting time in milli
 `<ms>`. A meeting ID that is not a plain folder name (anything besides ASCII letters, digits,
 `-` and `_`) is rejected before anything is written, so no file can land outside the slide
 directory.
+
+`sqlite_deletions.rs` deletes meetings and unknown voices and keeps `deleted_items`, the records that
+stop paired devices restoring them. Records hold an ID and a time and are kept forever.
+`document_revision_floor` keeps a deleted meeting's revision from being reused, because a watcher
+that saw it would miss the next write.

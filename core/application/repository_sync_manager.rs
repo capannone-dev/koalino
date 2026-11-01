@@ -255,7 +255,8 @@ where
 
     /// Validates one peer envelope and applies it to a local or pending meeting.
     ///
-    /// Side effects: See `apply_to_local_meeting` and `apply_to_pending_meeting`.
+    /// Side effects: See `apply_to_local_meeting` and `apply_to_pending_meeting`. A message about a
+    /// deleted meeting is dropped, whatever it holds.
     fn apply_remote_sync_message(
         &mut self,
         p2p_network: &mut impl P2pNetwork,
@@ -275,6 +276,13 @@ where
             }
         })?;
         let meeting_id = envelope.meeting_id().clone();
+        if self.repository().is_meeting_deleted(&meeting_id)? {
+            // A deletion always wins: the peer gets the record and deletes its copy too.
+            self.pending_remote_meetings.remove(&meeting_id);
+            self.peer_sync_states
+                .remove(&(peer_device_id.clone(), meeting_id));
+            return Ok(());
+        }
         if self.meeting_crdt_service.meeting_exists(&meeting_id)? {
             self.apply_to_local_meeting(
                 p2p_network,

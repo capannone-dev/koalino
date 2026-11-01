@@ -22,6 +22,9 @@ mod attachment_sync;
 #[path = "sqlite_cluster_share.rs"]
 mod cluster_share;
 /// Persists unknown-speaker clusters and their member chunks (Issue #28).
+#[path = "sqlite_deletions.rs"]
+mod deletions;
+
 #[path = "sqlite_unknown_speaker_clusters.rs"]
 mod unknown_speaker_clusters;
 
@@ -190,6 +193,7 @@ impl SqliteNoteRepository {
         add_attachment_meeting_time_column(&sqlite_connection)?;
         attachment_sync::add_attachment_content_columns(&sqlite_connection)?;
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
+        deletions::initialize_deletion_schema(&sqlite_connection)?;
         for embedding_column in [
             &CLIP_EMBEDDINGS,
             &CLUSTER_REPRESENTATIVE_EMBEDDINGS,
@@ -1013,6 +1017,53 @@ impl NoteRepository for SqliteNoteRepository {
         self.delete_cluster(cluster_id)
     }
 
+    /// Deletes a meeting and everything it holds, leaving a deletion record.
+    ///
+    /// Inputs: Match `NoteRepository::delete_meeting`.
+    /// Outputs: Whether the meeting existed, or a portable storage error.
+    /// Side effects: Deletes its rows atomically. Never logs titles or transcripts.
+    fn delete_meeting(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        let existed = self.delete_meeting_rows(meeting_id)?;
+        self.log_operation("delete_meeting", meeting_id);
+        Ok(existed)
+    }
+
+    /// Deletes an unknown voice, leaving a deletion record.
+    ///
+    /// Inputs: Match `NoteRepository::delete_unknown_voice`.
+    /// Outputs: Whether the voice existed, or a portable storage error.
+    /// Side effects: Deletes biometric BLOBs and temporary review audio atomically.
+    fn delete_unknown_voice(&self, cluster_id: uuid::Uuid) -> Result<bool, StorageError> {
+        self.delete_unknown_voice_rows(cluster_id)
+    }
+
+    /// Tells whether this device holds a deletion record for `meeting_id`.
+    ///
+    /// Inputs: Match `NoteRepository::is_meeting_deleted`.
+    /// Outputs: The answer, or a portable storage error. Side effects: Reads one row.
+    fn is_meeting_deleted(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        deletions::is_meeting_recorded(&self.connection, meeting_id)
+    }
+
+    /// Lists every deletion record.
+    ///
+    /// Outputs: The records, or a portable storage error. Side effects: Reads IDs only.
+    fn deletion_records(&self) -> Result<crate::domain::models::DeletionRecords, StorageError> {
+        self.read_deletion_records()
+    }
+
+    /// Applies a paired device's deletion records.
+    ///
+    /// Inputs: Match `NoteRepository::apply_deletion_records`.
+    /// Outputs: The meetings removed here by this call, or a portable storage error.
+    /// Side effects: Deletes rows and leaves records atomically.
+    fn apply_deletion_records(
+        &self,
+        records: &crate::domain::models::DeletionRecords,
+    ) -> Result<Vec<MeetingId>, StorageError> {
+        self.apply_deletion_rows(records)
+    }
+
     /// Loads a meeting's unresolved, non-empty clusters in creation order.
     ///
     /// Inputs: Match `NoteRepository::load_unknown_speaker_clusters`.
@@ -1487,10 +1538,13 @@ fn add_document_revision_column(sqlite_connection: &Connection) -> Result<(), St
     Ok(())
 }
 
-/// SQL for the revision a document write takes: one past the newest stored. SQLite serializes
-/// writers, so concurrent connections never take the same revision.
-const NEXT_DOCUMENT_REVISION_SQL: &str =
-    "(SELECT COALESCE(MAX(document_revision), 0) + 1 FROM meetings)";
+/// SQL for the revision a document write takes: one past the newest stored or deleted. SQLite
+/// serializes writers, so concurrent connections never take the same revision. The floor keeps a
+/// deleted meeting's revision from being reused, which watchers that saw it would miss.
+const NEXT_DOCUMENT_REVISION_SQL: &str = "(SELECT MAX(
+        COALESCE((SELECT MAX(document_revision) FROM meetings), 0),
+        COALESCE((SELECT revision FROM document_revision_floor), 0)
+    ) + 1)";
 
 /// Ensures an SQL update affected exactly one existing meeting row.
 ///

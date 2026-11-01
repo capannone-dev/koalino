@@ -31,6 +31,10 @@ pub mod compute_router;
 mod compute_router_tests;
 /// Encrypts voice embeddings at rest and resolves the key protecting them.
 pub mod crypto;
+/// Encodes the `NTD1` messages that carry deletion records to paired devices.
+pub mod deletion_exchange;
+#[cfg(test)]
+mod deletion_exchange_tests;
 /// Encodes and validates the `DeviceManifest` messages paired devices exchange (Issue #43).
 pub mod device_manifest_exchange;
 #[cfg(test)]

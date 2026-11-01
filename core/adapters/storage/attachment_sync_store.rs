@@ -83,6 +83,22 @@ fn hash_file(file: &mut File) -> std::io::Result<(String, u64)> {
 }
 
 impl AttachmentLibrary for AttachmentSyncStore {
+    /// Removes the meeting's folder in the attachment store.
+    ///
+    /// Inputs: The deleted meeting; a name that is not a plain folder name is refused.
+    /// Outputs: Success (also when it had no folder), or a storage error.
+    /// Side effects: Deletes the folder and its files, which never logs their names.
+    fn remove_meeting_files(&mut self, meeting_id: &MeetingId) -> Result<(), StorageError> {
+        let meeting_directory = self.meeting_directory(meeting_id)?;
+        match std::fs::remove_dir_all(&meeting_directory) {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(file_error(
+                "unable to remove a deleted meeting's files",
+                &error,
+            )),
+            _ => Ok(()),
+        }
+    }
+
     fn hash_next_attachment(&mut self) -> Result<(), StorageError> {
         let Some((attachment_id, file_path)) = self
             .repository

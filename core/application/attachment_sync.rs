@@ -159,6 +159,18 @@ impl AttachmentSync {
         }
     }
 
+    /// Removes a deleted meeting's stored files and stops wanting its attachments.
+    ///
+    /// Side effects: Deletes files; a failure is logged and the files wait for no retry, as their
+    /// rows are already gone.
+    pub fn meeting_deleted(&mut self, meeting_id: &crate::domain::models::MeetingId) {
+        self.wanted
+            .retain(|_, wanted| &wanted.attachment.meeting_id != meeting_id);
+        if let Err(error) = self.library.remove_meeting_files(meeting_id) {
+            tracing::warn!(error = %error, "a deleted meeting's files could not be removed");
+        }
+    }
+
     /// Cancels transfers from `peer` and forgets its offers and what it was sent.
     ///
     /// Side effects: Removes partial files. The device's next manifest offers them again, and

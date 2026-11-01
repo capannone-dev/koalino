@@ -240,6 +240,12 @@ impl VoiceLibrarySync for SqliteVoiceVectorDB {
                     params![identity_key],
                 )
                 .map_err(|error| sqlite_error("unable to delete voice variants", error))?;
+            transaction
+                .execute(
+                    "DELETE FROM external_identity_mappings WHERE identity_id = ?1",
+                    params![identity_key],
+                )
+                .map_err(|error| sqlite_error("unable to delete external links", error))?;
             let removed_identities = transaction
                 .execute(
                     "DELETE FROM speaker_identities WHERE id = ?1",
