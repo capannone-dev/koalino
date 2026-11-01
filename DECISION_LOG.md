@@ -1588,3 +1588,34 @@ changed; the design below awaits the owner's decision.
   copy of those models was at hand. A driver update or a newer whisper.cpp could change this result.
 - **This is the failure #76 describes.** A lost device during inference throws through Rust and ends the process, so the CPU fallback
   doesn't help when it happens on a desktop.
+
+## 2026-11-01 — Why Adreno failed, and a working OpenCL path (#75)
+
+This replaces the "can't be used for now" conclusion above, which only covered Vulkan through our build. Everything here ran in
+a standalone test program on the S23 with a patched private copy of whisper.cpp 1.8.3. Nothing has shipped. All figures are from
+one 11 s English clip, a few passes at a time. Battery use, sustained heat, Italian and `large-v3-turbo` weren't measured.
+
+- **OpenCL works on the Adreno 740.** It gave correct text and no NaNs in any of 360 compared operations, against a median 0.14%
+  difference from the CPU on each operation's largest value, and up to 4.5% among the non-trivial ones.
+- **Flash Attention was broken by uninitialised memory.** The OpenCL kernel reads masked rows from the decoder's cache and
+  computes `0 x NaN`. Guarding that fixes it. The `exp` guard was added first and didn't fix it alone; it's still in the patch.
+- **Flash Attention isn't what makes it fast here.** The encoder took 15.3 s with it and 15.5 s without on OpenCL, and 1.30 s
+  against 1.16 s on the CPU. It's still worth keeping on, because only that setting gave the exact transcript on OpenCL.
+- **The real slowdown was the routing of matrix multiplies.** 95% of GPU time was in one generic kernel at about 2 GFLOP/s, while the
+  Adreno-tuned path, which reads weights as textures, reached about 85. Sending large multiplies there took the `base` encoder
+  from 15.5 s to 0.9 s. A faster tiled kernel also exists upstream but an earlier branch made it unreachable.
+- **Vulkan remains broken.** It loses the device with every option tried. Its Flash Attention output is already wrong, and without
+  Flash Attention some multiplies saturate at 65504. The cause isn't known.
+
+| Model | Encoder CPU | Encoder GPU | Decode step CPU | Decode step GPU | Total CPU | Total GPU |
+| --- | --- | --- | --- | --- | --- | --- |
+| `base` | 1.32 s | 0.90 s | 7 ms | 27 ms | 0.14 | 0.21 |
+| `small` | 4.47 s | 2.69 s | 19 ms | 48 ms | 0.46 | 0.46 |
+| `medium` | 15.2 s | 8.16 s | 48 ms | 172 ms | 1.51 | 1.47 to 1.55 |
+
+Totals are multiples of audio length, with 5 CPU threads and models with 16-bit weights.
+
+- **The GPU encoder wins, the GPU decoder loses, so overall it's level.** An encoder on the GPU with a decoder on the CPU would be
+  about 0.87 times audio length on `medium`, under real time. That figure is an estimate from the table and hasn't been run.
+- **Shipping needs decisions.** It means carrying a patch to a third-party crate, adding the OpenCL build and Android's
+  `uses-native-library` entry, and a fallback for other GPUs. The app hasn't been run with any of this.
