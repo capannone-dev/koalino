@@ -142,6 +142,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P3 | #61 | Open: measure on real meetings and retune the voice matcher cutoffs; first 15 recordings measured; needs the owner's natural recordings (#72) | 3.4 |
 | P2 | #77 | Open: finished recordings show "Unattributed" for unknown speakers | 3.2 |
 | P2 | #79 | Open: check deletion over real paired sync, the desktop delete buttons, and the one-time rewrite on a phone | 3.2 |
+| P3 | #80 | Open: the P2P invite test fails intermittently in the full suite | — |
 | P3 | #78 | Open: the GPU thread affinity test fails intermittently in the full suite | — |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |
