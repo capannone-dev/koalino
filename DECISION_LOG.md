@@ -1619,3 +1619,36 @@ Totals are multiples of audio length, with 5 CPU threads and models with 16-bit 
   about 0.87 times audio length on `medium`, under real time. That figure is an estimate from the table and hasn't been run.
 - **Shipping needs decisions.** It means carrying a patch to a third-party crate, adding the OpenCL build and Android's
   `uses-native-library` entry, and a fallback for other GPUs. The app hasn't been run with any of this.
+
+## 2026-11-01 — Adreno decoder fix and CPU, CPU + GPU, GPU comparison (#75)
+
+Same limits as the entry above: a standalone test on the S23, a patched private copy of whisper.cpp, and one 11 s English clip,
+which is encoded as a full 30 s window. Not in the app. Battery use and Italian weren't measured. Each figure is the median of
+4 passes, or 12 for sustained, with 5 CPU threads, Flash Attention on and cool-downs between setups. Transcripts were correct in all.
+
+| Model | CPU only | CPU + GPU | GPU only |
+| --- | --- | --- | --- |
+| `base` | 0.143 | **0.108** | 0.141 |
+| `small` | 0.496 | **0.313** | 0.343 |
+| `medium` | 1.651 | 0.983 | **0.923** |
+| `large-v3-turbo` | 2.789 | **1.393** | 1.463 |
+| `medium`, 12 passes | 1.645 | 1.010 | **0.987** |
+
+Figures are multiples of audio length.
+
+| Model | Encoder CPU | Encoder GPU only | Decode step CPU | Decode step GPU only |
+| --- | --- | --- | --- | --- |
+| `base` | 1.32 s | 0.90 s | 7.6 ms | 17 ms |
+| `small` | 4.82 s | 2.68 s | 21 ms | 31 ms |
+| `medium` | 16.3 s | 8.07 s | 51 ms | 61 ms |
+| `large-v3-turbo` | 29.8 s | 15.1 s | 14 ms | 19 ms |
+
+- **Why the decoder was slow.** Decoder steps have one output row, but they were sent to tile kernels that process a block of 32 or
+  more rows. Sending anything under 16 rows to the single-row kernel took `medium` from 172 ms to 61 ms a step.
+- **The GPU decoder is still slower than the CPU on every model.** On `medium` the GPU is busy for about 36 ms of a step, with 636 kernel
+  submissions. That leaves about 40 µs per submission, which is inferred from the timings and not measured directly. Qualcomm's
+  performance hint didn't help. Recordable queues are untried.
+- **CPU + GPU keeps only the encoder's weights on the GPU**, with no second copy of the model. It uses CPU cores and the GPU together,
+  so it isn't clearly better than GPU only: the best setup depends on the model and the differences are small on `medium` and turbo.
+- **What this means for live use.** `small` is comfortable. `medium` is borderline, at about 1.0 once warm and before voice windows,
+  which cost about 0.15 more. Turbo is too slow to keep up, but about twice as fast as before for processing after a meeting.
