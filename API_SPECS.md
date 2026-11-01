@@ -259,6 +259,10 @@ contents, EXIF data, or database-specific values.
   `note_taker_free_string`): `provider`, `openai_model`, `key_saved`, `environment_key`,
   `keychain_available`, `selected_model`, `shipped_model`, `available_disk_bytes`,
   `using_local_fallback`, `models` and `download`. It never contains the key.
+- `int32_t note_taker_set_efficient_gpu(int32_t enabled)` turns efficient mode on or off for the next recording. It returns `0`, or
+  `1` when turning it on without a supported GPU. `int32_t note_taker_retry_gpu(void)` lets the GPU be tried again after a crash
+  stopped it, and returns `0` or `2`. `note_taker_transcription_settings` adds `suggestion` (`file_name`, `efficient`, `reason`)
+  and `efficient` (`gpu_name`, `enabled`, `gpu_blocked`, `gpu_in_use`).
 - `int32_t note_taker_set_whisper_model(const char *file_name)`,
   `note_taker_set_transcription_provider(const char *provider)` (`local` or `openai`),
   `note_taker_set_openai_model(const char *model)`, `note_taker_save_openai_key(const char *key)`,

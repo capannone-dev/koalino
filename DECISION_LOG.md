@@ -1689,3 +1689,36 @@ Medians of 3 runs. Whole runs, as multiples of audio length, median of 3:
 - **Before shipping.** The app needs patched whisper.cpp and OpenCL, which needs approval. Pinning must pick cores by capacity rather than
   a fixed mask, must tolerate a missing thread and offline cores, and should restore affinity afterwards. The prime core can be offline:
   setting affinity to it alone returned `EINVAL` here.
+
+## 2026-11-01 — Efficient mode and a suggested model in Settings (#75, #68, #76)
+
+The owner asked for a per-device model choice with a suggestion, offering both the standard models and an "efficient" version needing
+the Adreno adjustments, and so approved the patched whisper.cpp and OpenCL on Android.
+
+- **Efficient mode is a switch, not a second list of models.** It uses the same files, so nothing downloads twice and the list stays
+  readable. Off is the default, and the standard models behave as before. The switch appears only on a supported GPU. Settings
+  were already per device, as `<db>.transcription-settings.json` doesn't sync. No further models are bundled: `base` stays the only one in the app.
+- **whisper-rs-sys is vendored** in `third_party/`, with an unmodified copy committed first. A build-time patch would break a fresh clone.
+- **OpenCL is opened at run time**, because a normal link stops the app loading where the library is missing. The manifest declares it
+  with `uses-native-library`, not required.
+- **A standard phone doesn't initialize the GPU.** Upstream compiled every kernel when listing devices, about 9 s even for a CPU model; that
+  now waits for a model to use the GPU. With a supported GPU, standard mode still creates one idle OpenCL context. Other phones see no OpenCL at all.
+- **Supported: Adreno 730, 740, 750, 830**, the generations whisper.cpp has tuned kernels for. **Only the 740 is tested.**
+- **Pinning covers the whole `full()` call**, from Rust, with no whisper.cpp change, as the encoder doesn't mind. Cores are the fastest cluster
+  of at least two, here 3–6, because the S23's prime core can go offline.
+- **The crash guard (#76) covers every GPU.** A driver can abort or `exit(1)`, as ggml does on a kernel compile error, which Rust can't catch.
+- **Suggestion rule, advice only.** Phones with 6 GB or more: `small` in efficient mode on a supported GPU, `small` on the CPU from 2.8 GHz, else `base`.
+  Computers: turbo with 4 GB or more on a graphics card, `small` with 7 GB of memory, else `base`. `medium` is never suggested on a phone,
+  as about 1.0 with voice windows leaves no margin. Telemetry-based proposals from #68 aren't built, so it stays open.
+
+Measured through the real engine with word timing, on an S23, `small`, 11 s English clip, median of two rounds with cool-downs, 3 passes each:
+
+| Language | Standard | Efficient |
+| --- | --- | --- |
+| Fixed | 0.44 | **0.31** |
+| Auto | 0.85 | **0.57** |
+
+- **Auto language costs about 0.25–0.4 more**, on either setup, on a clip this short. Earlier figures used a fixed language, so Auto recordings are slower than those suggest.
+  Choosing the language is the cheapest speed-up available.
+- **Not verified in the installed app**, because the phone was locked: that Android lets the app open the vendor's library, thread pinning there,
+  a real recording, and the Settings page on the phone. No phone test of a driver crash; the guard is tested with a simulated abort. Battery use is unmeasured.
