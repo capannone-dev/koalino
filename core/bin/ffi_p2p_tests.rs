@@ -127,6 +127,14 @@ fn wait_for_status(handle: &P2pHandle, condition: impl Fn(&Value) -> bool) -> Va
     json(&p2p_status_json(Some(handle as &dyn P2pControl)))
 }
 
+/// Tells whether a status lists a device as nearby. Real discovery runs here, so other devices on
+/// the machine's networks can be listed too.
+fn lists_nearby(status: &Value, peer_id: &str) -> bool {
+    status["nearby_devices"]
+        .as_array()
+        .is_some_and(|devices| devices.iter().any(|device| device["peer_id"] == peer_id))
+}
+
 /// Runs one command through the JSON interface.
 fn command(handle: &P2pHandle, request: &str) -> Value {
     json(&p2p_command_json(Some(handle as &dyn P2pControl), request))
@@ -506,16 +514,14 @@ fn an_invite_finds_a_device_but_pairing_still_needs_the_code() {
         &serde_json::json!({"command":"join_invite","invite":invite}).to_string(),
     );
     let inviter_id = joined["peer_id"].as_str().unwrap_or_default().to_owned();
-    let listed = wait_for_status(&joiner, |status| {
-        status["nearby_devices"][0]["peer_id"] == inviter_id.as_str()
-    });
+    let listed = wait_for_status(&joiner, |status| lists_nearby(status, &inviter_id));
 
     assert_eq!(own_invite["ok"], true);
     assert!(own_invite["expires_at_ms"].as_u64().is_some());
     assert_eq!(own_join["error_code"], "invite_from_this_device");
     assert_eq!(malformed["error_code"], "invite_malformed");
     assert_eq!(expired["error_code"], "invite_expired");
-    assert_eq!(unchanged["nearby_devices"], serde_json::json!([]));
+    assert!(!lists_nearby(&unchanged, "12D3KooWPeer"));
     assert_eq!(listed["trusted_devices"], serde_json::json!([]));
 
     let started = command(
