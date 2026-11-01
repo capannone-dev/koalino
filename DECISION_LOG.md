@@ -1720,5 +1720,8 @@ Measured through the real engine with word timing, on an S23, `small`, 11 s Engl
 
 - **Auto language costs about 0.25–0.4 more**, on either setup, on a clip this short. Earlier figures used a fixed language, so Auto recordings are slower than those suggest.
   Choosing the language is the cheapest speed-up available.
-- **Not verified in the installed app**, because the phone was locked: that Android lets the app open the vendor's library, thread pinning there,
-  a real recording, and the Settings page on the phone. No phone test of a driver crash; the guard is tested with a simulated abort. Battery use is unmeasured.
+- **Checked in the installed release app on the S23.** Android lets the app open the vendor's library: Settings suggests `small` in efficient mode and
+  names the Adreno 740. The suggestion's Download and Use buttons worked. In efficient mode the app held 933 MB of GPU memory, and a recording of the
+  public clip played from a laptop speaker gave a transcript (0:35), with no crash warning in Settings. With the language set to Italian, the English clip came out in Italian.
+- **Not verified.** Thread pinning in the app: the driver thread was seen only on cores 3 and 5, inside the chosen group, but the app's thread mask can't be read from
+  outside. Speed in the app, as Android builds write no logs. Accuracy of that transcript. A real driver crash; the guard is tested with a simulated abort. Battery use.

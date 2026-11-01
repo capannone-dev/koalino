@@ -136,7 +136,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P2 | #64 | Done (2026-10-30): relay and device addresses in Settings, applied live, in release builds with no defines | 4.1 |
 | P2 | #65 | Done (2026-10-30): pairing invites as a link and QR display; the code comparison is still required | 4.1 |
 | P3 | #66 | Done (2026-10-30): Nearby and disconnected devices explain what they need | 4.1 |
-| P2 | #75 | Efficient mode built (2026-11-01): needs a check in the installed app on an unlocked phone, then battery figures | 3.5 |
+| P2 | #75 | Efficient mode built and checked in the app on an S23 (2026-11-01): battery figures and in-app speed still open | 3.5 |
 | P3 | #68 | Device-based suggestion built (2026-11-01): telemetry-based proposals still open | 3.5 |
 | P3 | #61 | Open: measure on real meetings and retune the voice matcher cutoffs; needs the owner's recordings | 3.4 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
