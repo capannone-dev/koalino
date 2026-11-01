@@ -39,6 +39,11 @@ const WINDOW_STEP_SAMPLES: usize = 5 * SAMPLE_RATE_HZ as usize;
 /// Samples per millisecond.
 const SAMPLES_PER_MS: f64 = SAMPLE_RATE_HZ as f64 / 1_000.0;
 
+/// Length of a voice window: short enough that a fast turn change doesn't mix two people much.
+const VOICE_WINDOW_SAMPLES: usize = 2 * SAMPLE_RATE_HZ as usize;
+/// Step between voice windows, so each moment is in about two of them.
+const VOICE_WINDOW_STEP_SAMPLES: usize = SAMPLE_RATE_HZ as usize;
+
 /// Scores the frames of one window.
 pub trait SegmentationModel: Send + Sync {
     /// Segments one window.
@@ -197,6 +202,68 @@ where
                 )
             })
             .collect())
+    }
+
+    /// Measures the voice in 2 s windows every second, as the whole-meeting grouping needs (#73).
+    ///
+    /// Inputs: The chunk's samples in [-1, 1].
+    /// Outputs: One segment per window with enough speech, its embedding the speech-weighted mean
+    /// of the local speakers talking alone in that window; or the first model error.
+    /// Side effects: Runs inference once per window (CPU-heavy). Keeps no audio.
+    pub fn voice_windows_for_samples(
+        &self,
+        samples: &[f32],
+    ) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        let mut voice_windows = Vec::new();
+        let mut start_sample = 0;
+        while start_sample < samples.len() {
+            let end_sample = (start_sample + VOICE_WINDOW_SAMPLES).min(samples.len());
+            if let Some(embedding) = self.window_voice(&samples[start_sample..end_sample])? {
+                voice_windows.push(SpeakerSegment::new(
+                    (start_sample as f64 / SAMPLES_PER_MS) as u64,
+                    (end_sample as f64 / SAMPLES_PER_MS) as u64,
+                    embedding,
+                ));
+            }
+            start_sample += VOICE_WINDOW_STEP_SAMPLES;
+        }
+        Ok(voice_windows)
+    }
+
+    /// Embeds the speech in one short clip.
+    ///
+    /// Inputs: Up to `VOICE_WINDOW_SAMPLES` samples, padded here for the segmentation model.
+    /// Outputs: The unit embedding, `None` without enough speech, or a model error.
+    /// Side effects: Runs segmentation and embedding.
+    fn window_voice(&self, clip: &[f32]) -> Result<Option<Vec<f32>>, DiarizationError> {
+        let activity = self.segment_window(clip, 0)?;
+        let min_samples = (self.tuning.min_embedding_ms as f64 * SAMPLES_PER_MS) as usize;
+        let mut weighted_sum: Vec<f32> = Vec::new();
+        for local_speaker in 0..LOCAL_SPEAKERS {
+            let mut speech = Vec::new();
+            for (frame, active) in activity.frames.iter().enumerate() {
+                let is_alone =
+                    active[local_speaker] && active.iter().filter(|on| **on).count() == 1;
+                if is_alone {
+                    speech.extend_from_slice(&clip[activity.frame_range(frame, clip.len())]);
+                }
+            }
+            if speech.len() < min_samples {
+                continue;
+            }
+            let embedding = self.embedding_model.embed(&speech)?;
+            let weight = speech.len() as f32;
+            if weighted_sum.is_empty() {
+                weighted_sum = vec![0.0; embedding.len()];
+            }
+            for (total, value) in weighted_sum.iter_mut().zip(&embedding) {
+                *total += value * weight;
+            }
+        }
+        if weighted_sum.is_empty() {
+            return Ok(None);
+        }
+        Ok(unit(&weighted_sum))
     }
 
     /// Segments the window starting at `start_sample`.
@@ -422,6 +489,30 @@ where
             .spawn(move || {
                 // The receiver is gone only when the caller dropped the future.
                 let _ = result_sender.send(engine.diarize_samples(&samples));
+            })
+            .map_err(|_| DiarizationError::Unavailable)?;
+        result_receiver
+            .await
+            .map_err(|_| DiarizationError::Unavailable)?
+    }
+
+    /// Measures the chunk's voice windows on a separate thread, as `diarize` does.
+    ///
+    /// Outputs: See `voice_windows_for_samples`; `InvalidAudio` for another format, or
+    /// `Unavailable` when the thread cannot start or dies.
+    /// Side effects: Runs inference off the calling thread; never logs audio or embeddings.
+    async fn voice_windows(
+        &self,
+        audio_bytes: &[u8],
+    ) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        let samples = decode_wav_pcm16_mono(audio_bytes)?;
+        let engine = self.clone();
+        let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
+        std::thread::Builder::new()
+            .name(String::from("voice-windows"))
+            .spawn(move || {
+                // The receiver is gone only when the caller dropped the future.
+                let _ = result_sender.send(engine.voice_windows_for_samples(&samples));
             })
             .map_err(|_| DiarizationError::Unavailable)?;
         result_receiver

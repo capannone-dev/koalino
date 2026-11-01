@@ -149,6 +149,15 @@ impl DiarizationEngine for MockDiarizationEngine {
             .pop()
             .unwrap_or(Err(DiarizationError::Unavailable))
     }
+
+    /// Reports no voice windows, so the final pass leaves the live result alone.
+    async fn voice_windows(
+        &self,
+        _audio_bytes: &[u8],
+    ) -> Result<Vec<crate::ports::ai::SpeakerSegment>, crate::domain::errors::DiarizationError>
+    {
+        Ok(Vec::new())
+    }
 }
 
 /// Classifies embeddings by their first component so each test controls the outcome per segment.
@@ -952,6 +961,15 @@ impl DiarizationEngine for ScriptedIntegrationDiarizer {
             .pop()
             .unwrap_or_default())
     }
+
+    /// Reports no voice windows, so the final pass leaves the live result alone.
+    async fn voice_windows(
+        &self,
+        _audio_bytes: &[u8],
+    ) -> Result<Vec<crate::ports::ai::SpeakerSegment>, crate::domain::errors::DiarizationError>
+    {
+        Ok(Vec::new())
+    }
 }
 
 /// Simulates a full meeting through real in-memory SQLite and vector-search adapters.
@@ -1234,7 +1252,7 @@ async fn five_unknown_chunks_form_two_clusters_and_assignment_attributes_three_s
             "a one", "b one", "a two", "b two", "a three", "a again",
         ]),
         Some(one_speaker_per_chunk_diarizer(
-            1_000,
+            3_000,
             vec![
                 voice_a[0].clone(),
                 voice_b[0].clone(),
@@ -1268,7 +1286,7 @@ async fn five_unknown_chunks_form_two_clusters_and_assignment_attributes_three_s
     assert_eq!(clusters.len(), 2);
     assert_eq!(clusters[0].chunk_ids().len(), 3);
     assert_eq!(clusters[1].chunk_ids().len(), 2);
-    assert_eq!(clusters[0].total_duration_ms(), 3_000);
+    assert_eq!(clusters[0].total_duration_ms(), 9_000);
     let alice_id = Uuid::new_v4();
 
     let assignment = session
@@ -1280,7 +1298,7 @@ async fn five_unknown_chunks_form_two_clusters_and_assignment_attributes_three_s
         .unwrap_or_else(|error| panic!("assignment should succeed: {error}"));
 
     assert_eq!(assignment.segments_updated(), 3);
-    assert_eq!(assignment.variants_stored(), 3);
+    assert_eq!(assignment.variants_stored(), 1);
     let attributed_texts = |segments: &[TranscriptSegment]| -> Vec<String> {
         segments
             .iter()
@@ -1386,4 +1404,175 @@ async fn a_chunks_language_reaches_the_engine() {
         *session.transcription_engine().received_languages.borrow(),
         vec![italian, None]
     );
+}
+
+/// Gives every chunk one live voice, and scripted voice windows for the final pass.
+struct FinalPassDiarizer {
+    live_voice: Vec<f32>,
+    chunk_voices: Mutex<Vec<Vec<f32>>>,
+}
+
+#[async_trait::async_trait]
+impl DiarizationEngine for FinalPassDiarizer {
+    /// Reports the same live voice for the whole of each 10 s chunk, as a merged result would.
+    async fn diarize(&self, _audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        Ok(vec![SpeakerSegment::new(
+            0,
+            10_000,
+            self.live_voice.clone(),
+        )])
+    }
+
+    /// Reports ten windows of the chunk's scripted voice.
+    async fn voice_windows(
+        &self,
+        _audio_bytes: &[u8],
+    ) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        let voice = self
+            .chunk_voices
+            .lock()
+            .map_err(|_| DiarizationError::Unavailable)?
+            .remove(0);
+        Ok((0..10_u64)
+            .map(|second| {
+                SpeakerSegment::new(second * 1_000, second * 1_000 + 2_000, voice.clone())
+            })
+            .collect())
+    }
+}
+
+/// Runs a recording of 10 s chunks, one per voice, whose live pass merges everyone.
+async fn run_final_pass(
+    voice_vector_database: &InMemoryVoiceVectorDB,
+    chunk_voices: Vec<Vec<f32>>,
+) -> (Vec<TranscriptSegment>, Option<usize>, usize) {
+    let meeting_id = MeetingId::new("meeting-final");
+    let mut session = MeetingSession::start(
+        meeting_id.clone(),
+        MockTranscriptionEngine::returning(&["chunk 0", "chunk 1"]),
+        Some(FinalPassDiarizer {
+            live_voice: vec![0.0, 0.0, 1.0],
+            chunk_voices: Mutex::new(chunk_voices.clone()),
+        }),
+        VoiceIdentityManager::new(voice_vector_database),
+        sqlite_repository_with_meeting(&meeting_id),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    for chunk in 0..chunk_voices.len() {
+        let start_ms = chunk as u64 * 10_000;
+        session
+            .process_vad_chunk(&vad_chunk_for(
+                "meeting-final",
+                chunk as u32,
+                start_ms,
+                start_ms + 10_000,
+            ))
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+    }
+    let finished = session
+        .finish_meeting()
+        .unwrap_or_else(|error| panic!("{error}"));
+    let clusters =
+        UnknownSpeakerClusterer::new(session.note_repository(), ClusteringConfig::default())
+            .get_clusters_for_meeting(&meeting_id)
+            .unwrap_or_else(|error| panic!("{error}"));
+    (
+        session.persisted_segments().to_vec(),
+        finished,
+        clusters.len(),
+    )
+}
+
+#[tokio::test]
+async fn the_final_pass_separates_people_the_live_pass_merged() {
+    let (segments, finished, cluster_count) = run_final_pass(
+        &InMemoryVoiceVectorDB::new(),
+        vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]],
+    )
+    .await;
+    assert_eq!(finished, Some(2));
+    assert_eq!(cluster_count, 2, "each unnamed speaker has one cluster");
+    let clusters: Vec<_> = segments
+        .iter()
+        .map(TranscriptSegment::unknown_cluster_id)
+        .collect();
+    assert!(clusters[0].is_some() && clusters[1].is_some());
+    assert_ne!(clusters[0], clusters[1]);
+    assert_eq!(segments[0].text(), "chunk 0");
+}
+
+#[tokio::test]
+async fn the_final_pass_names_a_whole_speaker_below_the_per_turn_limit() {
+    let voice_vector_database = InMemoryVoiceVectorDB::new();
+    let identity_id = Uuid::new_v4();
+    voice_vector_database
+        .save_speaker_identity(&SpeakerIdentity::new(identity_id, "Ada"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    voice_vector_database
+        .store_embedding(VoiceEmbedding::new(
+            identity_id,
+            Uuid::new_v4(),
+            vec![0.7, 0.714, 0.0],
+        ))
+        .unwrap_or_else(|error| panic!("{error}"));
+    // Similarity 0.7: unnamed for a single turn, named for a whole speaker.
+    let (segments, _, cluster_count) = run_final_pass(
+        &voice_vector_database,
+        vec![vec![1.0, 0.0, 0.0], vec![1.0, 0.0, 0.0]],
+    )
+    .await;
+    assert!(
+        segments
+            .iter()
+            .all(|segment| segment.speaker_identity_id() == Some(identity_id))
+    );
+    assert_eq!(cluster_count, 0, "the live cluster is no longer needed");
+}
+
+#[tokio::test]
+async fn a_voice_below_the_name_limit_stays_unknown() {
+    let voice_vector_database = InMemoryVoiceVectorDB::new();
+    let identity_id = Uuid::new_v4();
+    voice_vector_database
+        .save_speaker_identity(&SpeakerIdentity::new(identity_id, "Ada"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    voice_vector_database
+        .store_embedding(VoiceEmbedding::new(
+            identity_id,
+            Uuid::new_v4(),
+            vec![0.5, 0.866, 0.0],
+        ))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let (segments, _, _) = run_final_pass(&voice_vector_database, vec![vec![1.0, 0.0, 0.0]]).await;
+    assert!(
+        segments
+            .iter()
+            .all(|segment| segment.speaker_identity_id().is_none())
+    );
+}
+
+#[tokio::test]
+async fn without_voice_windows_the_live_result_stands() {
+    let meeting_id = MeetingId::new("meeting-final");
+    let mut session = MeetingSession::start(
+        meeting_id.clone(),
+        MockTranscriptionEngine::returning(&["hello"]),
+        Some(one_speaker_per_chunk_diarizer(1_000, vec![vec![1.0, 0.0]])),
+        VoiceIdentityManager::new(InMemoryVoiceVectorDB::new()),
+        sqlite_repository_with_meeting(&meeting_id),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    session
+        .process_vad_chunk(&vad_chunk_for("meeting-final", 0, 0, 1_000))
+        .await
+        .unwrap_or_else(|error| panic!("{error}"));
+    let before = session.persisted_segments().to_vec();
+    assert_eq!(
+        session
+            .finish_meeting()
+            .unwrap_or_else(|error| panic!("{error}")),
+        None
+    );
+    assert_eq!(session.persisted_segments(), before);
 }

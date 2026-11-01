@@ -95,6 +95,17 @@ pub trait DiarizationEngine {
     /// Outputs: Time-bounded speaker segments with derived embeddings or a portable diarization error.
     /// Side effects: An implementation may execute local or remote AI workloads.
     async fn diarize(&self, audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError>;
+
+    /// Measures the voice in short overlapping windows, for grouping over the whole meeting (#73).
+    ///
+    /// Inputs: `audio_bytes` as for `diarize`.
+    /// Outputs: One segment per window holding speech, with its chunk-relative span and voice
+    /// embedding; an engine without such a measure returns none, which leaves the live result in place.
+    /// Side effects: An implementation may execute local or remote AI workloads.
+    async fn voice_windows(
+        &self,
+        audio_bytes: &[u8],
+    ) -> Result<Vec<SpeakerSegment>, DiarizationError>;
 }
 
 /// Forwards transcription calls through references so one engine can serve many sessions.
@@ -127,5 +138,12 @@ where
 {
     async fn diarize(&self, audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
         (*self).diarize(audio_bytes).await
+    }
+
+    async fn voice_windows(
+        &self,
+        audio_bytes: &[u8],
+    ) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        (*self).voice_windows(audio_bytes).await
     }
 }

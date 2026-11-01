@@ -7,6 +7,10 @@
 pub mod alignment;
 /// Orchestrates one meeting's local VAD and external bridge chunks into persisted segments.
 pub mod meeting_session;
+/// Groups a whole meeting's voice windows into speakers at its end (#73).
+pub mod meeting_speaker_pass;
+#[cfg(test)]
+mod meeting_speaker_pass_tests;
 /// Composition root that owns the pipeline ports and opens one session per recording.
 pub mod pipeline_factory;
 #[cfg(test)]

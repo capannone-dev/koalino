@@ -174,6 +174,26 @@ pub trait NoteRepository {
         Err(StorageError::Unavailable)
     }
 
+    /// Creates a cluster or replaces its members, after the final pass has regrouped the meeting.
+    ///
+    /// Inputs: `cluster` lists exactly `chunks`; its meeting must exist.
+    /// Outputs: Success or a storage error. Side effects: Rewrites biometric vectors in one transaction.
+    fn replace_unknown_speaker_cluster_members(
+        &self,
+        _cluster: &UnknownSpeakerCluster,
+        _chunks: &[UnknownSpeakerChunk],
+    ) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
+    }
+
+    /// Deletes a cluster the final pass found no speaker for, with its members and review clips.
+    ///
+    /// Inputs: `cluster_id`; an unknown one is not an error. Outputs: Success or a storage error.
+    /// Side effects: Deletes biometric vectors and temporary review audio in one transaction.
+    fn delete_unknown_speaker_cluster(&self, _cluster_id: Uuid) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
+    }
+
     /// Loads one meeting's unresolved unknown-speaker clusters that have at least one member.
     ///
     /// Inputs: `meeting_id` identifies the meeting.
@@ -386,6 +406,18 @@ where
         chunk: &UnknownSpeakerChunk,
     ) -> Result<(), StorageError> {
         (*self).save_unknown_speaker_cluster_chunk(cluster, chunk)
+    }
+
+    fn replace_unknown_speaker_cluster_members(
+        &self,
+        cluster: &UnknownSpeakerCluster,
+        chunks: &[UnknownSpeakerChunk],
+    ) -> Result<(), StorageError> {
+        (*self).replace_unknown_speaker_cluster_members(cluster, chunks)
+    }
+
+    fn delete_unknown_speaker_cluster(&self, cluster_id: Uuid) -> Result<(), StorageError> {
+        (*self).delete_unknown_speaker_cluster(cluster_id)
     }
 
     fn load_unknown_speaker_clusters(

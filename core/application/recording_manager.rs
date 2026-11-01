@@ -590,17 +590,42 @@ fn process_chunk<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort
 ///
 /// Inputs: The recording to close and the shared counters.
 /// Outputs: The summary.
-/// Side effects: Drops the session and clears the recording flag.
+/// Side effects: Runs the session's final speaker pass, which rewrites the recording's segments, then
+/// drops the session and clears the recording flag.
 fn finish_recording<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>(
-    recording: ActiveRecording<'_, TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>,
+    mut recording: ActiveRecording<
+        '_,
+        TranscriptionPort,
+        DiarizationPort,
+        MatcherPort,
+        RepositoryPort,
+    >,
     worker_state: &WorkerState,
-) -> RecordingSummary {
+) -> RecordingSummary
+where
+    TranscriptionPort: TranscriptionEngine,
+    DiarizationPort: DiarizationEngine + Sync,
+    MatcherPort: VoiceIdentityMatcher,
+    RepositoryPort: NoteRepository,
+{
     worker_state.recording_active.store(false, Ordering::SeqCst);
+    let segment_count = match recording.session.finish_meeting() {
+        Ok(Some(final_segment_count)) => final_segment_count,
+        Ok(None) => recording.segment_count,
+        Err(error) => {
+            tracing::warn!(
+                meeting_id = %recording.meeting_id.as_str(),
+                error = %error,
+                "The final speaker pass failed; the live result stands"
+            );
+            recording.segment_count
+        }
+    };
     let summary = RecordingSummary {
         meeting_id: recording.meeting_id,
         processed_chunk_count: recording.processed_chunk_count,
         failed_chunk_count: recording.failed_chunk_count,
-        segment_count: recording.segment_count,
+        segment_count,
     };
     tracing::info!(
         meeting_id = %summary.meeting_id.as_str(),

@@ -15,6 +15,20 @@ pub trait VoiceIdentityMatcher {
     /// Outputs: A conservative strong, weak, or absent match classification, or a storage error.
     /// Side effects: Queries the adapter-owned voice-signature store.
     fn match_embedding(&self, embedding: &[f32]) -> Result<VoiceMatchResult, StorageError>;
+
+    /// Finds the saved voice nearest a whole speaker's voice, so the caller can apply its own limit.
+    ///
+    /// Inputs: `embedding` as for `match_embedding`, averaged over all of a speaker's speech.
+    /// Outputs: The identity and similarity, or `None` when nothing plausible is saved. By default
+    /// it derives this from `match_embedding`, treating a strong match as a full score.
+    /// Side effects: Queries the adapter-owned voice-signature store.
+    fn best_voice_match(&self, embedding: &[f32]) -> Result<Option<(Uuid, f32)>, StorageError> {
+        Ok(match self.match_embedding(embedding)? {
+            VoiceMatchResult::StrongMatch(identity_id) => Some((identity_id, 1.0)),
+            VoiceMatchResult::WeakMatch(identity_id, score) => Some((identity_id, score)),
+            VoiceMatchResult::NoMatch => None,
+        })
+    }
 }
 
 /// Forwards voice matching through references so one matcher can serve many sessions.
@@ -24,6 +38,10 @@ where
 {
     fn match_embedding(&self, embedding: &[f32]) -> Result<VoiceMatchResult, StorageError> {
         (*self).match_embedding(embedding)
+    }
+
+    fn best_voice_match(&self, embedding: &[f32]) -> Result<Option<(Uuid, f32)>, StorageError> {
+        (*self).best_voice_match(embedding)
     }
 }
 

@@ -12,6 +12,9 @@
 //! than in the vector-search adapter. Persistence goes only through `NoteRepository`; identity
 //! enrollment goes only through `VoiceVectorDB`. Embeddings are never logged.
 
+use crate::application::pipeline::meeting_speaker_pass::{
+    MIN_CLEAN_VOICE_CONSISTENCY, speaker_voices,
+};
 use chrono::Utc;
 use uuid::Uuid;
 
@@ -34,6 +37,9 @@ use crate::{
 pub const DEFAULT_CLUSTER_SIMILARITY_THRESHOLD: f32 = 0.40;
 
 /// Configures unknown-speaker clustering.
+/// Least clean speech a member needs for its voice to be saved when its cluster is named.
+pub const MIN_SAVED_VOICE_MS: u64 = 8_000;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ClusteringConfig {
     /// Exclusive cosine-similarity cutoff in `(0, 1]`.
@@ -305,7 +311,7 @@ where
     /// Outputs: A summary carrying the identity as read back from the voice store, plus created
     /// variants and updated segments; or not-found, already-resolved, or storage errors.
     /// Side effects: In order, saves the identity (creating it, or renaming it to
-    /// `identity.display_name()`), stores one voice variant per member embedding, rewrites the
+    /// `identity.display_name()`), stores one averaged voice when the members are clean, rewrites the
     /// meeting's transcript segments, then marks the cluster resolved and deletes its review
     /// clips. A failure part-way leaves earlier steps applied; retrying after a segment failure
     /// re-stores variants, which only adds duplicate acoustic variants.
@@ -339,13 +345,16 @@ where
         let member_chunks = self
             .note_repository
             .load_unknown_speaker_chunks(cluster_id)?;
-        for member_chunk in &member_chunks {
+        // Saving every member would keep any mixed turn in the library for good, and sync it (#74).
+        let saved_voice = clean_voice_of(&member_chunks);
+        if let Some(saved_voice) = &saved_voice {
             voice_vector_database.store_embedding(VoiceEmbedding::new(
                 identity_id,
                 Uuid::new_v4(),
-                member_chunk.embedding().to_vec(),
+                saved_voice.clone(),
             ))?;
         }
+        let variants_stored = usize::from(saved_voice.is_some());
 
         let meeting_id = cluster.meeting_id();
         let mut segments_updated = 0_usize;
@@ -374,7 +383,7 @@ where
             cluster_id = %cluster_id,
             identity_id = %identity_id,
             identity_created,
-            variants_stored = member_chunks.len(),
+            variants_stored,
             segments_updated,
             "Unknown speaker cluster assigned to identity"
         );
@@ -382,10 +391,32 @@ where
             cluster_id,
             identity: persisted_identity,
             identity_created,
-            variants_stored: member_chunks.len(),
+            variants_stored,
             segments_updated,
         })
     }
+}
+
+/// Averages a cluster's members into one voice, if they are fit to save.
+///
+/// Inputs: The members. A member's duration is its clean speech; the final pass records zero for a
+/// group that isn't clean.
+/// Outputs: The voice, or `None` with too little speech or inconsistent members. Side effects: None.
+fn clean_voice_of(member_chunks: &[UnknownSpeakerChunk]) -> Option<Vec<f32>> {
+    let clean_speech_ms: u64 = member_chunks
+        .iter()
+        .map(UnknownSpeakerChunk::duration_ms)
+        .sum();
+    if clean_speech_ms < MIN_SAVED_VOICE_MS {
+        return None;
+    }
+    let embeddings: Vec<Vec<f32>> = member_chunks
+        .iter()
+        .map(|member_chunk| member_chunk.embedding().to_vec())
+        .collect();
+    let voices = speaker_voices(&embeddings, &vec![0; embeddings.len()]);
+    let voice = voices.into_iter().next()?;
+    (voice.consistency >= MIN_CLEAN_VOICE_CONSISTENCY).then_some(voice.centroid)
 }
 
 /// Rejects embeddings that cannot take part in cosine comparison.

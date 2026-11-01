@@ -32,6 +32,19 @@ where
     fn match_embedding(&self, embedding: &[f32]) -> Result<VoiceMatchResult, StorageError> {
         Self::match_embedding(self, embedding)
     }
+
+    /// Returns the nearest saved voice and its real similarity.
+    ///
+    /// Inputs: A speaker's averaged embedding. Outputs: The identity and score, or `None`.
+    /// Side effects: Queries the vector database.
+    fn best_voice_match(&self, embedding: &[f32]) -> Result<Option<(Uuid, f32)>, StorageError> {
+        Ok(self
+            .vector_database
+            .search_similar(embedding, 1)?
+            .into_iter()
+            .next()
+            .map(|(closest, score)| (closest.identity_id(), score)))
+    }
 }
 
 impl<VectorDatabase> VoiceIdentityManager<VectorDatabase>

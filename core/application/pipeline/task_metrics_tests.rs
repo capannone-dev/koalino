@@ -91,6 +91,15 @@ impl DiarizationEngine for OneSpeakerDiarizer {
     async fn diarize(&self, _audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
         Ok(vec![SpeakerSegment::new(0, 3_000, vec![1.0, 0.0])])
     }
+
+    /// Reports no voice windows, so the final pass leaves the live result alone.
+    async fn voice_windows(
+        &self,
+        _audio_bytes: &[u8],
+    ) -> Result<Vec<crate::ports::ai::SpeakerSegment>, crate::domain::errors::DiarizationError>
+    {
+        Ok(Vec::new())
+    }
 }
 
 /// The recorder every test uses: a local whisper model on `device-metrics`.

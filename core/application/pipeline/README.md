@@ -129,3 +129,10 @@ meeting IDs, offsets, counts, and clip IDs only, never text, audio, or embedding
 
 `TranscriptionEngine` is synchronous. Drive a session from a blocking-capable worker, such as a
 dedicated thread or `spawn_blocking`, rather than directly on the main async runtime.
+
+## Final pass (#73, #74)
+
+`meeting_speaker_pass.rs` holds the pure policy, and `MeetingSession::finish_meeting` applies it when a recording stops. It
+groups the recording's short voice windows, gives every word the nearest window's speaker, names each speaker once, and
+replaces the live segments. Unnamed speakers keep a live cluster, now holding one averaged voice. Without windows, or after
+a crash, the live result stands. See `DECISION_LOG.md` for the figures.

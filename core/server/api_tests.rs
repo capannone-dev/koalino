@@ -857,7 +857,7 @@ async fn cluster_assignment_endpoint_assigns_and_resolves_the_cluster() {
     assert_eq!(assignment["cluster_id"], large_cluster_id.to_string());
     assert_eq!(assignment["identity_name"], "Grace Hopper");
     assert_eq!(assignment["identity_created"], true);
-    assert_eq!(assignment["variants_stored"], 2);
+    assert_eq!(assignment["variants_stored"], 0);
     assert_eq!(assignment["segments_updated"], 1);
     assert!(
         assignment["identity_id"]

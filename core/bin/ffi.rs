@@ -2924,7 +2924,7 @@ mod ffi_contract_tests {
         assert_eq!(clusters[0]["has_review_clip"], true);
         assert!(clusters[0].get("representative_embedding").is_none());
         assert_eq!(library["saved_people"][0]["display_name"], "Ada");
-        assert_eq!(library["saved_people"][0]["voice_variant_count"], 2);
+        assert_eq!(library["saved_people"][0]["voice_variant_count"], 0);
         assert_eq!(files_after_listing, 0);
         assert_eq!(clip_bytes, vec![7, 8]);
         assert_eq!(missing["error_code"], "clip_not_found");
@@ -2953,7 +2953,7 @@ mod ffi_contract_tests {
         assert_eq!(response["cluster_id"], cluster_id.to_string());
         assert_eq!(response["identity_name"], "Grace Hopper");
         assert_eq!(response["identity_created"], true);
-        assert_eq!(response["variants_stored"], 2);
+        assert_eq!(response["variants_stored"], 0);
         assert_eq!(response["segments_updated"], 1);
         assert!(
             response["identity_id"]
@@ -3007,7 +3007,7 @@ mod ffi_contract_tests {
         assert_eq!(second_response["identity_created"], false);
         assert_eq!(stored_identities.len(), 1);
         assert_eq!(stored_identities[0].0.display_name(), "Grace Hopper");
-        assert_eq!(stored_identities[0].1, 4);
+        assert_eq!(stored_identities[0].1, 0);
     }
 
     /// Verifies `assign_new_identity` stores the typed display name with the first variant.

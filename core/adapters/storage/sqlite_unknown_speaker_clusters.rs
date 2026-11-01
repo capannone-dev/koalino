@@ -163,6 +163,113 @@ impl SqliteNoteRepository {
         Ok(())
     }
 
+    /// Creates a cluster or replaces its members in one transaction.
+    ///
+    /// Inputs: `cluster` lists exactly `chunks`; its meeting must exist.
+    /// Outputs: Success, or a rejection for an unknown meeting or an adapter failure.
+    /// Side effects: Seals and rewrites biometric vectors; they are never logged.
+    pub(super) fn replace_cluster_members(
+        &self,
+        cluster: &UnknownSpeakerCluster,
+        chunks: &[UnknownSpeakerChunk],
+    ) -> Result<(), StorageError> {
+        let cluster_id = cluster.cluster_id().to_string();
+        let sealed_representative = CLUSTER_REPRESENTATIVE_EMBEDDINGS.seal(
+            self.embedding_cipher.as_ref(),
+            &[&cluster_id],
+            cluster.representative_embedding(),
+        )?;
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|error| sqlite_error("unable to begin cluster replacement", error))?;
+        let changed_cluster_rows = transaction
+            .execute(
+                "INSERT INTO unknown_speaker_clusters (cluster_id, meeting_id, representative_embedding, total_duration_ms, created_at_utc, resolved_identity_id, embedding_format)
+                 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)
+                 ON CONFLICT(cluster_id) DO UPDATE SET
+                    representative_embedding = excluded.representative_embedding,
+                    embedding_format = excluded.embedding_format,
+                    total_duration_ms = excluded.total_duration_ms
+                 WHERE unknown_speaker_clusters.meeting_id = excluded.meeting_id",
+                params![
+                    cluster_id,
+                    cluster.meeting_id().as_str(),
+                    sealed_representative,
+                    sqlite_milliseconds(cluster.total_duration_ms())?,
+                    cluster.created_at().to_rfc3339(),
+                    cluster.resolved_identity_id().map(|identity_id| identity_id.to_string()),
+                    SEALED_EMBEDDING_FORMAT,
+                ],
+            )
+            .map_err(|error| sqlite_error("unable to save unknown-speaker cluster", error))?;
+        if changed_cluster_rows == 0 {
+            return Err(StorageError::Rejected {
+                reason: format!(
+                    "cannot save cluster for unknown or different meeting {}",
+                    cluster.meeting_id().as_str()
+                ),
+            });
+        }
+        transaction
+            .execute(
+                "DELETE FROM cluster_chunks WHERE cluster_id = ?1",
+                params![cluster_id],
+            )
+            .map_err(|error| sqlite_error("unable to clear cluster chunks", error))?;
+        for chunk in chunks {
+            let sealed_chunk = CLUSTER_CHUNK_EMBEDDINGS.seal(
+                self.embedding_cipher.as_ref(),
+                &[&cluster_id, chunk.chunk_id()],
+                chunk.embedding(),
+            )?;
+            transaction
+                .execute(
+                    "INSERT INTO cluster_chunks (cluster_id, chunk_id, derived_embedding, duration_ms, embedding_format) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![
+                        cluster_id,
+                        chunk.chunk_id(),
+                        sealed_chunk,
+                        sqlite_milliseconds(chunk.duration_ms())?,
+                        SEALED_EMBEDDING_FORMAT,
+                    ],
+                )
+                .map_err(|error| sqlite_error("unable to save cluster chunk", error))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit cluster replacement", error))?;
+        self.log_operation(
+            "replace_unknown_speaker_cluster_members",
+            cluster.meeting_id(),
+        );
+        Ok(())
+    }
+
+    /// Deletes a cluster, its members and its review clips in one transaction.
+    ///
+    /// Inputs: `cluster_id`; an unknown one changes nothing. Outputs: Success or an adapter failure.
+    /// Side effects: Deletes biometric vectors and temporary review audio.
+    pub(super) fn delete_cluster(&self, cluster_id: Uuid) -> Result<(), StorageError> {
+        let cluster_id = cluster_id.to_string();
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|error| sqlite_error("unable to begin cluster deletion", error))?;
+        for statement in [
+            "DELETE FROM unassigned_voice_clips WHERE cluster_id = ?1",
+            "DELETE FROM cluster_chunks WHERE cluster_id = ?1",
+            "DELETE FROM unknown_speaker_clusters WHERE cluster_id = ?1",
+        ] {
+            transaction
+                .execute(statement, params![cluster_id])
+                .map_err(|error| sqlite_error("unable to delete cluster", error))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit cluster deletion", error))
+    }
+
     /// Loads a meeting's unresolved clusters with at least one member, in creation order.
     ///
     /// Inputs: `meeting_id` identifies the meeting.

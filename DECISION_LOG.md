@@ -1513,3 +1513,38 @@ changed; the design below awaits the owner's decision.
 - Not checked: that the installed app can read core speeds as `adb shell` can. Our release app can't be inspected, and
   if it can't read them it uses 8 threads, as in the middle column.
 
+## 2026-11-01 — #73 whole-meeting speakers, #74 naming once and saving clean voices
+
+- **Two passes.** Live chunks and labels stay as they were. During a recording the session also keeps one voice
+  embedding per 2 s window, every second, in memory and without audio. When the recording stops, it groups them all
+  (average linkage), reassigns every word to the nearest window's speaker, and replaces the live segments. After a
+  crash the live result stands, and the embeddings are gone with the process.
+- **Measured through the Rust code on the 15 recordings** (`evaluate_meeting_pass.py`):
+
+  | Measure | Live design | Final pass, threshold 0.2 | Target |
+  | --- | --- | --- | --- |
+  | Speaker error | 15.3% | **5.3%** (missed 0, false alarm 3.1, confusion 2.2) | at most 10% |
+  | Right speaker count | 11/15 | **15/15** | |
+  | Words under the right speaker | about 85% | **94.4%** turbo, **95.0%** `base` | at least 95% |
+  | Wrongly named speech, 12 multi-speaker files | about 5% per speaker | **0%** | at most 1% |
+
+- **The 95% gap on turbo is explained.** Words over 1 s from a turn change are 99.4% right, and words within 1 s are
+  86.2%. These scripts change speaker about every 5 s, far more often than a normal meeting, and a window is 2 s.
+- **Threshold 0.2, tuned on these same recordings, so the figures flatter it.** 0.19 and 0.2 find all speaker counts,
+  0.21 to 0.3 miss one or two with error 6.2–6.8%, 0.18 gives 7.0%, and 0.15 gives 13.2%. Final tuning needs the
+  natural recordings (#72).
+- **Missed speech comes from quiet speech.** The windows left without a voice are quieter than the rest: median level
+  0.014 against 0.041 for Ettore, and Marta, the quietest reader (0.021), loses most, up to 32.5% in one file.
+  All of it was inside VAD chunks. It no longer loses words or speaker time, because each word and moment takes the nearest
+  window in its chunk. The price is the 3.1% false alarm, where a chunk's pauses count as speech.
+- **Each speaker is named once, at 0.60**, from the average of all their speech: right matches reached about 0.66 and above, and
+  the one wrong nearest match at threshold 0.25 was in a mixed group. Below that they stay unknown. If two speakers match
+  one person, only the closer keeps the name. A name the owner gave during the recording is kept.
+- **Naming a group saves one averaged voice, not each member.** It needs 8 s of speech and members averaging 0.60
+  similarity to their centre. The final pass marks a group under 20 windows or under that consistency as not saveable.
+  Naming still works without a saved voice; the app just doesn't learn it from that group.
+- **Not covered.** Cost on a phone: 0.064 times audio length on a desktop CPU, and the S23 disconnected before it
+  could be measured. A full recording through the app with a microphone. Whether later matches improve over time, since
+  this test enrols from solo recordings. Confirming a single weak-match clip still saves that clip's voice, by the
+  owner's explicit choice. A final speaker with no live cluster has no review clip, because no audio is kept for it.
+

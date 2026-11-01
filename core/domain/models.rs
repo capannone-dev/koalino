@@ -1441,7 +1441,17 @@ impl TimedWord {
         &self.text
     }
 
-    /// Returns the moment halfway through the word, in milliseconds.
+    /// Returns when the word starts, in chunk milliseconds.
+    pub fn start_ms(&self) -> u64 {
+        self.start_ms
+    }
+
+    /// Returns when the word ends, in chunk milliseconds.
+    pub fn end_ms(&self) -> u64 {
+        self.end_ms
+    }
+
+    /// Returns the moment that decides who said the word, in chunk milliseconds.
     pub fn midpoint_ms(&self) -> u64 {
         self.start_ms + (self.end_ms - self.start_ms) / 2
     }

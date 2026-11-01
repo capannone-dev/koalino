@@ -995,7 +995,7 @@ fn core_service_lists_and_assigns_clusters_from_sqlite() {
         "Assigned cluster {cluster_id} to \"Grace Hopper\""
     )));
     assert!(assigned.contains("new identity"));
-    assert!(assigned.contains("2 voice variants stored, 0 transcript segments updated"));
+    assert!(assigned.contains("0 voice variants stored, 0 transcript segments updated"));
 
     let relisted = dispatch(list_command(), &mut cli_service)
         .unwrap_or_else(|error| panic!("list-clusters must dispatch: {error}"));
@@ -1081,7 +1081,7 @@ fn assigned_cluster_names_are_listed_after_a_restart() {
     assert!(assigned.is_ok_and(|output| output.contains("new identity")));
     let listed = listed.unwrap_or_else(|error| panic!("voice list must dispatch: {error}"));
     assert!(listed.contains("Grace Hopper"), "{listed}");
-    assert!(listed.contains("| 1"), "{listed}");
+    assert!(listed.contains("| 0"), "{listed}");
 }
 
 /// Verifies the global `--log-level` flag parses before or after the subcommand and is optional.

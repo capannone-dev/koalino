@@ -17,8 +17,9 @@ use crate::{
     domain::{
         errors::{StorageError, TranscriptionError},
         models::{
-            AudioRecording, ExternalMediaChunk, MeetingId, SpeakerIdentity, TranscriptSegment,
-            TranscriptionContext, UnassignedVoiceClip, VoiceMatchResult, WeakVoiceMatchCandidate,
+            AudioRecording, ExternalMediaChunk, MeetingId, SpeakerIdentity, Transcript,
+            TranscriptSegment, TranscriptionContext, UnassignedVoiceClip, UnknownSpeakerChunk,
+            UnknownSpeakerCluster, VoiceMatchResult, WeakVoiceMatchCandidate,
         },
     },
     ports::{
@@ -33,7 +34,13 @@ use crate::application::unknown_speaker_clusterer::{
     ClusterAssignment, ClusteringConfig, ClusteringError, UnknownSpeakerClusterer,
 };
 
-use super::task_metrics::TaskMetricsRecorder;
+use super::{
+    meeting_speaker_pass::{
+        SPEAKER_NAME_THRESHOLD, SpeakerPassConfig, VoiceWindow, group_voice_windows, speaker_at,
+        speaker_voices,
+    },
+    task_metrics::TaskMetricsRecorder,
+};
 
 use super::alignment::{AlignedRegion, ChunkBounds, SpeakerRegion, align_transcript};
 pub use super::alignment::{ChunkBoundsError, SpeakerAttribution};
@@ -61,6 +68,90 @@ pub enum MeetingSessionError {
         /// The meeting identifier carried by the chunk's recording.
         received: String,
     },
+}
+
+/// Some text with its meeting time: one word, or a whole region when the engine gave no word timing.
+#[derive(Clone, Debug)]
+struct TextPiece {
+    chunk_index: usize,
+    start_ms: u64,
+    end_ms: u64,
+    text: String,
+}
+
+/// Who a speaker turned out to be at the end of a recording.
+#[derive(Clone, Copy, Debug, Default)]
+struct FinalAttribution {
+    /// The named person, if any.
+    identity_id: Option<Uuid>,
+    /// The cluster to review, for an unnamed speaker or one the owner named during the recording.
+    cluster_id: Option<Uuid>,
+}
+
+/// Lists a chunk's text with meeting times.
+///
+/// Inputs: The chunk's number and bounds, its transcript, and its aligned regions.
+/// Outputs: One piece per timed word, or per region without word timing. Side effects: None.
+fn text_pieces_of(
+    chunk_index: usize,
+    chunk_bounds: ChunkBounds,
+    transcript: &Transcript,
+    aligned_regions: &[AlignedRegion],
+) -> Vec<TextPiece> {
+    let timed_words = transcript.timed_words();
+    if timed_words.is_empty() {
+        return aligned_regions
+            .iter()
+            .map(|region| TextPiece {
+                chunk_index,
+                start_ms: region.start_time_ms(),
+                end_ms: region.end_time_ms(),
+                text: region.text().to_owned(),
+            })
+            .collect();
+    }
+    timed_words
+        .iter()
+        .map(|word| TextPiece {
+            chunk_index,
+            start_ms: chunk_bounds.start_offset_ms() + word.start_ms(),
+            end_ms: chunk_bounds.start_offset_ms() + word.end_ms(),
+            text: word.text().to_owned(),
+        })
+        .collect()
+}
+
+/// Counts, per speaker, how many of their windows fall in each live cluster's segments.
+///
+/// Inputs: The windows and speakers, the speaker count, and this recording's live segments.
+/// Outputs: For each speaker, `(cluster, windows)` pairs. Side effects: None.
+fn live_overlap_per_speaker(
+    voice_windows: &[VoiceWindow],
+    labels: &[usize],
+    speaker_count: usize,
+    live_segments: &[TranscriptSegment],
+) -> Vec<Vec<(Uuid, usize)>> {
+    let mut overlap: Vec<Vec<(Uuid, usize)>> = vec![Vec::new(); speaker_count];
+    for (window, speaker) in voice_windows.iter().zip(labels) {
+        let center_ms = window.center_ms();
+        let cluster_id = live_segments
+            .iter()
+            .find(|segment| {
+                segment.start_time_ms() <= center_ms && center_ms < segment.end_time_ms()
+            })
+            .and_then(TranscriptSegment::unknown_cluster_id);
+        let Some(cluster_id) = cluster_id else {
+            continue;
+        };
+        match overlap[*speaker]
+            .iter_mut()
+            .find(|(known, _)| *known == cluster_id)
+        {
+            Some((_, windows)) => *windows += 1,
+            None => overlap[*speaker].push((cluster_id, 1)),
+        }
+    }
+    overlap
 }
 
 /// One VAD-bounded local audio chunk ready for the pipeline.
@@ -155,6 +246,14 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     note_repository: RepositoryPort,
     /// Full timeline mirrored in memory because the repository replaces segments per meeting.
     persisted_segments: Vec<TranscriptSegment>,
+    /// Segments from before this recording, which the final pass leaves alone.
+    earlier_segments: Vec<TranscriptSegment>,
+    /// This recording's voice windows, in memory only and in time order, for the final pass.
+    voice_windows: Vec<VoiceWindow>,
+    /// This recording's text with its timing, in time order, for the final pass.
+    text_pieces: Vec<TextPiece>,
+    /// How many chunks this recording has processed.
+    chunk_count: usize,
     /// Similarity policy used to group unknown voices into clusters.
     clustering_config: ClusteringConfig,
     /// Saves a telemetry row per completed transcription and diarization; `None` records none.
@@ -196,7 +295,11 @@ where
             diarization_engine,
             voice_identity_matcher,
             note_repository,
+            earlier_segments: persisted_segments.clone(),
             persisted_segments,
+            voice_windows: Vec::new(),
+            text_pieces: Vec::new(),
+            chunk_count: 0,
             clustering_config: ClusteringConfig::default(),
             task_metrics: None,
         })
@@ -297,7 +400,12 @@ where
 
         let speaker_regions = self.diarize_and_attribute(vad_chunk).await;
         let aligned_regions = align_transcript(chunk_bounds, speaker_regions, &transcript);
+        let chunk_index = self.chunk_count;
+        self.chunk_count += 1;
+        let chunk_pieces = text_pieces_of(chunk_index, chunk_bounds, &transcript, &aligned_regions);
         let attributed_segments = self.persist_aligned_regions(aligned_regions)?;
+        self.text_pieces.extend(chunk_pieces);
+        self.collect_voice_windows(vad_chunk, chunk_index).await;
         tracing::info!(
             meeting_id = %self.meeting_id.as_str(),
             chunk_start_ms = chunk_bounds.start_offset_ms(),
@@ -307,6 +415,274 @@ where
             "Local audio chunk processed into transcript segments"
         );
         Ok(attributed_segments)
+    }
+
+    /// Measures a chunk's voice windows for the final pass.
+    ///
+    /// Inputs: The chunk and its number. Outputs: None; a failure only leaves those windows out.
+    /// Side effects: Runs diarization inference and keeps embeddings in memory, without audio.
+    async fn collect_voice_windows(&mut self, vad_chunk: &VadAudioChunk, chunk_index: usize) {
+        let Some(diarization_engine) = &self.diarization_engine else {
+            return;
+        };
+        let offset_ms = vad_chunk.chunk_bounds().start_offset_ms();
+        match diarization_engine
+            .voice_windows(vad_chunk.audio_bytes())
+            .await
+        {
+            Ok(windows) => {
+                self.voice_windows
+                    .extend(windows.into_iter().map(|window| VoiceWindow {
+                        chunk_index,
+                        start_ms: offset_ms + window.start_time_ms(),
+                        end_ms: offset_ms + window.end_time_ms(),
+                        embedding: window.embedding().to_vec(),
+                    }))
+            }
+            Err(error) => {
+                tracing::warn!(
+                    meeting_id = %self.meeting_id.as_str(),
+                    error = %error,
+                    "Voice windows failed; the final pass will have less to go on"
+                );
+            }
+        }
+    }
+
+    /// Redoes who said what using the whole recording, and names each speaker once (#73, #74).
+    ///
+    /// Call when the recording's last chunk is done. Until then, and after a crash, the live result
+    /// stands.
+    ///
+    /// Inputs: None; uses the windows and text gathered during the recording.
+    /// Outputs: The number of segments now standing for this recording, or `None` when there was
+    /// nothing to redo, as without diarization. A storage error leaves the live segments in place.
+    /// Side effects: Queries saved voices, rewrites this recording's segments, replaces the members of
+    /// the clusters still needed with one voice, deletes the others with their review clips, and
+    /// drops the embeddings from memory. CPU-heavy on long meetings; call it off the UI thread.
+    pub fn finish_meeting(&mut self) -> Result<Option<usize>, MeetingSessionError> {
+        let voice_windows = std::mem::take(&mut self.voice_windows);
+        let text_pieces = std::mem::take(&mut self.text_pieces);
+        if voice_windows.is_empty() || text_pieces.is_empty() {
+            return Ok(None);
+        }
+        let embeddings: Vec<Vec<f32>> = voice_windows
+            .iter()
+            .map(|window| window.embedding.clone())
+            .collect();
+        let labels = group_voice_windows(&embeddings, &SpeakerPassConfig::default());
+        let voices = speaker_voices(&embeddings, &labels);
+        let live_segments: Vec<TranscriptSegment> = self
+            .persisted_segments
+            .iter()
+            .filter(|segment| !self.earlier_segments.contains(segment))
+            .cloned()
+            .collect();
+        let live_overlap =
+            live_overlap_per_speaker(&voice_windows, &labels, voices.len(), &live_segments);
+
+        let mut attributions = self.name_speakers(&voices, &live_overlap);
+        let mut claimed_clusters: Vec<Uuid> = attributions
+            .iter()
+            .filter_map(|attribution| attribution.cluster_id)
+            .collect();
+        for (speaker, voice) in voices.iter().enumerate() {
+            if attributions[speaker].identity_id.is_some() {
+                continue;
+            }
+            let cluster_id = live_overlap[speaker]
+                .iter()
+                .filter(|(cluster_id, _)| !claimed_clusters.contains(cluster_id))
+                .max_by_key(|(_, windows)| *windows)
+                .map_or_else(Uuid::new_v4, |(cluster_id, _)| *cluster_id);
+            claimed_clusters.push(cluster_id);
+            attributions[speaker].cluster_id = Some(cluster_id);
+            self.save_final_cluster(cluster_id, voice)?;
+        }
+
+        let final_segments =
+            self.final_segments(&voice_windows, &labels, &text_pieces, &attributions);
+        let final_count = final_segments.len();
+        let mut timeline = self.earlier_segments.clone();
+        timeline.extend(final_segments);
+        timeline.sort_by_key(TranscriptSegment::start_time_ms);
+        self.note_repository
+            .save_transcript_segments(&self.meeting_id, &timeline)?;
+        self.persisted_segments = timeline;
+
+        for segment in &live_segments {
+            let Some(cluster_id) = segment.unknown_cluster_id() else {
+                continue;
+            };
+            if !claimed_clusters.contains(&cluster_id)
+                && let Err(error) = self
+                    .note_repository
+                    .delete_unknown_speaker_cluster(cluster_id)
+            {
+                tracing::warn!(
+                    meeting_id = %self.meeting_id.as_str(),
+                    error = %error,
+                    "An unneeded speaker cluster could not be deleted"
+                );
+            }
+        }
+        tracing::info!(
+            meeting_id = %self.meeting_id.as_str(),
+            speaker_count = voices.len(),
+            segment_count = final_count,
+            "Meeting speakers finalized"
+        );
+        Ok(Some(final_count))
+    }
+
+    /// Names each speaker at most once, preferring Unknown to a wrong name.
+    ///
+    /// Inputs: Each speaker's voice and how their windows overlap live clusters.
+    /// Outputs: One attribution per speaker. A speaker the owner already named during the recording
+    /// keeps that name. If two speakers match one person, only the closer keeps the name.
+    /// Side effects: Queries saved voices. A failed lookup leaves the speaker unnamed.
+    fn name_speakers(
+        &self,
+        voices: &[super::meeting_speaker_pass::SpeakerVoice],
+        live_overlap: &[Vec<(Uuid, usize)>],
+    ) -> Vec<FinalAttribution> {
+        let mut attributions = vec![FinalAttribution::default(); voices.len()];
+        let mut best_score_per_identity: Vec<(Uuid, f32, usize)> = Vec::new();
+        for (speaker, voice) in voices.iter().enumerate() {
+            let user_named = live_overlap[speaker]
+                .iter()
+                .max_by_key(|(_, windows)| *windows)
+                .and_then(|(cluster_id, windows)| {
+                    let resolved = self
+                        .note_repository
+                        .load_unknown_speaker_cluster(*cluster_id)
+                        .ok()
+                        .flatten()?
+                        .resolved_identity_id()?;
+                    (*windows * 2 >= voice.window_count).then_some((*cluster_id, resolved))
+                });
+            if let Some((cluster_id, identity_id)) = user_named {
+                attributions[speaker] = FinalAttribution {
+                    identity_id: Some(identity_id),
+                    cluster_id: Some(cluster_id),
+                };
+                continue;
+            }
+            let matched = self
+                .voice_identity_matcher
+                .best_voice_match(&voice.centroid)
+                .unwrap_or_else(|error| {
+                    tracing::warn!(
+                        meeting_id = %self.meeting_id.as_str(),
+                        error = %error,
+                        "Voice matching failed; the speaker stays unnamed"
+                    );
+                    None
+                });
+            let Some((identity_id, score)) =
+                matched.filter(|(_, score)| *score >= SPEAKER_NAME_THRESHOLD)
+            else {
+                continue;
+            };
+            match best_score_per_identity
+                .iter_mut()
+                .find(|(known, _, _)| *known == identity_id)
+            {
+                Some(entry) if entry.1 >= score => {}
+                Some(entry) => {
+                    attributions[entry.2].identity_id = None;
+                    attributions[speaker].identity_id = Some(identity_id);
+                    *entry = (identity_id, score, speaker);
+                }
+                None => {
+                    attributions[speaker].identity_id = Some(identity_id);
+                    best_score_per_identity.push((identity_id, score, speaker));
+                }
+            }
+        }
+        attributions
+    }
+
+    /// Stores an unnamed speaker's single voice as their cluster's only member.
+    ///
+    /// Inputs: The cluster to create or reuse, and the voice. Its member records as much clean speech
+    /// as the group has, zero when the group isn't clean, so naming it later saves only a clean voice.
+    /// Outputs: Success or a storage error.
+    /// Side effects: Rewrites the cluster's members, which are biometric vectors.
+    fn save_final_cluster(
+        &self,
+        cluster_id: Uuid,
+        voice: &super::meeting_speaker_pass::SpeakerVoice,
+    ) -> Result<(), MeetingSessionError> {
+        const MILLISECONDS_PER_WINDOW: u64 = 1_000;
+        let speech_ms = voice.window_count as u64 * MILLISECONDS_PER_WINDOW;
+        let chunk_id = format!("meeting-voice-{cluster_id}");
+        let created_at = self
+            .note_repository
+            .load_unknown_speaker_cluster(cluster_id)?
+            .map_or_else(chrono::Utc::now, |existing| existing.created_at());
+        let cluster = UnknownSpeakerCluster::new(
+            cluster_id,
+            self.meeting_id.clone(),
+            voice.centroid.clone(),
+            vec![chunk_id.clone()],
+            speech_ms,
+            created_at,
+            None,
+        );
+        let chunk = UnknownSpeakerChunk::new(
+            chunk_id,
+            voice.centroid.clone(),
+            if voice.is_clean() { speech_ms } else { 0 },
+        );
+        self.note_repository
+            .replace_unknown_speaker_cluster_members(&cluster, &[chunk])?;
+        Ok(())
+    }
+
+    /// Builds this recording's final segments: within a chunk, each run of one speaker's text.
+    ///
+    /// Inputs: The windows and their speakers, the text in time order, and the speakers' attributions.
+    /// Outputs: Segments in time order. Side effects: None.
+    fn final_segments(
+        &self,
+        voice_windows: &[VoiceWindow],
+        labels: &[usize],
+        text_pieces: &[TextPiece],
+        attributions: &[FinalAttribution],
+    ) -> Vec<TranscriptSegment> {
+        let mut runs: Vec<(usize, usize, u64, u64, Vec<&str>)> = Vec::new();
+        for piece in text_pieces {
+            let middle_ms = piece.start_ms + piece.end_ms.saturating_sub(piece.start_ms) / 2;
+            let speaker =
+                speaker_at(voice_windows, labels, piece.chunk_index, middle_ms).unwrap_or(0);
+            match runs.last_mut() {
+                Some(run) if run.0 == piece.chunk_index && run.1 == speaker => {
+                    run.3 = piece.end_ms;
+                    run.4.push(&piece.text);
+                }
+                _ => runs.push((
+                    piece.chunk_index,
+                    speaker,
+                    piece.start_ms,
+                    piece.end_ms,
+                    vec![&piece.text],
+                )),
+            }
+        }
+        runs.into_iter()
+            .map(|(_, speaker, start_ms, end_ms, words)| {
+                let attribution = attributions.get(speaker).copied().unwrap_or_default();
+                TranscriptSegment::new(
+                    self.meeting_id.clone(),
+                    start_ms,
+                    end_ms,
+                    attribution.identity_id,
+                    words.join(" "),
+                )
+                .with_unknown_cluster_id(attribution.cluster_id)
+            })
+            .collect()
     }
 
     /// Processes one isolated external-bridge chunk using its guaranteed participant identity.

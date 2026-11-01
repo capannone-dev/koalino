@@ -45,6 +45,15 @@ impl DiarizationEngine for NoDiarizationEngine {
     async fn diarize(&self, _audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
         Err(DiarizationError::Unavailable)
     }
+
+    /// Reports no voice windows, so the final pass leaves the live result alone.
+    async fn voice_windows(
+        &self,
+        _audio_bytes: &[u8],
+    ) -> Result<Vec<crate::ports::ai::SpeakerSegment>, crate::domain::errors::DiarizationError>
+    {
+        Ok(Vec::new())
+    }
 }
 
 /// Placeholder voice matcher for factories built without a voice-signature library.
@@ -90,6 +99,20 @@ where
         match &self.voice_identity_matcher {
             Some(voice_identity_matcher) => voice_identity_matcher.match_embedding(embedding),
             None => Ok(VoiceMatchResult::NoMatch),
+        }
+    }
+
+    /// Delegates to the configured matcher, or reports nothing when none is configured.
+    ///
+    /// Inputs: A speaker's averaged embedding. Outputs: The identity and score, or `None`.
+    /// Side effects: Queries the configured matcher's voice store, if any.
+    fn best_voice_match(
+        &self,
+        embedding: &[f32],
+    ) -> Result<Option<(uuid::Uuid, f32)>, StorageError> {
+        match &self.voice_identity_matcher {
+            Some(voice_identity_matcher) => voice_identity_matcher.best_voice_match(embedding),
+            None => Ok(None),
         }
     }
 }

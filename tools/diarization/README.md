@@ -63,3 +63,6 @@ recordings of the scripts in `test_scripts/`, using the output of the `measure_t
 turn's voice and tries diarization from 2 s windows.
 That output contains voice embeddings, so keep it outside the repository and delete it afterwards.
 The script prints only counts and rates.
+
+`evaluate_meeting_pass.py` scores the Rust final pass (#73, #74) from the output of `measure_transcription` and
+`measure_meeting_pass`. Its data is personal: keep it outside the repository and delete it afterwards.

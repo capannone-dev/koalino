@@ -398,13 +398,13 @@ fn assigning_identity_updates_chunks_segments_and_resolves_cluster() {
         Some(SpeakerIdentity::new(new_identity_id, "Grace Hopper")),
         "the assigned identity must be persisted"
     );
-    assert_eq!(assignment.variants_stored(), 2);
+    assert_eq!(assignment.variants_stored(), 0);
     assert_eq!(assignment.segments_updated(), 2);
     assert_eq!(
         voice_vector_database
             .voice_variant_count(new_identity_id)
             .unwrap_or_default(),
-        2
+        0
     );
     let segment_speakers: Vec<Option<Uuid>> = note_repository
         .load_transcript_segments(&meeting_id)
@@ -473,7 +473,7 @@ fn assigning_existing_identity_adds_variants_without_creating_it() {
         voice_vector_database
             .voice_variant_count(existing_identity_id)
             .unwrap_or_default(),
-        2
+        1
     );
 }
 
@@ -504,7 +504,7 @@ fn assigning_missing_or_resolved_cluster_is_rejected() {
         voice_vector_database
             .voice_variant_count(identity_id)
             .unwrap_or_default(),
-        1
+        0
     );
 }
 
@@ -559,6 +559,62 @@ fn assignment_persists_identity_in_the_sqlite_voice_store() {
         voice_store
             .voice_variant_count(identity.identity_id())
             .unwrap_or_default(),
-        2
+        0
+    );
+}
+
+/// Names a cluster built from `members`, and returns how many voices were saved.
+fn voices_saved_for(members: &[(&[f32], u64)]) -> usize {
+    let meeting_id = MeetingId::new("meeting-clean-voice");
+    let repository = repository_with_meetings(&[&meeting_id]);
+    let lenient = ClusteringConfig::new(0.01).unwrap_or_else(|error| panic!("{error}"));
+    let clusterer = UnknownSpeakerClusterer::new(&repository, lenient);
+    let mut cluster_id = None;
+    for (index, (embedding, duration_ms)) in members.iter().enumerate() {
+        let (joined, _) = add_chunk(
+            &clusterer,
+            &meeting_id,
+            embedding,
+            &format!("c{index}"),
+            *duration_ms,
+        );
+        assert_eq!(*cluster_id.get_or_insert(joined), joined);
+    }
+    let voice_store = InMemoryVoiceVectorDB::new();
+    clusterer
+        .assign_identity_to_cluster(
+            &voice_store,
+            cluster_id.unwrap_or_else(|| panic!("a member is needed")),
+            &SpeakerIdentity::new(Uuid::new_v4(), "Ada"),
+        )
+        .unwrap_or_else(|error| panic!("{error}"))
+        .variants_stored()
+}
+
+#[test]
+fn naming_saves_one_voice_from_long_consistent_speech() {
+    assert_eq!(
+        voices_saved_for(&[(&[1.0, 0.0], 5_000), (&[0.9, 0.1], 5_000)]),
+        1
+    );
+}
+
+#[test]
+fn naming_saves_no_voice_from_brief_speech() {
+    assert_eq!(
+        voices_saved_for(&[(&[1.0, 0.0], 1_000), (&[0.9, 0.1], 1_000)]),
+        0
+    );
+}
+
+#[test]
+fn naming_saves_no_voice_from_mixed_speech() {
+    assert_eq!(
+        voices_saved_for(&[
+            (&[1.0, 0.01, 0.01], 9_000),
+            (&[0.01, 1.0, 0.01], 9_000),
+            (&[0.01, 0.01, 1.0], 9_000),
+        ]),
+        0
     );
 }

@@ -380,6 +380,85 @@ fn measure_diarization() {
     .unwrap_or_else(|error| panic!("the output must be written: {error}"));
 }
 
+/// Writes one JSON line per recording with the real final pass (#73): the VAD chunks, each voice
+/// window in meeting time with its embedding, and the speaker the Rust grouping gave it.
+///
+/// Inputs: Common variables, the two diarization model variables, and optionally
+/// `MEASURE_THRESHOLD`. Outputs: Panics on failure.
+/// Side effects: Runs inference and writes embeddings to the output.
+#[test]
+#[ignore = "needs diarization models and local recordings"]
+fn measure_meeting_pass() {
+    use crate::application::pipeline::meeting_speaker_pass::{
+        SpeakerPassConfig, group_voice_windows,
+    };
+    let mut config = SpeakerPassConfig::default();
+    if let Some(threshold) = env::var("MEASURE_THRESHOLD")
+        .ok()
+        .and_then(|value| value.parse().ok())
+    {
+        config.similarity_threshold = threshold;
+    }
+    let engine = WindowedDiarizationEngine::new(
+        OnnxSegmentationModel::load(&path_from_environment(
+            "NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL",
+        ))
+        .unwrap_or_else(|error| panic!("{error}")),
+        OnnxSpeakerEmbeddingModel::load(&path_from_environment(
+            "NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL",
+        ))
+        .unwrap_or_else(|error| panic!("{error}")),
+        DiarizationTuning::default(),
+    );
+    let mut lines = Vec::new();
+    for (name, samples) in recordings() {
+        let chunks = vad_chunk_bounds(&samples);
+        let started = Instant::now();
+        let mut windows = Vec::new();
+        for (start, length) in &chunks {
+            let offset_ms = (*start / SAMPLES_PER_MS) as u64;
+            let chunk_windows = engine
+                .voice_windows_for_samples(&samples[*start..*start + *length])
+                .unwrap_or_else(|error| panic!("{error}"));
+            windows.extend(chunk_windows.into_iter().map(|window| {
+                (
+                    offset_ms + window.start_time_ms(),
+                    offset_ms + window.end_time_ms(),
+                    window.embedding().to_vec(),
+                )
+            }));
+        }
+        let embed_ms = started.elapsed().as_millis() as u64;
+        let grouping_started = Instant::now();
+        let embeddings: Vec<Vec<f32>> = windows.iter().map(|window| window.2.clone()).collect();
+        let labels = group_voice_windows(&embeddings, &config);
+        lines.push(
+            json!({
+                "name": name,
+                "duration_ms": (samples.len() / SAMPLES_PER_MS) as u64,
+                "embed_ms": embed_ms,
+                "group_ms": grouping_started.elapsed().as_millis() as u64,
+                "chunks": chunks.iter().map(|(start, length)| json!({
+                    "start_ms": start / SAMPLES_PER_MS,
+                    "end_ms": (start + length) / SAMPLES_PER_MS,
+                })).collect::<Vec<_>>(),
+                "windows": windows.iter().zip(&labels).map(|(window, label)| json!({
+                    "start_ms": window.0,
+                    "end_ms": window.1,
+                    "label": label,
+                    "embedding": window.2,
+                })).collect::<Vec<_>>(),
+            })
+            .to_string(),
+        );
+    }
+    fs::write(
+        path_from_environment("NOTE_TAKER_MEASURE_OUTPUT"),
+        lines.join("\n"),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+}
+
 /// Supplies one in-memory recording to the real engine.
 struct InMemoryPcm(Vec<f32>);
 

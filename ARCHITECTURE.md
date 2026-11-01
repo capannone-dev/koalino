@@ -155,3 +155,9 @@ independently of them, so a microphone recording and a Teams meeting can run at 
 The core never references the Teams SDK. It talks to `ICallJoiner`/`ICallSession`, which
 `TeamsBot.Media` implements and the tests mock with NSubstitute. The serializer is checked
 against the Rust golden fixtures, so both sides share one wire format.
+
+## Final speaker pass
+
+Live chunks give captions and provisional speakers. When a recording stops, `MeetingSession::finish_meeting` regroups the
+recording's voice windows over the whole meeting, reassigns every word, and names each speaker once. Embeddings stay in
+memory until then, and no extra audio is kept. A crash leaves the live result.

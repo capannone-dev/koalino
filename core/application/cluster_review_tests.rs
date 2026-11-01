@@ -111,13 +111,13 @@ fn assigning_a_new_name_creates_an_identity_and_resolves_the_cluster() {
     assert_eq!(assignment.cluster_id(), large_cluster_id);
     assert_eq!(assignment.identity_name(), "Grace Hopper");
     assert!(assignment.identity_created());
-    assert_eq!(assignment.variants_stored(), 2);
+    assert_eq!(assignment.variants_stored(), 0);
     assert_eq!(assignment.segments_updated(), 1);
     assert_eq!(
         voice_vector_database
             .voice_variant_count(assignment.identity_id())
             .unwrap_or_default(),
-        2
+        0
     );
     let remaining = list_unknown_clusters(&note_repository, &meeting_id)
         .unwrap_or_else(|error| panic!("clusters should list: {error}"));
@@ -331,7 +331,7 @@ fn assigned_names_survive_a_restart_and_are_reused_case_insensitively() {
     assert_eq!(second_assignment.identity_name(), "Grace Hopper");
     assert!(!second_assignment.identity_created());
     assert_eq!(identity_count, 1, "no duplicate identity may be created");
-    assert_eq!(variant_count, 2);
+    assert_eq!(variant_count, 0);
     assert_eq!(
         first_cluster.and_then(|cluster| cluster.resolved_identity_id()),
         Some(first_assignment.identity_id())
@@ -382,7 +382,7 @@ fn voice_library_spans_meetings_and_lists_saved_people() {
     );
     assert_eq!(library.saved_people().len(), 1);
     assert_eq!(library.saved_people()[0].display_name(), "Grace Hopper");
-    assert_eq!(library.saved_people()[0].voice_variant_count(), 1);
+    assert_eq!(library.saved_people()[0].voice_variant_count(), 0);
 }
 
 /// Verifies a cluster's review clip is found by cluster alone, and that none is reported for a

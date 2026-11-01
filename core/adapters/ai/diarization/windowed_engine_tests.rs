@@ -264,3 +264,42 @@ fn the_port_works_without_a_tokio_runtime() {
 
     assert_eq!(turns(&segments), vec![(0, 2_000, vec![1.0, 0.0])]);
 }
+
+#[test]
+fn voice_windows_step_by_a_second_and_skip_silence() {
+    let engine = WindowedDiarizationEngine::new(
+        AmplitudeSegmentation::default(),
+        AmplitudeEmbedding {
+            calls: AtomicUsize::new(0),
+        },
+        DiarizationTuning::default(),
+    );
+    let mut samples = vec![VOICE_A; 4 * RATE];
+    samples.extend(vec![0.0; 3 * RATE]);
+    let windows = engine
+        .voice_windows_for_samples(&samples)
+        .unwrap_or_else(|error| panic!("{error}"));
+    let starts: Vec<u64> = windows.iter().map(SpeakerSegment::start_time_ms).collect();
+    assert_eq!(starts, [0, 1_000, 2_000, 3_000]);
+    assert_eq!(windows[0].end_time_ms(), 2_000);
+    assert!(windows.iter().all(|window| !window.embedding().is_empty()));
+}
+
+#[test]
+fn voice_windows_report_a_model_failure() {
+    let engine = WindowedDiarizationEngine::new(
+        AmplitudeSegmentation {
+            fail: true,
+            ..AmplitudeSegmentation::default()
+        },
+        AmplitudeEmbedding {
+            calls: AtomicUsize::new(0),
+        },
+        DiarizationTuning::default(),
+    );
+    assert!(
+        engine
+            .voice_windows_for_samples(&vec![VOICE_A; RATE])
+            .is_err()
+    );
+}

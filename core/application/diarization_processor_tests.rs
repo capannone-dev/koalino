@@ -28,6 +28,15 @@ impl DiarizationEngine for MockDiarizationEngine {
     async fn diarize(&self, _audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
         Ok(self.segments.clone())
     }
+
+    /// Reports no voice windows, so the final pass leaves the live result alone.
+    async fn voice_windows(
+        &self,
+        _audio_bytes: &[u8],
+    ) -> Result<Vec<crate::ports::ai::SpeakerSegment>, crate::domain::errors::DiarizationError>
+    {
+        Ok(Vec::new())
+    }
 }
 
 /// Returns one scripted identity outcome for every segment embedding.

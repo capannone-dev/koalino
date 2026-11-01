@@ -991,6 +991,28 @@ impl NoteRepository for SqliteNoteRepository {
         self.save_cluster_chunk(cluster, chunk)
     }
 
+    /// Replaces a cluster's members atomically.
+    ///
+    /// Inputs: Match `NoteRepository::replace_unknown_speaker_cluster_members`.
+    /// Outputs: Success or a portable storage error.
+    /// Side effects: Rewrites sealed biometric BLOBs.
+    fn replace_unknown_speaker_cluster_members(
+        &self,
+        cluster: &UnknownSpeakerCluster,
+        chunks: &[UnknownSpeakerChunk],
+    ) -> Result<(), StorageError> {
+        self.replace_cluster_members(cluster, chunks)
+    }
+
+    /// Deletes a cluster, its members and clips atomically.
+    ///
+    /// Inputs: Match `NoteRepository::delete_unknown_speaker_cluster`.
+    /// Outputs: Success or a portable storage error.
+    /// Side effects: Deletes biometric BLOBs and temporary review audio.
+    fn delete_unknown_speaker_cluster(&self, cluster_id: uuid::Uuid) -> Result<(), StorageError> {
+        self.delete_cluster(cluster_id)
+    }
+
     /// Loads a meeting's unresolved, non-empty clusters in creation order.
     ///
     /// Inputs: Match `NoteRepository::load_unknown_speaker_clusters`.

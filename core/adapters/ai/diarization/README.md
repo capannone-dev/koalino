@@ -20,3 +20,6 @@ The models sit behind the `SegmentationModel` and `SpeakerEmbeddingModel` traits
 its own thread, never on the async runtime (the pipeline worker has no Tokio runtime, so
 `spawn_blocking` is not an option). Audio and embeddings (biometric
 PII) are never logged; embeddings are only stored encrypted by the storage adapter.
+
+`WindowedDiarizationEngine::voice_windows_for_samples` measures one voice per 2 s window, every second, for the
+final pass over a whole recording (#73); see `core/application/pipeline/`.

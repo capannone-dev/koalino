@@ -60,6 +60,15 @@ impl DiarizationEngine for SingleSpeakerDiarizationEngine {
     async fn diarize(&self, _audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
         Ok(vec![SpeakerSegment::new(0, 3_000, vec![1.0, 0.0])])
     }
+
+    /// Reports no voice windows, so the final pass leaves the live result alone.
+    async fn voice_windows(
+        &self,
+        _audio_bytes: &[u8],
+    ) -> Result<Vec<crate::ports::ai::SpeakerSegment>, crate::domain::errors::DiarizationError>
+    {
+        Ok(Vec::new())
+    }
 }
 
 /// Classifies every embedding as a strong match for one fixed identity.
@@ -299,6 +308,15 @@ impl DiarizationEngine for TwoSimilarSpeakersDiarizationEngine {
             SpeakerSegment::new(0, 1_500, vec![1.0, 0.0]),
             SpeakerSegment::new(1_500, 3_000, vec![0.8, 0.6]),
         ])
+    }
+
+    /// Reports no voice windows, so the final pass leaves the live result alone.
+    async fn voice_windows(
+        &self,
+        _audio_bytes: &[u8],
+    ) -> Result<Vec<crate::ports::ai::SpeakerSegment>, crate::domain::errors::DiarizationError>
+    {
+        Ok(Vec::new())
     }
 }
 
