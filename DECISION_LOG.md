@@ -1562,3 +1562,19 @@ changed; the design below awaits the owner's decision.
   the NVIDIA card over the Intel one: `large-v3-turbo` 0.065 on the GPU against 1.22 on the VM's CPU. VFIO passthrough was not
   done: GNOME and open apps hold the card, it needs `sudo` and a reboot, and RAM snapshots wouldn't work with it.
 
+
+## 2026-11-01 — Android check of #67 and the final pass in real recordings
+
+- **Settings work on the S23.** Downloading `tiny-q5_1`, choosing it, recording with it, going back to `base` and removing it
+  all worked. A fake key saved, was refused by OpenAI through Test key, and was removed. Not checked: a real key, a real
+  OpenAI transcription, or the sealed file's contents.
+- **The final pass runs in a real recording.** A temporary logging build reported `Meeting speakers finalized` with one
+  speaker for one voice played from a speaker, and no failed chunks. One 12 s chunk took 2.6 s in all with `tiny-q5_1`, of
+  which 0.74 s was transcription, so the live cost stays under real time. This was one voice on one device, so it says nothing
+  about telling people apart on a phone. Which core speeds the app reads is still not observed.
+- **Found: finished recordings show "Unattributed".** `ffi.rs` and `export_manager.rs` pick the label from the speaker identity
+  alone, so a segment in an unknown speaker's group, which has no identity, gets "Unattributed" and not "Unknown speaker".
+  The grouping itself is stored. This isn't Android-specific. Not fixed yet.
+- **Found: Android apps write no logs.** No tracing subscriber is set up outside tests, so these messages are lost on phones.
+- **Test leftovers.** The app has no way to delete a meeting or an unknown voice, so three `test*-delete-me` meetings and
+  their unknown voices remain on the S23.
