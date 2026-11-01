@@ -47,6 +47,9 @@ pub struct SavedTranscriptionSettings {
     /// True when local transcription should use efficient mode, on a phone GPU that supports it.
     #[serde(default)]
     pub efficient_gpu: bool,
+    /// Models whose proposal the owner dismissed, which are not proposed again.
+    #[serde(default)]
+    pub dismissed_proposals: Vec<String>,
 }
 
 /// Where the settings, downloaded models and sealed key live.

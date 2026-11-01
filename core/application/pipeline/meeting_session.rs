@@ -395,7 +395,12 @@ where
             .transcribe(vad_chunk.audio_recording(), &transcription_context)
             .map_err(|error| self.log_transcription_failure(chunk_bounds, error))?;
         if let Some(task_metrics) = &self.task_metrics {
-            task_metrics.record_transcription(processing_started_at.elapsed());
+            task_metrics.record_transcription(
+                processing_started_at.elapsed(),
+                chunk_bounds
+                    .end_offset_ms()
+                    .saturating_sub(chunk_bounds.start_offset_ms()),
+            );
         }
 
         let speaker_regions = self.diarize_and_attribute(vad_chunk).await;

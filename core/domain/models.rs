@@ -1497,6 +1497,8 @@ pub struct TaskMetrics {
     latency_ms: u64,
     estimated_power_mwh: f32,
     timestamp_epoch_ms: u64,
+    /// The length of the audio transcribed; `None` for other tasks and older records.
+    audio_duration_ms: Option<u64>,
 }
 
 impl TaskMetrics {
@@ -1526,7 +1528,21 @@ impl TaskMetrics {
             latency_ms,
             estimated_power_mwh,
             timestamp_epoch_ms,
+            audio_duration_ms: None,
         }
+    }
+
+    /// Records how much audio the task handled, which holds no audio or transcript.
+    ///
+    /// Inputs: The length, or `None` when unknown. Outputs: The record. Side effects: None.
+    pub fn with_audio_duration_ms(mut self, audio_duration_ms: Option<u64>) -> Self {
+        self.audio_duration_ms = audio_duration_ms;
+        self
+    }
+
+    /// Returns how much audio the task handled, when recorded.
+    pub fn audio_duration_ms(&self) -> Option<u64> {
+        self.audio_duration_ms
     }
 
     /// Returns the unique task execution ID.

@@ -1798,3 +1798,21 @@ Measured through the real engine with word timing, on an S23, `small`, 11 s Engl
   this device still refuses to take the meeting back.
 - **Which voice is playing:** the card turns the primary colour and shows `Playing…`, and Play becomes
   Stop. The controller holds one playing ID, so at most one card is marked.
+
+## 2026-11-01: Proposing a Whisper model from this device's speed (#68)
+
+- **What is measured.** Each transcription record gains the audio's length, a nullable column, so
+  older rows are ignored. No audio or text is added. The speed is processing time divided by audio
+  length, over a model's newest 30 chunks.
+- **Enough data** is at least 5 chunks and 120 s of audio for the current model. With less, nothing
+  is proposed from measurements.
+- **The rule.** Above 0.9 the model is falling behind, so propose the next smaller one. At or below
+  0.6 there is headroom, so propose the next larger one if it is predicted to stay at or below 0.6,
+  using relative costs tiny 0.6, base 1, small 3.2, medium 10.7, turbo 10.7. A phone stops at `small`.
+  Those costs are estimates, and a model not yet measured here says so.
+- **Accuracy is not measured.** Telemetry knows speed and energy only, so "larger" follows a fixed
+  order of the models, not a measurement of the owner's transcripts.
+- **Advice only.** Nothing changes or downloads without a press. A dismissed model is kept in the
+  settings file and not proposed again. With OpenAI chosen there is no proposal, because the device's
+  speed says nothing about it.
+

@@ -60,6 +60,33 @@ final class WhisperModelInfo {
   final bool tooLargeForMemory;
 }
 
+/// A model the core proposes from how the current one runs on this device (#68).
+final class WhisperProposal {
+  /// Creates the proposal.
+  const WhisperProposal({
+    required this.fileName,
+    required this.reason,
+    required this.measured,
+  });
+
+  /// Reads the proposal from the core's JSON.
+  factory WhisperProposal.fromJson(Map<String, Object?> json) =>
+      WhisperProposal(
+        fileName: json['file_name']! as String,
+        reason: json['reason']! as String,
+        measured: json['measured']! as bool,
+      );
+
+  /// The catalog file name.
+  final String fileName;
+
+  /// Why, in plain language.
+  final String reason;
+
+  /// Whether the model's speed was measured here, rather than estimated.
+  final bool measured;
+}
+
 /// The model the core suggests for this device.
 final class WhisperSuggestion {
   /// Creates the suggestion.
@@ -155,6 +182,7 @@ final class TranscriptionSettings {
     required this.models,
     required this.download,
     this.suggestion,
+    this.proposal,
     this.efficient = const EfficientModeStatus(),
   });
 
@@ -164,6 +192,9 @@ final class TranscriptionSettings {
         json['download']! as Map<String, Object?>;
     return TranscriptionSettings(
       provider: json['provider']! as String,
+      proposal: json['proposal'] == null
+          ? null
+          : WhisperProposal.fromJson(json['proposal']! as Map<String, Object?>),
       suggestion: json['suggestion'] == null
           ? null
           : WhisperSuggestion.fromJson(
@@ -194,6 +225,9 @@ final class TranscriptionSettings {
   }
 
   /// `local` or `openai`.
+  /// A model proposed from this device's measurements, or `null`.
+  final WhisperProposal? proposal;
+
   /// The model suggested for this device, or `null` when there is none.
   final WhisperSuggestion? suggestion;
 
@@ -217,6 +251,9 @@ abstract interface class TranscriptionSettingsBridge {
   /// Reads the view. Outputs: The view, or `null` when the core can't be reached.
   /// Side effects: Reads files and the key store.
   Future<TranscriptionSettings?> read();
+
+  /// Stops proposing a model, returning the core's status.
+  Future<int> dismissProposal(String fileName);
 
   /// Chooses a model on this device. Outputs: A core status. Side effects: Stores the choice.
   Future<int> selectModel(String fileName);
@@ -264,11 +301,21 @@ final class RustTranscriptionSettingsBridge
   Future<TranscriptionSettings?> read() async {
     final String? json = await Isolate.run<String?>(
         () => _callForText('note_taker_transcription_settings'));
-    return json == null
-        ? null
-        : TranscriptionSettings.fromJson(
-            jsonDecode(json) as Map<String, Object?>);
+    if (json == null) {
+      return null;
+    }
+    final Map<String, Object?> settings =
+        jsonDecode(json) as Map<String, Object?>;
+    // A separate call, since it needs the database while Settings otherwise doesn't.
+    final String? proposal = await Isolate.run<String?>(
+        () => _callForText('note_taker_whisper_proposal'));
+    settings['proposal'] = proposal == null ? null : jsonDecode(proposal);
+    return TranscriptionSettings.fromJson(settings);
   }
+
+  @override
+  Future<int> dismissProposal(String fileName) => Isolate.run(
+      () => _callWithText('note_taker_dismiss_whisper_proposal', fileName));
 
   @override
   Future<int> selectModel(String fileName) => Isolate.run(

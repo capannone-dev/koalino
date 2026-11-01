@@ -43,6 +43,7 @@ use crate::{
             MeetingTitle, SpeakerIdentity, TaskMetrics, TaskType, TranscriptSegment,
             UnassignedVoiceClip,
         },
+        whisper_proposal::{TranscriptionMeasurement, propose_from_measurements},
     },
     ffi_language::default_language,
     ffi_p2p::{p2p_command_json, p2p_status_json},
@@ -1061,6 +1062,44 @@ impl FfiRuntime {
             "{{\"total_transcription_time_ms\":{transcription_ms},\"average_latency_ms\":{},\"total_tasks\":{total_tasks},\"power_estimate_mwh\":{power_mwh}}}",
             latency_ms.checked_div(total_tasks).unwrap_or_default()
         ))
+    }
+
+    /// Proposes a Whisper model from this device's own speed.
+    ///
+    /// Outputs: `{"file_name","reason","measured"}`, or `null` with nothing to propose.
+    /// Side effects: Reads settings and privacy-safe telemetry from SQLite.
+    fn whisper_proposal(&self) -> Result<String, c_int> {
+        let Some((current_file, dismissed)) = crate::ffi_transcription::proposal_settings() else {
+            return Ok(String::from("null"));
+        };
+        let measurements: Vec<TranscriptionMeasurement> = self
+            .note_repository
+            .get_metrics_for_device(self.note_repository.device_id().as_str())
+            .map_err(|_| FFI_OPERATION_REJECTED)?
+            .iter()
+            .filter(|metric| metric.task_type() == TaskType::Transcription)
+            .map(|metric| TranscriptionMeasurement {
+                model_label: metric.model_name().to_owned(),
+                audio_ms: metric.audio_duration_ms().unwrap_or(0),
+                processing_ms: metric.duration_ms(),
+                power_mwh: metric.estimated_power_mwh(),
+            })
+            .collect();
+        let proposal = propose_from_measurements(
+            &current_file,
+            &measurements,
+            &dismissed,
+            cfg!(target_os = "android"),
+        );
+        Ok(proposal
+            .map_or(serde_json::Value::Null, |proposal| {
+                serde_json::json!({
+                    "file_name": proposal.file_name,
+                    "reason": proposal.reason,
+                    "measured": proposal.measured,
+                })
+            })
+            .to_string())
     }
 
     /// Serializes one device's most recent 24-hour metric series without task payloads.
@@ -2397,6 +2436,20 @@ pub extern "C" fn note_taker_get_current_state() -> c_int {
 #[unsafe(no_mangle)]
 pub extern "C" fn note_taker_get_devices() -> *mut c_char {
     with_runtime_json(|runtime| runtime.get_devices())
+        .ok()
+        .and_then(|json| CString::new(json).ok())
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Returns a Whisper model proposal from this device's speed as caller-freed UTF-8 JSON.
+///
+/// Outputs: An owned JSON object, the text `null` with nothing to propose, or a null pointer when
+/// the local runtime is unavailable.
+/// Side effects: Reads settings and privacy-safe SQLite telemetry metadata only.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_whisper_proposal() -> *mut c_char {
+    with_runtime_json(|runtime| runtime.whisper_proposal())
         .ok()
         .and_then(|json| CString::new(json).ok())
         .map(CString::into_raw)

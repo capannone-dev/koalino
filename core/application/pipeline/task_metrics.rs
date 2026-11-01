@@ -94,10 +94,10 @@ impl TaskMetricsRecorder {
 
     /// Records one completed transcription.
     ///
-    /// Inputs: How long the engine took. Outputs: None.
+    /// Inputs: How long the engine took, and the length of the audio. Outputs: None.
     /// Side effects: Saves one row; a failed save is logged as a warning and otherwise ignored.
-    pub fn record_transcription(&self, elapsed: Duration) {
-        self.record(&self.transcription, elapsed);
+    pub fn record_transcription(&self, elapsed: Duration, audio_duration_ms: u64) {
+        self.record(&self.transcription, elapsed, Some(audio_duration_ms));
     }
 
     /// Records one completed diarization.
@@ -107,19 +107,20 @@ impl TaskMetricsRecorder {
     /// logged as a warning and otherwise ignored.
     pub fn record_diarization(&self, elapsed: Duration) {
         match &self.diarization {
-            Some(profile) => self.record(profile, elapsed),
+            Some(profile) => self.record(profile, elapsed, None),
             None => self.record(
                 &TaskProfile::new(TaskType::Diarization, "diarization", 0.0),
                 elapsed,
+                None,
             ),
         }
     }
 
     /// Saves one row for `profile`.
     ///
-    /// Inputs: The task's profile and duration. Outputs: None.
+    /// Inputs: The task's profile and duration, and its audio's length when known. Outputs: None.
     /// Side effects: Writes to the telemetry store; logs a failure without task data.
-    fn record(&self, profile: &TaskProfile, elapsed: Duration) {
+    fn record(&self, profile: &TaskProfile, elapsed: Duration, audio_duration_ms: Option<u64>) {
         let duration_ms = u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX);
         let completed_epoch_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -135,7 +136,8 @@ impl TaskMetricsRecorder {
             duration_ms,
             profile.estimated_power_mwh(duration_ms),
             completed_epoch_ms,
-        );
+        )
+        .with_audio_duration_ms(audio_duration_ms);
         if let Err(error) = self.metrics_repository.save_metrics(task_metrics) {
             tracing::warn!(
                 task_type = profile.task_type.as_str(),

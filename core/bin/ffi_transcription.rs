@@ -241,6 +241,49 @@ pub extern "C" fn note_taker_transcription_settings() -> *mut c_char {
         .unwrap_or(std::ptr::null_mut())
 }
 
+/// Records that the owner doesn't want a proposed model, which changes nothing else.
+///
+/// Inputs: A catalog file name.
+/// Outputs: 0, or 1 when unknown. Side effects: Stores the dismissal.
+///
+/// # Safety
+/// `file_name` must be null or a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_dismiss_whisper_proposal(file_name: *const c_char) -> c_int {
+    let Some(file_name) = (unsafe { text_argument(file_name) }) else {
+        return STATUS_INVALID;
+    };
+    if find_whisper_model(file_name).is_none() {
+        return STATUS_INVALID;
+    }
+    update_settings(|saved| {
+        if !saved
+            .dismissed_proposals
+            .iter()
+            .any(|name| name == file_name)
+        {
+            saved.dismissed_proposals.push(file_name.to_owned());
+        }
+    })
+}
+
+/// Reads what a proposal depends on from the saved settings.
+///
+/// Outputs: The model in use and the dismissed files, or `None` when OpenAI transcribes, since this
+/// device's speed then says nothing. Side effects: Reads the settings file.
+pub(crate) fn proposal_settings() -> Option<(String, Vec<String>)> {
+    let paths = paths();
+    let saved = load_settings(&paths.settings_file);
+    if saved.provider == Some(SavedProvider::Openai) {
+        return None;
+    }
+    let current = saved
+        .whisper_model
+        .filter(|file| paths.locate_model(file).is_some())
+        .or_else(|| paths.shipped_file_name().map(str::to_owned))?;
+    Some((current, saved.dismissed_proposals))
+}
+
 /// Chooses the Whisper model for the next recording.
 ///
 /// Inputs: A catalog file name that is on this device.

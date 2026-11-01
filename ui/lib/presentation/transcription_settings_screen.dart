@@ -12,6 +12,12 @@ const Key openAiKeyFieldKey = ValueKey<String>('openai-key');
 /// Finds the provider selector in tests.
 const Key providerSelectorKey = ValueKey<String>('transcription-provider');
 
+/// Finds the button applying the proposed model in tests.
+const Key useProposalKey = ValueKey<String>('use-proposal');
+
+/// Finds the button dismissing the proposed model in tests.
+const Key dismissProposalKey = ValueKey<String>('dismiss-proposal');
+
 /// Finds the button applying the suggested model in tests.
 const Key useSuggestionKey = ValueKey<String>('use-suggestion');
 
@@ -263,6 +269,7 @@ final class _TranscriptionSettingsScreenState
             'memory. Downloads come from Hugging Face. This choice applies '
             'only to this device.'),
       ),
+      ..._proposalTiles(settings),
       ..._suggestionTiles(settings),
       ..._efficientTiles(settings),
     ];
@@ -279,6 +286,50 @@ final class _TranscriptionSettingsScreenState
       tiles.add(_modelTile(settings, model));
     }
     return tiles;
+  }
+
+  /// A model proposed from this device's measurements, with buttons to accept or dismiss it.
+  List<Widget> _proposalTiles(TranscriptionSettings settings) {
+    final WhisperProposal? proposal = settings.proposal;
+    final WhisperModelInfo? model = settings.models
+        .where((WhisperModelInfo row) => row.fileName == proposal?.fileName)
+        .firstOrNull;
+    if (proposal == null || model == null) {
+      return const <Widget>[];
+    }
+    final TranscriptionSettingsController controller = widget.controller;
+    final bool blocked = controller.isBusy || controller.isDownloading;
+    return <Widget>[
+      ListTile(
+        leading: const Icon(Icons.insights_outlined),
+        title: Text('Try ${model.name}'),
+        subtitle: Text(proposal.reason),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: Wrap(
+          spacing: 8,
+          children: <Widget>[
+            FilledButton.tonal(
+              key: useProposalKey,
+              onPressed: blocked
+                  ? null
+                  : () => controller.applyProposal(proposal,
+                      onDevice: model.onDevice),
+              child: Text(model.onDevice
+                  ? 'Use'
+                  : 'Download ${formatModelSize(model.sizeBytes)}'),
+            ),
+            TextButton(
+              key: dismissProposalKey,
+              onPressed:
+                  blocked ? null : () => controller.dismissProposal(proposal),
+              child: const Text('Not now'),
+            ),
+          ],
+        ),
+      ),
+    ];
   }
 
   /// The model suggested for this device, with a button unless it is already in use.

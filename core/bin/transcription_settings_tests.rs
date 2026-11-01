@@ -113,6 +113,7 @@ fn settings_round_trip_without_the_key() {
         whisper_model: Some("ggml-small.bin".to_owned()),
         openai_model: None,
         efficient_gpu: false,
+        dismissed_proposals: vec!["ggml-medium.bin".to_owned()],
     };
     assert_eq!(load_settings(&paths.settings_file), Default::default());
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));

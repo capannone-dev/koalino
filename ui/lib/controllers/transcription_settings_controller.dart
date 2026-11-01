@@ -113,6 +113,27 @@ final class TranscriptionSettingsController extends ChangeNotifier {
     await selectModel(suggestion.fileName);
   }
 
+  /// Applies a proposal: chooses it when on this device, or starts its download.
+  ///
+  /// Inputs: The proposal and whether its file is here. Efficient mode is left as it is.
+  /// Side effects: Stores the choice or starts a download, and reloads.
+  Future<void> applyProposal(WhisperProposal proposal,
+      {required bool onDevice}) async {
+    if (!onDevice) {
+      await download(proposal.fileName);
+      return;
+    }
+    await selectModel(proposal.fileName);
+  }
+
+  /// Stops proposing a model; the model in use doesn't change.
+  ///
+  /// Side effects: Stores the dismissal and reloads.
+  Future<void> dismissProposal(WhisperProposal proposal) => _run(
+        () => _bridge.dismissProposal(proposal.fileName),
+        success: 'That model won\'t be proposed again.',
+      );
+
   /// Starts downloading a model.
   ///
   /// Inputs: A catalog file name. Side effects: The core downloads in the background.

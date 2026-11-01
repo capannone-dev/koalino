@@ -200,6 +200,7 @@ impl SqliteNoteRepository {
             )
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
         add_meeting_title_column(&sqlite_connection)?;
+        add_task_audio_duration_column(&sqlite_connection)?;
         add_document_revision_column(&sqlite_connection)?;
         add_attachment_meeting_time_column(&sqlite_connection)?;
         attachment_sync::add_attachment_content_columns(&sqlite_connection)?;
@@ -1174,8 +1175,8 @@ impl MetricsRepository for SqliteNoteRepository {
     /// Stores privacy-safe completed-task metrics in the local telemetry table.
     fn save_metrics(&self, metrics: TaskMetrics) -> Result<(), StorageError> {
         self.connection.execute(
-            "INSERT INTO task_metrics (task_id, device_id, task_type, model_name, duration_ms, latency_ms, estimated_power_mwh, timestamp_epoch_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![metrics.task_id().to_string(), metrics.device_id().as_str(), metrics.task_type().as_str(), metrics.model_name(), metrics.duration_ms(), metrics.latency_ms(), metrics.estimated_power_mwh(), metrics.timestamp_epoch_ms()],
+            "INSERT INTO task_metrics (task_id, device_id, task_type, model_name, duration_ms, latency_ms, estimated_power_mwh, timestamp_epoch_ms, audio_duration_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![metrics.task_id().to_string(), metrics.device_id().as_str(), metrics.task_type().as_str(), metrics.model_name(), metrics.duration_ms(), metrics.latency_ms(), metrics.estimated_power_mwh(), metrics.timestamp_epoch_ms(), metrics.audio_duration_ms()],
         ).map_err(|error| sqlite_error("unable to save task metrics", error))?;
         tracing::info!(
             task_type = metrics.task_type().as_str(),
@@ -1187,7 +1188,7 @@ impl MetricsRepository for SqliteNoteRepository {
 
     /// Loads one device's completed metrics in completion order.
     fn get_metrics_for_device(&self, device_id: &str) -> Result<Vec<TaskMetrics>, StorageError> {
-        let mut statement = self.connection.prepare("SELECT task_id, task_type, model_name, duration_ms, latency_ms, estimated_power_mwh, timestamp_epoch_ms FROM task_metrics WHERE device_id = ?1 ORDER BY timestamp_epoch_ms").map_err(|error| sqlite_error("unable to prepare device metrics query", error))?;
+        let mut statement = self.connection.prepare("SELECT task_id, task_type, model_name, duration_ms, latency_ms, estimated_power_mwh, timestamp_epoch_ms, audio_duration_ms FROM task_metrics WHERE device_id = ?1 ORDER BY timestamp_epoch_ms").map_err(|error| sqlite_error("unable to prepare device metrics query", error))?;
         let rows = statement
             .query_map(params![device_id], |row| {
                 Ok((
@@ -1198,6 +1199,7 @@ impl MetricsRepository for SqliteNoteRepository {
                     row.get::<_, u64>(4)?,
                     row.get::<_, f32>(5)?,
                     row.get::<_, u64>(6)?,
+                    row.get::<_, Option<u64>>(7)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to load device metrics", error))?;
@@ -1210,6 +1212,7 @@ impl MetricsRepository for SqliteNoteRepository {
                 latency_ms,
                 estimated_power_mwh,
                 timestamp_epoch_ms,
+                audio_duration_ms,
             ) = row.map_err(|error| sqlite_error("unable to decode device metric", error))?;
             Ok(TaskMetrics::new(
                 uuid::Uuid::parse_str(&task_id).map_err(|error| StorageError::Rejected {
@@ -1222,7 +1225,8 @@ impl MetricsRepository for SqliteNoteRepository {
                 latency_ms,
                 estimated_power_mwh,
                 timestamp_epoch_ms,
-            ))
+            )
+            .with_audio_duration_ms(audio_duration_ms))
         })
         .collect()
     }
@@ -1233,7 +1237,7 @@ impl MetricsRepository for SqliteNoteRepository {
     /// Outputs: Privacy-safe metric metadata in timestamp order or a portable storage error.
     /// Side effects: Reads SQLite rows only; it does not load AI inputs, outputs, or raw audio.
     fn get_all_metrics(&self) -> Result<Vec<TaskMetrics>, StorageError> {
-        let mut statement = self.connection.prepare("SELECT task_id, device_id, task_type, model_name, duration_ms, latency_ms, estimated_power_mwh, timestamp_epoch_ms FROM task_metrics ORDER BY timestamp_epoch_ms").map_err(|error| sqlite_error("unable to prepare all metrics query", error))?;
+        let mut statement = self.connection.prepare("SELECT task_id, device_id, task_type, model_name, duration_ms, latency_ms, estimated_power_mwh, timestamp_epoch_ms, audio_duration_ms FROM task_metrics ORDER BY timestamp_epoch_ms").map_err(|error| sqlite_error("unable to prepare all metrics query", error))?;
         let rows = statement
             .query_map([], |row| {
                 Ok((
@@ -1245,6 +1249,7 @@ impl MetricsRepository for SqliteNoteRepository {
                     row.get::<_, u64>(5)?,
                     row.get::<_, f32>(6)?,
                     row.get::<_, u64>(7)?,
+                    row.get::<_, Option<u64>>(8)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to load all metrics", error))?;
@@ -1258,6 +1263,7 @@ impl MetricsRepository for SqliteNoteRepository {
                 latency_ms,
                 estimated_power_mwh,
                 timestamp_epoch_ms,
+                audio_duration_ms,
             ) = row.map_err(|error| sqlite_error("unable to decode metric", error))?;
             Ok(TaskMetrics::new(
                 uuid::Uuid::parse_str(&task_id).map_err(|error| StorageError::Rejected {
@@ -1270,7 +1276,8 @@ impl MetricsRepository for SqliteNoteRepository {
                 latency_ms,
                 estimated_power_mwh,
                 timestamp_epoch_ms,
-            ))
+            )
+            .with_audio_duration_ms(audio_duration_ms))
         })
         .collect()
     }
@@ -1473,6 +1480,26 @@ fn missing_meeting_error(meeting_id: &MeetingId) -> StorageError {
     }
 }
 
+/// Adds the audio length to telemetry of databases older than #68.
+///
+/// Inputs: An open connection. Outputs: Success or a storage rejection.
+/// Side effects: May add one column; existing rows keep NULL, which proposals ignore.
+fn add_task_audio_duration_column(sqlite_connection: &Connection) -> Result<(), StorageError> {
+    let has_column: bool = sqlite_connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM pragma_table_info('task_metrics') WHERE name = 'audio_duration_ms')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| sqlite_error("unable to inspect the telemetry table", error))?;
+    if has_column {
+        return Ok(());
+    }
+    sqlite_connection
+        .execute_batch("ALTER TABLE task_metrics ADD COLUMN audio_duration_ms INTEGER;")
+        .map_err(|error| sqlite_error("unable to add the telemetry audio length", error))
+}
+
 /// Adds the nullable `meetings.title` column to databases created before Issue #35.
 ///
 /// Inputs: A connection whose `meetings` table exists.
@@ -1583,6 +1610,72 @@ mod tests {
         },
         ports::storage::NoteRepository,
     };
+
+    /// The audio length survives storage, while a record made without one stays unknown.
+    #[test]
+    fn telemetry_keeps_the_audio_length_when_recorded() {
+        use crate::{
+            domain::models::{DeviceId, TaskMetrics, TaskType},
+            ports::telemetry::MetricsRepository,
+        };
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let device_id = DeviceId::new("device");
+        let record = |audio_duration_ms, timestamp_epoch_ms| {
+            TaskMetrics::new(
+                uuid::Uuid::new_v4(),
+                device_id.clone(),
+                TaskType::Transcription,
+                "ggml-base",
+                500,
+                500,
+                0.1,
+                timestamp_epoch_ms,
+            )
+            .with_audio_duration_ms(audio_duration_ms)
+        };
+        for metrics in [record(Some(15_000), 1), record(None, 2)] {
+            repository
+                .save_metrics(metrics)
+                .unwrap_or_else(|error| panic!("metrics should save: {error}"));
+        }
+
+        let mut lengths: Vec<(u64, Option<u64>)> = repository
+            .get_metrics_for_device("device")
+            .unwrap_or_else(|error| panic!("metrics should load: {error}"))
+            .iter()
+            .map(|metric| (metric.timestamp_epoch_ms(), metric.audio_duration_ms()))
+            .collect();
+        lengths.sort_unstable();
+        assert_eq!(lengths, vec![(1, Some(15_000)), (2, None)]);
+    }
+
+    /// A telemetry table from before the audio length gains the column and keeps its rows.
+    #[test]
+    fn older_telemetry_tables_gain_the_audio_length() {
+        let connection = rusqlite::Connection::open_in_memory()
+            .unwrap_or_else(|error| panic!("SQLite should open: {error}"));
+        connection
+            .execute_batch(
+                "CREATE TABLE task_metrics (task_id TEXT PRIMARY KEY);
+                 INSERT INTO task_metrics (task_id) VALUES ('old');",
+            )
+            .unwrap_or_else(|error| panic!("the old table should be created: {error}"));
+
+        for _ in 0..2 {
+            super::add_task_audio_duration_column(&connection)
+                .unwrap_or_else(|error| panic!("the migration should run twice: {error}"));
+        }
+
+        let audio_duration_ms: Option<u64> = connection
+            .query_row("SELECT audio_duration_ms FROM task_metrics", [], |row| {
+                row.get(0)
+            })
+            .unwrap_or_else(|error| panic!("the old row should remain: {error}"));
+        assert_eq!(audio_duration_ms, None);
+    }
 
     /// Verifies speaker-attributed segments are stored in timeline order and replaced atomically.
     #[test]

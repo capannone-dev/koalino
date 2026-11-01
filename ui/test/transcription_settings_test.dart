@@ -44,6 +44,7 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
   bool keySaved = false;
   bool keychain = true;
   String selected = 'ggml-base.bin';
+  WhisperProposal? proposal;
   WhisperDownload downloadState = const WhisperDownload();
   final List<String> calls = <String>[];
   int saveKeyStatus = transcriptionStatusOk;
@@ -83,8 +84,16 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
         models: const <WhisperModelInfo>[_base, _small, _english],
         download: downloadState,
         suggestion: suggestion,
+        proposal: proposal,
         efficient: efficient,
       );
+
+  @override
+  Future<int> dismissProposal(String fileName) async {
+    calls.add('dismiss $fileName');
+    proposal = null;
+    return transcriptionStatusOk;
+  }
 
   @override
   Future<int> selectModel(String fileName) async {
@@ -175,6 +184,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(bridge.calls, contains('efficient true'));
     expect(find.byKey(useSuggestionKey), findsNothing);
+  });
+
+  testWidgets('a proposal on the device is chosen only when asked',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..selected = 'ggml-small.bin'
+      ..proposal = const WhisperProposal(
+          fileName: 'ggml-base.bin',
+          reason: 'small falls behind here.',
+          measured: true);
+    await _pump(tester, bridge);
+    expect(find.text('small falls behind here.'), findsOneWidget);
+    expect(bridge.selected, 'ggml-small.bin');
+    await tester.ensureVisible(find.byKey(useProposalKey));
+    await tester.tap(find.byKey(useProposalKey));
+    await tester.pumpAndSettle();
+    expect(bridge.selected, 'ggml-base.bin');
+  });
+
+  testWidgets('a proposal not on the device downloads only when asked',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..proposal = const WhisperProposal(
+          fileName: 'ggml-small.bin',
+          reason: 'Room to spare.',
+          measured: false);
+    final TranscriptionSettingsController controller =
+        await _pump(tester, bridge);
+    await tester.ensureVisible(find.byKey(useProposalKey));
+    await tester.tap(find.byKey(useProposalKey));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('download ggml-small.bin'));
+    expect(bridge.selected, 'ggml-base.bin');
+    bridge.downloadState = const WhisperDownload(state: 'cancelled');
+    await controller.load();
+  });
+
+  testWidgets('dismissing a proposal hides it and keeps the model',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..proposal = const WhisperProposal(
+          fileName: 'ggml-small.bin',
+          reason: 'Room to spare.',
+          measured: false);
+    await _pump(tester, bridge);
+    await tester.ensureVisible(find.byKey(dismissProposalKey));
+    await tester.tap(find.byKey(dismissProposalKey));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('dismiss ggml-small.bin'));
+    expect(find.byKey(useProposalKey), findsNothing);
+    expect(bridge.selected, 'ggml-base.bin');
   });
 
   testWidgets('a suggestion not on the device downloads only when asked',

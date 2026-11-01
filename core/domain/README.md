@@ -26,6 +26,8 @@ domain values based on portable UTC meeting windows.
   A golden test pins this derivation, so every platform must reproduce it exactly.
 
 `whisper_catalog.rs` lists the downloadable Whisper models with pinned sizes and SHA-256 hashes (#67).
+`whisper_proposal.rs` proposes a smaller or larger model from this device's own speed (#68); it is pure and
+`whisper_proposal_tests.rs` specifies it with fixed telemetry.
 `whisper_suggestion.rs` suggests a model for a device from its memory, GPU and core speed (#68).
 
 `transcription_language.rs` defines the language a recording is transcribed in (Issue #62): AUTO or a
