@@ -2,10 +2,10 @@
 
 use std::{
     mem::{size_of, zeroed},
-    sync::mpsc,
+    sync::{Arc, Barrier, mpsc},
 };
 
-use super::gpu_thread_affinity::PinnedThreads;
+use super::gpu_thread_affinity::{PinnedThreads, threads_named};
 
 /// Reads a thread's CPU set as core numbers; zero means the caller.
 fn cores_of(thread_id: libc::pid_t) -> Vec<usize> {
@@ -72,4 +72,56 @@ fn an_impossible_core_leaves_threads_alone() {
         assert_eq!(cores_of(0), before);
     }
     assert_eq!(cores_of(0), before);
+}
+
+/// A named thread is found even while older threads of the process exit (#78).
+///
+/// Listing goes through threads oldest first, so only an older thread's exit can cut it short.
+#[test]
+fn finds_a_named_thread_while_older_threads_exit() {
+    let missed = (0..300)
+        .filter(|_| !found_while_older_threads_exit())
+        .count();
+
+    assert_eq!(missed, 0, "listings that missed the thread");
+}
+
+/// Starts older threads and a named one, and lists threads while the older ones exit.
+///
+/// Outputs: Whether the listing found the named thread. Side effects: Starts and joins threads.
+fn found_while_older_threads_exit() -> bool {
+    const OLDER_THREADS: usize = 48;
+    let start_exiting = Arc::new(Barrier::new(OLDER_THREADS + 1));
+    let older: Vec<_> = (0..OLDER_THREADS)
+        .map(|_| {
+            let start_exiting = Arc::clone(&start_exiting);
+            std::thread::spawn(move || {
+                start_exiting.wait();
+            })
+        })
+        .collect();
+    let (ready_sender, ready) = mpsc::channel();
+    let (finish, finish_receiver) = mpsc::channel::<()>();
+    let worker = std::thread::Builder::new()
+        .name("FakeDriverExit".to_owned())
+        .spawn(move || {
+            // SAFETY: `gettid` has no preconditions.
+            let thread_id = unsafe { libc::gettid() };
+            ready_sender
+                .send(thread_id)
+                .unwrap_or_else(|e| panic!("{e}"));
+            finish_receiver.recv().unwrap_or_else(|e| panic!("{e}"));
+        })
+        .unwrap_or_else(|e| panic!("{e}"));
+    let worker_id: libc::pid_t = ready.recv().unwrap_or_else(|e| panic!("{e}"));
+
+    start_exiting.wait();
+    let found = threads_named("FakeDriverExit").contains(&worker_id);
+
+    for thread in older {
+        thread.join().unwrap_or_else(|_| panic!("thread panicked"));
+    }
+    finish.send(()).unwrap_or_else(|e| panic!("{e}"));
+    worker.join().unwrap_or_else(|_| panic!("worker panicked"));
+    found
 }

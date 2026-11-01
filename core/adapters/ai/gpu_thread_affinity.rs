@@ -4,10 +4,16 @@
 //! submitting thread and the driver's `AdrenoOsLib` thread on one cluster. Pinning only one of them
 //! doesn't give the full gain (`DECISION_LOG.md`, #75). Every failure here only costs that speed.
 
-use std::mem::{size_of, zeroed};
+use std::{
+    collections::BTreeSet,
+    mem::{size_of, zeroed},
+};
 
 /// Prefix of the Adreno driver's worker threads.
 pub const ADRENO_DRIVER_THREAD_PREFIX: &str = "AdrenoOsLib";
+
+/// How many listings of the process's threads are combined; see `threads_named`.
+const THREAD_LISTINGS: usize = 4;
 
 /// One thread's earlier CPU set, to put back.
 struct SavedAffinity {
@@ -95,18 +101,29 @@ fn pin_thread(thread_id: libc::pid_t, chosen: &libc::cpu_set_t, saved: &mut Vec<
 
 /// Lists this process's threads whose name starts with a prefix.
 ///
+/// A listing of `/proc/self/task` ends early when an older thread exits during it, without saying
+/// so, which missed live threads in about 6% of listings in `gpu_thread_affinity_tests.rs` (#78).
+/// Combining several listings finds what any one of them missed.
+///
 /// Inputs: The prefix. Outputs: Their ids; empty when `/proc` can't be read.
 /// Side effects: Reads `/proc/self/task`.
-fn threads_named(prefix: &str) -> Vec<libc::pid_t> {
-    let Ok(entries) = std::fs::read_dir("/proc/self/task") else {
-        return Vec::new();
-    };
-    entries
-        .flatten()
-        .filter(|entry| {
-            std::fs::read_to_string(entry.path().join("comm"))
+pub(super) fn threads_named(prefix: &str) -> Vec<libc::pid_t> {
+    let mut thread_ids = BTreeSet::new();
+    for _ in 0..THREAD_LISTINGS {
+        let Ok(entries) = std::fs::read_dir("/proc/self/task") else {
+            return Vec::new();
+        };
+        thread_ids.extend(
+            entries
+                .flatten()
+                .filter_map(|entry| entry.file_name().to_str()?.parse::<libc::pid_t>().ok()),
+        );
+    }
+    thread_ids
+        .into_iter()
+        .filter(|thread_id| {
+            std::fs::read_to_string(format!("/proc/self/task/{thread_id}/comm"))
                 .is_ok_and(|name| name.starts_with(prefix))
         })
-        .filter_map(|entry| entry.file_name().to_str()?.parse().ok())
         .collect()
 }
