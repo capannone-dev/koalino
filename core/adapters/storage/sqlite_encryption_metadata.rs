@@ -55,12 +55,21 @@ impl SqliteEncryptionMetadataStore {
         Self::from_connection(sqlite_connection)
     }
 
+    /// Reads this connection's `secure_delete` setting, for tests.
+    #[cfg(test)]
+    pub(super) fn secure_delete_setting(&self) -> Option<i64> {
+        self.connection
+            .query_row("PRAGMA secure_delete", [], |row| row.get(0))
+            .ok()
+    }
+
     /// Configures the connection and creates the metadata table idempotently.
     ///
     /// Inputs: An open connection.
     /// Outputs: The store, or a portable storage error.
     /// Side effects: Sets a busy timeout and executes `CREATE TABLE IF NOT EXISTS`.
     fn from_connection(sqlite_connection: Connection) -> Result<Self, StorageError> {
+        super::sqlite_secure_delete::enable(&sqlite_connection)?;
         sqlite_connection
             .busy_timeout(BUSY_TIMEOUT)
             .map_err(|error| sqlite_error("unable to configure metadata busy timeout", error))?;

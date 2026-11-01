@@ -76,6 +76,14 @@ impl SqlitePeerStore {
         Self::from_connection(connection, cipher)
     }
 
+    /// Reads this connection's `secure_delete` setting, for tests.
+    #[cfg(test)]
+    pub(super) fn secure_delete_setting(&self) -> Option<i64> {
+        self.connection
+            .query_row("PRAGMA secure_delete", [], |row| row.get(0))
+            .ok()
+    }
+
     /// Configures the connection and creates the peer schema.
     ///
     /// Inputs: An open connection and the cipher. Outputs: The store, or a storage error.
@@ -85,6 +93,7 @@ impl SqlitePeerStore {
         connection: Connection,
         cipher: Arc<dyn EmbeddingCipher>,
     ) -> Result<Self, StorageError> {
+        super::sqlite_secure_delete::enable(&connection)?;
         connection
             .busy_timeout(BUSY_TIMEOUT)
             .map_err(|error| sqlite_error("unable to configure peer store busy timeout", error))?;

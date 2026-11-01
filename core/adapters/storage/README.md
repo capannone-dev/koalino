@@ -218,6 +218,9 @@ meeting's ID (`meeting-<uuid>`) as the folder name and the meeting time in milli
 `-` and `_`) is rejected before anything is written, so no file can land outside the slide
 directory.
 
+`sqlite_secure_delete.rs` makes every connection overwrite deleted content with zeros, and rewrites an
+existing database once with `VACUUM` to clear what earlier deletions left in free pages.
+
 `sqlite_deletions.rs` deletes meetings and unknown voices and keeps `deleted_items`, the records that
 stop paired devices restoring them. Records hold an ID and a time and are kept forever.
 `document_revision_floor` keeps a deleted meeting's revision from being reused, because a watcher

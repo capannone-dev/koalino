@@ -1744,8 +1744,13 @@ Measured through the real engine with word timing, on an S23, `small`, 11 s Engl
 - **Deleting while recording is refused**, because the running pipeline still writes to that meeting.
 - **The CLI needs `--yes`** rather than a prompt, so scripts stay non-interactive and a bare command
   never deletes. The web dashboard uses a dialog focused on Cancel.
-- **Not built.** Bytes may remain in free SQLite pages
-  until they are reused, as `secure_delete` is not on. An old app version on a paired device drops
-  `NTD1` as malformed and keeps its copy; this device still refuses to take the meeting back.
+- **Deleted bytes are erased, not just unlinked.** Every SQLite connection sets `secure_delete = ON`,
+  because the setting belongs to a connection. Existing databases are rewritten once with `VACUUM`,
+  recorded as `secure_delete_vacuum`, to clear what earlier deletions left in free pages. A failed
+  rewrite (a busy file, a full disk) is logged and retried at the next start, so it never stops the
+  owner reaching their notes. This does not reach SSD wear-levelled copies, backups or Automerge
+  history in other meetings; a device's disk encryption covers the first.
+- **Not built.** An old app version on a paired device drops `NTD1` as malformed and keeps its copy;
+  this device still refuses to take the meeting back.
 - **Which voice is playing:** the card turns the primary colour and shows `Playing…`, and Play becomes
   Stop. The controller holds one playing ID, so at most one card is marked.

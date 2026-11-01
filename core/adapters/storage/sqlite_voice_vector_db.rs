@@ -86,6 +86,14 @@ impl SqliteVoiceVectorDB {
         Self::from_connection(sqlite_connection, embedding_cipher)
     }
 
+    /// Reads this connection's `secure_delete` setting, for tests.
+    #[cfg(test)]
+    pub(super) fn secure_delete_setting(&self) -> Option<i64> {
+        self.connection
+            .query_row("PRAGMA secure_delete", [], |row| row.get(0))
+            .ok()
+    }
+
     /// Configures the connection, creates the voice schema idempotently, and encrypts legacy rows.
     ///
     /// Inputs: An open connection and the embedding cipher.
@@ -96,6 +104,7 @@ impl SqliteVoiceVectorDB {
         sqlite_connection: Connection,
         embedding_cipher: Arc<dyn EmbeddingCipher>,
     ) -> Result<Self, StorageError> {
+        super::sqlite_secure_delete::enable(&sqlite_connection)?;
         sqlite_connection
             .busy_timeout(BUSY_TIMEOUT)
             .map_err(|error| sqlite_error("unable to configure voice store busy timeout", error))?;

@@ -90,7 +90,9 @@ impl SqliteNoteRepository {
     ) -> Result<Self, StorageError> {
         let sqlite_connection = Connection::open(database_path)
             .map_err(|error| sqlite_error("unable to open SQLite database", error))?;
-        Self::from_connection(sqlite_connection, device_id, embedding_cipher)
+        let repository = Self::from_connection(sqlite_connection, device_id, embedding_cipher)?;
+        super::sqlite_secure_delete::vacuum_once(&repository.connection);
+        Ok(repository)
     }
 
     /// Opens an isolated in-memory SQLite repository for tests and ephemeral local workflows.
@@ -110,6 +112,14 @@ impl SqliteNoteRepository {
         )
     }
 
+    /// Reads this connection's `secure_delete` setting, for tests.
+    #[cfg(test)]
+    pub(super) fn secure_delete_setting(&self) -> Option<i64> {
+        self.connection
+            .query_row("PRAGMA secure_delete", [], |row| row.get(0))
+            .ok()
+    }
+
     /// Initializes the required SQLite schema for an already-open connection.
     ///
     /// Inputs: `sqlite_connection` must be a usable connection; `device_id` identifies safe log
@@ -123,6 +133,7 @@ impl SqliteNoteRepository {
         device_id: DeviceId,
         embedding_cipher: Arc<dyn EmbeddingCipher>,
     ) -> Result<Self, StorageError> {
+        super::sqlite_secure_delete::enable(&sqlite_connection)?;
         sqlite_connection
             .busy_timeout(BUSY_TIMEOUT)
             .map_err(|error| sqlite_error("unable to configure SQLite busy timeout", error))?;

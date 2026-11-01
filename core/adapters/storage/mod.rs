@@ -39,6 +39,10 @@ mod sqlite_meeting_document_tests;
 pub mod sqlite_peer_store;
 #[cfg(test)]
 mod sqlite_peer_store_tests;
+/// Makes SQLite erase deleted data instead of only marking its space as free.
+mod sqlite_secure_delete;
+#[cfg(test)]
+mod sqlite_secure_delete_tests;
 #[cfg(test)]
 mod sqlite_voice_library_sync_tests;
 /// Implements the voice-vector port with SQLite-persisted speaker names and voice variants.
