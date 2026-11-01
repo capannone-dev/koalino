@@ -105,6 +105,10 @@ fn main() {
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
     let whisper_root = out.join("whisper.cpp");
 
+    // note_taker: always take a fresh copy, or edits to our patched sources would never be built.
+    if whisper_root.exists() {
+        std::fs::remove_dir_all(&whisper_root).unwrap();
+    }
     if !whisper_root.exists() {
         std::fs::create_dir_all(&whisper_root).unwrap();
         fs_extra::dir::copy("./whisper.cpp", &out, &Default::default()).unwrap_or_else(|e| {
@@ -134,6 +138,7 @@ fn main() {
         .map_err(|v| v.to_string())
         .unwrap();
 
+        #[allow(unused_mut)] // note_taker: only the metal and vulkan features change it.
         let mut bindings = bindgen::Builder::default()
             .rust_edition(bindgen::RustEdition::Edition2021)
             .rust_target(package_msrv)
@@ -298,6 +303,21 @@ fn main() {
         config.define("CMAKE_CXX_COMPILER", "icpx");
     }
 
+    // note_taker: OpenCL for Adreno phones. The library is opened at run time by the core's loader
+    // (`opencl_loader_shim.rs`), so nothing links it and CMake only needs the headers. Android only,
+    // so a desktop build with every feature on (`make rust-lint`) needs no OpenCL headers.
+    // note_taker: rebuild when our patched sources change; see README.md.
+    println!("cargo:rerun-if-changed=whisper.cpp/ggml/src/ggml-opencl");
+    let opencl = cfg!(feature = "opencl") && env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android");
+    if opencl {
+        let opencl_headers = env::var("OPENCL_HEADERS_DIR")
+            .expect("OPENCL_HEADERS_DIR must name the OpenCL headers; run tools/cross/fetch.sh");
+        println!("cargo:rerun-if-env-changed=OPENCL_HEADERS_DIR");
+        config.define("GGML_OPENCL", "ON");
+        config.define("OpenCL_INCLUDE_DIR", opencl_headers);
+        config.define("OpenCL_LIBRARY", "opened-at-run-time");
+    }
+
     let destination = config.build();
 
     add_link_search_path(&out.join("build")).unwrap();
@@ -323,6 +343,10 @@ fn main() {
         } else {
             println!("cargo:rustc-link-lib=static=ggml-vulkan");
         }
+    }
+
+    if opencl {
+        println!("cargo:rustc-link-lib=static=ggml-opencl");
     }
 
     if cfg!(feature = "hipblas") {

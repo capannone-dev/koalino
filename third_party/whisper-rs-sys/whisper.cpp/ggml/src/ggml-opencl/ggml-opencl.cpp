@@ -2483,12 +2483,9 @@ static std::vector<ggml_backend_device> ggml_opencl_probe_devices(ggml_backend_r
             /* .context = */ dev_ctx.get(),
         });
 
-        if (!ggml_cl2_init(&found_devices.back())) {
-            found_devices.pop_back();
-            GGML_LOG_INFO("ggml_opencl: drop unsupported device.\n");
-            continue;
-        }
-
+        // note_taker: no ggml_cl2_init here. It compiles every kernel, about 9 s on an Adreno 740, and
+        // this runs even for a CPU-only model. It now happens when a model first uses this device.
+        // The core's OpenCL loader hides any GPU it doesn't support, so nothing unsupported gets here.
         dev_ctx.release();
     }
 
@@ -7487,7 +7484,7 @@ static void ggml_cl_mul_mat_kq_kqv_adreno(ggml_backend_t backend, const ggml_ten
     // <--------------------------------------------> //
     extra0 = src0->view_src ? (ggml_tensor_extra_cl *)src0->view_src->extra : (ggml_tensor_extra_cl *)src0->extra;
 
-    region.origin = (extra0->offset);
+    region.origin = (extra0->offset + src0->view_offs);
     if (nb01 > nb02) {
         // KQ
         region.size = nb01 * ne01;
@@ -7503,7 +7500,7 @@ static void ggml_cl_mul_mat_kq_kqv_adreno(ggml_backend_t backend, const ggml_ten
 
     // create sub-buffer for B
     // <--------------------------------------------> //
-    region.origin = (extra1->offset);
+    region.origin = (extra1->offset + src1->view_offs);
     region.size = nb10 * ne10 * ne11 * ne12;
     B_sub_buffer = clCreateSubBuffer((extra1->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
     CL_CHECK(status);
@@ -7524,7 +7521,7 @@ static void ggml_cl_mul_mat_kq_kqv_adreno(ggml_backend_t backend, const ggml_ten
 
     // create sub-buffer for output C
     // <--------------------------------------------> //
-    region.origin = (extrad->offset);
+    region.origin = (extrad->offset + dst->view_offs);
     region.size = ne0 * ne1 * dst->ne[2] * dst->nb[0]; // size of C in bytes
     D_sub_buffer = clCreateSubBuffer((extrad->data_device), 0, CL_BUFFER_CREATE_TYPE_REGION, &region, &status);
     CL_CHECK(status);
@@ -7639,6 +7636,14 @@ static void ggml_cl_mul_mat(ggml_backend_t backend, const ggml_tensor * src0, co
 
 #ifdef GGML_OPENCL_USE_ADRENO_KERNELS
     cl_context context = backend_ctx->context;
+
+    // Scratch test: plain contiguous matrices use the texture-cached path, whatever N is.
+    if (src0t == GGML_TYPE_F16 && src1t == GGML_TYPE_F32 && ne01 >= 64 && ne00 >= 16 && ne00 % 16 == 0 &&
+        ne1 >= 16 &&
+        ne02 == 1 && ne12 == 1 && ggml_is_contiguous(src0) && ggml_is_contiguous(src1)) {
+        ggml_cl_mul_mat_kq_kqv_adreno(backend, src0, src1, dst);
+        return;
+    }
 
     if(src0t == GGML_TYPE_F16 && src1t == GGML_TYPE_F32){
         if (ne01 >= 64 && ne1 >= 32 && ne00 >= 16 && (ne12 % ne02) == 0) {
@@ -7960,11 +7965,23 @@ static void ggml_cl_mul_mat(ggml_backend_t backend, const ggml_tensor * src0, co
 
     // GEMM using local memory
     // Current BK = 16, so ne00 % 16 == 0
+    if (src0t == GGML_TYPE_F16 && src1t == GGML_TYPE_F32 &&
+        src0->ne[1] > 32 &&   // M > 32
+        src1->ne[1] > 32 &&   // N > 32
+        src0->ne[0] > 32 &&   // K > 32
+        src0->ne[2] == 1 && src0->ne[3] == 1 &&
+        src1->ne[2] == 1 && src1->ne[3] == 1 &&
+        ggml_is_contiguous(src0) && ggml_is_contiguous(src1) &&
+        backend_ctx->kernel_mul_mat_f16_f32_tiled != NULL) {
+        ggml_cl_mul_mat_f16_f32_tiled(backend, src0, src1, dst);
+        return;
+    }
+
     if (ggml_is_contiguous(src0) &&
         ggml_is_contiguous(src1) &&
         src1t == GGML_TYPE_F32 &&
         ne00 % 16 == 0 &&
-        ne11 > 1) {
+        ne11 > 1 && !(src0t == GGML_TYPE_F16 && ne11 < 16)) {
         switch(src0t) {
             case GGML_TYPE_F32: {
                 kernel = backend_ctx->kernel_mul_mm_f32_f32_l4_lm;

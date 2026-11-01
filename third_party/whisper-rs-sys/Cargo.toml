@@ -53,6 +53,7 @@ metal = []
 openblas = []
 openmp = []
 vulkan = []
+opencl = []
 
 [lib]
 name = "whisper_rs_sys"

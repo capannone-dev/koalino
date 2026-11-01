@@ -15,6 +15,7 @@
 #define WG_SIZE (BLOCK_M)
 #define Q1_WG_SIZE 64
 
+inline float safe_exp(float x) { return (isnan(x) || x < -80.0f) ? 0.0f : exp(x); }
 inline float get_alibi_slope(
     const float max_bias, const uint h, const uint n_head_log2, const float m0, const float m1
 ) {
@@ -162,13 +163,13 @@ __kernel void flash_attn_f32_f16(
             }
 
             const ACC_TYPE m_new = max(m_i, max(score0, score1));
-            const ACC_TYPE p0 = exp(score0 - m_new);
-            const ACC_TYPE p1 = exp(score1 - m_new);
-            const ACC_TYPE scale_prev = exp(m_i - m_new);
+            const ACC_TYPE p0 = safe_exp(score0 - m_new);
+            const ACC_TYPE p1 = safe_exp(score1 - m_new);
+            const ACC_TYPE scale_prev = safe_exp(m_i - m_new);
 
             #pragma unroll
             for (int i = 0; i < DV_VEC; ++i) {
-                o_acc[i] = o_acc[i] * scale_prev + p0 * CONVERT_KV_ACC4(l_v[j][i]) + p1 * CONVERT_KV_ACC4(l_v[j+1][i]);
+                o_acc[i] = o_acc[i] * scale_prev + (p0 == 0.0f ? (ACC_TYPE4)(0.0f) : p0 * CONVERT_KV_ACC4(l_v[j][i])) + (p1 == 0.0f ? (ACC_TYPE4)(0.0f) : p1 * CONVERT_KV_ACC4(l_v[j+1][i]));
             }
             l_i = l_i * scale_prev + p0 + p1;
             m_i = m_new;
@@ -181,13 +182,13 @@ __kernel void flash_attn_f32_f16(
             const ACC_TYPE m_sink = sinks_ptr[head_idx];
             const ACC_TYPE m_final = max(m_i, m_sink);
 
-            const ACC_TYPE scale_o = exp(m_i - m_final);
+            const ACC_TYPE scale_o = safe_exp(m_i - m_final);
             #pragma unroll
             for (int i = 0; i < DV_VEC; ++i) {
                 o_acc[i] *= scale_o;
             }
 
-            l_i = l_i * exp(m_i - m_final) + exp(m_sink - m_final);
+            l_i = l_i * safe_exp(m_i - m_final) + safe_exp(m_sink - m_final);
         }
 
         const ulong o_row_offset = batch_idx * o_nb3 + my_query_row * o_nb2 + head_idx * o_nb1;
@@ -326,11 +327,11 @@ __kernel void flash_attn_f32_f16_q1(
         if (logit_softcap > 0.0f) {
             score = logit_softcap * tanh(score / logit_softcap);
         }
-        const ACC_TYPE p = exp(score - m_final);
+        const ACC_TYPE p = safe_exp(score - m_final);
         l_i += p;
         #pragma unroll
         for (int i = 0; i < DV_VEC; i++) {
-            o_acc[i] = mad(p, CONVERT_KV_ACC4(v_ptr[i]), o_acc[i]);
+            if (p != 0.0f) o_acc[i] = mad(p, CONVERT_KV_ACC4(v_ptr[i]), o_acc[i]);
         }
     }
 
@@ -349,7 +350,7 @@ __kernel void flash_attn_f32_f16_q1(
     ACC_TYPE l_final = local_l[0];
 
     if (sinks_ptr != NULL) {
-        l_final += exp(sinks_ptr[head_idx] - m_final);
+        l_final += safe_exp(sinks_ptr[head_idx] - m_final);
     }
 
     if (l_final > 0.0f) {

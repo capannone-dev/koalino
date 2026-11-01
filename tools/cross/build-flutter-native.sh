@@ -86,7 +86,12 @@ for platform in "$@"; do
       ;;
     android)
       refresh_whisper_build android "$CROSS_DIR/cmake/android-arm64.cmake" --target aarch64-linux-android
-      cargo build --release --features local-ai,microphone,vad,diarization --lib --target aarch64-linux-android
+      if [ ! -d "$OPENCL_HEADERS_DIR/CL" ]; then
+        echo "missing $OPENCL_HEADERS_DIR: run tools/cross/fetch-opencl.sh" >&2
+        exit 1
+      fi
+      # mobile-gpu adds efficient mode; the phone's OpenCL library is opened at run time (#75).
+      cargo build --release --features local-ai,mobile-gpu,microphone,vad,diarization --lib --target aarch64-linux-android
       jni=ui/android/app/src/main/jniLibs/arm64-v8a
       mkdir -p "$jni"
       cp "$CARGO_TARGET_DIR/aarch64-linux-android/release/libnote_taker_core.so" "$jni/"

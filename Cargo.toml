@@ -16,6 +16,8 @@ crate-type = ["rlib", "cdylib"]
 default = []
 # Enables the adapter-local whisper.cpp binding for explicitly opted-in local inference.
 local-ai = ["dep:whisper-rs", "dep:whisper-rs-sys"]
+# Adds the phone GPU backend: the vendored whisper.cpp with OpenCL, opened at run time (#75).
+mobile-gpu = ["local-ai", "whisper-rs-sys/opencl"]
 vad = ["dep:webrtc-vad"]
 # Captures the default microphone with cpal (ALSA on Linux, WASAPI on Windows, AAudio on Android;
 # Issue #45). Linux builds need the ALSA development package (`libasound2-dev`).
@@ -128,3 +130,7 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.ctr]
 opt-level = 3
+
+# Our Adreno fixes and an OpenCL build option; see third_party/whisper-rs-sys/README.md (#75).
+[patch.crates-io]
+whisper-rs-sys = { path = "third_party/whisper-rs-sys" }
