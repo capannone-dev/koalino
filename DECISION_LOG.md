@@ -1578,3 +1578,13 @@ changed; the design below awaits the owner's decision.
 - **Found: Android apps write no logs.** No tracing subscriber is set up outside tests, so these messages are lost on phones.
 - **Test leftovers.** The app has no way to delete a meeting or an unknown voice, so three `test*-delete-me` meetings and
   their unknown voices remain on the S23.
+
+## 2026-11-01 — phone GPU retry with `base` (#75)
+
+- **The Adreno 740 can't be used for now, and the error is known.** On the S23, `base` finished one pass of the 11 s clip at about
+  0.6 times audio length, against 0.14 on the CPU, and its whole transcript was ".". The next pass aborted with
+  `vk::Queue::submit: ErrorDeviceLost`. Two runs behaved the same way. Android builds stay on the CPU.
+- **Not retried.** `small` and `large-v3-turbo`, which aborted earlier during model setup; that abort's text is still unknown, and no
+  copy of those models was at hand. A driver update or a newer whisper.cpp could change this result.
+- **This is the failure #76 describes.** A lost device during inference throws through Rust and ends the process, so the CPU fallback
+  doesn't help when it happens on a desktop.
