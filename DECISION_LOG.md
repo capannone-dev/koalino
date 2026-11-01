@@ -1726,6 +1726,21 @@ Measured through the real engine with word timing, on an S23, `small`, 11 s Engl
 - **Not verified.** Thread pinning in the app: the driver thread was seen only on cores 3 and 5, inside the chosen group, but the app's thread mask can't be read from
   outside. Speed in the app, as Android builds write no logs. Accuracy of that transcript. A real driver crash; the guard is tested with a simulated abort. Battery use.
 
+## 2026-11-01 — #63 a final voice replaces live members on paired devices
+
+- **Found by naming a voice across two VMs.** A cluster share merged by union, so the whole-meeting
+  voice joined the live chunks on the other device. There the live durations could pass the 8 s rule
+  even when the final pass had marked the speaker as not clean (#74), so a device could save a voice
+  the recording device rejected. Devices also showed different speech times, and because a digest held
+  only counts, one live chunk becoming one final voice was never sent.
+- **Decision.** A share holding the `meeting-voice-<cluster>` member replaces the receiver's members,
+  and after that live shares add only clips. Digests also say whether the final voice is present. The
+  digest isn't sent between devices, so older peers still interoperate, and a device updated later
+  corrects itself at the next connection, for clusters still unresolved. Already-named ones keep what they have.
+- **Naming says when no voice was saved.** The name still applies, but the person won't be recognised
+  later, which the screen did not say. A final voice needs 20 s of speech (`MIN_CLEAN_VOICE_WINDOWS`), so
+  a short speaker is named without a saved voice.
+
 ## 2026-11-01 — Linux builds target a Debian 13 sysroot
 
 - **Cause.** The build with diarization needed glibc 2.43 from this machine, for only seven float

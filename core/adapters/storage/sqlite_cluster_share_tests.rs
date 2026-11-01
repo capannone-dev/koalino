@@ -22,6 +22,7 @@ use crate::{
         models::{
             ClusterDigest, ClusterShare, ClusterShareImport, DeviceId, MeetingId,
             UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
+            meeting_voice_chunk_id,
         },
     },
     ports::{meeting_document::MeetingDocumentCodec, storage::NoteRepository},
@@ -284,6 +285,95 @@ fn imports_are_idempotent_and_add_only_what_is_new() {
             .unresolved_cluster_digests()
             .unwrap_or_else(|error| panic!("digests must list: {error}")),
         vec![ClusterDigest::new(CLUSTER, 2, 2)]
+    );
+}
+
+/// The final pass's share for `CLUSTER`: one whole-meeting voice replacing the live members.
+fn final_share(sender: &Device, clean_speech_ms: u64) -> ClusterShare {
+    let chunk_id = meeting_voice_chunk_id(CLUSTER);
+    let cluster = UnknownSpeakerCluster::new(
+        CLUSTER,
+        meeting_id(),
+        vec![0.5, 0.25, -0.25],
+        vec![chunk_id.clone()],
+        30_000,
+        load_share(sender).cluster().created_at(),
+        None,
+    );
+    let voice = UnknownSpeakerChunk::new(chunk_id, vec![0.5, 0.25, -0.25], clean_speech_ms);
+    ClusterShare::new(cluster, vec![voice], Vec::new())
+}
+
+/// The member chunk IDs and durations a device stores for `CLUSTER`.
+fn stored_members(device: &Device) -> Vec<(String, u64)> {
+    let share = load_share(device);
+    share
+        .chunks()
+        .iter()
+        .map(|chunk| (chunk.chunk_id().to_owned(), chunk.duration_ms()))
+        .collect()
+}
+
+/// The final voice replaces live members, so a device can't save a voice the final pass rejected
+/// and every device reports the same speech time.
+#[test]
+fn a_final_voice_replaces_the_live_members() {
+    let sender = Device::new(1);
+    let receiver = Device::new(2);
+    record_clusters(&sender);
+    import(&receiver, &load_share(&sender));
+
+    import(&receiver, &final_share(&sender, 0));
+
+    let stored = load_share(&receiver);
+    assert_eq!(
+        stored_members(&receiver),
+        vec![(meeting_voice_chunk_id(CLUSTER), 0)]
+    );
+    assert_eq!(stored.cluster().total_duration_ms(), 30_000);
+}
+
+/// A live share arriving after the final voice changes no member, but still brings its clips.
+#[test]
+fn a_late_live_share_does_not_undo_the_final_voice() {
+    let sender = Device::new(1);
+    let receiver = Device::new(2);
+    record_clusters(&sender);
+    let live_share = load_share(&sender);
+    import(&receiver, &final_share(&sender, 30_000));
+
+    import(&receiver, &live_share);
+
+    let stored = load_share(&receiver);
+    assert_eq!(
+        stored_members(&receiver),
+        vec![(meeting_voice_chunk_id(CLUSTER), 30_000)]
+    );
+    assert_eq!(stored.cluster().total_duration_ms(), 30_000);
+    assert_eq!(cluster_clips(&receiver).len(), 2);
+}
+
+/// One live member becoming one final voice must still count as a change, or the sender never sends
+/// it to a device that already has one member.
+#[test]
+fn a_digest_tells_a_final_voice_from_a_live_member() {
+    let live = ClusterDigest::new(CLUSTER, 1, 0);
+    assert_ne!(live, live.with_final_voice(true));
+
+    let sender = Device::new(1);
+    record_clusters(&sender);
+    import(&sender, &final_share(&sender, 30_000));
+    let digests = sender
+        .repository
+        .unresolved_cluster_digests()
+        .unwrap_or_else(|error| panic!("digests must list: {error}"));
+    let digest = digests
+        .iter()
+        .find(|digest| digest.cluster_id() == CLUSTER)
+        .unwrap_or_else(|| panic!("the cluster must be listed"));
+    assert_eq!(
+        *digest,
+        ClusterDigest::new(CLUSTER, 1, 2).with_final_voice(true)
     );
 }
 

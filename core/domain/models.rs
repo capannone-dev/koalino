@@ -2334,6 +2334,14 @@ pub struct ClusterDigest {
     cluster_id: Uuid,
     chunk_count: usize,
     clip_count: usize,
+    has_final_voice: bool,
+}
+
+/// Names the member that holds a cluster's final whole-meeting voice.
+///
+/// Inputs: The cluster. Outputs: The chunk ID. Side effects: None.
+pub fn meeting_voice_chunk_id(cluster_id: Uuid) -> String {
+    format!("meeting-voice-{cluster_id}")
 }
 
 impl ClusterDigest {
@@ -2346,7 +2354,17 @@ impl ClusterDigest {
             cluster_id,
             chunk_count,
             clip_count,
+            has_final_voice: false,
         }
+    }
+
+    /// Records whether the cluster's member is the final whole-meeting voice, which replaces live
+    /// members and so can change the cluster without changing the counts.
+    ///
+    /// Inputs: Whether it is. Outputs: The digest. Side effects: None.
+    pub fn with_final_voice(mut self, has_final_voice: bool) -> Self {
+        self.has_final_voice = has_final_voice;
+        self
     }
 
     /// The cluster.

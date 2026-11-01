@@ -616,7 +616,7 @@ where
     ) -> Result<(), MeetingSessionError> {
         const MILLISECONDS_PER_WINDOW: u64 = 1_000;
         let speech_ms = voice.window_count as u64 * MILLISECONDS_PER_WINDOW;
-        let chunk_id = format!("meeting-voice-{cluster_id}");
+        let chunk_id = crate::domain::models::meeting_voice_chunk_id(cluster_id);
         let created_at = self
             .note_repository
             .load_unknown_speaker_cluster(cluster_id)?

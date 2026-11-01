@@ -6,7 +6,9 @@
 //! the sender's database: the share arrives decrypted from the pair-key layer and every embedding
 //! and clip is sealed again here with this database's cipher. Imports are idempotent: chunks and
 //! clips already stored are kept, and the representative embedding is only replaced by a share
-//! holding at least as many members. Nothing is stored for a meeting that has not synced yet or a
+//! holding at least as many members. The exception is the final pass's whole-meeting voice: it
+//! replaces the live members, because it records whether the speaker is clean enough to save and a
+//! union would lose that, and later live shares no longer change the members. Nothing is stored for a meeting that has not synced yet or a
 //! cluster already resolved here (in its row, or in the meeting document when the resolution
 //! synced before the share), so a resolved speaker's audio never comes back. This child
 //! module of `sqlite_adapter` never logs embeddings or audio.
@@ -22,7 +24,7 @@ use super::{
 use crate::{
     domain::{
         errors::StorageError,
-        models::{ClusterDigest, ClusterShare, ClusterShareImport},
+        models::{ClusterDigest, ClusterShare, ClusterShareImport, meeting_voice_chunk_id},
     },
     ports::storage::NoteRepository,
 };
@@ -48,7 +50,9 @@ impl SqliteNoteRepository {
             .prepare(
                 "SELECT cluster_id,
                     (SELECT COUNT(*) FROM cluster_chunks WHERE cluster_chunks.cluster_id = clusters.cluster_id),
-                    (SELECT COUNT(*) FROM unassigned_voice_clips WHERE unassigned_voice_clips.cluster_id = clusters.cluster_id)
+                    (SELECT COUNT(*) FROM unassigned_voice_clips WHERE unassigned_voice_clips.cluster_id = clusters.cluster_id),
+                    EXISTS (SELECT 1 FROM cluster_chunks WHERE cluster_chunks.cluster_id = clusters.cluster_id
+                            AND cluster_chunks.chunk_id = 'meeting-voice-' || clusters.cluster_id)
                  FROM unknown_speaker_clusters AS clusters
                  WHERE resolved_identity_id IS NULL
                    AND EXISTS (SELECT 1 FROM cluster_chunks WHERE cluster_chunks.cluster_id = clusters.cluster_id)
@@ -61,17 +65,19 @@ impl SqliteNoteRepository {
                     row.get::<_, String>(0)?,
                     row.get::<_, usize>(1)?,
                     row.get::<_, usize>(2)?,
+                    row.get::<_, bool>(3)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to list cluster digests", error))?;
         rows.map(|row| {
-            let (cluster_id, chunk_count, clip_count) =
+            let (cluster_id, chunk_count, clip_count, has_final_voice) =
                 row.map_err(|error| sqlite_error("unable to read a cluster digest", error))?;
             let cluster_id =
                 Uuid::parse_str(&cluster_id).map_err(|error| StorageError::Rejected {
                     reason: format!("stored cluster has an invalid UUID: {error}"),
                 })?;
-            Ok(ClusterDigest::new(cluster_id, chunk_count, clip_count))
+            Ok(ClusterDigest::new(cluster_id, chunk_count, clip_count)
+                .with_final_voice(has_final_voice))
         })
         .collect()
     }
@@ -105,7 +111,8 @@ impl SqliteNoteRepository {
     /// Outputs: What the import did, or a rejection for clips of another cluster or a cluster
     /// stored here under another meeting, or another storage error.
     /// Side effects: In one transaction, inserts or updates the cluster and inserts new chunks
-    /// and clips; writes nothing for a missing meeting or a resolved cluster.
+    /// and clips; writes nothing for a missing meeting or a resolved cluster. A final voice removes
+    /// the cluster's live members, and once one is stored only clips are added.
     pub(super) fn import_share(
         &self,
         share: &ClusterShare,
@@ -227,6 +234,27 @@ impl SqliteNoteRepository {
             )
             .map_err(|error| sqlite_error("unable to count the shared cluster's chunks", error))?;
         let total_duration_ms = sqlite_milliseconds(cluster.total_duration_ms())?;
+        let final_voice_id = meeting_voice_chunk_id(cluster.cluster_id());
+        let share_has_final_voice = share
+            .chunks()
+            .iter()
+            .any(|chunk| chunk.chunk_id() == final_voice_id);
+        let final_voice_stored: bool = transaction
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM cluster_chunks WHERE cluster_id = ?1 AND chunk_id = ?2)",
+                params![cluster_key, final_voice_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| sqlite_error("unable to look up the final voice", error))?;
+        let takes_members = share_has_final_voice || !final_voice_stored;
+        if share_has_final_voice {
+            transaction
+                .execute(
+                    "DELETE FROM cluster_chunks WHERE cluster_id = ?1",
+                    params![cluster_key],
+                )
+                .map_err(|error| sqlite_error("unable to replace live cluster chunks", error))?;
+        }
         if stored_cluster.is_none() {
             transaction
                 .execute(
@@ -242,7 +270,9 @@ impl SqliteNoteRepository {
                     ],
                 )
                 .map_err(|error| sqlite_error("unable to store the shared cluster", error))?;
-        } else if share.chunks().len() >= stored_chunk_count {
+        } else if share_has_final_voice
+            || (takes_members && share.chunks().len() >= stored_chunk_count)
+        {
             transaction
                 .execute(
                     "UPDATE unknown_speaker_clusters
@@ -257,7 +287,12 @@ impl SqliteNoteRepository {
                 )
                 .map_err(|error| sqlite_error("unable to update the shared cluster", error))?;
         }
-        for (chunk_id, sealed_embedding, duration_ms) in &sealed_chunks {
+        let members_to_store = if takes_members {
+            sealed_chunks.as_slice()
+        } else {
+            &[]
+        };
+        for (chunk_id, sealed_embedding, duration_ms) in members_to_store {
             transaction
                 .execute(
                     "INSERT OR IGNORE INTO cluster_chunks (cluster_id, chunk_id, derived_embedding, duration_ms, embedding_format)
