@@ -275,6 +275,11 @@ contents, EXIF data, or database-specific values.
   `1` when turning it on without a supported GPU. `int32_t note_taker_retry_gpu(void)` lets the GPU be tried again after a crash
   stopped it, and returns `0` or `2`. `note_taker_transcription_settings` adds `suggestion` (`file_name`, `efficient`, `reason`)
   and `efficient` (`gpu_name`, `enabled`, `gpu_blocked`, `gpu_in_use`).
+- `char *note_taker_whisper_proposal(void)` returns a model proposed from this device's speed as
+  JSON (`file_name`, `reason`, `measured`), the text `null` with nothing to propose, or a null pointer
+  when the runtime is unavailable; free it with `note_taker_free_string`.
+  `int32_t note_taker_dismiss_whisper_proposal(const char *file_name)` stops proposing a catalog model
+  and returns `0`, or `1` for an unknown file (#68).
 - `int32_t note_taker_set_whisper_model(const char *file_name)`,
   `note_taker_set_transcription_provider(const char *provider)` (`local` or `openai`),
   `note_taker_set_openai_model(const char *model)`, `note_taker_save_openai_key(const char *key)`,
