@@ -140,7 +140,8 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P2 | #75 | Efficient mode built and checked in the app on an S23 (2026-11-01): battery figures and in-app speed still open | 3.5 |
 | P3 | #68 | Telemetry-based proposals built (2026-11-01): the real-device runs are still open | 3.5 |
 | P3 | #61 | Open: measure on real meetings and retune the voice matcher cutoffs; first 15 recordings measured; needs the owner's natural recordings (#72) | 3.4 |
-| P2 | #79 | Open: check deletion over real paired sync, the desktop delete buttons, and the one-time rewrite on a phone | 3.2 |
+| P2 | #79 | Real paired sync and desktop buttons checked (2026-11-01): the one-time rewrite on a phone is still unconfirmed | 3.2 |
+| P3 | #81 | Open: timing and P2P tests fail when the machine is busy | — |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |
 | P3 | — | Decide how the Voice Galleries surface unclustered fallback clips | 3.2 |
