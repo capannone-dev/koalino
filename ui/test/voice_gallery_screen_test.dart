@@ -15,9 +15,13 @@ final class FakeVoiceGalleryBridge implements VoiceGalleryBridge {
   FakeVoiceGalleryBridge({
     required List<UnknownSpeakerCluster> clusters,
     this.savedPeople = const <SavedPerson>[],
+    this.variantsStored = 2,
   }) : _clusters = List<UnknownSpeakerCluster>.of(clusters);
 
   final List<UnknownSpeakerCluster> _clusters;
+
+  /// How many voice samples an assignment reports saving.
+  final int variantsStored;
 
   /// People returned with the library.
   List<SavedPerson> savedPeople;
@@ -87,7 +91,7 @@ final class FakeVoiceGalleryBridge implements VoiceGalleryBridge {
       identityId: 'identity-new',
       identityName: identityName,
       identityCreated: true,
-      variantsStored: 2,
+      variantsStored: variantsStored,
       segmentsUpdated: 1,
     );
   }
@@ -360,6 +364,25 @@ void main() {
     expect(bridge.libraryLoads, 2);
     expect(find.text('Unknown speaker 2'), findsNothing);
     expect(find.text('Assigned to Grace Hopper'), findsOneWidget);
+  });
+
+  testWidgets('Assign says when no voice could be saved',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[firstCluster],
+      variantsStored: 0,
+    );
+
+    await pumpGallery(tester, bridge);
+    await tester.enterText(
+        find.byKey(const ValueKey<String>('identity-name-cluster-1')), 'Grace');
+    await tester.tap(find.byKey(const ValueKey<String>('assign-cluster-1')));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text('Assigned to Grace. There was not enough clear speech to '
+            'recognize this voice in future recordings.'),
+        findsOneWidget);
   });
 
   testWidgets('Assign with a blank name does not call the bridge',

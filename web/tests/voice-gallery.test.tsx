@@ -37,6 +37,16 @@ test("Assign sends the typed name for that cluster and removes it", async () => 
   expect(screen.getByText("Grace Hopper: 1 voice sample")).toBeInTheDocument();
 });
 
+test("Assign says when no voice could be saved", async () => {
+  vi.mocked(api.assignCluster).mockResolvedValue({ cluster_id: "cluster-2", identity_id: "identity-1", identity_name: "Grace Hopper", identity_created: true, variants_stored: 0, segments_updated: 2 });
+  render(<VoiceGallery clusters={clusters} people={[]} />);
+
+  fireEvent.change(screen.getByLabelText("Name for unknown speaker 2"), { target: { value: "Grace Hopper" } });
+  fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[1]);
+
+  expect(await screen.findByText("Assigned to Grace Hopper. There was not enough clear speech to recognize this voice in future recordings.")).toBeInTheDocument();
+});
+
 test("a blank name is rejected without calling the API", async () => {
   render(<VoiceGallery clusters={clusters} people={[]} />);
 

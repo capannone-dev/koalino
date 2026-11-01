@@ -174,7 +174,10 @@ final class VoiceGalleryController extends ChangeNotifier {
         clusterId: cluster.clusterId,
         identityName: trimmedName,
       );
-      _statusMessage = 'Assigned to ${result.identityName}';
+      _statusMessage = result.variantsStored > 0
+          ? 'Assigned to ${result.identityName}'
+          : 'Assigned to ${result.identityName}. There was not enough clear '
+              'speech to recognize this voice in future recordings.';
     } on Object {
       _statusMessage = 'Unable to assign the speaker cluster';
       notifyListeners();

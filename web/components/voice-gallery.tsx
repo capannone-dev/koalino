@@ -74,7 +74,11 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
           voice_variant_count: (current.find((person) => person.identity_id === assignment.identity_id)?.voice_variant_count ?? 0) + assignment.variants_stored
         }
       ].sort((first, second) => first.display_name.localeCompare(second.display_name)));
-      setMessage(`Assigned to ${assignment.identity_name}.`);
+      setMessage(
+        assignment.variants_stored > 0
+          ? `Assigned to ${assignment.identity_name}.`
+          : `Assigned to ${assignment.identity_name}. There was not enough clear speech to recognize this voice in future recordings.`
+      );
     } catch {
       setMessage("Unable to assign the speaker cluster.");
     }
