@@ -1498,3 +1498,18 @@ changed; the design below awaits the owner's decision.
   needs `armv8.2-a+dotprod+fp16` (Cortex-A55 and A75, 2018, on). Without these the engine reports itself unavailable
   instead of crashing. The ARM build is compiled but **not run: S23 figures for #70 still need the phone**.
 
+### S23 figures for #70 (Snapdragon 8 Gen 2, 8 GB; 11 s clip, multiples of audio length, third pass)
+
+| Model | Old build, 8 threads | New build, 8 threads | New build, 5 fast cores | Peak memory |
+| --- | --- | --- | --- | --- |
+| `base` | 0.35 | 0.14 | **0.14** | 0.33 GB |
+| `small` | 1.21 | 0.53 | **0.45** | 0.77 GB |
+| `medium` | 4.48 | 3.42 | **1.44** | 1.95 GB |
+| `large-v3-turbo` | 8.53 | 7.05 | **2.88** | 1.95 GB |
+
+- **`small` is now the largest model an S23 can run live**: 0.45, against 1.21 before. `medium` and turbo stay slower
+  than real time. These runs got warmer as they went (28 to 38 °C), so the later rows may include some throttling.
+- `base` barely depends on the thread count from 4 up (3: 0.18, 4: 0.15, 5: 0.14, 8: 0.14); the gap widens with model size.
+- Not checked: that the installed app can read core speeds as `adb shell` can. Our release app can't be inspected, and
+  if it can't read them it uses 8 threads, as in the middle column.
+
