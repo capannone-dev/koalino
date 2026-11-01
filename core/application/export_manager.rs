@@ -22,7 +22,7 @@ use crate::{
         errors::ExportError,
         models::{
             ExportAttachment, ExportDocument, ExportFormat, ExportOptions, ExportResult,
-            ExportTranscriptSegment, MeetingId, SpeakerIdentity,
+            ExportTranscriptSegment, MeetingId, SpeakerIdentity, TranscriptSegment,
         },
     },
     ports::{
@@ -34,8 +34,25 @@ use crate::{
 
 /// Speaker label for segments diarization could not attribute.
 pub const UNATTRIBUTED_SPEAKER_LABEL: &str = "Unattributed";
-/// Speaker label for segments whose identity no longer exists in the voice store.
+/// Speaker label for segments of a voice nobody has named, or whose identity no longer exists.
 pub const UNKNOWN_SPEAKER_LABEL: &str = "Unknown speaker";
+
+/// Chooses the label a transcript segment shows.
+///
+/// Inputs: The segment, and a way to find a saved person's name.
+/// Outputs: The person's name; `Unknown speaker` for a voice that was separated but has no name, or a
+/// person who no longer exists; `Unattributed` when the segment has no speaker information at all.
+/// Side effects: None.
+pub fn segment_speaker_label<'name>(
+    segment: &TranscriptSegment,
+    name_of: impl Fn(Uuid) -> Option<&'name str>,
+) -> &'name str {
+    match (segment.speaker_identity_id(), segment.unknown_cluster_id()) {
+        (Some(identity_id), _) => name_of(identity_id).unwrap_or(UNKNOWN_SPEAKER_LABEL),
+        (None, Some(_)) => UNKNOWN_SPEAKER_LABEL,
+        (None, None) => UNATTRIBUTED_SPEAKER_LABEL,
+    }
+}
 
 /// Extracts offline meeting data and delegates artifact creation to an `ExportWriter`.
 pub struct ExportManager<'repository, NotePort: ?Sized, AttachmentPort: ?Sized, VoicePort: ?Sized> {
@@ -206,12 +223,11 @@ where
             .context("unable to load transcript segments for export")?
             .into_iter()
             .map(|segment| {
-                let speaker_label = match segment.speaker_identity_id() {
-                    Some(identity_id) => known_identities
+                let speaker_label = segment_speaker_label(&segment, |identity_id| {
+                    known_identities
                         .get(&identity_id)
-                        .map_or(UNKNOWN_SPEAKER_LABEL, SpeakerIdentity::display_name),
-                    None => UNATTRIBUTED_SPEAKER_LABEL,
-                };
+                        .map(SpeakerIdentity::display_name)
+                });
                 ExportTranscriptSegment::new(
                     segment.start_time_ms(),
                     segment.end_time_ms(),

@@ -28,9 +28,7 @@ use crate::{
             list_unknown_clusters, load_voice_library,
         },
         crypto::key_manager::KeyManagerConfig,
-        export_manager::{
-            ExportManager, ExportWriter, UNATTRIBUTED_SPEAKER_LABEL, UNKNOWN_SPEAKER_LABEL,
-        },
+        export_manager::{ExportManager, ExportWriter, segment_speaker_label},
         meeting_rename::{MeetingRenameError, rename_meeting},
         p2p_service::P2pControl,
         unknown_speaker_clusterer::ClusteringError,
@@ -1550,12 +1548,9 @@ impl FfiRuntime {
         meeting_json["segments"] = segments
             .iter()
             .map(|segment| {
-                let speaker = match segment.speaker_identity_id() {
-                    Some(identity_id) => speaker_names
-                        .get(&identity_id)
-                        .map_or(UNKNOWN_SPEAKER_LABEL, String::as_str),
-                    None => UNATTRIBUTED_SPEAKER_LABEL,
-                };
+                let speaker = segment_speaker_label(segment, |identity_id| {
+                    speaker_names.get(&identity_id).map(String::as_str)
+                });
                 serde_json::json!({
                     "start_time_ms": segment.start_time_ms(),
                     "end_time_ms": segment.end_time_ms(),

@@ -13,7 +13,10 @@ use uuid::Uuid;
 
 use crate::{
     adapters::{export::default_exporters, storage::sqlite_adapter::SqliteNoteRepository},
-    application::export_manager::{ExportManager, ExportWriter},
+    application::export_manager::{
+        ExportManager, ExportWriter, UNATTRIBUTED_SPEAKER_LABEL, UNKNOWN_SPEAKER_LABEL,
+        segment_speaker_label,
+    },
     domain::{
         errors::{ExportError, StorageError},
         models::{
@@ -220,6 +223,35 @@ fn exports_attributed_segments_with_identity_names() {
 }
 
 /// Verifies a meeting with only a flat transcript exports it as one unattributed segment.
+/// A label tells a named person, a separated voice without a name, and no speaker information apart.
+#[test]
+fn segment_labels_tell_unknown_voices_from_missing_speaker_information() {
+    let person = Uuid::from_u128(1);
+    let name_of = |identity_id: Uuid| (identity_id == person).then_some("Grace");
+    let segment = |identity: Option<Uuid>, cluster: Option<Uuid>| {
+        TranscriptSegment::new(MeetingId::new("meeting"), 0, 1, identity, "text")
+            .with_unknown_cluster_id(cluster)
+    };
+    let cluster = Some(Uuid::from_u128(2));
+
+    assert_eq!(
+        segment_speaker_label(&segment(Some(person), None), name_of),
+        "Grace"
+    );
+    assert_eq!(
+        segment_speaker_label(&segment(None, cluster), name_of),
+        UNKNOWN_SPEAKER_LABEL
+    );
+    assert_eq!(
+        segment_speaker_label(&segment(Some(Uuid::from_u128(3)), None), name_of),
+        UNKNOWN_SPEAKER_LABEL
+    );
+    assert_eq!(
+        segment_speaker_label(&segment(None, None), name_of),
+        UNATTRIBUTED_SPEAKER_LABEL
+    );
+}
+
 #[test]
 fn falls_back_to_unattributed_flat_transcript() {
     let fixture = ExportFixture::new();

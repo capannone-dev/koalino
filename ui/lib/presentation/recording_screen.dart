@@ -467,7 +467,7 @@ final class _TranscriptLine extends StatelessWidget {
         Row(
           children: <Widget>[
             Text(formatMeetingDuration(segment.startTimeMs), style: labelStyle),
-            // Until diarization exists (#44) every line is Unattributed; the label adds nothing.
+            // A line with no speaker information gets no label.
             if (segment.speaker != 'Unattributed') ...<Widget>[
               const SizedBox(width: 8),
               Text(segment.speaker, style: labelStyle),
