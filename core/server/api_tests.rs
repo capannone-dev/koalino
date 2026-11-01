@@ -1041,3 +1041,111 @@ async fn assigned_cluster_names_appear_in_the_voice_gallery_after_a_restart() {
     assert_eq!(restarted_status, StatusCode::OK);
     assert_eq!(gallery_names(&restarted_gallery), vec!["Grace Hopper"]);
 }
+
+/// Hooks reporting `recording` as being recorded and remembering what was removed.
+struct RecordingHooks {
+    recording: &'static str,
+    removed: std::sync::Mutex<Vec<String>>,
+}
+
+impl crate::application::deletion::MeetingDeletionHooks for RecordingHooks {
+    fn is_recording(&self, meeting_id: &MeetingId) -> bool {
+        meeting_id.as_str() == self.recording
+    }
+
+    fn remove_files(&self, meeting_id: &MeetingId) {
+        if let Ok(mut removed) = self.removed.lock() {
+            removed.push(meeting_id.as_str().to_owned());
+        }
+    }
+}
+
+/// Verifies DELETE removes a meeting and its files, and answers 404 afterwards.
+#[tokio::test]
+async fn delete_meeting_removes_it_and_its_files() {
+    let (_, state) = seeded_router();
+    let hooks = std::sync::Arc::new(RecordingHooks {
+        recording: "meeting-live",
+        removed: std::sync::Mutex::new(Vec::new()),
+    });
+    let router = build_router(state.with_deletion_hooks(hooks.clone()));
+
+    let (status, _) = send_json(&router, "DELETE", "/api/meetings/meeting-rome", None).await;
+    let (detail_status, _) = send_json(&router, "GET", "/api/meetings/meeting-rome", None).await;
+    let (repeat_status, repeat_body) =
+        send_json(&router, "DELETE", "/api/meetings/meeting-rome", None).await;
+
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(detail_status, StatusCode::NOT_FOUND);
+    assert_eq!(repeat_status, StatusCode::NOT_FOUND);
+    assert!(repeat_body["error"].is_string(), "{repeat_body}");
+    assert_eq!(
+        hooks.removed.lock().map(|removed| removed.clone()).ok(),
+        Some(vec!["meeting-rome".to_owned()])
+    );
+}
+
+/// Verifies a meeting being recorded is refused and stays.
+#[tokio::test]
+async fn delete_meeting_refuses_one_being_recorded() {
+    let (_, state) = seeded_router();
+    let hooks = std::sync::Arc::new(RecordingHooks {
+        recording: "meeting-rome",
+        removed: std::sync::Mutex::new(Vec::new()),
+    });
+    let router = build_router(state.with_deletion_hooks(hooks));
+
+    let (status, _) = send_json(&router, "DELETE", "/api/meetings/meeting-rome", None).await;
+    let (detail_status, _) = send_json(&router, "GET", "/api/meetings/meeting-rome", None).await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(detail_status, StatusCode::OK);
+}
+
+/// Verifies an unknown voice can be deleted over HTTP, and leaves the gallery.
+#[tokio::test]
+async fn delete_cluster_removes_it_from_the_gallery() {
+    let (router, large_cluster_id, _) = cluster_router();
+    let path = format!("/api/clusters/{large_cluster_id}");
+
+    let (status, _) = send_json(&router, "DELETE", &path, None).await;
+    let (repeat_status, _) = send_json(&router, "DELETE", &path, None).await;
+    let (_, gallery) = send_json(&router, "GET", "/api/voice-gallery", None).await;
+
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(repeat_status, StatusCode::NOT_FOUND);
+    let clusters = gallery["unknown_clusters"]
+        .as_array()
+        .unwrap_or_else(|| panic!("clusters must be an array: {gallery}"));
+    assert_eq!(clusters.len(), 1);
+    assert_ne!(clusters[0]["cluster_id"], large_cluster_id.to_string());
+}
+
+/// Verifies a saved person can be deleted over HTTP, and a malformed ID is refused.
+#[tokio::test]
+async fn delete_identity_removes_them_from_the_gallery() {
+    let (router, large_cluster_id, _) = cluster_router();
+    let (assign_status, assignment) = send_json(
+        &router,
+        "POST",
+        &format!("/api/clusters/{large_cluster_id}/assign"),
+        Some(r#"{"identity_name":"Ada"}"#),
+    )
+    .await;
+    assert_eq!(assign_status, StatusCode::OK, "{assignment}");
+    let identity_id = assignment["identity_id"].as_str().unwrap_or_default();
+
+    let (bad_status, _) = send_json(&router, "DELETE", "/api/identities/not-a-uuid", None).await;
+    let (status, _) = send_json(
+        &router,
+        "DELETE",
+        &format!("/api/identities/{identity_id}"),
+        None,
+    )
+    .await;
+    let (_, gallery) = send_json(&router, "GET", "/api/voice-gallery", None).await;
+
+    assert_eq!(bad_status, StatusCode::BAD_REQUEST);
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    assert_eq!(gallery["identities"], serde_json::json!([]));
+}

@@ -31,6 +31,9 @@ note-taker record stop|status
 note-taker meetings list
 note-taker meetings view <meeting-id>
 note-taker meetings rename <meeting-id> <new-title>
+note-taker meetings delete <meeting-id> --yes
+note-taker voice delete-cluster <cluster-id> --yes
+note-taker voice delete-person <identity-id> --yes
 note-taker meetings export <meeting-id> --format <markdown|pdf|json> [--output <path>] [--no-attachments] [--no-metadata]
 note-taker meetings export-all --format <markdown|pdf|json> [--date-range <YYYY-MM-DD>:<YYYY-MM-DD>] [--output <path>] [--no-attachments] [--no-metadata]
 note-taker voice list
@@ -56,6 +59,9 @@ done from a Devices screen (app or web), not the CLI.
 `record start --title` stores a title on the meeting (Issue #35). Without it, a new meeting is
 untitled and an existing one keeps its title. Blank titles, titles longer than 200 characters,
 and titles with control characters are rejected before recording starts.
+
+The delete commands share `application::deletion` with the HTTP API. They need `--yes`, because the
+deletion cannot be undone and also reaches paired devices. A meeting being recorded is refused.
 
 `meetings rename` (Issue #38) replaces a meeting's title through `application::meeting_rename`,
 the same use case as the HTTP API and FFI. It prints

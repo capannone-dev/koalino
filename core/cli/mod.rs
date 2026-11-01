@@ -15,6 +15,7 @@ use crate::{
         cluster_review::{
             NamedClusterAssignment, assign_cluster_to_named_identity, list_unknown_clusters,
         },
+        deletion::{self, MeetingDeletionHooks},
         export_manager::{ExportManager, ExportWriter},
         meeting_rename::rename_meeting,
         voice_identity_manager::VoiceIdentityManager,
@@ -153,6 +154,15 @@ pub enum MeetingCommand {
         /// characters. Quote it when it contains spaces.
         new_title: String,
     },
+    /// Deletes a meeting with its transcript, attachments and unknown voices, here and on paired
+    /// devices. This cannot be undone.
+    Delete {
+        /// The meeting to delete.
+        meeting_id: String,
+        /// Confirms the deletion; without it nothing is deleted.
+        #[arg(long)]
+        yes: bool,
+    },
     /// Exports one meeting as Markdown, PDF, or JSON.
     Export {
         /// The meeting to export.
@@ -283,6 +293,24 @@ pub enum VoiceCommand {
         /// Name of the person; a known identity with this name is reused, otherwise one is created.
         identity_name: String,
     },
+    /// Deletes an unknown voice here and on paired devices; its transcript stays. This cannot be
+    /// undone.
+    DeleteCluster {
+        /// Cluster UUID printed by `voice list-clusters`.
+        cluster_id: Uuid,
+        /// Confirms the deletion; without it nothing is deleted.
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Deletes a saved person's name and voice samples here and on paired devices; transcripts stay
+    /// and show an unknown speaker. This cannot be undone.
+    DeletePerson {
+        /// Identity UUID printed by `voice list`.
+        identity_id: Uuid,
+        /// Confirms the deletion; without it nothing is deleted.
+        #[arg(long)]
+        yes: bool,
+    },
 }
 
 /// Holds a nested voice action for clap.
@@ -358,6 +386,19 @@ pub trait RecordingControl {
     fn status(&self) -> Result<String, String>;
 }
 
+/// Refuses a deletion that was not confirmed with `--yes`.
+///
+/// Outputs: Success, or the message to show. Side effects: None.
+fn confirmed(yes: bool) -> Result<(), String> {
+    if yes {
+        Ok(())
+    } else {
+        Err(String::from(
+            "this deletes it for good, here and on paired devices; add --yes to confirm",
+        ))
+    }
+}
+
 /// Provides the narrow service surface driven by parsed CLI commands.
 pub trait CliService {
     /// Records `input` (`None`: the microphone) into a meeting, optionally titled, in the
@@ -379,6 +420,12 @@ pub trait CliService {
     /// Replaces a meeting's title and describes the change.
     fn rename_meeting(&mut self, meeting_id: &str, new_title: &str) -> Result<String, String>;
     /// Loads display-safe voice rows.
+    /// Deletes a meeting and everything it holds, and describes what happened.
+    fn delete_meeting(&mut self, meeting_id: &str) -> Result<String, String>;
+    /// Deletes an unknown voice and describes what happened.
+    fn delete_unknown_voice(&mut self, cluster_id: Uuid) -> Result<String, String>;
+    /// Deletes a saved person and describes what happened.
+    fn delete_saved_person(&mut self, identity_id: Uuid) -> Result<String, String>;
     fn list_voices(&self) -> Result<Vec<(String, String, usize)>, String>;
     /// Resolves a clip through the voice identity application service.
     fn assign_voice_clip(&mut self, clip_id: Uuid, identity_id: Uuid) -> Result<String, String>;
@@ -442,6 +489,15 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
                     new_title,
                 },
         }) => cli_service.rename_meeting(&meeting_id, &new_title),
+        CliCommand::Meetings(MeetingArgs {
+            command: MeetingCommand::Delete { meeting_id, yes },
+        }) => confirmed(yes).and_then(|()| cli_service.delete_meeting(&meeting_id)),
+        CliCommand::Voice(VoiceArgs {
+            command: VoiceCommand::DeleteCluster { cluster_id, yes },
+        }) => confirmed(yes).and_then(|()| cli_service.delete_unknown_voice(cluster_id)),
+        CliCommand::Voice(VoiceArgs {
+            command: VoiceCommand::DeletePerson { identity_id, yes },
+        }) => confirmed(yes).and_then(|()| cli_service.delete_saved_person(identity_id)),
         CliCommand::Meetings(MeetingArgs {
             command:
                 MeetingCommand::Export {
@@ -658,6 +714,8 @@ pub struct CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort> {
     repository: RepositoryPort,
     voice_identity_manager: VoiceIdentityManager<VectorDatabasePort>,
     export_writer: ExportWriter,
+    /// Checks for a recording and removes files on deletion; `None` skips both.
+    deletion_hooks: Option<Box<dyn MeetingDeletionHooks>>,
 }
 
 impl<RecordingPort, RepositoryPort, VectorDatabasePort>
@@ -684,7 +742,16 @@ where
             repository,
             voice_identity_manager: VoiceIdentityManager::new(vector_database),
             export_writer,
+            deletion_hooks: None,
         }
+    }
+
+    /// Attaches what deleting a meeting needs from outside the database.
+    ///
+    /// Side effects: None; without it deletions skip the recording check and leave files.
+    pub fn with_deletion_hooks(mut self, deletion_hooks: Box<dyn MeetingDeletionHooks>) -> Self {
+        self.deletion_hooks = Some(deletion_hooks);
+        self
     }
 
     /// Enables `log-level` by naming the control file a daemon on the same database polls.
@@ -837,6 +904,27 @@ where
                     rename.new_title().as_str()
                 )
             })
+            .map_err(|error| error.to_string())
+    }
+    fn delete_meeting(&mut self, meeting_id: &str) -> Result<String, String> {
+        deletion::delete_meeting(
+            &self.repository,
+            self.deletion_hooks.as_deref(),
+            &MeetingId::new(meeting_id),
+        )
+        .map(|()| format!("Deleted meeting {meeting_id}"))
+        .map_err(|error| error.to_string())
+    }
+    fn delete_unknown_voice(&mut self, cluster_id: Uuid) -> Result<String, String> {
+        deletion::delete_unknown_voice(&self.repository, self.deletion_hooks.as_deref(), cluster_id)
+            .map(|()| format!("Deleted unknown voice {cluster_id}"))
+            .map_err(|error| error.to_string())
+    }
+    fn delete_saved_person(&mut self, identity_id: Uuid) -> Result<String, String> {
+        self.voice_identity_manager
+            .vector_database()
+            .delete_identity(identity_id)
+            .map(|()| format!("Deleted person {identity_id}"))
             .map_err(|error| error.to_string())
     }
     fn list_voices(&self) -> Result<Vec<(String, String, usize)>, String> {

@@ -25,6 +25,8 @@ use uuid::Uuid;
 
 use crate::{
     adapters::audio::{live_microphone::LiveMicrophone, pcm_input::PcmInput},
+    adapters::storage::private_files::remove_meeting_folder,
+    application::deletion::MeetingDeletionHooks,
     application::recording_manager::RecordingSummary,
     cli::RecordingControl,
     domain::models::{MeetingId, MeetingTitle},
@@ -474,6 +476,59 @@ impl RecordingControl for PipelineRecordingControl {
             ),
             None => String::from("Idle"),
         })
+    }
+}
+
+/// Answers deletion questions for the CLI and the daemon from this database's files.
+pub struct LocalMeetingFiles {
+    /// Shows which meeting a recording in any process is writing to.
+    control_files: RecordingControlFiles,
+    /// Holds each meeting's private attachment folder.
+    attachment_directory: PathBuf,
+}
+
+impl LocalMeetingFiles {
+    /// Locates the files of `database_path`.
+    ///
+    /// Inputs: The database, and `NOTE_TAKER_ATTACHMENT_DIR` when set (as P2P composition reads it).
+    /// Outputs: The hooks. Side effects: Reads one environment variable.
+    pub fn for_database(database_path: &Path) -> Self {
+        let attachment_directory = std::env::var("NOTE_TAKER_ATTACHMENT_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| {
+                database_path
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."))
+                    .join("attachments")
+            });
+        Self::new(
+            RecordingControlFiles::for_database(database_path),
+            attachment_directory,
+        )
+    }
+
+    /// Creates hooks from explicit locations.
+    pub fn new(control_files: RecordingControlFiles, attachment_directory: PathBuf) -> Self {
+        Self {
+            control_files,
+            attachment_directory,
+        }
+    }
+}
+
+impl MeetingDeletionHooks for LocalMeetingFiles {
+    /// Compares `meeting_id` with the active-recording file. Side effects: Reads that file.
+    fn is_recording(&self, meeting_id: &MeetingId) -> bool {
+        self.control_files
+            .active_recording()
+            .is_some_and(|active| active.meeting_id() == meeting_id.as_str())
+    }
+
+    /// Removes the meeting's attachment folder. Side effects: Deletes files; logs a failure.
+    fn remove_files(&self, meeting_id: &MeetingId) {
+        if remove_meeting_folder(&self.attachment_directory, meeting_id.as_str()).is_err() {
+            tracing::warn!("a deleted meeting's attachment files could not be removed");
+        }
     }
 }
 

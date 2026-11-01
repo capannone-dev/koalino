@@ -19,7 +19,9 @@ use uuid::Uuid;
 
 use super::{
     attachment_file_store::{kept_file_name, supported_mime_type},
-    private_files::{create_private_directory, file_error, is_plain_folder_name},
+    private_files::{
+        create_private_directory, file_error, is_plain_folder_name, remove_meeting_folder,
+    },
     sqlite_adapter::SqliteNoteRepository,
 };
 use crate::{
@@ -85,18 +87,12 @@ fn hash_file(file: &mut File) -> std::io::Result<(String, u64)> {
 impl AttachmentLibrary for AttachmentSyncStore {
     /// Removes the meeting's folder in the attachment store.
     ///
-    /// Inputs: The deleted meeting; a name that is not a plain folder name is refused.
+    /// Inputs: The deleted meeting.
     /// Outputs: Success (also when it had no folder), or a storage error.
     /// Side effects: Deletes the folder and its files, which never logs their names.
     fn remove_meeting_files(&mut self, meeting_id: &MeetingId) -> Result<(), StorageError> {
-        let meeting_directory = self.meeting_directory(meeting_id)?;
-        match std::fs::remove_dir_all(&meeting_directory) {
-            Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(file_error(
-                "unable to remove a deleted meeting's files",
-                &error,
-            )),
-            _ => Ok(()),
-        }
+        remove_meeting_folder(&self.attachment_directory, meeting_id.as_str())
+            .map_err(|error| file_error("unable to remove a deleted meeting's files", &error))
     }
 
     fn hash_next_attachment(&mut self) -> Result<(), StorageError> {

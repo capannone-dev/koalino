@@ -12,7 +12,7 @@ use note_taker_core::{
     },
     application::{crypto::key_manager::KeyManagerConfig, export_manager::ExportWriter},
     cli::{Cli, CliCommand, CoreCliService, dispatch},
-    cli_recording::{PipelineRecordingControl, RecordingControlFiles},
+    cli_recording::{LocalMeetingFiles, PipelineRecordingControl, RecordingControlFiles},
     device_identity::device_id_from_environment,
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
     storage_composition::{EncryptedStores, open_encrypted_stores},
@@ -86,7 +86,8 @@ fn main() -> Result<()> {
     let export_writer = ExportWriter::new(default_exporters(), default_export_directory());
     let mut cli_service =
         CoreCliService::new(recording_control, repository, voice_store, export_writer)
-            .with_log_level_control(LogLevelControlFile::for_database(&database_path));
+            .with_log_level_control(LogLevelControlFile::for_database(&database_path))
+            .with_deletion_hooks(Box::new(LocalMeetingFiles::for_database(&database_path)));
     if let Some(trusted_peer_store) = trusted_peer_store {
         cli_service = cli_service.with_trusted_peer_store(Box::new(trusted_peer_store));
     }

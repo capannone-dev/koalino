@@ -79,6 +79,15 @@ impl RecordingControl for NoRecordingControl {
 }
 
 impl CliService for MockCliService {
+    fn delete_meeting(&mut self, _meeting_id: &str) -> Result<String, String> {
+        Ok(String::new())
+    }
+    fn delete_unknown_voice(&mut self, _cluster_id: Uuid) -> Result<String, String> {
+        Ok(String::new())
+    }
+    fn delete_saved_person(&mut self, _identity_id: Uuid) -> Result<String, String> {
+        Ok(String::new())
+    }
     fn start_recording(
         &mut self,
         meeting_id: Option<&str>,
@@ -1322,4 +1331,80 @@ fn core_service_without_an_allowlist_rejects_device_commands() {
 
     assert!(cli_service.list_paired_devices().is_err());
     assert!(cli_service.revoke_device("Phone").is_err());
+}
+
+/// Verifies the delete commands parse and need --yes before anything goes.
+#[test]
+fn meeting_delete_needs_yes_and_then_removes_it() {
+    let mut service = core_service_with_titled_meeting();
+    let parse = |arguments: &[&str]| {
+        Cli::try_parse_from(arguments).unwrap_or_else(|error| panic!("must parse: {error}"))
+    };
+
+    let refused = dispatch(
+        parse(&["note-taker", "meetings", "delete", "meeting-rename"]).command,
+        &mut service,
+    );
+    assert!(refused.is_err_and(|message| message.contains("--yes")));
+    assert!(service.list_meetings().is_ok_and(|rows| rows.len() == 1));
+
+    let deleted = dispatch(
+        parse(&[
+            "note-taker",
+            "meetings",
+            "delete",
+            "meeting-rename",
+            "--yes",
+        ])
+        .command,
+        &mut service,
+    );
+    assert_eq!(deleted.as_deref(), Ok("Deleted meeting meeting-rename"));
+    assert!(service.list_meetings().is_ok_and(|rows| rows.is_empty()));
+
+    let repeated = dispatch(
+        parse(&[
+            "note-taker",
+            "meetings",
+            "delete",
+            "meeting-rename",
+            "--yes",
+        ])
+        .command,
+        &mut service,
+    );
+    assert_eq!(
+        repeated,
+        Err(String::from("meeting meeting-rename does not exist"))
+    );
+}
+
+/// Verifies the voice delete commands parse and an unknown voice is reported.
+#[test]
+fn voice_delete_commands_report_their_outcome() {
+    let mut service = core_service_with_titled_meeting();
+    let unknown = Uuid::from_u128(7).to_string();
+    let parse = |arguments: &[&str]| {
+        Cli::try_parse_from(arguments).unwrap_or_else(|error| panic!("must parse: {error}"))
+    };
+
+    let unconfirmed = dispatch(
+        parse(&["note-taker", "voice", "delete-person", &unknown]).command,
+        &mut service,
+    );
+    let cluster = dispatch(
+        parse(&["note-taker", "voice", "delete-cluster", &unknown, "--yes"]).command,
+        &mut service,
+    );
+    let person = dispatch(
+        parse(&["note-taker", "voice", "delete-person", &unknown, "--yes"]).command,
+        &mut service,
+    );
+
+    assert!(unconfirmed.is_err_and(|message| message.contains("--yes")));
+    assert_eq!(
+        cluster,
+        Err(format!("unknown voice {unknown} does not exist"))
+    );
+    assert_eq!(person, Ok(format!("Deleted person {unknown}")));
 }

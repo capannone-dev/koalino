@@ -1742,7 +1742,9 @@ Measured through the real engine with word timing, on an S23, `small`, 11 s Engl
 - **Deleting a person now removes their external account links.** Foreign keys are enforced, so such a
   person could not be deleted before. No UI could reach this until now.
 - **Deleting while recording is refused**, because the running pipeline still writes to that meeting.
-- **Not built.** The web dashboard and CLI have no delete yet. Bytes may remain in free SQLite pages
+- **The CLI needs `--yes`** rather than a prompt, so scripts stay non-interactive and a bare command
+  never deletes. The web dashboard uses a dialog focused on Cancel.
+- **Not built.** Bytes may remain in free SQLite pages
   until they are reused, as `secure_delete` is not on. An old app version on a paired device drops
   `NTD1` as malformed and keeps its copy; this device still refuses to take the meeting back.
 - **Which voice is playing:** the card turns the primary colour and shows `Playing…`, and Play becomes

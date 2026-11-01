@@ -29,6 +29,7 @@ use crate::{
             VoiceLibraryCluster, assign_cluster_to_named_identity, find_cluster_review_clip,
             list_unknown_clusters, load_voice_library,
         },
+        deletion::{self, DeletionError, MeetingDeletionHooks},
         export_manager::{ExportManager, ExportWriter},
         log_control::LogControl,
         meeting_crdt::MeetingCrdtService,
@@ -72,6 +73,8 @@ pub struct ServerAppState {
     p2p_control: Option<Arc<dyn P2pControl>>,
     /// The process's log level and log directory, for the web Settings page (Issue #46).
     log_control: Option<Arc<dyn LogControl>>,
+    /// Checks for a recording and removes files on deletion; `None` skips both.
+    deletion_hooks: Option<Arc<dyn MeetingDeletionHooks>>,
 }
 
 impl ServerAppState {
@@ -96,6 +99,7 @@ impl ServerAppState {
             event_publisher,
             p2p_control: None,
             log_control: None,
+            deletion_hooks: None,
         }
     }
 
@@ -121,6 +125,14 @@ impl ServerAppState {
     /// Side effects: None; without it those routes answer 503.
     pub fn with_log_control(mut self, log_control: Arc<dyn LogControl>) -> Self {
         self.log_control = Some(log_control);
+        self
+    }
+
+    /// Attaches what deleting a meeting needs from outside the database.
+    ///
+    /// Side effects: None; without it deletions skip the recording check and leave files.
+    pub fn with_deletion_hooks(mut self, deletion_hooks: Arc<dyn MeetingDeletionHooks>) -> Self {
+        self.deletion_hooks = Some(deletion_hooks);
         self
     }
 
@@ -168,12 +180,22 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .route("/api/meetings", get(list_meetings).post(create_meeting))
         .route(
             "/api/meetings/{meeting_id}",
-            get(get_meeting).patch(rename_meeting_title),
+            get(get_meeting)
+                .patch(rename_meeting_title)
+                .delete(delete_meeting_route),
         )
         .route("/api/meetings/{meeting_id}/export", post(export_meeting))
         .route(
             "/api/meetings/{meeting_id}/unknown-clusters",
             get(get_unknown_clusters),
+        )
+        .route(
+            "/api/clusters/{cluster_id}",
+            axum::routing::delete(delete_cluster_route),
+        )
+        .route(
+            "/api/identities/{identity_id}",
+            axum::routing::delete(delete_identity_route),
         )
         .route("/api/clusters/{cluster_id}/assign", post(assign_cluster))
         .route(
@@ -507,6 +529,79 @@ fn export_failure_response(error: &anyhow::Error) -> Response {
 /// Builds a JSON error response.
 fn export_error_response(status_code: StatusCode, message: String) -> Response {
     (status_code, Json(ExportErrorBody { error: message })).into_response()
+}
+
+/// Maps a deletion's outcome to its response.
+///
+/// Outputs: `204` when done; `404` unknown; `409` being recorded; `500` storage. Errors are
+/// `{"error": "…"}`. Side effects: None.
+fn deletion_response(deletion_result: Result<(), DeletionError>) -> Response {
+    let status_code = match &deletion_result {
+        Ok(()) => return StatusCode::NO_CONTENT.into_response(),
+        Err(DeletionError::NotFound { .. }) => StatusCode::NOT_FOUND,
+        Err(DeletionError::Recording { .. }) => StatusCode::CONFLICT,
+        Err(DeletionError::Storage(_)) => StatusCode::INTERNAL_SERVER_ERROR,
+    };
+    let message = deletion_result
+        .err()
+        .map(|error| error.to_string())
+        .unwrap_or_default();
+    (status_code, Json(ExportErrorBody { error: message })).into_response()
+}
+
+/// Deletes a meeting with its transcript, attachments and unknown voices.
+///
+/// Inputs: The meeting ID path segment.
+/// Outputs: As `deletion_response`.
+/// Side effects: Irreversibly deletes its rows and private files. The P2P task spreads the deletion
+/// to paired devices within about a second.
+async fn delete_meeting_route(
+    Path(meeting_identifier): Path<String>,
+    State(application_state): State<ServerAppState>,
+) -> Response {
+    tracing::info!(endpoint = "DELETE /api/meetings/:meeting_id", meeting_id = %meeting_identifier, "headless API request received");
+    let repositories = application_state.repositories.lock().await;
+    deletion_response(deletion::delete_meeting(
+        &**repositories,
+        application_state.deletion_hooks.as_deref(),
+        &MeetingId::new(meeting_identifier),
+    ))
+}
+
+/// Deletes an unknown voice without naming it. Its transcript stays.
+///
+/// Inputs: The cluster UUID path segment; a malformed one gets axum's `400`.
+/// Outputs: As `deletion_response`.
+/// Side effects: Irreversibly deletes its embeddings and review audio, and spreads as above.
+async fn delete_cluster_route(
+    Path(cluster_id): Path<uuid::Uuid>,
+    State(application_state): State<ServerAppState>,
+) -> Response {
+    tracing::info!(endpoint = "DELETE /api/clusters/:cluster_id", cluster_id = %cluster_id, "headless API request received");
+    let repositories = application_state.repositories.lock().await;
+    deletion_response(deletion::delete_unknown_voice(
+        &**repositories,
+        application_state.deletion_hooks.as_deref(),
+        cluster_id,
+    ))
+}
+
+/// Deletes a saved person's name and voice samples. Transcripts show an unknown speaker afterwards.
+///
+/// Inputs: The identity UUID path segment; a malformed one gets axum's `400`.
+/// Outputs: `204`, also for an unknown person, or `500` with `{"error": "…"}`.
+/// Side effects: Irreversibly deletes biometric data, and spreads as above.
+async fn delete_identity_route(
+    Path(identity_id): Path<uuid::Uuid>,
+    State(application_state): State<ServerAppState>,
+) -> Response {
+    tracing::info!(endpoint = "DELETE /api/identities/:identity_id", identity_id = %identity_id, "headless API request received");
+    let voice_database = application_state.voice_database.lock().await;
+    deletion_response(
+        voice_database
+            .delete_identity(identity_id)
+            .map_err(DeletionError::from),
+    )
 }
 
 /// Returns speaker labels and metadata-only unresolved review items for the local gallery.

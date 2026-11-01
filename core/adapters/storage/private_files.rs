@@ -25,6 +25,21 @@ pub fn is_plain_folder_name(meeting_id: &str) -> bool {
             .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
 }
 
+/// Removes a deleted meeting's folder in an attachment store.
+///
+/// Inputs: The store's folder and the meeting. An ID that cannot name a folder never had one.
+/// Outputs: Success (also when there is no folder), or the file error.
+/// Side effects: Deletes the folder and its files. Files linked from elsewhere are not in it.
+pub fn remove_meeting_folder(attachment_directory: &Path, meeting_id: &str) -> std::io::Result<()> {
+    if !is_plain_folder_name(meeting_id) {
+        return Ok(());
+    }
+    match std::fs::remove_dir_all(attachment_directory.join(meeting_id)) {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
+}
+
 /// Creates `directory` (and its parents), readable only by the user on Unix.
 ///
 /// Inputs: The folder to create. Outputs: Success (also when it exists) or a rejection.

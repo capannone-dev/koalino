@@ -353,6 +353,13 @@ identifiers return `400`, a missing clip or an identity the voice store has neve
 
 ### Meeting rename
 
+`DELETE /api/meetings/{id}` deletes a meeting with its transcript, attachments and unknown voices,
+`DELETE /api/clusters/{uuid}` an unknown voice (its transcript stays), and
+`DELETE /api/identities/{uuid}` a saved person's name and voice samples. They are irreversible and
+reach paired devices. Responses: `204` when done; `404` for an unknown meeting or voice (a person
+always gets `204`); `409` while the meeting is being recorded; `400` for a malformed UUID; `500` for a
+storage failure. Errors are `{ "error": "..." }`.
+
 `PATCH /api/meetings/{id}` (Issue #38) accepts `{ "title": "New Title" }`. `title` is required
 and other fields are rejected. The title is trimmed and must be 1–200 characters without control
 characters (such as newlines), the same rules as `POST /api/meetings`. Responses:
@@ -424,6 +431,10 @@ returns `400`, an unknown cluster `404`, an already-resolved cluster `409`, and 
 `record stop` (asks the running `record start` on the same database to finish and waits until
 its audio is transcribed), `record status`, `meetings list` (ID, title,
 date, duration), `meetings view <meeting-id>` (title first),
+`meetings delete <meeting-id> --yes`, `voice delete-cluster <cluster-id> --yes` and
+`voice delete-person <identity-id> --yes` delete for good, here and on paired devices. Without `--yes`
+they delete nothing and say so. A meeting being recorded is refused.
+
 `meetings rename <meeting-id> <new-title>` (prints `Renamed meeting <id>: "<old>" -> "<new>"`),
 `voice list`, `voice assign <clip-uuid> <identity-uuid>`, `voice list-clusters <meeting-id>`,
 `voice assign-cluster <cluster-uuid> <identity-name>`, `devices list` (peer ID, name, pairing

@@ -31,6 +31,8 @@ pub mod compute_router;
 mod compute_router_tests;
 /// Encrypts voice embeddings at rest and resolves the key protecting them.
 pub mod crypto;
+/// Deletes meetings and unknown voices for the CLI and the HTTP API.
+pub mod deletion;
 /// Encodes the `NTD1` messages that carry deletion records to paired devices.
 pub mod deletion_exchange;
 #[cfg(test)]

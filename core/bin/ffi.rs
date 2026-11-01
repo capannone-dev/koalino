@@ -1339,8 +1339,11 @@ impl FfiRuntime {
             Err(_) => return FFI_OPERATION_REJECTED,
         }
         self.remove_review_clip_files(&clip_ids);
-        if let Err(error) = fs::remove_dir_all(self.attachment_directory.join(meeting_id))
-            && error.kind() != std::io::ErrorKind::NotFound
+        if crate::adapters::storage::private_files::remove_meeting_folder(
+            &self.attachment_directory,
+            meeting_id,
+        )
+        .is_err()
         {
             tracing::warn!("a deleted meeting's attachment files could not be removed");
         }

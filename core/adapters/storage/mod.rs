@@ -14,7 +14,7 @@ mod embedding_encryption_tests;
 /// Implements a lightweight in-memory cosine-similarity database for tests and local development.
 pub mod in_memory_voice_vector_db;
 /// Creates private attachment folders and files shared by the attachment stores.
-mod private_files;
+pub mod private_files;
 /// Stores Teams screen-share captures as image files linked to their meeting.
 pub mod slide_attachment_store;
 #[cfg(test)]

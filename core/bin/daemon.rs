@@ -12,6 +12,7 @@ use note_taker_core::{
     application::{
         crypto::key_manager::KeyManagerConfig, log_control::LogControl, p2p_service::P2pControl,
     },
+    cli_recording::LocalMeetingFiles,
     device_identity::device_id_from_environment,
     domain::models::DeviceId,
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
@@ -97,7 +98,8 @@ async fn main() -> Result<()> {
     )
     .await;
     let mut application_state = ServerAppState::new(note_repository, voice_store)
-        .with_log_control(Arc::clone(&log_control) as Arc<dyn LogControl>);
+        .with_log_control(Arc::clone(&log_control) as Arc<dyn LogControl>)
+        .with_deletion_hooks(Arc::new(LocalMeetingFiles::for_database(&database_path)));
     if let Some(p2p_task) = &p2p_task {
         application_state =
             application_state.with_p2p_control(Arc::clone(p2p_task) as Arc<dyn P2pControl>);
