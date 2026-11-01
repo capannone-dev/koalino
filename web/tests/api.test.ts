@@ -1,7 +1,7 @@
 // Verifies the typed API client calls the documented unknown-speaker cluster and meeting rename routes.
 
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { assignCluster, getUnknownClusters, MeetingRenameError, renameMeeting } from "@/lib/api";
+import { assignCluster, deleteMeeting, deleteSavedPerson, deleteUnknownVoice, getUnknownClusters, MeetingRenameError, renameMeeting } from "@/lib/api";
 
 const fetchMock = vi.fn();
 
@@ -78,4 +78,21 @@ test("renameMeeting reports an unreachable daemon as a network failure", async (
   fetchMock.mockRejectedValue(new TypeError("Failed to fetch"));
 
   await expect(renameMeeting("meeting-1", "Roadmap Review")).rejects.toMatchObject({ kind: "network", status: null });
+});
+
+test.each([
+  ["deleteMeeting", deleteMeeting, "a b", "/api/meetings/a%20b"],
+  ["deleteUnknownVoice", deleteUnknownVoice, "c1", "/api/clusters/c1"],
+  ["deleteSavedPerson", deleteSavedPerson, "p1", "/api/identities/p1"]
+] as const)("%s sends DELETE, and a 404 counts as gone", async (_name, call, id, path) => {
+  fetchMock.mockResolvedValue(new Response(null, { status: 404 }));
+  await expect(call(id)).resolves.toBeUndefined();
+  expect(fetchMock.mock.calls[0][0]).toContain(path);
+  expect(fetchMock.mock.calls[0][1]).toEqual({ method: "DELETE" });
+});
+
+test("a 409 on delete reports a recording and a 500 a failure", async () => {
+  fetchMock.mockResolvedValueOnce(new Response("{}", { status: 409 })).mockResolvedValueOnce(new Response("{}", { status: 500 }));
+  await expect(deleteMeeting("m")).rejects.toMatchObject({ kind: "recording" });
+  await expect(deleteMeeting("m")).rejects.toMatchObject({ kind: "failed" });
 });

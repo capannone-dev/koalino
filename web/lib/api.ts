@@ -188,3 +188,43 @@ export function webSocketUrl(): string {
   if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
   return `${apiBaseUrl.replace(/^http/, "ws")}/ws`;
 }
+
+/** Why a deletion failed: `recording` when the meeting is being recorded, else any other refusal. */
+export class DeletionError extends Error {
+  constructor(readonly kind: "recording" | "failed") {
+    super(`Deletion failed: ${kind}`);
+    this.name = "DeletionError";
+  }
+}
+
+/**
+ * Sends a `DELETE` to `path`. An item already gone (404) counts as deleted.
+ *
+ * Inputs: the API path. Outputs: resolves when the item is gone; throws `DeletionError` otherwise.
+ * Side effects: irreversibly deletes the item on the daemon and, through sync, on paired devices.
+ */
+async function deleteItem(path: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, { method: "DELETE" });
+  } catch {
+    throw new DeletionError("failed");
+  }
+  if (response.status === 409) throw new DeletionError("recording");
+  if (!response.ok && response.status !== 404) throw new DeletionError("failed");
+}
+
+/** Deletes a meeting with its transcript, attachments and unknown voices. See `deleteItem`. */
+export function deleteMeeting(meetingId: string): Promise<void> {
+  return deleteItem(`/api/meetings/${encodeURIComponent(meetingId)}`);
+}
+
+/** Deletes an unknown voice; its transcript stays. See `deleteItem`. */
+export function deleteUnknownVoice(clusterId: string): Promise<void> {
+  return deleteItem(`/api/clusters/${encodeURIComponent(clusterId)}`);
+}
+
+/** Deletes a saved person's name and voice samples. See `deleteItem`. */
+export function deleteSavedPerson(identityId: string): Promise<void> {
+  return deleteItem(`/api/identities/${encodeURIComponent(identityId)}`);
+}

@@ -5,7 +5,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { VoiceGallery } from "@/components/voice-gallery";
 import * as api from "@/lib/api";
 
-vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<typeof api>("@/lib/api")), assignCluster: vi.fn() }));
+vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<typeof api>("@/lib/api")), deleteUnknownVoice: vi.fn(), deleteSavedPerson: vi.fn(), assignCluster: vi.fn() }));
 
 const clusters: api.LibraryCluster[] = [
   { cluster_id: "cluster-1", meeting_id: "meeting-1", total_duration_ms: 12_500, chunk_count: 3, created_at: "2026-10-27T09:15:00+00:00", meeting_title: "Project Sync", has_review_clip: true },
@@ -74,4 +74,38 @@ test("explains when there are no saved people", () => {
 
   expect(screen.getByText("No unknown speakers to review.")).toBeInTheDocument();
   expect(screen.getByText("No saved people yet. Name a voice to add someone.")).toBeInTheDocument();
+});
+
+test("deleting an unknown voice asks first, then removes its card", async () => {
+  const deleted = vi.mocked(api.deleteUnknownVoice).mockResolvedValue();
+  render(<VoiceGallery clusters={clusters} people={[]} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Delete Unknown speaker 1" }));
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(deleted).not.toHaveBeenCalled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Delete Unknown speaker 1" }));
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+  expect(await screen.findByText("Voice deleted.")).toBeInTheDocument();
+  expect(deleted).toHaveBeenCalledWith("cluster-1");
+  expect(screen.queryByText("12.5 s · 3 chunks")).not.toBeInTheDocument();
+  deleted.mockReset();
+});
+
+test("a saved person can be deleted, and a refusal keeps them and explains", async () => {
+  const deleted = vi.mocked(api.deleteSavedPerson).mockRejectedValueOnce(new api.DeletionError("failed")).mockResolvedValue();
+  const ada = { identity_id: "identity-1", display_name: "Ada", voice_variant_count: 2 };
+  render(<VoiceGallery clusters={[]} people={[ada]} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Delete Ada" }));
+  expect(screen.getByRole("alertdialog", { name: "Delete Ada?" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  expect(await screen.findByText(/Couldn't delete this/)).toBeInTheDocument();
+  expect(screen.getByText(/Ada: 2 voice/)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  expect(await screen.findByText("Ada deleted.")).toBeInTheDocument();
+  expect(screen.queryByText(/Ada: 2 voice/)).not.toBeInTheDocument();
+  deleted.mockReset();
 });

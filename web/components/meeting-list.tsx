@@ -4,8 +4,10 @@
 
 import Link from "next/link";
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { RenameMeetingDialog } from "@/components/rename-meeting-dialog";
 import type { MeetingSummary } from "@/lib/api";
+import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion-messages";
 
 /** The row whose actions menu is open; `position` is set when it was opened by right-click. */
 type OpenMenu = { meetingId: string; position: { x: number; y: number } | null };
@@ -21,6 +23,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
   const [currentMeetings, setCurrentMeetings] = useState(meetings);
   const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null);
   const [renamingMeeting, setRenamingMeeting] = useState<MeetingSummary | null>(null);
+  const [deletingMeeting, setDeletingMeeting] = useState<MeetingSummary | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
   // Each row's actions button, so focus can return to it after the menu or dialog closes.
   const actionButtons = useRef(new Map<string, HTMLButtonElement>());
@@ -60,7 +63,14 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
   }
 
   if (currentMeetings.length === 0) {
-    return <p className="text-muted">No meetings yet.</p>;
+    return (
+      <>
+        <p role="status" aria-live="polite" className="text-sm text-success">
+          {statusMessage}
+        </p>
+        <p className="text-muted">No meetings yet.</p>
+      </>
+    );
   }
 
   return (
@@ -129,12 +139,42 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                   >
                     Rename
                   </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOpenMenu(null);
+                      setStatusMessage("");
+                      setDeletingMeeting(meeting);
+                    }}
+                    className="flex min-h-11 w-full items-center px-4 text-left text-danger hover:bg-surface-muted"
+                  >
+                    Delete
+                  </button>
                 </div>
               ) : null}
             </li>
           );
         })}
       </ul>
+      {deletingMeeting ? (
+        <ConfirmDeleteDialog
+          title={`Delete ${deletingMeeting.title}?`}
+          message={meetingDeletionMessage}
+          onClose={() => {
+            focusActionsButton(deletingMeeting.meeting_id);
+            setDeletingMeeting(null);
+          }}
+          onConfirm={async () => {
+            await deleteMeetingWithMessage(deletingMeeting.meeting_id);
+            setCurrentMeetings((current) =>
+              current.filter((candidate) => candidate.meeting_id !== deletingMeeting.meeting_id)
+            );
+            setStatusMessage("Meeting deleted");
+            setDeletingMeeting(null);
+          }}
+        />
+      ) : null}
       {renamingMeeting ? (
         <RenameMeetingDialog
           meeting={renamingMeeting}

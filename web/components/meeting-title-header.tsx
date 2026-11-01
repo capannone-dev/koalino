@@ -2,9 +2,12 @@
 
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { RenameMeetingDialog } from "@/components/rename-meeting-dialog";
 import type { MeetingSummary } from "@/lib/api";
+import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion-messages";
 
 /**
  * Shows `meeting.title` as the page's `h1`, with a pencil button opening the rename dialog.
@@ -16,6 +19,8 @@ import type { MeetingSummary } from "@/lib/api";
 export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
   const [currentMeeting, setCurrentMeeting] = useState(meeting);
   const [isRenaming, setIsRenaming] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const router = useRouter();
   const [statusMessage, setStatusMessage] = useState("");
   const pencilRef = useRef<HTMLButtonElement>(null);
 
@@ -42,10 +47,31 @@ export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
         >
           <PencilIcon />
         </button>
+        <button
+          type="button"
+          aria-label="Delete meeting"
+          title="Delete meeting"
+          onClick={() => setIsDeleting(true)}
+          className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-danger hover:bg-surface-muted"
+        >
+          <TrashIcon />
+        </button>
       </div>
       <p role="status" aria-live="polite" className="text-sm text-success">
         {statusMessage}
       </p>
+      {isDeleting ? (
+        <ConfirmDeleteDialog
+          title={`Delete ${currentMeeting.title}?`}
+          message={meetingDeletionMessage}
+          onClose={() => setIsDeleting(false)}
+          onConfirm={async () => {
+            await deleteMeetingWithMessage(currentMeeting.meeting_id);
+            router.push("/meetings");
+            router.refresh();
+          }}
+        />
+      ) : null}
       {isRenaming ? (
         <RenameMeetingDialog
           meeting={currentMeeting}
@@ -58,6 +84,17 @@ export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
         />
       ) : null}
     </>
+  );
+}
+
+/** A 20 px outline bin, hidden from assistive technology because the button is labelled. */
+function TrashIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M19 6l-1 14H6L5 6" />
+    </svg>
   );
 }
 

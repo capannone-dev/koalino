@@ -5,7 +5,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { MeetingList } from "@/components/meeting-list";
 import * as api from "@/lib/api";
 
-vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<typeof api>("@/lib/api")), renameMeeting: vi.fn() }));
+vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<typeof api>("@/lib/api")), deleteMeeting: vi.fn(), renameMeeting: vi.fn() }));
 
 const meetings: api.MeetingSummary[] = [
   { meeting_id: "meeting-titled", title: "Project Sync", created_at: "2026-10-27T09:05:00+00:00" },
@@ -198,4 +198,33 @@ test("an empty list says there are no meetings", () => {
   render(<MeetingList meetings={[]} />);
 
   expect(screen.getByText("No meetings yet.")).toBeInTheDocument();
+});
+
+test("Delete in the row menu asks first, then removes only that row", async () => {
+  const deleted = vi.mocked(api.deleteMeeting).mockResolvedValue();
+  render(<MeetingList meetings={meetings} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Actions for Project Sync" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+  expect(screen.getByRole("alertdialog", { name: "Delete Project Sync?" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+  expect(await screen.findByText("Meeting deleted")).toBeInTheDocument();
+  expect(deleted).toHaveBeenCalledWith("meeting-titled");
+  expect(screen.queryByText("Project Sync")).not.toBeInTheDocument();
+  expect(screen.getByText("Meeting 2026-10-26 18:00 UTC")).toBeInTheDocument();
+  deleted.mockReset();
+});
+
+test("a meeting being recorded stays, and the dialog says why", async () => {
+  const deleted = vi.mocked(api.deleteMeeting).mockRejectedValue(new api.DeletionError("recording"));
+  render(<MeetingList meetings={meetings} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Actions for Project Sync" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+  expect(await screen.findByText(/being recorded/)).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Project Sync" })).toBeInTheDocument();
+  deleted.mockReset();
 });

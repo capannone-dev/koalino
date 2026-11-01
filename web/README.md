@@ -54,6 +54,8 @@ review clips can be played from the Flutter Voice Gallery, which receives local 
   in code points, so an emoji counts once), and control characters such as newlines and tabs.
   Errors show after the first Save, then update as the person types. An unchanged title closes the
   dialog without a request.
+- **Deleting:** the row menu, the meeting header, unknown voices and saved people offer Delete through
+  `ConfirmDeleteDialog`. A refusal stays in the dialog with a plain message.
 - **Request:** `renameMeeting` sends `PATCH /api/meetings/{id}` with `{"title": ...}` and maps
   failures to a `MeetingRenameError` kind (400, 404, 5xx, other, network). The dialog stays open
   with a plain message per kind and never shows the server's error text.

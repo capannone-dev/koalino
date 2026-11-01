@@ -5,7 +5,9 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { MeetingTitleHeader } from "@/components/meeting-title-header";
 import * as api from "@/lib/api";
 
-vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<typeof api>("@/lib/api")), renameMeeting: vi.fn() }));
+const routerPush = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush, refresh: vi.fn() }) }));
+vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<typeof api>("@/lib/api")), renameMeeting: vi.fn(), deleteMeeting: vi.fn() }));
 
 const meeting: api.MeetingSummary = { meeting_id: "meeting-titled", title: "Project Sync", created_at: "2026-10-27T09:05:00+00:00" };
 
@@ -57,4 +59,15 @@ test("a failed rename keeps the old heading and shows the error in the dialog", 
 
   expect(await within(dialog).findByRole("alert")).toHaveTextContent("Couldn't save the new title. Try again.");
   expect(screen.getByRole("heading", { level: 1, name: "Project Sync" })).toBeInTheDocument();
+});
+
+test("Delete meeting asks first, then returns to the list", async () => {
+  vi.mocked(api.deleteMeeting).mockResolvedValue();
+  render(<MeetingTitleHeader meeting={meeting} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Delete meeting" }));
+  fireEvent.click(within(screen.getByRole("alertdialog", { name: "Delete Project Sync?" })).getByRole("button", { name: "Delete" }));
+
+  await vi.waitFor(() => expect(routerPush).toHaveBeenCalledWith("/meetings"));
+  expect(api.deleteMeeting).toHaveBeenCalledWith("meeting-titled");
 });
