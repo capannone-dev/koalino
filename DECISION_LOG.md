@@ -1726,6 +1726,23 @@ Measured through the real engine with word timing, on an S23, `small`, 11 s Engl
 - **Not verified.** Thread pinning in the app: the driver thread was seen only on cores 3 and 5, inside the chosen group, but the app's thread mask can't be read from
   outside. Speed in the app, as Android builds write no logs. Accuracy of that transcript. A real driver crash; the guard is tested with a simulated abort. Battery use.
 
+## 2026-11-01 — Linux builds target a Debian 13 sysroot
+
+- **Cause.** The build with diarization needed glibc 2.43 from this machine, for only seven float
+  functions (`acosf`, `coshf` and similar), so it would not start on Debian 13 (glibc 2.41).
+- **Decision: build against a hash-pinned Debian 13 sysroot, with clang and lld.** Building inside a
+  VM would make releases depend on a VM. Symbol shims would hide the next such function. Zig cannot
+  link the prebuilt ONNX Runtime, which needs libstdc++. The builds fail if a file needs more than
+  Debian 13 offers, so the problem cannot come back unnoticed. Debian 13 and newer are covered; older
+  systems are not.
+- **Pinned packages can leave the mirror** at a Debian point release. `fetch-debian-sysroot.sh` then
+  stops at the download, and its header says how to update the pins.
+- **Checked on the VMs with public or synthetic audio only:** on `deb-shell`, a 25 s file holding two
+  voices gave two unknown-voice clusters in 11 s, on 2 CPUs. The transcript's words were in the database
+  file before deletion and gone after it. On `deb-gui`, the desktop bundle loaded both model sets and
+  recorded from the VM's audio device, which is silent, so the desktop's transcription of speech is
+  covered by the same core but was not exercised there.
+
 ## 2026-11-01 — Deleting meetings and voices
 
 - **Deleting spreads to paired devices and always wins**, as voices already did (#56). Automerge and

@@ -12,3 +12,6 @@
 /web/.next/
 /web/package-lock.json
 /web/tsconfig.tsbuildinfo
+
+# Packaged programs and models from tools/cross/package-linux-server.sh.
+/dist/

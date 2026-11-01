@@ -76,11 +76,15 @@ for platform in "$@"; do
       # A fixed CPU level, because -march=native would tie the app to the build machine's CPU. Vulkan
       # gives desktop GPUs a large speed-up (#70, #71).
       export GGML_NATIVE=OFF GGML_AVX=ON GGML_AVX2=ON GGML_FMA=ON GGML_F16C=ON
-      refresh_whisper_build linux "$GGML_NATIVE $GGML_AVX $GGML_AVX2 $GGML_FMA $GGML_F16C"
-      cargo build --release --features local-ai,microphone,vad,diarization,whisper-rs/vulkan --lib
+      # shellcheck source=debian-13.sh
+      source "$CROSS_DIR/debian-13.sh"
+      refresh_whisper_build linux "$GGML_NATIVE $GGML_AVX $GGML_AVX2 $GGML_FMA $GGML_F16C $(cat "$CROSS_DIR/cmake/debian-13.cmake")" \
+        --target "$DEBIAN_TARGET"
+      cargo build --release --features local-ai,microphone,vad,diarization,whisper-rs/vulkan --lib --target "$DEBIAN_TARGET"
       unset GGML_NATIVE GGML_AVX GGML_AVX2 GGML_FMA GGML_F16C
+      check_debian_13_compatible "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/libnote_taker_core.so"
       mkdir -p ui/native/linux
-      cp "$CARGO_TARGET_DIR/release/libnote_taker_core.so" ui/native/linux/
+      cp "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/libnote_taker_core.so" ui/native/linux/
       stage_model ui/native/models
       stage_diarization_models ui/native/models
       ;;

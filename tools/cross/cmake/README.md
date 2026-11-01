@@ -15,6 +15,9 @@
 - `mingw-library-names.cmake` is included after ggml's `project()`. ggml removes the `lib` prefix
   from its static libraries on MinGW, producing `ggml.a`, but rustc's `-l static=ggml` looks for
   `libggml.a`. A deferred call gives the three ggml targets the prefix back.
+- `debian-13.cmake` (`x86_64-unknown-linux-gnu`) uses clang with the sysroot from
+  `../fetch-debian-sysroot.sh`. It finds headers and libraries there and in `$VULKAN_SDK`, and programs
+  such as `glslc` on this machine.
 - `android-arm64.cmake` (`aarch64-linux-android`) sets `ANDROID_ABI=arm64-v8a` and
   `ANDROID_PLATFORM=android-29`, then includes the NDK's toolchain. Without it, the NDK defaults
   to 32-bit ARM, and the link fails with "incompatible with aarch64linux".
