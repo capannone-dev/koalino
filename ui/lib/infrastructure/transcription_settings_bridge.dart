@@ -60,6 +60,64 @@ final class WhisperModelInfo {
   final bool tooLargeForMemory;
 }
 
+/// The model the core suggests for this device.
+final class WhisperSuggestion {
+  /// Creates the suggestion.
+  const WhisperSuggestion({
+    required this.fileName,
+    required this.efficient,
+    required this.reason,
+  });
+
+  /// Reads the suggestion from the core's JSON.
+  factory WhisperSuggestion.fromJson(Map<String, Object?> json) =>
+      WhisperSuggestion(
+        fileName: json['file_name']! as String,
+        efficient: json['efficient']! as bool,
+        reason: json['reason']! as String,
+      );
+
+  final String fileName;
+
+  /// Whether the suggestion includes efficient mode.
+  final bool efficient;
+
+  /// Why, in plain language.
+  final String reason;
+}
+
+/// Efficient mode's state on this device.
+final class EfficientModeStatus {
+  /// Creates the state; by default the device has no GPU for it.
+  const EfficientModeStatus({
+    this.gpuName,
+    this.enabled = false,
+    this.gpuBlocked = false,
+    this.gpuInUse = false,
+  });
+
+  /// Reads the state from the core's JSON.
+  factory EfficientModeStatus.fromJson(Map<String, Object?> json) =>
+      EfficientModeStatus(
+        gpuName: json['gpu_name'] as String?,
+        enabled: json['enabled']! as bool,
+        gpuBlocked: json['gpu_blocked']! as bool,
+        gpuInUse: json['gpu_in_use']! as bool,
+      );
+
+  /// The supported GPU's name, or `null` when this device has none.
+  final String? gpuName;
+
+  /// Whether the owner turned efficient mode on.
+  final bool enabled;
+
+  /// Whether a crash during GPU work moved transcription to the processor.
+  final bool gpuBlocked;
+
+  /// Whether the latest loaded model runs on a GPU.
+  final bool gpuInUse;
+}
+
 /// What the core reports about the current or last download.
 final class WhisperDownload {
   /// Creates the report.
@@ -96,6 +154,8 @@ final class TranscriptionSettings {
     required this.usingLocalFallback,
     required this.models,
     required this.download,
+    this.suggestion,
+    this.efficient = const EfficientModeStatus(),
   });
 
   /// Reads the view from the core's JSON.
@@ -104,6 +164,14 @@ final class TranscriptionSettings {
         json['download']! as Map<String, Object?>;
     return TranscriptionSettings(
       provider: json['provider']! as String,
+      suggestion: json['suggestion'] == null
+          ? null
+          : WhisperSuggestion.fromJson(
+              json['suggestion']! as Map<String, Object?>),
+      efficient: json['efficient'] == null
+          ? const EfficientModeStatus()
+          : EfficientModeStatus.fromJson(
+              json['efficient']! as Map<String, Object?>),
       openAiModel: json['openai_model']! as String,
       keySaved: json['key_saved']! as bool,
       environmentKey: json['environment_key']! as bool,
@@ -126,6 +194,12 @@ final class TranscriptionSettings {
   }
 
   /// `local` or `openai`.
+  /// The model suggested for this device, or `null` when there is none.
+  final WhisperSuggestion? suggestion;
+
+  /// Efficient mode's state.
+  final EfficientModeStatus efficient;
+
   final String provider;
   final String openAiModel;
   final bool keySaved;
@@ -149,6 +223,12 @@ abstract interface class TranscriptionSettingsBridge {
 
   /// Chooses `local` or `openai`. Outputs: A core status. Side effects: Stores the choice.
   Future<int> setProvider(String provider);
+
+  /// Turns efficient mode on or off for the next recording.
+  Future<int> setEfficientGpu({required bool enabled});
+
+  /// Lets the GPU be tried again after a crash stopped it.
+  Future<int> retryGpu();
 
   /// Chooses the OpenAI model. Outputs: A core status. Side effects: Stores the choice.
   Future<int> setOpenAiModel(String model);
@@ -197,6 +277,19 @@ final class RustTranscriptionSettingsBridge
   @override
   Future<int> setProvider(String provider) => Isolate.run(
       () => _callWithText('note_taker_set_transcription_provider', provider));
+
+  @override
+  Future<int> setEfficientGpu({required bool enabled}) {
+    final int value = enabled ? 1 : 0;
+    return Isolate.run(() => _openCoreLibrary()
+        .lookupFunction<Int32 Function(Int32), int Function(int)>(
+            'note_taker_set_efficient_gpu')(value));
+  }
+
+  @override
+  Future<int> retryGpu() => Isolate.run(() => _openCoreLibrary()
+      .lookupFunction<Int32 Function(), int Function()>(
+          'note_taker_retry_gpu')());
 
   @override
   Future<int> setOpenAiModel(String model) =>

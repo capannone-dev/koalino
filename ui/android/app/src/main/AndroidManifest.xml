@@ -23,6 +23,9 @@
         android:label="Note Taker"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Efficient mode (#75): apps can only open the vendor's OpenCL library if they declare
+             it. Not required, so phones without it install the app and stay on the processor. -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

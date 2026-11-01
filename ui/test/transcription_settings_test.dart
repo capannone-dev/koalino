@@ -48,6 +48,27 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
   final List<String> calls = <String>[];
   int saveKeyStatus = transcriptionStatusOk;
   String? savedKey;
+  WhisperSuggestion? suggestion;
+  EfficientModeStatus efficient = const EfficientModeStatus();
+
+  @override
+  Future<int> setEfficientGpu({required bool enabled}) async {
+    calls.add('efficient $enabled');
+    efficient = EfficientModeStatus(
+        gpuName: efficient.gpuName,
+        enabled: enabled,
+        gpuBlocked: efficient.gpuBlocked,
+        gpuInUse: efficient.gpuInUse);
+    return transcriptionStatusOk;
+  }
+
+  @override
+  Future<int> retryGpu() async {
+    calls.add('retry');
+    efficient = EfficientModeStatus(
+        gpuName: efficient.gpuName, enabled: efficient.enabled);
+    return transcriptionStatusOk;
+  }
 
   @override
   Future<TranscriptionSettings?> read() async => TranscriptionSettings(
@@ -61,6 +82,8 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
         usingLocalFallback: false,
         models: const <WhisperModelInfo>[_base, _small, _english],
         download: downloadState,
+        suggestion: suggestion,
+        efficient: efficient,
       );
 
   @override
@@ -137,6 +160,73 @@ Future<TranscriptionSettingsController> _pump(
 }
 
 void main() {
+  testWidgets('a suggestion on the device is applied with efficient mode',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..selected = 'ggml-base.bin'
+      ..efficient = const EfficientModeStatus(gpuName: 'Adreno (TM) 740')
+      ..suggestion = const WhisperSuggestion(
+          fileName: 'ggml-base.bin', efficient: true, reason: 'Keeps up.');
+    await _pump(tester, bridge);
+    expect(find.text('Suggested for this device: base, efficient mode'),
+        findsOneWidget);
+    expect(find.text('Keeps up.'), findsOneWidget);
+    await tester.tap(find.byKey(useSuggestionKey));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('efficient true'));
+    expect(find.byKey(useSuggestionKey), findsNothing);
+  });
+
+  testWidgets('a suggestion not on the device downloads only when asked',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..suggestion = const WhisperSuggestion(
+          fileName: 'ggml-small.bin', efficient: false, reason: 'Keeps up.');
+    final TranscriptionSettingsController controller =
+        await _pump(tester, bridge);
+    expect(bridge.calls.where((String call) => call.startsWith('download')),
+        isEmpty);
+    expect(bridge.selected, 'ggml-base.bin');
+    await tester.tap(find.byKey(useSuggestionKey));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('download ggml-small.bin'));
+    expect(bridge.selected, 'ggml-base.bin');
+    bridge.downloadState = const WhisperDownload(state: 'cancelled');
+    await controller.load();
+  });
+
+  testWidgets('efficient mode is offered only with a supported GPU',
+      (WidgetTester tester) async {
+    await _pump(tester, _FakeBridge());
+    expect(find.byKey(efficientModeKey), findsNothing);
+  });
+
+  testWidgets('efficient mode can be turned on and off',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..efficient = const EfficientModeStatus(gpuName: 'Adreno (TM) 740');
+    await _pump(tester, bridge);
+    await tester.tap(find.byKey(efficientModeKey));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('efficient true'));
+    await tester.tap(find.byKey(efficientModeKey));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('efficient false'));
+  });
+
+  testWidgets('a GPU that crashed says so and can be tried again',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..efficient = const EfficientModeStatus(
+          gpuName: 'Adreno (TM) 740', enabled: true, gpuBlocked: true);
+    await _pump(tester, bridge);
+    expect(find.textContaining('stopped the app'), findsOneWidget);
+    await tester.tap(find.text('Try the graphics chip again'));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('retry'));
+    expect(find.textContaining('stopped the app'), findsNothing);
+  });
+
   testWidgets('saving a key keeps recordings local and clears the field',
       (WidgetTester tester) async {
     final _FakeBridge bridge = _FakeBridge();

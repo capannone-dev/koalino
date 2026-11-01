@@ -12,6 +12,12 @@ const Key openAiKeyFieldKey = ValueKey<String>('openai-key');
 /// Finds the provider selector in tests.
 const Key providerSelectorKey = ValueKey<String>('transcription-provider');
 
+/// Finds the button applying the suggested model in tests.
+const Key useSuggestionKey = ValueKey<String>('use-suggestion');
+
+/// Finds the efficient mode switch in tests.
+const Key efficientModeKey = ValueKey<String>('efficient-mode');
+
 /// Speed and accuracy hints for each size, from measurements on Italian speech (see #67, #69).
 const Map<String, String> _familyHints = <String, String>{
   'tiny': 'Fastest, least accurate',
@@ -254,8 +260,11 @@ final class _TranscriptionSettingsScreenState
             style: Theme.of(context).textTheme.titleMedium),
         subtitle: const Text(
             'Bigger models make fewer mistakes, and need more time and '
-            'memory. Downloads come from Hugging Face.'),
+            'memory. Downloads come from Hugging Face. This choice applies '
+            'only to this device.'),
       ),
+      ..._suggestionTiles(settings),
+      ..._efficientTiles(settings),
     ];
     String? family;
     for (final WhisperModelInfo model in settings.models) {
@@ -270,6 +279,74 @@ final class _TranscriptionSettingsScreenState
       tiles.add(_modelTile(settings, model));
     }
     return tiles;
+  }
+
+  /// The model suggested for this device, with a button unless it is already in use.
+  List<Widget> _suggestionTiles(TranscriptionSettings settings) {
+    final WhisperSuggestion? suggestion = settings.suggestion;
+    final WhisperModelInfo? model = settings.models
+        .where((WhisperModelInfo row) => row.fileName == suggestion?.fileName)
+        .firstOrNull;
+    if (suggestion == null || model == null) {
+      return const <Widget>[];
+    }
+    final TranscriptionSettingsController controller = widget.controller;
+    final bool inUse = settings.selectedModel == model.fileName &&
+        settings.efficient.enabled == suggestion.efficient;
+    return <Widget>[
+      ListTile(
+        leading: const Icon(Icons.recommend_outlined),
+        title: Text('Suggested for this device: ${model.name}'
+            '${suggestion.efficient ? ', efficient mode' : ''}'),
+        subtitle: Text(suggestion.reason),
+        trailing: inUse
+            ? null
+            : FilledButton.tonal(
+                key: useSuggestionKey,
+                onPressed: controller.isBusy || controller.isDownloading
+                    ? null
+                    : () => controller.applySuggestion(suggestion,
+                        onDevice: model.onDevice),
+                child: Text(model.onDevice
+                    ? 'Use'
+                    : 'Download ${formatModelSize(model.sizeBytes)}'),
+              ),
+      ),
+    ];
+  }
+
+  /// The efficient mode switch, only with a supported GPU, and any crash that stopped the GPU.
+  List<Widget> _efficientTiles(TranscriptionSettings settings) {
+    final TranscriptionSettingsController controller = widget.controller;
+    final EfficientModeStatus efficient = settings.efficient;
+    return <Widget>[
+      if (efficient.gpuName case final String gpuName)
+        SwitchListTile(
+          key: efficientModeKey,
+          secondary: const Icon(Icons.bolt_outlined),
+          title: const Text('Efficient mode'),
+          subtitle:
+              Text('Runs the same models on the graphics chip ($gpuName), '
+                  'usually faster. Off uses the processor, as standard.'),
+          value: efficient.enabled,
+          onChanged: controller.isBusy
+              ? null
+              : (bool enabled) => controller.setEfficientGpu(enabled: enabled),
+        ),
+      if (efficient.gpuBlocked)
+        ListTile(
+          leading: const Icon(Icons.warning_amber_outlined),
+          title: const Text('The graphics chip stopped the app last time, so '
+              'this device is transcribing with its processor.'),
+          subtitle: Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: controller.isBusy ? null : controller.retryGpu,
+              child: const Text('Try the graphics chip again'),
+            ),
+          ),
+        ),
+    ];
   }
 
   /// One model's row.

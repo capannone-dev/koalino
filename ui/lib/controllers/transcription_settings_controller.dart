@@ -85,6 +85,34 @@ final class TranscriptionSettingsController extends ChangeNotifier {
       _run(() => _bridge.selectModel(fileName),
           success: 'Saved. The next recording uses this model.');
 
+  /// Turns efficient mode on or off.
+  ///
+  /// Inputs: The new state. Side effects: Stores the choice and reloads.
+  Future<void> setEfficientGpu({required bool enabled}) =>
+      _run(() => _bridge.setEfficientGpu(enabled: enabled),
+          success: 'Saved. The next recording uses this.');
+
+  /// Lets the GPU be tried again after a crash stopped it.
+  ///
+  /// Side effects: Clears the core's record and reloads.
+  Future<void> retryGpu() => _run(_bridge.retryGpu,
+      success: 'The next recording tries the graphics chip again.');
+
+  /// Applies the suggestion: chooses it when on this device, or starts its download.
+  ///
+  /// Inputs: The suggestion and whether its file is here. A download changes nothing else, so
+  /// the current model keeps working until the owner chooses the new one.
+  /// Side effects: Stores choices or starts a download, and reloads.
+  Future<void> applySuggestion(WhisperSuggestion suggestion,
+      {required bool onDevice}) async {
+    if (!onDevice) {
+      await download(suggestion.fileName);
+      return;
+    }
+    await setEfficientGpu(enabled: suggestion.efficient);
+    await selectModel(suggestion.fileName);
+  }
+
   /// Starts downloading a model.
   ///
   /// Inputs: A catalog file name. Side effects: The core downloads in the background.
