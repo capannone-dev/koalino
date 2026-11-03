@@ -1,5 +1,5 @@
-// Renders the header's primary navigation. Telemetry is not here: it is a page of Settings
-// (Issue #53), since owners open it rarely.
+// Renders the header's primary navigation. Telemetry (Issue #53) and Devices (Issue #84) are not
+// here: they are pages of Settings, since owners open them rarely.
 
 import Link from "next/link";
 
@@ -7,7 +7,6 @@ import Link from "next/link";
 const primaryPages = [
   { href: "/meetings", label: "Meetings" },
   { href: "/voice-gallery", label: "Voice gallery" },
-  { href: "/devices", label: "Devices" },
   { href: "/settings", label: "Settings" }
 ] as const;
 

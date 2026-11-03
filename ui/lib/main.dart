@@ -166,8 +166,6 @@ final class NoteTakerApp extends StatelessWidget {
           const _MeetingsDestination(),
       voicesScreenBuilder: (BuildContext context) =>
           const _VoiceGalleryDestination(),
-      devicesScreenBuilder: (BuildContext context) =>
-          const _DevicesDestination(),
       settingsScreenBuilder: (BuildContext context) => _SettingsDestination(
         appLockController: appLockController,
         languageController: languageController,
@@ -406,6 +404,8 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         appLockController: widget.appLockController,
         telemetryScreenBuilder: (BuildContext context) =>
             const _TelemetryDestination(),
+        devicesScreenBuilder: (BuildContext context) =>
+            const _DevicesDestination(),
         transcriptionRouteController: _transcriptionRouteController,
         languageController: widget.languageController,
         networkSettingsController: _networkSettingsController,

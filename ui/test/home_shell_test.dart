@@ -21,8 +21,6 @@ Future<void> pumpHomeShell(WidgetTester tester, Size size,
             const Text('Meetings screen'),
         voicesScreenBuilder: (BuildContext context) =>
             const Text('Voices screen'),
-        devicesScreenBuilder: (BuildContext context) =>
-            const Text('Devices screen'),
         settingsScreenBuilder: withSettings
             ? (BuildContext context) => const Text('Settings screen')
             : null,
@@ -59,10 +57,10 @@ void main() {
     expect(find.text('Meetings screen'), findsOneWidget);
     expect(find.text('Recording screen'), findsNothing);
 
-    await tester.tap(find.text('Devices'));
+    await tester.tap(find.text('Voices'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Devices screen'), findsOneWidget);
+    expect(find.text('Voices screen'), findsOneWidget);
   });
 
   testWidgets('a desktop window switches destinations with a navigation rail',
@@ -72,10 +70,28 @@ void main() {
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
 
-    await tester.tap(find.text('Devices'));
+    await tester.tap(find.text('Meetings'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Devices screen'), findsOneWidget);
+    expect(find.text('Meetings screen'), findsOneWidget);
+  });
+
+  testWidgets('Devices is not a destination; it lives in Settings (#84)',
+      (WidgetTester tester) async {
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1280, 800),
+    ]) {
+      await pumpHomeShell(tester, size, withSettings: true);
+
+      expect(find.text('Devices'), findsNothing);
+      expect(
+          find.text('Record').evaluate().length +
+              find.text('Meetings').evaluate().length +
+              find.text('Voices').evaluate().length +
+              find.text('Settings').evaluate().length,
+          4);
+    }
   });
 
   testWidgets(

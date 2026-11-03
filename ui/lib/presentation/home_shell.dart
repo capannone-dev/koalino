@@ -4,8 +4,9 @@
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 
-/// Hosts the Record, Meetings, Voices, and Devices destinations, plus Settings when given a builder
-/// (the app always gives one; Issue #46). Telemetry is a page of Settings (Issue #53).
+/// Hosts the Record, Meetings and Voices destinations, plus Settings when given a builder (the app
+/// always gives one; Issue #46). Telemetry (Issue #53) and Devices (Issue #84) are pages of
+/// Settings.
 ///
 /// Phones get a bottom `NavigationBar`; windows at least `twoPaneBreakpoint` wide get a
 /// `NavigationRail`. Only the selected destination is built, so hidden screens neither poll
@@ -13,16 +14,14 @@ import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 final class HomeShell extends StatefulWidget {
   /// Creates the shell from one builder per destination.
   ///
-  /// Inputs: Builders for the recording, meeting list, voice gallery, and devices screens, and
-  /// optionally the settings screen, supplied by the composition root (tests pass
-  /// placeholders).
+  /// Inputs: Builders for the recording, meeting list and voice gallery screens, and optionally
+  /// the settings screen, supplied by the composition root (tests pass placeholders).
   /// Outputs: The navigation shell, starting on Record.
   /// Side effects: None.
   const HomeShell({
     required this.recordingScreenBuilder,
     required this.meetingsScreenBuilder,
     required this.voicesScreenBuilder,
-    required this.devicesScreenBuilder,
     this.settingsScreenBuilder,
     super.key,
   });
@@ -30,7 +29,6 @@ final class HomeShell extends StatefulWidget {
   final WidgetBuilder recordingScreenBuilder;
   final WidgetBuilder meetingsScreenBuilder;
   final WidgetBuilder voicesScreenBuilder;
-  final WidgetBuilder devicesScreenBuilder;
   final WidgetBuilder? settingsScreenBuilder;
 
   @override
@@ -55,11 +53,6 @@ final class _HomeShellState extends State<HomeShell> {
       icon: Icons.record_voice_over_outlined,
       selectedIcon: Icons.record_voice_over,
       label: 'Voices'
-    ),
-    (
-      icon: Icons.devices_outlined,
-      selectedIcon: Icons.devices,
-      label: 'Devices'
     ),
   ];
 
@@ -92,8 +85,7 @@ final class _HomeShellState extends State<HomeShell> {
         builder: switch (_selectedIndex) {
           1 => widget.meetingsScreenBuilder,
           2 => widget.voicesScreenBuilder,
-          3 => widget.devicesScreenBuilder,
-          4 => widget.settingsScreenBuilder ?? widget.recordingScreenBuilder,
+          3 => widget.settingsScreenBuilder ?? widget.recordingScreenBuilder,
           _ => widget.recordingScreenBuilder,
         },
       ),

@@ -260,6 +260,34 @@ void main() {
       expect(find.text('Telemetry page'), findsOneWidget);
     });
 
+    testWidgets('Devices opens as a page of Settings (#84)',
+        (WidgetTester tester) async {
+      final LogSettingsController controller =
+          desktopController(FakeLogBridge());
+      await tester.pumpWidget(MaterialApp(
+          home: SettingsScreen(
+        logSettingsController: controller,
+        devicesScreenBuilder: (BuildContext context) =>
+            const Scaffold(body: Text('Devices page')),
+      )));
+
+      expect(find.text('Devices'), findsOneWidget);
+      await tester.tap(find.text('Devices'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Devices page'), findsOneWidget);
+    });
+
+    testWidgets('without a devices page there is no Devices entry',
+        (WidgetTester tester) async {
+      final LogSettingsController controller =
+          desktopController(FakeLogBridge());
+      await tester.pumpWidget(
+          MaterialApp(home: SettingsScreen(logSettingsController: controller)));
+
+      expect(find.text('Devices'), findsNothing);
+    });
+
     testWidgets('without a telemetry page there is no Telemetry entry',
         (WidgetTester tester) async {
       final LogSettingsController controller =

@@ -31,7 +31,8 @@ final class SettingsScreen extends StatelessWidget {
   ///
   /// Inputs: The log settings controller, already loaded by the composition root, and the
   /// app-lock controller where the platform has App lock (Android), already initialized, and
-  /// the Telemetry page, which adds a Telemetry entry that opens it, and the transcription
+  /// the Telemetry page, which adds a Telemetry entry that opens it, the Devices page, which adds
+  /// a Devices entry first in the list (Issue #84), and the transcription
   /// choice, shown only when device sync is on, the default transcription language, and the
   /// network addresses, also shown only when device sync is on.
   /// Outputs: A Material 3 settings list.
@@ -40,6 +41,7 @@ final class SettingsScreen extends StatelessWidget {
     required this.logSettingsController,
     this.appLockController,
     this.telemetryScreenBuilder,
+    this.devicesScreenBuilder,
     this.transcriptionRouteController,
     this.languageController,
     this.networkSettingsController,
@@ -50,6 +52,9 @@ final class SettingsScreen extends StatelessWidget {
   final LogSettingsController logSettingsController;
   final AppLockController? appLockController;
   final WidgetBuilder? telemetryScreenBuilder;
+
+  /// Opens pairing and the paired devices, which left the bottom bar (Issue #84).
+  final WidgetBuilder? devicesScreenBuilder;
   final TranscriptionRouteController? transcriptionRouteController;
   final TranscriptionLanguageController? languageController;
   final NetworkSettingsController? networkSettingsController;
@@ -75,6 +80,19 @@ final class SettingsScreen extends StatelessWidget {
         ]),
         builder: (BuildContext context, Widget? child) => ListView(
           children: <Widget>[
+            if (devicesScreenBuilder
+                case final WidgetBuilder devicesScreen) ...<Widget>[
+              ListTile(
+                leading: const Icon(Icons.devices_outlined),
+                title: const Text('Devices'),
+                subtitle: const Text(
+                    'Pair your devices and see which ones are connected.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context)
+                    .push(MaterialPageRoute<void>(builder: devicesScreen)),
+              ),
+              const Divider(),
+            ],
             if (appLock != null) ...<Widget>[
               ..._appLockTiles(context, appLock),
               const Divider(),

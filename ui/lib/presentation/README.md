@@ -25,7 +25,8 @@ from another device (Issue #65). `devices_screen.dart` offers both, and explains
 networks are not found, depending on whether a relay is set (Issue #66). Settings has the relay and
 static peer fields, which apply at once (`NetworkAddressesSection`, Issue #64).
 
-`HomeShell` switches between the Record, Meetings, Voices, Devices, and Settings destinations, with a bottom
+`HomeShell` switches between the Record, Meetings, Voices and Settings destinations (Devices is a page of
+Settings, Issue #84), with a bottom
 `NavigationBar` below 840 px and a `NavigationRail` above it. `RecordingScreen` adds an optional,
 width-capped meeting title field. `MeetingListScreen` renders titles above their date and
 duration, and pushes `MeetingDetailScreen` on phones or shows `MeetingDetailView` beside the list

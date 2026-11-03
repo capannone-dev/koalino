@@ -1,7 +1,9 @@
-// Renders the web Settings page: the entry to the Telemetry page (Issue #53), the daemon's log level
+// Renders the web Settings page: the entries to the Devices (Issue #84) and Telemetry (Issue #53)
+// pages, the daemon's log level
 // a download of its logs (Issue #46), and, with device sync on, where recordings are transcribed
 // (Issue #59).
 
+import { DevicesEntry } from "@/components/devices-entry";
 import { LogSettings } from "@/components/log-settings";
 import { TelemetryEntry } from "@/components/telemetry-entry";
 import { TranscriptionRouteSettings } from "@/components/transcription-route-settings";
@@ -14,6 +16,7 @@ export default async function SettingsPage() {
   return (
     <section className="space-y-4">
       <h1 className="text-2xl font-bold sm:text-3xl">Settings</h1>
+      <DevicesEntry />
       {p2pStatus?.enabled ? (
         <TranscriptionRouteSettings
           initialRoute={p2pStatus.transcription_route}

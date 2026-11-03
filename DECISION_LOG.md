@@ -1911,3 +1911,12 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   with a compile. The limit is now 60 s, which only bounds a hang.
 - **Result:** 50 of 50 full runs passed with a release compile of the core looping alongside (load average about 38 on
   22 cores), against 5 failed runs of 6 before.
+
+## 2026-11-03 — #84 Devices moves into Settings; #85 approvals for Projects
+
+- **Devices is a page of Settings** in the desktop and Android apps and on the web, first in the list. Pairing is a setup
+  task, and Projects (#85) needs the tab, so the phone's bar stays at five: Record, Meetings, Projects, Voices,
+  Settings. The web page keeps its `/devices` address.
+- **Approved by the owner for #85:** `mail-parser` (Rust, pure, no network) to read `.eml` emails; `markdown` (pure
+  Dart) and `pdfrx` (PDFium) to show Markdown and PDF inside the Flutter app. Emails come in as `.eml` files, and on
+  Android through the share sheet; no mailbox connection.

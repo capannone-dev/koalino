@@ -30,6 +30,7 @@ plain messages; server text is never shown.
 `telemetry-dashboard.tsx` owns the responsive Recharts visualizations and bounded WebSocket refresh
 loop. It receives typed local API DTOs only and never reads SQLite or media files.
 
+`devices-entry.tsx` (Issue #84) is the Settings card that opens the Devices page, which left the primary navigation.
 `devices-panel.tsx` (Issue #43) is the Devices page body. It polls the P2P status every two
 seconds and offers the same steps and wording as the Flutter Devices screen: Make discoverable
 (shown as discoverable for the daemon's five-minute pairing window), Pair with a nearby device,

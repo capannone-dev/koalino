@@ -144,6 +144,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P3 | #81 | Busy-machine test failures fixed: speed checks count thread CPU time, relay checks wait for progress; 50 of 50 runs pass beside a compile | — |
 | P1 | #82 | One person's unknown voices share a card and are named once (grouped across chunks, speakers and meetings at 0.5); the final pass also removes wordless live clusters | 3.2 |
 | P1 | #83 | Leftover voices of finished recordings deleted at start-up; recordings need 1/15 of their speech (8–30 s) per speaker, and a brief speaker heard only in isolated seconds joins the nearest | 3.2 |
+| P2 | #84 | Devices is a page of Settings in the apps and on the web; the phone's bar keeps room for Projects (#85) | 2 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |
 | P3 | — | Decide how the Voice Galleries surface unclustered fallback clips | 3.2 |
