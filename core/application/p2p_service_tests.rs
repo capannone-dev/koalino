@@ -1331,6 +1331,72 @@ async fn projects_reach_paired_devices() {
     );
 }
 
+/// A device that lost the other's agreement key gets it again (Issue #85). On the test VMs the
+/// device that confirmed the pairing first sent its key before the other admitted it, so the key
+/// was dropped and every project list after it too. Here the laptop's pinned key is wiped after
+/// pairing: the project list the phone then seals must still reach it, because the laptop asks
+/// for the key again and the phone sends the list again once both hold it.
+#[tokio::test]
+async fn a_device_that_lost_the_pair_key_asks_for_it_and_gets_the_projects() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9486"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let (laptop, laptop_database) = service_with_database("Laptop", laptop_adapter);
+    let (phone, phone_database) = service_with_database("Phone", phone_adapter);
+    let mut laptop = laptop
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_project_library(Box::new(pipeline_connection(&laptop_database, "Laptop")));
+    let mut phone = phone
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_project_library(Box::new(pipeline_connection(&phone_database, "Phone")));
+    let phone_id = phone.transport().local_peer_id();
+    let laptop_id = laptop.transport().local_peer_id();
+    let laptop_store = trust_store_connection(&laptop_database);
+    let phone_store = trust_store_connection(&phone_database);
+    pair(&mut laptop, &mut phone, phone_address).await;
+    drive(&mut laptop, &mut phone, |_, _| {
+        matches!(laptop_store.pair_key(&phone_id), Ok(Some(_)))
+            && matches!(phone_store.pair_key(&laptop_id), Ok(Some(_)))
+    })
+    .await;
+
+    // The laptop forgets the phone's key, as if the phone's key message had been dropped.
+    rusqlite::Connection::open(&laptop_database)
+        .and_then(|connection| {
+            connection.execute(
+                "UPDATE p2p_trusted_peers SET sealed_pair_key = NULL WHERE peer_id = ?1",
+                [phone_id.as_str()],
+            )
+        })
+        .unwrap_or_else(|error| panic!("the pinned key must be wiped: {error}"));
+    pipeline_connection(&phone_database, "Phone")
+        .create_project(&project_name("Hiring"))
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    drive(&mut laptop, &mut phone, |_, _| {
+        project_names(&laptop_database) == vec!["Hiring".to_owned()]
+    })
+    .await;
+    let on_laptop = laptop_store
+        .pair_key(&phone_id)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| panic!("the laptop must hold the pair key again"));
+    let on_phone = phone_store
+        .pair_key(&laptop_id)
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| panic!("the phone must keep the pair key"));
+    assert!(on_laptop.matches(&on_phone));
+}
+
 /// A meeting deleted on one device goes from the other too, whichever way it is reported, and
 /// neither device's sync brings it back.
 #[tokio::test]

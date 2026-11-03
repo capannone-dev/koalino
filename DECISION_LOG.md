@@ -1935,3 +1935,18 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **E-mails stay whole:** the `.eml` file is the resource; its attachments of an accepted type are added to the same
   project as separate resources, and others stay inside the e-mail. HTML-only mail is shown as text, so no markup
   or remote content is ever rendered.
+
+## 2026-11-03 — A lost pair key is asked for again
+
+- **Found on the test VMs (#85).** The desktop app and the deb-shell daemon paired, but projects
+  never reached the app. The daemon confirmed first and sent its agreement key before the app had
+  admitted it, so the app dropped the key. Each side sent its key only once, at pairing or
+  connection, so the app never got it. Every project list, voice library and attachment list
+  sealed with that key was dropped too, and was not sent again because the sender had marked it
+  as sent.
+- **Decision: keys are answered, asked for, and shares are resent.** A device answers a key it
+  hasn't answered on this connection with its own; a device that receives a sealed message
+  without the sender's key sends its own key, which makes the sender answer; and whenever a key
+  arrives, everything sealed or counted for that device is sent again on the next tick. Each
+  device answers once per connection, so keys never bounce back and forth. The key message format
+  is unchanged, so older devices still pair.

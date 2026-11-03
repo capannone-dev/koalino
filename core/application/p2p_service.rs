@@ -16,7 +16,10 @@
 //! When configured with a pair-agreement secret, the service also sends every connected paired
 //! device its X25519 public key (`NTK1`, Issue #50). The public key received from a paired device
 //! yields the pair key, which is pinned in the allowlist the first time; review clips sent to that
-//! device are encrypted with it.
+//! device are encrypted with it. A key message can be lost: the device that confirms a pairing
+//! first may send its key before the other has admitted it. So a device answers a key it has not
+//! answered on this connection with its own, asks again with its own key when a sealed message
+//! arrives before it holds one, and sends every sealed share again whenever a key arrives.
 //!
 //! On the same one-second tick as local changes, unresolved unknown-speaker clusters are copied
 //! to connected paired devices whose pair key is agreed (`NTC1`, Issue #50), so their speakers
@@ -444,6 +447,12 @@ pub struct P2pService<Transport, Store, Repository> {
     voice_library: Option<Box<dyn VoiceLibrarySync>>,
     /// How many deletion records each connected device was last sent.
     shared_deletion_counts: HashMap<DeviceId, usize>,
+    /// Devices this device answered with its public key on this connection; each is answered
+    /// once, so two devices never echo keys back and forth.
+    pair_key_answered: HashSet<DeviceId>,
+    /// Devices asked for their key (by sending ours) since a sealed message arrived before their
+    /// key; asked once until a key arrives or they reconnect.
+    pair_key_requested: HashSet<DeviceId>,
     /// The library digest each connected device was last sent.
     shared_voice_digests: HashMap<DeviceId, [u8; 32]>,
     /// The project list to keep in step with paired devices (Issue #85); `None` leaves it here.
@@ -490,6 +499,8 @@ where
             attachment_sync: None,
             voice_library: None,
             shared_deletion_counts: HashMap::new(),
+            pair_key_answered: HashSet::new(),
+            pair_key_requested: HashSet::new(),
             shared_voice_digests: HashMap::new(),
             project_library: None,
             shared_project_digests: HashMap::new(),
@@ -762,18 +773,16 @@ where
                 // A (re)connected device may have lost nothing, but sending again is idempotent
                 // and covers shares it could not store before.
                 self.connected_peers.insert(peer_device_id.clone());
-                self.shared_clusters.remove(peer_device_id);
-                self.shared_voice_digests.remove(peer_device_id);
-                self.shared_project_digests.remove(peer_device_id);
-                self.shared_deletion_counts.remove(peer_device_id);
-                if let Some(attachment_sync) = self.attachment_sync.as_mut() {
-                    attachment_sync.forget_shared(peer_device_id);
-                }
+                self.pair_key_answered.remove(peer_device_id);
+                self.pair_key_requested.remove(peer_device_id);
+                self.forget_shared_with(peer_device_id);
                 Some(peer_device_id.clone())
             }
             NetworkEvent::PeerExpired(peer_device_id) => {
                 self.peer_manifests.remove(peer_device_id);
                 self.connected_peers.remove(peer_device_id);
+                self.pair_key_answered.remove(peer_device_id);
+                self.pair_key_requested.remove(peer_device_id);
                 self.shared_clusters.remove(peer_device_id);
                 self.shared_voice_digests.remove(peer_device_id);
                 self.shared_project_digests.remove(peer_device_id);
@@ -812,7 +821,10 @@ where
 
     /// Derives and pins the pair key from a public key `peer_device_id` sent.
     ///
-    /// Side effects: May store the sealed key in the allowlist. A malformed or low-order key, a
+    /// Side effects: May store the sealed key in the allowlist. Once the key is pinned (now or
+    /// before), answers with this device's key unless it already did on this connection, since
+    /// the peer may have dropped the one sent at pairing, and forgets what was shared with the
+    /// peer so sealed shares it may have dropped are sent again. A malformed or low-order key, a
     /// key from an unpaired device, and a key that differs from the pinned one are logged (peer ID
     /// only) and ignored; the pinned key stays.
     fn accept_pair_public_key(
@@ -838,7 +850,13 @@ where
                     .map_err(|error| error.to_string())
             });
         match pinning {
-            Ok(PairKeyPinning::Stored | PairKeyPinning::AlreadyPinned) => {}
+            Ok(PairKeyPinning::Stored | PairKeyPinning::AlreadyPinned) => {
+                self.pair_key_requested.remove(peer_device_id);
+                self.forget_shared_with(peer_device_id);
+                if self.pair_key_answered.insert(peer_device_id.clone()) {
+                    self.send_pair_public_key(peer_device_id);
+                }
+            }
             Ok(PairKeyPinning::Mismatch) => tracing::warn!(
                 peer = %peer_device_id.as_str(),
                 "a paired device sent a different agreement key; the pinned pair key is kept"
@@ -1036,6 +1054,7 @@ where
                     peer = %peer_device_id.as_str(),
                     "a voice library arrived before the pair key was agreed and was dropped"
                 );
+                self.ask_for_pair_key(peer_device_id);
                 return;
             }
             Err(error) => {
@@ -1158,6 +1177,7 @@ where
                     peer = %peer_device_id.as_str(),
                     "a project list arrived before the pair key was agreed and was dropped"
                 );
+                self.ask_for_pair_key(peer_device_id);
                 return;
             }
             Err(error) => {
@@ -1485,6 +1505,7 @@ where
                     peer = %peer_device_id.as_str(),
                     "an attachment list arrived before the pair key was agreed and was dropped"
                 );
+                self.ask_for_pair_key(peer_device_id);
                 return;
             }
             Err(error) => {
@@ -1693,6 +1714,7 @@ where
                     peer = %peer_device_id.as_str(),
                     "a cluster share arrived before the pair key was agreed and was dropped"
                 );
+                self.ask_for_pair_key(peer_device_id);
                 return;
             }
             Err(error) => {
@@ -1795,6 +1817,31 @@ where
                     received_at: held.received_at,
                 });
             }
+        }
+    }
+
+    /// Forgets which sealed and counted shares `peer_device_id` was sent, so the next tick sends
+    /// them again: cluster shares, the voice library, the project list, deletion records and the
+    /// attachment list. Sending again is idempotent.
+    ///
+    /// Side effects: Clears this service's per-peer share records only.
+    fn forget_shared_with(&mut self, peer_device_id: &DeviceId) {
+        self.shared_clusters.remove(peer_device_id);
+        self.shared_voice_digests.remove(peer_device_id);
+        self.shared_project_digests.remove(peer_device_id);
+        self.shared_deletion_counts.remove(peer_device_id);
+        if let Some(attachment_sync) = self.attachment_sync.as_mut() {
+            attachment_sync.forget_shared(peer_device_id);
+        }
+    }
+
+    /// Asks `peer_device_id` for its key after a sealed message arrived before it: sending this
+    /// device's key makes the peer answer with its own (see `accept_pair_public_key`).
+    ///
+    /// Side effects: Sends one message, once until a key arrives or the peer reconnects.
+    fn ask_for_pair_key(&mut self, peer_device_id: &DeviceId) {
+        if self.pair_key_requested.insert(peer_device_id.clone()) {
+            self.send_pair_public_key(peer_device_id);
         }
     }
 
