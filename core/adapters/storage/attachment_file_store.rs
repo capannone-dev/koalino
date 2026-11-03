@@ -25,6 +25,7 @@ use crate::{
     domain::{
         errors::StorageError,
         models::{Attachment, DeviceId, MeetingId},
+        projects::ProjectId,
     },
     ports::storage::AttachmentRepository,
 };
@@ -78,13 +79,90 @@ impl AttachmentFileStore {
                 reason: String::from("meeting ID is not a valid attachment folder name"),
             });
         }
+        let attachment = self.copy_and_link(
+            attachment_repository,
+            meeting_id.as_str(),
+            source_path,
+            |attachment| {
+                let attachment = Attachment::new(
+                    attachment.attachment_id(),
+                    Some(meeting_id.clone()),
+                    attachment.file_path(),
+                    attachment.mime_type(),
+                    attachment.original_timestamp(),
+                    attachment.original_device_id(),
+                );
+                match meeting_time_ms {
+                    Some(meeting_time_ms) => attachment.with_meeting_time_ms(meeting_time_ms),
+                    None => attachment,
+                }
+            },
+        )?;
+        tracing::info!(
+            meeting_id = %meeting_id.as_str(),
+            attachment_id = %attachment.attachment_id(),
+            mime_type = attachment.mime_type(),
+            has_meeting_time = meeting_time_ms.is_some(),
+            "File attached to meeting"
+        );
+        Ok(attachment)
+    }
+
+    /// Copies one file into a project's folder and links it to the project as a resource
+    /// (Issue #85).
+    ///
+    /// Inputs: The repository holding the project, the project, and the source file.
+    /// Outputs: The stored resource, or a rejection for an unsupported type, a missing,
+    /// oversized or unreadable source, or a row that cannot be saved (for example, an unknown
+    /// project).
+    /// Side effects: Creates `<attachment_directory>/project-<uuid>/` and one file; writes one
+    /// attachment row; removes the copy again when the row cannot be saved. Logs IDs only.
+    pub fn import_project_file<RepositoryPort>(
+        &self,
+        attachment_repository: &RepositoryPort,
+        project_id: ProjectId,
+        source_path: &Path,
+    ) -> Result<Attachment, StorageError>
+    where
+        RepositoryPort: AttachmentRepository + ?Sized,
+    {
+        let resource = self.copy_and_link(
+            attachment_repository,
+            &project_folder_name(project_id),
+            source_path,
+            |attachment| attachment.with_project_id(project_id),
+        )?;
+        tracing::info!(
+            %project_id,
+            attachment_id = %resource.attachment_id(),
+            mime_type = resource.mime_type(),
+            "File added to project"
+        );
+        Ok(resource)
+    }
+
+    /// Copies `source_path` into `<attachment_directory>/<folder_name>/` and saves the row that
+    /// `owned_by` builds from an unowned attachment describing the copy.
+    ///
+    /// Outputs: The saved attachment, or a rejection. Side effects: Creates folders and one
+    /// file, writes one row, and removes the copy again when the row cannot be saved.
+    fn copy_and_link<RepositoryPort>(
+        &self,
+        attachment_repository: &RepositoryPort,
+        folder_name: &str,
+        source_path: &Path,
+        owned_by: impl FnOnce(Attachment) -> Attachment,
+    ) -> Result<Attachment, StorageError>
+    where
+        RepositoryPort: AttachmentRepository + ?Sized,
+    {
         let mime_type = supported_mime_type(source_path)?;
         let mut source_file = open_regular_file(source_path)?;
         let attachment_id = Uuid::new_v4();
-        let meeting_directory = self.attachment_directory.join(meeting_id.as_str());
-        create_private_directory(&meeting_directory)?;
+        let owner_directory = self.attachment_directory.join(folder_name);
+        create_private_directory(&owner_directory)?;
         let copy_path =
-            meeting_directory.join(format!("{attachment_id}-{}", kept_file_name(source_path)));
+            owner_directory.join(format!("{attachment_id}-{}", kept_file_name(source_path)));
         // Reading one byte past the limit tells an oversized file from one exactly at it.
         let copied_bytes = write_private_file(
             &copy_path,
@@ -94,30 +172,18 @@ impl AttachmentFileStore {
             remove_copy(&copy_path, attachment_id);
             return Err(too_large());
         }
-
-        let attachment = Attachment::new(
+        let attachment = owned_by(Attachment::new(
             attachment_id,
-            Some(meeting_id.clone()),
+            None,
             copy_path.to_string_lossy().into_owned(),
             mime_type,
             Utc::now(),
             self.device_id.as_str(),
-        );
-        let attachment = match meeting_time_ms {
-            Some(meeting_time_ms) => attachment.with_meeting_time_ms(meeting_time_ms),
-            None => attachment,
-        };
+        ));
         if let Err(error) = attachment_repository.save_attachment(&attachment) {
             remove_copy(&copy_path, attachment_id);
             return Err(error);
         }
-        tracing::info!(
-            meeting_id = %meeting_id.as_str(),
-            %attachment_id,
-            mime_type,
-            has_meeting_time = meeting_time_ms.is_some(),
-            "File attached to meeting"
-        );
         Ok(attachment)
     }
 }
@@ -125,7 +191,7 @@ impl AttachmentFileStore {
 /// Names the folder that holds a project's resource files (Issue #85): `project-<uuid>`.
 ///
 /// Inputs: The project. Outputs: A plain folder name. Side effects: None.
-pub fn project_folder_name(project_id: crate::domain::projects::ProjectId) -> String {
+pub fn project_folder_name(project_id: ProjectId) -> String {
     format!("project-{project_id}")
 }
 
@@ -141,11 +207,13 @@ pub(super) fn supported_mime_type(source_path: &Path) -> Result<&'static str, St
     match extension.as_deref() {
         Some("jpg" | "jpeg") => Ok("image/jpeg"),
         Some("png") => Ok("image/png"),
+        Some("gif") => Ok("image/gif"),
         Some("webp") => Ok("image/webp"),
         Some("heic") => Ok("image/heic"),
         Some("pdf") => Ok("application/pdf"),
         Some("txt") => Ok("text/plain"),
-        Some("md") => Ok("text/markdown"),
+        Some("md" | "markdown") => Ok("text/markdown"),
+        Some("eml") => Ok("message/rfc822"),
         Some("docx") => {
             Ok("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         }
@@ -155,7 +223,7 @@ pub(super) fn supported_mime_type(source_path: &Path) -> Result<&'static str, St
         }
         Some("odt") => Ok("application/vnd.oasis.opendocument.text"),
         _ => Err(StorageError::Rejected {
-            reason: String::from("only pictures and documents can be attached"),
+            reason: String::from("only pictures, documents and emails can be attached"),
         }),
     }
 }

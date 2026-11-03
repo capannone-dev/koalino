@@ -2,6 +2,8 @@
 //! (Issue #54): the copy keeps the original name inside the meeting's folder, carries the meeting
 //! time when given, leaves the source alone, and nothing is left behind when an import fails.
 //! Each test uses unique directories under the OS temp directory and an in-memory repository.
+//! Project resources (Issue #85) are copied the same way into the project's folder, and also
+//! accept emails (`.eml`) and GIFs.
 
 use std::path::{Path, PathBuf};
 
@@ -9,11 +11,15 @@ use uuid::Uuid;
 
 use crate::{
     adapters::storage::{
-        attachment_file_store::AttachmentFileStore, sqlite_adapter::SqliteNoteRepository,
+        attachment_file_store::{AttachmentFileStore, project_folder_name},
+        sqlite_adapter::SqliteNoteRepository,
     },
     application::{crypto::voice_encryptor::ephemeral_cipher, meeting_crdt::MeetingCrdtService},
-    domain::models::{DeviceId, MeetingId},
-    ports::storage::AttachmentRepository,
+    domain::{
+        models::{DeviceId, MeetingId},
+        projects::{ProjectId, ProjectName},
+    },
+    ports::{projects::ProjectRepository, storage::AttachmentRepository},
 };
 
 /// A temporary directory deleted when dropped.
@@ -255,5 +261,101 @@ fn file_names_are_reduced_to_safe_characters() {
     assert!(
         file_name.ends_with("-Q3_plan__v2__final_.pdf"),
         "{file_name}"
+    );
+}
+
+/// Opens an in-memory repository holding one project, and returns both.
+fn repository_with_project() -> (SqliteNoteRepository, ProjectId) {
+    let repository = SqliteNoteRepository::open_in_memory(ephemeral_cipher())
+        .unwrap_or_else(|error| panic!("repository should open: {error}"));
+    let project = repository
+        .create_project(&ProjectName::parse("Hiring").unwrap_or_else(|error| panic!("{error}")))
+        .unwrap_or_else(|error| panic!("project should be created: {error}"));
+    (repository, project.project_id())
+}
+
+/// Verifies a resource is copied privately into its project's folder and listed as the project's.
+#[test]
+fn a_project_resource_is_copied_into_the_project_folder() {
+    let sources = TemporaryDirectory::new("sources");
+    let attachment_directory = TemporaryDirectory::new("attachments");
+    let (repository, project_id) = repository_with_project();
+    let source = sources.file("Interview notes.md", b"# Notes");
+
+    let resource = store(&attachment_directory)
+        .import_project_file(&repository, project_id, &source)
+        .unwrap_or_else(|error| panic!("resource should be imported: {error}"));
+
+    assert_eq!(resource.project_id(), Some(project_id));
+    assert_eq!(resource.meeting_id(), None);
+    assert_eq!(resource.mime_type(), "text/markdown");
+    let copy = Path::new(resource.file_path());
+    assert_eq!(
+        copy.parent(),
+        Some(
+            attachment_directory
+                .0
+                .join("attachments")
+                .join(project_folder_name(project_id))
+                .as_path()
+        )
+    );
+    assert_eq!(std::fs::read(copy).ok(), Some(b"# Notes".to_vec()));
+    assert!(source.exists());
+    assert_eq!(
+        repository.project_resources(project_id).unwrap_or_default(),
+        vec![resource]
+    );
+}
+
+/// Verifies emails and GIFs are accepted as resources with their types.
+#[test]
+fn emails_and_gifs_are_accepted() {
+    let sources = TemporaryDirectory::new("sources");
+    let attachment_directory = TemporaryDirectory::new("attachments");
+    let (repository, project_id) = repository_with_project();
+    let store = store(&attachment_directory);
+
+    let mime_types: Vec<String> = ["Offer.eml", "reaction.gif", "readme.markdown"]
+        .iter()
+        .map(|name| {
+            store
+                .import_project_file(&repository, project_id, &sources.file(name, b"x"))
+                .unwrap_or_else(|error| panic!("{name} should be imported: {error}"))
+                .mime_type()
+                .to_owned()
+        })
+        .collect();
+
+    assert_eq!(
+        mime_types,
+        vec!["message/rfc822", "image/gif", "text/markdown"]
+    );
+}
+
+/// Verifies a resource for an unknown project leaves no copy behind.
+#[test]
+fn an_unknown_project_leaves_no_copy() {
+    let sources = TemporaryDirectory::new("sources");
+    let attachment_directory = TemporaryDirectory::new("attachments");
+    let (repository, _) = repository_with_project();
+    let unknown = ProjectId::new_random();
+
+    let result = store(&attachment_directory).import_project_file(
+        &repository,
+        unknown,
+        &sources.file("notes.md", b"x"),
+    );
+
+    assert!(result.is_err());
+    let folder = attachment_directory
+        .0
+        .join("attachments")
+        .join(project_folder_name(unknown));
+    assert_eq!(
+        std::fs::read_dir(folder)
+            .map(|entries| entries.count())
+            .unwrap_or(0),
+        0
     );
 }
