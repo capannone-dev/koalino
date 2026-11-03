@@ -171,6 +171,15 @@ impl AttachmentSync {
         }
     }
 
+    /// Removes a deleted project's stored resource files (Issue #85).
+    ///
+    /// Side effects: Deletes files; a failure is logged, as the rows are already gone.
+    pub fn project_deleted(&mut self, project_id: crate::domain::projects::ProjectId) {
+        if let Err(error) = self.library.remove_project_files(project_id) {
+            tracing::warn!(error = %error, "a deleted project's files could not be removed");
+        }
+    }
+
     /// Cancels transfers from `peer` and forgets its offers and what it was sent.
     ///
     /// Side effects: Removes partial files. The device's next manifest offers them again, and

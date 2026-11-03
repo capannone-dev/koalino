@@ -74,6 +74,18 @@ pub trait AttachmentLibrary {
         Ok(())
     }
 
+    /// Removes the resource files this library stored for a project that was deleted (Issue #85).
+    ///
+    /// Inputs: The deleted project. Outputs: Success, or a storage error.
+    /// Side effects: Deletes only the project's folder in the private attachment store. Libraries
+    /// without files do nothing.
+    fn remove_project_files(
+        &mut self,
+        _project_id: crate::domain::projects::ProjectId,
+    ) -> Result<(), StorageError> {
+        Ok(())
+    }
+
     /// Computes the content hash of one linked attachment that has none yet.
     ///
     /// Outputs: Success (also when there is nothing to do), or a storage error.

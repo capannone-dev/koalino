@@ -91,6 +91,10 @@ pub mod pairing_manager;
 mod pairing_manager_tests;
 /// Connects transcription, diarization, and voice identity into speaker-attributed segments.
 pub mod pipeline;
+/// Encodes the sealed `NTP1` messages that copy the project list to paired devices (Issue #85).
+pub mod project_library_exchange;
+#[cfg(test)]
+mod project_library_exchange_tests;
 /// Runs meeting pipeline sessions on a dedicated worker thread for live recordings.
 pub mod recording_manager;
 #[cfg(test)]

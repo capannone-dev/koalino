@@ -517,6 +517,11 @@ fn open_service(
             .unwrap_or_else(|| Path::new("."))
             .join("attachments")
     });
+    let project_library = open_note_repository(
+        database_path,
+        device_id.clone(),
+        Arc::clone(&embedding_cipher),
+    )?;
     let attachment_library = AttachmentSyncStore::new(
         open_note_repository(database_path, device_id, Arc::clone(&embedding_cipher))?,
         attachment_directory,
@@ -537,6 +542,7 @@ fn open_service(
     .with_local_capabilities(config.capabilities)
     .with_pair_agreement_secret(pair_agreement_secret)
     .with_voice_library(Box::new(voice_library))
+    .with_project_library(Box::new(project_library))
     .with_attachment_library(Box::new(attachment_library))
     .with_transcription_route_store(Box::new(route_store));
     if let Some(pipeline_config) = hosted_pipeline {

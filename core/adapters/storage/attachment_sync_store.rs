@@ -95,6 +95,22 @@ impl AttachmentLibrary for AttachmentSyncStore {
             .map_err(|error| file_error("unable to remove a deleted meeting's files", &error))
     }
 
+    /// Removes the project's folder in the attachment store (Issue #85).
+    ///
+    /// Inputs: The deleted project.
+    /// Outputs: Success (also when it had no folder), or a storage error.
+    /// Side effects: Deletes the folder and its files, which never logs their names.
+    fn remove_project_files(
+        &mut self,
+        project_id: crate::domain::projects::ProjectId,
+    ) -> Result<(), StorageError> {
+        remove_meeting_folder(
+            &self.attachment_directory,
+            &super::attachment_file_store::project_folder_name(project_id),
+        )
+        .map_err(|error| file_error("unable to remove a deleted project's files", &error))
+    }
+
     fn hash_next_attachment(&mut self) -> Result<(), StorageError> {
         let Some((attachment_id, file_path)) = self
             .repository

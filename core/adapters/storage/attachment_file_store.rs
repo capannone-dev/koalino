@@ -122,6 +122,13 @@ impl AttachmentFileStore {
     }
 }
 
+/// Names the folder that holds a project's resource files (Issue #85): `project-<uuid>`.
+///
+/// Inputs: The project. Outputs: A plain folder name. Side effects: None.
+pub fn project_folder_name(project_id: crate::domain::projects::ProjectId) -> String {
+    format!("project-{project_id}")
+}
+
 /// Maps a supported file extension (any case) to its MIME type.
 ///
 /// Inputs: The source path. Outputs: The MIME type, or a rejection for any other extension.

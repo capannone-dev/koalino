@@ -46,9 +46,11 @@ use crate::{
             VoiceEmbedding,
         },
         peer_trust::DeviceName,
+        projects::ProjectName,
     },
     ports::{
         peer_trust::{PairingTransport, TrustedPeerStore},
+        projects::ProjectRepository,
         remote_transcription::{FinishedTranscription, HostedTranscription, TranscriptionHost},
         storage::{AttachmentRepository, NoteRepository},
         voice::VoiceVectorDB,
@@ -1236,6 +1238,97 @@ async fn the_voice_library_reaches_paired_devices() {
     .await;
     assert_eq!(on_phone.voice_variant_count(alice).ok(), Some(0));
     assert_eq!(voice_names(&on_laptop), vec!["Bruno".to_owned()]);
+}
+
+/// The names of the projects `database_path` lists, in list order.
+fn project_names(database_path: &PathBuf) -> Vec<String> {
+    pipeline_connection(database_path, "reader")
+        .list_projects()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|summary| summary.project.name().as_str().to_owned())
+        .collect()
+}
+
+/// A valid project name.
+fn project_name(name: &str) -> ProjectName {
+    ProjectName::parse(name).unwrap_or_else(|error| panic!("{error}"))
+}
+
+/// Projects made on either device reach the other (Issue #85), with a meeting moved into one; a
+/// rename follows, and a deleted project goes from both and does not come back.
+#[tokio::test]
+async fn projects_reach_paired_devices() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9485"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let (laptop, laptop_database) = service_with_database("Laptop", laptop_adapter);
+    let (phone, phone_database) = service_with_database("Phone", phone_adapter);
+    let mut laptop = laptop
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_project_library(Box::new(pipeline_connection(&laptop_database, "Laptop")));
+    let mut phone = phone
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_project_library(Box::new(pipeline_connection(&phone_database, "Phone")));
+    let (on_laptop, on_phone) = (
+        pipeline_connection(&laptop_database, "Laptop"),
+        pipeline_connection(&phone_database, "Phone"),
+    );
+    let hiring = on_laptop
+        .create_project(&project_name("Hiring"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    on_phone
+        .create_project(&project_name("Budget"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let interview = MeetingId::new("meeting-interview");
+    MeetingCrdtService::new(pipeline_connection(&laptop_database, "Laptop"))
+        .create_meeting(&interview)
+        .unwrap_or_else(|error| panic!("{error}"));
+    on_laptop
+        .move_meeting_to_project(&interview, Some(hiring.project_id()))
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    pair(&mut laptop, &mut phone, phone_address).await;
+    let both = vec!["Budget".to_owned(), "Hiring".to_owned()];
+    drive(&mut laptop, &mut phone, |_, _| {
+        project_names(&laptop_database) == both
+            && project_names(&phone_database) == both
+            && on_phone.meeting_projects().unwrap_or_default()
+                == vec![(interview.clone(), hiring.project_id())]
+    })
+    .await;
+
+    on_phone
+        .rename_project(hiring.project_id(), &project_name("Hiring 2027"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    drive(&mut laptop, &mut phone, |_, _| {
+        project_names(&laptop_database).contains(&"Hiring 2027".to_owned())
+    })
+    .await;
+
+    on_laptop
+        .delete_project(hiring.project_id())
+        .unwrap_or_else(|error| panic!("{error}"));
+    drive(&mut laptop, &mut phone, |_, _| {
+        project_names(&phone_database) == vec!["Budget".to_owned()]
+    })
+    .await;
+    assert_eq!(project_names(&laptop_database), vec!["Budget".to_owned()]);
+    assert!(on_phone.meeting_projects().unwrap_or_default().is_empty());
+    assert!(
+        on_phone
+            .load_meeting_metadata(&interview)
+            .ok()
+            .flatten()
+            .is_some()
+    );
 }
 
 /// A meeting deleted on one device goes from the other too, whichever way it is reported, and
