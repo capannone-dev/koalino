@@ -15,7 +15,7 @@ use crate::{
         meeting_document::AutomergeMeetingDocumentCodec,
     },
     domain::{
-        models::{Attachment, DeviceId, MeetingId},
+        models::{Attachment, DeletionRecords, DeviceId, MeetingId},
         projects::{Project, ProjectId, ProjectLibrary, ProjectName, ProjectTombstone},
     },
     ports::{
@@ -433,5 +433,129 @@ fn a_deletion_wins_over_any_version_and_reports_the_project() {
             .tombstones
             .len(),
         1
+    );
+}
+
+#[test]
+fn deleting_a_resource_removes_only_it_and_records_the_deletion() {
+    let device = Device::new();
+    let project = device.create("Hiring");
+    let doomed = device.resource(project.project_id());
+    let kept = device.resource(project.project_id());
+
+    assert_eq!(
+        device
+            .repository
+            .delete_project_resource(doomed.attachment_id())
+            .ok(),
+        Some(true)
+    );
+
+    assert_eq!(
+        device
+            .repository
+            .project_resources(project.project_id())
+            .unwrap_or_default(),
+        vec![kept]
+    );
+    assert_eq!(
+        device
+            .repository
+            .deletion_records()
+            .unwrap_or_default()
+            .attachment_ids,
+        vec![doomed.attachment_id()]
+    );
+    assert_eq!(
+        device
+            .repository
+            .delete_project_resource(doomed.attachment_id())
+            .ok(),
+        Some(false)
+    );
+}
+
+#[test]
+fn deleting_a_resource_never_touches_a_meeting_attachment() {
+    let device = Device::new();
+    let meeting = device.meeting("meeting-with-photo");
+    let photo = Attachment::new(
+        Uuid::new_v4(),
+        Some(meeting.clone()),
+        "/data/attachments/photo.png",
+        "image/png",
+        Utc::now(),
+        "device",
+    );
+    device
+        .repository
+        .save_attachment(&photo)
+        .unwrap_or_else(|error| panic!("attachment must be saved: {error}"));
+
+    assert_eq!(
+        device
+            .repository
+            .delete_project_resource(photo.attachment_id())
+            .ok(),
+        Some(false)
+    );
+    assert_eq!(
+        device
+            .repository
+            .get_attachments_for_meeting(&meeting)
+            .unwrap_or_default()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn a_resource_deleted_on_a_paired_device_goes_here_too_and_is_reported() {
+    let device = Device::new();
+    let project = device.create("Hiring");
+    let doomed = device.resource(project.project_id());
+    let records = DeletionRecords {
+        attachment_ids: vec![doomed.attachment_id(), Uuid::from_u128(404)],
+        ..DeletionRecords::default()
+    };
+
+    let applied = device
+        .repository
+        .apply_deletion_records(&records)
+        .unwrap_or_else(|error| panic!("records must apply: {error}"));
+    let again = device
+        .repository
+        .apply_deletion_records(&records)
+        .unwrap_or_else(|error| panic!("records must apply: {error}"));
+
+    assert_eq!(
+        applied.resources,
+        vec![(doomed.attachment_id(), project.project_id())]
+    );
+    assert!(applied.meeting_ids.is_empty());
+    assert!(again.resources.is_empty());
+    assert!(
+        device
+            .repository
+            .project_resources(project.project_id())
+            .unwrap_or_default()
+            .is_empty()
+    );
+    // An ID not held here stays blocked, so a resource still on its way is refused later.
+    assert_eq!(
+        device
+            .repository
+            .deletion_records()
+            .unwrap_or_default()
+            .attachment_ids
+            .len(),
+        2
+    );
+    assert_eq!(
+        device
+            .repository
+            .attachment_known(Uuid::from_u128(404))
+            .ok(),
+        Some(true)
     );
 }

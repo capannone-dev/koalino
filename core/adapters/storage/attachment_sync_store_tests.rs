@@ -291,6 +291,56 @@ fn a_resource_of_a_project_not_here_is_refused() {
 }
 
 #[test]
+fn a_deleted_resource_loses_its_file_and_is_never_fetched_again() {
+    let mut fixture = Fixture::new();
+    let project = fixture
+        .repository
+        .create_project(&ProjectName::parse("Hiring").unwrap_or_else(|error| panic!("{error}")))
+        .unwrap_or_else(|error| panic!("project must be created: {error}"));
+    let mut resource = incoming(b"agenda");
+    resource.owner = AttachmentOwner::Project(project.project_id());
+    receive(&mut fixture, &resource, b"agenda")
+        .unwrap_or_else(|error| panic!("the resource must be stored: {error}"));
+    let mut neighbour = incoming(b"budget");
+    neighbour.attachment_id = Uuid::from_u128(0xCD);
+    neighbour.owner = resource.owner.clone();
+    receive(&mut fixture, &neighbour, b"budget")
+        .unwrap_or_else(|error| panic!("the neighbour must be stored: {error}"));
+    let project_folder = fixture.directory.join(format!(
+        "attachments/project-{}",
+        project.project_id().as_uuid()
+    ));
+
+    fixture
+        .repository
+        .delete_project_resource(resource.attachment_id)
+        .unwrap_or_else(|error| panic!("the resource must be deleted: {error}"));
+    fixture
+        .store
+        .remove_resource_file(resource.attachment_id, project.project_id())
+        .unwrap_or_else(|error| panic!("the file must be removed: {error}"));
+
+    let left: Vec<String> = std::fs::read_dir(&project_folder)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(
+        left,
+        vec![format!("{}-whiteboard.png", neighbour.attachment_id)]
+    );
+    assert_eq!(
+        fixture.store.has_attachment(resource.attachment_id).ok(),
+        Some(true),
+        "a deleted resource counts as held, so it is not fetched again"
+    );
+    assert!(receive(&mut fixture, &resource, b"agenda").is_err());
+}
+
+#[test]
 fn a_file_that_fails_its_check_leaves_nothing_behind() {
     let mut fixture = Fixture::new();
     let attachment = incoming(b"picture");

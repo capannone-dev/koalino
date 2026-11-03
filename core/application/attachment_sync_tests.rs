@@ -31,6 +31,7 @@ use crate::{
 struct LibraryState {
     meetings: HashSet<String>,
     projects: HashSet<ProjectId>,
+    removed_resources: Vec<Uuid>,
     shared: Vec<SharedAttachment>,
     served: HashMap<String, Vec<u8>>,
     partial: HashMap<Uuid, Vec<u8>>,
@@ -119,6 +120,14 @@ impl AttachmentLibrary for FakeLibrary {
     }
     fn discard_incoming(&mut self, attachment: &SharedAttachment) {
         self.with(|state| state.partial.remove(&attachment.attachment_id));
+    }
+    fn remove_resource_file(
+        &mut self,
+        attachment_id: Uuid,
+        _project_id: ProjectId,
+    ) -> Result<(), StorageError> {
+        self.with(|state| state.removed_resources.push(attachment_id));
+        Ok(())
     }
 }
 
@@ -295,6 +304,26 @@ fn a_project_resource_waits_for_its_project_and_is_dropped_when_it_is_deleted() 
     assert_eq!(
         library.with(|state| state.stored.get(&resource.attachment_id).cloned()),
         Some(b"notes".to_vec())
+    );
+}
+
+#[test]
+fn a_resource_deleted_by_a_peer_is_no_longer_wanted_and_its_file_goes() {
+    let (mut sync, library) = receiver();
+    let mut network = FakeNetwork::default();
+    let project_id = ProjectId::from_uuid(Uuid::from_u128(85));
+    let mut resource = attachment(1, b"notes");
+    resource.owner = AttachmentOwner::Project(project_id);
+    sync.accept_manifest(&laptop(), vec![resource.clone()]);
+
+    sync.resource_deleted(resource.attachment_id, project_id);
+    library.with(|state| state.projects.insert(project_id));
+    sync.pump(&mut network, Instant::now());
+
+    assert!(network.requests.is_empty());
+    assert_eq!(
+        library.with(|state| state.removed_resources.clone()),
+        vec![resource.attachment_id]
     );
 }
 

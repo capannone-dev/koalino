@@ -3,9 +3,9 @@
 use crate::domain::{
     errors::StorageError,
     models::{
-        Attachment, ClusterDigest, ClusterShare, ClusterShareImport, DeletionRecords, MeetingId,
-        MeetingMetadata, MeetingTitle, MeetingWindow, Transcript, TranscriptSegment,
-        UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
+        AppliedDeletions, Attachment, ClusterDigest, ClusterShare, ClusterShareImport,
+        DeletionRecords, MeetingId, MeetingMetadata, MeetingTitle, MeetingWindow, Transcript,
+        TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
     },
 };
 use chrono::{DateTime, Utc};
@@ -70,13 +70,13 @@ pub trait NoteRepository {
     /// Applies deletion records from a paired device; items not held here stay blocked.
     ///
     /// Inputs: Records decoded from a paired device; applying them twice changes nothing.
-    /// Outputs: The meetings removed by this call, or a storage error.
+    /// Outputs: The meetings and project resources removed by this call, or a storage error.
     /// Side effects: As the delete methods, in one step. Attachment files are the caller's.
     fn apply_deletion_records(
         &self,
         _records: &DeletionRecords,
-    ) -> Result<Vec<MeetingId>, StorageError> {
-        Ok(Vec::new())
+    ) -> Result<AppliedDeletions, StorageError> {
+        Ok(AppliedDeletions::default())
     }
 
     /// Lists stable identifiers for every locally known meeting.
@@ -388,7 +388,7 @@ where
     fn apply_deletion_records(
         &self,
         records: &DeletionRecords,
-    ) -> Result<Vec<MeetingId>, StorageError> {
+    ) -> Result<AppliedDeletions, StorageError> {
         (**self).apply_deletion_records(records)
     }
 

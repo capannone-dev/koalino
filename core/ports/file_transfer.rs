@@ -86,6 +86,19 @@ pub trait AttachmentLibrary {
         Ok(())
     }
 
+    /// Removes the file of one project resource deleted on a paired device (Issue #85).
+    ///
+    /// Inputs: The resource and the project it belonged to; its row is already gone.
+    /// Outputs: Success (also when no file was stored), or a storage error.
+    /// Side effects: Deletes the file in the project's folder. Libraries without files do nothing.
+    fn remove_resource_file(
+        &mut self,
+        _attachment_id: Uuid,
+        _project_id: crate::domain::projects::ProjectId,
+    ) -> Result<(), StorageError> {
+        Ok(())
+    }
+
     /// Computes the content hash of one linked attachment that has none yet.
     ///
     /// Outputs: Success (also when there is nothing to do), or a storage error.
@@ -98,7 +111,8 @@ pub trait AttachmentLibrary {
     /// Outputs: Metadata ordered by attachment ID, or a storage error. Side effects: Reads rows.
     fn shared_attachments(&self) -> Result<Vec<SharedAttachment>, StorageError>;
 
-    /// Tells whether this attachment is already stored here. Side effects: Reads one row.
+    /// Tells whether this attachment is already stored here, or was deleted here so it must not
+    /// be fetched again. Side effects: Reads rows.
     fn has_attachment(&self, attachment_id: Uuid) -> Result<bool, StorageError>;
 
     /// Tells whether the meeting or project an attachment belongs to has synced here.

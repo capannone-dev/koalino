@@ -2446,6 +2446,18 @@ pub struct DeletionRecords {
     pub meeting_ids: Vec<MeetingId>,
     /// Deleted unknown voices, which cluster shares must not restore.
     pub cluster_ids: Vec<Uuid>,
+    /// Deleted project resources (Issue #85), which attachment sync must not restore.
+    pub attachment_ids: Vec<Uuid>,
+}
+
+/// What applying a paired device's deletion records removed here, so the caller can remove the
+/// files that belonged to it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct AppliedDeletions {
+    /// Meetings removed by this call.
+    pub meeting_ids: Vec<MeetingId>,
+    /// Project resources removed by this call, with the project each belonged to.
+    pub resources: Vec<(Uuid, crate::domain::projects::ProjectId)>,
 }
 
 impl Transcript {

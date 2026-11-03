@@ -1,8 +1,9 @@
-//! Deletes meetings and unknown voices, and keeps the records that stop them coming back.
+//! Deletes meetings, unknown voices and project resources, and keeps the records that stop them
+//! coming back.
 //!
 //! Automerge documents and cluster shares merge by union, so a paired device that still holds a
-//! deleted item would otherwise restore it. `deleted_items` keeps one row per deleted meeting or
-//! unknown voice, forever. A record holds only an ID and a time, and deletions always win over
+//! deleted item would otherwise restore it. `deleted_items` keeps one row per deleted meeting,
+//! unknown voice or project resource (Issue #85), forever. A record holds only an ID and a time, and deletions always win over
 //! anything a peer sends, as for saved voices (#56). The cost is that a deleted ID is never reused;
 //! meetings and clusters get new UUIDs.
 //!
@@ -16,13 +17,16 @@ use uuid::Uuid;
 use super::{SqliteNoteRepository, sqlite_error};
 use crate::domain::{
     errors::StorageError,
-    models::{DeletionRecords, MeetingId},
+    models::{AppliedDeletions, DeletionRecords, MeetingId},
+    projects::ProjectId,
 };
 
 /// Marks a deleted meeting's row.
 const MEETING_KIND: &str = "meeting";
 /// Marks a deleted unknown voice's row.
 const CLUSTER_KIND: &str = "unknown_voice";
+/// Marks a deleted project resource's row.
+const ATTACHMENT_KIND: &str = "attachment";
 
 /// Creates the deletion records' table and the revision floor.
 ///
@@ -176,7 +180,76 @@ fn remove_cluster(
     Ok(removed_rows > 0)
 }
 
+/// Tells whether a project resource has a deletion record.
+pub(super) fn is_attachment_recorded(
+    connection: &Connection,
+    attachment_id: Uuid,
+) -> Result<bool, StorageError> {
+    is_recorded(connection, ATTACHMENT_KIND, &attachment_id.to_string())
+}
+
+/// Removes a project resource's row and leaves its deletion record.
+///
+/// Outputs: The project it belonged to, or `None` when no resource has this ID; an absent one is
+/// still recorded when `record_when_absent` is set, unless the ID is a meeting attachment's, which
+/// is never touched. Side effects: Deletes one row. Callers provide the transaction.
+fn remove_resource(
+    connection: &Connection,
+    attachment_id: Uuid,
+    record_when_absent: bool,
+) -> Result<Option<ProjectId>, StorageError> {
+    let attachment_key = attachment_id.to_string();
+    let owner: Option<Option<String>> = connection
+        .query_row(
+            "SELECT project_id FROM attachments WHERE attachment_id = ?1",
+            params![attachment_key],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|error| sqlite_error("unable to read a project resource", error))?;
+    match owner {
+        Some(Some(project_text)) => {
+            connection
+                .execute(
+                    "DELETE FROM attachments WHERE attachment_id = ?1",
+                    params![attachment_key],
+                )
+                .map_err(|error| sqlite_error("unable to delete a project resource", error))?;
+            record_deletion(connection, ATTACHMENT_KIND, &attachment_key)?;
+            Ok(ProjectId::parse(&project_text))
+        }
+        Some(None) => Ok(None),
+        None => {
+            if record_when_absent {
+                record_deletion(connection, ATTACHMENT_KIND, &attachment_key)?;
+            }
+            Ok(None)
+        }
+    }
+}
+
 impl SqliteNoteRepository {
+    /// Implements `ProjectRepository::delete_project_resource` in one transaction.
+    pub(super) fn delete_resource_rows(&self, attachment_id: Uuid) -> Result<bool, StorageError> {
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|error| sqlite_error("unable to begin resource deletion", error))?;
+        let removed = remove_resource(&transaction, attachment_id, false)?;
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit resource deletion", error))?;
+        Ok(removed.is_some())
+    }
+
+    /// Tells whether an attachment is stored here or was deleted here as a project resource.
+    ///
+    /// Outputs: The answer, or a storage error. Side effects: Reads rows.
+    pub fn attachment_known(&self, attachment_id: Uuid) -> Result<bool, StorageError> {
+        Ok(self.attachment_exists(attachment_id)?
+            || is_attachment_recorded(&self.connection, attachment_id)?)
+    }
+
     /// Implements `NoteRepository::delete_meeting` in one transaction.
     pub(super) fn delete_meeting_rows(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
         let transaction = self
@@ -218,19 +291,23 @@ impl SqliteNoteRepository {
                 .collect::<Result<Vec<String>, _>>()
                 .map_err(|error| sqlite_error("unable to read deletion records", error))
         };
-        Ok(DeletionRecords {
-            meeting_ids: read_ids(MEETING_KIND)?
-                .into_iter()
-                .map(MeetingId::new)
-                .collect(),
-            cluster_ids: read_ids(CLUSTER_KIND)?
+        let read_uuids = |item_kind: &str| -> Result<Vec<Uuid>, StorageError> {
+            read_ids(item_kind)?
                 .iter()
                 .map(|stored_id| {
                     Uuid::parse_str(stored_id).map_err(|_| StorageError::Rejected {
                         reason: String::from("a stored deletion record is not a UUID"),
                     })
                 })
-                .collect::<Result<Vec<Uuid>, StorageError>>()?,
+                .collect()
+        };
+        Ok(DeletionRecords {
+            meeting_ids: read_ids(MEETING_KIND)?
+                .into_iter()
+                .map(MeetingId::new)
+                .collect(),
+            cluster_ids: read_uuids(CLUSTER_KIND)?,
+            attachment_ids: read_uuids(ATTACHMENT_KIND)?,
         })
     }
 
@@ -238,23 +315,28 @@ impl SqliteNoteRepository {
     pub(super) fn apply_deletion_rows(
         &self,
         records: &DeletionRecords,
-    ) -> Result<Vec<MeetingId>, StorageError> {
+    ) -> Result<AppliedDeletions, StorageError> {
         let transaction = self
             .connection
             .unchecked_transaction()
             .map_err(|error| sqlite_error("unable to begin applying deletions", error))?;
-        let mut removed_meetings = Vec::new();
+        let mut applied = AppliedDeletions::default();
         for meeting_id in &records.meeting_ids {
             if remove_meeting(&transaction, meeting_id, true)? {
-                removed_meetings.push(meeting_id.clone());
+                applied.meeting_ids.push(meeting_id.clone());
             }
         }
         for cluster_id in &records.cluster_ids {
             remove_cluster(&transaction, *cluster_id, true)?;
         }
+        for attachment_id in &records.attachment_ids {
+            if let Some(project_id) = remove_resource(&transaction, *attachment_id, true)? {
+                applied.resources.push((*attachment_id, project_id));
+            }
+        }
         transaction
             .commit()
             .map_err(|error| sqlite_error("unable to commit applied deletions", error))?;
-        Ok(removed_meetings)
+        Ok(applied)
     }
 }

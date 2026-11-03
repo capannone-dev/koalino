@@ -1097,12 +1097,13 @@ impl NoteRepository for SqliteNoteRepository {
     /// Applies a paired device's deletion records.
     ///
     /// Inputs: Match `NoteRepository::apply_deletion_records`.
-    /// Outputs: The meetings removed here by this call, or a portable storage error.
+    /// Outputs: The meetings and project resources removed here by this call, or a portable
+    /// storage error.
     /// Side effects: Deletes rows and leaves records atomically.
     fn apply_deletion_records(
         &self,
         records: &crate::domain::models::DeletionRecords,
-    ) -> Result<Vec<MeetingId>, StorageError> {
+    ) -> Result<crate::domain::models::AppliedDeletions, StorageError> {
         self.apply_deletion_rows(records)
     }
 

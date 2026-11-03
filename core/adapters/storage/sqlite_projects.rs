@@ -355,6 +355,10 @@ impl ProjectRepository for SqliteNoteRepository {
         Ok(())
     }
 
+    fn delete_project_resource(&self, attachment_id: uuid::Uuid) -> Result<bool, StorageError> {
+        self.delete_resource_rows(attachment_id)
+    }
+
     fn project_resources(&self, project_id: ProjectId) -> Result<Vec<Attachment>, StorageError> {
         self.load_attachments(AttachmentOwnerFilter::Project(project_id))
     }

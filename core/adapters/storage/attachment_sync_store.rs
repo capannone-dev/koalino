@@ -119,6 +119,40 @@ impl AttachmentLibrary for AttachmentSyncStore {
         .map_err(|error| file_error("unable to remove a deleted project's files", &error))
     }
 
+    /// Removes the stored file of one project resource deleted on a paired device (Issue #85).
+    ///
+    /// Inputs: The resource and its project. Outputs: Success (also when no file is stored), or a
+    /// storage error. Side effects: Deletes every `<attachment ID>-*` file, and a leftover partial
+    /// file, in the project's folder; never logs names.
+    fn remove_resource_file(
+        &mut self,
+        attachment_id: Uuid,
+        project_id: crate::domain::projects::ProjectId,
+    ) -> Result<(), StorageError> {
+        let project_folder =
+            self.attachment_directory
+                .join(super::attachment_file_store::project_folder_name(
+                    project_id,
+                ));
+        let entries = match std::fs::read_dir(&project_folder) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(file_error("unable to list a project's files", &error)),
+        };
+        let stored_prefix = format!("{attachment_id}-");
+        let partial_name = format!(".{attachment_id}.part");
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let file_name = file_name.to_string_lossy();
+            if file_name.starts_with(&stored_prefix) || file_name == partial_name {
+                std::fs::remove_file(entry.path()).map_err(|error| {
+                    file_error("unable to remove a deleted resource's file", &error)
+                })?;
+            }
+        }
+        Ok(())
+    }
+
     fn hash_next_attachment(&mut self) -> Result<(), StorageError> {
         let Some((attachment_id, file_path)) = self
             .repository
@@ -150,7 +184,7 @@ impl AttachmentLibrary for AttachmentSyncStore {
     }
 
     fn has_attachment(&self, attachment_id: Uuid) -> Result<bool, StorageError> {
-        self.repository.attachment_exists(attachment_id)
+        self.repository.attachment_known(attachment_id)
     }
 
     fn has_owner(&self, owner: &AttachmentOwner) -> Result<bool, StorageError> {

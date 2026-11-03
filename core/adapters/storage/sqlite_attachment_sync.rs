@@ -248,8 +248,8 @@ impl SqliteNoteRepository {
     /// Stores the row of a verified file from a paired device.
     ///
     /// Inputs: The metadata and the file's local path.
-    /// Outputs: Success, or a rejection when the meeting or project is unknown or the row cannot be
-    /// written.
+    /// Outputs: Success, or a rejection when the meeting or project is unknown, the attachment was
+    /// deleted here, or the row cannot be written.
     /// Side effects: Inserts one row; an existing row is kept unchanged.
     pub fn insert_received_attachment(
         &self,
@@ -265,8 +265,10 @@ impl SqliteNoteRepository {
             .execute(
                 "INSERT OR IGNORE INTO attachments (attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms, content_hash, size_bytes, project_id)
                  SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
-                 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)
-                    OR EXISTS (SELECT 1 FROM projects WHERE project_id = ?10)",
+                 WHERE (EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)
+                        OR EXISTS (SELECT 1 FROM projects WHERE project_id = ?10))
+                   AND NOT EXISTS (SELECT 1 FROM deleted_items
+                                   WHERE item_kind = 'attachment' AND item_id = ?1)",
                 params![
                     attachment.attachment_id.to_string(),
                     meeting_id,

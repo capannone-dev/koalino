@@ -14,6 +14,7 @@ fn records_round_trip() {
     let records = DeletionRecords {
         meeting_ids: vec![MeetingId::new("meeting-1")],
         cluster_ids: vec![Uuid::from_u128(1)],
+        attachment_ids: vec![Uuid::from_u128(2)],
     };
 
     let messages = encode_deletion_messages(&records);
@@ -32,6 +33,7 @@ fn many_records_split_across_messages() {
             .map(|index| MeetingId::new(format!("meeting-{index}")))
             .collect(),
         cluster_ids: vec![Uuid::from_u128(1)],
+        attachment_ids: Vec::new(),
     };
 
     let messages = encode_deletion_messages(&records);
@@ -79,6 +81,48 @@ fn implausible_messages_are_refused() {
     );
     assert_eq!(
         decode_deletion_message(message.as_bytes()),
+        Err(DeletionMessageError::Invalid)
+    );
+}
+
+/// A device from before project resources sends no `attachment_ids`; its records still apply.
+#[test]
+fn a_message_without_resource_records_is_accepted() {
+    let message = format!(
+        "NTD1{}",
+        serde_json::json!({"meeting_ids": ["meeting-1"], "cluster_ids": []})
+    );
+
+    assert_eq!(
+        decode_deletion_message(message.as_bytes()),
+        Ok(DeletionRecords {
+            meeting_ids: vec![MeetingId::new("meeting-1")],
+            ..DeletionRecords::default()
+        })
+    );
+}
+
+/// Only resource records make a message too, and too many of them are refused.
+#[test]
+fn resource_records_alone_are_sent_and_bounded() {
+    let records = DeletionRecords {
+        attachment_ids: vec![Uuid::from_u128(7)],
+        ..DeletionRecords::default()
+    };
+    let too_many: Vec<Uuid> = (0..=MAX_RECORDS_PER_MESSAGE as u128)
+        .map(Uuid::from_u128)
+        .collect();
+    let oversized = format!(
+        "NTD1{}",
+        serde_json::json!({"meeting_ids": [], "cluster_ids": [], "attachment_ids": too_many})
+    );
+
+    let messages = encode_deletion_messages(&records);
+
+    assert_eq!(messages.len(), 1);
+    assert_eq!(decode_deletion_message(&messages[0]), Ok(records));
+    assert_eq!(
+        decode_deletion_message(oversized.as_bytes()),
         Err(DeletionMessageError::Invalid)
     );
 }

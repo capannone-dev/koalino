@@ -18,7 +18,10 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    domain::models::{DeviceId, FileChunk, SharedAttachment},
+    domain::{
+        models::{AttachmentOwner, DeviceId, FileChunk, MeetingId, SharedAttachment},
+        projects::ProjectId,
+    },
     ports::file_transfer::{
         AttachmentLibrary, FILE_TRANSFER_CHUNK_BYTES, FileTransferEvent, FileTransferNetwork,
     },
@@ -163,24 +166,50 @@ impl AttachmentSync {
     ///
     /// Side effects: Deletes files; a failure is logged and the files wait for no retry, as their
     /// rows are already gone.
-    pub fn meeting_deleted(&mut self, meeting_id: &crate::domain::models::MeetingId) {
-        self.wanted
-            .retain(|_, wanted| !matches!(&wanted.attachment.owner, crate::domain::models::AttachmentOwner::Meeting(owner) if owner == meeting_id));
+    pub fn meeting_deleted(&mut self, meeting_id: &MeetingId) {
+        self.forget_where(|attachment| {
+            matches!(&attachment.owner, AttachmentOwner::Meeting(owner) if owner == meeting_id)
+        });
         if let Err(error) = self.library.remove_meeting_files(meeting_id) {
             tracing::warn!(error = %error, "a deleted meeting's files could not be removed");
         }
     }
 
-    /// Removes a deleted project's stored resource files (Issue #85).
+    /// Removes a deleted project's stored resource files and stops wanting its resources
+    /// (Issue #85).
     ///
     /// Side effects: Deletes files; a failure is logged, as the rows are already gone.
-    pub fn project_deleted(&mut self, project_id: crate::domain::projects::ProjectId) {
-        self.wanted.retain(|_, wanted| {
-            wanted.attachment.owner != crate::domain::models::AttachmentOwner::Project(project_id)
-        });
+    pub fn project_deleted(&mut self, project_id: ProjectId) {
+        self.forget_where(|attachment| attachment.owner == AttachmentOwner::Project(project_id));
         if let Err(error) = self.library.remove_project_files(project_id) {
             tracing::warn!(error = %error, "a deleted project's files could not be removed");
         }
+    }
+
+    /// Removes the file of one project resource deleted on a paired device and stops wanting it
+    /// (Issue #85).
+    ///
+    /// Side effects: Deletes the file; a failure is logged, as the row is already gone.
+    pub fn resource_deleted(&mut self, attachment_id: Uuid, project_id: ProjectId) {
+        self.forget_where(|attachment| attachment.attachment_id == attachment_id);
+        if let Err(error) = self.library.remove_resource_file(attachment_id, project_id) {
+            tracing::warn!(error = %error, "a deleted resource's file could not be removed");
+        }
+    }
+
+    /// Stops wanting, and cancels the transfers of, every attachment `deleted` matches.
+    ///
+    /// Side effects: Removes the partial files of cancelled transfers.
+    fn forget_where(&mut self, deleted: impl Fn(&SharedAttachment) -> bool) {
+        let library = &mut self.library;
+        self.active.retain(|transfer| {
+            let keep = !deleted(&transfer.attachment);
+            if !keep {
+                library.discard_incoming(&transfer.attachment);
+            }
+            keep
+        });
+        self.wanted.retain(|_, wanted| !deleted(&wanted.attachment));
     }
 
     /// Cancels transfers from `peer` and forgets its offers and what it was sent.

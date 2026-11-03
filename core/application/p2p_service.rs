@@ -871,7 +871,8 @@ where
                 return;
             }
         };
-        let record_count = records.meeting_ids.len() + records.cluster_ids.len();
+        let record_count =
+            records.meeting_ids.len() + records.cluster_ids.len() + records.attachment_ids.len();
         if record_count == 0 {
             return;
         }
@@ -909,8 +910,8 @@ where
 
     /// Applies deletion records `peer_device_id` sent.
     ///
-    /// Side effects: Deletes the named meetings and unknown voices, with the files of those
-    /// meetings. A message that cannot be read or applied is logged (peer ID only) and dropped.
+    /// Side effects: Deletes the named meetings, unknown voices and project resources, with the
+    /// files of those meetings and resources. A message that cannot be read or applied is logged (peer ID only) and dropped.
     fn accept_deletions(&mut self, peer_device_id: &DeviceId, payload: &[u8]) {
         let applied = decode_deletion_message(payload)
             .map_err(|error| error.to_string())
@@ -921,10 +922,13 @@ where
                     .map_err(|error| error.to_string())
             });
         match applied {
-            Ok(removed_meetings) => {
+            Ok(applied) => {
                 if let Some(attachment_sync) = self.attachment_sync.as_mut() {
-                    for meeting_id in &removed_meetings {
+                    for meeting_id in &applied.meeting_ids {
                         attachment_sync.meeting_deleted(meeting_id);
+                    }
+                    for (attachment_id, project_id) in &applied.resources {
+                        attachment_sync.resource_deleted(*attachment_id, *project_id);
                     }
                 }
             }

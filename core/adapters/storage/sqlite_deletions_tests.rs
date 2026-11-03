@@ -267,10 +267,11 @@ fn records_from_a_peer_delete_here_too() {
     let records = DeletionRecords {
         meeting_ids: vec![doomed_meeting()],
         cluster_ids: vec![OTHER_CLUSTER],
+        attachment_ids: Vec::new(),
     };
 
     assert_eq!(
-        checked(device.repository.apply_deletion_records(&records)),
+        checked(device.repository.apply_deletion_records(&records)).meeting_ids,
         vec![doomed_meeting()]
     );
 
@@ -285,5 +286,9 @@ fn records_from_a_peer_delete_here_too() {
     );
     assert!(device.lists(&kept_meeting()));
     assert_eq!(checked(device.repository.deletion_records()), records);
-    assert!(checked(device.repository.apply_deletion_records(&records)).is_empty());
+    assert!(
+        checked(device.repository.apply_deletion_records(&records))
+            .meeting_ids
+            .is_empty()
+    );
 }

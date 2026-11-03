@@ -6,6 +6,7 @@
 //! and its sync. Names and resource files are user content: implementations must not log them.
 
 use chrono::{DateTime, Utc};
+use uuid::Uuid;
 
 use crate::domain::{
     errors::StorageError,
@@ -93,6 +94,14 @@ pub trait ProjectRepository {
         meeting_id: &MeetingId,
         project_id: Option<ProjectId>,
     ) -> Result<(), StorageError>;
+
+    /// Deletes one project resource's row and records the deletion, so paired devices delete it
+    /// too and attachment sync never brings it back.
+    ///
+    /// Inputs: The resource's attachment ID. A meeting attachment is never touched.
+    /// Outputs: Whether a resource was deleted, or a storage error.
+    /// Side effects: Deletes one row and writes a deletion record. The file is the caller's.
+    fn delete_project_resource(&self, attachment_id: Uuid) -> Result<bool, StorageError>;
 
     /// Lists a project's resources, oldest first.
     ///

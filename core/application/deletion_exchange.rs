@@ -1,6 +1,8 @@
 //! Encodes the `NTD1` messages that carry deletion records to paired devices.
 //!
-//! A message is `NTD1` followed by JSON listing deleted meeting IDs and unknown-voice cluster IDs.
+//! A message is `NTD1` followed by JSON listing deleted meeting IDs, unknown-voice cluster IDs and
+//! project-resource attachment IDs (Issue #85; absent in messages from older devices, which in turn
+//! ignore the field).
 //! It holds identifiers only, travels on the encrypted transport like the meeting documents, and
 //! comes only from paired devices, because the network adapter drops sync payloads from anyone
 //! else. Records only ever grow, and applying one twice changes nothing.
@@ -33,6 +35,8 @@ pub enum DeletionMessageError {
 struct DeletionBody {
     meeting_ids: Vec<String>,
     cluster_ids: Vec<Uuid>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    attachment_ids: Vec<Uuid>,
 }
 
 /// Reports whether `payload` is a deletion message.
@@ -49,9 +53,14 @@ pub fn is_deletion_message(payload: &[u8]) -> bool {
 pub fn encode_deletion_messages(records: &DeletionRecords) -> Vec<Vec<u8>> {
     let meeting_parts = records.meeting_ids.chunks(MAX_RECORDS_PER_MESSAGE);
     let cluster_parts = records.cluster_ids.chunks(MAX_RECORDS_PER_MESSAGE);
-    let part_count = meeting_parts.len().max(cluster_parts.len());
+    let attachment_parts = records.attachment_ids.chunks(MAX_RECORDS_PER_MESSAGE);
+    let part_count = meeting_parts
+        .len()
+        .max(cluster_parts.len())
+        .max(attachment_parts.len());
     let mut meeting_parts = meeting_parts;
     let mut cluster_parts = cluster_parts;
+    let mut attachment_parts = attachment_parts;
     (0..part_count)
         .filter_map(|_| {
             let body = DeletionBody {
@@ -62,6 +71,7 @@ pub fn encode_deletion_messages(records: &DeletionRecords) -> Vec<Vec<u8>> {
                     .map(|meeting_id| meeting_id.as_str().to_owned())
                     .collect(),
                 cluster_ids: cluster_parts.next().unwrap_or_default().to_vec(),
+                attachment_ids: attachment_parts.next().unwrap_or_default().to_vec(),
             };
             let encoded_body = serde_json::to_vec(&body).ok()?;
             let mut message = Vec::with_capacity(DELETION_HEADER.len() + encoded_body.len());
@@ -87,6 +97,7 @@ pub fn decode_deletion_message(payload: &[u8]) -> Result<DeletionRecords, Deleti
     };
     if body.meeting_ids.len() > MAX_RECORDS_PER_MESSAGE
         || body.cluster_ids.len() > MAX_RECORDS_PER_MESSAGE
+        || body.attachment_ids.len() > MAX_RECORDS_PER_MESSAGE
         || !body.meeting_ids.iter().all(usable_id)
     {
         return Err(DeletionMessageError::Invalid);
@@ -94,5 +105,6 @@ pub fn decode_deletion_message(payload: &[u8]) -> Result<DeletionRecords, Deleti
     Ok(DeletionRecords {
         meeting_ids: body.meeting_ids.into_iter().map(MeetingId::new).collect(),
         cluster_ids: body.cluster_ids,
+        attachment_ids: body.attachment_ids,
     })
 }
