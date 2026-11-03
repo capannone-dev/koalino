@@ -38,3 +38,11 @@ Devices tests (Issue #43):
   discoverable, pairing with a nearby device and comparing the code, Codes match and its result,
   waiting for the other device, accepting and rejecting a request, removing a device after
   confirmation, a refused step's message, and the two-second refresh.
+
+Projects tests (Issue #85):
+
+- `projects-api.test.ts` covers each request's URL, method and body, the upload's encoded name,
+  error codes mapped to kinds (unknown codes, 503, network), and name validation.
+- `project-view.test.tsx` covers creating a project, the project page's meetings and files, a file
+  still syncing, adding only meetings outside projects, the e-mail preview (markup shown as text),
+  upload messages, confirmed deletion, and the meeting page's picker restoring its choice.

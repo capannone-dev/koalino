@@ -3,7 +3,7 @@
 # Dashboard components
 
 Components render API DTOs from `web/lib/api.ts`. Client components are limited to WebSocket status,
-the cluster-assignment form, meeting renaming, the log settings, and the Devices panel; they do not access databases or Rust implementation details.
+the cluster-assignment form, meeting renaming, the log settings, the Devices panel, and the project pages; they do not access databases or Rust implementation details.
 
 `voice-gallery.tsx` renders one card per unknown-speaker cluster with a name field and an
 **Assign** button. A blank name is rejected without a request. A successful assignment removes the
@@ -24,7 +24,19 @@ elsewhere, such as `info,note_taker_core=debug`, shows as "Custom") and **Export
 downloads the file through `fetchLogExport` and saves it with a temporary link. Failures map to
 plain messages; server text is never shown.
 
-`primary-nav.tsx` renders the header links (Meetings, Voice gallery, Devices, Settings).
+`primary-nav.tsx` renders the header links (Meetings, Projects, Voice gallery, Settings).
+
+Projects (Issue #85), over `lib/projects-api.ts`:
+
+- `projects-index.tsx` lists projects with "1 meeting · 2 files" and creates one, checking the
+  name as Rust does first, then opens it.
+- `project-view.tsx` is a project's page: rename, delete (confirmed), its meetings (open, remove,
+  add one outside any project), Add files, Write a note, and each file with View, Open (PDFs),
+  Download and Delete (confirmed). Previews never render a file's markup: pictures inline,
+  Markdown and text as plain text, e-mails as headers and text. A file still syncing shows
+  "Syncing…".
+- `meeting-project-picker.tsx` is the meeting page's Project selector; a failed move puts the
+  previous choice back.
 `telemetry-entry.tsx` is the Settings card linking to `/settings/telemetry` (Issue #53).
 
 `telemetry-dashboard.tsx` owns the responsive Recharts visualizations and bounded WebSocket refresh

@@ -6,6 +6,7 @@ import Link from "next/link";
 /** The pages reachable from every page, in display order. */
 const primaryPages = [
   { href: "/meetings", label: "Meetings" },
+  { href: "/projects", label: "Projects" },
   { href: "/voice-gallery", label: "Voice gallery" },
   { href: "/settings", label: "Settings" }
 ] as const;

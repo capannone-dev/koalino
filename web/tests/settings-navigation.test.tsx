@@ -7,12 +7,13 @@ import { PrimaryNav } from "@/components/primary-nav";
 import { DevicesEntry } from "@/components/devices-entry";
 import { TelemetryEntry } from "@/components/telemetry-entry";
 
-test("the primary navigation has no telemetry or devices entry", () => {
+test("the primary navigation has Projects after Meetings, and no telemetry or devices entry", () => {
   render(<PrimaryNav />);
 
   const links = screen.getAllByRole("link").map((link) => [link.textContent, link.getAttribute("href")]);
   expect(links).toEqual([
     ["Meetings", "/meetings"],
+    ["Projects", "/projects"],
     ["Voice gallery", "/voice-gallery"],
     ["Settings", "/settings"]
   ]);

@@ -34,6 +34,9 @@ checks on every change under `web/`, so they are verified even where Node.js is 
   `GET /api/meetings/{id}/unknown-clusters`. It shows each cluster's total speech time and chunk
   count, and posts the typed name to `POST /api/clusters/{id}/assign`. An assigned cluster is
   removed from the list.
+- `/projects` lists projects and creates them; `/projects/<id>` shows a project's meetings, files,
+  notes and e-mails, with uploads, notes, previews and deletion (Issue #85, `app/projects/README.md`).
+  A meeting's page has a Project selector.
 - `/settings` (Issue #46) links to Telemetry, shows the daemon's log level, changes it until the daemon restarts,
   and downloads the newest week of logs (`app/settings/README.md`).
 

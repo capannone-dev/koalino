@@ -4,7 +4,8 @@ export type Device = { device_id: string; supports_vad: boolean; supported_model
 export type Metric = { task_type: "transcription" | "cloud_transcription" | "file_transfer" | "diarization"; duration_ms: number; latency_ms: number; power_mwh: number; recorded_at: number };
 export type DeviceTelemetry = { device_id: string; metrics: Metric[] };
 export type TelemetrySummary = { total_transcription_time_ms: number; average_latency_ms: number; total_tasks: number; power_estimate_mwh: number };
-export type MeetingSummary = { meeting_id: string; title: string; created_at: string };
+/** `project_id` is the meeting's project (Issue #85): null outside any, absent from older servers. */
+export type MeetingSummary = { meeting_id: string; title: string; created_at: string; project_id?: string | null };
 export type Attachment = { attachment_id: string; file_path: string; mime_type: string; original_timestamp_utc: string };
 export type MeetingDetail = { meeting_id: string; title: string; created_at: string; transcript: string | null; attachments: Attachment[] };
 export type VoiceIdentity = { identity_id: string; display_name: string; voice_variant_count: number };

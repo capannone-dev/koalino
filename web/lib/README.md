@@ -22,3 +22,12 @@ throw `P2pRequestError`, whose `kind` is `invalid_peer` (400), `not_found` (404)
 `unavailable` (503), `server`, or `network`. It shares `apiBaseUrl` with `api.ts`.
 `DeviceCapabilities` is the manifest summary the status carries for this server and for each
 connected paired device (`null` while not connected).
+
+`projects-api.ts` (Issue #85) is the projects client: `getProjects`, `getProject`, `createProject`,
+`renameProject`, `deleteProject`, `moveMeetingToProject`, `uploadProjectFile` (the raw file, its
+name in the query), `addProjectNote`, `deleteProjectResource`, `getProjectEmail`,
+`getProjectResourceText`, and `projectResourceFileUrl` for pictures and downloads. Failures throw
+`ProjectApiError` with the daemon's `error_code` as `kind` (`unavailable` for 503, `network`,
+otherwise `unexpected`); `projectErrorMessage` turns it into a plain message, never the server's
+text. `projectNameError` checks names with Rust's rules. `MeetingSummary.project_id` (in `api.ts`)
+is the meeting's project, absent from older servers.
