@@ -10,8 +10,18 @@ pub struct SpeakerPassConfig {
     /// Least average cosine similarity at which two groups merge. On the evaluation recordings this
     /// finds every speaker count; 0.21 to 0.3 miss one or two, and 0.15 errs far more (`DECISION_LOG.md`).
     pub similarity_threshold: f32,
-    /// A group smaller than this joins its nearest group: about this many seconds of speech.
+    /// A group smaller than this joins its nearest group: about this many seconds of speech. The
+    /// least size for short meetings; longer ones raise it, see `min_group_share`.
     pub min_group_windows: usize,
+    /// In a long meeting a group also needs this share of all windows, up to
+    /// `max_min_group_windows` (#82). One person's voice drifts over a long meeting, so the
+    /// grouping splits off small groups of the same person: on the 15 evaluation recordings joined
+    /// into one 19-minute meeting, an 8-window minimum found 7 speakers for 3 people and a 30-window
+    /// one found 3, with fewer windows misplaced. The price: someone who says less than that is
+    /// given to the nearest voice.
+    pub min_group_share: f32,
+    /// The most windows `min_group_share` can ask a group for: half a minute of speech.
+    pub max_min_group_windows: usize,
     /// Most windows grouped exhaustively; the rest then join the nearest group. Memory grows with
     /// the square of this count, so it bounds a long meeting at about 18 MB on a phone.
     pub max_clustered_windows: usize,
@@ -22,6 +32,8 @@ impl Default for SpeakerPassConfig {
         Self {
             similarity_threshold: 0.2,
             min_group_windows: 8,
+            min_group_share: 1.0 / 30.0,
+            max_min_group_windows: 30,
             max_clustered_windows: 3_000,
         }
     }
@@ -330,6 +342,23 @@ pub(crate) fn dense_labels(labels: &[usize]) -> Vec<usize> {
         .collect()
 }
 
+/// Returns how many windows a group needs to stand as its own speaker in a meeting of `count`.
+///
+/// Inputs: The number of windows grouped and the settings. Outputs: `min_group_windows` for a
+/// short meeting, rising with `min_group_share` up to `max_min_group_windows` (never below the
+/// least). Side effects: None.
+fn least_group_windows(count: usize, config: &SpeakerPassConfig) -> usize {
+    let share_windows = (count as f32 * config.min_group_share).floor();
+    let share_windows = if share_windows.is_finite() && share_windows > 0.0 {
+        share_windows as usize
+    } else {
+        0
+    };
+    share_windows
+        .min(config.max_min_group_windows)
+        .max(config.min_group_windows)
+}
+
 /// Groups a meeting's voice windows into speakers.
 ///
 /// Inputs: One embedding per window, in any scale, all the same length.
@@ -353,7 +382,7 @@ pub fn group_voice_windows(embeddings: &[Vec<f32>], config: &SpeakerPassConfig) 
     absorb_small_groups(
         &sample_vectors,
         &mut sample_labels,
-        config.min_group_windows,
+        least_group_windows(sample_count, config),
     );
     let sample_labels = dense_labels(&sample_labels);
     if sample_count == vectors.len() {

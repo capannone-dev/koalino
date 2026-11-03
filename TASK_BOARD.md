@@ -143,6 +143,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P2 | #79 | Real paired sync and desktop buttons checked (2026-11-01): the one-time rewrite on a phone is still unconfirmed | 3.2 |
 | P3 | #81 | Open: timing and P2P tests fail when the machine is busy | — |
 | P1 | #82 | One person's unknown voices share a card and are named once (grouped across chunks, speakers and meetings at 0.5); the final pass also removes wordless live clusters | 3.2 |
+| P1 | #83 | Leftover voices of finished recordings deleted at start-up; long recordings need 1/30 of their speech (8–30 s) per speaker | 3.2 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
 | P3 | — | Persist the attribution category (pending review / unknown / unattributed) with `speaker_identity_id`; relink segments on single-clip `assign_voice_clip` | 3.2 |
 | P3 | — | Decide how the Voice Galleries surface unclustered fallback clips | 3.2 |

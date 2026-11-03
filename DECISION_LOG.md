@@ -1845,3 +1845,32 @@ Found on the S23 after a long lunch recording ("Pranzo"): the Voices screen list
   silently while a split costs one more naming. 0.5 keeps a margin above every different-person pair measured.
 - **Not covered.** Noisy rooms like the lunch recording, many speakers, and similar voices. Whether 0.5 still keeps people apart
   there needs real recordings (#72). The CLI still names one cluster at a time.
+
+## 2026-11-03 — #83 leftover voices are deleted, and long recordings keep fewer tiny speakers
+
+The S23's 14.5-minute "Pranzo" lunch with 5–6 people still listed 30 unknown voices after #82: 13 leftover pieces
+(0.3–4.9 s) from before #82, 7 large voices (18–151 s) and about 10 small ones (3–12 s).
+
+- **Leftovers are deleted, not hidden**, at the owner's request. At app and daemon start, before P2P, every unresolved
+  voice of a finished recording that no transcript line points at, and that is not a final-pass voice, is deleted through
+  `delete_unknown_voice`, so a deletion record stops paired devices sending it back. A recording counts as finished
+  once a line points at a final-pass voice: the transcript is then the final one, so nothing will point at the others.
+  Meetings without that (a crash, no diarization, a transcript not yet synced) and meetings being recorded are untouched,
+  because a live voice there may still get its line.
+- **A long recording needs more speech per speaker.** One person's voice drifts over a long meeting, and the final pass
+  kept any group of 8 windows. Joining the 15 evaluation recordings into one 19-minute, 3-person meeting (clean audio)
+  reproduces it:
+
+  | Least group | Speakers found (3 people) | Windows misplaced (of 1145) |
+  | --- | --- | --- |
+  | 8 | 7 | 25 |
+  | 15 | 5 | 26 |
+  | 20 | 4 | 25 |
+  | 30 | 3 | 22 |
+
+  The least group is now 1/30 of the windows, at least 8 and at most 30. Recordings under 4 minutes, including all 15
+  evaluation recordings, are unchanged. **The price:** in a long meeting someone who says less than that (20 s in a
+  10-minute meeting, 30 s from 15 minutes up) is given to the nearest voice. Adding 10, 20, 30 or 45 windows of a third
+  person to a 330-window two-person meeting kept them at or above the least group and folded them below it.
+- **Not covered.** Recordings already finished keep their speakers; only new recordings are regrouped. A noisy room may
+  still split one person into several voices of 30 s or more, which the voice groups of #82 then have to join.

@@ -50,6 +50,44 @@ fn a_brief_group_joins_its_nearest_neighbour() {
     assert_eq!(labels.iter().max(), Some(&1));
 }
 
+/// Builds two talkative voices of `each` windows and a third voice of `brief` windows.
+fn two_voices_and_a_brief_one(each: usize, brief: usize) -> Vec<Vec<f32>> {
+    let mut windows = voice(0, each);
+    windows.extend(voice(3, each));
+    windows.extend(voice(6, brief));
+    windows
+}
+
+#[test]
+fn a_short_meeting_keeps_a_brief_voice() {
+    // 95 windows: the least group stays 8 windows, as on the evaluation recordings.
+    let labels = group_voice_windows(
+        &two_voices_and_a_brief_one(40, 15),
+        &SpeakerPassConfig::default(),
+    );
+    assert_eq!(labels.iter().max(), Some(&2));
+}
+
+#[test]
+fn a_long_meeting_folds_a_brief_voice_into_its_nearest() {
+    // 615 windows, about ten minutes: 15 s is below the 20 s a voice now needs (#82).
+    let labels = group_voice_windows(
+        &two_voices_and_a_brief_one(300, 15),
+        &SpeakerPassConfig::default(),
+    );
+    assert_eq!(labels.iter().max(), Some(&1));
+}
+
+#[test]
+fn a_long_meeting_keeps_someone_who_spoke_half_a_minute() {
+    // 1235 windows: the least group stops growing at 30 windows.
+    let labels = group_voice_windows(
+        &two_voices_and_a_brief_one(600, 35),
+        &SpeakerPassConfig::default(),
+    );
+    assert_eq!(labels.iter().max(), Some(&2));
+}
+
 #[test]
 fn one_person_stays_one_speaker_even_when_brief() {
     let labels = group_voice_windows(&voice(2, 3), &SpeakerPassConfig::default());
