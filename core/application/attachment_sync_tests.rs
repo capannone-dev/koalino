@@ -18,7 +18,8 @@ use super::attachment_sync::{
 use crate::{
     domain::{
         errors::{NetworkError, StorageError},
-        models::{DeviceId, FileChunk, MeetingId, SharedAttachment},
+        models::{AttachmentOwner, DeviceId, FileChunk, MeetingId, SharedAttachment},
+        projects::ProjectId,
     },
     ports::file_transfer::{
         AttachmentLibrary, FILE_TRANSFER_CHUNK_BYTES, FileTransferEvent, FileTransferNetwork,
@@ -29,6 +30,7 @@ use crate::{
 #[derive(Default)]
 struct LibraryState {
     meetings: HashSet<String>,
+    projects: HashSet<ProjectId>,
     shared: Vec<SharedAttachment>,
     served: HashMap<String, Vec<u8>>,
     partial: HashMap<Uuid, Vec<u8>>,
@@ -61,8 +63,11 @@ impl AttachmentLibrary for FakeLibrary {
     fn has_attachment(&self, attachment_id: Uuid) -> Result<bool, StorageError> {
         Ok(self.with(|state| state.stored.contains_key(&attachment_id)))
     }
-    fn has_meeting(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
-        Ok(self.with(|state| state.meetings.contains(meeting_id.as_str())))
+    fn has_owner(&self, owner: &AttachmentOwner) -> Result<bool, StorageError> {
+        Ok(self.with(|state| match owner {
+            AttachmentOwner::Meeting(meeting_id) => state.meetings.contains(meeting_id.as_str()),
+            AttachmentOwner::Project(project_id) => state.projects.contains(project_id),
+        }))
     }
     fn read_chunk(&self, hash: &str, offset: u64) -> Result<Option<FileChunk>, StorageError> {
         Ok(self.with(|state| {
@@ -157,7 +162,7 @@ fn laptop() -> DeviceId {
 fn attachment(number: u128, contents: &[u8]) -> SharedAttachment {
     SharedAttachment {
         attachment_id: Uuid::from_u128(number),
-        meeting_id: MeetingId::new("meeting-1"),
+        owner: AttachmentOwner::Meeting(MeetingId::new("meeting-1")),
         file_name: "a.png".to_owned(),
         mime_type: "image/png".to_owned(),
         content_hash: format!("{:x}", Sha256::digest(contents)),
@@ -259,6 +264,38 @@ fn an_attachment_waits_for_its_meeting_to_sync() {
     library.with(|state| state.meetings.insert("meeting-1".to_owned()));
     sync.pump(&mut network, Instant::now());
     assert_eq!(network.requests.len(), 1);
+}
+
+#[test]
+fn a_project_resource_waits_for_its_project_and_is_dropped_when_it_is_deleted() {
+    let (mut sync, library) = receiver();
+    let mut network = FakeNetwork::default();
+    let project_id = ProjectId::from_uuid(Uuid::from_u128(85));
+    let mut resource = attachment(1, b"notes");
+    resource.owner = AttachmentOwner::Project(project_id);
+    sync.accept_manifest(&laptop(), vec![resource.clone()]);
+
+    sync.pump(&mut network, Instant::now());
+    assert!(
+        network.requests.is_empty(),
+        "the project has not synced yet"
+    );
+
+    sync.project_deleted(project_id);
+    library.with(|state| state.projects.insert(project_id));
+    sync.pump(&mut network, Instant::now());
+    assert!(
+        network.requests.is_empty(),
+        "a deleted project's resource is no longer wanted"
+    );
+
+    sync.accept_manifest(&laptop(), vec![resource.clone()]);
+    sync.pump(&mut network, Instant::now());
+    answer_requests(&mut sync, &mut network, b"notes");
+    assert_eq!(
+        library.with(|state| state.stored.get(&resource.attachment_id).cloned()),
+        Some(b"notes".to_vec())
+    );
 }
 
 #[test]

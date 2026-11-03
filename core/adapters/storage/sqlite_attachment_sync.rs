@@ -1,8 +1,8 @@
 //! Lists and stores the attachments exchanged with paired devices (Issue #57).
 //!
 //! A linked attachment gets a content hash and size once, recorded in its row, so listing them for
-//! a manifest never rereads files. Only rows linked to a meeting are ever listed or looked up by
-//! hash. This child module of `sqlite_adapter` reads metadata only and never logs names.
+//! a manifest never rereads files. Only rows linked to a meeting, or project resources (Issue #85),
+//! are ever listed or looked up by hash. This child module of `sqlite_adapter` reads metadata only and never logs names.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -11,8 +11,12 @@ use uuid::Uuid;
 use super::{SqliteNoteRepository, sqlite_error};
 use crate::domain::{
     errors::StorageError,
-    models::{MeetingId, SharedAttachment},
+    models::{AttachmentOwner, MeetingId, SharedAttachment},
+    projects::ProjectId,
 };
+
+/// The SQL condition matching rows that are shared: linked to a meeting or owned by a project.
+const SHARED_ROW: &str = "(meeting_id IS NOT NULL OR project_id IS NOT NULL)";
 
 /// Adds the nullable hash and size columns to older databases.
 ///
@@ -43,16 +47,16 @@ pub(super) fn add_attachment_content_columns(connection: &Connection) -> Result<
 }
 
 impl SqliteNoteRepository {
-    /// Lists linked attachments without a content hash.
+    /// Lists linked attachments and project resources without a content hash.
     ///
     /// Outputs: (attachment ID, file path) pairs, or a storage error. Side effects: Reads rows.
     pub fn attachments_awaiting_hash(&self) -> Result<Vec<(String, String)>, StorageError> {
         let mut statement = self
             .connection
-            .prepare(
+            .prepare(&format!(
                 "SELECT attachment_id, file_path FROM attachments
-                 WHERE meeting_id IS NOT NULL AND content_hash IS NULL ORDER BY rowid",
-            )
+                 WHERE {SHARED_ROW} AND content_hash IS NULL ORDER BY rowid"
+            ))
             .map_err(|error| sqlite_error("unable to prepare the attachment hash query", error))?;
         let rows = statement
             .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
@@ -83,7 +87,7 @@ impl SqliteNoteRepository {
         Ok(())
     }
 
-    /// Lists linked, hashed attachments with their local paths.
+    /// Lists linked, hashed attachments and project resources with their local paths.
     ///
     /// Outputs: (metadata, local path) pairs ordered by ID; the metadata's file name is the
     /// path's last part without the leading `<attachment ID>-`. Or a storage error.
@@ -91,13 +95,13 @@ impl SqliteNoteRepository {
     pub fn shared_attachment_rows(&self) -> Result<Vec<SharedAttachment>, StorageError> {
         let mut statement = self
             .connection
-            .prepare(
+            .prepare(&format!(
                 "SELECT attachment_id, meeting_id, file_path, mime_type, content_hash, size_bytes,
-                        original_timestamp_utc, original_device_id, meeting_time_ms
+                        original_timestamp_utc, original_device_id, meeting_time_ms, project_id
                  FROM attachments
-                 WHERE meeting_id IS NOT NULL AND content_hash IS NOT NULL
-                 ORDER BY attachment_id",
-            )
+                 WHERE {SHARED_ROW} AND content_hash IS NOT NULL
+                 ORDER BY attachment_id"
+            ))
             .map_err(|error| {
                 sqlite_error("unable to prepare the shared attachment query", error)
             })?;
@@ -105,7 +109,7 @@ impl SqliteNoteRepository {
             .query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, String>(4)?,
@@ -113,12 +117,33 @@ impl SqliteNoteRepository {
                     row.get::<_, String>(6)?,
                     row.get::<_, String>(7)?,
                     row.get::<_, Option<i64>>(8)?,
+                    row.get::<_, Option<String>>(9)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to list shared attachments", error))?;
         rows.map(|row| {
-            let (id, meeting_id, path, mime_type, content_hash, size, timestamp, device, time) =
-                row.map_err(|error| sqlite_error("unable to read a shared attachment", error))?;
+            let (
+                id,
+                meeting_id,
+                path,
+                mime_type,
+                content_hash,
+                size,
+                timestamp,
+                device,
+                time,
+                project,
+            ) = row.map_err(|error| sqlite_error("unable to read a shared attachment", error))?;
+            // A project resource never has a meeting; a stored project ID is always valid text.
+            let owner = match (project.as_deref().and_then(ProjectId::parse), meeting_id) {
+                (Some(project_id), _) => AttachmentOwner::Project(project_id),
+                (None, Some(meeting_id)) => AttachmentOwner::Meeting(MeetingId::new(meeting_id)),
+                (None, None) => {
+                    return Err(StorageError::Rejected {
+                        reason: String::from("a shared attachment has no usable owner"),
+                    });
+                }
+            };
             let attachment_id = Uuid::parse_str(&id).map_err(|error| StorageError::Rejected {
                 reason: format!("stored attachment has an invalid UUID: {error}"),
             })?;
@@ -137,7 +162,7 @@ impl SqliteNoteRepository {
                 .unwrap_or(file_name);
             Ok(SharedAttachment {
                 attachment_id,
-                meeting_id: MeetingId::new(meeting_id),
+                owner,
                 file_name,
                 mime_type,
                 content_hash,
@@ -176,7 +201,30 @@ impl SqliteNoteRepository {
             .map_err(|error| sqlite_error("unable to look up a meeting", error))
     }
 
-    /// Finds the file of a linked attachment by content hash.
+    /// Tells whether a project exists here (and is not deleted).
+    ///
+    /// Outputs: Whether it exists, or a storage error. Side effects: Reads one row.
+    pub fn project_exists(&self, project_id: ProjectId) -> Result<bool, StorageError> {
+        self.connection
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM projects WHERE project_id = ?1)",
+                params![project_id.to_string()],
+                |row| row.get(0),
+            )
+            .map_err(|error| sqlite_error("unable to look up a project", error))
+    }
+
+    /// Tells whether the meeting or project an attachment belongs to exists here.
+    ///
+    /// Outputs: Whether it exists, or a storage error. Side effects: Reads one row.
+    pub fn attachment_owner_exists(&self, owner: &AttachmentOwner) -> Result<bool, StorageError> {
+        match owner {
+            AttachmentOwner::Meeting(meeting_id) => self.meeting_exists(meeting_id),
+            AttachmentOwner::Project(project_id) => self.project_exists(*project_id),
+        }
+    }
+
+    /// Finds the file of a linked attachment or project resource by content hash.
     ///
     /// Outputs: Its local path, `None` when no linked attachment has the hash, or a storage error.
     /// Side effects: Reads one row.
@@ -186,8 +234,10 @@ impl SqliteNoteRepository {
     ) -> Result<Option<String>, StorageError> {
         self.connection
             .query_row(
-                "SELECT file_path FROM attachments
-                 WHERE content_hash = ?1 AND meeting_id IS NOT NULL ORDER BY rowid LIMIT 1",
+                &format!(
+                    "SELECT file_path FROM attachments
+                     WHERE content_hash = ?1 AND {SHARED_ROW} ORDER BY rowid LIMIT 1"
+                ),
                 params![content_hash],
                 |row| row.get(0),
             )
@@ -198,22 +248,28 @@ impl SqliteNoteRepository {
     /// Stores the row of a verified file from a paired device.
     ///
     /// Inputs: The metadata and the file's local path.
-    /// Outputs: Success, or a rejection when the meeting is unknown or the row cannot be written.
+    /// Outputs: Success, or a rejection when the meeting or project is unknown or the row cannot be
+    /// written.
     /// Side effects: Inserts one row; an existing row is kept unchanged.
     pub fn insert_received_attachment(
         &self,
         attachment: &SharedAttachment,
         file_path: &str,
     ) -> Result<(), StorageError> {
+        let (meeting_id, project_id) = match &attachment.owner {
+            AttachmentOwner::Meeting(meeting_id) => (Some(meeting_id.as_str().to_owned()), None),
+            AttachmentOwner::Project(project_id) => (None, Some(project_id.to_string())),
+        };
         let inserted = self
             .connection
             .execute(
-                "INSERT OR IGNORE INTO attachments (attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms, content_hash, size_bytes)
-                 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9
-                 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
+                "INSERT OR IGNORE INTO attachments (attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms, content_hash, size_bytes, project_id)
+                 SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
+                 WHERE EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)
+                    OR EXISTS (SELECT 1 FROM projects WHERE project_id = ?10)",
                 params![
                     attachment.attachment_id.to_string(),
-                    attachment.meeting_id.as_str(),
+                    meeting_id,
                     file_path,
                     attachment.mime_type,
                     attachment.original_timestamp.to_rfc3339(),
@@ -223,6 +279,7 @@ impl SqliteNoteRepository {
                         .map(|time| i64::try_from(time).unwrap_or(i64::MAX)),
                     attachment.content_hash,
                     i64::try_from(attachment.size_bytes).unwrap_or(i64::MAX),
+                    project_id,
                 ],
             )
             .map_err(|error| sqlite_error("unable to store a received attachment", error))?;

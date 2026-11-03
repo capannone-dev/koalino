@@ -5,7 +5,7 @@
 
 use crate::domain::{
     errors::{NetworkError, StorageError},
-    models::{DeviceId, FileChunk, MeetingId, SharedAttachment},
+    models::{AttachmentOwner, DeviceId, FileChunk, MeetingId, SharedAttachment},
 };
 use uuid::Uuid;
 
@@ -92,7 +92,8 @@ pub trait AttachmentLibrary {
     /// Side effects: Reads one file and writes its hash. A file that cannot be read is skipped.
     fn hash_next_attachment(&mut self) -> Result<(), StorageError>;
 
-    /// Lists the attachments linked to a meeting whose content hash is known.
+    /// Lists the attachments linked to a meeting, and project resources, whose content hash is
+    /// known.
     ///
     /// Outputs: Metadata ordered by attachment ID, or a storage error. Side effects: Reads rows.
     fn shared_attachments(&self) -> Result<Vec<SharedAttachment>, StorageError>;
@@ -100,8 +101,9 @@ pub trait AttachmentLibrary {
     /// Tells whether this attachment is already stored here. Side effects: Reads one row.
     fn has_attachment(&self, attachment_id: Uuid) -> Result<bool, StorageError>;
 
-    /// Tells whether this meeting has synced here. Side effects: Reads one row.
-    fn has_meeting(&self, meeting_id: &MeetingId) -> Result<bool, StorageError>;
+    /// Tells whether the meeting or project an attachment belongs to has synced here.
+    /// Side effects: Reads one row.
+    fn has_owner(&self, owner: &AttachmentOwner) -> Result<bool, StorageError>;
 
     /// Reads the chunk of a file linked to a meeting.
     ///

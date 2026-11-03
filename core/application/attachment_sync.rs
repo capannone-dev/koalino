@@ -165,7 +165,7 @@ impl AttachmentSync {
     /// rows are already gone.
     pub fn meeting_deleted(&mut self, meeting_id: &crate::domain::models::MeetingId) {
         self.wanted
-            .retain(|_, wanted| &wanted.attachment.meeting_id != meeting_id);
+            .retain(|_, wanted| !matches!(&wanted.attachment.owner, crate::domain::models::AttachmentOwner::Meeting(owner) if owner == meeting_id));
         if let Err(error) = self.library.remove_meeting_files(meeting_id) {
             tracing::warn!(error = %error, "a deleted meeting's files could not be removed");
         }
@@ -175,6 +175,9 @@ impl AttachmentSync {
     ///
     /// Side effects: Deletes files; a failure is logged, as the rows are already gone.
     pub fn project_deleted(&mut self, project_id: crate::domain::projects::ProjectId) {
+        self.wanted.retain(|_, wanted| {
+            wanted.attachment.owner != crate::domain::models::AttachmentOwner::Project(project_id)
+        });
         if let Err(error) = self.library.remove_project_files(project_id) {
             tracing::warn!(error = %error, "a deleted project's files could not be removed");
         }
@@ -396,10 +399,7 @@ impl AttachmentSync {
             if self.active.iter().any(|transfer| {
                 transfer.attachment.content_hash == attachment.content_hash
                     || transfer.attachment.attachment_id == attachment_id
-            }) || !self
-                .library
-                .has_meeting(&attachment.meeting_id)
-                .unwrap_or(false)
+            }) || !self.library.has_owner(&attachment.owner).unwrap_or(false)
             {
                 continue;
             }

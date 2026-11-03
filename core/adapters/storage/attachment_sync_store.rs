@@ -27,7 +27,7 @@ use super::{
 use crate::{
     domain::{
         errors::StorageError,
-        models::{FileChunk, MeetingId, SharedAttachment},
+        models::{AttachmentOwner, FileChunk, MeetingId, SharedAttachment},
     },
     ports::file_transfer::{AttachmentLibrary, FILE_TRANSFER_CHUNK_BYTES, MAX_FILE_TRANSFER_BYTES},
 };
@@ -54,22 +54,30 @@ impl AttachmentSyncStore {
         }
     }
 
-    /// The folder of a meeting, after checking its ID cannot reach outside the attachment folder.
+    /// The folder of a meeting or project, after checking a meeting ID cannot reach outside the
+    /// attachment folder. A project's folder is `project-<uuid>`, always a plain name.
     ///
     /// Outputs: The path, or a rejection. Side effects: None.
-    fn meeting_directory(&self, meeting_id: &MeetingId) -> Result<PathBuf, StorageError> {
-        if !is_plain_folder_name(meeting_id.as_str()) {
-            return Err(StorageError::Rejected {
-                reason: String::from("an attachment names an unusable meeting ID"),
-            });
+    fn owner_directory(&self, owner: &AttachmentOwner) -> Result<PathBuf, StorageError> {
+        match owner {
+            AttachmentOwner::Meeting(meeting_id) => {
+                if !is_plain_folder_name(meeting_id.as_str()) {
+                    return Err(StorageError::Rejected {
+                        reason: String::from("an attachment names an unusable meeting ID"),
+                    });
+                }
+                Ok(self.attachment_directory.join(meeting_id.as_str()))
+            }
+            AttachmentOwner::Project(project_id) => Ok(self.attachment_directory.join(
+                super::attachment_file_store::project_folder_name(*project_id),
+            )),
         }
-        Ok(self.attachment_directory.join(meeting_id.as_str()))
     }
 
     /// The partial file of an attachment. Outputs: The path, or a rejection. Side effects: None.
     fn partial_path(&self, attachment: &SharedAttachment) -> Result<PathBuf, StorageError> {
         Ok(self
-            .meeting_directory(&attachment.meeting_id)?
+            .owner_directory(&attachment.owner)?
             .join(format!(".{}.part", attachment.attachment_id)))
     }
 }
@@ -145,8 +153,8 @@ impl AttachmentLibrary for AttachmentSyncStore {
         self.repository.attachment_exists(attachment_id)
     }
 
-    fn has_meeting(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
-        self.repository.meeting_exists(meeting_id)
+    fn has_owner(&self, owner: &AttachmentOwner) -> Result<bool, StorageError> {
+        self.repository.attachment_owner_exists(owner)
     }
 
     fn read_chunk(&self, hash: &str, offset: u64) -> Result<Option<FileChunk>, StorageError> {
@@ -182,7 +190,7 @@ impl AttachmentLibrary for AttachmentSyncStore {
                 reason: String::from("an attachment's type or size is not acceptable"),
             });
         }
-        create_private_directory(&self.meeting_directory(&attachment.meeting_id)?)?;
+        create_private_directory(&self.owner_directory(&attachment.owner)?)?;
         let partial_path = self.partial_path(attachment)?;
         let _ = std::fs::remove_file(&partial_path);
         let mut open_options = OpenOptions::new();
@@ -232,7 +240,7 @@ impl AttachmentLibrary for AttachmentSyncStore {
         }
         let safe_name = kept_file_name(Path::new(&attachment.file_name));
         let final_path = self
-            .meeting_directory(&attachment.meeting_id)?
+            .owner_directory(&attachment.owner)?
             .join(format!("{}-{safe_name}", attachment.attachment_id));
         if let Err(error) = std::fs::rename(&partial_path, &final_path) {
             self.discard_incoming(attachment);

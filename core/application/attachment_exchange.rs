@@ -5,6 +5,11 @@
 //! transport, and each message can be applied alone. File names and meeting IDs are private, so
 //! they travel only inside the sealed value and are never logged. The sender holds the pair key
 //! but is still peer input, so `decode_attachment_manifest` bounds every value.
+//!
+//! Project resources (Issue #85) carry a `project_id` and an empty `meeting_id`, and always travel
+//! in messages of their own: a device from before projects refuses an entry with an empty meeting
+//! ID, which drops its whole message, so keeping them apart means it still accepts every meeting
+//! attachment.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -16,8 +21,9 @@ use crate::{
         voice_library_exchange::rfc3339,
     },
     domain::{
-        models::{DeviceId, MeetingId, SharedAttachment},
+        models::{AttachmentOwner, DeviceId, MeetingId, SharedAttachment},
         peer_trust::PairKey,
+        projects::ProjectId,
     },
     ports::file_transfer::MAX_FILE_TRANSFER_BYTES,
 };
@@ -51,7 +57,11 @@ pub enum AttachmentManifestError {
 #[derive(Serialize, Deserialize)]
 struct AttachmentBody {
     attachment_id: Uuid,
+    /// The meeting, or empty for a project resource.
     meeting_id: String,
+    /// The project of a resource; absent for a meeting attachment.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    project_id: Option<Uuid>,
     file_name: String,
     mime_type: String,
     content_hash: String,
@@ -71,6 +81,8 @@ pub fn is_attachment_manifest(payload: &[u8]) -> bool {
 
 /// Seals `attachments` for `to`, split into messages that each fit the transport.
 ///
+/// Meeting attachments come first; project resources follow in messages of their own.
+///
 /// Inputs: The list, the pair key, and the two device IDs the messages are bound to.
 /// Outputs: The messages (none for an empty list), or an error. Side effects: None.
 pub fn encode_attachment_manifests(
@@ -79,10 +91,15 @@ pub fn encode_attachment_manifests(
     from: &DeviceId,
     to: &DeviceId,
 ) -> Result<Vec<Vec<u8>>, AttachmentManifestError> {
-    attachments
+    let (meeting_attachments, project_resources): (Vec<&SharedAttachment>, Vec<&SharedAttachment>) =
+        attachments
+            .iter()
+            .partition(|attachment| matches!(attachment.owner, AttachmentOwner::Meeting(_)));
+    meeting_attachments
         .chunks(MAX_ATTACHMENTS_PER_MESSAGE)
+        .chain(project_resources.chunks(MAX_ATTACHMENTS_PER_MESSAGE))
         .map(|part| {
-            let body: Vec<AttachmentBody> = part.iter().map(to_body).collect();
+            let body: Vec<AttachmentBody> = part.iter().copied().map(to_body).collect();
             let plaintext =
                 serde_json::to_vec(&body).map_err(|_| AttachmentManifestError::Malformed)?;
             let sealed = seal_for_peer(pair_key, ATTACHMENT_MANIFEST_HEADER, from, to, &plaintext)
@@ -129,9 +146,14 @@ pub fn is_content_hash(hash: &str) -> bool {
 
 /// Copies an attachment into its wire form.
 fn to_body(attachment: &SharedAttachment) -> AttachmentBody {
+    let (meeting_id, project_id) = match &attachment.owner {
+        AttachmentOwner::Meeting(meeting_id) => (meeting_id.as_str().to_owned(), None),
+        AttachmentOwner::Project(project_id) => (String::new(), Some(project_id.as_uuid())),
+    };
     AttachmentBody {
         attachment_id: attachment.attachment_id,
-        meeting_id: attachment.meeting_id.as_str().to_owned(),
+        meeting_id,
+        project_id,
         file_name: attachment.file_name.clone(),
         mime_type: attachment.mime_type.clone(),
         content_hash: attachment.content_hash.clone(),
@@ -144,14 +166,20 @@ fn to_body(attachment: &SharedAttachment) -> AttachmentBody {
 
 /// Validates one wire entry.
 ///
-/// Outputs: The attachment, or `Invalid` for values outside the limits. Side effects: None.
+/// Outputs: The attachment, or `Invalid` for values outside the limits or an entry that names both
+/// or neither of a meeting and a project. Side effects: None.
 fn from_body(body: AttachmentBody) -> Result<SharedAttachment, AttachmentManifestError> {
-    let texts = [
-        &body.meeting_id,
-        &body.file_name,
-        &body.mime_type,
-        &body.original_device_id,
-    ];
+    let owner = match body.project_id {
+        Some(project_id) if body.meeting_id.is_empty() => {
+            AttachmentOwner::Project(ProjectId::from_uuid(project_id))
+        }
+        Some(_) => return Err(AttachmentManifestError::Invalid),
+        None if body.meeting_id.is_empty() || body.meeting_id.len() > MAX_TEXT_BYTES => {
+            return Err(AttachmentManifestError::Invalid);
+        }
+        None => AttachmentOwner::Meeting(MeetingId::new(body.meeting_id)),
+    };
+    let texts = [&body.file_name, &body.mime_type, &body.original_device_id];
     if !is_content_hash(&body.content_hash)
         || body.size_bytes > MAX_FILE_TRANSFER_BYTES
         || texts
@@ -162,7 +190,7 @@ fn from_body(body: AttachmentBody) -> Result<SharedAttachment, AttachmentManifes
     }
     Ok(SharedAttachment {
         attachment_id: body.attachment_id,
-        meeting_id: MeetingId::new(body.meeting_id),
+        owner,
         file_name: body.file_name,
         mime_type: body.mime_type,
         content_hash: body.content_hash,

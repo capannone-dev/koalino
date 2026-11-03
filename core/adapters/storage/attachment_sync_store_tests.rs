@@ -11,9 +11,13 @@ use uuid::Uuid;
 use super::{attachment_sync_store::AttachmentSyncStore, sqlite_adapter::SqliteNoteRepository};
 use crate::{
     application::crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
-    domain::models::{Attachment, DeviceId, MeetingId, SharedAttachment},
+    domain::{
+        models::{Attachment, AttachmentOwner, DeviceId, MeetingId, SharedAttachment},
+        projects::{ProjectId, ProjectName},
+    },
     ports::{
         file_transfer::{AttachmentLibrary, FILE_TRANSFER_CHUNK_BYTES},
+        projects::ProjectRepository,
         storage::{AttachmentRepository, NoteRepository},
     },
 };
@@ -89,7 +93,7 @@ fn sha256(contents: &[u8]) -> String {
 fn incoming(contents: &[u8]) -> SharedAttachment {
     SharedAttachment {
         attachment_id: Uuid::from_u128(0xAB),
-        meeting_id: MeetingId::new("meeting-1"),
+        owner: AttachmentOwner::Meeting(MeetingId::new("meeting-1")),
         file_name: "whiteboard.png".to_owned(),
         mime_type: "image/png".to_owned(),
         content_hash: sha256(contents),
@@ -243,6 +247,50 @@ fn a_verified_file_is_stored_privately_with_its_metadata() {
 }
 
 #[test]
+fn a_project_resource_is_stored_in_its_project_folder_and_shared_back() {
+    let mut fixture = Fixture::new();
+    let project = fixture
+        .repository
+        .create_project(&ProjectName::parse("Hiring").unwrap_or_else(|error| panic!("{error}")))
+        .unwrap_or_else(|error| panic!("project must be created: {error}"));
+    let mut resource = incoming(b"agenda");
+    resource.owner = AttachmentOwner::Project(project.project_id());
+    resource.file_name = "agenda.md".to_owned();
+    resource.mime_type = "text/markdown".to_owned();
+    resource.meeting_time_ms = None;
+
+    receive(&mut fixture, &resource, b"agenda")
+        .unwrap_or_else(|error| panic!("the resource must be stored: {error}"));
+
+    let stored = fixture
+        .repository
+        .project_resources(project.project_id())
+        .unwrap_or_else(|error| panic!("resources must load: {error}"));
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].meeting_id(), None);
+    assert!(
+        stored[0]
+            .file_path()
+            .contains(&format!("project-{}", project.project_id().as_uuid()))
+    );
+    assert_eq!(fixture.shared(), vec![resource]);
+}
+
+#[test]
+fn a_resource_of_a_project_not_here_is_refused() {
+    let mut fixture = Fixture::new();
+    let mut resource = incoming(b"agenda");
+    resource.owner = AttachmentOwner::Project(ProjectId::new_random());
+
+    assert_eq!(fixture.store.has_owner(&resource.owner).ok(), Some(false));
+    assert!(receive(&mut fixture, &resource, b"agenda").is_err());
+    assert_eq!(
+        fixture.store.has_attachment(resource.attachment_id).ok(),
+        Some(false)
+    );
+}
+
+#[test]
 fn a_file_that_fails_its_check_leaves_nothing_behind() {
     let mut fixture = Fixture::new();
     let attachment = incoming(b"picture");
@@ -275,7 +323,7 @@ fn a_name_from_a_peer_cannot_leave_the_meeting_folder() {
 fn unusable_metadata_is_refused_before_anything_is_written() {
     let mut fixture = Fixture::new();
     let mut escaping_meeting = incoming(b"x");
-    escaping_meeting.meeting_id = MeetingId::new("../other");
+    escaping_meeting.owner = AttachmentOwner::Meeting(MeetingId::new("../other"));
     let mut executable = incoming(b"x");
     executable.file_name = "tool.exe".to_owned();
     let mut wrong_type = incoming(b"x");

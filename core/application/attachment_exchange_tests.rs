@@ -9,9 +9,11 @@ use super::attachment_exchange::{
     encode_attachment_manifests, is_attachment_manifest, is_content_hash,
 };
 use crate::{
+    application::crypto::pair_key::seal_for_peer,
     domain::{
-        models::{DeviceId, MeetingId, SharedAttachment},
+        models::{AttachmentOwner, DeviceId, MeetingId, SharedAttachment},
         peer_trust::PairKey,
+        projects::ProjectId,
     },
     ports::file_transfer::MAX_FILE_TRANSFER_BYTES,
 };
@@ -35,7 +37,7 @@ fn phone() -> DeviceId {
 fn attachment(number: u128) -> SharedAttachment {
     SharedAttachment {
         attachment_id: Uuid::from_u128(number),
-        meeting_id: MeetingId::new("meeting-1"),
+        owner: AttachmentOwner::Meeting(MeetingId::new("meeting-1")),
         file_name: "whiteboard.png".to_owned(),
         mime_type: "image/png".to_owned(),
         content_hash: "ab".repeat(32),
@@ -121,6 +123,83 @@ fn implausible_values_are_refused() {
             Err(AttachmentManifestError::Invalid)
         );
     }
+}
+
+/// A project resource with the given ID number.
+fn resource(number: u128) -> SharedAttachment {
+    SharedAttachment {
+        owner: AttachmentOwner::Project(ProjectId::from_uuid(Uuid::from_u128(85))),
+        meeting_time_ms: None,
+        ..attachment(number)
+    }
+}
+
+/// Seals a hand-written JSON body, as a misbehaving peer could.
+fn sealed_json(json: &str) -> Vec<u8> {
+    let mut message = b"NTA1".to_vec();
+    message.extend_from_slice(
+        &seal_for_peer(&key(), b"NTA1", &laptop(), &phone(), json.as_bytes())
+            .unwrap_or_else(|error| panic!("the body must seal: {error}")),
+    );
+    message
+}
+
+/// One JSON entry whose owner fields are `owner`.
+fn entry_with_owner(owner: &str) -> String {
+    format!(
+        r#"[{{"attachment_id":"{}",{owner},"file_name":"a.png","mime_type":"image/png","content_hash":"{}","size_bytes":1,"original_timestamp":"2026-11-03T10:00:00Z","original_device_id":"laptop","meeting_time_ms":null}}]"#,
+        Uuid::from_u128(1),
+        "ab".repeat(32)
+    )
+}
+
+#[test]
+fn project_resources_round_trip_in_messages_of_their_own() {
+    let mixed = [resource(1), attachment(2), resource(3)];
+
+    let messages = encode_attachment_manifests(&mixed, &key(), &laptop(), &phone())
+        .unwrap_or_else(|error| panic!("the list must seal: {error}"));
+    let decoded: Vec<Vec<SharedAttachment>> = messages
+        .iter()
+        .map(|message| {
+            decode_attachment_manifest(message, &key(), &laptop(), &phone())
+                .unwrap_or_else(|error| panic!("the message must open: {error}"))
+        })
+        .collect();
+
+    assert_eq!(
+        decoded,
+        vec![vec![attachment(2)], vec![resource(1), resource(3)]]
+    );
+}
+
+#[test]
+fn an_entry_must_name_exactly_one_owner() {
+    let project = Uuid::from_u128(85);
+    let both = format!(r#""meeting_id":"meeting-1","project_id":"{project}""#);
+    let neither = String::from(r#""meeting_id":"""#);
+    let only_project = format!(r#""meeting_id":"","project_id":"{project}""#);
+
+    for owner in [both, neither] {
+        assert_eq!(
+            decode_attachment_manifest(
+                &sealed_json(&entry_with_owner(&owner)),
+                &key(),
+                &laptop(),
+                &phone()
+            ),
+            Err(AttachmentManifestError::Invalid)
+        );
+    }
+    assert!(
+        decode_attachment_manifest(
+            &sealed_json(&entry_with_owner(&only_project)),
+            &key(),
+            &laptop(),
+            &phone()
+        )
+        .is_ok()
+    );
 }
 
 #[test]

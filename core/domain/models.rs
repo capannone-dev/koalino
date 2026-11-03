@@ -799,13 +799,22 @@ pub struct Attachment {
     project_id: Option<crate::domain::projects::ProjectId>,
 }
 
+/// What an attachment belongs to: a meeting, or a project as one of its resources (Issue #85).
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum AttachmentOwner {
+    /// An attachment of a meeting.
+    Meeting(MeetingId),
+    /// A resource of a project.
+    Project(crate::domain::projects::ProjectId),
+}
+
 /// One linked attachment as paired devices describe it: metadata only, never a local path.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SharedAttachment {
     /// The ID shared by every copy of this attachment.
     pub attachment_id: Uuid,
-    /// The meeting it belongs to.
-    pub meeting_id: MeetingId,
+    /// The meeting or project it belongs to.
+    pub owner: AttachmentOwner,
     /// The file's name, without any folder.
     pub file_name: String,
     /// The file's MIME type.
