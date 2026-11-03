@@ -57,6 +57,9 @@ final class FakeVoiceGalleryBridge implements VoiceGalleryBridge {
   /// When set, `assignCluster` throws this error instead of succeeding.
   Object? assignmentError;
 
+  /// `(comma-joined clusterIds, identityName)` pairs sent to `assignVoiceGroup`.
+  final List<(String, String)> assignedGroups = <(String, String)>[];
+
   @override
   Future<VoiceLibrary> getVoiceLibrary() async {
     libraryLoads += 1;
@@ -93,6 +96,29 @@ final class FakeVoiceGalleryBridge implements VoiceGalleryBridge {
       identityCreated: true,
       variantsStored: variantsStored,
       segmentsUpdated: 1,
+    );
+  }
+
+  @override
+  Future<VoiceGroupAssignmentResult> assignVoiceGroup({
+    required List<String> clusterIds,
+    required String identityName,
+  }) async {
+    assignedGroups.add((clusterIds.join(','), identityName));
+    final Object? error = assignmentError;
+    if (error != null) {
+      throw error;
+    }
+    _clusters.removeWhere((UnknownSpeakerCluster cluster) =>
+        clusterIds.contains(cluster.clusterId));
+    return VoiceGroupAssignmentResult(
+      identityId: 'identity-new',
+      identityName: identityName,
+      identityCreated: true,
+      assignedClusterIds: clusterIds,
+      skippedClusterCount: 0,
+      variantsStored: variantsStored,
+      segmentsUpdated: clusterIds.length,
     );
   }
 
@@ -502,6 +528,156 @@ void main() {
     expect(find.text('Unknown speaker 1'), findsOneWidget);
   });
 
+  group('voices of one person (#82)', () {
+    const UnknownSpeakerCluster longPart = UnknownSpeakerCluster(
+      clusterId: 'part-1',
+      meetingId: 'meeting-1',
+      meetingTitle: 'Lunch',
+      totalDurationMs: 105000,
+      chunkCount: 1,
+      hasReviewClip: true,
+      voiceGroupId: 'part-1',
+    );
+    const UnknownSpeakerCluster shortPart = UnknownSpeakerCluster(
+      clusterId: 'part-2',
+      meetingId: 'meeting-1',
+      meetingTitle: 'Lunch',
+      totalDurationMs: 29000,
+      chunkCount: 1,
+      hasReviewClip: true,
+      voiceGroupId: 'part-1',
+    );
+    const UnknownSpeakerCluster laterPart = UnknownSpeakerCluster(
+      clusterId: 'part-3',
+      meetingId: 'meeting-2',
+      meetingTitle: 'Standup',
+      totalDurationMs: 8000,
+      chunkCount: 2,
+      voiceGroupId: 'part-1',
+    );
+    const UnknownSpeakerCluster someoneElse = UnknownSpeakerCluster(
+      clusterId: 'other-1',
+      meetingId: 'meeting-1',
+      meetingTitle: 'Lunch',
+      totalDurationMs: 22000,
+      chunkCount: 1,
+      voiceGroupId: 'other-1',
+    );
+    final List<UnknownSpeakerCluster> lunch = <UnknownSpeakerCluster>[
+      longPart,
+      shortPart,
+      laterPart,
+      someoneElse,
+    ];
+
+    testWidgets('share one card that says how much it covers',
+        (WidgetTester tester) async {
+      final FakeVoiceGalleryBridge bridge =
+          FakeVoiceGalleryBridge(clusters: lunch);
+
+      await pumpGallery(tester, bridge, meetingId: null);
+
+      expect(find.text('Unknown speaker 1'), findsOneWidget);
+      expect(find.text('Unknown speaker 2'), findsOneWidget);
+      expect(find.text('Unknown speaker 3'), findsNothing);
+      expect(find.text('142.0 s · 3 parts in 2 meetings'), findsOneWidget);
+      expect(find.text('Lunch, Standup'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Assign'), findsNWidgets(2));
+    });
+
+    testWidgets('are named at once', (WidgetTester tester) async {
+      final FakeVoiceGalleryBridge bridge =
+          FakeVoiceGalleryBridge(clusters: lunch);
+
+      await pumpGallery(tester, bridge, meetingId: null);
+      await tester.enterText(
+          find.byKey(const ValueKey<String>('identity-name-part-1')),
+          ' Marco ');
+      await tester.tap(find.byKey(const ValueKey<String>('assign-part-1')));
+      await tester.pumpAndSettle();
+
+      expect(bridge.assignedGroups, <(String, String)>[
+        ('part-1,part-2,part-3', 'Marco'),
+      ]);
+      expect(bridge.assignedClusters, isEmpty);
+      expect(find.text('Assigned 3 voices to Marco'), findsOneWidget);
+      expect(find.text('Unknown speaker 2'), findsNothing);
+    });
+
+    testWidgets('a part left out is not named and plays on its own',
+        (WidgetTester tester) async {
+      final FakeVoiceGalleryBridge bridge =
+          FakeVoiceGalleryBridge(clusters: lunch);
+
+      await pumpGallery(tester, bridge, meetingId: null);
+      await tester.tap(find.text('3 parts'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('play-part-2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('include-part-2')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey<String>('identity-name-part-1')), 'Marco');
+      await tester
+          .ensureVisible(find.byKey(const ValueKey<String>('assign-part-1')));
+      await tester.tap(find.byKey(const ValueKey<String>('assign-part-1')));
+      await tester.pumpAndSettle();
+
+      expect(bridge.playedPaths, <String>['/private/clips/part-2.wav']);
+      expect(bridge.assignedGroups, <(String, String)>[
+        ('part-1,part-3', 'Marco'),
+      ]);
+    });
+
+    testWidgets('with every part left out, nothing is named',
+        (WidgetTester tester) async {
+      final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+          clusters: <UnknownSpeakerCluster>[longPart, shortPart]);
+
+      await pumpGallery(tester, bridge, meetingId: null);
+      await tester.tap(find.text('2 parts'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('include-part-1')));
+      await tester.tap(find.byKey(const ValueKey<String>('include-part-2')));
+      await tester.enterText(
+          find.byKey(const ValueKey<String>('identity-name-part-1')), 'Marco');
+      await tester
+          .ensureVisible(find.byKey(const ValueKey<String>('assign-part-1')));
+      await tester.tap(find.byKey(const ValueKey<String>('assign-part-1')));
+      await tester.pumpAndSettle();
+
+      expect(bridge.assignedGroups, isEmpty);
+      expect(find.text('Choose at least one voice to name'), findsOneWidget);
+    });
+
+    testWidgets('Play plays the longest part', (WidgetTester tester) async {
+      final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+          clusters: <UnknownSpeakerCluster>[shortPart, longPart]);
+
+      await pumpGallery(tester, bridge, meetingId: null);
+      await tester.tap(find.byKey(const ValueKey<String>('play-group-part-1')));
+      await tester.pumpAndSettle();
+
+      expect(bridge.playedPaths, <String>['/private/clips/part-1.wav']);
+    });
+
+    testWidgets('deleting the card deletes every part',
+        (WidgetTester tester) async {
+      final FakeVoiceGalleryBridge bridge =
+          FakeVoiceGalleryBridge(clusters: lunch);
+
+      await pumpGallery(tester, bridge, meetingId: null);
+      await tester.tap(find.byKey(const ValueKey<String>('delete-part-1')));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete Unknown speaker 1?'), findsOneWidget);
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      expect(bridge.deletedClusters, <String>['part-1', 'part-2', 'part-3']);
+      expect(find.text('Unknown speaker 2'), findsNothing);
+    });
+  });
+
   group('FFI JSON decoding', () {
     test('decodes the note_taker_get_voice_library response', () {
       final VoiceLibrary library = decodeVoiceLibrary(
@@ -521,6 +697,8 @@ void main() {
       expect(library.unknownClusters[0].totalDurationMs, 2500);
       expect(library.unknownClusters[0].hasReviewClip, isTrue);
       expect(library.unknownClusters[1].meetingTitle, isNull);
+      expect(library.unknownClusters[0].voiceGroupId, 'c1',
+          reason: 'without a group, a voice is its own');
       expect(library.savedPeople.single.displayName, 'Ada');
       expect(library.savedPeople.single.voiceVariantCount, 3);
     });
@@ -532,6 +710,35 @@ void main() {
         throwsA(isA<StateError>().having(
             (StateError error) => error.message, 'message', contains('boom'))),
       );
+    });
+
+    test('decodes each voice\'s group', () {
+      final VoiceLibrary library = decodeVoiceLibrary(
+        '{"ok":true,"unknown_clusters":[{"cluster_id":"c2","meeting_id":"m1",'
+        '"meeting_title":null,"total_duration_ms":400,"chunk_count":1,'
+        '"created_at":"2026-10-27T09:16:00+00:00","has_review_clip":false,'
+        '"voice_group_id":"c1"}],"saved_people":[]}',
+      );
+
+      expect(library.unknownClusters.single.voiceGroupId, 'c1');
+    });
+
+    test('decodes a note_taker_assign_voice_group response', () {
+      final VoiceGroupAssignmentResult result = decodeVoiceGroupAssignment(
+        '{"ok":true,"identity_id":"i1","identity_name":"Marco",'
+        '"identity_created":false,"assigned_cluster_ids":["c1","c2"],'
+        '"skipped_cluster_count":1,"variants_stored":2,"segments_updated":5}',
+      );
+
+      expect(result.identityName, 'Marco');
+      expect(result.identityCreated, isFalse);
+      expect(result.assignedClusterIds, <String>['c1', 'c2']);
+      expect(result.skippedClusterCount, 1);
+      expect(result.variantsStored, 2);
+      expect(
+          () => decodeVoiceGroupAssignment(
+              '{"ok":false,"error_code":"invalid_argument","error":"x"}'),
+          throwsStateError);
     });
 
     test('decodes the review clip path', () {

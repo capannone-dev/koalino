@@ -100,6 +100,9 @@ calls the Rust C ABI.
 - `note_taker_assign_cluster` receives only the cluster ID and the typed name. Rust resolves the
   name, enrolls the cluster's embeddings, relinks transcript segments, and deletes the review
   audio. Flutter never receives or constructs biometric data.
+- `note_taker_get_voice_library` tags each voice with `voice_group_id`. Rust decides which voices
+  sound like one person (#82); Flutter only collects them into one card. The card names its ticked
+  voices with `note_taker_assign_voice_group`, and a voice can be unticked when it is someone else.
 
 Both calls read and write SQLite synchronously, so the bridge runs each one in `Isolate.run` from
 a top-level function that opens the core library inside the isolate. `decodeUnknownClusters` and

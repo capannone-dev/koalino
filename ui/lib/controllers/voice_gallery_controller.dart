@@ -38,6 +38,10 @@ final class VoiceGalleryController extends ChangeNotifier {
   final String? meetingId;
 
   List<UnknownSpeakerCluster> _clusters = const <UnknownSpeakerCluster>[];
+  List<UnknownVoiceGroup> _groups = const <UnknownVoiceGroup>[];
+
+  /// Voices the owner left out of their group's naming (#82), by cluster ID.
+  final Set<String> _leftOutClusterIds = <String>{};
   List<SavedPerson> _savedPeople = const <SavedPerson>[];
   bool _isLoading = false;
   String? _errorMessage;
@@ -45,6 +49,25 @@ final class VoiceGalleryController extends ChangeNotifier {
 
   /// Returns unresolved cluster metadata in creation order.
   List<UnknownSpeakerCluster> get clusters => _clusters;
+
+  /// Returns the unresolved voices grouped by person, in the order Rust listed them (#82).
+  List<UnknownVoiceGroup> get groups => _groups;
+
+  /// Reports whether `cluster` is named with the rest of its group.
+  bool isIncluded(UnknownSpeakerCluster cluster) =>
+      !_leftOutClusterIds.contains(cluster.clusterId);
+
+  /// Includes `cluster` in, or leaves it out of, its group's naming.
+  ///
+  /// Side effects: Notifies listeners. A voice left out stays listed and can be named later.
+  void setIncluded(UnknownSpeakerCluster cluster, bool included) {
+    if (included) {
+      _leftOutClusterIds.remove(cluster.clusterId);
+    } else {
+      _leftOutClusterIds.add(cluster.clusterId);
+    }
+    notifyListeners();
+  }
 
   /// Returns the saved people, sorted by name.
   List<SavedPerson> get savedPeople => _savedPeople;
@@ -74,6 +97,9 @@ final class VoiceGalleryController extends ChangeNotifier {
           .where((UnknownSpeakerCluster cluster) =>
               meetingId == null || cluster.meetingId == meetingId)
           .toList(growable: false);
+      _groups = UnknownVoiceGroup.collect(_clusters);
+      _leftOutClusterIds.removeWhere((String clusterId) => !_clusters.any(
+          (UnknownSpeakerCluster cluster) => cluster.clusterId == clusterId));
       _savedPeople = library.savedPeople;
     } on Object {
       _errorMessage = 'Unable to load Voice Gallery';
@@ -112,6 +138,24 @@ final class VoiceGalleryController extends ChangeNotifier {
     }
   }
 
+  /// Plays the longest voice of `group` that has a sample, or stops it when it is playing.
+  ///
+  /// Side effects: As `play`.
+  Future<void> playGroup(UnknownVoiceGroup group) async {
+    final List<UnknownSpeakerCluster> playable = group.voices
+        .where((UnknownSpeakerCluster voice) => voice.hasReviewClip)
+        .toList();
+    if (playable.isEmpty) {
+      return;
+    }
+    final UnknownSpeakerCluster playing = playable.firstWhere(
+        (UnknownSpeakerCluster voice) => voice.clusterId == _playingClusterId,
+        orElse: () => playable.reduce((UnknownSpeakerCluster longest,
+                UnknownSpeakerCluster voice) =>
+            voice.totalDurationMs > longest.totalDurationMs ? voice : longest));
+    await play(playing);
+  }
+
   /// Clears the playing mark.
   void _markStopped() {
     if (_playingClusterId != null) {
@@ -134,6 +178,29 @@ final class VoiceGalleryController extends ChangeNotifier {
     } on Object {
       _statusMessage = 'Unable to delete this voice';
       notifyListeners();
+      return;
+    }
+    _statusMessage = 'Voice deleted';
+    await load();
+  }
+
+  /// Deletes every voice of `group` for good and refreshes the lists.
+  ///
+  /// Side effects: Stops playback if one of them is playing, and deletes each in Rust. A refusal
+  /// stops there, keeps what is left, and reports a status message.
+  Future<void> deleteGroup(UnknownVoiceGroup group) async {
+    try {
+      if (group.voices.any((UnknownSpeakerCluster voice) =>
+          voice.clusterId == _playingClusterId)) {
+        await _voiceGalleryBridge.stopPlayback();
+        _markStopped();
+      }
+      for (final UnknownSpeakerCluster voice in group.voices) {
+        await _voiceGalleryBridge.deleteUnknownVoice(voice.clusterId);
+      }
+    } on Object {
+      _statusMessage = 'Unable to delete this voice';
+      await load();
       return;
     }
     _statusMessage = 'Voice deleted';
@@ -178,6 +245,51 @@ final class VoiceGalleryController extends ChangeNotifier {
           ? 'Assigned to ${result.identityName}'
           : 'Assigned to ${result.identityName}. There was not enough clear '
               'speech to recognize this voice in future recordings.';
+    } on Object {
+      _statusMessage = 'Unable to assign the speaker cluster';
+      notifyListeners();
+      return;
+    }
+    await load();
+  }
+
+  /// Names the included voices of `group` as one person and refreshes the list (#82).
+  ///
+  /// A one-voice group goes through `assignCluster`. A blank name, or no voice included, is
+  /// rejected locally without calling Rust. A rejected naming keeps the list and reports it.
+  Future<void> assignGroup(UnknownVoiceGroup group, String identityName) async {
+    if (group.voices.length == 1) {
+      return assignCluster(group.voices.single, identityName);
+    }
+    final String trimmedName = identityName.trim();
+    if (trimmedName.isEmpty) {
+      _statusMessage = 'Enter a name before assigning';
+      notifyListeners();
+      return;
+    }
+    final List<String> clusterIds = <String>[
+      for (final UnknownSpeakerCluster voice in group.voices)
+        if (isIncluded(voice)) voice.clusterId,
+    ];
+    if (clusterIds.isEmpty) {
+      _statusMessage = 'Choose at least one voice to name';
+      notifyListeners();
+      return;
+    }
+    try {
+      final VoiceGroupAssignmentResult result =
+          await _voiceGalleryBridge.assignVoiceGroup(
+        clusterIds: clusterIds,
+        identityName: trimmedName,
+      );
+      final int named = result.assignedClusterIds.length;
+      final String assigned = named == 1
+          ? 'Assigned to ${result.identityName}'
+          : 'Assigned $named voices to ${result.identityName}';
+      _statusMessage = result.variantsStored > 0
+          ? assigned
+          : '$assigned. There was not enough clear speech to recognize this '
+              'voice in future recordings.';
     } on Object {
       _statusMessage = 'Unable to assign the speaker cluster';
       notifyListeners();

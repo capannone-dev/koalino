@@ -238,8 +238,9 @@ error (see `API_SPECS.md`). The CLI binary composes an `ExportWriter` from
 case as the CLI and HTTP API. `note_taker_get_unknown_clusters(meeting_id)` returns unresolved
 unknown-speaker clusters with optional local review-clip paths. `note_taker_assign_cluster(
 cluster_id, identity_name)` assigns a cluster to a named identity and deletes its review audio.
-`note_taker_get_voice_library()` lists every meeting's clusters and the saved people, writing no
-audio, and `note_taker_prepare_cluster_review_clip(cluster_id)` writes one clip when it is played.
+`note_taker_get_voice_library()` lists every meeting's clusters, grouped by voice (#82), and the
+saved people, writing no audio. `note_taker_assign_voice_group(cluster_ids_json, identity_name)`
+names a group's voices as one person, and `note_taker_prepare_cluster_review_clip(cluster_id)` writes one clip when it is played.
 All return caller-freed JSON; see `API_SPECS.md`.
 
 `transcription_settings.rs` keeps Settings' Whisper model, provider and OpenAI key, and `ffi_transcription.rs`

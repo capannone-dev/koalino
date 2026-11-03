@@ -1816,3 +1816,32 @@ Measured through the real engine with word timing, on an S23, `small`, 11 s Engl
   settings file and not proposed again. With OpenAI chosen there is no proposal, because the device's
   speed says nothing about it.
 
+
+## 2026-11-03 — #82 one person's unknown voices are named once
+
+Found on the S23 after a long lunch recording ("Pranzo"): the Voices screen listed 21+ unknown voices for one meeting.
+
+- **Two causes.** The final pass deleted only the live clusters a transcript segment pointed to. A diarized turn that got no words
+  (a laugh, a short noise) still made a live cluster with a review clip, so those stayed as 0.7–5 s entries. The session now
+  remembers every live cluster its turns touched and the final pass deletes each one it doesn't keep. Separately, every
+  unresolved cluster was its own card, so a person split across final speakers, recordings or meetings was named once per card.
+- **The library groups voices; storage doesn't change.** Unresolved clusters are grouped on each listing by average linkage over
+  their representative voices. Nothing about groups is stored or synced, and naming a group still resolves each cluster on its
+  own, so paired devices need no new message and older peers interoperate. The Linux, Windows and Android apps and the web show
+  one card per group, with the parts listed, playable, and untickable when one is someone else.
+- **Cutoff 0.5, measured on the 15 evaluation recordings** (`measure_meeting_pass`, ECAPA, 33 final speakers of 3 people). One
+  person's whole-recording voices in different recordings: median 0.85, 5th percentile 0.58, lowest 0.50. Different people:
+  99th percentile 0.37, highest 0.41. Pieces of 5 windows (about 5 s): different people up to 0.49; the same person joins above 0.5
+  72% of the time, 91% at 10 windows and 99% at 20. Grouping all 33 voices plus a 3-window piece of each multi-speaker voice:
+
+  | Cutoff | Groups (3 people) | Groups mixing people |
+  | --- | --- | --- |
+  | 0.45 | 4 | 0 |
+  | 0.50 | 6 | 0 |
+  | 0.55 | 8 | 0 |
+  | 0.60 | 12 | 0 |
+
+  0.45 groups best here, but these are clean recordings of three people on one microphone, and a wrong merge names someone
+  silently while a split costs one more naming. 0.5 keeps a margin above every different-person pair measured.
+- **Not covered.** Noisy rooms like the lunch recording, many speakers, and similar voices. Whether 0.5 still keeps people apart
+  there needs real recordings (#72). The CLI still names one cluster at a time.

@@ -1,5 +1,6 @@
 // Renders unknown voices with sample playback and name assignment, and the saved people. Opens
 // from the Voices destination for all meetings, or from a meeting for that meeting's (Issue #63).
+// Voices that sound like one person share a card and are named at once (#82).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
@@ -21,7 +22,8 @@ final class VoiceGalleryScreen extends StatefulWidget {
 
 /// Starts loading once, keeps one name field per cluster, and renders controller changes.
 final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
-  /// Name-field controllers keyed by cluster ID, so typed text survives rebuilds.
+  /// Name-field controllers keyed by group ID (a lone voice's cluster ID), so typed text survives
+  /// rebuilds.
   final Map<String, TextEditingController> _nameControllers =
       <String, TextEditingController>{};
 
@@ -69,7 +71,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
               ),
             );
           }
-          _pruneNameControllers(controller.clusters);
+          _pruneNameControllers(controller.groups);
           final String? statusMessage = controller.statusMessage;
           final bool showsSavedPeople = controller.meetingId == null;
           return ListView(
@@ -89,9 +91,13 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                   padding: EdgeInsets.symmetric(vertical: 8),
                   child: Text('No unknown speakers to review'),
                 ),
-              for (final (int index, UnknownSpeakerCluster cluster)
-                  in controller.clusters.indexed)
-                _buildClusterCard(context, controller, index, cluster),
+              for (final (int index, UnknownVoiceGroup group)
+                  in controller.groups.indexed)
+                if (group.voices.length == 1)
+                  _buildClusterCard(
+                      context, controller, index, group.voices.single)
+                else
+                  _buildGroupCard(context, controller, index, group),
               if (showsSavedPeople) ...<Widget>[
                 _sectionTitle(context, 'Saved people'),
                 if (controller.savedPeople.isEmpty)
@@ -193,53 +199,206 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                 ],
               ),
             ),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: TextField(
-                    key: ValueKey<String>('identity-name-${cluster.clusterId}'),
-                    controller: nameController,
-                    decoration: InputDecoration(
-                      labelText: 'Name',
-                      border: const OutlineInputBorder(),
-                      suffixIcon: controller.savedPeople.isEmpty
-                          ? null
-                          : PopupMenuButton<String>(
-                              tooltip: 'Choose a saved person',
-                              icon: const Icon(Icons.people_outline),
-                              onSelected: (String name) =>
-                                  nameController.text = name,
-                              itemBuilder: (BuildContext context) =>
-                                  <PopupMenuEntry<String>>[
-                                for (final SavedPerson person
-                                    in controller.savedPeople)
-                                  PopupMenuItem<String>(
-                                    value: person.displayName,
-                                    child: Text(person.displayName),
-                                  ),
-                              ],
-                            ),
-                    ),
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (String typedName) =>
-                        controller.assignCluster(cluster, typedName),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  key: ValueKey<String>('assign-${cluster.clusterId}'),
-                  onPressed: controller.isLoading
-                      ? null
-                      : () => controller.assignCluster(
-                          cluster, nameController.text),
-                  child: const Text('Assign'),
-                ),
-              ],
+            _nameRow(
+              controller,
+              nameController,
+              cluster.clusterId,
+              (String typedName) =>
+                  controller.assignCluster(cluster, typedName),
             ),
           ],
         ),
       ),
     );
+  }
+
+  /// Builds the name field, with saved people to pick from, and the Assign button.
+  ///
+  /// `keyId` names the widgets' keys; `onAssign` receives the typed name.
+  Widget _nameRow(
+    VoiceGalleryController controller,
+    TextEditingController nameController,
+    String keyId,
+    void Function(String) onAssign,
+  ) {
+    return Row(
+      children: <Widget>[
+        Expanded(
+          child: TextField(
+            key: ValueKey<String>('identity-name-$keyId'),
+            controller: nameController,
+            decoration: InputDecoration(
+              labelText: 'Name',
+              border: const OutlineInputBorder(),
+              suffixIcon: controller.savedPeople.isEmpty
+                  ? null
+                  : PopupMenuButton<String>(
+                      tooltip: 'Choose a saved person',
+                      icon: const Icon(Icons.people_outline),
+                      onSelected: (String name) => nameController.text = name,
+                      itemBuilder: (BuildContext context) =>
+                          <PopupMenuEntry<String>>[
+                        for (final SavedPerson person in controller.savedPeople)
+                          PopupMenuItem<String>(
+                            value: person.displayName,
+                            child: Text(person.displayName),
+                          ),
+                      ],
+                    ),
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: onAssign,
+          ),
+        ),
+        const SizedBox(width: 12),
+        FilledButton(
+          key: ValueKey<String>('assign-$keyId'),
+          onPressed:
+              controller.isLoading ? null : () => onAssign(nameController.text),
+          child: const Text('Assign'),
+        ),
+      ],
+    );
+  }
+
+  /// Builds one card for several voices of one person (#82): their total, the meetings they
+  /// come from, Play for the longest, the parts to leave out or play, and one name for all.
+  Widget _buildGroupCard(
+    BuildContext context,
+    VoiceGalleryController controller,
+    int index,
+    UnknownVoiceGroup group,
+  ) {
+    final TextEditingController nameController =
+        _nameControllers.putIfAbsent(group.groupId, TextEditingController.new);
+    final bool isPlaying = group.voices.any((UnknownSpeakerCluster voice) =>
+        voice.clusterId == controller.playingClusterId);
+    final bool canPlay =
+        group.voices.any((UnknownSpeakerCluster voice) => voice.hasReviewClip);
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final int meetingCount = group.meetingIds.length;
+    final String partsLabel = '${group.voices.length} parts';
+    final String coverage = meetingCount == 1
+        ? partsLabel
+        : '$partsLabel in $meetingCount meetings';
+    final List<String> meetingTitles = <String>{
+      for (final UnknownSpeakerCluster voice in group.voices)
+        voice.meetingTitle ?? 'Untitled meeting',
+    }.toList(growable: false);
+    return Card(
+      key: ValueKey<String>('card-${group.groupId}'),
+      margin: const EdgeInsets.only(bottom: 12),
+      color: isPlaying ? colors.primaryContainer : null,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: isPlaying
+                  ? Icon(Icons.volume_up, color: colors.onPrimaryContainer)
+                  : null,
+              title: Text('Unknown speaker ${index + 1}'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  if (isPlaying)
+                    Text('Playing…',
+                        style: TextStyle(
+                            color: colors.onPrimaryContainer,
+                            fontWeight: FontWeight.bold)),
+                  Text('${_formatSeconds(group.totalDurationMs)} · $coverage'),
+                  if (controller.meetingId == null)
+                    Text(meetingTitles.join(', ')),
+                ],
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (canPlay)
+                    TextButton(
+                      key: ValueKey<String>('play-group-${group.groupId}'),
+                      onPressed: () => controller.playGroup(group),
+                      child: Text(isPlaying ? 'Stop' : 'Play'),
+                    ),
+                  IconButton(
+                    key: ValueKey<String>('delete-${group.groupId}'),
+                    tooltip: 'Delete these voices',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () =>
+                        _confirmDeleteGroup(context, controller, index, group),
+                  ),
+                ],
+              ),
+            ),
+            ExpansionTile(
+              key: ValueKey<String>('parts-${group.groupId}'),
+              tilePadding: EdgeInsets.zero,
+              title: Text(partsLabel),
+              subtitle: const Text('These sound like one person. '
+                  'Untick any that is someone else.'),
+              children: <Widget>[
+                for (final UnknownSpeakerCluster voice in group.voices)
+                  _buildPartRow(controller, voice),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _nameRow(
+              controller,
+              nameController,
+              group.groupId,
+              (String typedName) => controller.assignGroup(group, typedName),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds one voice of a group: whether it is named with the others, where it is from, and Play.
+  Widget _buildPartRow(
+      VoiceGalleryController controller, UnknownSpeakerCluster voice) {
+    final bool isPlaying = controller.playingClusterId == voice.clusterId;
+    return Row(
+      children: <Widget>[
+        Checkbox(
+          key: ValueKey<String>('include-${voice.clusterId}'),
+          value: controller.isIncluded(voice),
+          onChanged: (bool? included) =>
+              controller.setIncluded(voice, included ?? false),
+        ),
+        Expanded(
+          child: Text(
+            '${voice.meetingTitle ?? 'Untitled meeting'} · '
+            '${_formatSeconds(voice.totalDurationMs)}',
+          ),
+        ),
+        if (voice.hasReviewClip)
+          TextButton(
+            key: ValueKey<String>('play-${voice.clusterId}'),
+            onPressed: () => controller.play(voice),
+            child: Text(isPlaying ? 'Stop' : 'Play'),
+          ),
+      ],
+    );
+  }
+
+  /// Asks before deleting every voice of a group, then deletes them.
+  Future<void> _confirmDeleteGroup(
+    BuildContext context,
+    VoiceGalleryController controller,
+    int index,
+    UnknownVoiceGroup group,
+  ) async {
+    if (await confirmDelete(
+      context,
+      title: 'Delete Unknown speaker ${index + 1}?',
+      message: 'Its ${group.voices.length} voice samples go for good, here '
+          'and on your paired devices. The transcripts stay.',
+    )) {
+      await controller.deleteGroup(group);
+    }
   }
 
   /// Asks before deleting an unknown voice, then deletes it.
@@ -275,12 +434,11 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
     }
   }
 
-  /// Forgets name fields whose clusters are no longer listed and disposes them after the frame,
+  /// Forgets name fields whose groups are no longer listed and disposes them after the frame,
   /// once their `TextField`s have unmounted.
-  void _pruneNameControllers(List<UnknownSpeakerCluster> clusters) {
-    final Set<String> listedClusterIds = clusters
-        .map((UnknownSpeakerCluster cluster) => cluster.clusterId)
-        .toSet();
+  void _pruneNameControllers(List<UnknownVoiceGroup> groups) {
+    final Set<String> listedClusterIds =
+        groups.map((UnknownVoiceGroup group) => group.groupId).toSet();
     final List<TextEditingController> staleControllers =
         <TextEditingController>[];
     _nameControllers
@@ -302,9 +460,14 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
 
   /// Formats total speech time (seconds, one decimal) and chunk count, e.g. `12.5 s · 3 chunks`.
   String _formatSummary(UnknownSpeakerCluster cluster) {
-    final int tenthsOfSecond = (cluster.totalDurationMs + 50) ~/ 100;
     final String chunkLabel = cluster.chunkCount == 1 ? 'chunk' : 'chunks';
-    return '${tenthsOfSecond ~/ 10}.${tenthsOfSecond % 10} s · '
+    return '${_formatSeconds(cluster.totalDurationMs)} · '
         '${cluster.chunkCount} $chunkLabel';
+  }
+
+  /// Formats milliseconds as seconds with one decimal, e.g. `12.5 s`.
+  String _formatSeconds(int milliseconds) {
+    final int tenthsOfSecond = (milliseconds + 50) ~/ 100;
+    return '${tenthsOfSecond ~/ 10}.${tenthsOfSecond % 10} s';
   }
 }

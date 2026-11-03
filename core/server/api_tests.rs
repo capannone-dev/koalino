@@ -923,6 +923,72 @@ async fn cluster_assignment_endpoint_rejects_invalid_requests() {
     assert!(missing_body["error"].is_string());
 }
 
+/// Verifies the gallery tells which group each voice is in, and that naming a group names each
+/// chosen voice as one person (#82).
+#[tokio::test]
+async fn a_voice_group_is_listed_and_named_at_once() {
+    let (router, large_cluster_id, small_cluster_id) = cluster_router();
+
+    let (_, gallery) = send_json(&router, "GET", "/api/voice-gallery", None).await;
+    let clusters = gallery["unknown_clusters"]
+        .as_array()
+        .unwrap_or_else(|| panic!("clusters must be an array: {gallery}"));
+    for cluster in clusters {
+        assert!(
+            cluster["voice_group_id"]
+                .as_str()
+                .and_then(|group_id| uuid::Uuid::parse_str(group_id).ok())
+                .is_some(),
+            "each voice names its group: {cluster}"
+        );
+    }
+
+    let (status, assignment) = send_json(
+        &router,
+        "POST",
+        "/api/voice-groups/assign",
+        Some(&format!(
+            r#"{{"cluster_ids":["{large_cluster_id}","{small_cluster_id}"],"identity_name":"Grace"}}"#
+        )),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{assignment}");
+    assert_eq!(assignment["identity_name"], "Grace");
+    assert_eq!(assignment["identity_created"], true);
+    assert_eq!(
+        assignment["assigned_cluster_ids"],
+        serde_json::json!([large_cluster_id.to_string(), small_cluster_id.to_string()])
+    );
+    assert_eq!(assignment["skipped_cluster_count"], 0);
+    let (_, remaining) = send_json(
+        &router,
+        "GET",
+        "/api/meetings/meeting-clusters/unknown-clusters",
+        None,
+    )
+    .await;
+    assert_eq!(remaining, serde_json::json!([]));
+
+    let (empty_status, _) = send_json(
+        &router,
+        "POST",
+        "/api/voice-groups/assign",
+        Some(r#"{"cluster_ids":[],"identity_name":"Grace"}"#),
+    )
+    .await;
+    assert_eq!(empty_status, StatusCode::BAD_REQUEST);
+    let (named_status, _) = send_json(
+        &router,
+        "POST",
+        "/api/voice-groups/assign",
+        Some(&format!(
+            r#"{{"cluster_ids":["{large_cluster_id}"],"identity_name":"Grace"}}"#
+        )),
+    )
+    .await;
+    assert_eq!(named_status, StatusCode::CONFLICT);
+}
+
 /// Builds a router over the SQLite file at `database_path`, composed as `bin/daemon.rs` does.
 fn file_backed_router(database_path: &std::path::Path) -> axum::Router {
     let stores = file_backed_stores(database_path, "headless-server");

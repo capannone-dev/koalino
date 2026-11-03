@@ -10,8 +10,10 @@ export type MeetingDetail = { meeting_id: string; title: string; created_at: str
 export type VoiceIdentity = { identity_id: string; display_name: string; voice_variant_count: number };
 export type UnassignedClip = { clip_id: string; meeting_id: string; start_time_ms: number; end_time_ms: number; audio_url?: string };
 export type UnknownCluster = { cluster_id: string; meeting_id: string; total_duration_ms: number; chunk_count: number; created_at: string };
-export type LibraryCluster = UnknownCluster & { meeting_title: string | null; has_review_clip: boolean };
+/** `voice_group_id` is shared by voices that sound like one person (#82); older servers omit it. */
+export type LibraryCluster = UnknownCluster & { meeting_title: string | null; has_review_clip: boolean; voice_group_id?: string };
 export type VoiceGalleryResponse = { identities: VoiceIdentity[]; unknown_clusters: LibraryCluster[]; unassigned_clips: UnassignedClip[] };
+export type VoiceGroupAssignment = { identity_id: string; identity_name: string; identity_created: boolean; assigned_cluster_ids: string[]; skipped_cluster_count: number; variants_stored: number; segments_updated: number };
 export type ClusterAssignment = { cluster_id: string; identity_id: string; identity_name: string; identity_created: boolean; variants_stored: number; segments_updated: number };
 
 export const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8080";
@@ -43,6 +45,23 @@ export async function assignCluster(clusterId: string, identityName: string): Pr
     throw new Error(`Cluster assignment failed (${response.status}): ${errorBody.error ?? "unknown error"}`);
   }
   return response.json() as Promise<ClusterAssignment>;
+}
+
+/**
+ * Names several unknown voices as one person (#82); voices named or gone meanwhile are skipped.
+ * Throws with the server's message on failure.
+ */
+export async function assignVoiceGroup(clusterIds: string[], identityName: string): Promise<VoiceGroupAssignment> {
+  const response = await fetch(`${apiBaseUrl}/api/voice-groups/assign`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ cluster_ids: clusterIds, identity_name: identityName })
+  });
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(`Voice group assignment failed (${response.status}): ${errorBody.error ?? "unknown error"}`);
+  }
+  return response.json() as Promise<VoiceGroupAssignment>;
 }
 
 /** Why `renameMeeting` failed: the HTTP status class, or `network` when the daemon was unreachable. */

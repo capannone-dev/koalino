@@ -25,9 +25,10 @@ use crate::{
     adapters::export::default_exporters,
     application::{
         cluster_review::{
-            ClusterReviewError, NamedClusterAssignment, SavedPersonSummary, UnknownClusterSummary,
-            VoiceLibraryCluster, assign_cluster_to_named_identity, find_cluster_review_clip,
-            list_unknown_clusters, load_voice_library,
+            ClusterReviewError, NamedClusterAssignment, NamedGroupAssignment, SavedPersonSummary,
+            UnknownClusterSummary, VoiceLibraryCluster, assign_cluster_to_named_identity,
+            assign_clusters_to_named_identity, find_cluster_review_clip, list_unknown_clusters,
+            load_voice_library,
         },
         deletion::{self, DeletionError, MeetingDeletionHooks},
         export_manager::{ExportManager, ExportWriter},
@@ -198,6 +199,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
             axum::routing::delete(delete_identity_route),
         )
         .route("/api/clusters/{cluster_id}/assign", post(assign_cluster))
+        .route("/api/voice-groups/assign", post(assign_voice_group))
         .route(
             "/api/clusters/{cluster_id}/review-clip",
             get(get_cluster_review_clip),
@@ -789,6 +791,36 @@ async fn assign_cluster(
     }
 }
 
+/// Names several unknown voices as one person, as when the owner names a voice group (#82).
+///
+/// Inputs: A `{"cluster_ids": ["<uuid>", …], "identity_name": "…"}` body.
+/// Outputs: `200` with a `GroupAssignmentResponse`; `400` for a blank name or no clusters; Axum's
+/// `422` for a malformed body or ID; `404`/`409` when every cluster is gone or already named; `500` for storage
+/// failures. Clusters gone or named meanwhile are skipped and counted.
+/// Side effects: Under the repository and voice locks, does what `assign_cluster` does for each
+/// cluster, to one identity.
+async fn assign_voice_group(
+    State(application_state): State<ServerAppState>,
+    Json(group_request): Json<GroupAssignmentRequest>,
+) -> Response {
+    tracing::info!(
+        endpoint = "/api/voice-groups/assign",
+        cluster_count = group_request.cluster_ids.len(),
+        "headless API request received"
+    );
+    let repositories = application_state.repositories.lock().await;
+    let voice_database = application_state.voice_database.lock().await;
+    match assign_clusters_to_named_identity(
+        &**repositories,
+        &**voice_database,
+        &group_request.cluster_ids,
+        &group_request.identity_name,
+    ) {
+        Ok(assignment) => Json(GroupAssignmentResponse::from(&assignment)).into_response(),
+        Err(error) => cluster_review_error_response(&error),
+    }
+}
+
 /// Serves a cluster's review clip so the dashboard can play it (Issue #63).
 ///
 /// Inputs: `cluster_id` path segment (a UUID; anything else is rejected with `400` by Axum).
@@ -818,7 +850,9 @@ async fn get_cluster_review_clip(
 /// Maps cluster-review failures to stable HTTP statuses with a `{"error": "…"}` body.
 fn cluster_review_error_response(error: &ClusterReviewError) -> Response {
     let status_code = match error {
-        ClusterReviewError::BlankIdentityName => StatusCode::BAD_REQUEST,
+        ClusterReviewError::BlankIdentityName | ClusterReviewError::NoClustersSelected => {
+            StatusCode::BAD_REQUEST
+        }
         ClusterReviewError::Clustering(ClusteringError::ClusterNotFound { .. }) => {
             StatusCode::NOT_FOUND
         }
@@ -841,6 +875,47 @@ fn cluster_review_error_response(error: &ClusterReviewError) -> Response {
 struct ClusterAssignmentRequest {
     /// Person's name; a known identity with this name is reused, otherwise one is created.
     identity_name: String,
+}
+
+/// Request body for `POST /api/voice-groups/assign`.
+#[derive(Deserialize)]
+struct GroupAssignmentRequest {
+    /// The voices to name, in order; a malformed UUID rejects the request.
+    cluster_ids: Vec<uuid::Uuid>,
+    /// Person's name; a known identity with this name is reused, otherwise one is created.
+    identity_name: String,
+}
+
+/// Summarizes a voice group named as one person.
+#[derive(Serialize)]
+struct GroupAssignmentResponse {
+    identity_id: String,
+    identity_name: String,
+    /// `true` when this naming created the identity.
+    identity_created: bool,
+    assigned_cluster_ids: Vec<String>,
+    /// Voices skipped because they were already named or gone.
+    skipped_cluster_count: usize,
+    variants_stored: usize,
+    segments_updated: usize,
+}
+
+impl From<&NamedGroupAssignment> for GroupAssignmentResponse {
+    fn from(assignment: &NamedGroupAssignment) -> Self {
+        Self {
+            identity_id: assignment.identity_id().to_string(),
+            identity_name: String::from(assignment.identity_name()),
+            identity_created: assignment.identity_created(),
+            assigned_cluster_ids: assignment
+                .assigned_cluster_ids()
+                .iter()
+                .map(ToString::to_string)
+                .collect(),
+            skipped_cluster_count: assignment.skipped_cluster_count(),
+            variants_stored: assignment.variants_stored(),
+            segments_updated: assignment.segments_updated(),
+        }
+    }
 }
 
 /// Serializes one unresolved cluster without its representative embedding.
@@ -1021,6 +1096,8 @@ struct LibraryClusterResponse {
     meeting_title: Option<String>,
     /// Whether `GET /api/clusters/{id}/review-clip` has audio to serve.
     has_review_clip: bool,
+    /// The voice group it belongs to, shared by voices that sound like one person (#82).
+    voice_group_id: String,
 }
 impl From<&VoiceLibraryCluster> for LibraryClusterResponse {
     fn from(library_cluster: &VoiceLibraryCluster) -> Self {
@@ -1028,6 +1105,7 @@ impl From<&VoiceLibraryCluster> for LibraryClusterResponse {
             cluster: UnknownClusterResponse::from(library_cluster.summary()),
             meeting_title: library_cluster.meeting_title().map(String::from),
             has_review_clip: library_cluster.has_review_clip(),
+            voice_group_id: library_cluster.voice_group_id().to_string(),
         }
     }
 }

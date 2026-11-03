@@ -168,7 +168,7 @@ fn pair_index(low: usize, high: usize, count: usize) -> usize {
 /// Inputs: Unit vectors and the similarity threshold.
 /// Outputs: One group number per vector, not yet dense. Uses the nearest-neighbour chain, which gives
 /// the same groups as the textbook algorithm in quadratic time. Side effects: None.
-fn average_linkage(vectors: &[Vec<f32>], similarity_threshold: f32) -> Vec<usize> {
+pub(crate) fn average_linkage(vectors: &[Vec<f32>], similarity_threshold: f32) -> Vec<usize> {
     let count = vectors.len();
     let mut distances = vec![0.0_f32; count * count.saturating_sub(1) / 2];
     for low in 0..count {
@@ -315,7 +315,7 @@ fn absorb_small_groups(vectors: &[Vec<f32>], labels: &mut [usize], min_group_win
 }
 
 /// Renumbers groups from zero in order of first appearance.
-fn dense_labels(labels: &[usize]) -> Vec<usize> {
+pub(crate) fn dense_labels(labels: &[usize]) -> Vec<usize> {
     let mut seen: Vec<usize> = Vec::new();
     labels
         .iter()

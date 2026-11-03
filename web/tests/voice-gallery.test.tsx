@@ -5,7 +5,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { VoiceGallery } from "@/components/voice-gallery";
 import * as api from "@/lib/api";
 
-vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<typeof api>("@/lib/api")), deleteUnknownVoice: vi.fn(), deleteSavedPerson: vi.fn(), assignCluster: vi.fn() }));
+vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<typeof api>("@/lib/api")), deleteUnknownVoice: vi.fn(), deleteSavedPerson: vi.fn(), assignCluster: vi.fn(), assignVoiceGroup: vi.fn() }));
 
 const clusters: api.LibraryCluster[] = [
   { cluster_id: "cluster-1", meeting_id: "meeting-1", total_duration_ms: 12_500, chunk_count: 3, created_at: "2026-10-27T09:15:00+00:00", meeting_title: "Project Sync", has_review_clip: true },
@@ -14,6 +14,8 @@ const clusters: api.LibraryCluster[] = [
 
 beforeEach(() => {
   vi.mocked(api.assignCluster).mockReset();
+  vi.mocked(api.assignVoiceGroup).mockReset();
+  vi.mocked(api.deleteUnknownVoice).mockReset();
 });
 
 test("renders one card per unresolved cluster", () => {
@@ -118,4 +120,73 @@ test("a saved person can be deleted, and a refusal keeps them and explains", asy
   expect(await screen.findByText("Ada deleted.")).toBeInTheDocument();
   expect(screen.queryByText(/Ada: 2 voice/)).not.toBeInTheDocument();
   deleted.mockReset();
+});
+
+/** One person heard in two meetings, and someone else (#82). */
+const lunch: api.LibraryCluster[] = [
+  { cluster_id: "part-1", meeting_id: "meeting-1", total_duration_ms: 105_000, chunk_count: 1, created_at: "2026-11-02T12:00:00+00:00", meeting_title: "Lunch", has_review_clip: true, voice_group_id: "part-1" },
+  { cluster_id: "other-1", meeting_id: "meeting-1", total_duration_ms: 22_000, chunk_count: 1, created_at: "2026-11-02T12:01:00+00:00", meeting_title: "Lunch", has_review_clip: false, voice_group_id: "other-1" },
+  { cluster_id: "part-2", meeting_id: "meeting-2", total_duration_ms: 29_000, chunk_count: 1, created_at: "2026-11-02T13:00:00+00:00", meeting_title: "Standup", has_review_clip: true, voice_group_id: "part-1" }
+];
+
+test("voices of one person share one card that says what it covers", () => {
+  render(<VoiceGallery clusters={lunch} people={[]} />);
+
+  expect(screen.getByText("Unknown speaker 1")).toBeInTheDocument();
+  expect(screen.getByText("Unknown speaker 2")).toBeInTheDocument();
+  expect(screen.queryByText("Unknown speaker 3")).not.toBeInTheDocument();
+  expect(screen.getByText("134.0 s · 2 parts in 2 meetings")).toBeInTheDocument();
+  expect(screen.getByText("Lunch, Standup")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Assign" })).toHaveLength(2);
+});
+
+test("a group is named at once, without the parts left out", async () => {
+  vi.mocked(api.assignVoiceGroup).mockResolvedValue({ identity_id: "identity-1", identity_name: "Marco", identity_created: true, assigned_cluster_ids: ["part-1"], skipped_cluster_count: 0, variants_stored: 1, segments_updated: 4 });
+  render(<VoiceGallery clusters={lunch} people={[]} />);
+
+  fireEvent.click(screen.getByLabelText("Include Standup · 29.0 s"));
+  fireEvent.change(screen.getByLabelText("Name for unknown speaker 1"), { target: { value: " Marco " } });
+  fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
+
+  expect(await screen.findByText("Assigned to Marco.")).toBeInTheDocument();
+  expect(api.assignVoiceGroup).toHaveBeenCalledWith(["part-1"], "Marco");
+  expect(api.assignCluster).not.toHaveBeenCalled();
+  expect(screen.getByText("29.0 s · 1 chunk")).toBeInTheDocument();
+});
+
+test("naming a whole group says how many voices it named", async () => {
+  vi.mocked(api.assignVoiceGroup).mockResolvedValue({ identity_id: "identity-1", identity_name: "Marco", identity_created: true, assigned_cluster_ids: ["part-1", "part-2"], skipped_cluster_count: 0, variants_stored: 2, segments_updated: 4 });
+  render(<VoiceGallery clusters={lunch} people={[]} />);
+
+  fireEvent.change(screen.getByLabelText("Name for unknown speaker 1"), { target: { value: "Marco" } });
+  fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
+
+  expect(await screen.findByText("Assigned 2 voices to Marco.")).toBeInTheDocument();
+  expect(api.assignVoiceGroup).toHaveBeenCalledWith(["part-1", "part-2"], "Marco");
+  expect(screen.queryByText("Unknown speaker 2")).not.toBeInTheDocument();
+  expect(screen.getByText("Marco: 2 voice samples")).toBeInTheDocument();
+});
+
+test("with every part left out, nothing is named", async () => {
+  render(<VoiceGallery clusters={lunch} people={[]} />);
+
+  fireEvent.click(screen.getByLabelText("Include Lunch · 105.0 s"));
+  fireEvent.click(screen.getByLabelText("Include Standup · 29.0 s"));
+  fireEvent.change(screen.getByLabelText("Name for unknown speaker 1"), { target: { value: "Marco" } });
+  fireEvent.click(screen.getAllByRole("button", { name: "Assign" })[0]);
+
+  expect(await screen.findByText("Choose at least one voice to name.")).toBeInTheDocument();
+  expect(api.assignVoiceGroup).not.toHaveBeenCalled();
+});
+
+test("deleting a group deletes every part", async () => {
+  vi.mocked(api.deleteUnknownVoice).mockResolvedValue();
+  render(<VoiceGallery clusters={lunch} people={[]} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Delete Unknown speaker 1" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+
+  expect(await screen.findByText("Voice deleted.")).toBeInTheDocument();
+  expect(vi.mocked(api.deleteUnknownVoice).mock.calls).toEqual([["part-1"], ["part-2"]]);
+  expect(screen.queryByText("134.0 s · 2 parts in 2 meetings")).not.toBeInTheDocument();
 });

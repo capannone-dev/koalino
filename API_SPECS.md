@@ -164,8 +164,18 @@ from a background isolate.
 
 - `char *note_taker_get_voice_library(void)` returns every meeting's unresolved clusters and the
   saved people (Issue #63):
-  `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title":"…|null","total_duration_ms","chunk_count","created_at","has_review_clip":true}],"saved_people":[{"identity_id","display_name","voice_variant_count"}]}`,
+  `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title":"…|null","total_duration_ms","chunk_count","created_at","has_review_clip":true,"voice_group_id":"uuid"}],"saved_people":[{"identity_id","display_name","voice_variant_count"}]}`,
   or `{"ok":false,"error_code":"list_failed|runtime_unavailable","error":"…"}`. It writes no audio.
+  Voices that sound like one person, in any meeting, share `voice_group_id` (the ID of the group's
+  first cluster) and are listed next to each other (Issue #82). A lone voice's group is its own ID.
+- `char *note_taker_assign_voice_group(const char *cluster_ids_json, const char *identity_name)`
+  names several voices as one person (Issue #82). `cluster_ids_json` is a JSON array of UUID
+  strings. It returns
+  `{"ok":true,"identity_id","identity_name","identity_created","assigned_cluster_ids":["uuid"],"skipped_cluster_count":0,"variants_stored":2,"segments_updated":5}`.
+  Each voice is assigned as by `note_taker_assign_cluster`, to one identity. Voices already named or
+  gone are skipped and counted; when all are, it returns the first one's error. Errors use the codes
+  of `note_taker_assign_cluster`; a malformed array, an empty one, or a blank name is
+  `invalid_argument`.
 - `char *note_taker_prepare_cluster_review_clip(const char *cluster_id)` writes that cluster's clip
   to `NOTE_TAKER_REVIEW_CLIP_DIR` when the owner asks to hear it, and returns
   `{"ok":true,"review_clip_path":"/abs/<clip>.wav"}`, or `{"ok":false,"error_code","error"}` with
@@ -312,7 +322,8 @@ is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting. 
 /api/meetings` with `{"title":"..."}` (or `{}`) creates an empty meeting and returns `201` with
 its summary. An invalid title returns `400` (Issue #35). `GET /api/voice-gallery` returns
 `identities` (`identity_id`, `display_name`, `voice_variant_count`), `unknown_clusters` (the summary
-below plus `meeting_title` and `has_review_clip`, for every meeting), and `unassigned_clips`
+below plus `meeting_title`, `has_review_clip` and `voice_group_id`, for every meeting; voices that
+sound like one person share `voice_group_id` and are listed together, Issue #82), and `unassigned_clips`
 (identifiers and timing only); voice vectors and raw audio are never serialized.
 `GET /api/clusters/{id}/review-clip` returns `200` with the clip as `audio/wav` and
 `Cache-Control: no-store`, or `404` when the cluster has none (Issue #63). `GET /api/telemetry` returns aggregate task count, duration, and latency.
@@ -428,6 +439,12 @@ settle on the same identity. A non-UUID `cluster_id` or a blank name
 returns `400`, an unknown cluster `404`, an already-resolved cluster `409`, and storage failures
 `500`. The identity and its name are persisted in the voice store, so they appear in
 `GET /api/voice-gallery` and survive a daemon restart.
+
+`POST /api/voice-groups/assign` accepts `{ "cluster_ids": ["uuid", …], "identity_name": "Marco" }`
+and names each voice as one person, as above (Issue #82). It returns `200` with
+`{ "identity_id", "identity_name", "identity_created", "assigned_cluster_ids": ["uuid"], "skipped_cluster_count": 0, "variants_stored", "segments_updated" }`.
+Voices already named or gone are skipped and counted. A blank name or an empty list returns `400`, a
+malformed body `422`, and when every voice was skipped, `404` or `409` as for the first one.
 
 ## Linux CLI contract
 

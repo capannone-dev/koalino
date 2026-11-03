@@ -413,6 +413,11 @@ having no transcript.
 `POST /api/clusters/{id}/assign`), and FFI (`note_taker_get_unknown_clusters`,
 `note_taker_assign_cluster`) commands. Those driving adapters only parse and format.
 
+- `load_voice_library` groups every meeting's unresolved clusters by voice (#82): average linkage
+  over their representative voices, at `DEFAULT_VOICE_GROUP_SIMILARITY` (0.5). Grouping is
+  recomputed on each listing, never stored or synced. `assign_clusters_to_named_identity` names a
+  group's clusters one by one to one identity, skipping any already named or gone, so each cluster
+  still resolves as paired devices expect.
 - `list_unknown_clusters` calls `get_clusters_for_meeting`. It returns `UnknownClusterSummary`
   values (ID, meeting, total duration, chunk count, creation time) and drops the biometric
   representative vector.

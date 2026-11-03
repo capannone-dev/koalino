@@ -18,7 +18,8 @@ final class UnknownSpeakerCluster {
     required this.chunkCount,
     this.meetingTitle,
     this.hasReviewClip = false,
-  });
+    String? voiceGroupId,
+  }) : voiceGroupId = voiceGroupId ?? clusterId;
 
   /// Stable cluster UUID sent back when assigning an identity.
   final String clusterId;
@@ -39,6 +40,9 @@ final class UnknownSpeakerCluster {
   /// and audio bytes never cross the FFI boundary.
   final bool hasReviewClip;
 
+  /// The group of voices that sound like this person (#82); the cluster's own ID when alone.
+  final String voiceGroupId;
+
   /// Decodes one element of the library's `unknown_clusters` array.
   factory UnknownSpeakerCluster.fromJson(Map<String, Object?> json) {
     return UnknownSpeakerCluster(
@@ -48,7 +52,47 @@ final class UnknownSpeakerCluster {
       totalDurationMs: (json['total_duration_ms']! as num).toInt(),
       chunkCount: (json['chunk_count']! as num).toInt(),
       hasReviewClip: json['has_review_clip'] as bool? ?? false,
+      voiceGroupId: json['voice_group_id'] as String?,
     );
+  }
+}
+
+/// Voices that Rust found to sound like one person, shown and named together (#82).
+final class UnknownVoiceGroup {
+  /// Creates a group of at least one voice.
+  const UnknownVoiceGroup({required this.groupId, required this.voices});
+
+  /// The group's ID, shared by its voices.
+  final String groupId;
+
+  /// The group's voices, in library order.
+  final List<UnknownSpeakerCluster> voices;
+
+  /// Speech of every voice in the group, in milliseconds.
+  int get totalDurationMs => voices.fold(
+      0, (int sum, UnknownSpeakerCluster voice) => sum + voice.totalDurationMs);
+
+  /// The different meetings the voices come from, in order.
+  List<String> get meetingIds => <String>{
+        for (final UnknownSpeakerCluster voice in voices) voice.meetingId
+      }.toList(growable: false);
+
+  /// Collects `voices` into groups by `voiceGroupId`, keeping the order of each group's first voice.
+  static List<UnknownVoiceGroup> collect(List<UnknownSpeakerCluster> voices) {
+    final Map<String, List<UnknownSpeakerCluster>> byGroup =
+        <String, List<UnknownSpeakerCluster>>{};
+    for (final UnknownSpeakerCluster voice in voices) {
+      byGroup
+          .putIfAbsent(voice.voiceGroupId, () => <UnknownSpeakerCluster>[])
+          .add(voice);
+    }
+    return <UnknownVoiceGroup>[
+      for (final MapEntry<String, List<UnknownSpeakerCluster>> entry
+          in byGroup.entries)
+        UnknownVoiceGroup(
+            groupId: entry.key,
+            voices: List<UnknownSpeakerCluster>.unmodifiable(entry.value)),
+    ];
   }
 }
 
@@ -112,6 +156,41 @@ final class ClusterAssignmentResult {
   final int variantsStored;
 
   /// Number of transcript segments re-attributed to the identity.
+  final int segmentsUpdated;
+}
+
+/// Summarizes several voices named as one person (#82).
+final class VoiceGroupAssignmentResult {
+  /// Creates an immutable summary.
+  const VoiceGroupAssignmentResult({
+    required this.identityId,
+    required this.identityName,
+    required this.identityCreated,
+    required this.assignedClusterIds,
+    required this.skippedClusterCount,
+    required this.variantsStored,
+    required this.segmentsUpdated,
+  });
+
+  /// Identity every voice was assigned to.
+  final String identityId;
+
+  /// Display name of that identity.
+  final String identityName;
+
+  /// Whether the identity was created by this naming.
+  final bool identityCreated;
+
+  /// The voices now named.
+  final List<String> assignedClusterIds;
+
+  /// Voices skipped because they were already named or gone.
+  final int skippedClusterCount;
+
+  /// Number of voice samples stored in all.
+  final int variantsStored;
+
+  /// Number of transcript segments re-attributed in all.
   final int segmentsUpdated;
 }
 
@@ -182,6 +261,25 @@ ClusterAssignmentResult decodeClusterAssignment(String responseJson) {
   );
 }
 
+/// Decodes the `note_taker_assign_voice_group` response.
+///
+/// Returns the summary for `{"ok":true,...}`; throws `StateError` carrying the Rust error code
+/// and message otherwise, and `FormatException` for any other shape.
+VoiceGroupAssignmentResult decodeVoiceGroupAssignment(String responseJson) {
+  final Map<String, Object?> json = _decodeOkObject(responseJson);
+  return VoiceGroupAssignmentResult(
+    identityId: json['identity_id']! as String,
+    identityName: json['identity_name']! as String,
+    identityCreated: json['identity_created']! as bool,
+    assignedClusterIds: (json['assigned_cluster_ids']! as List<Object?>)
+        .cast<String>()
+        .toList(growable: false),
+    skippedClusterCount: (json['skipped_cluster_count']! as num).toInt(),
+    variantsStored: (json['variants_stored']! as num).toInt(),
+    segmentsUpdated: (json['segments_updated']! as num).toInt(),
+  );
+}
+
 /// Builds the exception for a Rust `{"ok":false,"error_code","error"}` response.
 StateError _nativeError(Map<String, Object?> json) =>
     StateError('Rust rejected the Voice Gallery request '
@@ -198,6 +296,12 @@ abstract interface class VoiceGalleryBridge {
   /// Assigns every chunk of `clusterId` to the identity named `identityName`.
   Future<ClusterAssignmentResult> assignCluster({
     required String clusterId,
+    required String identityName,
+  });
+
+  /// Assigns every voice in `clusterIds` to one identity named `identityName` (#82).
+  Future<VoiceGroupAssignmentResult> assignVoiceGroup({
+    required List<String> clusterIds,
     required String identityName,
   });
 
@@ -247,6 +351,15 @@ final class RustVoiceGalleryBridge implements VoiceGalleryBridge {
   }) async {
     return decodeClusterAssignment(
         await _assignClusterJson(clusterId, identityName));
+  }
+
+  @override
+  Future<VoiceGroupAssignmentResult> assignVoiceGroup({
+    required List<String> clusterIds,
+    required String identityName,
+  }) async {
+    return decodeVoiceGroupAssignment(
+        await _assignVoiceGroupJson(jsonEncode(clusterIds), identityName));
   }
 
   @override
@@ -308,6 +421,16 @@ Future<String> _assignClusterJson(String clusterId, String identityName) =>
     Isolate.run(() => _callNativeJson(
           'note_taker_assign_cluster',
           <String>[clusterId, identityName],
+        ));
+
+/// Calls `note_taker_assign_voice_group` on a background isolate.
+///
+/// Declared at top level so the isolate closure captures only the two strings.
+Future<String> _assignVoiceGroupJson(
+        String clusterIdsJson, String identityName) =>
+    Isolate.run(() => _callNativeJson(
+          'note_taker_assign_voice_group',
+          <String>[clusterIdsJson, identityName],
         ));
 
 /// Invokes a zero-, one- or two-string C command that returns caller-freed JSON and copies it out.

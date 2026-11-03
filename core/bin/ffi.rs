@@ -24,8 +24,9 @@ use crate::{
     application::{
         attachment_manager::AttachmentManager,
         cluster_review::{
-            ClusterReviewError, assign_cluster_to_named_identity, find_cluster_review_clip,
-            list_unknown_clusters, load_voice_library,
+            ClusterReviewError, assign_cluster_to_named_identity,
+            assign_clusters_to_named_identity, find_cluster_review_clip, list_unknown_clusters,
+            load_voice_library,
         },
         crypto::key_manager::KeyManagerConfig,
         export_manager::{ExportManager, ExportWriter, segment_speaker_label},
@@ -867,9 +868,10 @@ impl FfiRuntime {
     /// Describes every meeting's unresolved clusters and the saved people as JSON (Issue #63).
     ///
     /// Outputs: `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title",
-    /// "total_duration_ms","chunk_count","created_at","has_review_clip"}],"saved_people":
+    /// "total_duration_ms","chunk_count","created_at","has_review_clip","voice_group_id"}],"saved_people":
     /// [{"identity_id","display_name","voice_variant_count"}]}`, or `{"ok":false,"error_code":
-    /// "list_failed","error"}`. `meeting_title` is null for an untitled meeting.
+    /// "list_failed","error"}`. `meeting_title` is null for an untitled meeting. Voices that sound
+    /// like one person share `voice_group_id` and are listed next to each other (#82).
     /// Side effects: Reads SQLite. Writes no audio, and embeddings never leave Rust.
     fn get_voice_library(&self) -> String {
         let library = match load_voice_library(
@@ -889,6 +891,7 @@ impl FfiRuntime {
                 "chunk_count": cluster.summary().chunk_count(),
                 "created_at": cluster.summary().created_at().to_rfc3339(),
                 "has_review_clip": cluster.has_review_clip(),
+                "voice_group_id": cluster.voice_group_id().to_string(),
             })).collect::<Vec<_>>(),
             "saved_people": library.saved_people().iter().map(|person| serde_json::json!({
                 "identity_id": person.identity_id().to_string(),
@@ -960,15 +963,7 @@ impl FfiRuntime {
             identity_name,
         ) {
             Ok(assignment) => {
-                for clip_id in cluster_clip_ids {
-                    self.loaded_review_clips.remove(&clip_id);
-                    let clip_path = self.review_clip_directory.join(format!("{clip_id}.wav"));
-                    if let Err(error) = fs::remove_file(&clip_path)
-                        && error.kind() != std::io::ErrorKind::NotFound
-                    {
-                        tracing::warn!(clip_id = %clip_id, "unable to delete resolved review clip file");
-                    }
-                }
+                self.forget_review_clip_files(cluster_clip_ids);
                 serde_json::json!({
                     "ok": true,
                     "cluster_id": assignment.cluster_id().to_string(),
@@ -980,18 +975,70 @@ impl FfiRuntime {
                 })
                 .to_string()
             }
-            Err(error) => {
-                let error_code = match &error {
-                    ClusterReviewError::BlankIdentityName => "invalid_argument",
-                    ClusterReviewError::Clustering(ClusteringError::ClusterNotFound { .. }) => {
-                        "cluster_not_found"
-                    }
-                    ClusterReviewError::Clustering(ClusteringError::ClusterAlreadyResolved {
-                        ..
-                    }) => "cluster_already_resolved",
-                    ClusterReviewError::Clustering(_) => "assignment_failed",
-                };
-                export_error_json(error_code, &error.to_string())
+            Err(error) => cluster_assignment_error_json(&error),
+        }
+    }
+
+    /// Names several unknown voices as one person, as when the owner names a voice group (#82).
+    ///
+    /// Inputs: `cluster_ids_json` is a JSON array of UUID strings, in the order to name them;
+    /// `identity_name` is the person's non-blank name.
+    /// Outputs: `{"ok":true,"identity_id","identity_name","identity_created",
+    /// "assigned_cluster_ids","skipped_cluster_count","variants_stored","segments_updated"}`, or
+    /// `{"ok":false,"error_code","error"}` with the codes of `assign_cluster`. Voices named or gone
+    /// meanwhile are skipped and counted; when every voice was skipped, the first one's error.
+    /// Side effects: As `assign_cluster`, for each voice, to one identity.
+    fn assign_voice_group(&mut self, cluster_ids_json: &str, identity_name: &str) -> String {
+        let Ok(cluster_ids) = serde_json::from_str::<Vec<Uuid>>(cluster_ids_json) else {
+            return export_error_json(
+                "invalid_argument",
+                "cluster_ids must be a JSON array of UUIDs",
+            );
+        };
+        let clip_ids: Vec<Uuid> = cluster_ids
+            .iter()
+            .flat_map(|cluster_id| self.review_clip_ids_for_cluster(*cluster_id))
+            .collect();
+        match assign_clusters_to_named_identity(
+            &self.note_repository,
+            self.voice_identity_manager.vector_database(),
+            &cluster_ids,
+            identity_name,
+        ) {
+            Ok(assignment) => {
+                self.forget_review_clip_files(clip_ids);
+                serde_json::json!({
+                    "ok": true,
+                    "identity_id": assignment.identity_id().to_string(),
+                    "identity_name": assignment.identity_name(),
+                    "identity_created": assignment.identity_created(),
+                    "assigned_cluster_ids": assignment
+                        .assigned_cluster_ids()
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>(),
+                    "skipped_cluster_count": assignment.skipped_cluster_count(),
+                    "variants_stored": assignment.variants_stored(),
+                    "segments_updated": assignment.segments_updated(),
+                })
+                .to_string()
+            }
+            Err(error) => cluster_assignment_error_json(&error),
+        }
+    }
+
+    /// Deletes the playable files of review clips whose rows are gone.
+    ///
+    /// Inputs: The clip IDs. Outputs: None; a file that cannot be deleted is logged.
+    /// Side effects: Removes `<clip_id>.wav` files and forgets the clips loaded in memory.
+    fn forget_review_clip_files(&mut self, clip_ids: Vec<Uuid>) {
+        for clip_id in clip_ids {
+            self.loaded_review_clips.remove(&clip_id);
+            let clip_path = self.review_clip_directory.join(format!("{clip_id}.wav"));
+            if let Err(error) = fs::remove_file(&clip_path)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                tracing::warn!(clip_id = %clip_id, "unable to delete resolved review clip file");
             }
         }
     }
@@ -2722,6 +2769,62 @@ pub unsafe extern "C" fn note_taker_assign_cluster(
         .unwrap_or(std::ptr::null_mut())
 }
 
+/// Names several unknown voices as one person and returns caller-freed result JSON (#82).
+///
+/// Inputs: `cluster_ids_json` (a JSON array of UUID strings) and `identity_name` (non-blank) are
+/// non-null NUL-terminated UTF-8 strings.
+/// Outputs: An owned JSON string (free with `note_taker_free_string`), as described on
+/// `FfiRuntime::assign_voice_group`, or `runtime_unavailable`/`invalid_argument` errors. Returns
+/// null only if the response cannot be allocated as a C string.
+/// Side effects: As `note_taker_assign_cluster`, for each voice, synchronously; Flutter should call
+/// it from a background isolate.
+///
+/// # Safety
+/// Both pointers must be null or point to valid NUL-terminated C strings for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_assign_voice_group(
+    cluster_ids_json: *const c_char,
+    identity_name: *const c_char,
+) -> *mut c_char {
+    let response_json = match (unsafe { ffi_string(cluster_ids_json) }, unsafe {
+        ffi_string(identity_name)
+    }) {
+        (Some(cluster_ids_json), Some(identity_name)) => with_runtime_json(|runtime| {
+            Ok(runtime.assign_voice_group(cluster_ids_json, identity_name))
+        })
+        .unwrap_or_else(|_| {
+            export_error_json("runtime_unavailable", "the native runtime is unavailable")
+        }),
+        _ => export_error_json(
+            "invalid_argument",
+            "cluster_ids_json and identity_name must be valid UTF-8 C strings",
+        ),
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Maps a cluster-review failure to the FFI's `{"ok":false,"error_code","error"}` JSON.
+///
+/// Inputs: The failure. Outputs: `invalid_argument`, `cluster_not_found`,
+/// `cluster_already_resolved`, or `assignment_failed`. Side effects: None.
+fn cluster_assignment_error_json(error: &ClusterReviewError) -> String {
+    let error_code = match error {
+        ClusterReviewError::BlankIdentityName | ClusterReviewError::NoClustersSelected => {
+            "invalid_argument"
+        }
+        ClusterReviewError::Clustering(ClusteringError::ClusterNotFound { .. }) => {
+            "cluster_not_found"
+        }
+        ClusterReviewError::Clustering(ClusteringError::ClusterAlreadyResolved { .. }) => {
+            "cluster_already_resolved"
+        }
+        ClusterReviewError::Clustering(_) => "assignment_failed",
+    };
+    export_error_json(error_code, &error.to_string())
+}
+
 /// Converts a borrowed C string to UTF-8 without retaining its pointer.
 ///
 /// Inputs: `value` is a nullable C string pointer.
@@ -3212,6 +3315,52 @@ mod ffi_contract_tests {
             "raw review audio must be deleted after assignment"
         );
         assert_eq!(relisted, serde_json::json!([]));
+    }
+
+    /// Verifies the library tells each voice's group, and that naming a group names each chosen
+    /// voice as one person and deletes their review audio (#82).
+    #[test]
+    fn a_voice_group_is_listed_and_named_at_once() {
+        let (mut ffi_runtime, export_directory) = export_runtime();
+        let (first_cluster, _) = seed_cluster(&ffi_runtime, &MeetingId::new("ffi-group-a"));
+        let (second_cluster, _) = seed_cluster(&ffi_runtime, &MeetingId::new("ffi-group-b"));
+        let library = parse_response(&ffi_runtime.get_voice_library());
+        let listed = parse_response(&ffi_runtime.get_unknown_clusters("ffi-group-a"));
+        let review_clip_path =
+            std::path::PathBuf::from(listed[0]["review_clip_path"].as_str().unwrap_or_default());
+
+        let response = parse_response(&ffi_runtime.assign_voice_group(
+            &format!(r#"["{first_cluster}","{second_cluster}"]"#),
+            "Grace Hopper",
+        ));
+        let malformed = parse_response(&ffi_runtime.assign_voice_group("not json", "Grace"));
+        let empty = parse_response(&ffi_runtime.assign_voice_group("[]", "Grace"));
+        let repeated = parse_response(
+            &ffi_runtime.assign_voice_group(&format!(r#"["{first_cluster}"]"#), "Grace"),
+        );
+        let review_clip_remains = review_clip_path.exists();
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        let voices = library["unknown_clusters"]
+            .as_array()
+            .unwrap_or_else(|| panic!("voices must be listed: {library}"));
+        assert_eq!(voices.len(), 2);
+        assert_eq!(
+            voices[0]["voice_group_id"], voices[1]["voice_group_id"],
+            "the same voice in two meetings is one group: {library}"
+        );
+        assert_eq!(response["ok"], true, "{response}");
+        assert_eq!(response["identity_name"], "Grace Hopper");
+        assert_eq!(response["identity_created"], true);
+        assert_eq!(
+            response["assigned_cluster_ids"],
+            serde_json::json!([first_cluster.to_string(), second_cluster.to_string()])
+        );
+        assert_eq!(response["skipped_cluster_count"], 0);
+        assert!(!review_clip_remains, "raw review audio must be deleted");
+        assert_eq!(malformed["error_code"], "invalid_argument");
+        assert_eq!(empty["error_code"], "invalid_argument");
+        assert_eq!(repeated["error_code"], "cluster_already_resolved");
     }
 
     /// Verifies a name assigned in one app launch is reused, not duplicated, in the next launch.

@@ -12,7 +12,8 @@ use crate::{
     },
     application::{
         cluster_review::{
-            ClusterReviewError, assign_cluster_to_named_identity, find_cluster_review_clip,
+            ClusterReviewError, assign_cluster_to_named_identity,
+            assign_clusters_to_named_identity, find_cluster_review_clip, group_unknown_voices,
             list_unknown_clusters, load_voice_library,
         },
         unknown_speaker_clusterer::{ClusteringConfig, ClusteringError, UnknownSpeakerClusterer},
@@ -409,4 +410,191 @@ fn finds_a_review_clip_by_cluster() {
     );
     assert!(review_clip(small_cluster_id).is_none());
     assert!(review_clip(Uuid::new_v4()).is_none());
+}
+
+/// Adds one single-chunk cluster with `embedding` to a new meeting called `meeting_name`.
+///
+/// Outputs: The cluster ID. Side effects: Creates the meeting and the cluster in SQLite.
+fn add_meeting_with_voice(
+    note_repository: &SqliteNoteRepository,
+    meeting_name: &str,
+    embedding: &[f32],
+    duration_ms: u64,
+) -> Uuid {
+    let meeting_id = MeetingId::new(meeting_name);
+    note_repository
+        .create_meeting(&meeting_id, &[])
+        .unwrap_or_else(|error| panic!("meeting should be created: {error}"));
+    UnknownSpeakerClusterer::new(note_repository, ClusteringConfig::default())
+        .find_or_create_cluster(
+            &meeting_id,
+            embedding,
+            Uuid::new_v4().to_string(),
+            duration_ms,
+        )
+        .unwrap_or_else(|error| panic!("chunk should be clustered: {error}"))
+        .cluster_id()
+}
+
+/// Verifies close voices form one group and distant ones stay apart (#82).
+#[test]
+fn close_voices_form_one_group() {
+    let labels = group_unknown_voices(
+        &[
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.95, 0.31, 0.0],
+            vec![0.0, 0.0, 2.0],
+        ],
+        0.6,
+    );
+    assert_eq!(labels, vec![0, 1, 0, 2]);
+}
+
+/// Verifies a voice that cannot be compared stays on its own instead of joining or failing.
+#[test]
+fn an_unusable_voice_stays_alone() {
+    let labels = group_unknown_voices(
+        &[
+            vec![1.0, 0.0],
+            vec![0.0, 0.0],
+            vec![1.0, 0.0, 0.0],
+            vec![1.0, 0.0],
+        ],
+        0.6,
+    );
+    assert_eq!(labels, vec![0, 1, 2, 0]);
+}
+
+/// Verifies the library puts one person's clusters from several meetings into one group, listed
+/// together, and keeps another person apart (#82).
+#[test]
+fn the_library_groups_one_persons_voices_across_meetings() {
+    let note_repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
+    let first = add_meeting_with_voice(&note_repository, "meeting-a", &[1.0, 0.0, 0.0], 30_000);
+    let other = add_meeting_with_voice(&note_repository, "meeting-b", &[0.0, 1.0, 0.0], 5_000);
+    let second = add_meeting_with_voice(&note_repository, "meeting-c", &[0.97, 0.0, 0.24], 12_000);
+
+    let library = load_voice_library(&note_repository, &InMemoryVoiceVectorDB::default())
+        .unwrap_or_else(|error| panic!("library should load: {error}"));
+
+    let groups = library.unknown_voice_groups();
+    assert_eq!(groups.len(), 2);
+    let grouped: Vec<Vec<Uuid>> = groups
+        .iter()
+        .map(|group| {
+            group
+                .clusters()
+                .iter()
+                .map(|cluster| cluster.summary().cluster_id())
+                .collect()
+        })
+        .collect();
+    assert!(grouped.contains(&vec![first, second]), "{grouped:?}");
+    assert!(grouped.contains(&vec![other]));
+    let pair = groups
+        .iter()
+        .find(|group| group.clusters().len() == 2)
+        .unwrap_or_else(|| panic!("a group of two should exist"));
+    assert_eq!(pair.total_duration_ms(), 42_000);
+    assert_eq!(pair.meeting_count(), 2);
+    assert!(
+        pair.clusters()
+            .iter()
+            .all(|cluster| cluster.voice_group_id() == pair.group_id())
+    );
+    let flat: Vec<Uuid> = library
+        .unknown_clusters()
+        .iter()
+        .map(|cluster| cluster.summary().cluster_id())
+        .collect();
+    let first_position = flat.iter().position(|id| *id == first);
+    let second_position = flat.iter().position(|id| *id == second);
+    assert_eq!(
+        first_position.map(|position| position + 1),
+        second_position,
+        "a group's clusters are listed next to each other"
+    );
+}
+
+/// Verifies naming several clusters at once creates one person and resolves each cluster (#82).
+#[test]
+fn naming_a_group_names_each_cluster_once_for_one_person() {
+    let note_repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
+    let first = add_meeting_with_voice(&note_repository, "meeting-a", &[1.0, 0.0], 3_000);
+    let second = add_meeting_with_voice(&note_repository, "meeting-b", &[0.9, 0.1], 2_000);
+    let voice_database = InMemoryVoiceVectorDB::default();
+
+    let assignment = assign_clusters_to_named_identity(
+        &note_repository,
+        &voice_database,
+        &[first, second],
+        "  Ada Lovelace ",
+    )
+    .unwrap_or_else(|error| panic!("the group should be named: {error}"));
+
+    assert_eq!(assignment.identity_name(), "Ada Lovelace");
+    assert!(assignment.identity_created());
+    assert_eq!(assignment.assigned_cluster_ids(), &[first, second]);
+    let identities = voice_database
+        .list_speaker_identities()
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(identities.len(), 1, "one person, not one per cluster");
+    for cluster_id in [first, second] {
+        let cluster = note_repository
+            .load_unknown_speaker_cluster(cluster_id)
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(
+            cluster.and_then(|cluster| cluster.resolved_identity_id()),
+            Some(assignment.identity_id())
+        );
+    }
+}
+
+/// Verifies a cluster named meanwhile (for example on a paired device) is skipped, not fatal,
+/// while a blank name or an empty selection writes nothing.
+#[test]
+fn naming_a_group_skips_clusters_already_named_and_rejects_bad_input() {
+    let note_repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
+    let first = add_meeting_with_voice(&note_repository, "meeting-a", &[1.0, 0.0], 3_000);
+    let second = add_meeting_with_voice(&note_repository, "meeting-b", &[0.9, 0.1], 2_000);
+    let voice_database = InMemoryVoiceVectorDB::default();
+    assign_cluster_to_named_identity(&note_repository, &voice_database, first, "Grace")
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert!(matches!(
+        assign_clusters_to_named_identity(&note_repository, &voice_database, &[second], "  "),
+        Err(ClusterReviewError::BlankIdentityName)
+    ));
+    assert!(matches!(
+        assign_clusters_to_named_identity(&note_repository, &voice_database, &[], "Grace"),
+        Err(ClusterReviewError::NoClustersSelected)
+    ));
+    let assignment = assign_clusters_to_named_identity(
+        &note_repository,
+        &voice_database,
+        &[first, second, Uuid::new_v4()],
+        "grace",
+    )
+    .unwrap_or_else(|error| panic!("the rest of the group should be named: {error}"));
+    assert_eq!(assignment.assigned_cluster_ids(), &[second]);
+    assert_eq!(assignment.skipped_cluster_count(), 2);
+    assert_eq!(assignment.identity_name(), "Grace");
+    assert!(!assignment.identity_created());
+
+    assert!(matches!(
+        assign_clusters_to_named_identity(&note_repository, &voice_database, &[first], "Grace"),
+        Err(ClusterReviewError::Clustering(
+            ClusteringError::ClusterAlreadyResolved { .. }
+        ))
+    ));
 }

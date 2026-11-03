@@ -6,6 +6,11 @@
 //! validates the typed name, resolves it to an identity, and delegates to
 //! `UnknownSpeakerClusterer::assign_identity_to_cluster`.
 //!
+//! The voice library also groups unresolved clusters whose voices are close (#82), across chunks,
+//! speakers of one recording, and meetings, so one person is named once: naming a group assigns
+//! every cluster in it to one identity. Grouping is recomputed on each listing and never stored,
+//! so it needs no sync; each cluster still resolves on its own, as paired devices expect.
+//!
 //! Name resolution: a name matching an identity stored in `VoiceVectorDB` (trimmed,
 //! case-insensitive) reuses that identity and keeps its stored spelling; any other name becomes a
 //! new identity with a fresh UUID. The clusterer persists the identity, so names survive restarts
@@ -15,8 +20,11 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::{
-    application::unknown_speaker_clusterer::{
-        ClusterAssignment, ClusteringConfig, ClusteringError, UnknownSpeakerClusterer,
+    application::{
+        pipeline::meeting_speaker_pass::{average_linkage, dense_labels, unit_vector},
+        unknown_speaker_clusterer::{
+            ClusterAssignment, ClusteringConfig, ClusteringError, UnknownSpeakerClusterer,
+        },
     },
     domain::models::{MeetingId, SpeakerIdentity, UnassignedVoiceClip, UnknownSpeakerCluster},
     ports::{storage::NoteRepository, voice::VoiceVectorDB},
@@ -28,6 +36,9 @@ pub enum ClusterReviewError {
     /// The typed identity name is empty or whitespace only.
     #[error("identity name must not be blank")]
     BlankIdentityName,
+    /// A group naming was asked for without any cluster.
+    #[error("at least one voice must be chosen")]
+    NoClustersSelected,
     /// The clusterer rejected the request (unknown or resolved cluster, storage failure).
     #[error(transparent)]
     Clustering(#[from] ClusteringError),
@@ -87,6 +98,8 @@ pub struct VoiceLibraryCluster {
     summary: UnknownClusterSummary,
     meeting_title: Option<String>,
     has_review_clip: bool,
+    /// The group this voice belongs to: the ID of the group's first cluster (#82).
+    voice_group_id: Uuid,
 }
 
 impl VoiceLibraryCluster {
@@ -103,6 +116,59 @@ impl VoiceLibraryCluster {
     /// Reports whether a review clip can still be played for this cluster.
     pub fn has_review_clip(&self) -> bool {
         self.has_review_clip
+    }
+
+    /// Returns the ID of the voice group this cluster belongs to, shared by its whole group (#82).
+    pub fn voice_group_id(&self) -> Uuid {
+        self.voice_group_id
+    }
+}
+
+/// Default least average cosine similarity between two clusters' voices for them to be offered as
+/// one person (#82).
+///
+/// Measured on the evaluation recordings (`DECISION_LOG.md`, #82): one person's whole-recording
+/// voices in different recordings reach a median of 0.85 (5th percentile 0.58), different people
+/// at most 0.41, and 5 s pieces of different people at most 0.49. A wrong merge would name someone
+/// silently, while a split costs one more naming, so this errs towards splitting; the owner can also
+/// leave a part out.
+pub const DEFAULT_VOICE_GROUP_SIMILARITY: f32 = 0.5;
+
+/// Unresolved clusters that sound like one person, offered to be named together (#82).
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnknownVoiceGroup {
+    group_id: Uuid,
+    clusters: Vec<VoiceLibraryCluster>,
+}
+
+impl UnknownVoiceGroup {
+    /// Returns the group's ID, the ID of its first cluster. It changes if that cluster goes.
+    pub fn group_id(&self) -> Uuid {
+        self.group_id
+    }
+
+    /// Borrows the group's clusters, in library order.
+    pub fn clusters(&self) -> &[VoiceLibraryCluster] {
+        &self.clusters
+    }
+
+    /// Returns the speech of every cluster in the group, in milliseconds.
+    pub fn total_duration_ms(&self) -> u64 {
+        self.clusters
+            .iter()
+            .map(|cluster| cluster.summary.total_duration_ms)
+            .sum()
+    }
+
+    /// Returns how many different meetings the group's clusters come from.
+    pub fn meeting_count(&self) -> usize {
+        let mut meetings: Vec<&MeetingId> = Vec::new();
+        for cluster in &self.clusters {
+            if !meetings.contains(&&cluster.summary.meeting_id) {
+                meetings.push(&cluster.summary.meeting_id);
+            }
+        }
+        meetings.len()
     }
 }
 
@@ -135,18 +201,73 @@ impl SavedPersonSummary {
 #[derive(Clone, Debug, PartialEq)]
 pub struct VoiceLibrary {
     unknown_clusters: Vec<VoiceLibraryCluster>,
+    unknown_voice_groups: Vec<UnknownVoiceGroup>,
     saved_people: Vec<SavedPersonSummary>,
 }
 
 impl VoiceLibrary {
-    /// Borrows the unresolved clusters, in the repository's meeting order, then creation order.
+    /// Borrows the unresolved clusters, group by group: groups in the order their first cluster
+    /// appears (meeting order, then creation order), and a group's clusters next to each other.
     pub fn unknown_clusters(&self) -> &[VoiceLibraryCluster] {
         &self.unknown_clusters
+    }
+
+    /// Borrows the unresolved clusters grouped by voice, in the same order (#82).
+    pub fn unknown_voice_groups(&self) -> &[UnknownVoiceGroup] {
+        &self.unknown_voice_groups
     }
 
     /// Borrows the saved people, sorted by name ignoring case.
     pub fn saved_people(&self) -> &[SavedPersonSummary] {
         &self.saved_people
+    }
+}
+
+/// Summarizes naming several clusters as one person (#82).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NamedGroupAssignment {
+    identity: SpeakerIdentity,
+    identity_created: bool,
+    assigned_cluster_ids: Vec<Uuid>,
+    skipped_cluster_count: usize,
+    variants_stored: usize,
+    segments_updated: usize,
+}
+
+impl NamedGroupAssignment {
+    /// Returns the identity every cluster was assigned to.
+    pub fn identity_id(&self) -> Uuid {
+        self.identity.identity_id()
+    }
+
+    /// Returns that identity's stored display name.
+    pub fn identity_name(&self) -> &str {
+        self.identity.display_name()
+    }
+
+    /// Reports whether this naming created the identity's voice-store record.
+    pub fn identity_created(&self) -> bool {
+        self.identity_created
+    }
+
+    /// Borrows the clusters now resolved, in the order given.
+    pub fn assigned_cluster_ids(&self) -> &[Uuid] {
+        &self.assigned_cluster_ids
+    }
+
+    /// Returns how many given clusters were skipped, being already named or gone.
+    pub fn skipped_cluster_count(&self) -> usize {
+        self.skipped_cluster_count
+    }
+
+    /// Returns how many voice variants were stored in all.
+    pub fn variants_stored(&self) -> usize {
+        self.variants_stored
+    }
+
+    /// Returns how many transcript segments were re-attributed in all.
+    pub fn segments_updated(&self) -> usize {
+        self.segments_updated
     }
 }
 
@@ -224,13 +345,15 @@ where
     RepositoryPort: NoteRepository + ?Sized,
     VectorDatabase: VoiceVectorDB + ?Sized,
 {
-    let mut unknown_clusters = Vec::new();
+    let mut listed_clusters: Vec<VoiceLibraryCluster> = Vec::new();
+    let mut representatives: Vec<Vec<f32>> = Vec::new();
     for meeting_id in note_repository
         .list_meeting_ids()
         .map_err(ClusteringError::from)?
     {
-        let summaries = list_unknown_clusters(note_repository, &meeting_id)?;
-        if summaries.is_empty() {
+        let clusters = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default())
+            .get_clusters_for_meeting(&meeting_id)?;
+        if clusters.is_empty() {
             continue;
         }
         let meeting_title = note_repository
@@ -240,17 +363,38 @@ where
         let review_clips = note_repository
             .get_unassigned_clips(&meeting_id)
             .map_err(ClusteringError::from)?;
-        unknown_clusters.extend(summaries.into_iter().map(|summary| {
+        for cluster in clusters {
             let has_review_clip = review_clips
                 .iter()
-                .any(|clip| clip.cluster_id() == Some(summary.cluster_id()));
-            VoiceLibraryCluster {
-                summary,
+                .any(|clip| clip.cluster_id() == Some(cluster.cluster_id()));
+            representatives.push(cluster.representative_embedding().to_vec());
+            listed_clusters.push(VoiceLibraryCluster {
+                summary: UnknownClusterSummary::from_cluster(&cluster),
                 meeting_title: meeting_title.clone(),
                 has_review_clip,
-            }
-        }));
+                voice_group_id: cluster.cluster_id(),
+            });
+        }
     }
+    let group_labels = group_unknown_voices(&representatives, DEFAULT_VOICE_GROUP_SIMILARITY);
+    drop(representatives);
+    let mut unknown_voice_groups: Vec<UnknownVoiceGroup> = Vec::new();
+    for (mut cluster, group_label) in listed_clusters.into_iter().zip(group_labels) {
+        match unknown_voice_groups.get_mut(group_label) {
+            Some(group) => {
+                cluster.voice_group_id = group.group_id;
+                group.clusters.push(cluster);
+            }
+            None => unknown_voice_groups.push(UnknownVoiceGroup {
+                group_id: cluster.voice_group_id,
+                clusters: vec![cluster],
+            }),
+        }
+    }
+    let unknown_clusters = unknown_voice_groups
+        .iter()
+        .flat_map(|group| group.clusters.iter().cloned())
+        .collect();
     let mut saved_people = voice_vector_database
         .list_speaker_identities()
         .map_err(ClusteringError::from)?
@@ -268,8 +412,58 @@ where
     saved_people.sort_by_key(|person| person.display_name.to_lowercase());
     Ok(VoiceLibrary {
         unknown_clusters,
+        unknown_voice_groups,
         saved_people,
     })
+}
+
+/// Groups voices that sound like one person (#82).
+///
+/// Inputs: One representative voice per cluster, in any scale, and the least average cosine
+/// similarity at which two groups merge (average linkage). A vector that is empty, has a zero or
+/// non-finite length, or whose length differs from the others' is never grouped.
+/// Outputs: One group number per voice, from zero, numbered in order of first appearance.
+/// Side effects: None; quadratic in the number of voices.
+pub fn group_unknown_voices(representatives: &[Vec<f32>], similarity_threshold: f32) -> Vec<usize> {
+    let is_usable = |vector: &Vec<f32>| {
+        let length_squared: f32 = vector.iter().map(|value| value * value).sum();
+        !vector.is_empty() && length_squared.is_finite() && length_squared > 0.0
+    };
+    let mut labels: Vec<Option<usize>> = vec![None; representatives.len()];
+    let mut next_label = 0_usize;
+    let mut dimensions: Vec<usize> = Vec::new();
+    for vector in representatives.iter().filter(|vector| is_usable(vector)) {
+        if !dimensions.contains(&vector.len()) {
+            dimensions.push(vector.len());
+        }
+    }
+    for dimension in dimensions {
+        let members: Vec<usize> = (0..representatives.len())
+            .filter(|index| {
+                representatives[*index].len() == dimension && is_usable(&representatives[*index])
+            })
+            .collect();
+        let unit_vectors: Vec<Vec<f32>> = members
+            .iter()
+            .map(|index| unit_vector(&representatives[*index]))
+            .collect();
+        let member_labels = dense_labels(&average_linkage(&unit_vectors, similarity_threshold));
+        let group_count = member_labels.iter().max().map_or(0, |highest| highest + 1);
+        for (index, label) in members.into_iter().zip(member_labels) {
+            labels[index] = Some(next_label + label);
+        }
+        next_label += group_count;
+    }
+    let labels: Vec<usize> = labels
+        .into_iter()
+        .map(|label| {
+            label.unwrap_or_else(|| {
+                next_label += 1;
+                next_label - 1
+            })
+        })
+        .collect();
+    dense_labels(&labels)
 }
 
 /// Finds the review clip of one cluster, for playback on request.
@@ -333,4 +527,75 @@ where
     let assignment = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default())
         .assign_identity_to_cluster(&voice_vector_database, cluster_id, &identity)?;
     Ok(NamedClusterAssignment { assignment })
+}
+
+/// Names several clusters as one person, as when the owner names a voice group (#82).
+///
+/// Inputs: The persistence ports (either may be a `dyn` port), the clusters in the order to assign
+/// them, and the person's name, which must contain a non-whitespace character.
+/// Outputs: The summary. A cluster already named (for example on a paired device) or no longer
+/// present is skipped. Errors: `BlankIdentityName` or `NoClustersSelected`, which write nothing;
+/// the first skip's error when every cluster was skipped; and any storage error, which stops at
+/// that cluster and leaves the earlier ones named.
+/// Side effects: As `assign_cluster_to_named_identity`, once per cluster: saves the identity,
+/// stores voice variants, relinks segments, resolves each cluster, and deletes its review clips.
+pub fn assign_clusters_to_named_identity<RepositoryPort, VectorDatabase>(
+    note_repository: &RepositoryPort,
+    voice_vector_database: &VectorDatabase,
+    cluster_ids: &[Uuid],
+    identity_name: &str,
+) -> Result<NamedGroupAssignment, ClusterReviewError>
+where
+    RepositoryPort: NoteRepository + ?Sized,
+    VectorDatabase: VoiceVectorDB + ?Sized,
+{
+    if identity_name.trim().is_empty() {
+        return Err(ClusterReviewError::BlankIdentityName);
+    }
+    if cluster_ids.is_empty() {
+        return Err(ClusterReviewError::NoClustersSelected);
+    }
+    let mut outcome: Option<NamedGroupAssignment> = None;
+    let mut first_skip: Option<ClusterReviewError> = None;
+    let mut skipped_cluster_count = 0_usize;
+    for cluster_id in cluster_ids {
+        match assign_cluster_to_named_identity(
+            note_repository,
+            voice_vector_database,
+            *cluster_id,
+            identity_name,
+        ) {
+            Ok(named) => {
+                let summary = outcome.get_or_insert_with(|| NamedGroupAssignment {
+                    identity: named.assignment.identity().clone(),
+                    identity_created: named.identity_created(),
+                    assigned_cluster_ids: Vec::new(),
+                    skipped_cluster_count: 0,
+                    variants_stored: 0,
+                    segments_updated: 0,
+                });
+                summary.assigned_cluster_ids.push(named.cluster_id());
+                summary.variants_stored += named.variants_stored();
+                summary.segments_updated += named.segments_updated();
+            }
+            Err(
+                error @ ClusterReviewError::Clustering(
+                    ClusteringError::ClusterNotFound { .. }
+                    | ClusteringError::ClusterAlreadyResolved { .. },
+                ),
+            ) => {
+                skipped_cluster_count += 1;
+                first_skip.get_or_insert(error);
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    match (outcome, first_skip) {
+        (Some(mut summary), _) => {
+            summary.skipped_cluster_count = skipped_cluster_count;
+            Ok(summary)
+        }
+        (None, Some(error)) => Err(error),
+        (None, None) => Err(ClusterReviewError::NoClustersSelected),
+    }
 }
