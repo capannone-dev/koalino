@@ -133,3 +133,23 @@ sheet can read the shared file, and a path outside the folder (including through
 link) is refused. It is our own small provider instead of androidx's `FileProvider`, so no
 library was added. Verified on the S23: the sheet showed the file's name (read through the
 grant), and `adb shell content query` was refused.
+
+## Sharing to a project (Issue #85)
+
+The activity accepts `SEND` and `SEND_MULTIPLE` for e-mails (`message/rfc822`), PDFs, pictures
+and text (Markdown included), so mail apps, file managers and galleries offer Note Taker in their
+share sheet. `IncomingShares.kt` copies each share at once, on a background thread, into its own
+folder under `cache/incoming` (a shared URI is readable only while the share lasts):
+
+- Only `content://` URIs are read. A `file://` URI from another app could name this app's own
+  private files, such as the database or keys, which must never end up in a project.
+- Names come from the sender's display name, reduced to one safe path component; an e-mail
+  without a name gets `.eml`, so Rust recognises it. A text-only share becomes a `.txt` file named
+  after its subject.
+- A file over 100 MiB (Rust's attachment limit) or one that can't be read is dropped and counted.
+- A share that starts the app is taken in `onCreate` (not again when a killed activity is
+  restored); one reaching the running app arrives through `onNewIntent` (`singleTop`).
+
+Dart takes the share on `note_taker/incoming_shares` (`takePending`, and `sharesArrived` while it
+runs), asks which project it goes into, and calls `release(directory)` once Rust has copied the
+files. Folders left behind are removed after a day.

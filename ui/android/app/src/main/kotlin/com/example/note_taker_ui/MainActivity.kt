@@ -6,11 +6,14 @@
 // (`WhisperModel`) on `note_taker/whisper_model`, and drives the recording foreground service
 // (`RecordingService`) on `note_taker/recording_service`, reporting its notification's actions
 // back to Dart. Exported logs are shared through the share sheet on `note_taker/share`
-// (`SharedFiles`, Issue #46).
+// (`SharedFiles`, Issue #46). Files and e-mails shared to the app from others are copied by
+// `IncomingShares` and offered to Dart on `note_taker/incoming_shares` (Issue #85).
 package com.example.note_taker_ui
 
 import android.content.Context
+import android.content.Intent
 import android.net.wifi.WifiManager
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import io.flutter.embedding.android.FlutterActivity
@@ -25,6 +28,9 @@ class MainActivity : FlutterActivity() {
 
     /** Answers `note_taker/microphone`; null until the engine is configured. */
     private var microphonePermission: MicrophonePermission? = null
+
+    /** Copies what other apps share to the app; created with the activity. */
+    private val incomingShares by lazy { IncomingShares(applicationContext) }
 
     /** Runs Keystore work off the main thread. */
     private val keyVaultExecutor = Executors.newSingleThreadExecutor()
@@ -46,6 +52,10 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler(microphone)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/share")
             .setMethodCallHandler(SharedFiles(this))
+        val sharesChannel =
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/incoming_shares")
+        sharesChannel.setMethodCallHandler(incomingShares)
+        incomingShares.channel = sharesChannel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/whisper_model")
             .setMethodCallHandler(WhisperModel(assets))
         val recordingChannel =
@@ -116,7 +126,26 @@ class MainActivity : FlutterActivity() {
     /** Stops reporting to an engine that is going away. */
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         RecordingService.stateListener = null
+        incomingShares.channel = null
         super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    /**
+     * Copies a share that started the app. A restored activity skips it: its intent was
+     * imported before the process was killed.
+     */
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (savedInstanceState == null && incomingShares.receive(intent)) {
+            // Cleared so a later recreation of the activity does not import it again.
+            setIntent(Intent(Intent.ACTION_MAIN))
+        }
+    }
+
+    /** Copies a share that reached the running app (the activity is `singleTop`). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        incomingShares.receive(intent)
     }
 
     /** Hands RECORD_AUDIO answers to `MicrophonePermission`. */

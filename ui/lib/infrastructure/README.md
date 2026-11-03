@@ -109,3 +109,8 @@ cancelled), and `setEnabled`. There is no desktop implementation.
 `ProjectCommandException` (Rust's `error_code`). `ProjectBridge` sends one JSON command per call
 through `note_taker_project_command` on a background isolate (`runRustProjectCommand`); tests
 pass a fake runner. `PlatformProjectFilesPicker` picks the accepted types, `.eml` included.
+
+`incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Note Taker:
+`IncomingShare` (the copies' folder, their paths, and how many could not be read) and
+`IncomingShareBridge` (`arrivals`, `takePending`, `release`). `AndroidIncomingShareBridge` talks
+to `IncomingShares.kt` on `note_taker/incoming_shares`; desktops get `NoIncomingShareBridge`.

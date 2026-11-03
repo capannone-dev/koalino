@@ -27,6 +27,7 @@ import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_configuration.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/host_key.dart';
+import 'package:note_taker_ui/infrastructure/incoming_share_bridge.dart';
 import 'package:note_taker_ui/infrastructure/language_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_attachment_bridge.dart';
@@ -53,6 +54,7 @@ import 'package:note_taker_ui/presentation/photo_capture_screen.dart';
 import 'package:note_taker_ui/presentation/projects_screen.dart';
 import 'package:note_taker_ui/presentation/recording_screen.dart';
 import 'package:note_taker_ui/presentation/settings_screen.dart';
+import 'package:note_taker_ui/presentation/share_to_project.dart';
 import 'package:note_taker_ui/presentation/telemetry_dashboard_screen.dart';
 import 'package:note_taker_ui/presentation/voice_gallery_screen.dart';
 
@@ -110,6 +112,7 @@ Future<void> main() async {
     coreStartupController: coreStartupController,
     appLockController: appLockController,
     languageController: languageController,
+    incomingShareBridge: platformIncomingShareBridge(),
   ));
   unawaited(appLockController?.initialize());
   // Starts after the first frame, so the waiting message shows during a keychain prompt.
@@ -128,6 +131,8 @@ final class NoteTakerApp extends StatelessWidget {
   /// `appLockController`, when given (Android), covers every screen while the app is locked
   /// and adds the App lock switch to Settings. `languageController`, when given, adds the language
   /// selector to the Record screen and the default language to Settings.
+  /// `incomingShareBridge`, when given (Android), offers files shared from other apps to a
+  /// project once the core is open (Issue #85).
   /// Outputs: A configured Material application.
   /// Side effects: None.
   const NoteTakerApp({
@@ -137,6 +142,7 @@ final class NoteTakerApp extends StatelessWidget {
     this.coreStartupController,
     this.appLockController,
     this.languageController,
+    this.incomingShareBridge,
     super.key,
   });
 
@@ -148,6 +154,7 @@ final class NoteTakerApp extends StatelessWidget {
   final Future<String?> Function()? activeMeetingId;
   final CoreStartupController? coreStartupController;
   final AppLockController? appLockController;
+  final IncomingShareBridge? incomingShareBridge;
 
   /// Builds the root Material 3 application.
   ///
@@ -156,7 +163,7 @@ final class NoteTakerApp extends StatelessWidget {
   /// Side effects: None.
   @override
   Widget build(BuildContext context) {
-    final Widget shell = HomeShell(
+    final Widget homeShell = HomeShell(
       recordingScreenBuilder: (BuildContext context) => RecordingScreen(
         recordingController: recordingController,
         languageController: languageController,
@@ -179,6 +186,15 @@ final class NoteTakerApp extends StatelessWidget {
         languageController: languageController,
       ),
     );
+    final IncomingShareBridge? shareBridge = incomingShareBridge;
+    // Inside the startup gate, so a share waits until the core can store it.
+    final Widget shell = shareBridge == null
+        ? homeShell
+        : IncomingShareListener(
+            shareBridge: shareBridge,
+            projectsController: _projectsController,
+            child: homeShell,
+          );
     final CoreStartupController? startup = coreStartupController;
     final AppLockController? appLock = appLockController;
     return MaterialApp(
