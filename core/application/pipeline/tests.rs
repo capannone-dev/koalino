@@ -1502,6 +1502,78 @@ async fn the_final_pass_separates_people_the_live_pass_merged() {
     assert_eq!(segments[0].text(), "chunk 0");
 }
 
+/// Gives each chunk a long voiced turn with words and a brief turn of another voice without any.
+struct WordlessTurnDiarizer;
+
+#[async_trait::async_trait]
+impl DiarizationEngine for WordlessTurnDiarizer {
+    /// Reports a 9.9 s turn and a 0.1 s turn, too short to receive any of the chunk's words.
+    async fn diarize(&self, _audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        Ok(vec![
+            SpeakerSegment::new(0, 9_900, vec![1.0, 0.0, 0.0]),
+            SpeakerSegment::new(9_900, 10_000, vec![0.0, 0.0, 1.0]),
+        ])
+    }
+
+    /// Reports ten windows of the first voice.
+    async fn voice_windows(
+        &self,
+        _audio_bytes: &[u8],
+    ) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        Ok((0..10_u64)
+            .map(|second| {
+                SpeakerSegment::new(second * 1_000, second * 1_000 + 2_000, vec![1.0, 0.0, 0.0])
+            })
+            .collect())
+    }
+}
+
+#[tokio::test]
+async fn the_final_pass_removes_live_voices_that_received_no_words() {
+    let meeting_id = MeetingId::new("meeting-final");
+    let mut session = MeetingSession::start(
+        meeting_id.clone(),
+        MockTranscriptionEngine::returning(&["one two three four five"]),
+        Some(WordlessTurnDiarizer),
+        VoiceIdentityManager::new(InMemoryVoiceVectorDB::new()),
+        sqlite_repository_with_meeting(&meeting_id),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    session
+        .process_vad_chunk(&vad_chunk_for("meeting-final", 0, 0, 10_000))
+        .await
+        .unwrap_or_else(|error| panic!("{error}"));
+    let clusterer =
+        UnknownSpeakerClusterer::new(session.note_repository(), ClusteringConfig::default());
+    let live_clusters = clusterer
+        .get_clusters_for_meeting(&meeting_id)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(live_clusters.len(), 2, "the live pass saw two voices");
+
+    session
+        .finish_meeting()
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let clusters =
+        UnknownSpeakerClusterer::new(session.note_repository(), ClusteringConfig::default())
+            .get_clusters_for_meeting(&meeting_id)
+            .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(
+        clusters.len(),
+        1,
+        "only the speaker the final pass found is left to name"
+    );
+    assert!(
+        session
+            .note_repository()
+            .get_unassigned_clips(&meeting_id)
+            .unwrap_or_else(|error| panic!("{error}"))
+            .iter()
+            .all(|clip| clip.cluster_id() == Some(clusters[0].cluster_id())),
+        "the wordless voice's review clip is gone too"
+    );
+}
+
 #[tokio::test]
 async fn the_final_pass_names_a_whole_speaker_below_the_per_turn_limit() {
     let voice_vector_database = InMemoryVoiceVectorDB::new();

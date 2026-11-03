@@ -157,6 +157,11 @@ impl SpeakerRegion {
             attribution,
         }
     }
+
+    /// Borrows the region's speaker attribution, before any words are aligned to it.
+    pub fn attribution(&self) -> &SpeakerAttribution {
+        &self.attribution
+    }
 }
 
 /// One aligned, meeting-timed region with its share of the chunk transcript.

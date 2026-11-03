@@ -134,5 +134,5 @@ dedicated thread or `spawn_blocking`, rather than directly on the main async run
 
 `meeting_speaker_pass.rs` holds the pure policy, and `MeetingSession::finish_meeting` applies it when a recording stops. It
 groups the recording's short voice windows, gives every word the nearest window's speaker, names each speaker once, and
-replaces the live segments. Unnamed speakers keep a live cluster, now holding one averaged voice. Without windows, or after
-a crash, the live result stands. See `DECISION_LOG.md` for the figures.
+replaces the live segments. Unnamed speakers keep a live cluster, now holding one averaged voice. Every other live cluster
+of the recording is deleted, including turns that got no words (#82). Without windows, or after a crash, the live result stands. See `DECISION_LOG.md` for the figures.

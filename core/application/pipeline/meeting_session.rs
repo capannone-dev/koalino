@@ -254,6 +254,9 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     text_pieces: Vec<TextPiece>,
     /// How many chunks this recording has processed.
     chunk_count: usize,
+    /// Every live cluster this recording's voices joined or founded, including voices that got no
+    /// words, so the final pass can remove the ones it doesn't keep (#82).
+    live_cluster_ids: Vec<Uuid>,
     /// Similarity policy used to group unknown voices into clusters.
     clustering_config: ClusteringConfig,
     /// Saves a telemetry row per completed transcription and diarization; `None` records none.
@@ -300,6 +303,7 @@ where
             voice_windows: Vec::new(),
             text_pieces: Vec::new(),
             chunk_count: 0,
+            live_cluster_ids: Vec::new(),
             clustering_config: ClusteringConfig::default(),
             task_metrics: None,
         })
@@ -404,6 +408,14 @@ where
         }
 
         let speaker_regions = self.diarize_and_attribute(vad_chunk).await;
+        for cluster_id in speaker_regions
+            .iter()
+            .filter_map(|region| region.attribution().unknown_cluster_id())
+        {
+            if !self.live_cluster_ids.contains(&cluster_id) {
+                self.live_cluster_ids.push(cluster_id);
+            }
+        }
         let aligned_regions = align_transcript(chunk_bounds, speaker_regions, &transcript);
         let chunk_index = self.chunk_count;
         self.chunk_count += 1;
@@ -515,10 +527,17 @@ where
             .save_transcript_segments(&self.meeting_id, &timeline)?;
         self.persisted_segments = timeline;
 
-        for segment in &live_segments {
-            let Some(cluster_id) = segment.unknown_cluster_id() else {
-                continue;
-            };
+        let live_cluster_ids = std::mem::take(&mut self.live_cluster_ids);
+        let segment_cluster_ids = live_segments
+            .iter()
+            .filter_map(TranscriptSegment::unknown_cluster_id);
+        let mut unneeded_cluster_ids: Vec<Uuid> = Vec::new();
+        for cluster_id in live_cluster_ids.into_iter().chain(segment_cluster_ids) {
+            if !unneeded_cluster_ids.contains(&cluster_id) {
+                unneeded_cluster_ids.push(cluster_id);
+            }
+        }
+        for cluster_id in unneeded_cluster_ids {
             if !claimed_clusters.contains(&cluster_id)
                 && let Err(error) = self
                     .note_repository
