@@ -1,7 +1,8 @@
 //! Specifies the meeting-document schema: transcript, origin, and segments round-trip, segment
 //! replacement is minimal, and concurrent edits from two devices merge without loss. Cluster
 //! resolutions (Issue #50) round-trip, decide the speaker of their segments, and converge when
-//! two devices name the same cluster at once.
+//! two devices name the same cluster at once. A meeting's project (Issue #85) round-trips, can be
+//! cleared, and converges when two devices move the meeting at once.
 
 use automerge::{AutoCommit, ROOT, ReadDoc, transaction::Transactable};
 use chrono::{TimeZone, Utc};
@@ -9,7 +10,10 @@ use uuid::Uuid;
 
 use super::meeting_document::AutomergeMeetingDocumentCodec;
 use crate::{
-    domain::models::{DeviceId, MeetingId, TranscriptSegment},
+    domain::{
+        models::{DeviceId, MeetingId, TranscriptSegment},
+        projects::ProjectId,
+    },
     ports::meeting_document::{MeetingDocumentCodec, MeetingOrigin, MeetingProjection},
 };
 
@@ -295,4 +299,58 @@ fn malformed_cluster_resolutions_are_skipped() {
         .unwrap_or_else(|error| panic!("entries must be written: {error}"));
 
     assert!(project(&document.save()).cluster_resolutions.is_empty());
+}
+
+/// Moves the fixture meeting into `project_id` (or out of any project), panicking on failure.
+fn with_project(document: &[u8], project_id: Option<ProjectId>) -> Vec<u8> {
+    AutomergeMeetingDocumentCodec
+        .with_project(document, project_id)
+        .unwrap_or_else(|error| panic!("the project must be written: {error}"))
+}
+
+/// A meeting moved into a project projects that project, and moving it out clears it.
+#[test]
+fn a_meetings_project_round_trips_and_clears() {
+    let project_id = ProjectId::from_uuid(Uuid::from_u128(85));
+
+    let moved_in = with_project(&empty_document(), Some(project_id));
+    assert_eq!(project(&moved_in).project_id, Some(project_id));
+
+    let moved_out = with_project(&moved_in, None);
+    assert_eq!(project(&moved_out).project_id, None);
+    assert_eq!(with_project(&moved_out, None), moved_out);
+}
+
+/// Two devices moving one meeting into different projects at once settle on the same project.
+#[test]
+fn concurrent_moves_converge_on_one_project() {
+    let shared = with_project(&empty_document(), None);
+    let first = with_project(&shared, Some(ProjectId::from_uuid(Uuid::from_u128(1))));
+    let second = with_project(&shared, Some(ProjectId::from_uuid(Uuid::from_u128(2))));
+
+    let mut merged_one_way = AutoCommit::load(&first).unwrap_or_else(|error| panic!("{error}"));
+    let mut other = AutoCommit::load(&second).unwrap_or_else(|error| panic!("{error}"));
+    merged_one_way
+        .merge(&mut other)
+        .unwrap_or_else(|error| panic!("{error}"));
+    let mut merged_other_way = AutoCommit::load(&second).unwrap_or_else(|error| panic!("{error}"));
+    let mut first_copy = AutoCommit::load(&first).unwrap_or_else(|error| panic!("{error}"));
+    merged_other_way
+        .merge(&mut first_copy)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let winner = project(&merged_one_way.save()).project_id;
+    assert!(winner.is_some());
+    assert_eq!(winner, project(&merged_other_way.save()).project_id);
+}
+
+/// A peer's project value that is not a project ID leaves the meeting outside any project.
+#[test]
+fn a_malformed_project_value_is_ignored() {
+    let mut document = AutoCommit::new();
+    document
+        .put(ROOT, "project_id", "not a project")
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(project(&document.save()).project_id, None);
 }

@@ -39,6 +39,8 @@ mod sqlite_meeting_document_tests;
 pub mod sqlite_peer_store;
 #[cfg(test)]
 mod sqlite_peer_store_tests;
+#[cfg(test)]
+mod sqlite_projects_tests;
 /// Makes SQLite erase deleted data instead of only marking its space as free.
 mod sqlite_secure_delete;
 #[cfg(test)]

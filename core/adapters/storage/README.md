@@ -225,3 +225,9 @@ existing database once with `VACUUM` to clear what earlier deletions left in fre
 stop paired devices restoring them. Records hold an ID and a time and are kept forever.
 `document_revision_floor` keeps a deleted meeting's revision from being reused, because a watcher
 that saw it would miss the next write.
+
+`sqlite_projects.rs` (Issue #85) stores projects in `projects` and deletions in `project_tombstones` (kept forever, so a
+deleted project never returns). `meetings.project_id` indexes the project named in each meeting's CRDT document, written
+by the projection; `attachments.project_id` marks a project's resources, which never join the unlinked import queue. A
+meeting or resource naming a project this device lacks is not shown in any project. Merging a paired device's list keeps
+the newest name and lets deletions win.

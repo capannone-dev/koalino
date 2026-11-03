@@ -1,8 +1,9 @@
 //! Declares how meeting data is read from and written into the meeting's CRDT document.
 //!
 //! Since Issue #43 the Automerge document is the source of truth for everything that syncs: the
-//! meeting's origin, the transcript, the transcript segments, and (Issue #50) which identity each
-//! unknown-speaker cluster was named as. The SQLite rows are an index
+//! meeting's origin, the transcript, the transcript segments, (Issue #50) which identity each
+//! unknown-speaker cluster was named as, and (Issue #85) the project it belongs to. The SQLite rows
+//! are an index
 //! derived from the document. Storage adapters receive an implementation of this port (as they
 //! receive `EmbeddingCipher`). They call it inside their own transactions, so the document and the
 //! index never diverge, and they never depend on the CRDT library.
@@ -13,6 +14,7 @@ use uuid::Uuid;
 use crate::domain::{
     errors::StorageError,
     models::{DeviceId, MeetingId, TranscriptSegment},
+    projects::ProjectId,
 };
 
 /// When and where a meeting was recorded; written once, by the recording device.
@@ -38,6 +40,9 @@ pub struct MeetingProjection {
     /// Unknown-speaker clusters named on any device, as (cluster, identity), ordered by cluster
     /// (Issue #50).
     pub cluster_resolutions: Vec<(Uuid, Uuid)>,
+    /// The project the meeting belongs to (Issue #85). Unlike the fields above, `None` is a value:
+    /// the meeting is in no project, so the index clears its project too.
+    pub project_id: Option<ProjectId>,
 }
 
 /// Reads and edits serialized meeting documents without exposing the CRDT library.
@@ -77,6 +82,17 @@ pub trait MeetingDocumentCodec: Send + Sync {
         document: &[u8],
         cluster_id: Uuid,
         identity_id: Uuid,
+    ) -> Result<Vec<u8>, StorageError>;
+
+    /// Moves the meeting into `project_id`, or out of any project for `None` (Issue #85).
+    ///
+    /// Inputs: The serialized document and the project. Outputs: The updated document bytes
+    /// (unchanged when the meeting is already there), or a storage error. Concurrent moves on two
+    /// devices converge on one project. Side effects: None.
+    fn with_project(
+        &self,
+        document: &[u8],
+        project_id: Option<ProjectId>,
     ) -> Result<Vec<u8>, StorageError>;
 
     /// Reads the index-relevant fields of a document.

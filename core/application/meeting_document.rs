@@ -7,6 +7,7 @@
 //! | `origin` | map `{ created_at_ms: int, acquisition_device_id: str }`, written once |
 //! | `transcript` | string |
 //! | `segments` | map from `<start_ms:012>-<end_ms:012>[-<n>]` to a segment map |
+//! | `project_id` | string, the hyphenated UUID of the meeting's project (Issue #85); absent for none |
 //!
 //! Each segment map is `{ start_ms: uint, end_ms: uint, text: str, speaker_identity_id?: str,
 //! unknown_cluster_id?: str }`, with UUIDs in hyphenated form. Keys are derived from the span, so
@@ -31,6 +32,7 @@ use crate::{
     domain::{
         errors::StorageError,
         models::{DeviceId, MeetingId, TranscriptSegment},
+        projects::ProjectId,
     },
     ports::meeting_document::{MeetingDocumentCodec, MeetingOrigin, MeetingProjection},
 };
@@ -43,6 +45,10 @@ const TRANSCRIPT_KEY: &str = "transcript";
 const SEGMENTS_KEY: &str = "segments";
 /// Root key of the cluster-resolutions map.
 const CLUSTER_RESOLUTIONS_KEY: &str = "cluster_resolutions";
+/// Root key of the project the meeting belongs to, as a UUID string (Issue #85). It is a register
+/// like the title: concurrent moves resolve to Automerge's deterministic winner. Absent means the
+/// meeting is in no project.
+const PROJECT_KEY: &str = "project_id";
 
 /// The Automerge implementation of `MeetingDocumentCodec`.
 #[derive(Clone, Copy, Debug, Default)]
@@ -153,6 +159,38 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
         Ok(automerge_document.save())
     }
 
+    fn with_project(
+        &self,
+        document: &[u8],
+        project_id: Option<ProjectId>,
+    ) -> Result<Vec<u8>, StorageError> {
+        let mut automerge_document = load(document)?;
+        let stored = read_string(&automerge_document, &ROOT, PROJECT_KEY);
+        match project_id {
+            Some(project_id) => {
+                let project_text = project_id.to_string();
+                if stored.as_deref() != Some(project_text.as_str()) {
+                    automerge_document
+                        .put(ROOT, PROJECT_KEY, project_text)
+                        .map_err(|error| crdt_error("unable to write the project", error))?;
+                }
+            }
+            None => {
+                if automerge_document
+                    .get(ROOT, PROJECT_KEY)
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
+                    automerge_document
+                        .delete(ROOT, PROJECT_KEY)
+                        .map_err(|error| crdt_error("unable to clear the project", error))?;
+                }
+            }
+        }
+        Ok(automerge_document.save())
+    }
+
     fn project(
         &self,
         meeting_id: &MeetingId,
@@ -192,11 +230,15 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
             ),
             _ => None,
         };
+        // A value that is not a project ID (from a faulty peer) leaves the meeting outside any.
+        let project_id = read_string(&automerge_document, &ROOT, PROJECT_KEY)
+            .and_then(|project_text| ProjectId::parse(&project_text));
         Ok(MeetingProjection {
             origin,
             transcript,
             segments,
             cluster_resolutions,
+            project_id,
         })
     }
 }

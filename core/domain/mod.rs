@@ -11,6 +11,10 @@ mod network_addresses_tests;
 pub mod peer_trust;
 #[cfg(test)]
 mod peer_trust_tests;
+/// Defines projects: folders of meetings and external resources (Issue #85).
+pub mod projects;
+#[cfg(test)]
+mod projects_tests;
 /// Defines the language a recording is transcribed in.
 pub mod transcription_language;
 #[cfg(test)]

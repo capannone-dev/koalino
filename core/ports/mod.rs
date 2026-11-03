@@ -20,6 +20,8 @@ pub mod meeting_document;
 pub mod network;
 /// Declares persistence for this node's P2P identity and its trusted peers.
 pub mod peer_trust;
+/// Declares how projects are stored and exchanged with paired devices (Issue #85).
+pub mod projects;
 /// Declares the host, stored choice and sample access behind remote transcription.
 pub mod remote_transcription;
 /// Declares local screen-share detection, capture and slide storage contracts.

@@ -35,3 +35,7 @@ code whisper.cpp knows.
 
 `network_addresses.rs` holds the relay and static peer addresses, and the pairing invite's text form.
 Invite text is untrusted, so parsing bounds every part (Issues #64 and #65).
+
+`projects.rs` (Issue #85) defines projects, folders of meetings and resources: `ProjectId`, `ProjectName` (1–200
+characters, trimmed, no control characters), `Project` with the rule paired devices use to agree on a name
+(`supersedes`: newest change, then greater name), and `ProjectTombstone`, the deletion record that always wins.

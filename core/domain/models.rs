@@ -794,6 +794,9 @@ pub struct Attachment {
     original_device_id: String,
     /// Meeting time (ms) the attachment belongs at in the transcript; `None` places it at the end.
     meeting_time_ms: Option<u64>,
+    /// The project that owns this attachment as one of its resources (Issue #85); such an
+    /// attachment has no meeting.
+    project_id: Option<crate::domain::projects::ProjectId>,
 }
 
 /// One linked attachment as paired devices describe it: metadata only, never a local path.
@@ -878,7 +881,22 @@ impl Attachment {
             original_timestamp,
             original_device_id: original_device_id.into(),
             meeting_time_ms: None,
+            project_id: None,
         }
+    }
+
+    /// Makes the attachment a resource of `project_id` (Issue #85).
+    ///
+    /// Inputs: The owning project; the attachment should have no meeting.
+    /// Outputs: The attachment. Side effects: None.
+    pub fn with_project_id(mut self, project_id: crate::domain::projects::ProjectId) -> Self {
+        self.project_id = Some(project_id);
+        self
+    }
+
+    /// Returns the project that owns this attachment as a resource, if any (Issue #85).
+    pub fn project_id(&self) -> Option<crate::domain::projects::ProjectId> {
+        self.project_id
     }
 
     /// Places the attachment at a point of its meeting's transcript (Issue #54).

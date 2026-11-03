@@ -25,6 +25,9 @@ mod cluster_share;
 #[path = "sqlite_deletions.rs"]
 mod deletions;
 
+/// Stores projects, indexes their meetings, and exchanges them with paired devices (Issue #85).
+#[path = "sqlite_projects.rs"]
+mod projects;
 #[path = "sqlite_unknown_speaker_clusters.rs"]
 mod unknown_speaker_clusters;
 
@@ -43,6 +46,7 @@ use crate::{
             MeetingId, MeetingMetadata, MeetingTitle, TaskMetrics, TaskType, Transcript,
             TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
         },
+        projects::ProjectId,
     },
     ports::{
         crypto::EmbeddingCipher,
@@ -206,6 +210,7 @@ impl SqliteNoteRepository {
         attachment_sync::add_attachment_content_columns(&sqlite_connection)?;
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
         deletions::initialize_deletion_schema(&sqlite_connection)?;
+        projects::initialize_project_schema(&sqlite_connection)?;
         for embedding_column in [
             &CLIP_EMBEDDINGS,
             &CLUSTER_REPRESENTATIVE_EMBEDDINGS,
@@ -361,9 +366,10 @@ impl AttachmentRepository for SqliteNoteRepository {
     fn save_attachment(&self, attachment: &Attachment) -> Result<(), StorageError> {
         let meeting_id = attachment.meeting_id().map(MeetingId::as_str);
         let inserted_row_count = self.connection.execute(
-            "INSERT INTO attachments (attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms)
-             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7
-             WHERE ?2 IS NULL OR EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2)",
+            "INSERT INTO attachments (attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms, project_id)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8
+             WHERE (?2 IS NULL OR EXISTS (SELECT 1 FROM meetings WHERE meeting_id = ?2))
+               AND (?8 IS NULL OR EXISTS (SELECT 1 FROM projects WHERE project_id = ?8))",
             params![
                 attachment.attachment_id().to_string(),
                 meeting_id,
@@ -374,11 +380,12 @@ impl AttachmentRepository for SqliteNoteRepository {
                 attachment
                     .meeting_time_ms()
                     .map(|meeting_time_ms| i64::try_from(meeting_time_ms).unwrap_or(i64::MAX)),
+                attachment.project_id().map(|project_id| project_id.to_string()),
             ],
         ).map_err(|error| sqlite_error("unable to save attachment", error))?;
         if inserted_row_count == 0 {
             return Err(StorageError::Rejected {
-                reason: String::from("cannot save attachment for an unknown meeting"),
+                reason: String::from("cannot save attachment for an unknown meeting or project"),
             });
         }
         if let Some(meeting_id) = attachment.meeting_id() {
@@ -397,7 +404,7 @@ impl AttachmentRepository for SqliteNoteRepository {
         meeting_id: &MeetingId,
     ) -> Result<Vec<Attachment>, StorageError> {
         self.load_crdt_document(meeting_id)?;
-        self.load_attachments(Some(meeting_id))
+        self.load_attachments(AttachmentOwnerFilter::Meeting(meeting_id))
     }
 
     /// Loads every imported attachment awaiting explicit meeting selection.
@@ -406,30 +413,38 @@ impl AttachmentRepository for SqliteNoteRepository {
     /// Outputs: Unlinked attachment metadata in insertion order, or a portable storage error.
     /// Side effects: Reads SQLite metadata only and never opens attachment files.
     fn get_unlinked_attachments(&self) -> Result<Vec<Attachment>, StorageError> {
-        self.load_attachments(None)
+        self.load_attachments(AttachmentOwnerFilter::Unlinked)
     }
 }
 
 impl SqliteNoteRepository {
-    /// Reads attachment rows for either one meeting or the unlinked import queue.
+    /// Reads the attachment rows of one meeting, of one project, or of the unlinked import queue.
     ///
-    /// Inputs: `meeting_id` narrows results when present; `None` selects unlinked records.
-    /// Outputs: Parsed attachment metadata in insertion order, or a portable storage error.
+    /// Inputs: Which owner's rows to read. Outputs: Parsed attachment metadata in insertion
+    /// order, or a portable storage error.
     /// Side effects: Reads SQLite rows only and never opens attachment files.
-    fn load_attachments(
+    pub(super) fn load_attachments(
         &self,
-        meeting_id: Option<&MeetingId>,
+        owner: AttachmentOwnerFilter<'_>,
     ) -> Result<Vec<Attachment>, StorageError> {
-        let (query, parameter) = match meeting_id {
-            Some(value) => (
-                "SELECT attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms FROM attachments WHERE meeting_id = ?1 ORDER BY rowid",
-                Some(value.as_str()),
-            ),
-            None => (
-                "SELECT attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms FROM attachments WHERE meeting_id IS NULL ORDER BY rowid",
+        const COLUMNS: &str = "SELECT attachment_id, meeting_id, file_path, mime_type, original_timestamp_utc, original_device_id, meeting_time_ms, project_id FROM attachments";
+        let project_text;
+        let (condition, parameter) = match owner {
+            AttachmentOwnerFilter::Meeting(meeting_id) => {
+                ("meeting_id = ?1", Some(meeting_id.as_str()))
+            }
+            AttachmentOwnerFilter::Project(project_id) => {
+                project_text = project_id.to_string();
+                ("project_id = ?1", Some(project_text.as_str()))
+            }
+            // Project resources have no meeting but are not waiting for one.
+            AttachmentOwnerFilter::Unlinked => (
+                "meeting_id IS NULL AND project_id IS NULL AND ?1 IS NULL",
                 None,
             ),
         };
+        let query = format!("{COLUMNS} WHERE {condition} ORDER BY rowid");
+        let query = query.as_str();
         let mut statement = self
             .connection
             .prepare(query)
@@ -444,6 +459,7 @@ impl SqliteNoteRepository {
                     row.get::<_, String>(4)?,
                     row.get::<_, String>(5)?,
                     row.get::<_, Option<i64>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to load attachments", error))?;
@@ -456,6 +472,7 @@ impl SqliteNoteRepository {
                 timestamp,
                 device_id,
                 meeting_time_ms,
+                project_text,
             ) = row.map_err(|error| sqlite_error("unable to decode attachment", error))?;
             let parsed_attachment_id =
                 uuid::Uuid::parse_str(&attachment_id).map_err(|error| StorageError::Rejected {
@@ -475,15 +492,28 @@ impl SqliteNoteRepository {
                 device_id,
             );
             // A negative value can only come from outside the app; it is treated as unknown.
-            Ok(
-                match meeting_time_ms.and_then(|value| u64::try_from(value).ok()) {
-                    Some(meeting_time_ms) => attachment.with_meeting_time_ms(meeting_time_ms),
-                    None => attachment,
-                },
-            )
+            let attachment = match meeting_time_ms.and_then(|value| u64::try_from(value).ok()) {
+                Some(meeting_time_ms) => attachment.with_meeting_time_ms(meeting_time_ms),
+                None => attachment,
+            };
+            Ok(match project_text.as_deref().and_then(ProjectId::parse) {
+                Some(project_id) => attachment.with_project_id(project_id),
+                None => attachment,
+            })
         })
         .collect()
     }
+}
+
+/// Selects whose attachment rows `load_attachments` reads.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum AttachmentOwnerFilter<'owner> {
+    /// The attachments of one meeting.
+    Meeting(&'owner MeetingId),
+    /// The resources of one project (Issue #85).
+    Project(ProjectId),
+    /// Imports waiting for the owner to pick a meeting.
+    Unlinked,
 }
 
 impl NoteRepository for SqliteNoteRepository {
@@ -1382,9 +1412,10 @@ fn write_segment_rows(
     Ok(())
 }
 
-/// Rewrites the index fields the document holds; fields it lacks keep their rows.
+/// Rewrites the index fields the document holds; fields it lacks keep their rows, except the
+/// project, which the document always decides (Issue #85).
 ///
-/// Side effects: Updates the transcript column and segment rows; marks each cluster the document
+/// Side effects: Updates the transcript and project columns and segment rows; marks each cluster the document
 /// resolves as resolved (to the document's identity) and deletes its review clips (Issue #50).
 /// Callers provide the transaction.
 fn apply_projection(
@@ -1403,6 +1434,17 @@ fn apply_projection(
     if let Some(segments) = &projection.segments {
         write_segment_rows(connection, meeting_id, segments)?;
     }
+    connection
+        .execute(
+            "UPDATE meetings SET project_id = ?1 WHERE meeting_id = ?2 AND project_id IS NOT ?1",
+            params![
+                projection
+                    .project_id
+                    .map(|project_id| project_id.to_string()),
+                meeting_id.as_str()
+            ],
+        )
+        .map_err(|error| sqlite_error("unable to project the meeting's project", error))?;
     for (cluster_id, identity_id) in &projection.cluster_resolutions {
         let cluster_key = cluster_id.to_string();
         connection
