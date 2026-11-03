@@ -1920,3 +1920,18 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **Approved by the owner for #85:** `mail-parser` (Rust, pure, no network) to read `.eml` emails; `markdown` (pure
   Dart) and `pdfrx` (PDFium) to show Markdown and PDF inside the Flutter app. Emails come in as `.eml` files, and on
   Android through the share sheet; no mailbox connection.
+
+## 2026-11-03 — #85 Project resources: sync, deletion, e-mails
+
+- **One owner per attachment:** `SharedAttachment.owner` is a meeting or a project. Project resources reuse the `NTA1`
+  manifests and the chunked transfer, with an empty `meeting_id` and a `project_id`, and travel in messages of their
+  own: a device from before projects refuses an entry with no meeting ID, which drops the whole message, so keeping
+  them apart lets it still receive every meeting attachment.
+- **Deleting one resource** writes an `attachment` record in `deleted_items`, sent as `attachment_ids` in `NTD1`
+  (missing in older messages, ignored by older devices). Like every deletion it always wins: a deleted resource
+  counts as held, so it is never fetched again, and a row for it is refused. Meeting attachments are not deletable
+  this way.
+- **`mail-parser` is pinned to 0.11:** 1.0 needs Rust 1.98, above the project's `rust-version` (1.88).
+- **E-mails stay whole:** the `.eml` file is the resource; its attachments of an accepted type are added to the same
+  project as separate resources, and others stay inside the e-mail. HTML-only mail is shown as text, so no markup
+  or remote content is ever rendered.

@@ -14,6 +14,9 @@ adapter without changing the application or domain boundaries.
 voice-embedding key is kept in the macOS Keychain, Windows Credential Manager, or Linux Secret
 Service. See `keychain/README.md` for entry names and error classification.
 
+`email/` implements the `EmailReader` port with the pure-Rust `mail-parser` crate, for e-mails kept in projects
+(#85). See `email/README.md`.
+
 `export/` implements the `MeetingExporter` port for Markdown, PDF (`printpdf` with its bundled
 `lopdf`), and versioned JSON. PDFs embed the bundled DejaVu Sans fonts, plus CJK and emoji fallback
 fonts from `NOTE_TAKER_PDF_FONT_DIR`, `~/.note_taker/fonts/`, or the system.

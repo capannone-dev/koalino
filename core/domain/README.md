@@ -39,3 +39,7 @@ Invite text is untrusted, so parsing bounds every part (Issues #64 and #65).
 `projects.rs` (Issue #85) defines projects, folders of meetings and resources: `ProjectId`, `ProjectName` (1–200
 characters, trimmed, no control characters), `Project` with the rule paired devices use to agree on a name
 (`supersedes`: newest change, then greater name), and `ProjectTombstone`, the deletion record that always wins.
+
+`email.rs` (Issue #85) describes an imported e-mail: `EmailMessage` (subject, people, sending time, text body,
+attachments) with `EmailPerson` and `EmailAttachment`, and the limits that bound a file the user picked
+(50 MiB, a million body characters, 100 attachments).

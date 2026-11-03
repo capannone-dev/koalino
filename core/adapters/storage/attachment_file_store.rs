@@ -8,6 +8,10 @@
 //! it was, and its owner deletes it. Only pictures and common document types are accepted, up to
 //! `MAX_ATTACHMENT_BYTES`. If the row cannot be saved, the copy is removed again. File contents
 //! and names are never logged.
+//!
+//! Project resources (Issue #85) go to `<attachment_directory>/project-<uuid>/` instead. An
+//! imported e-mail is kept as it is, and each of its attachments of a supported type becomes a
+//! resource of the same project; the others are counted and left inside the e-mail.
 
 use std::{
     fs::File,
@@ -23,12 +27,24 @@ use crate::{
         create_private_directory, file_error, is_plain_folder_name, write_private_file,
     },
     domain::{
+        email::MAX_EMAIL_BYTES,
         errors::StorageError,
         models::{Attachment, DeviceId, MeetingId},
         projects::ProjectId,
     },
-    ports::storage::AttachmentRepository,
+    ports::{email::EmailReader, storage::AttachmentRepository},
 };
+
+/// What importing an e-mail into a project stored.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectEmailImport {
+    /// The `.eml` file, kept as a resource.
+    pub email: Attachment,
+    /// Its attachments that became resources, in the e-mail's order.
+    pub extracted: Vec<Attachment>,
+    /// Attachments left out because their type is not accepted or they could not be stored.
+    pub skipped_attachments: usize,
+}
 
 /// Largest file accepted (100 MiB): photos and documents, never recordings.
 const MAX_ATTACHMENT_BYTES: u64 = 100 * 1024 * 1024;
@@ -141,6 +157,88 @@ impl AttachmentFileStore {
         Ok(resource)
     }
 
+    /// Keeps an `.eml` e-mail as a project resource and adds each of its attachments of a
+    /// supported type as a resource of the same project (Issue #85).
+    ///
+    /// Inputs: The repository holding the project, the e-mail reader, the project, and the
+    /// source `.eml` file.
+    /// Outputs: What was stored, or a rejection for a file not named `.eml`, larger than
+    /// `MAX_EMAIL_BYTES`, unreadable, not an e-mail, or whose row cannot be saved. Once the e-mail
+    /// is stored, an attachment that cannot be stored is skipped, never an error.
+    /// Side effects: Creates the project's folder and files; writes rows. Logs IDs and counts
+    /// only.
+    pub fn import_project_email<RepositoryPort>(
+        &self,
+        attachment_repository: &RepositoryPort,
+        email_reader: &dyn EmailReader,
+        project_id: ProjectId,
+        source_path: &Path,
+    ) -> Result<ProjectEmailImport, StorageError>
+    where
+        RepositoryPort: AttachmentRepository + ?Sized,
+    {
+        if supported_mime_type(source_path)? != "message/rfc822" {
+            return Err(StorageError::Rejected {
+                reason: String::from("only .eml files can be imported as e-mails"),
+            });
+        }
+        let mut raw_email = Vec::new();
+        let read_limit = u64::try_from(MAX_EMAIL_BYTES).unwrap_or(u64::MAX);
+        (&mut open_regular_file(source_path)?)
+            .take(read_limit + 1)
+            .read_to_end(&mut raw_email)
+            .map_err(|error| file_error("unable to read the e-mail", &error))?;
+        let email =
+            email_reader
+                .read_email(&raw_email)
+                .map_err(|error| StorageError::Rejected {
+                    reason: error.to_string(),
+                })?;
+        let folder_name = project_folder_name(project_id);
+        let owned_by_project = |attachment: Attachment| attachment.with_project_id(project_id);
+        let stored_email = self.store_and_link(
+            attachment_repository,
+            &folder_name,
+            source_path,
+            &mut raw_email.as_slice(),
+            owned_by_project,
+        )?;
+        let mut extracted = Vec::new();
+        let mut skipped_attachments = 0;
+        for attachment in &email.attachments {
+            // Only the last part of the sender's name is kept, so it cannot name a folder.
+            let attachment_name = Path::new(&attachment.file_name)
+                .file_name()
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            let stored = supported_mime_type(&attachment_name).and_then(|_| {
+                self.store_and_link(
+                    attachment_repository,
+                    &folder_name,
+                    &attachment_name,
+                    &mut attachment.contents.as_slice(),
+                    owned_by_project,
+                )
+            });
+            match stored {
+                Ok(resource) => extracted.push(resource),
+                Err(_) => skipped_attachments += 1,
+            }
+        }
+        tracing::info!(
+            %project_id,
+            attachment_id = %stored_email.attachment_id(),
+            extracted_count = extracted.len(),
+            skipped_count = skipped_attachments,
+            "E-mail added to project"
+        );
+        Ok(ProjectEmailImport {
+            email: stored_email,
+            extracted,
+            skipped_attachments,
+        })
+    }
+
     /// Copies `source_path` into `<attachment_directory>/<folder_name>/` and saves the row that
     /// `owned_by` builds from an unowned attachment describing the copy.
     ///
@@ -156,18 +254,46 @@ impl AttachmentFileStore {
     where
         RepositoryPort: AttachmentRepository + ?Sized,
     {
-        let mime_type = supported_mime_type(source_path)?;
+        supported_mime_type(source_path)?;
         let mut source_file = open_regular_file(source_path)?;
+        self.store_and_link(
+            attachment_repository,
+            folder_name,
+            source_path,
+            &mut source_file,
+            owned_by,
+        )
+    }
+
+    /// Writes `contents` into `<attachment_directory>/<folder_name>/<new ID>-<safe name>` and
+    /// saves the row that `owned_by` builds from an unowned attachment describing the file.
+    ///
+    /// Inputs: The repository, the owner's folder, the name the file is known by (its extension
+    /// gives the type), its contents, and the owner.
+    /// Outputs: The saved attachment, or a rejection for an unsupported type, contents above
+    /// `MAX_ATTACHMENT_BYTES`, or a row that cannot be saved.
+    /// Side effects: Creates folders and one file, writes one row, and removes the file again
+    /// on failure.
+    fn store_and_link<RepositoryPort>(
+        &self,
+        attachment_repository: &RepositoryPort,
+        folder_name: &str,
+        named_as: &Path,
+        contents: &mut impl Read,
+        owned_by: impl FnOnce(Attachment) -> Attachment,
+    ) -> Result<Attachment, StorageError>
+    where
+        RepositoryPort: AttachmentRepository + ?Sized,
+    {
+        let mime_type = supported_mime_type(named_as)?;
         let attachment_id = Uuid::new_v4();
         let owner_directory = self.attachment_directory.join(folder_name);
         create_private_directory(&owner_directory)?;
         let copy_path =
-            owner_directory.join(format!("{attachment_id}-{}", kept_file_name(source_path)));
+            owner_directory.join(format!("{attachment_id}-{}", kept_file_name(named_as)));
         // Reading one byte past the limit tells an oversized file from one exactly at it.
-        let copied_bytes = write_private_file(
-            &copy_path,
-            &mut (&mut source_file).take(MAX_ATTACHMENT_BYTES + 1),
-        )?;
+        let copied_bytes =
+            write_private_file(&copy_path, &mut contents.take(MAX_ATTACHMENT_BYTES + 1))?;
         if copied_bytes > MAX_ATTACHMENT_BYTES {
             remove_copy(&copy_path, attachment_id);
             return Err(too_large());

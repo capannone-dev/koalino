@@ -3,16 +3,20 @@
 //! time when given, leaves the source alone, and nothing is left behind when an import fails.
 //! Each test uses unique directories under the OS temp directory and an in-memory repository.
 //! Project resources (Issue #85) are copied the same way into the project's folder, and also
-//! accept emails (`.eml`) and GIFs.
+//! accept emails (`.eml`) and GIFs; an imported e-mail also adds its supported attachments to the
+//! project.
 
 use std::path::{Path, PathBuf};
 
 use uuid::Uuid;
 
 use crate::{
-    adapters::storage::{
-        attachment_file_store::{AttachmentFileStore, project_folder_name},
-        sqlite_adapter::SqliteNoteRepository,
+    adapters::{
+        email::mail_parser_reader::MailParserEmailReader,
+        storage::{
+            attachment_file_store::{AttachmentFileStore, project_folder_name},
+            sqlite_adapter::SqliteNoteRepository,
+        },
     },
     application::{crypto::voice_encryptor::ephemeral_cipher, meeting_crdt::MeetingCrdtService},
     domain::{
@@ -357,5 +361,130 @@ fn an_unknown_project_leaves_no_copy() {
             .map(|entries| entries.count())
             .unwrap_or(0),
         0
+    );
+}
+
+/// An e-mail with a PDF, an executable and a nameless picture attached.
+const EMAIL_WITH_FILES: &str = "From: Giacomo <giacomo@example.com>\r
+Subject: Candidates\r
+Content-Type: multipart/mixed; boundary=\"m\"\r
+\r
+--m\r
+Content-Type: text/plain\r
+\r
+CVs attached.\r
+--m\r
+Content-Type: application/pdf\r
+Content-Disposition: attachment; filename=\"../../cv anna.pdf\"\r
+Content-Transfer-Encoding: base64\r
+\r
+JVBERi0xLjQK\r
+--m\r
+Content-Type: application/octet-stream\r
+Content-Disposition: attachment; filename=\"setup.exe\"\r
+\r
+MZ\r
+--m\r
+Content-Type: image/png\r
+Content-Disposition: attachment\r
+Content-Transfer-Encoding: base64\r
+\r
+iVBORw0K\r
+--m--\r
+";
+
+/// Verifies an e-mail is kept as a resource and its supported attachments become resources too.
+#[test]
+fn an_email_is_kept_and_its_supported_attachments_become_resources() {
+    let sources = TemporaryDirectory::new("sources");
+    let attachment_directory = TemporaryDirectory::new("attachments");
+    let (repository, project_id) = repository_with_project();
+    let source = sources.file("Candidates.eml", EMAIL_WITH_FILES.as_bytes());
+
+    let imported = store(&attachment_directory)
+        .import_project_email(
+            &repository,
+            &MailParserEmailReader::new(),
+            project_id,
+            &source,
+        )
+        .unwrap_or_else(|error| panic!("e-mail should be imported: {error}"));
+
+    assert_eq!(imported.email.mime_type(), "message/rfc822");
+    assert_eq!(
+        std::fs::read(imported.email.file_path()).ok(),
+        Some(EMAIL_WITH_FILES.as_bytes().to_vec())
+    );
+    let extracted: Vec<(String, &str)> = imported
+        .extracted
+        .iter()
+        .map(|resource| {
+            let name = Path::new(resource.file_path())
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let without_id = name
+                .strip_prefix(&format!("{}-", resource.attachment_id()))
+                .map(str::to_owned)
+                .unwrap_or(name);
+            (without_id, resource.mime_type())
+        })
+        .collect();
+    assert_eq!(
+        extracted,
+        vec![("cv_anna.pdf".to_owned(), "application/pdf")]
+    );
+    assert_eq!(
+        std::fs::read(imported.extracted[0].file_path()).ok(),
+        Some(b"%PDF-1.4\n".to_vec())
+    );
+    assert_eq!(imported.skipped_attachments, 2);
+    assert_eq!(
+        repository
+            .project_resources(project_id)
+            .unwrap_or_default()
+            .len(),
+        2
+    );
+}
+
+/// Verifies a file that is not an e-mail, or not named `.eml`, is refused and leaves nothing.
+#[test]
+fn a_file_that_is_not_an_email_is_refused() {
+    let sources = TemporaryDirectory::new("sources");
+    let attachment_directory = TemporaryDirectory::new("attachments");
+    let (repository, project_id) = repository_with_project();
+    let empty = sources.file("empty.eml", b"");
+    let named_otherwise = sources.file("notes.md", EMAIL_WITH_FILES.as_bytes());
+    let file_store = store(&attachment_directory);
+
+    for source in [empty, named_otherwise] {
+        assert!(
+            file_store
+                .import_project_email(
+                    &repository,
+                    &MailParserEmailReader::new(),
+                    project_id,
+                    &source
+                )
+                .is_err()
+        );
+    }
+    assert!(
+        repository
+            .project_resources(project_id)
+            .unwrap_or_default()
+            .is_empty()
+    );
+    assert!(
+        std::fs::read_dir(
+            attachment_directory
+                .0
+                .join("attachments")
+                .join(project_folder_name(project_id))
+        )
+        .map(|entries| entries.count())
+        .unwrap_or(0)
+            == 0
     );
 }

@@ -102,3 +102,7 @@ declares the host, stored choice and sample access behind transcription on a pai
 `projects.rs` (Issue #85) declares `ProjectRepository` (create, rename, delete, list projects, move a meeting in or
 out, list a project's meetings and resources) and `ProjectLibrarySync` (digest, export and merge the project list
 with paired devices). A meeting's project lives in its CRDT document (`MeetingDocumentCodec::with_project`).
+`delete_project_resource` removes one resource and records the deletion, which paired devices apply too.
+
+`email.rs` (Issue #85) declares `EmailReader`, which parses an imported `.eml` file into
+`domain::email::EmailMessage`, and `EmailReadError` (too large, not an e-mail).

@@ -4,6 +4,8 @@
 pub mod ai;
 /// Implements audio-capture ports with local, platform-facing infrastructure.
 pub mod audio;
+/// Reads imported e-mails with `mail-parser` behind the e-mail port (Issue #85).
+pub mod email;
 /// Implements portable meeting export renderers behind the export port.
 pub mod export;
 /// Stores the random embedding key in the operating system's credential store.

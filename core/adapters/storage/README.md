@@ -202,6 +202,10 @@ meeting through `AttachmentRepository`, with a meeting time when given.
 - **Accepted:** only pictures and common document types, up to 100 MiB.
 - **Sources** are left for the caller.
 - **Cleanup:** a copy whose row is rejected is removed again.
+- **Project resources (#85):** `import_project_file` copies into `<attachment dir>/project-<uuid>/`;
+  Markdown, `.eml` and GIF are accepted too. `import_project_email` keeps the `.eml` and adds each
+  attachment of an accepted type as a resource of the same project (only the last part of its name
+  is kept); the rest are counted as skipped.
 
 `private_files.rs` holds what both attachment stores share: the meeting-ID folder-name check and
 private, never-overwriting file creation.

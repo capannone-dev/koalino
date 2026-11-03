@@ -6,6 +6,8 @@ pub mod ai;
 pub mod audio;
 /// Declares at-rest encryption contracts for voice embeddings and their key metadata.
 pub mod crypto;
+/// Declares how imported e-mails are read (Issue #85).
+pub mod email;
 /// Declares format-neutral meeting-export rendering contracts.
 pub mod export;
 /// Declares provider-neutral external meeting bridge contracts.
