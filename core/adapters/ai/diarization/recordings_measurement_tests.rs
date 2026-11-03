@@ -431,7 +431,8 @@ fn measure_meeting_pass() {
         let embed_ms = started.elapsed().as_millis() as u64;
         let grouping_started = Instant::now();
         let embeddings: Vec<Vec<f32>> = windows.iter().map(|window| window.2.clone()).collect();
-        let labels = group_voice_windows(&embeddings, &config);
+        let start_times_ms: Vec<u64> = windows.iter().map(|window| window.0).collect();
+        let labels = group_voice_windows(&embeddings, Some(&start_times_ms), &config);
         lines.push(
             json!({
                 "name": name,

@@ -19,7 +19,7 @@ fn voice(axis: usize, count: usize) -> Vec<Vec<f32>> {
 
 #[test]
 fn no_windows_give_no_speakers() {
-    assert!(group_voice_windows(&[], &SpeakerPassConfig::default()).is_empty());
+    assert!(group_voice_windows(&[], None, &SpeakerPassConfig::default()).is_empty());
 }
 
 #[test]
@@ -30,7 +30,7 @@ fn two_voices_alternating_give_two_speakers() {
         .zip(second)
         .flat_map(|(left, right)| [left, right])
         .collect();
-    let labels = group_voice_windows(&windows, &SpeakerPassConfig::default());
+    let labels = group_voice_windows(&windows, None, &SpeakerPassConfig::default());
     for (position, label) in labels.iter().enumerate() {
         assert_eq!(*label, position % 2);
     }
@@ -45,7 +45,7 @@ fn a_brief_group_joins_its_nearest_neighbour() {
     stray[0] = 0.5;
     stray[6] = 1.0;
     windows.extend(vec![stray; 3]);
-    let labels = group_voice_windows(&windows, &SpeakerPassConfig::default());
+    let labels = group_voice_windows(&windows, None, &SpeakerPassConfig::default());
     assert_eq!(labels[40..], [0, 0, 0]);
     assert_eq!(labels.iter().max(), Some(&1));
 }
@@ -60,19 +60,32 @@ fn two_voices_and_a_brief_one(each: usize, brief: usize) -> Vec<Vec<f32>> {
 
 #[test]
 fn a_short_meeting_keeps_a_brief_voice() {
-    // 95 windows: the least group stays 8 windows, as on the evaluation recordings.
+    // 95 windows: the least group stays 8 windows (1/15 is 6), as on the evaluation recordings.
     let labels = group_voice_windows(
         &two_voices_and_a_brief_one(40, 15),
+        None,
         &SpeakerPassConfig::default(),
     );
     assert_eq!(labels.iter().max(), Some(&2));
 }
 
 #[test]
+fn a_five_minute_meeting_folds_a_brief_voice() {
+    // 232 windows: a voice needs 1/15 of them, 15 (#83).
+    let labels = group_voice_windows(
+        &two_voices_and_a_brief_one(110, 12),
+        None,
+        &SpeakerPassConfig::default(),
+    );
+    assert_eq!(labels.iter().max(), Some(&1));
+}
+
+#[test]
 fn a_long_meeting_folds_a_brief_voice_into_its_nearest() {
-    // 615 windows, about ten minutes: 15 s is below the 20 s a voice now needs (#82).
+    // 615 windows, about ten minutes: 15 s is below the 30 s a voice now needs (#83).
     let labels = group_voice_windows(
         &two_voices_and_a_brief_one(300, 15),
+        None,
         &SpeakerPassConfig::default(),
     );
     assert_eq!(labels.iter().max(), Some(&1));
@@ -83,14 +96,59 @@ fn a_long_meeting_keeps_someone_who_spoke_half_a_minute() {
     // 1235 windows: the least group stops growing at 30 windows.
     let labels = group_voice_windows(
         &two_voices_and_a_brief_one(600, 35),
+        None,
         &SpeakerPassConfig::default(),
     );
     assert_eq!(labels.iter().max(), Some(&2));
 }
 
+/// Builds 140 windows, one per second: voices on axes 0 and 3 taking turns in 30 s runs, and 20
+/// windows of a voice on axis 6, either in one run or one at a time spread over the meeting.
+fn turns_with_a_third_voice(third_in_one_run: bool) -> (Vec<Vec<f32>>, Vec<u64>) {
+    let (mut first, mut second, mut third) = (voice(0, 60), voice(3, 60), voice(6, 20));
+    let mut windows = Vec::new();
+    for second_of_meeting in 0..140_usize {
+        let third_speaks = if third_in_one_run {
+            (60..80).contains(&second_of_meeting)
+        } else {
+            second_of_meeting % 7 == 3
+        };
+        let next = if third_speaks {
+            third.pop()
+        } else if (second_of_meeting / 30) % 2 == 0 {
+            first.pop().or_else(|| second.pop())
+        } else {
+            second.pop().or_else(|| first.pop())
+        };
+        if let Some(vector) = next {
+            windows.push(vector);
+        }
+    }
+    let starts = (0..windows.len() as u64)
+        .map(|second| second * 1_000)
+        .collect();
+    (windows, starts)
+}
+
+#[test]
+fn a_voice_heard_only_in_isolated_seconds_joins_its_nearest() {
+    // 20 windows clear the 9-window least size of a 140-window meeting, but no two are adjacent:
+    // a person talks in runs, while noise, laughter or crosstalk comes and goes (#83).
+    let (windows, starts) = turns_with_a_third_voice(false);
+    let labels = group_voice_windows(&windows, Some(&starts), &SpeakerPassConfig::default());
+    assert_eq!(labels.iter().max(), Some(&1));
+}
+
+#[test]
+fn a_brief_voice_that_speaks_in_a_run_stays() {
+    let (windows, starts) = turns_with_a_third_voice(true);
+    let labels = group_voice_windows(&windows, Some(&starts), &SpeakerPassConfig::default());
+    assert_eq!(labels.iter().max(), Some(&2));
+}
+
 #[test]
 fn one_person_stays_one_speaker_even_when_brief() {
-    let labels = group_voice_windows(&voice(2, 3), &SpeakerPassConfig::default());
+    let labels = group_voice_windows(&voice(2, 3), None, &SpeakerPassConfig::default());
     assert_eq!(labels, [0, 0, 0]);
 }
 
@@ -105,7 +163,7 @@ fn a_long_meeting_is_sampled_and_every_window_gets_a_speaker() {
         max_clustered_windows: 100,
         ..SpeakerPassConfig::default()
     };
-    let labels = group_voice_windows(&windows, &config);
+    let labels = group_voice_windows(&windows, None, &config);
     assert_eq!(labels.len(), windows.len());
     assert_eq!(labels.iter().max(), Some(&1));
     assert!((0..5).all(|position| labels[position] == labels[0]));
@@ -120,7 +178,7 @@ fn scale_does_not_change_the_groups() {
         .map(|vector| vector.iter().map(|value| value * 7.0).collect())
         .collect();
     assert_eq!(
-        group_voice_windows(&windows, &SpeakerPassConfig::default())
+        group_voice_windows(&windows, None, &SpeakerPassConfig::default())
             .iter()
             .max(),
         Some(&1)

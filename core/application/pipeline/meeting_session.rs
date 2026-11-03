@@ -487,7 +487,12 @@ where
             .iter()
             .map(|window| window.embedding.clone())
             .collect();
-        let labels = group_voice_windows(&embeddings, &SpeakerPassConfig::default());
+        let start_times_ms: Vec<u64> = voice_windows.iter().map(|window| window.start_ms).collect();
+        let labels = group_voice_windows(
+            &embeddings,
+            Some(&start_times_ms),
+            &SpeakerPassConfig::default(),
+        );
         let voices = speaker_voices(&embeddings, &labels);
         let live_segments: Vec<TranscriptSegment> = self
             .persisted_segments

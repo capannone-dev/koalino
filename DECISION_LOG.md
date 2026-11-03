@@ -1874,3 +1874,16 @@ The S23's 14.5-minute "Pranzo" lunch with 5–6 people still listed 30 unknown v
   person to a 330-window two-person meeting kept them at or above the least group and folded them below it.
 - **Not covered.** Recordings already finished keep their speakers; only new recordings are regrouped. A noisy room may
   still split one person into several voices of 30 s or more, which the voice groups of #82 then have to join.
+- **Retuned on a second lunch (2026-11-03).** A 5-minute lunch of 3 people (231 windows, S23 microphone) still gave 6
+  speakers. Two changes bring it to 3 (103, 83 and 45 windows), and leave all 15 evaluation recordings with the same
+  speaker for every window:
+  - The share is now **1/15** (at least 8, at most 30 windows), so a 5-minute meeting needs 15 windows: 4 speakers.
+  - **A brief group heard only in isolated seconds joins its nearest group.** People talk in runs. Contiguity, the share
+    of a group's windows with a window of the same group starting within a second, was at least 0.76 for every speaker
+    of the evaluation recordings and 0.88–0.96 for the lunch's three people, but 0.53 for the fourth group, 15 single
+    seconds spread over the whole meeting. A group under 30 windows with contiguity below 0.65 now folds. Its
+    consistency (0.47–0.53 against 0.49) could not tell it apart. Long meetings that are sampled skip this rule, since
+    sampled windows are not consecutive.
+  - With either change alone the lunch kept 4 speakers.
+  - **The price:** someone who says a few isolated words across a meeting, never a whole sentence, is given to the
+    nearest voice.

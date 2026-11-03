@@ -17,11 +17,19 @@ pub struct SpeakerPassConfig {
     /// `max_min_group_windows` (#82). One person's voice drifts over a long meeting, so the
     /// grouping splits off small groups of the same person: on the 15 evaluation recordings joined
     /// into one 19-minute meeting, an 8-window minimum found 7 speakers for 3 people and a 30-window
-    /// one found 3, with fewer windows misplaced. The price: someone who says less than that is
-    /// given to the nearest voice.
+    /// one found 3, with fewer windows misplaced. A 5-minute lunch of 3 people (231 windows) gave 6
+    /// speakers at 8 windows, 4 at a 1/15 share (15) and 3 once `min_group_contiguity` also folded
+    /// a group of scattered seconds. The price: someone who says less than that is given to the
+    /// nearest voice.
     pub min_group_share: f32,
     /// The most windows `min_group_share` can ask a group for: half a minute of speech.
     pub max_min_group_windows: usize,
+    /// A group under `max_min_group_windows` also joins its nearest group when fewer than this
+    /// share of its windows have a neighbour of the same group within a second (#83). People talk
+    /// in runs: every speaker group of the evaluation recordings scored at least 0.76, and those of
+    /// a 5-minute lunch at least 0.88, while the stray group of that lunch, single seconds spread
+    /// over the whole meeting, scored 0.53. Used only when window times are given.
+    pub min_group_contiguity: f32,
     /// Most windows grouped exhaustively; the rest then join the nearest group. Memory grows with
     /// the square of this count, so it bounds a long meeting at about 18 MB on a phone.
     pub max_clustered_windows: usize,
@@ -32,8 +40,9 @@ impl Default for SpeakerPassConfig {
         Self {
             similarity_threshold: 0.2,
             min_group_windows: 8,
-            min_group_share: 1.0 / 30.0,
+            min_group_share: 1.0 / 15.0,
             max_min_group_windows: 30,
+            min_group_contiguity: 0.65,
             max_clustered_windows: 3_000,
         }
     }
@@ -294,11 +303,19 @@ fn nearest_group(
         .map(|(group, _)| group)
 }
 
-/// Dissolves groups under the minimum size, smallest first, moving each member to its nearest group.
+/// Makes each group that is too small, or a brief group heard only in isolated seconds, join the
+/// group nearest each of its windows, smallest first.
 ///
-/// Inputs: Unit vectors, their group numbers, and the minimum size.
+/// Inputs: Unit vectors, their group numbers, each window's start in milliseconds in time order
+/// (`None` skips the isolated-seconds rule), the least size, and the settings.
 /// Outputs: Updates `labels`; a lone group stays whatever its size. Side effects: None.
-fn absorb_small_groups(vectors: &[Vec<f32>], labels: &mut [usize], min_group_windows: usize) {
+fn absorb_small_groups(
+    vectors: &[Vec<f32>],
+    labels: &mut [usize],
+    start_times_ms: Option<&[u64]>,
+    min_group_windows: usize,
+    config: &SpeakerPassConfig,
+) {
     let group_count = labels.iter().max().map_or(0, |highest| highest + 1);
     loop {
         let mut sizes = vec![0_usize; group_count];
@@ -308,10 +325,18 @@ fn absorb_small_groups(vectors: &[Vec<f32>], labels: &mut [usize], min_group_win
         if sizes.iter().filter(|size| **size > 0).count() <= 1 {
             return;
         }
+        let contiguity = start_times_ms.map(|starts| group_contiguity(labels, starts, group_count));
         let smallest = sizes
             .iter()
             .enumerate()
-            .filter(|(_, size)| **size > 0 && **size < min_group_windows)
+            .filter(|(group, size)| {
+                **size > 0
+                    && (**size < min_group_windows
+                        || (**size < config.max_min_group_windows
+                            && contiguity.as_ref().is_some_and(|shares| {
+                                shares[*group] < config.min_group_contiguity
+                            })))
+            })
             .min_by_key(|(_, size)| **size)
             .map(|(group, _)| group);
         let Some(smallest) = smallest else { return };
@@ -324,6 +349,44 @@ fn absorb_small_groups(vectors: &[Vec<f32>], labels: &mut [usize], min_group_win
             }
         }
     }
+}
+
+/// Returns, per group, the share of its windows that have another window of the group starting
+/// within a second of their own.
+///
+/// Inputs: Group numbers below `group_count` and each window's start, in time order.
+/// Outputs: One share per group; an empty group scores 1. Side effects: None.
+fn group_contiguity(labels: &[usize], start_times_ms: &[u64], group_count: usize) -> Vec<f32> {
+    const NEIGHBOUR_MS: u64 = 1_000;
+    let mut last_start: Vec<Option<u64>> = vec![None; group_count];
+    let mut joined = vec![false; labels.len()];
+    let mut last_index: Vec<Option<usize>> = vec![None; group_count];
+    for (index, (label, start_ms)) in labels.iter().zip(start_times_ms).enumerate() {
+        if let (Some(previous_start), Some(previous_index)) =
+            (last_start[*label], last_index[*label])
+            && start_ms.saturating_sub(previous_start) <= NEIGHBOUR_MS
+        {
+            joined[index] = true;
+            joined[previous_index] = true;
+        }
+        last_start[*label] = Some(*start_ms);
+        last_index[*label] = Some(index);
+    }
+    let mut totals = vec![(0_usize, 0_usize); group_count];
+    for (label, is_joined) in labels.iter().zip(&joined) {
+        totals[*label].0 += usize::from(*is_joined);
+        totals[*label].1 += 1;
+    }
+    totals
+        .into_iter()
+        .map(|(joined_count, count)| {
+            if count == 0 {
+                1.0
+            } else {
+                joined_count as f32 / count as f32
+            }
+        })
+        .collect()
 }
 
 /// Renumbers groups from zero in order of first appearance.
@@ -365,7 +428,11 @@ fn least_group_windows(count: usize, config: &SpeakerPassConfig) -> usize {
 /// Outputs: One speaker number per window, from zero; empty for no windows. A meeting over
 /// `max_clustered_windows` is sampled evenly, and the other windows join the nearest speaker.
 /// Side effects: None; CPU-heavy on long meetings, so call it off the UI and async threads.
-pub fn group_voice_windows(embeddings: &[Vec<f32>], config: &SpeakerPassConfig) -> Vec<usize> {
+pub fn group_voice_windows(
+    embeddings: &[Vec<f32>],
+    start_times_ms: Option<&[u64]>,
+    config: &SpeakerPassConfig,
+) -> Vec<usize> {
     let vectors: Vec<Vec<f32>> = embeddings
         .iter()
         .map(|vector| unit_vector(vector))
@@ -379,10 +446,15 @@ pub fn group_voice_windows(embeddings: &[Vec<f32>], config: &SpeakerPassConfig) 
         .collect();
     let sample_vectors: Vec<Vec<f32>> = sampled.iter().map(|item| vectors[*item].clone()).collect();
     let mut sample_labels = average_linkage(&sample_vectors, config.similarity_threshold);
+    // Sampling spreads a long meeting's windows apart, so their times say nothing about runs.
+    let sample_starts = start_times_ms
+        .filter(|starts| sample_count == vectors.len() && starts.len() == sample_count);
     absorb_small_groups(
         &sample_vectors,
         &mut sample_labels,
+        sample_starts,
         least_group_windows(sample_count, config),
+        config,
     );
     let sample_labels = dense_labels(&sample_labels);
     if sample_count == vectors.len() {
