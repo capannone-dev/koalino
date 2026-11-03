@@ -382,6 +382,15 @@ impl FfiRuntime {
             tracing::error!(error = %format!("{error:#}"), "unable to open encrypted stores");
             store_open_status(&error)
         })?;
+        // Before P2P starts, so paired devices hear of these deletions at the first exchange (#82).
+        if let Err(error) = crate::application::deletion::remove_leftover_voices(
+            &note_repository,
+            Some(&crate::cli_recording::LocalMeetingFiles::for_database(
+                &database_path,
+            )),
+        ) {
+            tracing::warn!(error = %error, "leftover unknown voices could not be removed");
+        }
         let review_clip_directory = setting("NOTE_TAKER_REVIEW_CLIP_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("voice_review_clips"));

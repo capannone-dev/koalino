@@ -126,7 +126,9 @@ transport. `P2pService` sends the library when its digest differs from what a de
 `SqliteVoiceVectorDB` merges it (#56).
 
 `deletion.rs` is the delete use case for the CLI and HTTP API. Through `MeetingDeletionHooks` it refuses
-a meeting being recorded and removes private attachment files.
+a meeting being recorded and removes private attachment files. `remove_leftover_voices` runs when
+the app and the daemon start, before P2P (#83): in each finished recording whose transcript points
+at a final-pass voice, it deletes, with deletion records, the unknown voices no line points at.
 
 `deletion_exchange.rs` encodes the `NTD1` messages listing deleted meetings and unknown voices. They
 hold identifiers only. `P2pService` sends them whenever a device has not had every record, and

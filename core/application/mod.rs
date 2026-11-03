@@ -37,6 +37,8 @@ pub mod deletion;
 pub mod deletion_exchange;
 #[cfg(test)]
 mod deletion_exchange_tests;
+#[cfg(test)]
+mod deletion_tests;
 /// Encodes and validates the `DeviceManifest` messages paired devices exchange (Issue #43).
 pub mod device_manifest_exchange;
 #[cfg(test)]

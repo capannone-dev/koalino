@@ -74,6 +74,13 @@ async fn main() -> Result<()> {
         device_id.clone(),
         KeyManagerConfig::from_environment(),
     )?;
+    // Before P2P starts, so paired devices hear of these deletions at the first exchange (#82).
+    if let Err(error) = note_taker_core::application::deletion::remove_leftover_voices(
+        &note_repository,
+        Some(&LocalMeetingFiles::for_database(&database_path)),
+    ) {
+        tracing::warn!(error = %error, "leftover unknown voices could not be removed");
+    }
     // P2P first: the pipeline routes transcription through its task.
     let p2p_task = start_p2p_task(
         database_path.clone(),
