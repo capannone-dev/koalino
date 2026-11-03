@@ -107,3 +107,9 @@ changing the level (and a refusal), the desktop export, cancel, and its messages
 share from the shared folder (an earlier export removed, a failing sheet), decoding the core's
 answer, and the screen with and without App lock. `fake_log_bridge.dart` holds the scripted
 bridge, sharer, and save dialog, which `app_lock_screen_test.dart` also uses.
+
+`project_bridge_test.dart` covers the Projects bridge (Issue #85): requests, decoding a project,
+an e-mail and an add-files answer, and refusals. `projects_screen_test.dart` drives the tab over
+`FakeProjects`: creating with name validation, a project's meetings and resources, the e-mail and
+document viewers, deleting a resource, moving a meeting from its page, the add-files message, and
+the Markdown view. `fake_project_runner.dart` scripts `note_taker_project_command`.

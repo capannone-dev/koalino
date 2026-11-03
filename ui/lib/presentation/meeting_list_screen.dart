@@ -4,6 +4,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
+import 'package:note_taker_ui/controllers/projects_controller.dart';
+import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
@@ -33,6 +35,7 @@ final class MeetingListScreen extends StatefulWidget {
     this.photoScreenBuilder,
     this.speakersScreenBuilder,
     this.exportController,
+    this.projectsController,
     super.key,
   });
 
@@ -41,6 +44,9 @@ final class MeetingListScreen extends StatefulWidget {
   final MeetingScreenBuilder? photoScreenBuilder;
   final MeetingScreenBuilder? speakersScreenBuilder;
   final MeetingExportController? exportController;
+
+  /// Offers Move to project for the open meeting when given (Issue #85).
+  final ProjectsController? projectsController;
 
   @override
   State<MeetingListScreen> createState() => _MeetingListScreenState();
@@ -68,6 +74,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         photoScreenBuilder: widget.photoScreenBuilder,
         speakersScreenBuilder: widget.speakersScreenBuilder,
         exportController: widget.exportController,
+        projectsController: widget.projectsController,
       ),
     ));
   }
@@ -156,6 +163,22 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                         AttachFilesButton(
                           controller: widget.controller,
                           attachmentsController: attachmentsController,
+                          meetingId: meetingId,
+                        ),
+                      _ => const SizedBox.shrink(),
+                    },
+                  ),
+              if (isTwoPane)
+                if (widget.projectsController
+                    case final ProjectsController projectsController)
+                  AnimatedBuilder(
+                    animation: widget.controller,
+                    builder: (BuildContext context, Widget? child) =>
+                        switch (widget.controller.selectedMeetingId) {
+                      final String meetingId
+                          when widget.controller.selectedMeeting != null =>
+                        MoveToProjectButton(
+                          controller: projectsController,
                           meetingId: meetingId,
                         ),
                       _ => const SizedBox.shrink(),

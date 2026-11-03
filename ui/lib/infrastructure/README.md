@@ -103,3 +103,9 @@ background isolates; a command blocks its isolate until the P2P task answers (Is
 `AppLockBridge` interface. `AndroidAppLockBridge` calls Kotlin's `AppLock` on the
 `note_taker/app_lock` channel: `status`, `authenticate` (the system prompt; false when
 cancelled), and `setEnabled`. There is no desktop implementation.
+
+`project_bridge.dart` (Issue #85) defines `ProjectSummary`, `ProjectDetail`, `ProjectResource`
+(with its `ProjectResourceKind`: image, markdown, pdf, email, text, document), `EmailView`, and
+`ProjectCommandException` (Rust's `error_code`). `ProjectBridge` sends one JSON command per call
+through `note_taker_project_command` on a background isolate (`runRustProjectCommand`); tests
+pass a fake runner. `PlatformProjectFilesPicker` picks the accepted types, `.eml` included.

@@ -6,9 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
 
 /// Pumps the shell at `size` (logical pixels) with placeholder destination screens, and a
-/// Settings placeholder when `withSettings` is true.
+/// Settings placeholder when `withSettings` is true and a Projects one when `withProjects` is.
 Future<void> pumpHomeShell(WidgetTester tester, Size size,
-    {bool withSettings = false}) async {
+    {bool withSettings = false, bool withProjects = false}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
@@ -21,6 +21,9 @@ Future<void> pumpHomeShell(WidgetTester tester, Size size,
             const Text('Meetings screen'),
         voicesScreenBuilder: (BuildContext context) =>
             const Text('Voices screen'),
+        projectsScreenBuilder: withProjects
+            ? (BuildContext context) => const Text('Projects screen')
+            : null,
         settingsScreenBuilder: withSettings
             ? (BuildContext context) => const Text('Settings screen')
             : null,
@@ -31,6 +34,36 @@ Future<void> pumpHomeShell(WidgetTester tester, Size size,
 
 /// Verifies phones use a bottom navigation bar and desktops a navigation rail.
 void main() {
+  testWidgets('Projects sits between Meetings and Voices and opens its screen',
+      (WidgetTester tester) async {
+    for (final Size size in <Size>[
+      const Size(390, 844),
+      const Size(1280, 800),
+    ]) {
+      await pumpHomeShell(tester, size, withSettings: true, withProjects: true);
+
+      final List<double> positions = <String>[
+        'Record',
+        'Meetings',
+        'Projects',
+        'Voices',
+        'Settings',
+      ]
+          .map((String label) => size.width < 600
+              ? tester.getCenter(find.text(label)).dx
+              : tester.getCenter(find.text(label)).dy)
+          .toList();
+      expect(positions, List<double>.of(positions)..sort());
+
+      await tester.tap(find.text('Projects'));
+      await tester.pumpAndSettle();
+      expect(find.text('Projects screen'), findsOneWidget);
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Settings screen'), findsOneWidget);
+    }
+  });
+
   testWidgets('Settings is a destination only when the app has settings',
       (WidgetTester tester) async {
     await pumpHomeShell(tester, const Size(390, 844));

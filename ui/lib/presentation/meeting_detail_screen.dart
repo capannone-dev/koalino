@@ -5,6 +5,8 @@ import 'dart:io';
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/projects_controller.dart';
+import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
@@ -38,6 +40,7 @@ final class MeetingDetailScreen extends StatefulWidget {
     this.photoScreenBuilder,
     this.speakersScreenBuilder,
     this.exportController,
+    this.projectsController,
     super.key,
   });
 
@@ -47,6 +50,9 @@ final class MeetingDetailScreen extends StatefulWidget {
   final MeetingScreenBuilder? photoScreenBuilder;
   final MeetingScreenBuilder? speakersScreenBuilder;
   final MeetingExportController? exportController;
+
+  /// Offers Move to project when given (Issue #85).
+  final ProjectsController? projectsController;
 
   @override
   State<MeetingDetailScreen> createState() => _MeetingDetailScreenState();
@@ -98,6 +104,12 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
             AttachFilesButton(
               controller: widget.controller,
               attachmentsController: attachmentsController,
+              meetingId: widget.meetingId,
+            ),
+          if (widget.projectsController
+              case final ProjectsController projectsController)
+            MoveToProjectButton(
+              controller: projectsController,
               meetingId: widget.meetingId,
             ),
         ],

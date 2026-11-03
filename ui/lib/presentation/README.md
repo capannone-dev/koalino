@@ -46,8 +46,7 @@ outgoing pairings with their six-digit codes in large type (read out digit by di
 readers), paired devices with a confirmed Remove, and nearby devices with Pair. This device and
 each paired device show their manifest in one line (`describeCapabilities`, such as
 "8 CPU cores · Whisper (on device)"), or "Not connected". A disabled P2P
-task shows "Device sync is off". `HomeShell` lists it as the fourth destination, Devices
-(Issue #43).
+task shows "Device sync is off" (Issue #43). It opens from Settings (Issue #84).
 
 `app_theme.dart` builds the light and dark Material 3 themes from one indigo seed with
 `noteTakerTheme(brightness)`. `NoteTakerApp` sets both and `ThemeMode.system`, so the app follows
@@ -73,7 +72,7 @@ a Telemetry entry, which pushes the telemetry dashboard as a page (Issue #53; it
 destination), the Log level selector (Error to Trace, Info by default; the core keeps the choice across
 restarts) and Export logs (Share logs on Android), which saves or shares the last seven days of
 logs. On Android it also holds the App lock switch, which explains why it is unavailable without
-a screen lock or before Android 10. `HomeShell` shows Settings as the fourth destination when given
+a screen lock or before Android 10. `HomeShell` shows Settings as the last destination when given
 a builder, which the app always gives.
 
 The meeting detail's app bar has Name speakers (`NameSpeakersButton`), which opens the voice
@@ -85,3 +84,17 @@ clip to a file only when Play is pressed.
 
 Beside it, Export (`ExportMeetingButton`, Issue #48) offers Markdown, PDF, and JSON, shows a
 spinner while exporting, and reports the result in a snack bar.
+
+Projects (Issue #85) is the destination between Meetings and Voices:
+
+- `projects_screen.dart` lists projects by name with their counts; New project asks for a name.
+- `project_detail_screen.dart` shows a project's meetings and its files, notes and e-mails, with
+  Add files, Write a note, Add meetings, Rename and Delete. A meeting opens its usual page;
+  removing it from the project keeps the meeting. A file still syncing says so.
+- `resource_viewer_screen.dart` shows every resource inside the app: pictures zoomable, Markdown
+  through `markdown_view.dart`, PDFs with `pdfrx`, e-mails as headers and plain text (Rust turns
+  HTML into text), and text files. Office documents say they can't be shown yet.
+- `markdown_view.dart` renders Markdown with the pure-Dart `markdown` parser. Links are inert and
+  images show their description, so nothing reaches the network.
+- `project_dialogs.dart` holds the name, note and meeting-picker dialogs, and
+  `MoveToProjectButton`, which meeting pages show to move a meeting into a project or out.

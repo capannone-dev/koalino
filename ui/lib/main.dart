@@ -18,6 +18,7 @@ import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/network_settings_controller.dart';
 import 'package:note_taker_ui/controllers/photo_capture_controller.dart';
+import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_route_controller.dart';
@@ -32,6 +33,7 @@ import 'package:note_taker_ui/infrastructure/meeting_attachment_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/infrastructure/photo_camera.dart';
+import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
@@ -48,6 +50,7 @@ import 'package:note_taker_ui/presentation/home_shell.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 import 'package:note_taker_ui/presentation/photo_capture_screen.dart';
+import 'package:note_taker_ui/presentation/projects_screen.dart';
 import 'package:note_taker_ui/presentation/recording_screen.dart';
 import 'package:note_taker_ui/presentation/settings_screen.dart';
 import 'package:note_taker_ui/presentation/telemetry_dashboard_screen.dart';
@@ -166,6 +169,11 @@ final class NoteTakerApp extends StatelessWidget {
           const _MeetingsDestination(),
       voicesScreenBuilder: (BuildContext context) =>
           const _VoiceGalleryDestination(),
+      projectsScreenBuilder: (BuildContext context) => ProjectsScreen(
+        controller: _projectsController,
+        meetingScreenBuilder: (BuildContext context, String meetingId) =>
+            _MeetingsDestination(openMeetingId: meetingId),
+      ),
       settingsScreenBuilder: (BuildContext context) => _SettingsDestination(
         appLockController: appLockController,
         languageController: languageController,
@@ -200,9 +208,13 @@ void _quit() {
   }
 }
 
-/// Owns a meeting controller for as long as the Meetings destination is shown.
+/// Owns a meeting controller for as long as the Meetings destination is shown, or one meeting's
+/// page opened from a project (`openMeetingId`).
 final class _MeetingsDestination extends StatefulWidget {
-  const _MeetingsDestination();
+  const _MeetingsDestination({this.openMeetingId});
+
+  /// The meeting to show alone, or `null` for the meeting list.
+  final String? openMeetingId;
 
   @override
   State<_MeetingsDestination> createState() => _MeetingsDestinationState();
@@ -232,6 +244,18 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
 
   @override
   Widget build(BuildContext context) {
+    if (widget.openMeetingId case final String meetingId) {
+      return MeetingDetailScreen(
+        controller: _controller,
+        meetingId: meetingId,
+        exportController: _exportController,
+        attachmentsController: _attachmentsController,
+        photoScreenBuilder: _photoScreenBuilder,
+        speakersScreenBuilder: (BuildContext context, String meetingId) =>
+            _VoiceGalleryDestination(meetingId: meetingId),
+        projectsController: _projectsController,
+      );
+    }
     return MeetingListScreen(
       controller: _controller,
       exportController: _exportController,
@@ -239,9 +263,18 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
       photoScreenBuilder: _photoScreenBuilder,
       speakersScreenBuilder: (BuildContext context, String meetingId) =>
           _VoiceGalleryDestination(meetingId: meetingId),
+      projectsController: _projectsController,
     );
   }
 }
+
+/// Projects state (Issue #85), shared by the Projects tab, meeting pages and files shared from
+/// other apps; it holds no resources, so it lives as long as the app.
+final ProjectsController _projectsController = ProjectsController(
+  projectBridge: const ProjectBridge(),
+  meetingBridge: const RustMeetingBridge(),
+  filesPicker: const PlatformProjectFilesPicker(),
+);
 
 /// Attaches files to the meeting being recorded from the Record screen; it holds no resources,
 /// so it lives as long as the app.

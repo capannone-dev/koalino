@@ -18,8 +18,12 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_riverpod: ^2.6.1
+  # Shows Markdown project resources inside the app (Issue #85; pure Dart, approved by the owner).
+  markdown: ^7.3.1
   fl_chart: ^0.69.2
   path_provider: ^2.1.5
+  # Shows PDF project resources inside the app with PDFium (Issue #85; approved by the owner).
+  pdfrx: ^2.11.0
   # Draws pairing invites as QR codes (Issue #65; pure Dart, approved by the owner, 2026-10-30).
   qr_flutter: ^4.1.0
 

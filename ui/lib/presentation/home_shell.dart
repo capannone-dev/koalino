@@ -4,9 +4,9 @@
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 
-/// Hosts the Record, Meetings and Voices destinations, plus Settings when given a builder (the app
-/// always gives one; Issue #46). Telemetry (Issue #53) and Devices (Issue #84) are pages of
-/// Settings.
+/// Hosts the Record, Meetings and Voices destinations, plus Projects (Issue #85, between Meetings
+/// and Voices) and Settings (Issue #46) when given their builders, as the app always does.
+/// Telemetry (Issue #53) and Devices (Issue #84) are pages of Settings.
 ///
 /// Phones get a bottom `NavigationBar`; windows at least `twoPaneBreakpoint` wide get a
 /// `NavigationRail`. Only the selected destination is built, so hidden screens neither poll
@@ -15,13 +15,15 @@ final class HomeShell extends StatefulWidget {
   /// Creates the shell from one builder per destination.
   ///
   /// Inputs: Builders for the recording, meeting list and voice gallery screens, and optionally
-  /// the settings screen, supplied by the composition root (tests pass placeholders).
+  /// the projects and settings screens, supplied by the composition root (tests pass
+  /// placeholders).
   /// Outputs: The navigation shell, starting on Record.
   /// Side effects: None.
   const HomeShell({
     required this.recordingScreenBuilder,
     required this.meetingsScreenBuilder,
     required this.voicesScreenBuilder,
+    this.projectsScreenBuilder,
     this.settingsScreenBuilder,
     super.key,
   });
@@ -29,6 +31,7 @@ final class HomeShell extends StatefulWidget {
   final WidgetBuilder recordingScreenBuilder;
   final WidgetBuilder meetingsScreenBuilder;
   final WidgetBuilder voicesScreenBuilder;
+  final WidgetBuilder? projectsScreenBuilder;
   final WidgetBuilder? settingsScreenBuilder;
 
   @override
@@ -39,56 +42,64 @@ final class HomeShell extends StatefulWidget {
 final class _HomeShellState extends State<HomeShell> {
   int _selectedIndex = 0;
 
-  /// The destinations always shown, in display order.
-  static const List<({IconData icon, IconData selectedIcon, String label})>
-      _mainDestinations =
-      <({IconData icon, IconData selectedIcon, String label})>[
-    (icon: Icons.mic_none, selectedIcon: Icons.mic, label: 'Record'),
-    (
-      icon: Icons.event_note_outlined,
-      selectedIcon: Icons.event_note,
-      label: 'Meetings'
-    ),
-    (
-      icon: Icons.record_voice_over_outlined,
-      selectedIcon: Icons.record_voice_over,
-      label: 'Voices'
-    ),
-  ];
-
-  /// The Settings destination, last, shown when the shell has a settings builder.
-  static const ({
-    IconData icon,
-    IconData selectedIcon,
-    String label
-  }) _settingsDestination = (
-    icon: Icons.settings_outlined,
-    selectedIcon: Icons.settings,
-    label: 'Settings'
-  );
-
-  /// The destinations shown, in display order.
-  List<({IconData icon, IconData selectedIcon, String label})>
-      get _destinations =>
-          <({IconData icon, IconData selectedIcon, String label})>[
-            ..._mainDestinations,
-            if (widget.settingsScreenBuilder != null) _settingsDestination,
+  /// The destinations shown, in display order, each with the builder of its screen.
+  List<
+          ({
+            IconData icon,
+            IconData selectedIcon,
+            String label,
+            WidgetBuilder builder
+          })>
+      get _destinations => <({
+            IconData icon,
+            IconData selectedIcon,
+            String label,
+            WidgetBuilder builder
+          })>[
+            (
+              icon: Icons.mic_none,
+              selectedIcon: Icons.mic,
+              label: 'Record',
+              builder: widget.recordingScreenBuilder,
+            ),
+            (
+              icon: Icons.event_note_outlined,
+              selectedIcon: Icons.event_note,
+              label: 'Meetings',
+              builder: widget.meetingsScreenBuilder,
+            ),
+            if (widget.projectsScreenBuilder case final WidgetBuilder builder)
+              (
+                icon: Icons.folder_outlined,
+                selectedIcon: Icons.folder,
+                label: 'Projects',
+                builder: builder,
+              ),
+            (
+              icon: Icons.record_voice_over_outlined,
+              selectedIcon: Icons.record_voice_over,
+              label: 'Voices',
+              builder: widget.voicesScreenBuilder,
+            ),
+            if (widget.settingsScreenBuilder case final WidgetBuilder builder)
+              (
+                icon: Icons.settings_outlined,
+                selectedIcon: Icons.settings,
+                label: 'Settings',
+                builder: builder,
+              ),
           ];
 
   void _selectDestination(int index) => setState(() => _selectedIndex = index);
 
   @override
   Widget build(BuildContext context) {
+    final destinations = _destinations;
+    final int selectedIndex =
+        _selectedIndex < destinations.length ? _selectedIndex : 0;
     final Widget selectedScreen = KeyedSubtree(
-      key: ValueKey<int>(_selectedIndex),
-      child: Builder(
-        builder: switch (_selectedIndex) {
-          1 => widget.meetingsScreenBuilder,
-          2 => widget.voicesScreenBuilder,
-          3 => widget.settingsScreenBuilder ?? widget.recordingScreenBuilder,
-          _ => widget.recordingScreenBuilder,
-        },
-      ),
+      key: ValueKey<String>(destinations[selectedIndex].label),
+      child: Builder(builder: destinations[selectedIndex].builder),
     );
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -96,10 +107,10 @@ final class _HomeShellState extends State<HomeShell> {
           return Scaffold(
             body: selectedScreen,
             bottomNavigationBar: NavigationBar(
-              selectedIndex: _selectedIndex,
+              selectedIndex: selectedIndex,
               onDestinationSelected: _selectDestination,
               destinations: <Widget>[
-                for (final destination in _destinations)
+                for (final destination in destinations)
                   NavigationDestination(
                     icon: Icon(destination.icon),
                     selectedIcon: Icon(destination.selectedIcon),
@@ -114,11 +125,11 @@ final class _HomeShellState extends State<HomeShell> {
             children: <Widget>[
               SafeArea(
                 child: NavigationRail(
-                  selectedIndex: _selectedIndex,
+                  selectedIndex: selectedIndex,
                   onDestinationSelected: _selectDestination,
                   labelType: NavigationRailLabelType.all,
                   destinations: <NavigationRailDestination>[
-                    for (final destination in _destinations)
+                    for (final destination in destinations)
                       NavigationRailDestination(
                         icon: Icon(destination.icon),
                         selectedIcon: Icon(destination.selectedIcon),
