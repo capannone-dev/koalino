@@ -36,6 +36,7 @@ use crate::{
         voice_identity_manager::VoiceIdentityManager,
     },
     device_identity::{DEVICE_ID_VARIABLE, resolve_device_id},
+    domain::projects::ProjectId,
     domain::transcription_language::TranscriptionLanguage,
     domain::{
         errors::ExportError,
@@ -54,10 +55,12 @@ use crate::{
     ports::{
         audio::MicrophoneSource,
         media::MetadataExtractor,
+        projects::ProjectRepository,
         storage::{AttachmentRepository, NoteRepository},
         telemetry::MetricsRepository,
         voice::VoiceVectorDB,
     },
+    project_commands::{ProjectFiles, run_project_command},
     recording_controller::{RecordingControlError, RecordingController},
     storage_composition::{EncryptedStores, open_encrypted_stores_with_keychain},
     transcription_settings::{
@@ -476,9 +479,35 @@ impl FfiRuntime {
     /// Side effects: Allocates in-memory SQLite; creates no directories.
     #[cfg(test)]
     fn in_memory_for_tests(export_directory: &Path) -> Result<Self, c_int> {
+        Self::in_memory_with_codec_choice(export_directory, false)
+    }
+
+    /// Like `in_memory_for_tests`, with the meeting-document codec the app's database has, which
+    /// moving a meeting into a project needs.
+    #[cfg(test)]
+    fn in_memory_with_documents_for_tests(export_directory: &Path) -> Result<Self, c_int> {
+        Self::in_memory_with_codec_choice(export_directory, true)
+    }
+
+    /// Builds an in-memory test runtime, with the meeting-document codec when `with_codec` is
+    /// set. Older tests store placeholder documents, which the codec would refuse.
+    #[cfg(test)]
+    fn in_memory_with_codec_choice(
+        export_directory: &Path,
+        with_codec: bool,
+    ) -> Result<Self, c_int> {
         let embedding_cipher = crate::application::crypto::voice_encryptor::ephemeral_cipher();
         let note_repository =
             SqliteNoteRepository::open_in_memory(std::sync::Arc::clone(&embedding_cipher))
+                .and_then(|repository| {
+                    if with_codec {
+                        repository.with_document_codec(std::sync::Arc::new(
+                            crate::application::meeting_document::AutomergeMeetingDocumentCodec,
+                        ))
+                    } else {
+                        Ok(repository)
+                    }
+                })
                 .map_err(|_| FFI_OPERATION_REJECTED)?;
         let voice_store = SqliteVoiceVectorDB::open_in_memory(embedding_cipher)
             .map_err(|_| FFI_OPERATION_REJECTED)?;
@@ -1359,11 +1388,29 @@ impl FfiRuntime {
     /// `duration_ms` is the latest segment end; or
     /// `{"ok":false,"error_code":"list_failed","error"}`.
     /// Side effects: Reads SQLite meeting metadata and segment offsets.
+    /// Runs one Projects command against this runtime's database and attachment folder.
+    ///
+    /// Inputs: The JSON request. Outputs: The JSON answer, with local file paths.
+    /// Side effects: Those of the command (see `project_commands`).
+    fn project_command(&mut self, request_json: &str) -> String {
+        let project_files = ProjectFiles::new(
+            self.attachment_directory.clone(),
+            self.note_repository.device_id().clone(),
+        );
+        run_project_command(&self.note_repository, &project_files, request_json, true)
+    }
+
     fn get_meetings(&self) -> String {
         let meeting_ids = match self.note_repository.list_meeting_ids() {
             Ok(meeting_ids) => meeting_ids,
             Err(error) => return export_error_json("list_failed", &error.to_string()),
         };
+        // A meeting in no project, or in one not synced here yet, has a null `project_id`.
+        let meeting_projects: HashMap<MeetingId, ProjectId> =
+            match self.note_repository.meeting_projects() {
+                Ok(meeting_projects) => meeting_projects.into_iter().collect(),
+                Err(error) => return export_error_json("list_failed", &error.to_string()),
+            };
         let mut serialized_meetings = Vec::with_capacity(meeting_ids.len());
         for meeting_id in meeting_ids {
             let meeting_metadata = match self.note_repository.load_meeting_metadata(&meeting_id) {
@@ -1373,7 +1420,17 @@ impl FfiRuntime {
             };
             match self.note_repository.load_transcript_segments(&meeting_id) {
                 Ok(segments) => {
-                    serialized_meetings.push(meeting_summary_json(&meeting_metadata, &segments));
+                    let mut meeting_json = meeting_summary_json(&meeting_metadata, &segments);
+                    if let serde_json::Value::Object(fields) = &mut meeting_json {
+                        fields.insert(
+                            String::from("project_id"),
+                            meeting_projects
+                                .get(&meeting_id)
+                                .map(|project_id| serde_json::Value::String(project_id.to_string()))
+                                .unwrap_or(serde_json::Value::Null),
+                        );
+                    }
+                    serialized_meetings.push(meeting_json);
                 }
                 Err(error) => return export_error_json("list_failed", &error.to_string()),
             }
@@ -2077,6 +2134,35 @@ pub unsafe extern "C" fn note_taker_p2p_command(request_json: *const c_char) -> 
             ),
             Err(_) => export_error_json("runtime_unavailable", "the native runtime is unavailable"),
         },
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Runs one Projects command (Issue #85) as JSON.
+///
+/// Inputs: `request_json` is a NUL-terminated UTF-8 object tagged by `command`: `list`, `create`,
+/// `rename`, `delete`, `detail`, `move_meeting`, `meeting_projects`, `add_files`, `add_note`,
+/// `delete_resource` or `read_email`; see `project_commands` for fields and answers.
+/// Outputs: An owned JSON answer (free with `note_taker_free_string`): `{"ok":true,...}` or
+/// `{"ok":false,"error_code","error"}`; resources include their local `file_path` so the app can
+/// open them. `runtime_unavailable` when the native runtime cannot start. Null only if the
+/// answer cannot be allocated.
+/// Side effects: Those of the command: SQLite writes and files copied into or removed from the
+/// project's folder. Paired devices receive the changes through P2P sync.
+///
+/// # Safety
+/// `request_json` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_project_command(request_json: *const c_char) -> *mut c_char {
+    let response_json = match unsafe { ffi_string(request_json) } {
+        None => export_error_json("invalid_request", "the request must be a UTF-8 C string"),
+        Some(request_json) => {
+            with_runtime_json(|runtime| Ok(runtime.project_command(request_json))).unwrap_or_else(
+                |_| export_error_json("runtime_unavailable", "the native runtime is unavailable"),
+            )
+        }
     };
     CString::new(response_json)
         .map(CString::into_raw)
@@ -3678,6 +3764,60 @@ mod ffi_contract_tests {
         assert_eq!(kept["meeting_id"], "ffi-kept");
         assert!(!private_folder_exists);
         assert!(kept_file_exists);
+    }
+
+    /// Verifies Projects commands run against the runtime and the meeting list names each
+    /// meeting's project (Issue #85).
+    #[test]
+    fn project_commands_run_and_meetings_carry_their_project() {
+        let export_directory =
+            std::env::temp_dir().join(format!("note-taker-ffi-projects-{}", uuid::Uuid::new_v4()));
+        let mut ffi_runtime = FfiRuntime::in_memory_with_documents_for_tests(&export_directory)
+            .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
+        for meeting_id in ["ffi-in-project", "ffi-loose"] {
+            crate::application::meeting_crdt::MeetingCrdtService::new(&ffi_runtime.note_repository)
+                .create_meeting(&MeetingId::new(meeting_id))
+                .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        }
+
+        let created =
+            parse_response(&ffi_runtime.project_command(r#"{"command":"create","name":"Hiring"}"#));
+        let project_id = created["project"]["project_id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
+        let moved = parse_response(
+            &ffi_runtime.project_command(
+                &serde_json::json!({
+                    "command": "move_meeting",
+                    "meeting_id": "ffi-in-project",
+                    "project_id": project_id,
+                })
+                .to_string(),
+            ),
+        );
+        let meetings = parse_response(&ffi_runtime.get_meetings());
+        let refused = parse_response(&ffi_runtime.project_command("not json"));
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert_eq!(created["ok"], true, "{created}");
+        assert_eq!(moved["ok"], true, "{moved}");
+        let project_of = |meeting_id: &str| {
+            meetings
+                .as_array()
+                .and_then(|meetings| {
+                    meetings
+                        .iter()
+                        .find(|meeting| meeting["meeting_id"] == meeting_id)
+                })
+                .map(|meeting| meeting["project_id"].clone())
+        };
+        assert_eq!(
+            project_of("ffi-in-project"),
+            Some(serde_json::Value::String(project_id))
+        );
+        assert_eq!(project_of("ffi-loose"), Some(serde_json::Value::Null));
+        assert_eq!(refused["error_code"], "invalid_request");
     }
 
     /// Verifies leftover review audio goes at startup and other files stay.

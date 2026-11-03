@@ -188,19 +188,130 @@ impl AttachmentFileStore {
             .take(read_limit + 1)
             .read_to_end(&mut raw_email)
             .map_err(|error| file_error("unable to read the e-mail", &error))?;
-        let email =
-            email_reader
-                .read_email(&raw_email)
-                .map_err(|error| StorageError::Rejected {
-                    reason: error.to_string(),
-                })?;
+        self.import_project_email_contents(
+            attachment_repository,
+            email_reader,
+            project_id,
+            source_path,
+            &raw_email,
+        )
+    }
+
+    /// Adds received contents, such as a web upload, to a project: an `.eml` name goes through
+    /// `import_project_email_contents`, any other accepted type is stored as one resource.
+    ///
+    /// Inputs: The repository, the e-mail reader, the project, the name the file is known by
+    /// (its extension gives the type; folders in it are ignored), and its contents.
+    /// Outputs: What was stored (`extracted` empty and no skips for a plain file), or a
+    /// rejection as for `import_project_file` and `import_project_email`.
+    /// Side effects: Creates the project's folder and files; writes rows. Logs IDs only.
+    pub fn import_project_contents<RepositoryPort>(
+        &self,
+        attachment_repository: &RepositoryPort,
+        email_reader: &dyn EmailReader,
+        project_id: ProjectId,
+        named_as: &Path,
+        contents: &[u8],
+    ) -> Result<ProjectEmailImport, StorageError>
+    where
+        RepositoryPort: AttachmentRepository + ?Sized,
+    {
+        let named_as = named_as.file_name().map(PathBuf::from).unwrap_or_default();
+        if supported_mime_type(&named_as)? == "message/rfc822" {
+            return self.import_project_email_contents(
+                attachment_repository,
+                email_reader,
+                project_id,
+                &named_as,
+                contents,
+            );
+        }
+        let resource = self.store_and_link(
+            attachment_repository,
+            &project_folder_name(project_id),
+            &named_as,
+            &mut &contents[..],
+            |attachment| attachment.with_project_id(project_id),
+        )?;
+        tracing::info!(
+            %project_id,
+            attachment_id = %resource.attachment_id(),
+            mime_type = resource.mime_type(),
+            "File added to project"
+        );
+        Ok(ProjectEmailImport {
+            email: resource,
+            extracted: Vec::new(),
+            skipped_attachments: 0,
+        })
+    }
+
+    /// Writes a note typed in the app into a project as a Markdown resource (Issue #85).
+    ///
+    /// Inputs: The repository, the project, the title (it names the file and heads the note) and
+    /// the text. Outputs: The stored resource, or a rejection for a blank or multi-line title or
+    /// a row that cannot be saved. Side effects: Creates one `.md` file and one row. Never logs
+    /// the title or text.
+    pub fn import_project_note<RepositoryPort>(
+        &self,
+        attachment_repository: &RepositoryPort,
+        project_id: ProjectId,
+        title: &str,
+        text: &str,
+    ) -> Result<Attachment, StorageError>
+    where
+        RepositoryPort: AttachmentRepository + ?Sized,
+    {
+        let title = title.trim();
+        if title.is_empty() || title.chars().any(char::is_control) {
+            return Err(StorageError::Rejected {
+                reason: String::from("a note needs a one-line title"),
+            });
+        }
+        let markdown = format!("# {title}\n\n{}\n", text.trim_end());
+        let resource = self.store_and_link(
+            attachment_repository,
+            &project_folder_name(project_id),
+            &PathBuf::from(format!("{title}.md")),
+            &mut markdown.as_bytes(),
+            |attachment| attachment.with_project_id(project_id),
+        )?;
+        tracing::info!(
+            %project_id,
+            attachment_id = %resource.attachment_id(),
+            "Note added to project"
+        );
+        Ok(resource)
+    }
+
+    /// Keeps e-mail contents as a project resource named after `source_path` and adds its
+    /// attachments of an accepted type, as `import_project_email` describes.
+    ///
+    /// Outputs: What was stored, or a rejection for contents that are too large, not an e-mail,
+    /// or a row that cannot be saved. Side effects: Creates files; writes rows.
+    fn import_project_email_contents<RepositoryPort>(
+        &self,
+        attachment_repository: &RepositoryPort,
+        email_reader: &dyn EmailReader,
+        project_id: ProjectId,
+        source_path: &Path,
+        raw_email: &[u8],
+    ) -> Result<ProjectEmailImport, StorageError>
+    where
+        RepositoryPort: AttachmentRepository + ?Sized,
+    {
+        let email = email_reader
+            .read_email(raw_email)
+            .map_err(|error| StorageError::Rejected {
+                reason: error.to_string(),
+            })?;
         let folder_name = project_folder_name(project_id);
         let owned_by_project = |attachment: Attachment| attachment.with_project_id(project_id);
         let stored_email = self.store_and_link(
             attachment_repository,
             &folder_name,
             source_path,
-            &mut raw_email.as_slice(),
+            &mut &raw_email[..],
             owned_by_project,
         )?;
         let mut extracted = Vec::new();

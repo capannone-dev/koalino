@@ -58,9 +58,14 @@ pub mod p2p_network_routes;
 pub mod pipeline_composition;
 /// Contains dependency-inversion traits for external capabilities.
 pub mod ports;
+/// Drives live recordings from raw PCM through the meeting pipeline worker.
+#[path = "bin/project_commands.rs"]
+pub mod project_commands;
+#[cfg(test)]
+#[path = "bin/project_commands_tests.rs"]
+mod project_commands_tests;
 /// Defines wire protocols with external processes (the Teams bot bridge).
 pub mod protocol;
-/// Drives live recordings from raw PCM through the meeting pipeline worker.
 #[path = "bin/recording_controller.rs"]
 pub mod recording_controller;
 /// Samples local screen shares beside a recording, on its own thread (Issue #49).

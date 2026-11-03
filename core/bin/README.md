@@ -119,6 +119,15 @@ HTTP runtime.
     `reject_request` and `revoke`; `ffi_p2p.rs` has the table.
   - A command waits for the task without holding the runtime lock.
 
+## Projects (`project_commands.rs`, Issue #85)
+
+`run_project_command` carries out one JSON Projects command (`list`, `create`, `rename`,
+`delete`, `detail`, `move_meeting`, `meeting_projects`, `add_files`, `add_note`,
+`delete_resource`, `read_email`). The app reaches it through `note_taker_project_command`; the
+web routes in `server/project_routes.rs` call its functions directly, so both behave alike.
+`ProjectFiles` holds the attachment folder and the e-mail reader; the daemon builds it over the
+same folder meeting deletions clean. Answers include local `file_path`s only for the app.
+
 ## App configuration (`note_taker_configure`)
 
 A desktop process inherits its environment; an Android app has none, and its working directory is

@@ -15,6 +15,10 @@ mod log_routes_tests;
 pub mod p2p_routes;
 #[cfg(test)]
 mod p2p_routes_tests;
+/// Serves the `/api/projects` routes of the web Projects pages (Issue #85).
+pub mod project_routes;
+#[cfg(test)]
+mod project_routes_tests;
 /// Refuses DNS-rebinding hosts and foreign browser origins before any route runs.
 pub mod request_guard;
 #[cfg(test)]

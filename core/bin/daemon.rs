@@ -17,6 +17,7 @@ use note_taker_core::{
     domain::models::DeviceId,
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
+    project_commands::ProjectFiles,
     recording_controller::RecordingController,
     server::api::{ServerAppState, build_router},
     storage_composition::{EncryptedStores, open_encrypted_stores},
@@ -97,6 +98,12 @@ async fn main() -> Result<()> {
             .map(|task| task as Arc<dyn RemoteTranscriptionGateway>),
     )
     .await;
+    // The same folder meeting deletions clean; project resources go in `project-<uuid>` there.
+    let local_meeting_files = LocalMeetingFiles::for_database(&database_path);
+    let project_files = Arc::new(ProjectFiles::new(
+        local_meeting_files.attachment_directory().to_path_buf(),
+        device_id.clone(),
+    ));
     let teams_bridge = start_teams_bridge_from_environment(
         &database_path,
         device_id,
@@ -106,7 +113,8 @@ async fn main() -> Result<()> {
     .await;
     let mut application_state = ServerAppState::new(note_repository, voice_store)
         .with_log_control(Arc::clone(&log_control) as Arc<dyn LogControl>)
-        .with_deletion_hooks(Arc::new(LocalMeetingFiles::for_database(&database_path)));
+        .with_deletion_hooks(Arc::new(local_meeting_files))
+        .with_project_files(project_files);
     if let Some(p2p_task) = &p2p_task {
         application_state =
             application_state.with_p2p_control(Arc::clone(p2p_task) as Arc<dyn P2pControl>);

@@ -208,6 +208,35 @@ from a background isolate.
 The ABI returns JSON strings rather than nested Rust structs. It neither accepts nor returns file
 contents, EXIF data, or database-specific values.
 
+### Projects C ABI (Issue #85)
+
+- `char *note_taker_project_command(const char *request_json)` runs one Projects command and
+  returns owned JSON (free with `note_taker_free_string`): `{"ok":true,...}` or
+  `{"ok":false,"error_code","error"}`. The request is tagged by `command`:
+
+| `command` | Fields | Answer |
+| --- | --- | --- |
+| `list` | | `projects`: `[{"project_id","name","created_at","updated_at","meeting_count","resource_count","latest_meeting_at"}]` by name |
+| `create` | `name` (1–200 characters, one line) | `project` |
+| `rename` | `project_id`, `name` | `project` |
+| `delete` | `project_id` | `deleted` (its meetings stay, outside any project; its resources and folder go) |
+| `detail` | `project_id` | `project`, `meetings` (newest first, as in `note_taker_get_meetings`), `resources` (oldest first) |
+| `move_meeting` | `meeting_id`, `project_id` (null moves it out) | `{}` |
+| `meeting_projects` | | `meeting_projects`: `{meeting ID: project ID}` |
+| `add_files` | `project_id`, `paths` | `added`, `failed` `[{"path","error"}]`, `skipped_attachments` |
+| `add_note` | `project_id`, `title`, `text` | `resource` (a Markdown file) |
+| `delete_resource` | `project_id`, `attachment_id` | `deleted: true` |
+| `read_email` | `project_id`, `attachment_id` | `email`: `{"subject","from","to","cc","sent_at","body_text","body_truncated","attachments"}` |
+
+- A resource is `{"attachment_id","file_name","mime_type","kind","added_at","size_bytes","file_path"}`;
+  `kind` is `image`, `markdown`, `pdf`, `email`, `text` or `document` (opened outside the app), and
+  `size_bytes` is null while the file is still on its way from a paired device.
+- `add_files` accepts the attachment types above plus GIF and `.eml`; an e-mail is kept whole, and
+  each of its attachments of an accepted type is added too (others count in `skipped_attachments`).
+- Error codes: `invalid_request`, `invalid_name`, `project_not_found`, `meeting_not_found`,
+  `resource_not_found`, `not_an_email`, `rejected`, `storage_failed`, `runtime_unavailable`.
+- `note_taker_get_meetings` items carry `project_id` (null outside any project).
+
 ### Background recording and lock-screen C ABI
 
 - `int32_t note_taker_start_recording(void)`, `note_taker_pause_recording(void)`, and
@@ -327,6 +356,30 @@ sound like one person share `voice_group_id` and are listed together, Issue #82)
 (identifiers and timing only); voice vectors and raw audio are never serialized.
 `GET /api/clusters/{id}/review-clip` returns `200` with the clip as `audio/wav` and
 `Cache-Control: no-store`, or `404` when the cluster has none (Issue #63). `GET /api/telemetry` returns aggregate task count, duration, and latency.
+
+### Projects (Issue #85)
+
+`GET /api/meetings` items carry `project_id` (null outside any project). The routes below use the
+same commands as the app (`core/bin/project_commands.rs`); resources never carry local paths.
+
+| Route | Success |
+| --- | --- |
+| `GET /api/projects` | `200`, project summaries by name |
+| `POST /api/projects` `{"name"}` | `201`, the summary |
+| `GET /api/projects/{project_id}` | `200` `{"project","meetings","resources"}` |
+| `PATCH /api/projects/{project_id}` `{"name"}` | `200`, the summary |
+| `DELETE /api/projects/{project_id}` | `204` |
+| `PUT /api/meetings/{meeting_id}/project` `{"project_id"}` (null moves it out) | `204` |
+| `POST /api/projects/{project_id}/resources?name=<file name>`, the file as the body (up to 100 MiB) | `201` `{"added","skipped_attachments"}` |
+| `POST /api/projects/{project_id}/notes` `{"title","text"}` | `201`, the resource |
+| `DELETE /api/projects/{project_id}/resources/{attachment_id}` | `204` |
+| `GET /api/projects/{project_id}/resources/{attachment_id}/file` | `200`, the bytes |
+| `GET /api/projects/{project_id}/resources/{attachment_id}/email` | `200`, the e-mail as plain text |
+
+Failures answer `{"error_code","error"}`: `400` for a bad ID, name, title or file type, `404` for
+an unknown project, meeting or resource (or a file not synced here yet), `503` when the daemon has
+no project files, `500` for storage errors. Files are served with their stored type,
+`X-Content-Type-Options: nosniff` and a `sandbox` Content Security Policy.
 
 ### Settings (Issue #46)
 

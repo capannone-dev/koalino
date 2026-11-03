@@ -514,6 +514,11 @@ impl LocalMeetingFiles {
             attachment_directory,
         }
     }
+
+    /// The attachment folder these hooks clean, which also holds project resources (#85).
+    pub fn attachment_directory(&self) -> &Path {
+        &self.attachment_directory
+    }
 }
 
 impl MeetingDeletionHooks for LocalMeetingFiles {

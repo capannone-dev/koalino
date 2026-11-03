@@ -47,20 +47,22 @@ use crate::{
         },
     },
     ports::{
+        projects::ProjectRepository,
         storage::{AttachmentRepository, NoteRepository},
         telemetry::MetricsRepository,
         voice::VoiceVectorDB,
     },
 };
 
-/// Combines the repository capabilities required by the headless read-only server boundary.
+/// Combines the repository capabilities required by the headless server boundary, including
+/// projects (Issue #85).
 pub trait ServerRepository:
-    NoteRepository + AttachmentRepository + MetricsRepository + Send
+    NoteRepository + AttachmentRepository + MetricsRepository + ProjectRepository + Send
 {
 }
 
 impl<T> ServerRepository for T where
-    T: NoteRepository + AttachmentRepository + MetricsRepository + Send
+    T: NoteRepository + AttachmentRepository + MetricsRepository + ProjectRepository + Send
 {
 }
 
@@ -76,6 +78,8 @@ pub struct ServerAppState {
     log_control: Option<Arc<dyn LogControl>>,
     /// Checks for a recording and removes files on deletion; `None` skips both.
     deletion_hooks: Option<Arc<dyn MeetingDeletionHooks>>,
+    /// Where project resources live (Issue #85); `None` makes the file routes answer 503.
+    project_files: Option<Arc<crate::project_commands::ProjectFiles>>,
 }
 
 impl ServerAppState {
@@ -101,6 +105,7 @@ impl ServerAppState {
             p2p_control: None,
             log_control: None,
             deletion_hooks: None,
+            project_files: None,
         }
     }
 
@@ -137,6 +142,27 @@ impl ServerAppState {
         self
     }
 
+    /// Attaches the project resource folder, which the `/api/projects` file routes use.
+    ///
+    /// Side effects: None; without it those routes answer 503.
+    pub fn with_project_files(
+        mut self,
+        project_files: Arc<crate::project_commands::ProjectFiles>,
+    ) -> Self {
+        self.project_files = Some(project_files);
+        self
+    }
+
+    /// The attached project files, if any.
+    pub(super) fn project_files(&self) -> Option<Arc<crate::project_commands::ProjectFiles>> {
+        self.project_files.clone()
+    }
+
+    /// The shared repositories, for routes that take the lock themselves.
+    pub(super) fn repositories(&self) -> Arc<Mutex<Box<dyn ServerRepository>>> {
+        Arc::clone(&self.repositories)
+    }
+
     /// The attached log control, if any.
     pub(super) fn log_control(&self) -> Option<Arc<dyn LogControl>> {
         self.log_control.clone()
@@ -150,7 +176,7 @@ impl ServerAppState {
     /// Tells the P2P task, if any, that `meeting_id` was just written, so connected devices get it.
     ///
     /// Side effects: Queues a notification without waiting; nothing without P2P.
-    fn notify_local_change(&self, meeting_id: &MeetingId) {
+    pub(super) fn notify_local_change(&self, meeting_id: &MeetingId) {
         if let Some(p2p_control) = &self.p2p_control {
             p2p_control.notify_local_change(meeting_id);
         }
@@ -215,6 +241,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .route("/api/telemetry/summary", get(get_telemetry_summary))
         .route("/ws", get(web_socket_upgrade))
         .merge(super::p2p_routes::routes())
+        .merge(super::project_routes::routes())
         .merge(super::log_routes::routes())
         // Innermost of the three layers, so CORS still answers preflights for allowed origins
         // and refusals are traced.
@@ -245,13 +272,22 @@ async fn list_meetings(
     let meeting_ids = repositories
         .list_meeting_ids()
         .map_err(storage_error_status)?;
+    // A meeting in no project, or in one not synced here yet, has a null `project_id`.
+    let meeting_projects: std::collections::HashMap<MeetingId, String> = repositories
+        .meeting_projects()
+        .map_err(storage_error_status)?
+        .into_iter()
+        .map(|(meeting_id, project_id)| (meeting_id, project_id.to_string()))
+        .collect();
     let mut meeting_summaries = Vec::with_capacity(meeting_ids.len());
     for meeting_id in meeting_ids {
         if let Some(meeting_metadata) = repositories
             .load_meeting_metadata(&meeting_id)
             .map_err(storage_error_status)?
         {
-            meeting_summaries.push(MeetingSummary::from(&meeting_metadata));
+            let mut summary = MeetingSummary::from(&meeting_metadata);
+            summary.project_id = meeting_projects.get(&meeting_id).cloned();
+            meeting_summaries.push(summary);
         }
     }
     Ok(Json(meeting_summaries))
@@ -1021,6 +1057,8 @@ struct MeetingSummary {
     title: String,
     /// RFC 3339 UTC creation time.
     created_at: String,
+    /// The project the meeting is in (Issue #85); null outside any project. Only the list sets it.
+    project_id: Option<String>,
 }
 impl From<&MeetingMetadata> for MeetingSummary {
     fn from(meeting_metadata: &MeetingMetadata) -> Self {
@@ -1028,6 +1066,7 @@ impl From<&MeetingMetadata> for MeetingSummary {
             meeting_id: String::from(meeting_metadata.meeting_id().as_str()),
             title: meeting_metadata.display_title(),
             created_at: meeting_metadata.created_at().to_rfc3339(),
+            project_id: None,
         }
     }
 }
