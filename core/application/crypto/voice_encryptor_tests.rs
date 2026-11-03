@@ -1,13 +1,16 @@
 //! Specifies AES-256-GCM sealing of voice embeddings: round trips, nonce freshness, tamper and
 //! wrong-key rejection, row binding, and the real-time performance budget.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use super::voice_encryptor::{
     EncryptionKey, SEALED_EMBEDDING_HEADER, VoiceEncryptor, decrypt_embedding,
     decrypt_embedding_with_context, encrypt_embedding, encrypt_embedding_with_context,
 };
-use crate::{domain::errors::CryptoError, ports::crypto::EmbeddingCipher};
+use crate::{
+    cpu_stopwatch_for_tests::CpuStopwatch, domain::errors::CryptoError,
+    ports::crypto::EmbeddingCipher,
+};
 
 /// Size of the format header, nonce, and authentication tag added to every embedding.
 const SEALING_OVERHEAD_BYTES: usize = 4 + 12 + 16;
@@ -194,8 +197,9 @@ fn keys_are_redacted_in_debug_output() {
 /// Benchmark: sealing and opening 1000 embeddings takes under one second in total (< 1 ms each).
 ///
 /// The AES-GCM crates build optimized in every profile (see `Cargo.toml`), so this measures real
-/// cipher cost. The best of three batches is compared, so one scheduling stall on a shared CI
-/// runner running the other tests in parallel cannot fail the budget.
+/// cipher cost. It counts the thread's CPU time, not wall-clock time, so other work on a busy
+/// machine or CI runner cannot fail the budget (#81); the best of three batches also absorbs cache
+/// effects of that work.
 #[test]
 fn sealing_and_opening_one_thousand_embeddings_takes_under_one_second() {
     let encryptor = VoiceEncryptor::new(&EncryptionKey::from_bytes(test_key(7)));
@@ -203,7 +207,7 @@ fn sealing_and_opening_one_thousand_embeddings_takes_under_one_second() {
 
     let mut fastest_batch = Duration::MAX;
     for _ in 0..3 {
-        let started_at = Instant::now();
+        let started_at = CpuStopwatch::start();
         for (row_index, embedding) in embeddings.iter().enumerate() {
             let context = format!("voice_variants:{row_index}");
             let sealed = encryptor

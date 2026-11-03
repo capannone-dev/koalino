@@ -9,7 +9,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use printpdf::lopdf::{self, Object};
@@ -19,6 +19,7 @@ use super::{
     pdf_fonts::{self, PdfFontConfig, TextFonts},
     tests::{TestDirectory, fixture_start, page_text_objects, page_texts},
 };
+use crate::cpu_stopwatch_for_tests::CpuStopwatch;
 use crate::domain::models::{
     ExportDocument, ExportFormat, ExportOptions, ExportTranscriptSegment, MeetingId,
 };
@@ -337,7 +338,8 @@ fn pdf_with_embedded_fonts_stays_small_for_typical_transcript() {
 }
 
 /// Verifies embedding Unicode fonts costs less than twice the built-in Helvetica path on the same
-/// typical transcript (best of several runs, so scheduler noise does not decide the result).
+/// typical transcript. Each render is timed by the thread's CPU time and the best of several runs is
+/// kept, so other work on a busy machine does not decide the result (#81).
 #[test]
 fn pdf_font_embedding_is_less_than_twice_as_slow_as_builtin_fonts() {
     let typical_lines = (0..300)
@@ -355,7 +357,7 @@ fn pdf_font_embedding_is_less_than_twice_as_slow_as_builtin_fonts() {
     let fastest_render = |font_config: &PdfFontConfig| {
         (0..5)
             .map(|_| {
-                let render_start = Instant::now();
+                let render_start = CpuStopwatch::start();
                 render_with(&document, font_config);
                 render_start.elapsed()
             })

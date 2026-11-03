@@ -83,6 +83,10 @@ pub mod transcription_settings;
 #[path = "bin/transcription_settings_tests.rs"]
 mod transcription_settings_tests;
 
+/// Times speed checks by thread CPU time, so load does not fail them (#81).
+#[cfg(test)]
+mod cpu_stopwatch_for_tests;
+
 #[cfg(test)]
 mod scaffold_contract_tests {
     use crate::{

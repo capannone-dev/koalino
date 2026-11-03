@@ -112,13 +112,18 @@ fn trust_store_connection(database_path: &PathBuf) -> SqlitePeerStore {
     .unwrap_or_else(|error| panic!("peer store must open: {error}"))
 }
 
-/// Drives both swarms and both services until `condition` holds (5 s limit).
+/// How long a drive may take before the test fails. The drives end as soon as their condition holds,
+/// so this only stops a hang: it is generous because on a busy machine a debug build moving an
+/// attachment through SQLite can take several seconds (#81).
+const DRIVE_DEADLINE: Duration = Duration::from_secs(60);
+
+/// Drives both swarms and both services until `condition` holds, failing after `DRIVE_DEADLINE`.
 async fn drive(
     laptop: &mut Service,
     phone: &mut Service,
     mut condition: impl FnMut(&Service, &Service) -> bool,
 ) {
-    tokio::time::timeout(Duration::from_secs(5), async {
+    tokio::time::timeout(DRIVE_DEADLINE, async {
         loop {
             laptop.poll_local_changes();
             phone.poll_local_changes();
@@ -362,12 +367,13 @@ fn link(dialer: &mut Service, listener: &mut Service, memory_address: &str) {
         .unwrap_or_else(|error| panic!("devices must link: {error}"));
 }
 
-/// Drives every service, as each daemon's loop would, until `condition` holds (5 s limit).
+/// Drives every service, as each daemon's loop would, until `condition` holds, failing after
+/// `DRIVE_DEADLINE`.
 async fn drive_all(
     services: &mut [&mut Service],
     mut condition: impl FnMut(&[&mut Service]) -> bool,
 ) {
-    tokio::time::timeout(Duration::from_secs(5), async {
+    tokio::time::timeout(DRIVE_DEADLINE, async {
         loop {
             for service in services.iter_mut() {
                 service.poll_local_changes();

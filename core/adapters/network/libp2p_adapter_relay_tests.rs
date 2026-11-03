@@ -62,6 +62,18 @@ fn pair(first: &mut Libp2pNetworkAdapter, second: &mut Libp2pNetworkAdapter) {
 /// Drives the nodes, redialing as the P2P task does, until `condition` holds or time runs out.
 async fn drive_until(
     nodes: &mut [&mut Libp2pNetworkAdapter],
+    condition: impl FnMut(&mut [&mut Libp2pNetworkAdapter]) -> bool,
+) -> bool {
+    drive_until_with(nodes, true, condition).await
+}
+
+/// Drives the nodes until `condition` holds or `DEADLINE` passes, redialing paired peers every
+/// 200 ms only when `redial_paired` is set. Returns whether the condition held. The checks wait for
+/// something to happen instead of sampling after a fixed time, so a busy machine only slows them
+/// (#81).
+async fn drive_until_with(
+    nodes: &mut [&mut Libp2pNetworkAdapter],
+    redial_paired: bool,
     mut condition: impl FnMut(&mut [&mut Libp2pNetworkAdapter]) -> bool,
 ) -> bool {
     tokio::time::timeout(DEADLINE, async {
@@ -80,7 +92,7 @@ async fn drive_until(
                     _ = redial.tick() => true,
                 }
             };
-            if redial_due {
+            if redial_paired && redial_due {
                 for node in nodes.iter_mut() {
                     node.redial_paired_peers();
                 }
@@ -89,11 +101,6 @@ async fn drive_until(
     })
     .await
     .is_ok()
-}
-
-/// Drives the nodes for `duration`, for checks that something does not happen.
-async fn drive_for(nodes: &mut [&mut Libp2pNetworkAdapter], duration: Duration) {
-    let _ = tokio::time::timeout(duration, drive_until(nodes, |_| false)).await;
 }
 
 /// Whether `node` queued the payload from `sender`.
@@ -165,18 +172,28 @@ async fn the_destination_refuses_a_device_it_is_not_paired_with() {
             .unwrap_or_else(|error| panic!("relay address must be valid: {error}"));
     }
 
-    let reserved = drive_until(&mut [&mut relay, &mut laptop, &mut other], |nodes| {
-        nodes[1].has_relay_reservation() && nodes[2].has_relay_reservation()
+    // The gate refuses at the handshake, so the laptop never counts `other` as connected, while
+    // `other` may see each attempt open briefly before the laptop drops it. Check the laptop's
+    // side on every step until `other` has tried the circuit several times.
+    let other_id = other.local_device_id();
+    let mut laptop_admitted_other = false;
+    let attempted = drive_until(&mut [&mut relay, &mut laptop, &mut other], |nodes| {
+        laptop_admitted_other |= nodes[1].is_connected_to(&other_id);
+        laptop_admitted_other
+            || nodes[1].has_relay_reservation()
+                && nodes[2].has_relay_reservation()
+                && nodes[0].relayed_circuits() >= 3
     })
     .await;
-    assert!(reserved);
-    drive_for(
-        &mut [&mut relay, &mut laptop, &mut other],
-        Duration::from_secs(2),
-    )
-    .await;
 
-    assert!(!other.is_connected_to(&laptop_id));
+    assert!(
+        !laptop_admitted_other,
+        "the laptop must refuse a device it is not paired with"
+    );
+    assert!(
+        attempted,
+        "other must try to reach the laptop through the relay"
+    );
 }
 
 /// A pairing window admits strangers to the relay's device, not to its relay service.
@@ -202,9 +219,14 @@ async fn a_stranger_admitted_for_pairing_cannot_use_the_relay() {
     })
     .await;
     assert!(was_refused, "the reservation request must be noticed");
-    drive_for(&mut [&mut relay, &mut stranger], Duration::from_millis(300)).await;
+    // The open pairing window lets the stranger dial again, so stop redialing and wait for the
+    // relay to drop the connection it refused, however long a busy machine takes.
+    let dropped = drive_until_with(&mut [&mut relay, &mut stranger], false, |nodes| {
+        !nodes[0].is_connected_to(&stranger_id)
+    })
+    .await;
 
-    assert!(!relay.is_connected_to(&stranger_id));
+    assert!(dropped, "the relay must disconnect the stranger it refused");
 }
 
 /// Losing the relay costs only the reservation, and it comes back with the relay.

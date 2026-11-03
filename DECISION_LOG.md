@@ -1887,3 +1887,27 @@ The S23's 14.5-minute "Pranzo" lunch with 5–6 people still listed 30 unknown v
   - With either change alone the lunch kept 4 speakers.
   - **The price:** someone who says a few isolated words across a meeting, never a whole sentence, is given to the
     nearest voice.
+
+## 2026-11-03 — #81 the tests that failed on a busy machine wait for progress or count CPU time
+
+Under load (twice as many busy loops as cores, or a release compile alongside) the full `cargo test --lib` failed in 5 of
+6 runs. Each failing test was checked for a real race before its check was changed.
+
+- **The two speed checks** (1000 voice-sample seal/open round trips under 1 s; PDF font embedding under twice the
+  built-in fonts) timed themselves by wall clock, which counts every moment another process holds the core. They now
+  count the test thread's own CPU time (`cpu_stopwatch_for_tests.rs`, `CLOCK_THREAD_CPUTIME_ID` through the existing
+  `libc` dependency; wall clock where a platform has no per-thread clock). Both pieces of work run on the test thread,
+  so nothing is missed. The budgets are unchanged.
+- **The two relay checks were snapshots, not races in the code.** "The destination refuses a device it is not paired
+  with" asserted, 2 s after reservations, that the refused device was not connected. The gate refuses at the handshake,
+  so the destination never admits it, but the dialing side sees each attempt open briefly, and it redials every 200 ms.
+  The test now checks the destination's side on every step until the device has tried at least three circuits. "A
+  stranger admitted for pairing cannot use the relay" asserted the stranger was gone 300 ms after the refusal, while it
+  kept redialing, which the open pairing window rightly admits. It now stops redialing and waits for the relay to drop
+  the refused connection. Both were checked against a broken gate: one that admits everyone, and one that never
+  disconnects a refused client. Each still fails, with its own message.
+- **The attachment sync test** didn't fail in 40 runs of its module under load. Its drives already wait for their
+  condition, but gave up after 5 s, which a debug build moving a 200 KB attachment through SQLite can need on a disk busy
+  with a compile. The limit is now 60 s, which only bounds a hang.
+- **Result:** 50 of 50 full runs passed with a release compile of the core looping alongside (load average about 38 on
+  22 cores), against 5 failed runs of 6 before.

@@ -141,7 +141,7 @@ Prioritized by the audit's rule: Security > Privacy > Reliability > Performance 
 | P3 | #68 | Telemetry-based proposals built (2026-11-01): the real-device runs are still open | 3.5 |
 | P3 | #61 | Open: measure on real meetings and retune the voice matcher cutoffs; first 15 recordings measured; needs the owner's natural recordings (#72) | 3.4 |
 | P2 | #79 | Real paired sync and desktop buttons checked (2026-11-01): the one-time rewrite on a phone is still unconfirmed | 3.2 |
-| P3 | #81 | Open: timing and P2P tests fail when the machine is busy | — |
+| P3 | #81 | Busy-machine test failures fixed: speed checks count thread CPU time, relay checks wait for progress; 50 of 50 runs pass beside a compile | — |
 | P1 | #82 | One person's unknown voices share a card and are named once (grouped across chunks, speakers and meetings at 0.5); the final pass also removes wordless live clusters | 3.2 |
 | P1 | #83 | Leftover voices of finished recordings deleted at start-up; recordings need 1/15 of their speech (8–30 s) per speaker, and a brief speaker heard only in isolated seconds joins the nearest | 3.2 |
 | P2 | — | Native GNOME (libadwaita-like) and Windows (Fluent) styling for the desktop app; it is Material 3 on every platform today | 2 |
