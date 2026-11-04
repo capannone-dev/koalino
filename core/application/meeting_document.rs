@@ -8,6 +8,7 @@
 //! | `transcript` | string |
 //! | `segments` | map from `<start_ms:012>-<end_ms:012>[-<n>]` to a segment map |
 //! | `project_id` | string, the hyphenated UUID of the meeting's project (Issue #85); absent for none |
+//! | `transcription_languages` | map from a language (`auto` or a Whisper code) to the offset in ms of the first chunk transcribed in it |
 //!
 //! Each segment map is `{ start_ms: uint, end_ms: uint, text: str, speaker_identity_id?: str,
 //! unknown_cluster_id?: str }`, with UUIDs in hyphenated form. Keys are derived from the span, so
@@ -33,6 +34,7 @@ use crate::{
         errors::StorageError,
         models::{DeviceId, MeetingId, TranscriptSegment},
         projects::ProjectId,
+        transcription_language::TranscriptionLanguage,
     },
     ports::meeting_document::{MeetingDocumentCodec, MeetingOrigin, MeetingProjection},
 };
@@ -49,6 +51,10 @@ const CLUSTER_RESOLUTIONS_KEY: &str = "cluster_resolutions";
 /// like the title: concurrent moves resolve to Automerge's deterministic winner. Absent means the
 /// meeting is in no project.
 const PROJECT_KEY: &str = "project_id";
+/// Root key of the map from each language the speech was transcribed in to the offset (ms) of
+/// its first chunk. A map, not a list, so two devices adding languages merge without duplicates;
+/// the offsets give the order.
+const TRANSCRIPTION_LANGUAGES_KEY: &str = "transcription_languages";
 
 /// The Automerge implementation of `MeetingDocumentCodec`.
 #[derive(Clone, Copy, Debug, Default)]
@@ -191,6 +197,37 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
         Ok(automerge_document.save())
     }
 
+    fn with_transcription_language(
+        &self,
+        document: &[u8],
+        language: TranscriptionLanguage,
+        first_used_at_ms: u64,
+    ) -> Result<Vec<u8>, StorageError> {
+        let mut automerge_document = load(document)?;
+        let languages_object = match automerge_document
+            .get(ROOT, TRANSCRIPTION_LANGUAGES_KEY)
+            .map_err(|error| crdt_error("unable to read the transcription languages", error))?
+        {
+            Some((Value::Object(ObjType::Map), object_id)) => object_id,
+            _ => automerge_document
+                .put_object(ROOT, TRANSCRIPTION_LANGUAGES_KEY, ObjType::Map)
+                .map_err(|error| {
+                    crdt_error("unable to create the transcription languages", error)
+                })?,
+        };
+        let recorded_at = read_unsigned(&automerge_document, &languages_object, language.as_str());
+        if recorded_at.is_none_or(|recorded_at| first_used_at_ms < recorded_at) {
+            automerge_document
+                .put(
+                    &languages_object,
+                    language.as_str(),
+                    ScalarValue::Uint(first_used_at_ms),
+                )
+                .map_err(|error| crdt_error("unable to record a transcription language", error))?;
+        }
+        Ok(automerge_document.save())
+    }
+
     fn project(
         &self,
         meeting_id: &MeetingId,
@@ -233,12 +270,20 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
         // A value that is not a project ID (from a faulty peer) leaves the meeting outside any.
         let project_id = read_string(&automerge_document, &ROOT, PROJECT_KEY)
             .and_then(|project_text| ProjectId::parse(&project_text));
+        let transcription_languages =
+            match automerge_document.get(ROOT, TRANSCRIPTION_LANGUAGES_KEY) {
+                Ok(Some((Value::Object(ObjType::Map), languages_object))) => {
+                    read_transcription_languages(&automerge_document, &languages_object)
+                }
+                _ => Vec::new(),
+            };
         Ok(MeetingProjection {
             origin,
             transcript,
             segments,
             cluster_resolutions,
             project_id,
+            transcription_languages,
         })
     }
 }
@@ -457,6 +502,37 @@ fn read_string(automerge_document: &AutoCommit, object: &ObjId, field: &str) -> 
         ScalarValue::Str(text) => Some(text.to_string()),
         _ => None,
     }
+}
+
+/// Reads the transcription-languages map in order of first use (then by code, for equal
+/// offsets). An entry that is not a language this build knows, or whose offset is malformed, is
+/// skipped with a warning, so a newer peer cannot break the projection.
+fn read_transcription_languages(
+    automerge_document: &AutoCommit,
+    languages_object: &ObjId,
+) -> Vec<TranscriptionLanguage> {
+    let mut languages: Vec<(u64, TranscriptionLanguage)> = automerge_document
+        .keys(languages_object)
+        .filter_map(|code| {
+            let first_used_at_ms = read_unsigned(automerge_document, languages_object, &code);
+            match (TranscriptionLanguage::parse(&code), first_used_at_ms) {
+                (Ok(language), Some(first_used_at_ms)) => Some((first_used_at_ms, language)),
+                _ => {
+                    tracing::warn!("skipped a transcription language this build does not know");
+                    None
+                }
+            }
+        })
+        .collect();
+    languages.sort_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then(left.1.as_str().cmp(right.1.as_str()))
+    });
+    languages
+        .into_iter()
+        .map(|(_, language)| language)
+        .collect()
 }
 
 /// Reads a non-negative integer field, or `None` when absent or malformed.

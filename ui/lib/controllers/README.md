@@ -74,6 +74,7 @@ transcribed; the core stores and applies it.
 
 `transcription_language_controller.dart` holds the default language and the language of the next or
 current recording, and returns to the default when a recording ends (Issue #62).
+`describeTranscriptionLanguages` names a meeting's languages for its detail screen.
 
 `projects_controller.dart` (Issue #85) holds the Projects tab: the project list, the open project
 (meetings newest first, resources oldest first), and every change (create, rename, delete, add

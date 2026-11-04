@@ -16,6 +16,7 @@ final class MeetingSummary {
     required this.title,
     required this.createdAt,
     required this.durationMs,
+    this.transcriptionLanguages = const <String>[],
   });
 
   /// Stable meeting identifier used for every follow-up request.
@@ -30,10 +31,14 @@ final class MeetingSummary {
   /// End of the latest transcript segment in milliseconds (0 before any audio is transcribed).
   final int durationMs;
 
+  /// Speech-to-text languages chosen while recording, in first-use order: `auto` or Whisper
+  /// codes. Empty for meetings recorded before languages were kept, or imported ones.
+  final List<String> transcriptionLanguages;
+
   /// Decodes one meeting object, filling a missing or blank title with `fallbackMeetingTitle`.
   ///
-  /// Inputs: A JSON object with `meeting_id`, `created_at` (RFC 3339), and optional `title`
-  /// and `duration_ms`.
+  /// Inputs: A JSON object with `meeting_id`, `created_at` (RFC 3339), and optional `title`,
+  /// `duration_ms` and `transcription_languages` (non-string entries are skipped).
   /// Outputs: The summary; throws `TypeError` or `FormatException` for a malformed object.
   factory MeetingSummary.fromJson(Map<String, Object?> json) {
     final DateTime createdAt =
@@ -46,6 +51,10 @@ final class MeetingSummary {
           : title,
       createdAt: createdAt,
       durationMs: (json['duration_ms'] as num?)?.toInt() ?? 0,
+      transcriptionLanguages: <String>[
+        ...((json['transcription_languages'] as List<Object?>?) ?? <Object?>[])
+            .whereType<String>(),
+      ],
     );
   }
 }

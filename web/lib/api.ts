@@ -5,9 +5,23 @@ export type Metric = { task_type: "transcription" | "cloud_transcription" | "fil
 export type DeviceTelemetry = { device_id: string; metrics: Metric[] };
 export type TelemetrySummary = { total_transcription_time_ms: number; average_latency_ms: number; total_tasks: number; power_estimate_mwh: number };
 /** `project_id` is the meeting's project (Issue #85): null outside any, absent from older servers. */
-export type MeetingSummary = { meeting_id: string; title: string; created_at: string; project_id?: string | null };
+/** `transcription_languages`: speech-to-text codes (`auto` or Whisper's) in first-use order; older daemons omit it. */
+export type MeetingSummary = {
+  meeting_id: string;
+  title: string;
+  created_at: string;
+  project_id?: string | null;
+  transcription_languages?: string[];
+};
 export type Attachment = { attachment_id: string; file_path: string; mime_type: string; original_timestamp_utc: string };
-export type MeetingDetail = { meeting_id: string; title: string; created_at: string; transcript: string | null; attachments: Attachment[] };
+export type MeetingDetail = {
+  meeting_id: string;
+  title: string;
+  created_at: string;
+  transcription_languages?: string[];
+  transcript: string | null;
+  attachments: Attachment[];
+};
 export type VoiceIdentity = { identity_id: string; display_name: string; voice_variant_count: number };
 export type UnassignedClip = { clip_id: string; meeting_id: string; start_time_ms: number; end_time_ms: number; audio_url?: string };
 export type UnknownCluster = { cluster_id: string; meeting_id: string; total_duration_ms: number; chunk_count: number; created_at: string };

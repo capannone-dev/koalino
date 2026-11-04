@@ -1,9 +1,10 @@
-// Renders one meeting's renamable title, its project (Issue #85), transcript, and metadata-only
-// attachment list from Axum.
+// Renders one meeting's renamable title, when it was created and the languages it was transcribed
+// in, its project (Issue #85), transcript, and metadata-only attachment list from Axum.
 
 import { MeetingTitleHeader } from "@/components/meeting-title-header";
 import { MeetingProjectPicker } from "@/components/meeting-project-picker";
 import { getMeeting, getMeetings } from "@/lib/api";
+import { describeTranscriptionLanguages, formatMeetingCreatedAt } from "@/lib/meeting-metadata";
 import { getProjects, type ProjectSummary } from "@/lib/projects-api";
 
 export default async function MeetingDetailPage({ params }: { params: Promise<{ meetingId: string }> }) {
@@ -14,6 +15,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
     getProjects().catch((): ProjectSummary[] | null => null),
     getMeetings().catch(() => [])
   ]);
+  const languages = describeTranscriptionLanguages(meeting.transcription_languages);
   const projectId = summaries.find((summary) => summary.meeting_id === meetingId)?.project_id ?? null;
   return (
     <section>
@@ -21,6 +23,10 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
         meeting={{ meeting_id: meeting.meeting_id, title: meeting.title, created_at: meeting.created_at }}
       />
       {projects === null ? null : <MeetingProjectPicker meetingId={meeting.meeting_id} projectId={projectId} projects={projects} />}
+      <p className="text-muted">
+        <time dateTime={meeting.created_at}>{formatMeetingCreatedAt(meeting.created_at)}</time>
+      </p>
+      {languages === null ? null : <p className="text-muted">{languages}</p>}
       <p>Meeting {meeting.meeting_id}</p>
       <h2>Transcript</h2>
       <p>{meeting.transcript ?? "No transcript is available."}</p>

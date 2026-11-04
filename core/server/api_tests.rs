@@ -463,6 +463,55 @@ async fn meeting_detail_shows_a_recorded_meeting_s_segments_as_its_transcript() 
     assert_eq!(meeting_detail["transcript"], "We start\nand then");
 }
 
+/// The speech-to-text languages recorded for a meeting appear, in first-use order, in its
+/// detail and in the meeting list, so the web meeting page can show them.
+#[tokio::test]
+async fn meeting_detail_and_list_name_the_transcription_languages() {
+    use crate::{
+        application::{
+            meeting_crdt::MeetingCrdtService, meeting_document::AutomergeMeetingDocumentCodec,
+        },
+        domain::transcription_language::TranscriptionLanguage,
+    };
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .and_then(|repository| {
+        repository.with_document_codec(std::sync::Arc::new(AutomergeMeetingDocumentCodec))
+    })
+    .unwrap_or_else(|error| panic!("test SQLite repository must initialize: {error}"));
+    let meeting_id = MeetingId::new("meeting-languages");
+    MeetingCrdtService::new(&repository)
+        .create_meeting(&meeting_id)
+        .unwrap_or_else(|error| panic!("test meeting must persist: {error}"));
+    for (code, offset_ms) in [("en", 5_000), ("it", 0)] {
+        let language = TranscriptionLanguage::parse(code)
+            .unwrap_or_else(|_| panic!("{code} must be a valid language"));
+        repository
+            .record_transcription_language(&meeting_id, language, offset_ms)
+            .unwrap_or_else(|error| panic!("the language must be recorded: {error}"));
+    }
+    let router = build_router(ServerAppState::new(
+        repository,
+        InMemoryVoiceVectorDB::new(),
+    ));
+
+    let (detail_status, meeting_detail) =
+        send_json(&router, "GET", "/api/meetings/meeting-languages", None).await;
+    let (list_status, meetings) = send_json(&router, "GET", "/api/meetings", None).await;
+
+    assert_eq!(detail_status, StatusCode::OK);
+    assert_eq!(
+        meeting_detail["transcription_languages"],
+        serde_json::json!(["it", "en"])
+    );
+    assert_eq!(list_status, StatusCode::OK);
+    assert_eq!(
+        meetings[0]["transcription_languages"],
+        serde_json::json!(["it", "en"])
+    );
+}
+
 /// Verifies unknown meeting identifiers return a portable HTTP not-found response.
 #[tokio::test]
 async fn unknown_meeting_returns_not_found() {

@@ -26,7 +26,7 @@ first, then the bundle's `data/models` on desktops; Android installs the APK's c
 `diarization_models_test.dart` covers the same for the two diarization models.
 
 `transcription_language_test.dart` covers choosing the language in Settings and on the Record
-screen, over `fake_language_bridge.dart`.
+screen, over `fake_language_bridge.dart`, and the wording of a meeting's languages.
 
 Meeting-title tests (Issue #36):
 

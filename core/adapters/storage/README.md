@@ -20,6 +20,10 @@ The `meetings` table stores one offline-first meeting per `meeting_id`:
   on open through an idempotent `ALTER TABLE meetings ADD COLUMN title TEXT`, and their existing
   meetings stay untitled. The title is local metadata, not part of the CRDT document, so it does
   not replicate to peers yet.
+- `transcription_languages`: nullable comma-separated language codes in first-use order, a
+  projection of the meeting document's `transcription_languages` map written by
+  `record_transcription_language` and every merge. `load_meeting_metadata` returns them; older
+  databases gain the column on open and their meetings show no language.
 
 The `unassigned_voice_clips` table retains temporary review audio for weak or unknown speaker
 matches, keyed by a UUID and its owning meeting. Each record includes the segment's start and end

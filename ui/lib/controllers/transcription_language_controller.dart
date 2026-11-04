@@ -12,6 +12,31 @@ typedef LanguageChoice = ({String code, String label});
 /// The code that lets Whisper detect the language.
 const String autoLanguageCode = 'auto';
 
+/// Names the languages a meeting was transcribed with, for its details.
+///
+/// Inputs: Codes in first-use order (`auto` or Whisper codes, as Rust reports them).
+/// Outputs: `Transcription language: Italian`, `Transcription languages: Italian, English`, with
+/// `auto` named `Automatic` and an unknown code shown as-is; `null` for no codes.
+/// Side effects: None.
+String? describeTranscriptionLanguages(List<String> codes) {
+  if (codes.isEmpty) {
+    return null;
+  }
+  final List<String> names = <String>[
+    for (final String code in codes)
+      code == autoLanguageCode
+          ? 'Automatic'
+          : transcriptionLanguageChoices
+                  .where((LanguageChoice choice) => choice.code == code)
+                  .firstOrNull
+                  ?.label ??
+              code,
+  ];
+  final String heading =
+      codes.length == 1 ? 'Transcription language' : 'Transcription languages';
+  return '$heading: ${names.join(', ')}';
+}
+
 /// AUTO, then every language Whisper knows, by name (`whisper.cpp`'s list).
 const List<LanguageChoice> transcriptionLanguageChoices = <LanguageChoice>[
   (code: autoLanguageCode, label: 'Auto'),

@@ -10,6 +10,7 @@ import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
+import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
 import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_timeline.dart';
@@ -388,6 +389,13 @@ final class _MeetingContent extends StatelessWidget {
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
+            if (describeTranscriptionLanguages(summary.transcriptionLanguages)
+                case final String languages)
+              Text(
+                languages,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
             SelectableText(
               summary.meetingId,
               style: theme.textTheme.bodySmall

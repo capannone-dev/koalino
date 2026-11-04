@@ -1950,3 +1950,17 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   arrives, everything sealed or counted for that device is sent again on the next tick. Each
   device answers once per connection, so keys never bounce back and forth. The key message format
   is unchanged, so older devices still pair.
+
+## 2026-11-04 — Meetings keep their transcription languages
+
+- **Asked for:** a meeting's details name the language chosen for speech to text (#62), next to its
+  date and time.
+- **Stored in the meeting document**, as a map from code to the meeting offset where it was first
+  used, so the language reaches paired devices and two devices recording one meeting merge cleanly;
+  the earliest offset wins and orders the list. SQLite keeps a projection in
+  `meetings.transcription_languages`.
+- **Only stamped chunks count:** a chunk without a chosen language (the CLI and daemon using the
+  environment's) records nothing, and meetings from before this change show no language. `auto` is
+  recorded as `auto` (shown as "Automatic"), not as the language Whisper detected.
+- **Shown** in the apps' meeting detail and on the web meeting page, which also gains the creation
+  time in UTC, as the apps show it.

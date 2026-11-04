@@ -9,7 +9,9 @@ WebSocket URL construction.
 `renameMeeting` sends `PATCH /api/meetings/{id}` and throws `MeetingRenameError`, whose `kind`
 distinguishes an invalid title (400), an unknown meeting (404), server errors (5xx), other statuses,
 and network failures. `meeting-title.ts` validates titles with the same rules as Rust's
-`MeetingTitle::parse` (Issue #42).
+`MeetingTitle::parse` (Issue #42). `meeting-metadata.ts` words the meeting page's creation time
+(`YYYY-MM-DD HH:MM UTC`, as the apps show it) and transcription languages, named in English with
+`Intl.DisplayNames`.
 
 `getLogLevel`, `setLogLevel`, and `fetchLogExport` (Issue #46) reach the Settings routes and throw
 `LogSettingsError`, whose `kind` is `invalid_level`, `no_logs`, `unavailable` (503), `server`, or

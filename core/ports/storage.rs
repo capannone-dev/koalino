@@ -7,6 +7,7 @@ use crate::domain::{
         DeletionRecords, MeetingId, MeetingMetadata, MeetingTitle, MeetingWindow, Transcript,
         TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
     },
+    transcription_language::TranscriptionLanguage,
 };
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -24,6 +25,21 @@ pub trait NoteRepository {
             meeting_ids: Vec::new(),
             latest_revision: after_revision,
         })
+    }
+
+    /// Records that a meeting's speech was transcribed in `language`, for its metadata.
+    ///
+    /// Inputs: The meeting, the language, and the offset (ms into the recording) of the first
+    /// chunk that used it. Outputs: Success, or a storage error. A language already recorded
+    /// changes nothing. Repositories without meeting documents ignore it.
+    /// Side effects: Writes the meeting's CRDT document and index, which syncs to paired devices.
+    fn record_transcription_language(
+        &self,
+        _meeting_id: &MeetingId,
+        _language: TranscriptionLanguage,
+        _first_used_at_ms: u64,
+    ) -> Result<(), StorageError> {
+        Ok(())
     }
 
     /// Deletes a meeting and everything it holds, and records that it was deleted.
@@ -383,6 +399,15 @@ where
 
     fn deletion_records(&self) -> Result<DeletionRecords, StorageError> {
         (**self).deletion_records()
+    }
+
+    fn record_transcription_language(
+        &self,
+        meeting_id: &MeetingId,
+        language: TranscriptionLanguage,
+        first_used_at_ms: u64,
+    ) -> Result<(), StorageError> {
+        (**self).record_transcription_language(meeting_id, language, first_used_at_ms)
     }
 
     fn apply_deletion_records(

@@ -205,11 +205,14 @@ fn test_recording_controller(
 
     let recording_manager = RecordingManager::spawn(move || -> anyhow::Result<_> {
         let note_repository = match shared_database {
-            Some((database_path, embedding_cipher)) => SqliteNoteRepository::open(
-                database_path,
-                crate::domain::models::DeviceId::new("ffi-test"),
-                embedding_cipher,
-            )?,
+            // As in the app: the worker writes meeting documents through the codec.
+            Some((database_path, embedding_cipher)) => {
+                crate::storage_composition::open_note_repository(
+                    &database_path,
+                    crate::domain::models::DeviceId::new("ffi-test"),
+                    embedding_cipher,
+                )?
+            }
             None => SqliteNoteRepository::open_in_memory(ephemeral_cipher())?,
         };
         Ok(PipelineFactory::new(
@@ -285,10 +288,11 @@ fn export_error_json(error_code: &str, message: &str) -> String {
 
 /// Serializes the meeting fields shared by `note_taker_get_meetings` and `note_taker_get_meeting`.
 ///
-/// Inputs: Persisted meeting metadata.
 /// Inputs: Persisted meeting metadata and the meeting's transcript segments.
-/// Outputs: `{"meeting_id","title","created_at","duration_ms"}` with the display title, RFC 3339
-/// UTC time, and the latest segment end (0 without segments).
+/// Outputs: `{"meeting_id","title","created_at","duration_ms","transcription_languages"}` with
+/// the display title, RFC 3339 UTC time, the latest segment end (0 without segments), and the
+/// speech-to-text languages in first-use order (`auto` or Whisper codes; empty when none was
+/// recorded).
 /// Side effects: None.
 fn meeting_summary_json(
     meeting_metadata: &MeetingMetadata,
@@ -303,7 +307,17 @@ fn meeting_summary_json(
             .map(TranscriptSegment::end_time_ms)
             .max()
             .unwrap_or_default(),
+        "transcription_languages": transcription_language_codes(meeting_metadata),
     })
+}
+
+/// Lists a meeting's speech-to-text languages as their text codes. Side effects: None.
+fn transcription_language_codes(meeting_metadata: &MeetingMetadata) -> Vec<&'static str> {
+    meeting_metadata
+        .transcription_languages()
+        .iter()
+        .map(|language| language.as_str())
+        .collect()
 }
 
 /// Validates the arguments of `note_taker_start_recording_with_title`.
@@ -1383,9 +1397,10 @@ impl FfiRuntime {
     /// Lists every local meeting with its display title as JSON.
     ///
     /// Inputs: None.
-    /// Outputs: `[{"meeting_id","title","created_at","duration_ms"}]` in repository order, where
-    /// `title` is the stored title or the dated fallback, `created_at` is RFC 3339 UTC, and
-    /// `duration_ms` is the latest segment end; or
+    /// Outputs: `[{"meeting_id","title","created_at","duration_ms","transcription_languages"}]`
+    /// in repository order, where `title` is the stored title or the dated fallback, `created_at`
+    /// is RFC 3339 UTC, `duration_ms` is the latest segment end, and `transcription_languages`
+    /// lists the speech-to-text language codes in first-use order; or
     /// `{"ok":false,"error_code":"list_failed","error"}`.
     /// Side effects: Reads SQLite meeting metadata and segment offsets.
     /// Runs one Projects command against this runtime's database and attachment folder.
@@ -1635,8 +1650,8 @@ impl FfiRuntime {
     /// Describes one meeting with its display title, duration, segments, and flat transcript.
     ///
     /// Inputs: A non-blank `meeting_id`.
-    /// Outputs: `{"meeting_id","title","created_at","duration_ms","transcript","segments",
-    /// "attachments"}`, where `transcript` is null until a flat transcript is stored, `segments` is
+    /// Outputs: `{"meeting_id","title","created_at","duration_ms","transcription_languages",
+    /// "transcript","segments","attachments"}`, where `transcript` is null until a flat transcript is stored, `segments` is
     /// `[{"start_time_ms","end_time_ms","speaker","text"}]` in timeline order (`speaker` is the
     /// voice-store name, `Unknown speaker`, or `Unattributed`, as in exports), and `attachments`
     /// is `[{"attachment_id","file_name","file_path","mime_type","meeting_time_ms"}]` in the
@@ -3887,6 +3902,65 @@ mod ffi_contract_tests {
         runtime.stop_recording();
         assert_eq!(runtime.recording_language, None);
         let _ = std::fs::remove_dir_all(&test_directory);
+    }
+
+    /// The language chosen for a recording reaches the meeting's metadata in both meeting JSONs,
+    /// and a meeting recorded without a choice lists the default.
+    #[test]
+    fn the_chosen_language_is_listed_in_the_meeting_json() {
+        let test_directory =
+            std::env::temp_dir().join(format!("ffi-meeting-language-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&test_directory)
+            .unwrap_or_else(|error| panic!("test directory must be created: {error}"));
+        let mut runtime =
+            FfiRuntime::open_for_tests(&test_directory.join("notes.sqlite3"), &test_directory)
+                .unwrap_or_else(|status| panic!("file runtime must open: status {status}"));
+        let italian = crate::domain::transcription_language::TranscriptionLanguage::parse("it")
+            .unwrap_or_else(|_| panic!("it is valid"));
+
+        assert_eq!(runtime.set_recording_language(italian), FFI_SUCCESS);
+        assert_eq!(
+            runtime.start_recording_titled(Some(MeetingId::new("ffi-italian")), None),
+            FFI_SUCCESS
+        );
+        assert_eq!(runtime.push_audio_pcm(vec![100; 32_000]), FFI_SUCCESS);
+        assert_eq!(runtime.stop_recording(), FFI_SUCCESS);
+        assert_eq!(
+            runtime.start_recording_titled(Some(MeetingId::new("ffi-default")), None),
+            FFI_SUCCESS
+        );
+        assert_eq!(runtime.push_audio_pcm(vec![100; 32_000]), FFI_SUCCESS);
+        assert_eq!(runtime.stop_recording(), FFI_SUCCESS);
+        let italian_detail = parse_response(&runtime.get_meeting("ffi-italian"));
+        let default_detail = parse_response(&runtime.get_meeting("ffi-default"));
+        let meetings = parse_response(&runtime.get_meetings());
+        drop(runtime);
+        let _ = std::fs::remove_dir_all(&test_directory);
+
+        assert_eq!(
+            italian_detail["transcription_languages"],
+            serde_json::json!(["it"])
+        );
+        // Without a choice the default (`auto` unless set) is recorded.
+        assert_eq!(
+            default_detail["transcription_languages"]
+                .as_array()
+                .map(Vec::len),
+            Some(1),
+            "{default_detail}"
+        );
+        let listed_italian = meetings
+            .as_array()
+            .and_then(|listed| {
+                listed
+                    .iter()
+                    .find(|meeting| meeting["meeting_id"] == "ffi-italian")
+            })
+            .unwrap_or_else(|| panic!("the meeting must be listed: {meetings}"));
+        assert_eq!(
+            listed_italian["transcription_languages"],
+            serde_json::json!(["it"])
+        );
     }
 
     #[test]

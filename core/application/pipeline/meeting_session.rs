@@ -257,6 +257,9 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     /// Every live cluster this recording's voices joined or founded, including voices that got no
     /// words, so the final pass can remove the ones it doesn't keep (#82).
     live_cluster_ids: Vec<Uuid>,
+    /// Languages this recording already stored in the meeting's metadata, so each is written
+    /// once per recording rather than once per chunk.
+    recorded_languages: Vec<TranscriptionLanguage>,
     /// Similarity policy used to group unknown voices into clusters.
     clustering_config: ClusteringConfig,
     /// Saves a telemetry row per completed transcription and diarization; `None` records none.
@@ -304,6 +307,7 @@ where
             text_pieces: Vec::new(),
             chunk_count: 0,
             live_cluster_ids: Vec::new(),
+            recorded_languages: Vec::new(),
             clustering_config: ClusteringConfig::default(),
             task_metrics: None,
         })
@@ -407,6 +411,8 @@ where
             );
         }
 
+        self.record_chunk_language(vad_chunk.language(), chunk_bounds.start_offset_ms());
+
         let speaker_regions = self.diarize_and_attribute(vad_chunk).await;
         for cluster_id in speaker_regions
             .iter()
@@ -432,6 +438,33 @@ where
             "Local audio chunk processed into transcript segments"
         );
         Ok(attributed_segments)
+    }
+
+    /// Stores the language a chunk was transcribed with in the meeting's metadata, once.
+    ///
+    /// Inputs: The chunk's language (`None` when the engine's own default was used, which is
+    /// not recorded) and the chunk's start within the meeting.
+    /// Outputs: None; a storage failure is logged and does not stop the recording.
+    /// Side effects: Writes the meeting's document the first time a language appears.
+    fn record_chunk_language(&mut self, language: Option<TranscriptionLanguage>, start_ms: u64) {
+        let Some(language) = language else {
+            return;
+        };
+        if self.recorded_languages.contains(&language) {
+            return;
+        }
+        match self.note_repository.record_transcription_language(
+            &self.meeting_id,
+            language,
+            start_ms,
+        ) {
+            Ok(()) => self.recorded_languages.push(language),
+            Err(error) => tracing::warn!(
+                meeting_id = %self.meeting_id.as_str(),
+                error = %error,
+                "Could not record the transcription language; the meeting will not show it"
+            ),
+        }
     }
 
     /// Measures a chunk's voice windows for the final pass.

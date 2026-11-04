@@ -62,6 +62,8 @@ void main() {
     await pumpMeetingDetail(tester, 'meeting-titled');
 
     expect(find.text('2026-10-27 09:05 UTC · 1:05'), findsOneWidget);
+    expect(
+        find.text('Transcription languages: Italian, English'), findsOneWidget);
     expect(find.text('meeting-titled'), findsOneWidget);
     expect(find.text('Alice · 0:00'), findsOneWidget);
     expect(find.text('Hello team.'), findsOneWidget);
@@ -74,6 +76,8 @@ void main() {
 
     expect(find.text('Meeting 2026-10-26 18:00 UTC'), findsOneWidget);
     expect(find.text('No transcript is available.'), findsOneWidget);
+    // A meeting recorded before languages were kept shows no language line.
+    expect(find.textContaining('Transcription language'), findsNothing);
   });
 
   testWidgets('reports a meeting that cannot be loaded',

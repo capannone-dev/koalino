@@ -19,6 +19,10 @@ Automerge document the source of truth for everything that syncs:
 - **`cluster_resolutions`** (Issue #50): a map from unknown-speaker cluster ID to the identity
   it was named as. Concurrent namings of one cluster converge on Automerge's winner, and a
   segment of a resolved cluster projects with that identity as its speaker on every device.
+- **`transcription_languages`:** a map from language code (`auto` or a Whisper code) to the
+  meeting offset where it was first used. `with_transcription_language` keeps the earliest offset,
+  so recordings on two devices merge into one list ordered by first use; unknown codes from a peer
+  are skipped. `MeetingSession` records each chunk's language once per recording.
 - **`with_segments`:** writes only the fields that changed and deletes segments that are gone.
 - **`project`:** skips malformed peer entries with a warning, and a field the document lacks
   projects as `None`.

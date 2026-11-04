@@ -40,6 +40,14 @@ Future<TranscriptionLanguageController> _loaded(
 }
 
 void main() {
+  test('names a meeting\'s transcription languages', () {
+    expect(describeTranscriptionLanguages(<String>[]), isNull);
+    expect(describeTranscriptionLanguages(<String>['it']),
+        'Transcription language: Italian');
+    expect(describeTranscriptionLanguages(<String>['auto', 'en', 'xx']),
+        'Transcription languages: Automatic, English, xx');
+  });
+
   test('offers AUTO first, then languages by name', () async {
     final TranscriptionLanguageController controller =
         await _loaded(FakeLanguageBridge());

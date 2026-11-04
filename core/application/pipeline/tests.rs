@@ -188,9 +188,24 @@ struct MockNoteRepository {
     saved_segments: RefCell<Vec<TranscriptSegment>>,
     segment_save_count: Cell<usize>,
     saved_clips: RefCell<Vec<UnassignedVoiceClip>>,
+    /// Each recorded transcription language with the offset it was first used at.
+    recorded_languages: RefCell<Vec<(TranscriptionLanguage, u64)>>,
 }
 
 impl NoteRepository for MockNoteRepository {
+    /// Captures the language for assertions.
+    fn record_transcription_language(
+        &self,
+        _meeting_id: &MeetingId,
+        language: TranscriptionLanguage,
+        first_used_at_ms: u64,
+    ) -> Result<(), StorageError> {
+        self.recorded_languages
+            .borrow_mut()
+            .push((language, first_used_at_ms));
+        Ok(())
+    }
+
     /// Accepts meeting creation without state because sessions require an existing meeting.
     fn create_meeting(
         &self,
@@ -1404,6 +1419,46 @@ async fn a_chunks_language_reaches_the_engine() {
         *session.transcription_engine().received_languages.borrow(),
         vec![italian, None]
     );
+}
+
+/// The meeting records each language its chunks were transcribed in once, at the start of the
+/// first chunk that used it (shown in the meeting's metadata); a chunk without one records nothing.
+#[tokio::test]
+async fn each_chunk_language_is_recorded_once_for_the_meeting() {
+    let mut session: MockSession = MeetingSession::start(
+        MeetingId::new(MEETING_ID),
+        MockTranscriptionEngine::returning(&["uno", "due", "three", "four"]),
+        None,
+        MockVoiceIdentityMatcher {
+            known_identity_id: Uuid::new_v4(),
+            weak_candidate_id: Uuid::new_v4(),
+        },
+        MockNoteRepository::default(),
+    )
+    .unwrap_or_else(|error| panic!("session should start: {error}"));
+    let italian = TranscriptionLanguage::parse("it").ok();
+    let english = TranscriptionLanguage::parse("en").ok();
+
+    for (number, start, language) in [
+        (1, 0, italian),
+        (2, 3_000, italian),
+        (3, 6_000, english),
+        (4, 9_000, None),
+    ] {
+        session
+            .process_vad_chunk(&vad_chunk(number, start, start + 3_000).with_language(language))
+            .await
+            .unwrap_or_else(|error| panic!("chunk should process: {error}"));
+    }
+
+    let recorded: Vec<(&str, u64)> = session
+        .note_repository()
+        .recorded_languages
+        .borrow()
+        .iter()
+        .map(|(language, offset)| (language.as_str(), *offset))
+        .collect();
+    assert_eq!(recorded, vec![("it", 0), ("en", 6_000)]);
 }
 
 /// Gives every chunk one live voice, and scripted voice windows for the final pass.

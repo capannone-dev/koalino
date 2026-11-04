@@ -47,6 +47,7 @@ use crate::{
             TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
         },
         projects::ProjectId,
+        transcription_language::TranscriptionLanguage,
     },
     ports::{
         crypto::EmbeddingCipher,
@@ -204,6 +205,7 @@ impl SqliteNoteRepository {
             )
             .map_err(|error| sqlite_error("unable to initialize meetings schema", error))?;
         add_meeting_title_column(&sqlite_connection)?;
+        add_meeting_transcription_languages_column(&sqlite_connection)?;
         add_task_audio_duration_column(&sqlite_connection)?;
         add_document_revision_column(&sqlite_connection)?;
         add_attachment_meeting_time_column(&sqlite_connection)?;
@@ -538,13 +540,15 @@ impl NoteRepository for SqliteNoteRepository {
             .collect()
     }
 
-    /// Reads a meeting's SQLite creation timestamp and title as portable metadata.
+    /// Reads a meeting's SQLite creation timestamp, title and transcription languages as
+    /// portable metadata.
     ///
     /// Inputs: `meeting_id` identifies a meeting record.
     /// Outputs: Metadata (untitled when the column is `NULL` or holds text that is no longer a
-    /// valid title), `None` for an unknown meeting, or a portable storage error.
+    /// valid title; no languages for meetings recorded before they were kept), `None` for an
+    /// unknown meeting, or a portable storage error.
     /// Side effects: Reads one SQLite row without transcript or CRDT content; logs a warning
-    /// (without the text) when a stored title is invalid.
+    /// (without the text) when a stored title or language is invalid.
     fn load_meeting_metadata(
         &self,
         meeting_id: &MeetingId,
@@ -552,15 +556,23 @@ impl NoteRepository for SqliteNoteRepository {
         let metadata_row = self
             .connection
             .query_row(
-                "SELECT created_at_utc, title FROM meetings WHERE meeting_id = ?1",
+                "SELECT created_at_utc, title, transcription_languages FROM meetings WHERE meeting_id = ?1",
                 params![meeting_id.as_str()],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                    ))
+                },
             )
             .optional()
             .map_err(|error| sqlite_error("unable to load meeting metadata", error))?;
-        let Some((created_at_text, stored_title)) = metadata_row else {
+        let Some((created_at_text, stored_title, stored_languages)) = metadata_row else {
             return Ok(None);
         };
+        let transcription_languages =
+            parse_stored_transcription_languages(meeting_id, stored_languages.as_deref());
         let title = stored_title.and_then(|stored_title| {
             MeetingTitle::parse(&stored_title)
                 .inspect_err(|error| {
@@ -573,7 +585,11 @@ impl NoteRepository for SqliteNoteRepository {
                 .ok()
         });
         parse_sqlite_timestamp(&created_at_text).map(|created_at| {
-            Some(MeetingMetadata::new(meeting_id.clone(), created_at).with_title(title))
+            Some(
+                MeetingMetadata::new(meeting_id.clone(), created_at)
+                    .with_title(title)
+                    .with_transcription_languages(transcription_languages),
+            )
         })
     }
 
@@ -1059,6 +1075,44 @@ impl NoteRepository for SqliteNoteRepository {
         self.delete_cluster(cluster_id)
     }
 
+    /// Records that `language` was used to transcribe part of a meeting.
+    ///
+    /// Inputs: Match `NoteRepository::record_transcription_language`.
+    /// Outputs: Success (also when the language was already recorded, or when this repository
+    /// has no meeting documents), or a portable storage error for an unknown meeting.
+    /// Side effects: Updates the meeting's CRDT document and its indexed language list in one
+    /// transaction, so paired devices receive it with the next sync.
+    fn record_transcription_language(
+        &self,
+        meeting_id: &MeetingId,
+        language: TranscriptionLanguage,
+        first_used_at_ms: u64,
+    ) -> Result<(), StorageError> {
+        let Some(document_codec) = self.document_codec.as_deref() else {
+            return Ok(());
+        };
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|error| sqlite_error("unable to begin recording a language", error))?;
+        let document = read_document(&transaction, meeting_id)?;
+        let updated_document =
+            document_codec.with_transcription_language(&document, language, first_used_at_ms)?;
+        if updated_document != document {
+            write_document(&transaction, meeting_id, &updated_document)?;
+            apply_projection(
+                &transaction,
+                meeting_id,
+                &document_codec.project(meeting_id, &updated_document)?,
+            )?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit recording a language", error))?;
+        self.log_operation("record_transcription_language", meeting_id);
+        Ok(())
+    }
+
     /// Deletes a meeting and everything it holds, leaving a deletion record.
     ///
     /// Inputs: Match `NoteRepository::delete_meeting`.
@@ -1446,6 +1500,16 @@ fn apply_projection(
             ],
         )
         .map_err(|error| sqlite_error("unable to project the meeting's project", error))?;
+    connection
+        .execute(
+            "UPDATE meetings SET transcription_languages = ?1
+             WHERE meeting_id = ?2 AND transcription_languages IS NOT ?1",
+            params![
+                stored_transcription_languages(&projection.transcription_languages),
+                meeting_id.as_str()
+            ],
+        )
+        .map_err(|error| sqlite_error("unable to project the transcription languages", error))?;
     for (cluster_id, identity_id) in &projection.cluster_resolutions {
         let cluster_key = cluster_id.to_string();
         connection
@@ -1561,6 +1625,75 @@ fn add_meeting_title_column(sqlite_connection: &Connection) -> Result<(), Storag
             .execute("ALTER TABLE meetings ADD COLUMN title TEXT", [])
             .map_err(|error| sqlite_error("unable to add meeting title column", error))?;
         tracing::info!("Added the meeting title column to an existing database");
+    }
+    Ok(())
+}
+
+/// Joins languages into the `meetings.transcription_languages` text: codes separated by commas
+/// in first-use order, or `NULL` when none was recorded.
+fn stored_transcription_languages(languages: &[TranscriptionLanguage]) -> Option<String> {
+    if languages.is_empty() {
+        return None;
+    }
+    Some(
+        languages
+            .iter()
+            .map(|language| language.as_str())
+            .collect::<Vec<_>>()
+            .join(","),
+    )
+}
+
+/// Splits the `meetings.transcription_languages` text back into languages.
+///
+/// Inputs: The meeting (for the log) and the column value, `None` when `NULL`.
+/// Outputs: The valid languages in stored order; unknown codes are skipped.
+/// Side effects: Logs a warning for each unknown code.
+fn parse_stored_transcription_languages(
+    meeting_id: &MeetingId,
+    stored_languages: Option<&str>,
+) -> Vec<TranscriptionLanguage> {
+    stored_languages
+        .unwrap_or_default()
+        .split(',')
+        .filter(|code| !code.is_empty())
+        .filter_map(|code| {
+            TranscriptionLanguage::parse(code)
+                .inspect_err(|_| {
+                    tracing::warn!(
+                        meeting_id = %meeting_id.as_str(),
+                        "Stored transcription language is unknown; skipping it"
+                    );
+                })
+                .ok()
+        })
+        .collect()
+}
+
+/// Adds the nullable `meetings.transcription_languages` column to older databases.
+///
+/// Outputs: Success (also when the column exists) or a storage error.
+/// Side effects: May run one `ALTER TABLE`; older meetings show no language.
+fn add_meeting_transcription_languages_column(
+    sqlite_connection: &Connection,
+) -> Result<(), StorageError> {
+    let language_column_count: i64 = sqlite_connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('meetings') WHERE name = 'transcription_languages'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| sqlite_error("unable to inspect meetings schema", error))?;
+    if language_column_count == 0 {
+        sqlite_connection
+            .execute(
+                "ALTER TABLE meetings ADD COLUMN transcription_languages TEXT",
+                [],
+            )
+            .map_err(|error| {
+                sqlite_error("unable to add the transcription languages column", error)
+            })?;
+        tracing::info!("Added the transcription languages column to an existing database");
     }
     Ok(())
 }

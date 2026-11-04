@@ -80,6 +80,7 @@ final MeetingSummary titledMeeting = MeetingSummary(
   title: 'Project Sync',
   createdAt: DateTime.utc(2026, 10, 27, 9, 5),
   durationMs: 65000,
+  transcriptionLanguages: const <String>['it', 'en'],
 );
 
 /// A meeting whose title is the Rust fallback, with no recorded audio.

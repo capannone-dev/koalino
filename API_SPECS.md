@@ -263,7 +263,7 @@ contents, EXIF data, or database-specific values.
   ID, or a blank, over-200-character, or control-character title returns `1`. Both arguments are
   ignored when resuming a paused recording.
 - `char *note_taker_get_meetings(void)` returns
-  `[{"meeting_id","title","created_at","duration_ms"}]`, and
+  `[{"meeting_id","title","created_at","duration_ms","transcription_languages"}]`, and
   `char *note_taker_get_meeting(const char *meeting_id)` returns the same fields plus
   `transcript` (the flat transcript, null until stored) and `segments`
   (`[{"start_time_ms","end_time_ms","speaker","text"}]` in timeline order, where `speaker` is
@@ -272,7 +272,9 @@ contents, EXIF data, or database-specific values.
   (`[{"attachment_id","file_name","file_path","mime_type","meeting_time_ms"}]` in the order they
   were added; Issue #54). `meeting_time_ms` is where in the transcript the attachment belongs,
   or null for the end of the meeting.
-  `duration_ms` is the end of the latest segment (0 without segments). `title`
+  `duration_ms` is the end of the latest segment (0 without segments).
+  `transcription_languages` lists the speech-to-text languages chosen while recording (`auto` or
+  Whisper codes) in first-use order; it is empty for meetings recorded before they were kept. `title`
   is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting; `created_at`
   is RFC 3339 UTC. Errors use `{"ok":false,"error_code","error"}` with `invalid_argument`,
   `meeting_not_found`, `list_failed`, `load_failed`, or `runtime_unavailable`. Free results
@@ -345,8 +347,9 @@ mapping and a `display_name` for first-time local identity naming; optional emai
 ## Headless HTTP and WebSocket API
 
 The headless daemon binds locally by default. `GET /api/meetings` returns
-`[{"meeting_id","title","created_at"}]`. `GET /api/meetings/{id}` adds the same `title` and
-`created_at`, a nullable transcript, and attachment metadata, but no CRDT or file bytes. `title`
+`[{"meeting_id","title","created_at","project_id","transcription_languages"}]`. `GET
+/api/meetings/{id}` adds the same `title`, `created_at` and `transcription_languages` (speech-to-text
+language codes in first-use order, empty when none was recorded), a nullable transcript, and attachment metadata, but no CRDT or file bytes. `title`
 is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting. `POST
 /api/meetings` with `{"title":"..."}` (or `{}`) creates an empty meeting and returns `201` with
 its summary. An invalid title returns `400` (Issue #35). `GET /api/voice-gallery` returns

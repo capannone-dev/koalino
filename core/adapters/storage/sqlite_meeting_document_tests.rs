@@ -1,6 +1,7 @@
 //! Specifies that the SQLite index follows the meeting document (Issue #43): local writes land in
 //! the document, a received document rewrites the index, a meeting created from a peer's document
-//! keeps that peer's origin, and legacy rows are migrated into the document once.
+//! keeps that peer's origin, and legacy rows are migrated into the document once. The languages a
+//! meeting was transcribed in (recorded in its document) reach its metadata here and on a peer.
 
 use std::{path::PathBuf, sync::Arc};
 
@@ -13,7 +14,10 @@ use crate::{
         crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor},
         meeting_document::AutomergeMeetingDocumentCodec,
     },
-    domain::models::{DeviceId, MeetingId, Transcript, TranscriptSegment},
+    domain::{
+        models::{DeviceId, MeetingId, Transcript, TranscriptSegment},
+        transcription_language::TranscriptionLanguage,
+    },
     ports::{crypto::EmbeddingCipher, storage::NoteRepository},
 };
 
@@ -230,4 +234,50 @@ fn document_writes_from_any_connection_are_listed_by_revision() {
     assert!(unchanged.meeting_ids.is_empty());
     assert_eq!(unchanged.latest_revision, after_recording.latest_revision);
     assert_eq!(after_second_meeting.meeting_ids, vec![other_meeting]);
+}
+
+/// The codes of the languages `repository`'s metadata lists for the fixture meeting.
+fn metadata_languages(repository: &SqliteNoteRepository) -> Vec<&'static str> {
+    repository
+        .load_meeting_metadata(&meeting())
+        .ok()
+        .flatten()
+        .map(|metadata| {
+            metadata
+                .transcription_languages()
+                .iter()
+                .map(|language| language.as_str())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Parses a language the test knows is valid.
+fn language(code: &str) -> TranscriptionLanguage {
+    TranscriptionLanguage::parse(code).unwrap_or_else(|error| panic!("{code}: {error}"))
+}
+
+/// The languages a meeting was transcribed in show in its metadata, in order of first use, and
+/// reach a device that receives its document. A meeting without any lists none.
+#[test]
+fn transcription_languages_reach_the_metadata_and_paired_devices() {
+    let laptop = device_repository(&scratch_database("laptop.sqlite3"), "device-laptop");
+    let phone = device_repository(&scratch_database("phone.sqlite3"), "device-phone");
+    record_meeting(&laptop);
+    assert!(metadata_languages(&laptop).is_empty());
+
+    laptop
+        .record_transcription_language(&meeting(), language("it"), 0)
+        .and_then(|()| laptop.record_transcription_language(&meeting(), language("en"), 4_000))
+        .and_then(|()| laptop.record_transcription_language(&meeting(), language("it"), 8_000))
+        .unwrap_or_else(|error| panic!("languages must be recorded: {error}"));
+    assert_eq!(metadata_languages(&laptop), vec!["it", "en"]);
+
+    let laptop_document = laptop
+        .load_crdt_document(&meeting())
+        .unwrap_or_else(|error| panic!("document must load: {error}"));
+    phone
+        .create_meeting(&meeting(), &laptop_document)
+        .unwrap_or_else(|error| panic!("peer meeting must be created: {error}"));
+    assert_eq!(metadata_languages(&phone), vec!["it", "en"]);
 }

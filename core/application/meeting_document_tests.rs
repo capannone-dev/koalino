@@ -2,7 +2,8 @@
 //! replacement is minimal, and concurrent edits from two devices merge without loss. Cluster
 //! resolutions (Issue #50) round-trip, decide the speaker of their segments, and converge when
 //! two devices name the same cluster at once. A meeting's project (Issue #85) round-trips, can be
-//! cleared, and converges when two devices move the meeting at once.
+//! cleared, and converges when two devices move the meeting at once. The languages a meeting was
+//! transcribed in are kept in the order they were first used, and an unknown code is skipped.
 
 use automerge::{AutoCommit, ROOT, ReadDoc, transaction::Transactable};
 use chrono::{TimeZone, Utc};
@@ -13,6 +14,7 @@ use crate::{
     domain::{
         models::{DeviceId, MeetingId, TranscriptSegment},
         projects::ProjectId,
+        transcription_language::TranscriptionLanguage,
     },
     ports::meeting_document::{MeetingDocumentCodec, MeetingOrigin, MeetingProjection},
 };
@@ -353,4 +355,75 @@ fn a_malformed_project_value_is_ignored() {
         .unwrap_or_else(|error| panic!("{error}"));
 
     assert_eq!(project(&document.save()).project_id, None);
+}
+
+/// Records `language` as used from `offset_ms`, panicking with context on failure.
+fn with_language(document: &[u8], language: &str, offset_ms: u64) -> Vec<u8> {
+    let language = TranscriptionLanguage::parse(language)
+        .unwrap_or_else(|error| panic!("{language} must be a language: {error}"));
+    AutomergeMeetingDocumentCodec
+        .with_transcription_language(document, language, offset_ms)
+        .unwrap_or_else(|error| panic!("the language must be recorded: {error}"))
+}
+
+/// The codes of a projection's languages.
+fn language_codes(projection: &MeetingProjection) -> Vec<&'static str> {
+    projection
+        .transcription_languages
+        .iter()
+        .map(|language| language.as_str())
+        .collect()
+}
+
+/// Languages project in the order they were first used; recording one again changes nothing,
+/// and an earlier first use moves it forward.
+#[test]
+fn transcription_languages_keep_the_order_of_first_use() {
+    let document = with_language(&empty_document(), "it", 0);
+    let document = with_language(&document, "en", 30_000);
+    let unchanged = with_language(&document, "it", 60_000);
+    assert_eq!(unchanged, document);
+    assert_eq!(language_codes(&project(&document)), vec!["it", "en"]);
+
+    let document = with_language(&document, "auto", 10_000);
+    assert_eq!(
+        language_codes(&project(&document)),
+        vec!["it", "auto", "en"]
+    );
+}
+
+/// A code another device wrote that this build does not know is skipped, not fatal.
+#[test]
+fn an_unknown_transcription_language_is_skipped() {
+    let mut automerge_document = AutoCommit::new();
+    let languages = automerge_document
+        .put_object(ROOT, "transcription_languages", automerge::ObjType::Map)
+        .unwrap_or_else(|error| panic!("{error}"));
+    automerge_document
+        .put(&languages, "xx", 0_u64)
+        .and_then(|()| automerge_document.put(&languages, "de", 5_u64))
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(
+        language_codes(&project(&automerge_document.save())),
+        vec!["de"]
+    );
+}
+
+/// Two devices recording different languages into copies of one document merge both.
+#[test]
+fn transcription_languages_from_two_devices_merge() {
+    let base = with_language(&empty_document(), "it", 0);
+    let mut laptop = AutoCommit::load(&with_language(&base, "fr", 20_000))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let mut phone = AutoCommit::load(&with_language(&base, "es", 10_000))
+        .unwrap_or_else(|error| panic!("{error}"));
+    laptop
+        .merge(&mut phone)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(
+        language_codes(&project(&laptop.save())),
+        vec!["it", "es", "fr"]
+    );
 }

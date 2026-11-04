@@ -2644,6 +2644,9 @@ pub struct MeetingMetadata {
     /// The user-chosen title; `None` for meetings created without one (including every meeting
     /// stored before Issue #35).
     title: Option<MeetingTitle>,
+    /// The languages its speech was transcribed in, in order of first use; empty for meetings
+    /// recorded before they were kept, or transcribed without a chosen language.
+    transcription_languages: Vec<TranscriptionLanguage>,
 }
 
 impl MeetingMetadata {
@@ -2657,7 +2660,26 @@ impl MeetingMetadata {
             meeting_id,
             created_at,
             title: None,
+            transcription_languages: Vec::new(),
         }
+    }
+
+    /// Attaches the languages the meeting was transcribed in.
+    ///
+    /// Inputs: The languages in order of first use. Outputs: The metadata carrying them.
+    /// Side effects: None.
+    pub fn with_transcription_languages(
+        mut self,
+        transcription_languages: Vec<TranscriptionLanguage>,
+    ) -> Self {
+        self.transcription_languages = transcription_languages;
+        self
+    }
+
+    /// The languages the meeting's speech was transcribed in, in order of first use: usually
+    /// one, more when it was changed during the recording, none when unknown.
+    pub fn transcription_languages(&self) -> &[TranscriptionLanguage] {
+        &self.transcription_languages
     }
 
     /// Attaches the persisted title.

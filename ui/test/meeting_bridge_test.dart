@@ -33,6 +33,17 @@ void main() {
       expect(meetings[0].durationMs, 0);
     });
 
+    test('parses the transcription languages, and none when missing', () {
+      final List<MeetingSummary> meetings = decodeMeetings('''
+[
+  {"meeting_id":"meeting-1","created_at":"2026-10-27T09:05:00+00:00","transcription_languages":["it","auto"]},
+  {"meeting_id":"meeting-2","created_at":"2026-10-26T18:00:00+00:00"}
+]''');
+
+      expect(meetings[0].transcriptionLanguages, <String>['it', 'auto']);
+      expect(meetings[1].transcriptionLanguages, isEmpty);
+    });
+
     test('turns a Rust error object into a StateError', () {
       expect(
         () => decodeMeetings(

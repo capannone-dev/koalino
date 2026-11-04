@@ -364,6 +364,7 @@ async fn get_meeting(
         meeting_id: String::from(meeting_id.as_str()),
         title: meeting_metadata.display_title(),
         created_at: meeting_metadata.created_at().to_rfc3339(),
+        transcription_languages: transcription_language_codes(&meeting_metadata),
         transcript,
         attachments: attachments.iter().map(AttachmentSummary::from).collect(),
     }))
@@ -1059,6 +1060,9 @@ struct MeetingSummary {
     created_at: String,
     /// The project the meeting is in (Issue #85); null outside any project. Only the list sets it.
     project_id: Option<String>,
+    /// Speech-to-text languages (`auto` or Whisper codes) in first-use order; empty when none
+    /// was recorded.
+    transcription_languages: Vec<&'static str>,
 }
 impl From<&MeetingMetadata> for MeetingSummary {
     fn from(meeting_metadata: &MeetingMetadata) -> Self {
@@ -1067,8 +1071,18 @@ impl From<&MeetingMetadata> for MeetingSummary {
             title: meeting_metadata.display_title(),
             created_at: meeting_metadata.created_at().to_rfc3339(),
             project_id: None,
+            transcription_languages: transcription_language_codes(meeting_metadata),
         }
     }
+}
+
+/// Lists a meeting's speech-to-text languages as their text codes. Side effects: None.
+fn transcription_language_codes(meeting_metadata: &MeetingMetadata) -> Vec<&'static str> {
+    meeting_metadata
+        .transcription_languages()
+        .iter()
+        .map(|language| language.as_str())
+        .collect()
 }
 
 /// Serializes a complete meeting response without CRDT data or attachment content.
@@ -1079,6 +1093,8 @@ struct MeetingDetail {
     title: String,
     /// RFC 3339 UTC creation time.
     created_at: String,
+    /// Speech-to-text languages in first-use order; empty when none was recorded.
+    transcription_languages: Vec<&'static str>,
     transcript: Option<String>,
     attachments: Vec<AttachmentSummary>,
 }
