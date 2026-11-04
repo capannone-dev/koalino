@@ -260,6 +260,9 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     /// Languages this recording already stored in the meeting's metadata, so each is written
     /// once per recording rather than once per chunk.
     recorded_languages: Vec<TranscriptionLanguage>,
+    /// The language the engine is configured with (`NOTE_TAKER_WHISPER_LANGUAGE`), recorded for
+    /// audio that carries no chosen language; `None` records nothing for such audio.
+    default_language: Option<TranscriptionLanguage>,
     /// Similarity policy used to group unknown voices into clusters.
     clustering_config: ClusteringConfig,
     /// Saves a telemetry row per completed transcription and diarization; `None` records none.
@@ -308,6 +311,7 @@ where
             chunk_count: 0,
             live_cluster_ids: Vec::new(),
             recorded_languages: Vec::new(),
+            default_language: None,
             clustering_config: ClusteringConfig::default(),
             task_metrics: None,
         })
@@ -320,6 +324,19 @@ where
     /// Side effects: None.
     pub fn with_clustering_config(mut self, clustering_config: ClusteringConfig) -> Self {
         self.clustering_config = clustering_config;
+        self
+    }
+
+    /// Sets the language the engine transcribes in when a chunk carries none.
+    ///
+    /// Inputs: The configured language, or `None` when it is unknown.
+    /// Outputs: The session, which records it in the meeting's metadata for such chunks and for
+    /// external (Teams) chunks. Side effects: None until a chunk is processed.
+    pub fn with_default_language(
+        mut self,
+        default_language: Option<TranscriptionLanguage>,
+    ) -> Self {
+        self.default_language = default_language;
         self
     }
 
@@ -411,7 +428,10 @@ where
             );
         }
 
-        self.record_chunk_language(vad_chunk.language(), chunk_bounds.start_offset_ms());
+        self.record_chunk_language(
+            vad_chunk.language().or(self.default_language),
+            chunk_bounds.start_offset_ms(),
+        );
 
         let speaker_regions = self.diarize_and_attribute(vad_chunk).await;
         for cluster_id in speaker_regions
@@ -442,8 +462,8 @@ where
 
     /// Stores the language a chunk was transcribed with in the meeting's metadata, once.
     ///
-    /// Inputs: The chunk's language (`None` when the engine's own default was used, which is
-    /// not recorded) and the chunk's start within the meeting.
+    /// Inputs: The chunk's language (`None` when it is unknown, which records nothing) and the
+    /// chunk's start within the meeting.
     /// Outputs: None; a storage failure is logged and does not stop the recording.
     /// Side effects: Writes the meeting's document the first time a language appears.
     fn record_chunk_language(&mut self, language: Option<TranscriptionLanguage>, start_ms: u64) {
@@ -776,6 +796,8 @@ where
             .transcription_engine
             .transcribe_external_media(media_chunk, audio_recording)
             .map_err(|error| self.log_transcription_failure(chunk_bounds, error))?;
+        // External audio is always transcribed in the configured language.
+        self.record_chunk_language(self.default_language, chunk_start_ms);
 
         let external_participant = media_chunk.external_participant();
         let attribution = match identity_mapper.map_external_to_local(external_participant.clone())

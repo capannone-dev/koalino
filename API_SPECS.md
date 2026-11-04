@@ -504,11 +504,13 @@ malformed body `422`, and when every voice was skipped, `404` or `409` as for th
 
 ## Linux CLI contract
 
-`note-taker` accepts `record start [--input <file.wav|->] [--meeting-id <id>] [--title <title>]`
-(without `--input`, the default microphone in builds with the `microphone` feature),
+`note-taker` accepts `record start [--input <file.wav|->] [--meeting-id <id>] [--title <title>]
+[--language <auto|code>]` (without `--input`, the default microphone in builds with the
+`microphone` feature; without `--language`, `NOTE_TAKER_WHISPER_LANGUAGE`, else `auto`; the
+language used is stored in the meeting's `transcription_languages`),
 `record stop` (asks the running `record start` on the same database to finish and waits until
 its audio is transcribed), `record status`, `meetings list` (ID, title,
-date, duration), `meetings view <meeting-id>` (title first),
+date, duration), `meetings view <meeting-id>` (title first, then the transcription languages),
 `meetings delete <meeting-id> --yes`, `voice delete-cluster <cluster-id> --yes` and
 `voice delete-person <identity-id> --yes` delete for good, here and on paired devices. Without `--yes`
 they delete nothing and say so. A meeting being recorded is refused.

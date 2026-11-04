@@ -1461,6 +1461,59 @@ async fn each_chunk_language_is_recorded_once_for_the_meeting() {
     assert_eq!(recorded, vec![("it", 0), ("en", 6_000)]);
 }
 
+/// Audio without a chosen language is transcribed in the configured default, so the meeting
+/// records that default: for unstamped chunks and for external (Teams) chunks alike.
+#[tokio::test]
+async fn the_configured_default_is_recorded_for_chunks_without_a_choice() {
+    let german = TranscriptionLanguage::parse("de").ok();
+    let italian = TranscriptionLanguage::parse("it").ok();
+    let mut session: MockSession = MeetingSession::start(
+        MeetingId::new(MEETING_ID),
+        MockTranscriptionEngine::returning(&["eins", "uno", "zwei"]),
+        None,
+        MockVoiceIdentityMatcher {
+            known_identity_id: Uuid::new_v4(),
+            weak_candidate_id: Uuid::new_v4(),
+        },
+        MockNoteRepository::default(),
+    )
+    .unwrap_or_else(|error| panic!("session should start: {error}"))
+    .with_default_language(german);
+    let identity_mapper = MockIdentityMapper {
+        mapped_identity: SpeakerIdentity::new(Uuid::new_v4(), "Dana External"),
+        fails: false,
+    };
+    let media_chunk = ExternalMediaChunk::new(
+        ExternalParticipant::new("teams-user-1", "Dana External", None),
+        vec![7, 7, 7],
+        42_000,
+    );
+    let audio_recording = AudioRecording::new(
+        RecordingId::new("external-teams-user-1-42000"),
+        MeetingId::new(MEETING_ID),
+        DeviceId::new("device-test"),
+    );
+
+    session
+        .process_external_chunk(&identity_mapper, &media_chunk, &audio_recording, 2_500)
+        .unwrap_or_else(|error| panic!("external chunk should process: {error}"));
+    for (number, start, language) in [(1, 50_000, italian), (2, 60_000, None)] {
+        session
+            .process_vad_chunk(&vad_chunk(number, start, start + 3_000).with_language(language))
+            .await
+            .unwrap_or_else(|error| panic!("chunk should process: {error}"));
+    }
+
+    let recorded: Vec<(&str, u64)> = session
+        .note_repository()
+        .recorded_languages
+        .borrow()
+        .iter()
+        .map(|(language, offset)| (language.as_str(), *offset))
+        .collect();
+    assert_eq!(recorded, vec![("de", 42_000), ("it", 50_000)]);
+}
+
 /// Gives every chunk one live voice, and scripted voice windows for the final pass.
 struct FinalPassDiarizer {
     live_voice: Vec<f32>,

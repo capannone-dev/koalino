@@ -565,6 +565,45 @@ fn the_recorded_meeting_reports_its_current_meeting_time() {
     assert_eq!(controller.current_meeting_time_ms(&meeting_id), None);
 }
 
+/// Without a choice, chunks carry the configured default (`NOTE_TAKER_WHISPER_LANGUAGE`), so the
+/// language travels with the audio and is recorded; a choice overrides it for one recording.
+#[test]
+fn chunks_without_a_choice_carry_the_configured_default() {
+    let language = |code: &str| {
+        TranscriptionLanguage::parse(code).unwrap_or_else(|error| panic!("{code}: {error}"))
+    };
+    let (controller, _) = controller_with(true, |_| {});
+    let mut controller = controller.with_default_language(Some(language("de")));
+    let default_meeting = controller
+        .start(Some(MeetingId::new("meeting-default")))
+        .unwrap_or_else(|error| panic!("recording should start: {error}"));
+    controller
+        .push_pcm(pcm_seconds(1))
+        .unwrap_or_else(|error| panic!("PCM should be accepted: {error}"));
+    controller
+        .stop()
+        .unwrap_or_else(|error| panic!("recording should stop: {error}"));
+    controller.set_language(Some(language("it")));
+    let chosen_meeting = controller
+        .start(Some(MeetingId::new("meeting-chosen")))
+        .unwrap_or_else(|error| panic!("recording should start: {error}"));
+    controller
+        .push_pcm(pcm_seconds(1))
+        .unwrap_or_else(|error| panic!("PCM should be accepted: {error}"));
+    controller
+        .stop()
+        .unwrap_or_else(|error| panic!("recording should stop: {error}"));
+
+    let text_of = |meeting_id: &MeetingId| -> Vec<String> {
+        stored_segments(&controller, meeting_id)
+            .iter()
+            .map(|segment| segment.text().to_owned())
+            .collect()
+    };
+    assert_eq!(text_of(&default_meeting), ["chunk of 1000 ms in de"]);
+    assert_eq!(text_of(&chosen_meeting), ["chunk of 1000 ms in it"]);
+}
+
 /// The language set before a start applies from the first chunk; one set during the recording
 /// applies to chunks cut after it; and the next recording starts without either.
 #[test]

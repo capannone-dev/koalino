@@ -117,6 +117,23 @@ fn local_whisper_language_rejects_malformed_values() {
     }
 }
 
+/// A code Whisper does not know is refused at start-up, and a valid one is offered typed so
+/// recordings can carry it.
+#[test]
+fn local_whisper_language_must_be_one_whisper_knows() {
+    let unknown_error = config_from(&[("NOTE_TAKER_WHISPER_LANGUAGE", "xx")])
+        .err()
+        .unwrap_or_else(|| panic!("xx must be rejected"));
+    assert!(format!("{unknown_error:#}").contains("NOTE_TAKER_WHISPER_LANGUAGE"));
+    assert_eq!(
+        valid_config(&[("NOTE_TAKER_WHISPER_LANGUAGE", "IT")])
+            .transcription_language()
+            .as_str(),
+        "it"
+    );
+    assert_eq!(valid_config(&[]).transcription_language().as_str(), "auto");
+}
+
 /// Verifies the OpenAI key never appears in debug output.
 #[test]
 fn debug_output_redacts_the_api_key() {

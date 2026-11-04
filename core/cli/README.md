@@ -26,7 +26,7 @@ every 2 seconds. A request written while no daemon runs is ignored at the next s
 `RUST_LOG` decides.
 
 ```text
-note-taker record start --input <file.wav|-> [--meeting-id <id>] [--title <title>]
+note-taker record start --input <file.wav|-> [--meeting-id <id>] [--title <title>] [--language <code>]
 note-taker record stop|status
 note-taker meetings list
 note-taker meetings view <meeting-id>
@@ -59,6 +59,11 @@ done from a Devices screen (app or web), not the CLI.
 `record start --title` stores a title on the meeting (Issue #35). Without it, a new meeting is
 untitled and an existing one keeps its title. Blank titles, titles longer than 200 characters,
 and titles with control characters are rejected before recording starts.
+
+`record start --language` sets the language spoken in this meeting: `auto` or a Whisper code such
+as `it`. Without it, the recording uses `NOTE_TAKER_WHISPER_LANGUAGE` (else `auto`). Either way the
+language used is stored in the meeting's details, and `meetings view` shows it as
+`Transcription language: it`. An unknown code is refused before recording starts.
 
 The delete commands share `application::deletion` with the HTTP API. They need `--yes`, because the
 deletion cannot be undone and also reaches paired devices. A meeting being recorded is refused.

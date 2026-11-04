@@ -13,6 +13,7 @@ use crate::{
     domain::{
         errors::{DiarizationError, StorageError},
         models::{MeetingId, VoiceMatchResult},
+        transcription_language::TranscriptionLanguage,
     },
     ports::{
         ai::{DiarizationEngine, SpeakerSegment, TranscriptionEngine},
@@ -151,6 +152,8 @@ pub struct PipelineFactory<TranscriptionPort, DiarizationPort, MatcherPort, Repo
     clustering_config: ClusteringConfig,
     /// Telemetry every session records into; `None` records none.
     task_metrics: Option<Rc<TaskMetricsRecorder>>,
+    /// The engine's configured language, recorded for audio without a chosen one.
+    default_language: Option<TranscriptionLanguage>,
 }
 
 impl<TranscriptionPort, RepositoryPort>
@@ -171,6 +174,7 @@ impl<TranscriptionPort, RepositoryPort>
             note_repository,
             clustering_config: ClusteringConfig::default(),
             task_metrics: None,
+            default_language: None,
         }
     }
 }
@@ -194,6 +198,7 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
             note_repository: self.note_repository,
             clustering_config: self.clustering_config,
             task_metrics: self.task_metrics,
+            default_language: self.default_language,
         }
     }
 
@@ -215,6 +220,7 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
             note_repository: self.note_repository,
             clustering_config: self.clustering_config,
             task_metrics: self.task_metrics,
+            default_language: self.default_language,
         }
     }
 
@@ -235,6 +241,19 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
     /// Outputs: The factory. Side effects: None.
     pub fn with_task_metrics(mut self, task_metrics: TaskMetricsRecorder) -> Self {
         self.task_metrics = Some(Rc::new(task_metrics));
+        self
+    }
+
+    /// Sets the language the transcription engine is configured with.
+    ///
+    /// Inputs: `NOTE_TAKER_WHISPER_LANGUAGE` as parsed, or `None` when unknown.
+    /// Outputs: The factory; every later session records it for audio without a chosen language.
+    /// Side effects: None.
+    pub fn with_default_language(
+        mut self,
+        default_language: Option<TranscriptionLanguage>,
+    ) -> Self {
+        self.default_language = default_language;
         self
     }
 
@@ -299,7 +318,9 @@ where
             &self.note_repository,
         )
         .map(|session| {
-            let session = session.with_clustering_config(self.clustering_config);
+            let session = session
+                .with_clustering_config(self.clustering_config)
+                .with_default_language(self.default_language);
             match &self.task_metrics {
                 Some(task_metrics) => session.with_task_metrics(Rc::clone(task_metrics)),
                 None => session,

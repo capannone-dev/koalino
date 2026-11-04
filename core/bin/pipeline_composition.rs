@@ -50,6 +50,7 @@ use crate::{
             AudioRecording, DeviceId, ExternalMediaChunk, TaskType, Transcript,
             TranscriptionContext, TranscriptionModel,
         },
+        transcription_language::TranscriptionLanguage,
     },
     ports::{ai::TranscriptionEngine, crypto::EmbeddingCipher, remote_transcription::ChunkSamples},
     recording_controller::{ChunkingMode, RecordingController},
@@ -118,8 +119,9 @@ pub enum TranscriptionProvider {
 pub struct PipelineConfig {
     transcription_provider: TranscriptionProvider,
     whisper_model_path: Option<PathBuf>,
-    /// Always passed to whisper.cpp, whose own default (`en`) would force English output.
-    whisper_language: String,
+    /// Always passed to whisper.cpp, whose own default (`en`) would force English output; also
+    /// the language of recordings without a chosen one.
+    whisper_language: TranscriptionLanguage,
     /// Secret; excluded from `Debug`.
     openai_api_key: Option<String>,
     openai_model: String,
@@ -218,7 +220,12 @@ impl PipelineConfig {
 
     /// Returns the local Whisper language: `auto` (detect per chunk) or a lowercase language code.
     pub fn whisper_language(&self) -> &str {
-        &self.whisper_language
+        self.whisper_language.as_str()
+    }
+
+    /// Returns the configured language, which recordings without a chosen one are made in.
+    pub fn transcription_language(&self) -> TranscriptionLanguage {
+        self.whisper_language
     }
 
     /// Lists the transcription models this configuration can run, for the device manifest
@@ -324,22 +331,17 @@ impl PipelineConfig {
 ///
 /// Inputs: The variable's value (`None` when unset or blank).
 /// Outputs: `auto` when unset, else the value trimmed and lowercased, which must be `auto` or a
-/// 2–3 letter language code; anything else is an error naming the variable.
+/// code Whisper knows; anything else is an error naming the variable.
 /// Side effects: None.
-fn parse_whisper_language(value: Option<String>) -> Result<String> {
+fn parse_whisper_language(value: Option<String>) -> Result<TranscriptionLanguage> {
     let Some(value) = value else {
-        return Ok("auto".to_owned());
+        return Ok(TranscriptionLanguage::Auto);
     };
-    let language = value.trim().to_ascii_lowercase();
-    let is_language_code =
-        (2..=3).contains(&language.len()) && language.bytes().all(|byte| byte.is_ascii_lowercase());
-    if language == "auto" || is_language_code {
-        Ok(language)
-    } else {
-        bail!(
+    TranscriptionLanguage::parse(&value).map_err(|_| {
+        anyhow!(
             "{WHISPER_LANGUAGE_VARIABLE} must be auto or a Whisper language code such as it or en"
         )
-    }
+    })
 }
 
 /// Parses a boolean variable.
@@ -645,7 +647,7 @@ fn local_engine(
         model_path,
         thread_count,
         use_gpu,
-        Some(config.whisper_language.clone()),
+        Some(config.whisper_language.as_str().to_owned()),
     )
     .context("invalid local transcription configuration")?
     .with_efficient_gpu(config.efficient_gpu);
@@ -754,6 +756,7 @@ pub fn spawn_recording_controller(
     let chunk_audio_store = Arc::new(ChunkAudioStore::new());
     let engine_audio_store = Arc::clone(&chunk_audio_store);
     let chunking_mode = config.chunking_mode();
+    let default_language = config.transcription_language();
     let worker_database_path = database_path.to_path_buf();
     let worker_device_id = device_id.clone();
     let recording_manager = RecordingManager::spawn(move || -> Result<_> {
@@ -810,12 +813,15 @@ pub fn spawn_recording_controller(
         Ok(PipelineFactory::new(transcription_engine, note_repository)
             .with_diarization_engine(diarization_engine)
             .with_voice_matcher(Some(VoiceIdentityManager::new(voice_store)))
-            .with_task_metrics(task_metrics))
+            .with_task_metrics(task_metrics)
+            .with_default_language(Some(default_language)))
     })?;
+    // Recordings without a chosen language carry the configured one, so it is recorded too.
     Ok(RecordingController::new(
         recording_manager,
         chunk_audio_store,
         chunking_mode,
         device_id,
-    ))
+    )
+    .with_default_language(Some(default_language)))
 }

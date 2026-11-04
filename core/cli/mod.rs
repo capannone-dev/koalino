@@ -26,6 +26,7 @@ use crate::{
             MeetingTitle,
         },
         peer_trust::TrustedPeer,
+        transcription_language::TranscriptionLanguage,
     },
     ports::{
         peer_trust::TrustedPeerStore,
@@ -121,6 +122,11 @@ pub enum RecordCommand {
         /// Without it, the default microphone is recorded (builds with the `microphone` feature).
         #[arg(long)]
         input: Option<PathBuf>,
+        /// Language spoken in the meeting: `auto` (detect it) or a Whisper code such as `it` or
+        /// `en`. Defaults to `NOTE_TAKER_WHISPER_LANGUAGE`, else `auto`. Kept in the meeting's
+        /// details either way.
+        #[arg(long)]
+        language: Option<String>,
     },
     /// Asks the running `record start` to finish and waits until its audio is transcribed.
     Stop,
@@ -371,14 +377,17 @@ pub trait RecordingControl {
     /// Records `input` into a meeting and returns a summary once all audio is transcribed.
     ///
     /// Inputs: The meeting (`None` generates one), an optional title stored on it before audio
-    /// is captured, and the input path (`-` for stdin; `None` for the default microphone).
+    /// is captured, the input path (`-` for stdin; `None` for the default microphone), and the
+    /// language spoken (`None` for the configured default).
     /// Outputs: A terminal-safe summary, or a readable error.
-    /// Side effects: Blocks for the whole recording; persists the title and transcript segments.
+    /// Side effects: Blocks for the whole recording; persists the title, transcript segments and
+    /// the language used in the meeting's metadata.
     fn record(
         &mut self,
         meeting_id: Option<MeetingId>,
         title: Option<MeetingTitle>,
         input: Option<&Path>,
+        language: Option<TranscriptionLanguage>,
     ) -> Result<String, String>;
     /// Asks a running recording (in any process) to stop, and waits until it has.
     fn request_stop(&mut self) -> Result<String, String>;
@@ -401,13 +410,14 @@ fn confirmed(yes: bool) -> Result<(), String> {
 
 /// Provides the narrow service surface driven by parsed CLI commands.
 pub trait CliService {
-    /// Records `input` (`None`: the microphone) into a meeting, optionally titled, in the
-    /// foreground.
+    /// Records `input` (`None`: the microphone) into a meeting, optionally titled and in a
+    /// chosen language (`None`: the configured default), in the foreground.
     fn start_recording(
         &mut self,
         meeting_id: Option<&str>,
         title: Option<&str>,
         input: Option<&Path>,
+        language: Option<&str>,
     ) -> Result<String, String>;
     /// Stops recording.
     fn stop_recording(&mut self) -> Result<String, String>;
@@ -466,10 +476,14 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
                     meeting_id,
                     title,
                     input,
+                    language,
                 },
-        }) => {
-            cli_service.start_recording(meeting_id.as_deref(), title.as_deref(), input.as_deref())
-        }
+        }) => cli_service.start_recording(
+            meeting_id.as_deref(),
+            title.as_deref(),
+            input.as_deref(),
+            language.as_deref(),
+        ),
         CliCommand::Record(RecordArgs {
             command: RecordCommand::Stop,
         }) => cli_service.stop_recording(),
@@ -619,6 +633,23 @@ fn select_paired_device(peers: Vec<TrustedPeer>, device: &str) -> Result<Trusted
         count => Err(format!(
             "{count} paired devices are named \"{device}\"; use the peer ID from `devices list`."
         )),
+    }
+}
+
+/// Formats the `meetings view` language line, such as `Transcription languages: it, en\n`.
+///
+/// Inputs: The meeting's metadata. Outputs: The line with its newline, or an empty string when
+/// no language was recorded. Side effects: None.
+fn format_transcription_languages(meeting_metadata: &MeetingMetadata) -> String {
+    let codes: Vec<&str> = meeting_metadata
+        .transcription_languages()
+        .iter()
+        .map(|language| language.as_str())
+        .collect();
+    match codes.len() {
+        0 => String::new(),
+        1 => format!("Transcription language: {}\n", codes[0]),
+        _ => format!("Transcription languages: {}\n", codes.join(", ")),
     }
 }
 
@@ -809,6 +840,7 @@ where
         meeting_id: Option<&str>,
         title: Option<&str>,
         input: Option<&Path>,
+        language: Option<&str>,
     ) -> Result<String, String> {
         let meeting_id = match meeting_id.map(str::trim) {
             Some("") => return Err(String::from("--meeting-id must not be blank")),
@@ -819,7 +851,14 @@ where
             .map(MeetingTitle::parse)
             .transpose()
             .map_err(|error| format!("--title: {error}"))?;
-        self.recording_control.record(meeting_id, title, input)
+        let language = language
+            .map(TranscriptionLanguage::parse)
+            .transpose()
+            .map_err(|_| {
+                String::from("--language: use auto or a Whisper language code such as it or en")
+            })?;
+        self.recording_control
+            .record(meeting_id, title, input, language)
     }
     fn stop_recording(&mut self) -> Result<String, String> {
         self.recording_control.request_stop()
@@ -868,6 +907,7 @@ where
         let display_title = meeting_metadata.display_title();
         let title_underline = "=".repeat(display_title.chars().count());
         let created_at = format_created_at(&meeting_metadata);
+        let language_line = format_transcription_languages(&meeting_metadata);
         let transcript = crate::application::meeting_transcript::readable_transcript(
             &self.repository,
             &typed_meeting_id,
@@ -884,7 +924,7 @@ where
             .collect::<Vec<_>>()
             .join("\n");
         Ok(format!(
-            "{display_title}\n{title_underline}\nMeeting: {meeting_id}\nCreated: {created_at}\nTranscript:\n{transcript}\nAttachments:\n{attachment_lines}"
+            "{display_title}\n{title_underline}\nMeeting: {meeting_id}\nCreated: {created_at}\n{language_line}Transcript:\n{transcript}\nAttachments:\n{attachment_lines}"
         ))
     }
     /// Renames through the shared use case and prints `Renamed meeting <id>: "<old>" -> "<new>"`,

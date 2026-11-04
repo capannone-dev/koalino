@@ -1964,3 +1964,19 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   recorded as `auto` (shown as "Automatic"), not as the language Whisper detected.
 - **Shown** in the apps' meeting detail and on the web meeting page, which also gains the creation
   time in UTC, as the apps show it.
+
+## 2026-11-04 — The CLI chooses a meeting's language; the configured one is recorded too
+
+- **Asked for:** the CLI and daemon keep `NOTE_TAKER_WHISPER_LANGUAGE` as the general setting, a
+  recording can choose its own language, and the language actually used is in the meeting's details.
+- **`record start --language <code>`** overrides the variable for that recording.
+- **The configured language is stamped on the audio:** the recording controller labels chunks
+  without a chosen language with `NOTE_TAKER_WHISPER_LANGUAGE`, so the label travels with the audio
+  (also to a paired device that transcribes it, which used to apply its own default) and is
+  recorded like a chosen one. The pipeline records the same default for Teams-bridge chunks, which
+  do not pass through the controller.
+- **Stricter variable:** `NOTE_TAKER_WHISPER_LANGUAGE` must now be a code Whisper knows (it accepted
+  any 2–3 letters), so a typo stops start-up instead of failing every chunk.
+- **The daemon has no recording API**: it records only Teams meetings, which use the variable. A
+  per-meeting language there would need the Teams bot to send one.
+

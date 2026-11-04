@@ -29,6 +29,7 @@ use crate::{
         DeviceId, ExportFormat, ExportOptions, MeetingId, MeetingTitle, TranscriptSegment,
     },
     domain::peer_trust::{DeviceName, TrustedPeer},
+    domain::transcription_language::TranscriptionLanguage,
     ports::{peer_trust::TrustedPeerStore, storage::NoteRepository},
 };
 
@@ -46,8 +47,8 @@ struct MockCliService {
     /// `(cluster_id, identity_name)` pairs passed to `assign_cluster`.
     assigned_clusters: RefCell<Vec<(Uuid, String)>>,
     export_requests: RefCell<Vec<RecordedExportRequest>>,
-    /// `(meeting_id, title, input)` triples passed to `start_recording`.
-    recording_requests: Vec<(Option<String>, Option<String>, Option<PathBuf>)>,
+    /// Arguments passed to `start_recording`.
+    recording_requests: Vec<RecordingRequest>,
     /// `(meeting_id, new_title)` pairs passed to `rename_meeting`.
     rename_requests: Vec<(String, String)>,
     /// Directives passed to `request_log_level`.
@@ -56,6 +57,15 @@ struct MockCliService {
     paired_device_rows: Vec<PairedDeviceRow>,
     /// Selectors passed to `revoke_device`.
     revoked_devices: Vec<String>,
+}
+
+/// The arguments of one `start_recording` call.
+#[derive(Debug, PartialEq, Eq)]
+struct RecordingRequest {
+    meeting_id: Option<String>,
+    title: Option<String>,
+    input: Option<PathBuf>,
+    language: Option<String>,
 }
 
 /// Rejects every recording command; for service tests that never record.
@@ -67,6 +77,7 @@ impl RecordingControl for NoRecordingControl {
         _meeting_id: Option<MeetingId>,
         _title: Option<MeetingTitle>,
         _input: Option<&Path>,
+        _language: Option<TranscriptionLanguage>,
     ) -> Result<String, String> {
         Err(String::from("recording is not available in this test"))
     }
@@ -93,12 +104,14 @@ impl CliService for MockCliService {
         meeting_id: Option<&str>,
         title: Option<&str>,
         input: Option<&Path>,
+        language: Option<&str>,
     ) -> Result<String, String> {
-        self.recording_requests.push((
-            meeting_id.map(str::to_owned),
-            title.map(str::to_owned),
-            input.map(Path::to_path_buf),
-        ));
+        self.recording_requests.push(RecordingRequest {
+            meeting_id: meeting_id.map(str::to_owned),
+            title: title.map(str::to_owned),
+            input: input.map(Path::to_path_buf),
+            language: language.map(str::to_owned),
+        });
         Ok(String::from("recording started"))
     }
     fn stop_recording(&mut self) -> Result<String, String> {
@@ -194,6 +207,8 @@ fn parses_record_start_command() {
         "standup",
         "--title",
         "Daily standup",
+        "--language",
+        "it",
     ])
     .unwrap_or_else(|error| panic!("record start must parse: {error}"));
     match parsed_cli.command {
@@ -203,11 +218,13 @@ fn parses_record_start_command() {
                     meeting_id,
                     title,
                     input,
+                    language,
                 },
         }) => {
             assert_eq!(meeting_id.as_deref(), Some("standup"));
             assert_eq!(title.as_deref(), Some("Daily standup"));
             assert_eq!(input, Some(PathBuf::from("standup.wav")));
+            assert_eq!(language.as_deref(), Some("it"));
         }
         other => panic!("unexpected command: {other:?}"),
     }
@@ -226,12 +243,22 @@ fn record_start_defaults_to_the_microphone() {
     }
 }
 
-/// Verifies `record start` forwards its meeting, optional title, and input to the service.
+/// Verifies `record start` forwards its meeting, optional title, input and language to the
+/// service.
 #[test]
 fn dispatches_record_start_with_meeting_title_and_input() {
     let mut cli_service = MockCliService::default();
     for arguments in [
         vec!["note-taker", "record", "start", "--input", "-"],
+        vec![
+            "note-taker",
+            "record",
+            "start",
+            "--language",
+            "en",
+            "--input",
+            "-",
+        ],
         vec![
             "note-taker",
             "record",
@@ -252,8 +279,24 @@ fn dispatches_record_start_with_meeting_title_and_input() {
     assert_eq!(
         cli_service.recording_requests,
         vec![
-            (None, None, Some(PathBuf::from("-"))),
-            (None, Some(String::from("Test")), Some(PathBuf::from("-"))),
+            RecordingRequest {
+                meeting_id: None,
+                title: None,
+                input: Some(PathBuf::from("-")),
+                language: None,
+            },
+            RecordingRequest {
+                meeting_id: None,
+                title: None,
+                input: Some(PathBuf::from("-")),
+                language: Some(String::from("en")),
+            },
+            RecordingRequest {
+                meeting_id: None,
+                title: Some(String::from("Test")),
+                input: Some(PathBuf::from("-")),
+                language: None,
+            },
         ]
     );
 }
@@ -273,10 +316,32 @@ fn core_service_rejects_an_invalid_recording_title() {
     );
 
     let error = cli_service
-        .start_recording(None, Some("  "), Some(Path::new("-")))
+        .start_recording(None, Some("  "), Some(Path::new("-")), None)
         .expect_err("a blank title must be rejected");
 
     assert_eq!(error, "--title: meeting title must not be blank");
+}
+
+/// Verifies the core service refuses a language Whisper does not know before any recording.
+#[test]
+fn core_service_rejects_an_unknown_recording_language() {
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    let mut cli_service = CoreCliService::new(
+        NoRecordingControl,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    );
+
+    let error = cli_service
+        .start_recording(None, None, Some(Path::new("-")), Some("klingon"))
+        .expect_err("an unknown language must be rejected");
+
+    assert!(error.starts_with("--language:"), "{error}");
+    assert!(error.contains("auto"), "{error}");
 }
 
 /// Verifies the CLI requires both stable UUID arguments when manually resolving a voice clip.
@@ -469,6 +534,11 @@ fn core_service_lists_and_views_meeting_titles() {
     assert_eq!(view_lines.next(), Some("Project Sync"));
     assert_eq!(view_lines.next(), Some("============"));
     assert_eq!(view_lines.next(), Some("Meeting: meeting-titled"));
+    // A meeting with no recorded language has no language line.
+    assert!(
+        !view_output.contains("Transcription language"),
+        "{view_output}"
+    );
 
     let missing_error = cli_service
         .view_meeting("meeting-missing")

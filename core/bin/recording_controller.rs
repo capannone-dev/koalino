@@ -126,8 +126,11 @@ pub struct RecordingController {
     chunking_mode: ChunkingMode,
     device_id: DeviceId,
     active_capture: Option<ActiveCapture>,
-    /// The language for chunks cut from now on; `None` leaves it to the engine's configuration.
+    /// The language for chunks cut from now on; `None` falls back to `default_language`.
     language: Option<TranscriptionLanguage>,
+    /// The configured language (`NOTE_TAKER_WHISPER_LANGUAGE`) for recordings without a choice;
+    /// `None` leaves such chunks unlabelled, to the engine's configuration.
+    default_language: Option<TranscriptionLanguage>,
     /// State reported while no recording is active (`Idle`, then `Stopped` after a stop).
     inactive_state: AudioState,
     /// `None` when the composition configured no screen capture.
@@ -154,9 +157,29 @@ impl RecordingController {
             device_id,
             active_capture: None,
             language: None,
+            default_language: None,
             inactive_state: AudioState::Idle,
             screen_share: None,
         }
+    }
+
+    /// Sets the language for recordings without a chosen one.
+    ///
+    /// Inputs: The configured language, or `None`.
+    /// Outputs: The controller, which labels such chunks with it so the language travels with the
+    /// audio (also to a paired device) and is recorded in the meeting's metadata.
+    /// Side effects: None.
+    pub fn with_default_language(
+        mut self,
+        default_language: Option<TranscriptionLanguage>,
+    ) -> Self {
+        self.default_language = default_language;
+        self
+    }
+
+    /// The language chunks cut now are labelled with: the choice, else the configured default.
+    fn chunk_language(&self) -> Option<TranscriptionLanguage> {
+        self.language.or(self.default_language)
     }
 
     /// Chooses the language for the next recording, or for the rest of the current one.
@@ -348,7 +371,8 @@ impl RecordingController {
                 &self.chunk_audio_store,
                 &self.recording_manager,
                 &self.device_id,
-                self.language,
+                // Field by field: `capture` borrows `self.active_capture`.
+                self.language.or(self.default_language),
             )? {
                 submitted_count += 1;
             }
@@ -394,7 +418,8 @@ impl RecordingController {
                 &self.chunk_audio_store,
                 &self.recording_manager,
                 &self.device_id,
-                self.language,
+                // Field by field: `capture` borrows `self.active_capture`.
+                self.language.or(self.default_language),
             )?;
         }
         Ok(())
@@ -413,7 +438,8 @@ impl RecordingController {
             .take()
             .ok_or(RecordingControlError::NotRecording)?;
         // Audio still buffered keeps the choice; the next recording starts without it.
-        let language = self.language.take();
+        let language = self.chunk_language();
+        self.language = None;
         // No slide may be captured once Stop was pressed.
         if let Some(watcher) = capture.screen_share_watcher.take()
             && let Some(screen_share) = self.screen_share.as_mut()

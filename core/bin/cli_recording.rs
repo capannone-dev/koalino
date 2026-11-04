@@ -29,7 +29,10 @@ use crate::{
     application::deletion::MeetingDeletionHooks,
     application::recording_manager::RecordingSummary,
     cli::RecordingControl,
-    domain::models::{MeetingId, MeetingTitle},
+    domain::{
+        models::{MeetingId, MeetingTitle},
+        transcription_language::TranscriptionLanguage,
+    },
     ports::audio::MicrophoneSource,
     recording_controller::RecordingController,
 };
@@ -421,6 +424,7 @@ impl RecordingControl for PipelineRecordingControl {
         meeting_id: Option<MeetingId>,
         title: Option<MeetingTitle>,
         input: Option<&Path>,
+        language: Option<TranscriptionLanguage>,
     ) -> Result<String, String> {
         let audio_input = self.open_audio_input(input)?;
         let meeting_id =
@@ -434,6 +438,10 @@ impl RecordingControl for PipelineRecordingControl {
             .as_ref()
             .map(|title| format!(" \"{}\"", title.as_str()))
             .unwrap_or_default();
+        // `None` keeps the controller's configured default.
+        if language.is_some() {
+            controller.set_language(language);
+        }
         controller
             .start_titled(Some(meeting_id.clone()), title)
             .map_err(|error| error.to_string())?;

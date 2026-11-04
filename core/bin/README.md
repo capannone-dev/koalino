@@ -24,7 +24,9 @@ documented nonzero status codes distinguishable from lifecycle states.
 
 - `pipeline_composition.rs` is the only module that names concrete AI adapters. `PipelineConfig`
   reads `NOTE_TAKER_TRANSCRIPTION_PROVIDER` (`auto`, `local`, `openai`), `NOTE_TAKER_WHISPER_MODEL`,
-  `NOTE_TAKER_WHISPER_LANGUAGE` (`auto` by default; whisper.cpp would otherwise force English),
+  `NOTE_TAKER_WHISPER_LANGUAGE` (`auto` by default; whisper.cpp would otherwise force English;
+  an unknown code stops start-up; recordings without a chosen language carry it, and the daemon's
+  Teams meetings record it),
   `OPENAI_API_KEY` (redacted from `Debug`), `NOTE_TAKER_OPENAI_WHISPER_MODEL`,
   `NOTE_TAKER_OPENAI_LANGUAGE`, `NOTE_TAKER_ENABLE_DIARIZATION`,
   `NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL`, `NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL`, and
@@ -72,7 +74,7 @@ documented nonzero status codes distinguishable from lifecycle states.
   `RecordingController::start_titled` stores the title through the worker's repository once the
   session is open. Stop blocks while the
   last chunks are transcribed, so Flutter must call it from a background isolate.
-- `cli_recording.rs` runs `record start [--input <wav|->] [--title <title>]` in the foreground until the input ends, on
+- `cli_recording.rs` runs `record start [--input <wav|->] [--title <title>] [--language <code>]` in the foreground until the input ends, on
   Ctrl+C, or on `record stop`. Without `--input` it records the default microphone (builds with
   the `microphone` feature; others ask for `--input`), and a stop transcribes the audio the
   microphone still held. Processes coordinate through `<db>.recording-active` (PID and

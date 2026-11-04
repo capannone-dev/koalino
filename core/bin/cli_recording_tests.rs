@@ -36,8 +36,10 @@ use crate::{
     domain::{
         errors::TranscriptionError,
         models::{AudioRecording, DeviceId, MeetingId, Transcript, TranscriptionContext},
+        transcription_language::TranscriptionLanguage,
     },
     ports::ai::TranscriptionEngine,
+    ports::storage::NoteRepository,
     recording_controller::{ChunkingMode, RecordingController},
 };
 
@@ -194,7 +196,12 @@ fn recording_a_wav_file_transcribes_every_chunk() {
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
     let output = control
-        .record(Some(MeetingId::new("wav-meeting")), None, Some(&wav_path))
+        .record(
+            Some(MeetingId::new("wav-meeting")),
+            None,
+            Some(&wav_path),
+            None,
+        )
         .unwrap_or_else(|error| panic!("recording must succeed: {error}"));
 
     assert!(output.contains("wav-meeting"), "{output}");
@@ -213,7 +220,12 @@ fn an_interrupt_stops_the_recording_gracefully() {
     let mut control = recording_control(control_files.clone(), Arc::clone(&interrupt_requested));
 
     let output = control
-        .record(Some(MeetingId::new("interrupted")), None, Some(&wav_path))
+        .record(
+            Some(MeetingId::new("interrupted")),
+            None,
+            Some(&wav_path),
+            None,
+        )
         .unwrap_or_else(|error| panic!("recording must stop cleanly: {error}"));
 
     assert!(output.contains("0 chunks transcribed"), "{output}");
@@ -228,7 +240,7 @@ fn a_missing_input_is_reported() {
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
     let error = control
-        .record(None, None, Some(&directory.join("missing.wav")))
+        .record(None, None, Some(&directory.join("missing.wav")), None)
         .err()
         .unwrap_or_else(|| panic!("a missing file must fail"));
 
@@ -248,7 +260,7 @@ fn a_second_recording_is_refused() {
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
     let error = control
-        .record(None, None, Some(&wav_path))
+        .record(None, None, Some(&wav_path), None)
         .err()
         .unwrap_or_else(|| panic!("a concurrent recording must fail"));
 
@@ -335,6 +347,108 @@ fn record_start_with_a_title_creates_a_titled_meeting() {
     assert_eq!(meeting_rows[0][1], "Test");
 }
 
+/// Verifies `record start --language it` records Italian in the meeting's metadata, and that a
+/// recording without `--language` records the configured default instead.
+#[test]
+fn record_start_records_the_chosen_or_configured_language() {
+    let (_, directory) = control_files_in_temp_directory();
+    let database_path = directory.join("notes.sqlite3");
+    let wav_path = write_wav(&directory, 1);
+    let worker_database_path = database_path.clone();
+    let open_repository = |path: &Path| {
+        crate::storage_composition::open_note_repository(
+            path,
+            DeviceId::new("cli-test"),
+            ephemeral_cipher(),
+        )
+    };
+    let recording_control = PipelineRecordingControl::new(
+        RecordingControlFiles::for_database(&database_path),
+        Box::new(move || {
+            let worker_database_path = worker_database_path.clone();
+            let recording_manager = RecordingManager::spawn(move || -> anyhow::Result<_> {
+                Ok(PipelineFactory::new(
+                    FixedTranscriptionEngine,
+                    open_repository(&worker_database_path)?,
+                ))
+            })?;
+            // What `NOTE_TAKER_WHISPER_LANGUAGE=de` gives the CLI.
+            Ok(RecordingController::new(
+                recording_manager,
+                Arc::new(ChunkAudioStore::new()),
+                ChunkingMode::TimeBased,
+                DeviceId::new("cli-test"),
+            )
+            .with_default_language(TranscriptionLanguage::parse("de").ok()))
+        }),
+    )
+    .with_interrupt_flag(Arc::new(AtomicBool::new(false)));
+    let repository = open_repository(&database_path)
+        .unwrap_or_else(|error| panic!("repository must open: {error}"));
+    let mut cli_service = CoreCliService::new(
+        recording_control,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), directory.clone()),
+    );
+    let wav_argument = wav_path.to_string_lossy().into_owned();
+    for (meeting_id, language_arguments) in [
+        ("meeting-italian", vec!["--language", "it"]),
+        ("meeting-default", vec![]),
+    ] {
+        let mut arguments = vec![
+            "note-taker",
+            "record",
+            "start",
+            "--meeting-id",
+            meeting_id,
+            "--input",
+            &wav_argument,
+        ];
+        arguments.extend(language_arguments);
+        let parsed_cli = Cli::try_parse_from(arguments)
+            .unwrap_or_else(|error| panic!("record start must parse: {error}"));
+        dispatch(parsed_cli.command, &mut cli_service)
+            .unwrap_or_else(|error| panic!("recording must succeed: {error}"));
+    }
+    let view_output = dispatch(
+        CliCommand::Meetings(MeetingArgs {
+            command: MeetingCommand::View {
+                meeting_id: String::from("meeting-italian"),
+            },
+        }),
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("meeting view must succeed: {error}"));
+    drop(cli_service);
+    let repository = open_repository(&database_path)
+        .unwrap_or_else(|error| panic!("repository must reopen: {error}"));
+    let languages_of = |meeting_id: &str| -> Vec<&'static str> {
+        repository
+            .load_meeting_metadata(&MeetingId::new(meeting_id))
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| panic!("{meeting_id} must exist"))
+            .transcription_languages()
+            .iter()
+            .map(|language| language.as_str())
+            .collect()
+    };
+    let italian = languages_of("meeting-italian");
+    let default = languages_of("meeting-default");
+    drop(repository);
+    let _ = fs::remove_dir_all(&directory);
+
+    assert_eq!(italian, ["it"]);
+    assert_eq!(default, ["de"]);
+    assert!(
+        view_output
+            .lines()
+            .any(|line| line == "Transcription language: it"),
+        "{view_output}"
+    );
+}
+
 /// Verifies `record start` without `--input` records the microphone until stopped, including
 /// the audio still queued when the stop arrives.
 #[test]
@@ -355,7 +469,7 @@ fn recording_without_an_input_captures_the_microphone() {
         speaker_interrupt.store(true, Ordering::SeqCst);
     });
 
-    let output = control.record(Some(MeetingId::new("mic-meeting")), None, None);
+    let output = control.record(Some(MeetingId::new("mic-meeting")), None, None, None);
     let _ = speaker_thread.join();
     let _ = fs::remove_dir_all(&directory);
 
@@ -371,7 +485,7 @@ fn recording_without_an_input_or_a_microphone_is_reported() {
     let (control_files, directory) = control_files_in_temp_directory();
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)));
 
-    let error = control.record(None, None, None).err();
+    let error = control.record(None, None, None, None).err();
     let _ = fs::remove_dir_all(&directory);
 
     let error = error.unwrap_or_else(|| panic!("recording must fail without an input"));
@@ -386,7 +500,7 @@ fn a_microphone_that_cannot_open_is_reported() {
     let mut control = recording_control(control_files.clone(), Arc::new(AtomicBool::new(false)))
         .with_microphone_source(Arc::new(FakeMicrophone::failing()));
 
-    let error = control.record(None, None, None).err();
+    let error = control.record(None, None, None, None).err();
     let _ = fs::remove_dir_all(&directory);
 
     let error = error.unwrap_or_else(|| panic!("recording must fail without a microphone"));

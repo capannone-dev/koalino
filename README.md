@@ -63,6 +63,7 @@ target/debug/daemon                           # HTTP/WebSocket API on 127.0.0.1:
 target/debug/cli meetings list
 target/debug/cli record start --title "Weekly sync" --input meeting.wav
 target/debug/cli record start --title "Standup"   # the microphone (--features microphone)
+target/debug/cli record start --language it --input riunione.wav   # this meeting in Italian
 target/debug/cli log-level debug              # a running daemon applies it within 2 s
 target/debug/cli devices list                 # devices this database syncs with
 target/debug/cli devices revoke "My phone"    # a running daemon stops syncing with it within 1 s
@@ -92,7 +93,7 @@ repository.
 | `NOTE_TAKER_TRANSCRIPTION_PROVIDER` | `auto` | `auto`, `local` (whisper.cpp), or `openai` |
 | `NOTE_TAKER_WHISPER_MODEL` | unset | Path to the local GGML model (`local-ai` builds) |
 | `NOTE_TAKER_WHISPER_GPU` | on | `off` keeps local transcription on the CPU in GPU builds |
-| `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` | Language detection, or a code such as `it` or `en` |
+| `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` | Language detection, or a code such as `it` or `en`, for recordings without `--language`; kept in each meeting's details |
 | `OPENAI_API_KEY` | unset | Enables cloud transcription. Audio leaves the device only when this is set. In the app, a key saved in Settings replaces it |
 | `NOTE_TAKER_OPENAI_WHISPER_MODEL` | `whisper-1` | OpenAI transcription model |
 | `NOTE_TAKER_OPENAI_LANGUAGE` | unset (auto) | Language hint for the OpenAI API |
