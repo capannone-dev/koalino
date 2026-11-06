@@ -347,6 +347,17 @@ or ends a different one. `process_external_chunk(ExternalChunkRequest)` runs
 and waits for the segment count, which gives the bridge pump its backpressure.
 `end_external_meeting` closes the session and returns its summary.
 
+## After-meeting transcript pass (#87)
+
+`transcript_refinement.rs` re-transcribes a finished meeting. `plan_windows` joins its speech
+chunks end to end into windows of up to 30 s (`REFINEMENT_WINDOW_MS`, Whisper's input length) and
+maps window time back to meeting time. `refine_meeting` transcribes each window through the
+`TranscriptionEngine` port, prompting it with the previous window's text, then
+`reattribute_words` gives each word the speaker of the final speaker pass at its midpoint and
+groups words into segments (split at pauses over 2 s, at most 20 s). Segments outside the retained
+audio are kept. Nothing is saved until every window is done, and `cancelled` is polled before each
+one. Saving goes through `save_transcript_segments`, so the meeting document syncs as usual.
+
 ## Unknown-speaker clustering
 
 `unknown_speaker_clusterer.rs` groups a meeting's weak and unmatched voices so the user labels

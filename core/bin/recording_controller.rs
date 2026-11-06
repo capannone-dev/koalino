@@ -23,6 +23,7 @@ use crate::{
     adapters::audio::{
         chunk_audio_store::{ChunkAudioStore, encode_wav_pcm16},
         local_recorder::LocalRecorder,
+        retained_audio_store::RetainedAudioStore,
         vad_chunker::{FinalizedAudioChunk, VadChunker, VadConfig},
     },
     application::{
@@ -30,6 +31,7 @@ use crate::{
         pipeline::meeting_session::VadAudioChunk,
         recording_manager::{RecordingManager, RecordingManagerError, RecordingSummary},
         screen_share_monitor::ScreenShareMonitor,
+        transcript_refinement::ChunkSpan,
     },
     domain::{
         errors::{AudioError, StorageError},
@@ -39,6 +41,7 @@ use crate::{
         },
     },
     ports::audio::AudioCapture,
+    refinement_worker::RefinementControl,
     screen_share_watcher::{RecordingClock, ScreenShareWatcher},
 };
 
@@ -135,6 +138,17 @@ pub struct RecordingController {
     inactive_state: AudioState,
     /// `None` when the composition configured no screen capture.
     screen_share: Option<ScreenShareSetup>,
+    /// Where speech is kept for the after-meeting pass (#87); `None` keeps nothing.
+    transcript_pass: Option<TranscriptPass>,
+}
+
+/// The after-meeting pass's store and control, as the recorder sees them (#87).
+#[derive(Clone)]
+pub struct TranscriptPass {
+    /// Sealed speech per meeting, read by the pass.
+    pub store: Arc<RetainedAudioStore>,
+    /// Told when recordings start and stop, so the pass never runs during one.
+    pub control: Arc<RefinementControl>,
 }
 
 impl RecordingController {
@@ -160,7 +174,25 @@ impl RecordingController {
             default_language: None,
             inactive_state: AudioState::Idle,
             screen_share: None,
+            transcript_pass: None,
         }
+    }
+
+    /// Keeps each recording's speech sealed for the after-meeting pass (#87).
+    ///
+    /// Inputs: The pass's store and control. Outputs: The controller.
+    /// Side effects: None until a recording starts.
+    #[must_use]
+    pub fn with_transcript_pass(mut self, transcript_pass: TranscriptPass) -> Self {
+        self.transcript_pass = Some(transcript_pass);
+        self
+    }
+
+    /// Returns the after-meeting pass's control, so the platform can report charging.
+    pub fn transcript_pass_control(&self) -> Option<Arc<RefinementControl>> {
+        self.transcript_pass
+            .as_ref()
+            .map(|transcript_pass| Arc::clone(&transcript_pass.control))
     }
 
     /// Sets the language for recordings without a chosen one.
@@ -294,6 +326,9 @@ impl RecordingController {
         meeting_id: Option<MeetingId>,
         title: Option<MeetingTitle>,
     ) -> Result<MeetingId, RecordingControlError> {
+        if let Some(transcript_pass) = &self.transcript_pass {
+            transcript_pass.control.set_recording(true);
+        }
         if let Some(capture) = self.active_capture.as_mut() {
             if capture.local_recorder.state() == AudioState::Recording {
                 return Err(RecordingControlError::AlreadyRecording);
@@ -312,15 +347,20 @@ impl RecordingController {
             ChunkingMode::Vad(vad_config) => VadChunker::new(vad_config.clone())?,
             ChunkingMode::TimeBased => VadChunker::time_based(VadConfig::english()),
         };
-        self.recording_manager.begin_recording(meeting_id.clone())?;
+        if let Err(error) = self.recording_manager.begin_recording(meeting_id.clone()) {
+            self.end_transcript_pass_hold();
+            return Err(error.into());
+        }
         if let Some(title) = title
             && let Err(error) = self.save_meeting_title(&meeting_id, title)
         {
             let _ = self.recording_manager.end_recording();
+            self.end_transcript_pass_hold();
             return Err(error);
         }
         if let Err(error) = local_recorder.start() {
             let _ = self.recording_manager.end_recording();
+            self.end_transcript_pass_hold();
             return Err(error.into());
         }
         let meeting_start_offset_ms = self.meeting_timeline_end_ms(&meeting_id);
@@ -373,6 +413,7 @@ impl RecordingController {
                 &self.device_id,
                 // Field by field: `capture` borrows `self.active_capture`.
                 self.language.or(self.default_language),
+                self.transcript_pass.as_ref(),
             )? {
                 submitted_count += 1;
             }
@@ -420,6 +461,7 @@ impl RecordingController {
                 &self.device_id,
                 // Field by field: `capture` borrows `self.active_capture`.
                 self.language.or(self.default_language),
+                self.transcript_pass.as_ref(),
             )?;
         }
         Ok(())
@@ -464,6 +506,7 @@ impl RecordingController {
                 &self.recording_manager,
                 &self.device_id,
                 language,
+                self.transcript_pass.as_ref(),
             ) {
                 tracing::warn!(error = %error, "Final audio chunk could not be queued");
             }
@@ -479,7 +522,16 @@ impl RecordingController {
             );
         }
         self.inactive_state = AudioState::Stopped;
+        // After the final speaker pass, so the after-meeting pass reads the final speakers.
+        self.end_transcript_pass_hold();
         Ok(summary?)
+    }
+
+    /// Lets the after-meeting pass run again once no recording is in progress.
+    fn end_transcript_pass_hold(&self) {
+        if let Some(transcript_pass) = &self.transcript_pass {
+            transcript_pass.control.set_recording(false);
+        }
     }
 
     /// Starts screen-share sampling for a new recording, when configured.
@@ -596,7 +648,8 @@ fn samples_to_ms(sample_count: u64) -> u64 {
 /// Inputs: The active capture, the chunk, the engine audio store, the worker, and the device.
 /// Outputs: `Ok(true)` once queued, `Ok(false)` for a chunk without speech (Whisper would invent
 /// text for it; Issue #51), or the worker's error.
-/// Side effects: Advances the meeting timeline either way. A queued chunk's PCM is stored under
+/// Side effects: Advances the meeting timeline either way. A queued chunk is also sealed for the
+/// after-meeting pass when one is configured (#87). A queued chunk's PCM is stored under
 /// a fresh recording ID (read and deleted by the engine) and a WAV copy is sent with it for
 /// diarization and review clips; a skipped chunk's audio is dropped.
 fn submit_chunk(
@@ -606,6 +659,7 @@ fn submit_chunk(
     recording_manager: &RecordingManager,
     device_id: &DeviceId,
     language: Option<TranscriptionLanguage>,
+    transcript_pass: Option<&TranscriptPass>,
 ) -> Result<bool, RecordingControlError> {
     let contains_speech = finalized_chunk.contains_speech();
     let samples = finalized_chunk.into_audio_chunk().into_samples();
@@ -630,11 +684,27 @@ fn submit_chunk(
     ));
     capture.next_chunk_sequence += 1;
     let audio_bytes = encode_wav_pcm16(&samples, CAPTURE_SAMPLE_RATE_HZ);
+    let chunk_start_ms = capture.meeting_start_offset_ms + samples_to_ms(chunk_start_sample);
+    let chunk_end_ms = capture.meeting_start_offset_ms + samples_to_ms(chunk_end_sample);
+    if let Some(transcript_pass) = transcript_pass
+        && let Err(error) = transcript_pass.store.append_chunk(
+            &capture.meeting_id,
+            ChunkSpan {
+                start_ms: chunk_start_ms,
+                end_ms: chunk_end_ms,
+            },
+            language,
+            &samples,
+        )
+    {
+        // The live transcript is unaffected; the after-meeting pass will skip this chunk.
+        tracing::warn!(error = %error, "a chunk could not be kept for the after-meeting pass");
+    }
     chunk_audio_store.insert(&recording_id, samples);
     let vad_chunk = VadAudioChunk::new(
         AudioRecording::new(recording_id, capture.meeting_id.clone(), device_id.clone()),
-        capture.meeting_start_offset_ms + samples_to_ms(chunk_start_sample),
-        capture.meeting_start_offset_ms + samples_to_ms(chunk_end_sample),
+        chunk_start_ms,
+        chunk_end_ms,
         audio_bytes,
     )
     .map_err(|_| AudioError::InvalidConfiguration {

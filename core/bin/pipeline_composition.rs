@@ -31,7 +31,10 @@ use crate::{
         ai::openai_whisper_adapter::{
             OpenAiWhisperConfig, OpenAiWhisperTranscriptionEngine, ReqwestOpenAiHttpClient,
         },
-        audio::{chunk_audio_store::ChunkAudioStore, vad_chunker::VadConfig},
+        audio::{
+            chunk_audio_store::ChunkAudioStore, retained_audio_store::RetainedAudioStore,
+            vad_chunker::VadConfig,
+        },
         storage::sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
     application::{
@@ -52,8 +55,15 @@ use crate::{
         },
         transcription_language::TranscriptionLanguage,
     },
-    ports::{ai::TranscriptionEngine, crypto::EmbeddingCipher, remote_transcription::ChunkSamples},
-    recording_controller::{ChunkingMode, RecordingController},
+    ports::{
+        ai::TranscriptionEngine, crypto::EmbeddingCipher, remote_transcription::ChunkSamples,
+        storage::NoteRepository,
+    },
+    recording_controller::{ChunkingMode, RecordingController, TranscriptPass},
+    refinement_worker::{
+        EngineFactory, RefinementControl, RefinementWorker, RepositoryFactory,
+        retained_audio_directory,
+    },
     storage_composition::open_note_repository,
 };
 
@@ -90,6 +100,10 @@ pub const DIARIZATION_SEGMENTATION_MODEL_VARIABLE: &str =
 pub const DIARIZATION_EMBEDDING_MODEL_VARIABLE: &str = "NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL";
 /// Enables speech-pause chunking.
 pub const VAD_ENABLED_VARIABLE: &str = "NOTE_TAKER_VAD_ENABLED";
+/// Turns the after-meeting transcript pass on or off (#87); on by default except on Android.
+pub const TRANSCRIPT_PASS_VARIABLE: &str = "NOTE_TAKER_TRANSCRIPT_PASS";
+/// The model file for the after-meeting pass; unset uses the live model.
+pub const TRANSCRIPT_PASS_MODEL_VARIABLE: &str = "NOTE_TAKER_TRANSCRIPT_PASS_MODEL";
 
 /// The diarization engine this build composes.
 #[cfg(feature = "diarization")]
@@ -136,6 +150,10 @@ pub struct PipelineConfig {
     efficient_gpu: bool,
     /// The file recording an unfinished GPU attempt; `None` skips the crash check.
     gpu_attempt_marker: Option<PathBuf>,
+    /// Whether a recording keeps its speech sealed for the after-meeting pass (#87).
+    transcript_pass: bool,
+    /// The model for that pass; `None` uses `whisper_model_path`.
+    transcript_pass_model_path: Option<PathBuf>,
 }
 
 impl std::fmt::Debug for PipelineConfig {
@@ -162,6 +180,11 @@ impl std::fmt::Debug for PipelineConfig {
                 &self.diarization_embedding_model_path,
             )
             .field("vad_enabled", &self.vad_enabled)
+            .field("transcript_pass", &self.transcript_pass)
+            .field(
+                "transcript_pass_model_path",
+                &self.transcript_pass_model_path,
+            )
             .finish()
     }
 }
@@ -215,6 +238,14 @@ impl PipelineConfig {
             cloud_fallback: false,
             efficient_gpu: false,
             gpu_attempt_marker: None,
+            // Off on phones until they run it from a charging job (#87 step 2); otherwise speech
+            // would be kept there with nothing to process and delete it.
+            transcript_pass: parse_flag(
+                TRANSCRIPT_PASS_VARIABLE,
+                read(TRANSCRIPT_PASS_VARIABLE),
+                !cfg!(target_os = "android"),
+            )?,
+            transcript_pass_model_path: read(TRANSCRIPT_PASS_MODEL_VARIABLE).map(PathBuf::from),
         })
     }
 
@@ -290,6 +321,37 @@ impl PipelineConfig {
         self.efficient_gpu = efficient_gpu;
         self.gpu_attempt_marker = Some(gpu_attempt_marker);
         self
+    }
+
+    /// Applies the owner's choices for the after-meeting transcript pass (#87).
+    ///
+    /// Inputs: Whether it runs and its model's path, where `None` keeps the current value.
+    /// Outputs: The configuration. Side effects: None.
+    #[must_use]
+    pub fn with_transcript_pass(
+        mut self,
+        enabled: Option<bool>,
+        model_path: Option<PathBuf>,
+    ) -> Self {
+        if let Some(enabled) = enabled {
+            self.transcript_pass = enabled;
+        }
+        if model_path.is_some() {
+            self.transcript_pass_model_path = model_path;
+        }
+        self
+    }
+
+    /// Reports whether recordings keep their speech for the after-meeting pass.
+    pub fn transcript_pass(&self) -> bool {
+        self.transcript_pass
+    }
+
+    /// Returns the model the after-meeting pass loads: its own, else the live one.
+    pub fn transcript_pass_model_path(&self) -> Option<&Path> {
+        self.transcript_pass_model_path
+            .as_deref()
+            .or(self.whisper_model_path.as_deref())
     }
 
     /// Reports whether OpenAI failures fall back to the local model.
@@ -755,6 +817,8 @@ pub fn spawn_recording_controller(
 ) -> Result<RecordingController> {
     let chunk_audio_store = Arc::new(ChunkAudioStore::new());
     let engine_audio_store = Arc::clone(&chunk_audio_store);
+    let pass_cipher = Arc::clone(&embedding_cipher);
+    let pass_config = config.clone();
     let chunking_mode = config.chunking_mode();
     let default_language = config.transcription_language();
     let worker_database_path = database_path.to_path_buf();
@@ -817,11 +881,107 @@ pub fn spawn_recording_controller(
             .with_default_language(Some(default_language)))
     })?;
     // Recordings without a chosen language carry the configured one, so it is recorded too.
-    Ok(RecordingController::new(
+    let controller = RecordingController::new(
         recording_manager,
         chunk_audio_store,
         chunking_mode,
-        device_id,
+        device_id.clone(),
     )
-    .with_default_language(Some(default_language)))
+    .with_default_language(Some(default_language));
+    Ok(
+        match start_transcript_pass(database_path, device_id, pass_cipher, &pass_config) {
+            Some(transcript_pass) => controller.with_transcript_pass(transcript_pass),
+            None => controller,
+        },
+    )
+}
+
+/// Starts the after-meeting transcript pass (#87) when it is on and a local model exists.
+///
+/// Inputs: The database (its folder holds `retained-audio`), this device, the database key's
+/// cipher, and the configuration.
+/// Outputs: The pass's store and control for the recorder, or `None` when the pass is off, this
+/// build has no local engine, no model is configured, or its thread cannot start (recordings then
+/// keep nothing).
+/// Side effects: Spawns the worker thread, which at once looks for meetings left from earlier runs.
+/// A phone runs the pass only while charging, as the platform reports it.
+pub fn start_transcript_pass(
+    database_path: &Path,
+    device_id: DeviceId,
+    embedding_cipher: Arc<dyn EmbeddingCipher>,
+    config: &PipelineConfig,
+) -> Option<TranscriptPass> {
+    if !config.transcript_pass() || !cfg!(feature = "local-ai") {
+        return None;
+    }
+    let model_path = config.transcript_pass_model_path()?.to_path_buf();
+    let store = Arc::new(RetainedAudioStore::new(
+        retained_audio_directory(database_path),
+        Arc::clone(&embedding_cipher),
+    ));
+    let control = Arc::new(RefinementControl::new(cfg!(target_os = "android")));
+    let efficient_gpu = config.efficient_gpu;
+    let make_engine: EngineFactory = Box::new(move |audio_source| {
+        transcript_pass_engine(&model_path, efficient_gpu, audio_source)
+    });
+    let repository_path = database_path.to_path_buf();
+    let repository_device = device_id.clone();
+    let open_repository: RepositoryFactory = Box::new(move || {
+        Ok(Box::new(open_note_repository(
+            &repository_path,
+            repository_device.clone(),
+            Arc::clone(&embedding_cipher),
+        )?) as Box<dyn NoteRepository>)
+    });
+    let worker = RefinementWorker::new(
+        Arc::clone(&store),
+        Arc::clone(&control),
+        make_engine,
+        open_repository,
+        device_id,
+    );
+    match worker.spawn() {
+        Ok(_) => Some(TranscriptPass { store, control }),
+        Err(error) => {
+            tracing::warn!(error = %error, "the after-meeting transcript pass could not start");
+            None
+        }
+    }
+}
+
+/// Loads the after-meeting pass's model with the live engine's GPU policy.
+///
+/// Inputs: The model file, the efficient-mode choice, and the store the engine reads windows from.
+/// Outputs: The engine, or why it cannot load. Side effects: Loads the model into memory.
+#[cfg(feature = "local-ai")]
+fn transcript_pass_engine(
+    model_path: &Path,
+    efficient_gpu: bool,
+    audio_source: Arc<ChunkAudioStore>,
+) -> Result<Box<dyn TranscriptionEngine>> {
+    use crate::adapters::ai::local_whisper_cpp::{
+        LocalWhisperCppConfig, LocalWhisperCppTranscriptionEngine,
+    };
+    let use_gpu = whisper_gpu_allowed() && (!cfg!(target_os = "android") || efficient_gpu);
+    let config = LocalWhisperCppConfig::new(
+        model_path.to_path_buf(),
+        crate::adapters::ai::compute_resources::preferred_inference_threads(),
+        use_gpu,
+        None,
+    )
+    .context("invalid transcript pass configuration")?
+    .with_efficient_gpu(efficient_gpu);
+    let engine = LocalWhisperCppTranscriptionEngine::new(config, audio_source as _)
+        .context("unable to load the transcript pass model")?;
+    Ok(Box::new(engine))
+}
+
+/// Reports that this build has no local engine for the pass.
+#[cfg(not(feature = "local-ai"))]
+fn transcript_pass_engine(
+    _model_path: &Path,
+    _efficient_gpu: bool,
+    _audio_source: Arc<ChunkAudioStore>,
+) -> Result<Box<dyn TranscriptionEngine>> {
+    bail!("the transcript pass needs the local-ai feature")
 }

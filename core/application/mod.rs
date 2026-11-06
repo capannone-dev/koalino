@@ -122,6 +122,10 @@ mod teams_processor_tests;
 /// Defines telemetry requirements before dispatcher and storage implementation.
 #[cfg(test)]
 mod telemetry_tests;
+/// Re-transcribes a finished meeting in long windows and keeps its speakers (#87).
+pub mod transcript_refinement;
+#[cfg(test)]
+mod transcript_refinement_tests;
 /// Encodes the sealed `NTT3`/`NTT2` messages that transcribe on a paired device (Issue #59).
 pub mod transcription_exchange;
 #[cfg(test)]

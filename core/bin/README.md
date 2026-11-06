@@ -47,6 +47,14 @@ documented nonzero status codes distinguishable from lifecycle states.
   every chunk and wipes raw audio that no engine consumed.
   `with_screen_share(monitor, interval)` (Issue #49) gives every recording a
   `ScreenShareWatcher`.
+- `refinement_worker.rs` (#87) runs the after-meeting pass on its `transcript-pass` thread.
+  `RefinementControl` says when it may run: no recording, not shutting down, and on a phone only
+  while charging. The controller holds it while recording (`with_transcript_pass`) and appends
+  each speech chunk to the `RetainedAudioStore`. After Stop, and at start for leftover meetings,
+  `RefinementWorker` loads the pass model (`NOTE_TAKER_TRANSCRIPT_PASS_MODEL`, else the live one),
+  runs `refine_meeting`, and drops the model. Audio is deleted after a pass, when unreadable,
+  when the meeting was deleted, or after three failures. `record start` waits for the pass after
+  Stop. The pass is on by default except on Android, which needs a charging job first.
 - `screen_share_watcher.rs` runs `ScreenShareMonitor::sample` on its own `screen-share-watcher`
   thread at that interval, so frames never touch the audio path:
   - it attaches new slides to the recorded meeting at the meeting time the controller publishes

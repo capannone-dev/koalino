@@ -50,6 +50,12 @@ pub struct SavedTranscriptionSettings {
     /// Models whose proposal the owner dismissed, which are not proposed again.
     #[serde(default)]
     pub dismissed_proposals: Vec<String>,
+    /// Whether each meeting is re-transcribed after Stop (#87); `None` keeps the default (on).
+    #[serde(default)]
+    pub transcript_pass: Option<bool>,
+    /// The catalog file name of the model for that pass; `None` uses the live model.
+    #[serde(default)]
+    pub transcript_pass_model: Option<String>,
 }
 
 /// Where the settings, downloaded models and sealed key live.
@@ -190,6 +196,13 @@ pub fn apply_saved_settings(
             saved.provider == Some(SavedProvider::Openai),
         )
         .with_gpu_choices(saved.efficient_gpu, paths.gpu_attempt_marker.clone())
+        .with_transcript_pass(
+            saved.transcript_pass,
+            saved
+                .transcript_pass_model
+                .as_deref()
+                .and_then(|file_name| paths.locate_model(file_name)),
+        )
 }
 
 /// Checks a pasted key's form, without judging whether OpenAI accepts it.

@@ -47,6 +47,8 @@ const DEFAULT_STOP_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const DEFAULT_STOP_POLL_INTERVAL: Duration = Duration::from_millis(200);
 /// How long a microphone recording waits for audio before checking for a stop again.
 const MICROPHONE_WAIT: Duration = Duration::from_millis(100);
+/// Longest the CLI waits for the after-meeting pass before exiting (a long meeting on a CPU).
+const TRANSCRIPT_PASS_WAIT: Duration = Duration::from_secs(4 * 60 * 60);
 
 /// Where a recording's audio comes from.
 enum AudioInput {
@@ -456,6 +458,17 @@ impl RecordingControl for PipelineRecordingControl {
         eprintln!("Waiting for the remaining audio to be transcribed…");
         let summary = controller.stop().map_err(|error| error.to_string())?;
         capture_result?;
+        // This process may end right after, so it finishes the after-meeting pass itself (#87)
+        // rather than leaving the meeting's speech sealed on disk for a later run.
+        if let Some(control) = controller.transcript_pass_control() {
+            eprintln!("Transcribing the meeting again in longer windows…");
+            let ticket = control.request_round();
+            if !control.wait_for_round(ticket, TRANSCRIPT_PASS_WAIT) {
+                eprintln!(
+                    "The longer-window pass is still running; it will finish on a later run."
+                );
+            }
+        }
         Ok(format_summary(&summary, &title_label))
     }
 
@@ -493,6 +506,8 @@ pub struct LocalMeetingFiles {
     control_files: RecordingControlFiles,
     /// Holds each meeting's private attachment folder.
     attachment_directory: PathBuf,
+    /// Holds speech kept for the after-meeting pass (#87), when known.
+    retained_audio_directory: Option<PathBuf>,
 }
 
 impl LocalMeetingFiles {
@@ -509,10 +524,15 @@ impl LocalMeetingFiles {
                     .unwrap_or_else(|| Path::new("."))
                     .join("attachments")
             });
-        Self::new(
-            RecordingControlFiles::for_database(database_path),
-            attachment_directory,
-        )
+        Self {
+            retained_audio_directory: Some(crate::refinement_worker::retained_audio_directory(
+                database_path,
+            )),
+            ..Self::new(
+                RecordingControlFiles::for_database(database_path),
+                attachment_directory,
+            )
+        }
     }
 
     /// Creates hooks from explicit locations.
@@ -520,6 +540,7 @@ impl LocalMeetingFiles {
         Self {
             control_files,
             attachment_directory,
+            retained_audio_directory: None,
         }
     }
 
@@ -537,10 +558,23 @@ impl MeetingDeletionHooks for LocalMeetingFiles {
             .is_some_and(|active| active.meeting_id() == meeting_id.as_str())
     }
 
-    /// Removes the meeting's attachment folder. Side effects: Deletes files; logs a failure.
+    /// Removes the meeting's attachment folder and any speech kept for the after-meeting pass.
+    /// Side effects: Deletes files; logs a failure.
     fn remove_files(&self, meeting_id: &MeetingId) {
         if remove_meeting_folder(&self.attachment_directory, meeting_id.as_str()).is_err() {
             tracing::warn!("a deleted meeting's attachment files could not be removed");
+        }
+        if let Some(directory) = &self.retained_audio_directory {
+            let file = directory.join(
+                crate::adapters::audio::retained_audio_store::RetainedAudioStore::file_name(
+                    meeting_id,
+                ),
+            );
+            if let Err(error) = std::fs::remove_file(&file)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                tracing::warn!("a deleted meeting's retained audio could not be removed");
+            }
         }
     }
 }

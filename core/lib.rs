@@ -68,6 +68,12 @@ mod project_commands_tests;
 pub mod protocol;
 #[path = "bin/recording_controller.rs"]
 pub mod recording_controller;
+/// Runs the after-meeting transcript pass on its own thread (#87).
+#[path = "bin/refinement_worker.rs"]
+pub mod refinement_worker;
+#[cfg(test)]
+#[path = "bin/refinement_worker_tests.rs"]
+mod refinement_worker_tests;
 /// Samples local screen shares beside a recording, on its own thread (Issue #49).
 #[path = "bin/screen_share_watcher.rs"]
 pub mod screen_share_watcher;

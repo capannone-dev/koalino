@@ -97,6 +97,8 @@ repository.
 | `OPENAI_API_KEY` | unset | Enables cloud transcription. Audio leaves the device only when this is set. In the app, a key saved in Settings replaces it |
 | `NOTE_TAKER_OPENAI_WHISPER_MODEL` | `whisper-1` | OpenAI transcription model |
 | `NOTE_TAKER_OPENAI_LANGUAGE` | unset (auto) | Language hint for the OpenAI API |
+| `NOTE_TAKER_TRANSCRIPT_PASS` | on (off on Android) | After Stop, transcribe the meeting again in 30 s windows and replace its text. Speech is kept encrypted until then, and deleted after |
+| `NOTE_TAKER_TRANSCRIPT_PASS_MODEL` | the live model | GGML model for that pass, for example a larger one than live transcription uses (`local-ai` builds) |
 | `NOTE_TAKER_VAD_ENABLED` | `true` | Voice-activity chunking. `false` cuts near every 15 s |
 | `NOTE_TAKER_P2P_RELAY` | unset | `…/p2p/<peer id>` address of your relay, to reach devices across NATs. It must be paired with this device. In the apps, set it in Settings → Other networks instead; a saved value replaces this one |
 | `NOTE_TAKER_P2P_RELAY_SERVER_ADDRESS` | unset | On your always-on daemon: its public address (`/ip4/203.0.113.5/tcp/4001`), which turns the relay on. Use a fixed port in `NOTE_TAKER_P2P_LISTEN` |

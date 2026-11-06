@@ -16,6 +16,8 @@ pub mod local_recorder;
 pub mod pcm_input;
 /// Converts device audio at any rate and channel count to 16 kHz mono PCM16 (Issue #45).
 pub mod pcm_resampler;
+/// Keeps a meeting's speech sealed on disk until the after-meeting pass has read it (#87).
+pub mod retained_audio_store;
 /// Implements feature-gated 16 kHz VAD chunking over an AudioCapture source.
 pub mod vad_chunker;
 
@@ -29,5 +31,7 @@ mod local_recorder_tests;
 mod pcm_input_tests;
 #[cfg(test)]
 mod pcm_resampler_tests;
+#[cfg(test)]
+mod retained_audio_store_tests;
 #[cfg(test)]
 mod vad_chunker_tests;

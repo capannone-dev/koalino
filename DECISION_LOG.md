@@ -1980,3 +1980,21 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **The daemon has no recording API**: it records only Teams meetings, which use the variable. A
   per-meeting language there would need the Teams bot to send one.
 
+## 2026-11-06 — #87 After-meeting transcript pass, step 1 (desktop and CLI)
+
+- **Why:** live chunks are about 11 s, so Whisper hears little context and words at the cuts
+  suffer. On the evaluation sets, re-transcribing the speech in windows of up to 30 s with the same
+  `small` model lowered word error from 41.8% to 40.4% (NOTSOFAR, 14 of 20 recordings better) and
+  from 49.8% to 46.6% (AMI, 4 of 4), on par with or better than WhisperX `small`. Including the
+  silent chunks changed nothing (40.3%, 46.5%), so only speech is retained.
+- **Raw audio is kept, with the owner's approval** (an exception to CONTRIBUTING.md §7): encrypted with
+  AES-256-GCM under the database key, bound to its meeting, only until the pass ends. It is
+  deleted after the pass, when unreadable, when the meeting is deleted, or after three failed
+  attempts, so it never lingers.
+- **Speakers are not recomputed:** each new word takes the final speaker pass's speaker at its
+  midpoint, so names and unknown voices stay as they were.
+- **When it runs:** a dedicated thread, never while recording; on phones only while charging. The
+  model is loaded per round and dropped. Android keeps it off until a charging job exists (step 2);
+  a paired desktop doing it (step 3) and a Settings switch (step 4) follow.
+- **Setting:** `NOTE_TAKER_TRANSCRIPT_PASS` and `NOTE_TAKER_TRANSCRIPT_PASS_MODEL`, also in the saved
+  transcription settings, so a desktop can use turbo for the pass while live stays `small`.
