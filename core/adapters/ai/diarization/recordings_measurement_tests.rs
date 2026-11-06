@@ -29,6 +29,7 @@ use super::{
 };
 use crate::{
     adapters::audio::vad_chunker::{VadChunker, VadConfig},
+    application::transcript_refinement::{ChunkSpan, REFINEMENT_WINDOW_MS, plan_windows},
     domain::models::{AudioChunk, AudioConfig},
 };
 
@@ -71,6 +72,11 @@ fn stem(path: &Path) -> String {
 ///
 /// `english` is the configuration every recording uses today (`pipeline_composition`).
 fn vad_chunk_bounds(samples: &[f32]) -> Vec<(usize, usize)> {
+    vad_chunk_bounds_with(samples, false)
+}
+
+/// Cuts samples like `vad_chunk_bounds`; `keep_silent` also returns chunks without speech.
+fn vad_chunk_bounds_with(samples: &[f32], keep_silent: bool) -> Vec<(usize, usize)> {
     let mut chunker = VadChunker::new(VadConfig::english())
         .unwrap_or_else(|error| panic!("the chunker must start: {error}"));
     let pcm = samples
@@ -92,7 +98,7 @@ fn vad_chunk_bounds(samples: &[f32]) -> Vec<(usize, usize)> {
     for chunk in chunks {
         let length = chunk.audio_chunk().samples().len();
         // Silent chunks still advance the timeline but are never transcribed or diarized.
-        if chunk.contains_speech() {
+        if keep_silent || chunk.contains_speech() {
             bounds.push((next_start, length));
         }
         next_start += length;
@@ -135,7 +141,8 @@ fn words_from_state(state: &WhisperState, offset_ms: u64) -> Vec<Value> {
 
 /// Writes one JSON line per recording: timed words under one transcription configuration.
 ///
-/// Inputs: Common variables, plus `NOTE_TAKER_WHISPER_MODEL`, `MEASURE_MODE` (`whole` or `vad`),
+/// Inputs: Common variables, plus `NOTE_TAKER_WHISPER_MODEL`, `MEASURE_MODE` (`whole`, `vad`, or
+/// `windows`, the after-meeting pass of #87, or `windows_all`, which also keeps chunks without speech),
 /// `MEASURE_LANGUAGE` (`it` or `auto`), `MEASURE_BEAM` (0 for greedy) and optionally
 /// `MEASURE_SILERO_MODEL` and `MEASURE_GPU_DEVICE`. Silero has no effect through whisper-rs:
 /// `WhisperState::full` calls `whisper_full_with_state`, and only `whisper_full` applies VAD.
@@ -167,12 +174,77 @@ fn measure_transcription() {
 
     let mut lines = Vec::new();
     for (name, samples) in recordings() {
+        let chunks = vad_chunk_bounds_with(&samples, mode == "windows_all");
+        let started = Instant::now();
+        // `windows` is the after-meeting pass (#87): the same chunks joined into windows of up to
+        // 30 s, each prompted with the previous window's text, words mapped back to meeting time.
+        if mode == "windows" || mode == "windows_all" {
+            let spans: Vec<ChunkSpan> = chunks
+                .iter()
+                .map(|(start, length)| ChunkSpan {
+                    start_ms: (*start / SAMPLES_PER_MS) as u64,
+                    end_ms: ((*start + *length) / SAMPLES_PER_MS) as u64,
+                })
+                .collect();
+            let mut words: Vec<Value> = Vec::new();
+            let mut previous_text = String::new();
+            for window in plan_windows(&spans, REFINEMENT_WINDOW_MS) {
+                let audio: Vec<f32> = window
+                    .chunk_indexes()
+                    .iter()
+                    .flat_map(|index| {
+                        let (start, length) = chunks[*index];
+                        samples[start..start + length].iter().copied()
+                    })
+                    .collect();
+                let mut state = context
+                    .create_state()
+                    .unwrap_or_else(|error| panic!("{error}"));
+                let mut parameters = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+                parameters.set_n_threads(8);
+                parameters.set_print_progress(false);
+                parameters.set_print_realtime(false);
+                parameters.set_print_timestamps(false);
+                parameters.set_token_timestamps(true);
+                parameters.set_language(Some(language.as_str()));
+                if !previous_text.is_empty() {
+                    parameters.set_initial_prompt(&previous_text);
+                }
+                state
+                    .full(parameters, &audio)
+                    .unwrap_or_else(|error| panic!("transcription must run: {error}"));
+                let window_words = words_from_state(&state, 0);
+                previous_text = window_words
+                    .iter()
+                    .filter_map(|word| word["text"].as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                words.extend(window_words.into_iter().map(|mut word| {
+                    let start = window.to_meeting_ms(word["start_ms"].as_u64().unwrap_or(0));
+                    let end = window.to_meeting_ms(word["end_ms"].as_u64().unwrap_or(0));
+                    word["start_ms"] = json!(start);
+                    word["end_ms"] = json!(end);
+                    word
+                }));
+            }
+            lines.push(
+                json!({
+                    "name": name,
+                    "duration_ms": (samples.len() / SAMPLES_PER_MS) as u64,
+                    "elapsed_ms": started.elapsed().as_millis() as u64,
+                    "pieces": [],
+                    "language_ids": [],
+                    "words": words,
+                })
+                .to_string(),
+            );
+            continue;
+        }
         let pieces = if mode == "whole" {
             vec![(0, samples.len())]
         } else {
-            vad_chunk_bounds(&samples)
+            chunks
         };
-        let started = Instant::now();
         let mut words = Vec::new();
         let mut languages = Vec::new();
         for (start, length) in &pieces {
