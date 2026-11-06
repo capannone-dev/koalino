@@ -92,10 +92,22 @@ fn a_long_meeting_folds_a_brief_voice_into_its_nearest() {
 }
 
 #[test]
-fn a_long_meeting_keeps_someone_who_spoke_half_a_minute() {
-    // 1235 windows: the least group stops growing at 30 windows.
+fn a_long_meeting_folds_a_split_off_voice_under_a_minute() {
+    // 1245 windows, about twenty minutes: a voice drifting over a long meeting splits off groups of
+    // more than half a minute, so a voice now needs a minute (#61).
     let labels = group_voice_windows(
-        &two_voices_and_a_brief_one(600, 35),
+        &two_voices_and_a_brief_one(600, 45),
+        None,
+        &SpeakerPassConfig::default(),
+    );
+    assert_eq!(labels.iter().max(), Some(&1));
+}
+
+#[test]
+fn a_long_meeting_keeps_someone_who_spoke_a_minute() {
+    // 1265 windows: the least group stops growing at 60 windows.
+    let labels = group_voice_windows(
+        &two_voices_and_a_brief_one(600, 65),
         None,
         &SpeakerPassConfig::default(),
     );

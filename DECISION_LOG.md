@@ -1998,3 +1998,28 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   a paired desktop doing it (step 3) and a Settings switch (step 4) follow.
 - **Setting:** `NOTE_TAKER_TRANSCRIPT_PASS` and `NOTE_TAKER_TRANSCRIPT_PASS_MODEL`, also in the saved
   transcription settings, so a desktop can use turbo for the pass while live stays `small`.
+
+## 2026-11-06 — #61 A voice needs up to a minute of speech in a long meeting
+
+- **Why:** the final speaker pass still split one person into several voices in long meetings. A
+  52-minute recording of 3 people gave 8 speakers.
+- **Change:** the most windows `min_group_share` can ask a group for (`max_min_group_windows`) rises
+  from 30 to 60, so from about 15 minutes of speech on a voice needs a minute to stand alone.
+  Shorter meetings are unchanged.
+- **Measured with the Rust pass** on 14 + 14 AMI and NOTSOFAR recordings, split into a tuning and a
+  check set, and the 52-minute recording:
+
+  | Cap | Confusion, tune | Confusion, check | Speakers found / real, check | 52-min recording |
+  | --- | --- | --- | --- | --- |
+  | 30 | 11.3% | 8.0% | 5.14 / 4.71 | 8 / 3 |
+  | **60** | **9.8%** | **6.8%** | 4.43 / 4.71 | 4 / 3 |
+  | 90 (Python copy) | 8.8% | 6.2% | 4.21 / 4.71 | 4 / 3 |
+
+- **No real speaker was lost by the change.** The speakers missing at every cap (2 on the tune set
+  and 9 on the check set, all with over 30 s of speech) are missing because their voice mixes with
+  another, not because of the cap. 90 lowered confusion further but lost one more speaker, so 60
+  was chosen.
+- **The price:** in a meeting of 15 minutes or more of speech, someone who says less than a minute
+  (in a long enough meeting; 1/15 of the speech before that) is given to the nearest voice.
+- **Not changed:** the similarity threshold (0.15, 0.25 and 0.3 were all worse) and merging groups by
+  their centres (worse on the check set).

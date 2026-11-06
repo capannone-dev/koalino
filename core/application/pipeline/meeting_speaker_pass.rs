@@ -22,7 +22,11 @@ pub struct SpeakerPassConfig {
     /// a group of scattered seconds. The price: someone who says less than that is given to the
     /// nearest voice.
     pub min_group_share: f32,
-    /// The most windows `min_group_share` can ask a group for: half a minute of speech.
+    /// The most windows `min_group_share` can ask a group for: a minute of speech (#61). At half
+    /// a minute, real meetings still split one person into several voices (a 3-person, 52-minute
+    /// recording gave 8). A minute brings that recording to 4 and lowers speaker confusion on the
+    /// AMI and NOTSOFAR sets (11.3% to 9.8% and 8.0% to 6.8%) without losing any real speaker
+    /// there; 90 s lowers it further but loses one (`DECISION_LOG.md`).
     pub max_min_group_windows: usize,
     /// A group under `max_min_group_windows` also joins its nearest group when fewer than this
     /// share of its windows have a neighbour of the same group within a second (#83). People talk
@@ -41,7 +45,7 @@ impl Default for SpeakerPassConfig {
             similarity_threshold: 0.2,
             min_group_windows: 8,
             min_group_share: 1.0 / 15.0,
-            max_min_group_windows: 30,
+            max_min_group_windows: 60,
             min_group_contiguity: 0.65,
             max_clustered_windows: 3_000,
         }
