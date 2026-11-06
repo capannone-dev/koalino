@@ -114,16 +114,36 @@ final class FakeMicrophonePermission implements MicrophonePermission {
 
 /// Records what the controller shows in the notification and replays notification actions.
 final class FakeRecordingNotifier implements RecordingNotifier {
+  /// Creates a fake whose service starts unless `serviceStarts` is false.
+  FakeRecordingNotifier({this.serviceStarts = true, this.bridge});
+
+  /// Whether the simulated foreground service starts (Android may refuse it).
+  final bool serviceStarts;
+
+  /// The bridge whose start requests are counted at each `show`, when set.
+  final FakeRecordingBridge? bridge;
+
   /// Every state shown, in order, with its title.
   final List<(RecordingNotificationState, String?)> shown =
       <(RecordingNotificationState, String?)>[];
+
+  /// Rust start and resume requests made before each `show`, in order (needs `bridge`).
+  final List<int> rustStartsAtShow = <int>[];
 
   final StreamController<RecordingNotificationState> _actions =
       StreamController<RecordingNotificationState>.broadcast();
 
   @override
-  Future<void> show(RecordingNotificationState state, {String? title}) async {
+  Future<bool> show(RecordingNotificationState state, {String? title}) async {
     shown.add((state, title));
+    final FakeRecordingBridge? watchedBridge = bridge;
+    if (watchedBridge != null) {
+      rustStartsAtShow.add(watchedBridge.startRecordingCallCount +
+          watchedBridge.lifecycleCommands
+              .where((String command) => command == 'resume')
+              .length);
+    }
+    return serviceStarts;
   }
 
   @override
@@ -579,7 +599,7 @@ void main() {
       ]);
     });
 
-    testWidgets('a failed start shows no notification',
+    testWidgets('a failed start ends the notification it started',
         (WidgetTester tester) async {
       final FakeRecordingNotifier notifier = FakeRecordingNotifier();
       await pumpRecordingScreen(tester, FakeRecordingBridge(startResult: false),
@@ -588,7 +608,86 @@ void main() {
       await tester.tap(find.text('Start recording'));
       await tester.pump();
 
+      expect(notifier.shown, <(RecordingNotificationState, String?)>[
+        (RecordingNotificationState.recording, null),
+        (RecordingNotificationState.idle, null),
+      ]);
+    });
+
+    // Android silences the microphone of an app that leaves the screen without a running
+    // foreground service, and refuses to start one from the background. Rust can take seconds to
+    // start (model loading), so the service must start at the tap, before Rust opens the mic.
+    testWidgets('the service starts before Rust opens the microphone',
+        (WidgetTester tester) async {
+      final FakeRecordingBridge recordingBridge =
+          FakeRecordingBridge(startResult: true);
+      final FakeRecordingNotifier notifier =
+          FakeRecordingNotifier(bridge: recordingBridge);
+      await pumpRecordingScreen(tester, recordingBridge,
+          recordingNotifier: notifier);
+
+      await tester.tap(find.text('Start recording'));
+      await tester.pump();
+      await tester.tap(find.text('Pause'));
+      await tester.pump();
+      await tester.tap(find.text('Resume'));
+      await tester.pump();
+
+      expect(
+          notifier.shown.map(((RecordingNotificationState, String?) s) => s.$1),
+          <RecordingNotificationState>[
+            RecordingNotificationState.recording,
+            RecordingNotificationState.paused,
+            RecordingNotificationState.recording,
+          ]);
+      expect(notifier.rustStartsAtShow, <int>[0, 1, 1],
+          reason:
+              'each recording state is shown before Rust starts or resumes');
+    });
+
+    testWidgets('a microphone denial shows no notification',
+        (WidgetTester tester) async {
+      final FakeRecordingNotifier notifier = FakeRecordingNotifier();
+      await pumpRecordingScreen(tester, FakeRecordingBridge(startResult: true),
+          recordingNotifier: notifier,
+          microphonePermission: FakeMicrophonePermission(granted: false));
+
+      await tester.tap(find.text('Start recording'));
+      await tester.pump();
+
       expect(notifier.shown, isEmpty);
+    });
+
+    testWidgets('a failed resume shows the recording paused again',
+        (WidgetTester tester) async {
+      final FakeRecordingBridge recordingBridge =
+          FakeRecordingBridge(startResult: true, resumeResult: false);
+      final FakeRecordingNotifier notifier = FakeRecordingNotifier();
+      await pumpRecordingScreen(tester, recordingBridge,
+          recordingNotifier: notifier);
+      await tester.tap(find.text('Start recording'));
+      await tester.pump();
+      await tester.tap(find.text('Pause'));
+      await tester.pump();
+
+      await tester.tap(find.text('Resume'));
+      await tester.pump();
+
+      expect(notifier.shown.last.$1, RecordingNotificationState.paused);
+    });
+
+    testWidgets('a refused service tells the owner to keep the app open',
+        (WidgetTester tester) async {
+      final FakeRecordingNotifier notifier =
+          FakeRecordingNotifier(serviceStarts: false);
+      await pumpRecordingScreen(tester, FakeRecordingBridge(startResult: true),
+          recordingNotifier: notifier);
+
+      await tester.tap(find.text('Start recording'));
+      await tester.pump();
+
+      expect(find.text('Recording'), findsOneWidget);
+      expect(find.text(backgroundRecordingRefusedMessage), findsOneWidget);
     });
 
     testWidgets('a pause from the notification shows the recording paused',

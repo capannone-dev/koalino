@@ -33,8 +33,10 @@ enum RecordingNotificationState {
 abstract interface class RecordingNotifier {
   /// Shows `state` with the meeting's `title` (`null` when untitled).
   ///
+  /// Outputs: `false` when the platform refused the service, so a recording would be silenced
+  /// once the app leaves the screen; `true` otherwise, including where no service is needed.
   /// Side effects: On Android starts, updates, or ends the foreground service.
-  Future<void> show(RecordingNotificationState state, {String? title});
+  Future<bool> show(RecordingNotificationState state, {String? title});
 
   /// States the owner reached from the notification; Rust has already changed.
   Stream<RecordingNotificationState> get externalChanges;
@@ -45,9 +47,11 @@ final class NoRecordingNotifier implements RecordingNotifier {
   /// Creates the notifier.
   const NoRecordingNotifier();
 
+  /// Outputs: Always `true`: desktops keep capturing without a service.
   /// Side effects: None.
   @override
-  Future<void> show(RecordingNotificationState state, {String? title}) async {}
+  Future<bool> show(RecordingNotificationState state, {String? title}) async =>
+      true;
 
   /// Never emits.
   @override
@@ -70,16 +74,17 @@ final class AndroidRecordingNotifier implements RecordingNotifier {
   final StreamController<RecordingNotificationState> _changes =
       StreamController<RecordingNotificationState>.broadcast();
 
-  /// Side effects: Starts or updates the service, or ends it for `idle`. A service that cannot
-  /// start (for example notifications blocked by a policy) is ignored: recording goes on while
-  /// the app stays visible.
+  /// Outputs: `false` when Android refused to start the service (for example when asked while
+  /// the app is not visible); the caller tells the owner to keep the app open.
+  /// Side effects: Starts or updates the service, or ends it for `idle`.
   @override
-  Future<void> show(RecordingNotificationState state, {String? title}) async {
+  Future<bool> show(RecordingNotificationState state, {String? title}) async {
     try {
       await _channel.invokeMethod<void>(
           'show', <String, String?>{'state': state.name, 'title': title});
+      return true;
     } on PlatformException {
-      return;
+      return false;
     }
   }
 

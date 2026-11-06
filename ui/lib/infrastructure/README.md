@@ -47,7 +47,10 @@ uses `MicrophonePermission.kt` on `note_taker/microphone` (`RECORD_AUDIO`); desk
 runtime prompt, and a Windows privacy refusal surfaces as status 7 (Issue #45).
 
 `recording_notifier.dart` mirrors the recorder into Android's `RecordingService` and streams the
-changes made from its notification (Issue #47); desktops use `NoRecordingNotifier`.
+changes made from its notification (Issue #47); desktops use `NoRecordingNotifier`. The controller
+starts the service before Rust opens the microphone, because Android refuses to start it once the
+app has left the screen and then silences the microphone; `show` returns `false` when Android
+refused it.
 
 `whisper_model.dart` picks the model passed to the core, so a fresh install transcribes offline:
 `<data directory>/models/ggml-base.bin` when the owner put one there, otherwise the bundle's

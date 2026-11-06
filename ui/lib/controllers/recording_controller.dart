@@ -87,7 +87,9 @@ final class RecordingController extends ChangeNotifier {
   /// Inputs: `title` is user text; it is trimmed, and a blank title becomes `null` so Rust
   /// applies its dated fallback. Duplicate requests while one is pending or active are ignored.
   /// Outputs: Completes once the bridge reports whether the lifecycle command succeeded.
-  /// Side effects: Invokes the FFI bridge, updates UI state, and notifies listening widgets.
+  /// Side effects: Starts the Android foreground service before invoking the FFI bridge (and
+  /// ends it if Rust fails to start), updates UI state, and notifies listening widgets. A refused
+  /// service leaves the recording running with `backgroundRecordingRefusedMessage` shown.
   Future<void> startRecording({String? title}) async {
     if (_state != RecordingUiState.idle) {
       return;
@@ -107,16 +109,23 @@ final class RecordingController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    // The service starts now, while the app is surely visible: Rust may take seconds to start
+    // (model loading), Android refuses a service asked for from the background, and it silences
+    // the microphone of an app that leaves the screen without one.
+    final bool keepsRecordingInBackground = await _recordingNotifier
+        .show(RecordingNotificationState.recording, title: requestedTitle);
     final RecordingStartOutcome outcome =
         await _recordingBridge.startRecordingWithTitle(requestedTitle);
     if (outcome == RecordingStartOutcome.started) {
       _state = RecordingUiState.recording;
       _activeTitle = requestedTitle;
-      unawaited(_recordingNotifier.show(RecordingNotificationState.recording,
-          title: requestedTitle));
+      if (!keepsRecordingInBackground) {
+        _errorMessage = backgroundRecordingRefusedMessage;
+      }
     } else {
       _state = RecordingUiState.idle;
       _errorMessage = _startErrorMessage(outcome, 'Unable to start recording');
+      unawaited(_recordingNotifier.show(RecordingNotificationState.idle));
     }
     notifyListeners();
   }
@@ -149,7 +158,8 @@ final class RecordingController extends ChangeNotifier {
   ///
   /// Inputs: None; ignored unless paused and no other request is pending.
   /// Outputs: Completes once Rust reports the outcome.
-  /// Side effects: Invokes `startRecording` on the bridge, which resumes the paused meeting (a
+  /// Side effects: Shows the recording in the notification first (back to paused on failure),
+  /// then invokes `startRecording` on the bridge, which resumes the paused meeting (a
   /// titled start would create a new meeting). Notifies listeners.
   Future<void> resumeRecording() async {
     if (_state != RecordingUiState.paused || _isTransitioning) {
@@ -163,15 +173,21 @@ final class RecordingController extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    // Shown before Rust reopens the microphone, for the reason given in `startRecording`.
+    final bool keepsRecordingInBackground = await _recordingNotifier
+        .show(RecordingNotificationState.recording, title: _activeTitle);
     final RecordingStartOutcome outcome =
         await _recordingBridge.startRecording();
     _isTransitioning = false;
     if (outcome == RecordingStartOutcome.started) {
       _state = RecordingUiState.recording;
-      unawaited(_recordingNotifier.show(RecordingNotificationState.recording,
-          title: _activeTitle));
+      if (!keepsRecordingInBackground) {
+        _errorMessage = backgroundRecordingRefusedMessage;
+      }
     } else {
       _errorMessage = _startErrorMessage(outcome, 'Unable to resume recording');
+      unawaited(_recordingNotifier.show(RecordingNotificationState.paused,
+          title: _activeTitle));
     }
     notifyListeners();
   }
@@ -257,6 +273,11 @@ final class RecordingController extends ChangeNotifier {
 
 /// Shown when the owner refuses microphone access.
 const String _permissionDeniedMessage = 'Microphone access is needed to record';
+
+/// Shown while recording when Android refused the foreground service: leaving the app would
+/// silence the microphone.
+const String backgroundRecordingRefusedMessage =
+    'Keep the app open: Android did not allow recording in the background';
 
 /// The error for a start or resume that did not record.
 ///
