@@ -14,8 +14,8 @@ use std::{
 
 use serde_json::{Value, json};
 use whisper_rs::{
-    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
-    WhisperVadParams,
+    DtwMode, DtwModelPreset, DtwParameters, FullParams, SamplingStrategy, WhisperContext,
+    WhisperContextParameters, WhisperState, WhisperVadParams,
 };
 
 use super::{
@@ -131,8 +131,21 @@ fn words_from_state(state: &WhisperState, offset_ms: u64) -> Vec<Value> {
                 let joined = format!("{}{}", last["text"].as_str().unwrap_or(""), text);
                 last["text"] = json!(joined);
                 last["end_ms"] = json!(end_ms);
+                // A word is as sure as its least sure token.
+                let least = last["p"].as_f64().unwrap_or(1.0).min(f64::from(data.p));
+                last["p"] = json!(least);
             } else {
-                words.push(json!({"text": text.trim(), "start_ms": start_ms, "end_ms": end_ms}));
+                let mut word = json!({
+                    "text": text.trim(),
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "p": f64::from(data.p),
+                });
+                // With MEASURE_DTW, the aligned moment of the word's first token.
+                if data.t_dtw >= 0 {
+                    word["dtw_ms"] = json!(offset_ms + (data.t_dtw as u64) * 10);
+                }
+                words.push(word);
             }
         }
     }
@@ -144,7 +157,9 @@ fn words_from_state(state: &WhisperState, offset_ms: u64) -> Vec<Value> {
 /// Inputs: Common variables, plus `NOTE_TAKER_WHISPER_MODEL`, `MEASURE_MODE` (`whole`, `vad`, or
 /// `windows`, the after-meeting pass of #87, or `windows_all`, which also keeps chunks without speech),
 /// `MEASURE_LANGUAGE` (`it` or `auto`), `MEASURE_BEAM` (0 for greedy) and optionally
-/// `MEASURE_SILERO_MODEL` and `MEASURE_GPU_DEVICE`. Silero has no effect through whisper-rs:
+/// `MEASURE_SILERO_MODEL`, `MEASURE_GPU_DEVICE`, `MEASURE_DTW` (`tiny`, `base`, `small`, `medium`
+/// or `turbo`: aligned word times as `dtw_ms`), and for the windows modes `MEASURE_PROMPT=off` (no
+/// previous text) and `MEASURE_WINDOW_MS` (longest window). Silero has no effect through whisper-rs:
 /// `WhisperState::full` calls `whisper_full_with_state`, and only `whisper_full` applies VAD.
 /// Outputs: Panics on failure, since a partial measurement must not pass for a full one.
 /// Side effects: Runs inference and writes `NOTE_TAKER_MEASURE_OUTPUT`.
@@ -166,6 +181,35 @@ fn measure_transcription() {
     {
         context_parameters.gpu_device = device;
     }
+    if let Ok(preset) = env::var("MEASURE_DTW") {
+        let model_preset = match preset.as_str() {
+            "tiny" => DtwModelPreset::Tiny,
+            "base" => DtwModelPreset::Base,
+            "small" => DtwModelPreset::Small,
+            "medium" => DtwModelPreset::Medium,
+            "turbo" => DtwModelPreset::LargeV3Turbo,
+            other => panic!("unknown MEASURE_DTW {other}"),
+        };
+        context_parameters.dtw_parameters = DtwParameters {
+            mode: DtwMode::ModelPreset { model_preset },
+            ..DtwParameters::default()
+        };
+    }
+    let prompt = env::var("MEASURE_PROMPT").map_or(true, |value| value != "off");
+    let window_limit_ms = env::var("MEASURE_WINDOW_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(REFINEMENT_WINDOW_MS);
+    let strategy = || {
+        if beam > 0 {
+            SamplingStrategy::BeamSearch {
+                beam_size: beam,
+                patience: -1.0,
+            }
+        } else {
+            SamplingStrategy::Greedy { best_of: 1 }
+        }
+    };
     let context = WhisperContext::new_with_params(
         model_path.to_str().unwrap_or_else(|| panic!("bad path")),
         context_parameters,
@@ -188,7 +232,7 @@ fn measure_transcription() {
                 .collect();
             let mut words: Vec<Value> = Vec::new();
             let mut previous_text = String::new();
-            for window in plan_windows(&spans, REFINEMENT_WINDOW_MS) {
+            for window in plan_windows(&spans, window_limit_ms) {
                 let audio: Vec<f32> = window
                     .chunk_indexes()
                     .iter()
@@ -200,14 +244,14 @@ fn measure_transcription() {
                 let mut state = context
                     .create_state()
                     .unwrap_or_else(|error| panic!("{error}"));
-                let mut parameters = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
+                let mut parameters = FullParams::new(strategy());
                 parameters.set_n_threads(8);
                 parameters.set_print_progress(false);
                 parameters.set_print_realtime(false);
                 parameters.set_print_timestamps(false);
                 parameters.set_token_timestamps(true);
                 parameters.set_language(Some(language.as_str()));
-                if !previous_text.is_empty() {
+                if prompt && !previous_text.is_empty() {
                     parameters.set_initial_prompt(&previous_text);
                 }
                 state
@@ -224,6 +268,9 @@ fn measure_transcription() {
                     let end = window.to_meeting_ms(word["end_ms"].as_u64().unwrap_or(0));
                     word["start_ms"] = json!(start);
                     word["end_ms"] = json!(end);
+                    if let Some(dtw) = word["dtw_ms"].as_u64() {
+                        word["dtw_ms"] = json!(window.to_meeting_ms(dtw));
+                    }
                     word
                 }));
             }
@@ -251,15 +298,7 @@ fn measure_transcription() {
             let mut state = context
                 .create_state()
                 .unwrap_or_else(|error| panic!("{error}"));
-            let strategy = if beam > 0 {
-                SamplingStrategy::BeamSearch {
-                    beam_size: beam,
-                    patience: -1.0,
-                }
-            } else {
-                SamplingStrategy::Greedy { best_of: 1 }
-            };
-            let mut parameters = FullParams::new(strategy);
+            let mut parameters = FullParams::new(strategy());
             parameters.set_n_threads(8);
             parameters.set_print_progress(false);
             parameters.set_print_realtime(false);
