@@ -53,6 +53,7 @@ use crate::{
             LocalCapabilities, NetworkCommand, NetworkCommandError, NetworkCommandOutcome,
             P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError, P2pService, P2pSnapshot,
             PAIRING_WINDOW, REMOTE_TRANSCRIPTION_TIMEOUT, RemoteTranscriptionJob,
+            SPEECH_TRANSFER_TIMEOUT, SpeechTransferJob,
         },
         pairing_manager::PairingManager,
         repository_sync_manager::RepositorySyncManager,
@@ -66,7 +67,11 @@ use crate::{
     },
     p2p_network_routes::{NetworkRoutes, run_network_command},
     pipeline_composition::{PipelineConfig, select_transcription_engine},
-    ports::{crypto::EmbeddingCipher, peer_trust::PairAgreementSecretStore},
+    ports::{
+        crypto::EmbeddingCipher,
+        peer_trust::PairAgreementSecretStore,
+        speech_transfer::{SpeechInbox, SpeechLink, SpeechPart, SpeechSender, SpeechTransferError},
+    },
     storage_composition::open_note_repository,
     transcription_host::ThreadedTranscriptionHost,
 };
@@ -83,6 +88,9 @@ const FALLBACK_DEVICE_NAME: &str = "Note Taker device";
 
 /// How many chunks may wait to be sent; the pipeline handles one at a time.
 const REMOTE_TRANSCRIPTION_QUEUE_CAPACITY: usize = 4;
+
+/// How many speech parts may wait to be sent; the after-meeting worker sends one at a time.
+const SPEECH_TRANSFER_QUEUE_CAPACITY: usize = 2;
 
 /// Longest host name used as a default device name, matching `DeviceName`'s limit.
 const MAX_DEFAULT_NAME_CHARACTERS: usize = 64;
@@ -219,6 +227,10 @@ pub struct P2pHandle {
     snapshots: watch::Receiver<P2pSnapshot>,
     /// Queue of chunks to send to paired devices.
     remote_transcriptions: mpsc::Sender<RemoteTranscriptionJob>,
+    /// Queue of retained speech parts to send to the device that combines a meeting (#88).
+    speech_transfers: mpsc::Sender<SpeechTransferJob>,
+    /// Where speech paired devices send is stored, once the after-meeting worker runs.
+    speech_inbox: Arc<Mutex<Option<Box<dyn SpeechInbox>>>>,
     /// Tells the task to stop; taken by `shutdown`.
     stop: Mutex<Option<oneshot::Sender<()>>>,
     /// The task's thread; taken by `shutdown`.
@@ -337,6 +349,56 @@ impl RemoteTranscriptionGateway for P2pHandle {
     }
 }
 
+impl SpeechSender for P2pHandle {
+    /// Hands the part to the P2P task and blocks until its receipt or the deadline.
+    ///
+    /// Side effects: See the trait. A full queue or a stopped task is `Unreachable` at once.
+    fn send_part(&self, to: &DeviceId, part: SpeechPart) -> Result<(), SpeechTransferError> {
+        let (reply, answer) = std::sync::mpsc::channel();
+        self.speech_transfers
+            .try_send(SpeechTransferJob {
+                peer: to.clone(),
+                part,
+                reply,
+            })
+            .map_err(|_| SpeechTransferError::Unreachable)?;
+        answer
+            .recv_timeout(SPEECH_TRANSFER_TIMEOUT + Duration::from_secs(5))
+            .map_err(|_| SpeechTransferError::Unreachable)?
+    }
+}
+
+impl SpeechLink for P2pHandle {
+    fn accept_speech_with(&self, inbox: Box<dyn SpeechInbox>) {
+        *self
+            .speech_inbox
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(inbox);
+    }
+}
+
+/// The P2P service's inbox: forwards to the inbox the after-meeting worker attaches later, and
+/// refuses speech until then (the sender tries again on its next round).
+struct AttachedSpeechInbox(Arc<Mutex<Option<Box<dyn SpeechInbox>>>>);
+
+impl SpeechInbox for AttachedSpeechInbox {
+    fn receive_part(
+        &mut self,
+        from: &DeviceId,
+        part: SpeechPart,
+    ) -> Result<(), SpeechTransferError> {
+        match self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_mut()
+        {
+            Some(inbox) => inbox.receive_part(from, part),
+            None => Err(SpeechTransferError::Refused),
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl P2pControl for P2pHandle {
     fn snapshot(&self) -> P2pSnapshot {
@@ -398,6 +460,9 @@ pub fn spawn_p2p_task(
     let (network_sender, network_receiver) = mpsc::channel(COMMAND_QUEUE_CAPACITY);
     let (stop_sender, stop_receiver) = oneshot::channel();
     let (remote_sender, remote_receiver) = mpsc::channel(REMOTE_TRANSCRIPTION_QUEUE_CAPACITY);
+    let (speech_sender, speech_receiver) = mpsc::channel(SPEECH_TRANSFER_QUEUE_CAPACITY);
+    let speech_inbox: Arc<Mutex<Option<Box<dyn SpeechInbox>>>> = Arc::new(Mutex::new(None));
+    let service_inbox = AttachedSpeechInbox(Arc::clone(&speech_inbox));
     let database_path = database_path.to_path_buf();
     let worker = std::thread::Builder::new()
         .name("note-taker-p2p".to_owned())
@@ -420,13 +485,14 @@ pub fn spawn_p2p_task(
                     config,
                     hosted_pipeline,
                 );
-                let (mut service, mut network_routes) = match started {
+                let (service, mut network_routes) = match started {
                     Ok(started) => started,
                     Err(error) => {
                         let _ = startup_sender.send(Err(error));
                         return;
                     }
                 };
+                let mut service = service.with_speech_inbox(Box::new(service_inbox));
                 let (snapshot_sender, snapshot_receiver) =
                     watch::channel(snapshot_of(&service, &network_routes));
                 if startup_sender.send(Ok(snapshot_receiver)).is_err() {
@@ -436,10 +502,13 @@ pub fn spawn_p2p_task(
                     &mut service,
                     &mut network_routes,
                     snapshot_sender,
-                    command_receiver,
-                    network_receiver,
-                    remote_receiver,
-                    stop_receiver,
+                    TaskQueues {
+                        commands: command_receiver,
+                        network: network_receiver,
+                        remote_transcriptions: remote_receiver,
+                        speech_transfers: speech_receiver,
+                        stop: stop_receiver,
+                    },
                 )
                 .await;
             });
@@ -453,6 +522,8 @@ pub fn spawn_p2p_task(
         commands: command_sender,
         network_commands: network_sender,
         remote_transcriptions: remote_sender,
+        speech_transfers: speech_sender,
+        speech_inbox,
         snapshots,
         stop: Mutex::new(Some(stop_sender)),
         worker: Mutex::new(Some(worker)),
@@ -558,6 +629,20 @@ fn open_service(
     Ok((service, network_routes))
 }
 
+/// The queues the task reads, filled through its `P2pHandle`.
+struct TaskQueues {
+    /// Commands from the API, CLI and FFI.
+    commands: mpsc::Receiver<P2pRequest>,
+    /// Network-address commands.
+    network: mpsc::Receiver<NetworkRequest>,
+    /// Chunks to transcribe on paired devices.
+    remote_transcriptions: mpsc::Receiver<RemoteTranscriptionJob>,
+    /// Retained speech parts to send to the device that combines a meeting (#88).
+    speech_transfers: mpsc::Receiver<SpeechTransferJob>,
+    /// Fires once to stop the task.
+    stop: oneshot::Receiver<()>,
+}
+
 /// Runs the event loop until `stop` fires, all handles are gone, or the swarm ends.
 ///
 /// Side effects: Drives the swarm, applies events and commands, and publishes snapshots.
@@ -565,11 +650,15 @@ async fn run_service(
     service: &mut DaemonP2pService,
     network_routes: &mut NetworkRoutes,
     snapshot_sender: watch::Sender<P2pSnapshot>,
-    mut command_receiver: mpsc::Receiver<P2pRequest>,
-    mut network_receiver: mpsc::Receiver<NetworkRequest>,
-    mut remote_receiver: mpsc::Receiver<RemoteTranscriptionJob>,
-    mut stop: oneshot::Receiver<()>,
+    queues: TaskQueues,
 ) {
+    let TaskQueues {
+        commands: mut command_receiver,
+        network: mut network_receiver,
+        remote_transcriptions: mut remote_receiver,
+        speech_transfers: mut speech_receiver,
+        mut stop,
+    } = queues;
     let mut change_poll = tokio::time::interval(LOCAL_CHANGE_POLL_INTERVAL);
     change_poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut paired_peer_redial = tokio::time::interval(PAIRED_PEER_REDIAL_INTERVAL);
@@ -601,6 +690,7 @@ async fn run_service(
                 }
             }
             Some(job) = remote_receiver.recv() => service.request_remote_transcription(job),
+            Some(job) = speech_receiver.recv() => service.request_speech_transfer(job),
             request = command_receiver.recv() => {
                 let Some((command, reply_sender)) = request else {
                     break;

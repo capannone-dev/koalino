@@ -73,3 +73,11 @@ pub trait SpeechInbox: Send {
         part: SpeechPart,
     ) -> Result<(), SpeechTransferError>;
 }
+
+/// A running P2P link that carries speech both ways (#88).
+pub trait SpeechLink: SpeechSender {
+    /// Hands the link the inbox that stores speech paired devices send; until then it is refused.
+    ///
+    /// Side effects: Replaces any earlier inbox.
+    fn accept_speech_with(&self, inbox: Box<dyn SpeechInbox>);
+}

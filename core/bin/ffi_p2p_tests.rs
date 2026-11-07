@@ -26,7 +26,13 @@ use crate::{
     },
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
     ports::crypto::EmbeddingCipher,
-    ports::{storage::AttachmentRepository, voice::VoiceVectorDB},
+    ports::{
+        speech_transfer::{
+            SpeechChunk, SpeechInbox, SpeechLink, SpeechPart, SpeechSender, SpeechTransferError,
+        },
+        storage::AttachmentRepository,
+        voice::VoiceVectorDB,
+    },
     storage_composition::open_note_repository,
 };
 
@@ -439,6 +445,75 @@ fn the_composed_task_routes_transcription_and_reports_a_refusal() {
 
     assert!(matches!(answer, Err(TranscriptionError::Unavailable)));
     assert!(started.elapsed() < Duration::from_secs(30));
+}
+
+/// Stores the meetings and part positions it receives.
+struct RecordingInbox(Arc<std::sync::Mutex<Vec<(MeetingId, u32, usize)>>>);
+
+impl SpeechInbox for RecordingInbox {
+    fn receive_part(
+        &mut self,
+        _from: &DeviceId,
+        part: SpeechPart,
+    ) -> Result<(), SpeechTransferError> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push((
+                part.meeting_id,
+                part.part_index,
+                part.chunks[0].samples.len(),
+            ));
+        Ok(())
+    }
+}
+
+fn speech_part() -> SpeechPart {
+    SpeechPart {
+        meeting_id: MeetingId::new("meeting-phone"),
+        part_index: 0,
+        part_count: 1,
+        chunks: vec![SpeechChunk {
+            start_ms: 0,
+            end_ms: 1_000,
+            language: None,
+            samples: zeroize::Zeroizing::new(vec![3; 16_000]),
+        }],
+    }
+}
+
+/// The composed tasks carry a meeting's speech to the paired device that combines it (#88): it
+/// is refused until that device's worker attaches its inbox, then stored and confirmed.
+#[test]
+fn the_composed_task_carries_speech_to_the_combining_device() {
+    let laptop_database = fresh_database("laptop");
+    let phone_database = fresh_database("phone");
+    let (laptop, phone) = pair_tasks(&laptop_database, &phone_database);
+    let laptop_id = laptop.snapshot().status.local_peer_id;
+    let received = Arc::new(std::sync::Mutex::new(Vec::new()));
+
+    // Until the pair key is agreed the part is unreachable; then refused without an inbox.
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let mut before_inbox = phone.send_part(&laptop_id, speech_part());
+    while before_inbox == Err(SpeechTransferError::Unreachable)
+        && std::time::Instant::now() < deadline
+    {
+        std::thread::sleep(Duration::from_millis(200));
+        before_inbox = phone.send_part(&laptop_id, speech_part());
+    }
+    laptop.accept_speech_with(Box::new(RecordingInbox(Arc::clone(&received))));
+    let after_inbox = phone.send_part(&laptop_id, speech_part());
+    laptop.shutdown();
+    phone.shutdown();
+
+    assert_eq!(before_inbox, Err(SpeechTransferError::Refused));
+    assert_eq!(after_inbox, Ok(()));
+    assert_eq!(
+        *received
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        vec![(MeetingId::new("meeting-phone"), 0, 16_000)]
+    );
 }
 
 /// Verifies Settings' addresses are checked, apply live, and survive a restart.

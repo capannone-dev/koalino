@@ -76,6 +76,7 @@ fn main() -> Result<()> {
                 Arc::clone(&embedding_cipher),
                 PipelineConfig::from_environment()?,
                 None,
+                None,
             )
         }),
     );

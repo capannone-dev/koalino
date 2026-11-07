@@ -293,6 +293,7 @@ fn spawned_controller_reports_pipeline_availability() {
             ("NOTE_TAKER_ENABLE_DIARIZATION", "true"),
         ]),
         None,
+        None,
     )
     .unwrap_or_else(|error| panic!("controller should compose: {error:#}"));
 
@@ -315,6 +316,7 @@ fn spawning_without_an_engine_fails() {
         DeviceId::new("device-test"),
         ephemeral_cipher(),
         valid_config(&[]),
+        None,
         None,
     );
 

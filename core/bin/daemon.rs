@@ -17,6 +17,7 @@ use note_taker_core::{
     domain::models::DeviceId,
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
+    ports::speech_transfer::SpeechLink,
     project_commands::ProjectFiles,
     recording_controller::RecordingController,
     server::api::{ServerAppState, build_router},
@@ -96,6 +97,7 @@ async fn main() -> Result<()> {
         p2p_task
             .clone()
             .map(|task| task as Arc<dyn RemoteTranscriptionGateway>),
+        p2p_task.clone().map(|task| task as Arc<dyn SpeechLink>),
     )
     .await;
     // The same folder meeting deletions clean; project resources go in `project-<uuid>` there.
@@ -185,6 +187,7 @@ async fn compose_recording_pipeline(
     device_id: DeviceId,
     embedding_cipher: Arc<dyn note_taker_core::ports::crypto::EmbeddingCipher>,
     remote_gateway: Option<Arc<dyn RemoteTranscriptionGateway>>,
+    speech_link: Option<Arc<dyn SpeechLink>>,
 ) -> Option<RecordingController> {
     let composition = tokio::task::spawn_blocking(move || {
         spawn_recording_controller(
@@ -193,6 +196,7 @@ async fn compose_recording_pipeline(
             embedding_cipher,
             PipelineConfig::from_environment()?,
             remote_gateway,
+            speech_link,
         )
     })
     .await;

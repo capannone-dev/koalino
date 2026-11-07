@@ -56,12 +56,15 @@ use crate::{
         transcription_language::TranscriptionLanguage,
     },
     ports::{
-        ai::TranscriptionEngine, crypto::EmbeddingCipher, remote_transcription::ChunkSamples,
+        ai::TranscriptionEngine,
+        crypto::EmbeddingCipher,
+        remote_transcription::ChunkSamples,
+        speech_transfer::{SpeechLink, SpeechSender},
         storage::NoteRepository,
     },
     recording_controller::{ChunkingMode, RecordingController, TranscriptPass},
     refinement_worker::{
-        EngineFactory, RefinementControl, RefinementWorker, RepositoryFactory,
+        EngineFactory, RefinementControl, RefinementWorker, RepositoryFactory, RetainedSpeechInbox,
         retained_audio_directory,
     },
     storage_composition::open_note_repository,
@@ -803,7 +806,8 @@ fn load_diarization_engine(_config: &PipelineConfig) -> Result<Option<ComposedDi
 ///
 /// Inputs: The SQLite path (the same database the caller already opened), the device ID, the
 /// verified embedding cipher from `open_encrypted_stores`, the pipeline configuration, and the
-/// P2P task to route transcription through (`None` keeps it on this device).
+/// P2P task to route transcription through (`None` keeps it on this device), and the P2P link that
+/// carries retained speech between devices recording one meeting (#88; `None` without P2P).
 /// Outputs: The controller, or an error explaining which dependency is missing.
 /// Side effects: Spawns the worker thread, which selects (and may load) the transcription and
 /// diarization engines and opens its own note-repository, telemetry and voice-store connections; every
@@ -814,6 +818,7 @@ pub fn spawn_recording_controller(
     embedding_cipher: Arc<dyn EmbeddingCipher>,
     config: PipelineConfig,
     remote_gateway: Option<Arc<dyn RemoteTranscriptionGateway>>,
+    speech_link: Option<Arc<dyn SpeechLink>>,
 ) -> Result<RecordingController> {
     let chunk_audio_store = Arc::new(ChunkAudioStore::new());
     let engine_audio_store = Arc::clone(&chunk_audio_store);
@@ -889,57 +894,97 @@ pub fn spawn_recording_controller(
     )
     .with_default_language(Some(default_language));
     Ok(
-        match start_transcript_pass(database_path, device_id, pass_cipher, &pass_config) {
+        match start_transcript_pass(
+            database_path,
+            device_id,
+            pass_cipher,
+            &pass_config,
+            speech_link,
+        ) {
             Some(transcript_pass) => controller.with_transcript_pass(transcript_pass),
             None => controller,
         },
     )
 }
 
-/// Starts the after-meeting transcript pass (#87) when it is on and a local model exists.
+/// Starts the after-meeting worker (#87, #88) when the pass is on.
 ///
 /// Inputs: The database (its folder holds `retained-audio`), this device, the database key's
-/// cipher, and the configuration.
-/// Outputs: The pass's store and control for the recorder, or `None` when the pass is off, this
-/// build has no local engine, no model is configured, or its thread cannot start (recordings then
-/// keep nothing).
+/// cipher, the configuration, and the P2P link (`None` without P2P).
+/// Outputs: The pass's store and control for the recorder, or `None` when the pass is off, there
+/// is neither a local model nor a P2P link, or its thread cannot start (recordings then keep
+/// nothing).
 /// Side effects: Spawns the worker thread, which at once looks for meetings left from earlier runs.
-/// A phone runs the pass only while charging, as the platform reports it.
+/// With a local model the worker runs passes (a phone only while charging, as the platform
+/// reports it); without one but with P2P, it keeps speech only to send it to a paired device
+/// that combines the meeting. With P2P, the link sends this device's speech and stores the
+/// speech paired devices send here.
 pub fn start_transcript_pass(
     database_path: &Path,
     device_id: DeviceId,
     embedding_cipher: Arc<dyn EmbeddingCipher>,
     config: &PipelineConfig,
+    speech_link: Option<Arc<dyn SpeechLink>>,
 ) -> Option<TranscriptPass> {
-    if !config.transcript_pass() || !cfg!(feature = "local-ai") {
+    if !config.transcript_pass() {
         return None;
     }
-    let model_path = config.transcript_pass_model_path()?.to_path_buf();
+    let model_path = config
+        .transcript_pass_model_path()
+        .filter(|_| cfg!(feature = "local-ai"))
+        .map(Path::to_path_buf);
+    if model_path.is_none() && speech_link.is_none() {
+        return None;
+    }
     let store = Arc::new(RetainedAudioStore::new(
         retained_audio_directory(database_path),
         Arc::clone(&embedding_cipher),
     ));
     let control = Arc::new(RefinementControl::new(cfg!(target_os = "android")));
-    let efficient_gpu = config.efficient_gpu;
-    let make_engine: EngineFactory = Box::new(move |audio_source| {
-        transcript_pass_engine(&model_path, efficient_gpu, audio_source)
-    });
     let repository_path = database_path.to_path_buf();
     let repository_device = device_id.clone();
-    let open_repository: RepositoryFactory = Box::new(move || {
-        Ok(Box::new(open_note_repository(
-            &repository_path,
-            repository_device.clone(),
-            Arc::clone(&embedding_cipher),
-        )?) as Box<dyn NoteRepository>)
-    });
-    let worker = RefinementWorker::new(
-        Arc::clone(&store),
-        Arc::clone(&control),
-        make_engine,
-        open_repository,
-        device_id,
-    );
+    let repository_opener = move || -> RepositoryFactory {
+        let repository_path = repository_path.clone();
+        let repository_device = repository_device.clone();
+        let embedding_cipher = Arc::clone(&embedding_cipher);
+        Box::new(move || {
+            Ok(Box::new(open_note_repository(
+                &repository_path,
+                repository_device.clone(),
+                Arc::clone(&embedding_cipher),
+            )?) as Box<dyn NoteRepository>)
+        })
+    };
+    let worker = match model_path {
+        Some(model_path) => {
+            let efficient_gpu = config.efficient_gpu;
+            let make_engine: EngineFactory = Box::new(move |audio_source| {
+                transcript_pass_engine(&model_path, efficient_gpu, audio_source)
+            });
+            RefinementWorker::new(
+                Arc::clone(&store),
+                Arc::clone(&control),
+                make_engine,
+                repository_opener(),
+                device_id.clone(),
+            )
+        }
+        None => RefinementWorker::without_pass(
+            Arc::clone(&store),
+            Arc::clone(&control),
+            repository_opener(),
+            device_id.clone(),
+        ),
+    };
+    if let Some(link) = speech_link {
+        link.accept_speech_with(Box::new(RetainedSpeechInbox::new(
+            Arc::clone(&store),
+            repository_opener(),
+            device_id,
+            Arc::clone(&control),
+        )));
+        control.set_speech_sender(link as Arc<dyn SpeechSender>);
+    }
     match worker.spawn() {
         Ok(_) => Some(TranscriptPass { store, control }),
         Err(error) => {

@@ -436,6 +436,9 @@ impl FfiRuntime {
                 remote_gateway
                     .clone()
                     .map(|task| task as Arc<dyn RemoteTranscriptionGateway>),
+                remote_gateway
+                    .clone()
+                    .map(|task| task as Arc<dyn crate::ports::speech_transfer::SpeechLink>),
             )
         });
         let mut runtime = Self::from_parts(
