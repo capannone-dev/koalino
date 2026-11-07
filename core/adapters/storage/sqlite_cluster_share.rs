@@ -13,6 +13,7 @@
 //! synced before the share), so a resolved speaker's audio never comes back. This child
 //! module of `sqlite_adapter` never logs embeddings or audio.
 
+use crate::adapters::storage::sqlite_adapter::WriteTransaction;
 use rusqlite::{OptionalExtension, params};
 use uuid::Uuid;
 
@@ -181,7 +182,7 @@ impl SqliteNoteRepository {
 
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin the cluster import", error))?;
         let meeting_exists: bool = transaction
             .query_row(

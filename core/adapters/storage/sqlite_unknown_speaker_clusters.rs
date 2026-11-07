@@ -7,6 +7,7 @@
 //! cluster-and-chunk IDs) and never logged. This child module of `sqlite_adapter`
 //! also migrates pre-#28 databases by adding the clip and segment cluster-link columns.
 
+use crate::adapters::storage::sqlite_adapter::WriteTransaction;
 use rusqlite::{Connection, OptionalExtension, params};
 use uuid::Uuid;
 
@@ -113,7 +114,7 @@ impl SqliteNoteRepository {
         )?;
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin cluster transaction", error))?;
         let changed_cluster_rows = transaction
             .execute(
@@ -181,7 +182,7 @@ impl SqliteNoteRepository {
         )?;
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin cluster replacement", error))?;
         let changed_cluster_rows = transaction
             .execute(
@@ -254,7 +255,7 @@ impl SqliteNoteRepository {
         let cluster_id = cluster_id.to_string();
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin cluster deletion", error))?;
         for statement in [
             "DELETE FROM unassigned_voice_clips WHERE cluster_id = ?1",
@@ -381,7 +382,7 @@ impl SqliteNoteRepository {
     ) -> Result<(), StorageError> {
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin cluster resolution", error))?;
         if let Some(document_codec) = self.document_codec.as_deref() {
             let meeting_id: Option<String> = transaction

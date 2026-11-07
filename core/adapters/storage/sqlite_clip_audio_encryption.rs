@@ -6,6 +6,7 @@
 //! Older databases gain the column with default `0`, and their rows are sealed once, in one
 //! transaction, when the adapter opens. Reads accept only sealed audio. Audio is never logged.
 
+use crate::adapters::storage::sqlite_adapter::WriteTransaction;
 use rusqlite::{Connection, params};
 
 use super::sqlite_adapter::sqlite_error;
@@ -80,7 +81,7 @@ pub(super) fn prepare_clip_audio(
             .map_err(|error| sqlite_error("unable to add review clip audio format column", error))?;
     }
     let transaction = sqlite_connection
-        .unchecked_transaction()
+        .write_transaction()
         .map_err(|error| sqlite_error("unable to begin review clip migration", error))?;
     let legacy_clips = {
         let mut statement = transaction

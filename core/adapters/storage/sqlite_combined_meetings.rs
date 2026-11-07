@@ -11,6 +11,7 @@
 //! | `combine_on` | the device that combines their audio |
 //! | `kept_apart_from` | IDs of meetings split from it, one per line, or `NULL` |
 
+use crate::adapters::storage::sqlite_adapter::WriteTransaction;
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::{
@@ -160,7 +161,7 @@ impl SqliteNoteRepository {
         };
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin combining meetings", error))?;
         let document = read_document(&transaction, meeting_id)?;
         let changed = change(document_codec, &document)?;

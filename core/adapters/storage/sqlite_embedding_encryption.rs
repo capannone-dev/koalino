@@ -8,6 +8,7 @@
 //! accepted. The adapters only call the port; key handling and AES-GCM live in
 //! `application::crypto`.
 
+use crate::adapters::storage::sqlite_adapter::WriteTransaction;
 use rusqlite::{Connection, params};
 
 use super::sqlite_adapter::{decode_embedding, sqlite_error};
@@ -141,7 +142,7 @@ impl EmbeddingColumn {
         cipher: &dyn EmbeddingCipher,
     ) -> Result<usize, StorageError> {
         let transaction = sqlite_connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin embedding migration", error))?;
         let legacy_rows = {
             let mut statement = transaction

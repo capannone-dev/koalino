@@ -20,6 +20,7 @@
 //! Embeddings are encrypted at rest (Issue #31) and never logged. Opening the store re-encrypts
 //! any plaintext variant written before #31 (see `sqlite_embedding_encryption`).
 
+use crate::adapters::storage::sqlite_adapter::WriteTransaction;
 use std::{path::Path, sync::Arc, time::Duration};
 
 use chrono::Utc;
@@ -346,7 +347,7 @@ impl VoiceVectorDB for SqliteVoiceVectorDB {
     fn delete_identity(&self, identity_id: Uuid) -> Result<(), StorageError> {
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin identity deletion", error))?;
         transaction
             .execute(

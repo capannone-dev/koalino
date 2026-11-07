@@ -66,6 +66,26 @@ use crate::{
 /// process such as the daemon) to the same database file.
 const BUSY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// Opens SQLite write transactions that take the write lock at once (`BEGIN IMMEDIATE`).
+///
+/// A deferred transaction that reads and then writes cannot wait for another connection doing
+/// the same: SQLite fails one of them at once ("database is locked") to avoid a deadlock. The
+/// pipeline, the P2P task, the after-meeting worker and the apps each have their own connection,
+/// so every write transaction here starts immediate and waits up to `BUSY_TIMEOUT` instead.
+pub(crate) trait WriteTransaction {
+    /// Begins an immediate transaction on a shared connection.
+    ///
+    /// Outputs: The transaction (rolled back on drop unless committed), or `SQLITE_BUSY` after
+    /// the busy timeout. Side effects: Holds the database's write lock until it ends.
+    fn write_transaction(&self) -> rusqlite::Result<rusqlite::Transaction<'_>>;
+}
+
+impl WriteTransaction for rusqlite::Connection {
+    fn write_transaction(&self) -> rusqlite::Result<rusqlite::Transaction<'_>> {
+        rusqlite::Transaction::new_unchecked(self, rusqlite::TransactionBehavior::Immediate)
+    }
+}
+
 /// Names the one-time copy of pre-#43 rows into meeting documents in `storage_migrations`.
 const DOCUMENT_MIGRATION_NAME: &str = "meeting_documents_v1";
 
@@ -278,7 +298,7 @@ impl SqliteNoteRepository {
         };
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin document migration", error))?;
         transaction
             .execute_batch(
@@ -679,7 +699,7 @@ impl NoteRepository for SqliteNoteRepository {
         }
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin segment transaction", error))?;
         if let Some(document_codec) = self.document_codec.as_deref() {
             let document = document_codec
@@ -798,7 +818,7 @@ impl NoteRepository for SqliteNoteRepository {
         let document = document_codec.with_origin(initial_crdt_document, &origin)?;
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin meeting creation", error))?;
         transaction
             .execute(
@@ -835,7 +855,7 @@ impl NoteRepository for SqliteNoteRepository {
             let meeting_id = transcript.meeting_id();
             let transaction = self
                 .connection
-                .unchecked_transaction()
+                .write_transaction()
                 .map_err(|error| sqlite_error("unable to begin transcript transaction", error))?;
             let document = document_codec.with_transcript(
                 &read_document(&transaction, meeting_id)?,
@@ -926,7 +946,7 @@ impl NoteRepository for SqliteNoteRepository {
     ) -> Result<(), StorageError> {
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin document transaction", error))?;
         write_document(&transaction, meeting_id, crdt_document)?;
         // The document may carry a peer's changes; the index follows it.
@@ -1134,7 +1154,7 @@ impl NoteRepository for SqliteNoteRepository {
         };
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin recording a language", error))?;
         let document = read_document(&transaction, meeting_id)?;
         let updated_document =

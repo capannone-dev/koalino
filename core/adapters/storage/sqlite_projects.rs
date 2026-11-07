@@ -9,6 +9,7 @@
 //! any project. Times are stored as RFC 3339 text with milliseconds. This child module of
 //! `sqlite_adapter` never logs names.
 
+use crate::adapters::storage::sqlite_adapter::WriteTransaction;
 use chrono::{DateTime, SecondsFormat, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use sha2::{Digest, Sha256};
@@ -224,7 +225,7 @@ impl ProjectRepository for SqliteNoteRepository {
     fn delete_project(&self, project_id: ProjectId) -> Result<bool, StorageError> {
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin a project deletion", error))?;
         let existed = remove_project(&transaction, project_id, Utc::now())?;
         transaction
@@ -336,7 +337,7 @@ impl ProjectRepository for SqliteNoteRepository {
         }
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin moving a meeting", error))?;
         let document = read_document(&transaction, meeting_id)?;
         let moved = document_codec.with_project(&document, project_id)?;
@@ -436,7 +437,7 @@ impl ProjectLibrarySync for SqliteNoteRepository {
     ) -> Result<ProjectLibraryImport, StorageError> {
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin a project merge", error))?;
         let mut outcome = ProjectLibraryImport::default();
         for tombstone in &library.tombstones {

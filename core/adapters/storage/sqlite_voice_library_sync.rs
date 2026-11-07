@@ -12,6 +12,7 @@
 //! embeddings arrive decrypted from the pair-key layer and are sealed again with this database's
 //! cipher. This child module of `sqlite_voice_vector_db` never logs embeddings or names.
 
+use crate::adapters::storage::sqlite_adapter::WriteTransaction;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
 use sha2::{Digest, Sha256};
@@ -228,7 +229,7 @@ impl VoiceLibrarySync for SqliteVoiceVectorDB {
 
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin the voice merge", error))?;
         let mut changed = false;
         for tombstone in &library.tombstones {

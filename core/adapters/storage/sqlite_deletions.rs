@@ -10,6 +10,7 @@
 //! This child module of `sqlite_adapter` removes database rows only. Attachment files and review
 //! audio live in folders the composition roots own, so they remove those.
 
+use crate::adapters::storage::sqlite_adapter::WriteTransaction;
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension, params};
 use uuid::Uuid;
@@ -233,7 +234,7 @@ impl SqliteNoteRepository {
     pub(super) fn delete_resource_rows(&self, attachment_id: Uuid) -> Result<bool, StorageError> {
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin resource deletion", error))?;
         let removed = remove_resource(&transaction, attachment_id, false)?;
         transaction
@@ -254,7 +255,7 @@ impl SqliteNoteRepository {
     pub(super) fn delete_meeting_rows(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin meeting deletion", error))?;
         let existed = remove_meeting(&transaction, meeting_id, false)?;
         transaction
@@ -267,7 +268,7 @@ impl SqliteNoteRepository {
     pub(super) fn delete_unknown_voice_rows(&self, cluster_id: Uuid) -> Result<bool, StorageError> {
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin voice deletion", error))?;
         let existed = remove_cluster(&transaction, cluster_id, false)?;
         transaction
@@ -318,7 +319,7 @@ impl SqliteNoteRepository {
     ) -> Result<AppliedDeletions, StorageError> {
         let transaction = self
             .connection
-            .unchecked_transaction()
+            .write_transaction()
             .map_err(|error| sqlite_error("unable to begin applying deletions", error))?;
         let mut applied = AppliedDeletions::default();
         for meeting_id in &records.meeting_ids {

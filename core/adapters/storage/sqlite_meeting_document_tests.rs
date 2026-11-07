@@ -281,3 +281,54 @@ fn transcription_languages_reach_the_metadata_and_paired_devices() {
         .unwrap_or_else(|error| panic!("peer meeting must be created: {error}"));
     assert_eq!(metadata_languages(&phone), vec!["it", "en"]);
 }
+
+/// Two connections that each read and then write must wait for each other, not fail: a recording
+/// saves its transcript while the P2P task applies a synced change (#88 made this common).
+#[test]
+fn a_write_waits_for_another_connection_s_write_instead_of_failing() {
+    let directory = std::env::temp_dir().join(format!("doc-concurrency-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap_or_else(|error| panic!("{error}"));
+    let path = directory.join("notes.sqlite3");
+    let meeting_id = meeting();
+    device_repository(&path, "device-a")
+        .create_meeting(&meeting_id, &AutoCommit::new().save())
+        .unwrap_or_else(|error| panic!("{error}"));
+    let segment = |text: &str| {
+        vec![TranscriptSegment::new(
+            meeting_id.clone(),
+            0,
+            1_000,
+            None,
+            text,
+        )]
+    };
+
+    let failures = std::thread::scope(|scope| {
+        let writers: Vec<_> = ["uno", "due"]
+            .into_iter()
+            .map(|text| {
+                let segments = segment(text);
+                let meeting_id = meeting_id.clone();
+                let path = &path;
+                scope.spawn(move || {
+                    // Its own connection, as the pipeline and the P2P task each have.
+                    let repository = device_repository(path, "device-a");
+                    (0..40)
+                        .filter(|_| {
+                            repository
+                                .save_transcript_segments(&meeting_id, &segments)
+                                .is_err()
+                        })
+                        .count()
+                })
+            })
+            .collect();
+        writers
+            .into_iter()
+            .map(|writer| writer.join().unwrap_or(usize::MAX))
+            .sum::<usize>()
+    });
+    let _ = std::fs::remove_dir_all(&directory);
+
+    assert_eq!(failures, 0, "concurrent writes failed instead of waiting");
+}
