@@ -25,6 +25,9 @@ mod cluster_share;
 #[path = "sqlite_deletions.rs"]
 mod deletions;
 
+/// Indexes meetings folded into another device's recording of the same meeting (#88).
+#[path = "sqlite_combined_meetings.rs"]
+mod combined_meetings;
 /// Stores projects, indexes their meetings, and exchanges them with paired devices (Issue #85).
 #[path = "sqlite_projects.rs"]
 mod projects;
@@ -51,8 +54,10 @@ use crate::{
     },
     ports::{
         crypto::EmbeddingCipher,
-        meeting_document::{MeetingDocumentCodec, MeetingOrigin, MeetingProjection},
-        storage::{AttachmentRepository, DocumentChanges, NoteRepository},
+        meeting_document::{
+            MeetingCombination, MeetingDocumentCodec, MeetingOrigin, MeetingProjection,
+        },
+        storage::{AttachmentRepository, DocumentChanges, MeetingRecording, NoteRepository},
         telemetry::MetricsRepository,
     },
 };
@@ -213,6 +218,7 @@ impl SqliteNoteRepository {
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
         deletions::initialize_deletion_schema(&sqlite_connection)?;
         projects::initialize_project_schema(&sqlite_connection)?;
+        combined_meetings::initialize_combination_schema(&sqlite_connection)?;
         for embedding_column in [
             &CLIP_EMBEDDINGS,
             &CLUSTER_REPRESENTATIVE_EMBEDDINGS,
@@ -538,6 +544,41 @@ impl NoteRepository for SqliteNoteRepository {
                     .map_err(|error| sqlite_error("unable to decode meeting identifier", error))
             })
             .collect()
+    }
+
+    fn meeting_recordings(&self) -> Result<Vec<MeetingRecording>, StorageError> {
+        self.read_meeting_recordings()
+    }
+
+    fn combine_meeting(
+        &self,
+        meeting_id: &MeetingId,
+        combination: &MeetingCombination,
+    ) -> Result<(), StorageError> {
+        if meeting_id == &combination.into {
+            return Err(StorageError::Rejected {
+                reason: String::from("a meeting cannot be combined with itself"),
+            });
+        }
+        self.read_combination(&combination.into)?;
+        self.rewrite_combination(meeting_id, |codec, document| {
+            codec.with_combination(document, Some(combination))
+        })?;
+        self.log_operation("combine_meeting", meeting_id);
+        Ok(())
+    }
+
+    fn split_meeting(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        let Some(into) = self.read_combination(meeting_id)? else {
+            return Ok(false);
+        };
+        self.rewrite_combination(meeting_id, |codec, document| {
+            codec
+                .with_combination(document, None)
+                .and_then(|document| codec.with_kept_apart(&document, &into))
+        })?;
+        self.log_operation("split_meeting", meeting_id);
+        Ok(true)
     }
 
     /// Reads a meeting's SQLite creation timestamp, title and transcription languages as
@@ -1510,6 +1551,7 @@ fn apply_projection(
             ],
         )
         .map_err(|error| sqlite_error("unable to project the transcription languages", error))?;
+    combined_meetings::project_combination(connection, meeting_id, projection)?;
     for (cluster_id, identity_id) in &projection.cluster_resolutions {
         let cluster_key = cluster_id.to_string();
         connection

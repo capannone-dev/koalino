@@ -3,7 +3,8 @@
 //! Since Issue #43 the Automerge document is the source of truth for everything that syncs: the
 //! meeting's origin, the transcript, the transcript segments, (Issue #50) which identity each
 //! unknown-speaker cluster was named as, (Issue #85) the project it belongs to, and the languages
-//! its speech was transcribed in. The SQLite rows are an index
+//! its speech was transcribed in, and (#88) whether it was folded into another device's recording
+//! of the same meeting. The SQLite rows are an index
 //! derived from the document. Storage adapters receive an implementation of this port (as they
 //! receive `EmbeddingCipher`). They call it inside their own transactions, so the document and the
 //! index never diverge, and they never depend on the CRDT library.
@@ -27,6 +28,19 @@ pub struct MeetingOrigin {
     pub acquisition_device_id: DeviceId,
 }
 
+/// That a meeting is another device's recording of a meeting recorded here too, folded into it
+/// (#88). Only one of the two is listed; the pass combines their audio.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MeetingCombination {
+    /// The meeting this one was folded into: the recording that started first.
+    pub into: MeetingId,
+    /// Where this recording sits on that meeting's timeline: time `t` here is `t + offset_ms`
+    /// there.
+    pub offset_ms: i64,
+    /// The device that combines the two recordings' audio; the others send it theirs.
+    pub combine_on: DeviceId,
+}
+
 /// The index-relevant contents of a meeting document. `None` means the document does not hold that
 /// field yet, so the index must keep its current value.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -47,6 +61,11 @@ pub struct MeetingProjection {
     /// The languages the meeting's speech was transcribed in, in order of first use; empty when
     /// none was recorded. Languages are only ever added, so the index always takes this list.
     pub transcription_languages: Vec<TranscriptionLanguage>,
+    /// The meeting this one was folded into (#88). Like the project, `None` is a value: the
+    /// meeting stands on its own.
+    pub combined_into: Option<MeetingCombination>,
+    /// Meetings the owner split from this one, which must not be joined to it again, by ID.
+    pub kept_apart_from: Vec<MeetingId>,
 }
 
 /// Reads and edits serialized meeting documents without exposing the CRDT library.
@@ -112,6 +131,23 @@ pub trait MeetingDocumentCodec: Send + Sync {
         language: TranscriptionLanguage,
         first_used_at_ms: u64,
     ) -> Result<Vec<u8>, StorageError>;
+
+    /// Folds the meeting into another recording of it, or unfolds it for `None` (#88).
+    ///
+    /// Inputs: The serialized document and the combination. Outputs: The updated document bytes
+    /// (unchanged when that combination is already recorded), or a storage error. Two devices
+    /// recording the same combination at once converge on one. Side effects: None.
+    fn with_combination(
+        &self,
+        document: &[u8],
+        combination: Option<&MeetingCombination>,
+    ) -> Result<Vec<u8>, StorageError>;
+
+    /// Records that `other` was split from this meeting, so they are never joined again.
+    ///
+    /// Inputs: The serialized document and the other meeting. Outputs: The updated document bytes,
+    /// or a storage error. Side effects: None.
+    fn with_kept_apart(&self, document: &[u8], other: &MeetingId) -> Result<Vec<u8>, StorageError>;
 
     /// Reads the index-relevant fields of a document.
     ///

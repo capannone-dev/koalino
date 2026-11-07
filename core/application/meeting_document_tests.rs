@@ -3,7 +3,8 @@
 //! resolutions (Issue #50) round-trip, decide the speaker of their segments, and converge when
 //! two devices name the same cluster at once. A meeting's project (Issue #85) round-trips, can be
 //! cleared, and converges when two devices move the meeting at once. The languages a meeting was
-//! transcribed in are kept in the order they were first used, and an unknown code is skipped.
+//! transcribed in are kept in the order they were first used, and an unknown code is skipped. A
+//! meeting folded into another recording of it (#88) round-trips, converges, and can be split.
 
 use automerge::{AutoCommit, ROOT, ReadDoc, transaction::Transactable};
 use chrono::{TimeZone, Utc};
@@ -16,7 +17,9 @@ use crate::{
         projects::ProjectId,
         transcription_language::TranscriptionLanguage,
     },
-    ports::meeting_document::{MeetingDocumentCodec, MeetingOrigin, MeetingProjection},
+    ports::meeting_document::{
+        MeetingCombination, MeetingDocumentCodec, MeetingOrigin, MeetingProjection,
+    },
 };
 
 /// The meeting all fixtures belong to.
@@ -426,4 +429,87 @@ fn transcription_languages_from_two_devices_merge() {
         language_codes(&project(&laptop.save())),
         vec!["it", "es", "fr"]
     );
+}
+
+/// Folds the fixture meeting into `combination`'s meeting (or unfolds it), panicking on failure.
+fn with_combination(document: &[u8], combination: Option<&MeetingCombination>) -> Vec<u8> {
+    AutomergeMeetingDocumentCodec
+        .with_combination(document, combination)
+        .unwrap_or_else(|error| panic!("the combination must be written: {error}"))
+}
+
+/// The fixture meeting folded into the laptop's recording, combined on `device`.
+fn combination(device: &str) -> MeetingCombination {
+    MeetingCombination {
+        into: MeetingId::new("meeting-laptop"),
+        offset_ms: -2_500,
+        combine_on: DeviceId::new(device),
+    }
+}
+
+/// A meeting folded into another recording of it projects the fold, and Split clears it (#88).
+#[test]
+fn a_meetings_combination_round_trips_and_clears() {
+    let folded = with_combination(&empty_document(), Some(&combination("laptop")));
+    assert_eq!(project(&folded).combined_into, Some(combination("laptop")));
+    assert_eq!(
+        with_combination(&folded, Some(&combination("laptop"))),
+        folded
+    );
+
+    let split = with_combination(&folded, None);
+    assert_eq!(project(&split).combined_into, None);
+}
+
+/// Meetings the owner split from this one are remembered, each once, so they are not joined again.
+#[test]
+fn meetings_kept_apart_accumulate() {
+    let codec = AutomergeMeetingDocumentCodec;
+    let document = codec
+        .with_kept_apart(&empty_document(), &MeetingId::new("meeting-b"))
+        .and_then(|document| codec.with_kept_apart(&document, &MeetingId::new("meeting-a")))
+        .and_then(|document| codec.with_kept_apart(&document, &MeetingId::new("meeting-b")))
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(
+        project(&document).kept_apart_from,
+        vec![MeetingId::new("meeting-a"), MeetingId::new("meeting-b")]
+    );
+}
+
+/// Two devices that both found the same pair, each choosing who combines, settle on one choice.
+#[test]
+fn concurrent_combinations_converge_on_one_device() {
+    let shared = empty_document();
+    let first = with_combination(&shared, Some(&combination("laptop")));
+    let second = with_combination(&shared, Some(&combination("phone")));
+
+    let mut one_way = AutoCommit::load(&first).unwrap_or_else(|error| panic!("{error}"));
+    let mut other = AutoCommit::load(&second).unwrap_or_else(|error| panic!("{error}"));
+    one_way
+        .merge(&mut other)
+        .unwrap_or_else(|error| panic!("{error}"));
+    let mut other_way = AutoCommit::load(&second).unwrap_or_else(|error| panic!("{error}"));
+    let mut first_copy = AutoCommit::load(&first).unwrap_or_else(|error| panic!("{error}"));
+    other_way
+        .merge(&mut first_copy)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let winner = project(&one_way.save()).combined_into;
+    assert!(winner.is_some());
+    assert_eq!(winner, project(&other_way.save()).combined_into);
+}
+
+/// A peer's combination missing a field is ignored, so the meeting stays listed.
+#[test]
+fn an_incomplete_combination_is_ignored() {
+    let mut document = AutoCommit::new();
+    let combination = document
+        .put_object(ROOT, "combined_into", automerge::ObjType::Map)
+        .unwrap_or_else(|error| panic!("{error}"));
+    document
+        .put(&combination, "meeting_id", "meeting-laptop")
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(project(&document.save()).combined_into, None);
 }

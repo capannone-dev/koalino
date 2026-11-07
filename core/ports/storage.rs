@@ -4,13 +4,16 @@ use crate::domain::{
     errors::StorageError,
     models::{
         AppliedDeletions, Attachment, ClusterDigest, ClusterShare, ClusterShareImport,
-        DeletionRecords, MeetingId, MeetingMetadata, MeetingTitle, MeetingWindow, Transcript,
-        TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
+        DeletionRecords, DeviceId, MeetingId, MeetingMetadata, MeetingTitle, MeetingWindow,
+        Transcript, TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk,
+        UnknownSpeakerCluster,
     },
     transcription_language::TranscriptionLanguage,
 };
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
+
+use crate::ports::meeting_document::MeetingCombination;
 
 /// Persists meeting text in an offline-capable repository.
 pub trait NoteRepository {
@@ -40,6 +43,40 @@ pub trait NoteRepository {
         _first_used_at_ms: u64,
     ) -> Result<(), StorageError> {
         Ok(())
+    }
+
+    /// Lists every meeting with what decides whether two of them are one meeting recorded on two
+    /// devices (#88).
+    ///
+    /// Outputs: The meetings, oldest first, or a storage error. Repositories without meeting
+    /// documents list none.
+    /// Side effects: Reads meeting metadata only.
+    fn meeting_recordings(&self) -> Result<Vec<MeetingRecording>, StorageError> {
+        Ok(Vec::new())
+    }
+
+    /// Folds `meeting_id` into another device's recording of the same meeting (#88).
+    ///
+    /// Inputs: The meeting to fold and the combination (the meeting it joins, the clock offset,
+    /// and the device that combines their audio).
+    /// Outputs: Success, a rejection for an unknown meeting, or a storage error. Repositories
+    /// without meeting documents refuse.
+    /// Side effects: Writes the meeting's CRDT document and index, which syncs to paired devices.
+    fn combine_meeting(
+        &self,
+        _meeting_id: &MeetingId,
+        _combination: &MeetingCombination,
+    ) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
+    }
+
+    /// Splits a folded meeting from the meeting it joined, so both are listed again and never
+    /// joined again (#88).
+    ///
+    /// Inputs: The folded meeting. Outputs: Whether it was folded, or a storage error.
+    /// Side effects: Writes the meeting's CRDT document and index, which syncs to paired devices.
+    fn split_meeting(&self, _meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        Err(StorageError::Unavailable)
     }
 
     /// Deletes a meeting and everything it holds, and records that it was deleted.
@@ -370,6 +407,22 @@ pub trait AttachmentRepository {
     fn get_unlinked_attachments(&self) -> Result<Vec<Attachment>, StorageError>;
 }
 
+/// One meeting as a recording: when and where it was recorded and how it relates to other
+/// devices' recordings of the same meeting (#88).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MeetingRecording {
+    /// The meeting.
+    pub meeting_id: MeetingId,
+    /// When its recording started, on its device's clock.
+    pub created_at: DateTime<Utc>,
+    /// The device that recorded it.
+    pub acquisition_device_id: DeviceId,
+    /// The meeting it was folded into, if any.
+    pub combined_into: Option<MeetingCombination>,
+    /// Meetings the owner split from it.
+    pub kept_apart_from: Vec<MeetingId>,
+}
+
 /// Meetings whose documents changed since a revision (Issue #43).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocumentChanges {
@@ -419,6 +472,22 @@ where
 
     fn list_meeting_ids(&self) -> Result<Vec<MeetingId>, StorageError> {
         (*self).list_meeting_ids()
+    }
+
+    fn meeting_recordings(&self) -> Result<Vec<MeetingRecording>, StorageError> {
+        (**self).meeting_recordings()
+    }
+
+    fn combine_meeting(
+        &self,
+        meeting_id: &MeetingId,
+        combination: &MeetingCombination,
+    ) -> Result<(), StorageError> {
+        (**self).combine_meeting(meeting_id, combination)
+    }
+
+    fn split_meeting(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        (**self).split_meeting(meeting_id)
     }
 
     fn document_changes_since(&self, after_revision: u64) -> Result<DocumentChanges, StorageError> {

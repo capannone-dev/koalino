@@ -15,6 +15,9 @@
 //! both devices address the same segment, and each field is its own CRDT register: a speaker
 //! relink and a text fix made on different devices merge.
 //!
+//! | `combined_into` | map `{ meeting_id: str, offset_ms: int, combine_on: str }` (#88): the meeting this recording was folded into, its offset on that meeting's timeline, and the device that combines their audio; absent when it stands alone |
+//! | `kept_apart_from` | map from the ID of a meeting the owner split from this one to `true` (#88) |
+//!
 //! `cluster_resolutions` (Issue #50) maps an unknown-speaker cluster ID to the identity ID it was
 //! named as, both hyphenated UUID strings. One register per cluster, so two devices naming the
 //! same cluster at once converge on Automerge's winner. A segment whose `unknown_cluster_id` is
@@ -36,7 +39,9 @@ use crate::{
         projects::ProjectId,
         transcription_language::TranscriptionLanguage,
     },
-    ports::meeting_document::{MeetingDocumentCodec, MeetingOrigin, MeetingProjection},
+    ports::meeting_document::{
+        MeetingCombination, MeetingDocumentCodec, MeetingOrigin, MeetingProjection,
+    },
 };
 
 /// Root key of the origin map.
@@ -55,6 +60,11 @@ const PROJECT_KEY: &str = "project_id";
 /// its first chunk. A map, not a list, so two devices adding languages merge without duplicates;
 /// the offsets give the order.
 const TRANSCRIPTION_LANGUAGES_KEY: &str = "transcription_languages";
+/// Root key of the meeting this recording was folded into (#88). Its fields are registers, so two
+/// devices recording the fold at once converge.
+const COMBINED_INTO_KEY: &str = "combined_into";
+/// Root key of the meetings split from this one (#88): a map, so splits on two devices merge.
+const KEPT_APART_KEY: &str = "kept_apart_from";
 
 /// The Automerge implementation of `MeetingDocumentCodec`.
 #[derive(Clone, Copy, Debug, Default)]
@@ -228,6 +238,76 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
         Ok(automerge_document.save())
     }
 
+    fn with_combination(
+        &self,
+        document: &[u8],
+        combination: Option<&MeetingCombination>,
+    ) -> Result<Vec<u8>, StorageError> {
+        let mut automerge_document = load(document)?;
+        let stored = match automerge_document.get(ROOT, COMBINED_INTO_KEY) {
+            Ok(Some((Value::Object(ObjType::Map), object))) => Some(object),
+            _ => None,
+        };
+        match combination {
+            Some(combination) => {
+                let object = match stored {
+                    Some(object) => object,
+                    None => automerge_document
+                        .put_object(ROOT, COMBINED_INTO_KEY, ObjType::Map)
+                        .map_err(|error| crdt_error("unable to write the combination", error))?,
+                };
+                put_if_changed(
+                    &mut automerge_document,
+                    &object,
+                    "meeting_id",
+                    ScalarValue::Str(combination.into.as_str().into()),
+                )?;
+                put_if_changed(
+                    &mut automerge_document,
+                    &object,
+                    "offset_ms",
+                    ScalarValue::Int(combination.offset_ms),
+                )?;
+                put_if_changed(
+                    &mut automerge_document,
+                    &object,
+                    "combine_on",
+                    ScalarValue::Str(combination.combine_on.as_str().into()),
+                )?;
+            }
+            None => {
+                if automerge_document
+                    .get(ROOT, COMBINED_INTO_KEY)
+                    .ok()
+                    .flatten()
+                    .is_some()
+                {
+                    automerge_document
+                        .delete(ROOT, COMBINED_INTO_KEY)
+                        .map_err(|error| crdt_error("unable to clear the combination", error))?;
+                }
+            }
+        }
+        Ok(automerge_document.save())
+    }
+
+    fn with_kept_apart(&self, document: &[u8], other: &MeetingId) -> Result<Vec<u8>, StorageError> {
+        let mut automerge_document = load(document)?;
+        let object = match automerge_document.get(ROOT, KEPT_APART_KEY) {
+            Ok(Some((Value::Object(ObjType::Map), object))) => object,
+            _ => automerge_document
+                .put_object(ROOT, KEPT_APART_KEY, ObjType::Map)
+                .map_err(|error| crdt_error("unable to write the meetings kept apart", error))?,
+        };
+        put_if_changed(
+            &mut automerge_document,
+            &object,
+            other.as_str(),
+            ScalarValue::Boolean(true),
+        )?;
+        Ok(automerge_document.save())
+    }
+
     fn project(
         &self,
         meeting_id: &MeetingId,
@@ -277,6 +357,22 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
                 }
                 _ => Vec::new(),
             };
+        let combined_into = match automerge_document.get(ROOT, COMBINED_INTO_KEY) {
+            Ok(Some((Value::Object(ObjType::Map), object))) => {
+                read_combination(&automerge_document, &object)
+            }
+            _ => None,
+        };
+        let mut kept_apart_from: Vec<MeetingId> = match automerge_document.get(ROOT, KEPT_APART_KEY)
+        {
+            Ok(Some((Value::Object(ObjType::Map), object))) => automerge_document
+                .keys(&object)
+                .filter(|key| !key.is_empty())
+                .map(MeetingId::new)
+                .collect(),
+            _ => Vec::new(),
+        };
+        kept_apart_from.sort_by(|first, second| first.as_str().cmp(second.as_str()));
         Ok(MeetingProjection {
             origin,
             transcript,
@@ -284,6 +380,8 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
             cluster_resolutions,
             project_id,
             transcription_languages,
+            combined_into,
+            kept_apart_from,
         })
     }
 }
@@ -386,6 +484,22 @@ fn put_if_changed(
     automerge_document
         .put(object, field, value)
         .map_err(|error| crdt_error("unable to write a segment field", error))
+}
+
+/// Reads a combination map, or `None` when a field is missing or malformed.
+fn read_combination(automerge_document: &AutoCommit, object: &ObjId) -> Option<MeetingCombination> {
+    let into = read_string(automerge_document, object, "meeting_id")?;
+    let offset_ms = match read_scalar(automerge_document, object, "offset_ms")? {
+        ScalarValue::Int(offset_ms) => offset_ms,
+        ScalarValue::Uint(offset_ms) => i64::try_from(offset_ms).ok()?,
+        _ => return None,
+    };
+    let combine_on = read_string(automerge_document, object, "combine_on")?;
+    (!into.is_empty() && !combine_on.is_empty()).then(|| MeetingCombination {
+        into: MeetingId::new(into),
+        offset_ms,
+        combine_on: DeviceId::new(combine_on),
+    })
 }
 
 /// Reads the origin map, or `None` when a field is missing or malformed.
