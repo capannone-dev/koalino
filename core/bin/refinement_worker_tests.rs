@@ -573,3 +573,27 @@ fn the_inbox_takes_only_speech_of_meetings_combined_here_in_order() {
         .unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(chunks.len(), 2);
 }
+
+#[test]
+fn without_a_p2p_link_the_pass_does_not_wait_for_another_device() {
+    let setup = Setup::new();
+    let control = Arc::new(RefinementControl::new(false));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let worker = |control: &Arc<RefinementControl>| {
+        setup
+            .worker(control, false, &calls)
+            .with_clock(after(Duration::ZERO))
+    };
+
+    // With P2P, a recording just finished waits for a paired device's recording of it.
+    let linked = Arc::new(RefinementControl::new(false));
+    linked.set_speech_sender(Arc::new(Sender {
+        parts: Mutex::new(Vec::new()),
+        fails: None,
+    }));
+    assert_eq!(worker(&linked).run_pending(), 0);
+
+    // Without P2P (the CLI), nothing can arrive, so the pass runs at once.
+    assert_eq!(worker(&control).run_pending(), 1);
+    assert_eq!(setup.texts(), vec!["nuovo testo"]);
+}

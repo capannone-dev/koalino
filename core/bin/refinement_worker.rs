@@ -10,7 +10,8 @@
 //!    (`application::combined_refinement`), re-transcribes a meeting alone in 30 s windows
 //!    (`application::transcript_refinement`), or deletes speech nobody will use.
 //!
-//! Nothing runs while a recording is running. Passes run on a phone only while it is charging,
+//! A finished recording waits `COMBINING_GRACE` for a paired device's recording of it only when
+//! this process runs P2P; the CLI runs the pass at once. Nothing runs while a recording is running. Passes run on a phone only while it is charging,
 //! and stop between windows when that changes; a device without a pass model only folds, sends
 //! and deletes. The model is loaded only for a round of work and dropped after. Retained audio
 //! never lingers: it is deleted after a pass or a confirmed transfer, when unreadable, when its
@@ -36,7 +37,7 @@ use crate::{
         retained_audio_store::{RetainedAudioError, RetainedAudioStore, RetainedChunk},
     },
     application::{
-        combined_meetings::{AudioPlan, find_combinations, plan_retained_audio},
+        combined_meetings::{AudioPlan, COMBINING_GRACE, find_combinations, plan_retained_audio},
         combined_refinement::{CombinedRecording, refine_combined_meeting},
         speech_transfer_exchange::{PART_AUDIO_BUDGET_BYTES, split_into_parts},
         transcript_refinement::{
@@ -318,6 +319,9 @@ impl RefinementWorker {
             }
         };
         let held: HashSet<MeetingId> = pending.iter().cloned().collect();
+        // Without P2P (the CLI), no paired device's recording can arrive, so a meeting does not
+        // wait the grace period for one.
+        let has_link = self.control.speech_sender().is_some();
         let mut engine: Option<(Box<dyn TranscriptionEngine>, Arc<ChunkAudioStore>)> = None;
         let mut handled: HashSet<MeetingId> = HashSet::new();
         let mut refined = 0;
@@ -334,6 +338,11 @@ impl RefinementWorker {
                 .written_at(&meeting_id)
                 .and_then(|written| (self.now)().duration_since(written).ok())
                 .unwrap_or_default();
+            let age = if has_link {
+                age
+            } else {
+                age.max(COMBINING_GRACE)
+            };
             let plan = plan_retained_audio(
                 &meeting_id,
                 &recordings,
