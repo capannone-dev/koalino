@@ -93,6 +93,9 @@ impl CliService for MockCliService {
     fn delete_meeting(&mut self, _meeting_id: &str) -> Result<String, String> {
         Ok(String::new())
     }
+    fn split_meeting(&mut self, _meeting_id: &str) -> Result<String, String> {
+        Ok(String::new())
+    }
     fn delete_unknown_voice(&mut self, _cluster_id: Uuid) -> Result<String, String> {
         Ok(String::new())
     }
@@ -126,6 +129,7 @@ impl CliService for MockCliService {
             title: String::from("Rome offsite"),
             created_at: String::from("2026-10-25 09:00 UTC"),
             duration: String::from("unknown"),
+            device_count: 1,
         }])
     }
     fn view_meeting(&self, _meeting_id: &str) -> Result<String, String> {
@@ -1477,4 +1481,99 @@ fn voice_delete_commands_report_their_outcome() {
         Err(format!("unknown voice {unknown} does not exist"))
     );
     assert_eq!(person, Ok(format!("Deleted person {unknown}")));
+}
+
+/// Verifies a meeting recorded on two devices is listed once with both devices, its view says so,
+/// and `meetings split` lists the other device's recording again (#88).
+#[test]
+fn core_service_lists_a_combined_meeting_once_and_splits_it() {
+    use crate::{
+        application::meeting_document::AutomergeMeetingDocumentCodec,
+        ports::meeting_document::MeetingCombination,
+    };
+    let directory = std::env::temp_dir().join(format!("cli-combined-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap_or_else(|error| panic!("{error}"));
+    let cipher = crate::application::crypto::voice_encryptor::ephemeral_cipher();
+    let open = |device: &str| {
+        SqliteNoteRepository::open(
+            directory.join("notes.sqlite3"),
+            crate::domain::models::DeviceId::new(device),
+            std::sync::Arc::clone(&cipher),
+        )
+        .and_then(|repository| {
+            repository.with_document_codec(std::sync::Arc::new(AutomergeMeetingDocumentCodec))
+        })
+        .unwrap_or_else(|error| panic!("repository must open: {error}"))
+    };
+    let laptop = open("device-laptop");
+    let phone = open("device-phone");
+    let empty_document = automerge::AutoCommit::new().save();
+    laptop
+        .create_meeting(&MeetingId::new("meeting-laptop"), &empty_document)
+        .unwrap_or_else(|error| panic!("{error}"));
+    phone
+        .create_meeting(&MeetingId::new("meeting-phone"), &empty_document)
+        .unwrap_or_else(|error| panic!("{error}"));
+    laptop
+        .combine_meeting(
+            &MeetingId::new("meeting-phone"),
+            &MeetingCombination {
+                into: MeetingId::new("meeting-laptop"),
+                offset_ms: 2_000,
+                combine_on: crate::domain::models::DeviceId::new("device-laptop"),
+            },
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+    drop(phone);
+    let mut cli_service = CoreCliService::new(
+        NoRecordingControl,
+        laptop,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    );
+    let list = |cli_service: &mut CoreCliService<_, _, _>| {
+        dispatch(
+            CliCommand::Meetings(MeetingArgs {
+                command: MeetingCommand::List,
+            }),
+            cli_service,
+        )
+        .unwrap_or_else(|error| panic!("meetings must list: {error}"))
+    };
+
+    let combined = list(&mut cli_service);
+    let view = cli_service
+        .view_meeting("meeting-laptop")
+        .unwrap_or_else(|error| panic!("{error}"));
+    let split = dispatch(
+        CliCommand::Meetings(MeetingArgs {
+            command: MeetingCommand::Split {
+                meeting_id: String::from("meeting-laptop"),
+            },
+        }),
+        &mut cli_service,
+    );
+    let apart = list(&mut cli_service);
+    let _ = std::fs::remove_dir_all(&directory);
+
+    assert!(
+        combined.starts_with("ID | Title | Date | Duration | Devices"),
+        "{combined}"
+    );
+    assert!(
+        combined.contains("meeting-laptop |") && combined.ends_with("| 2"),
+        "{combined}"
+    );
+    assert!(!combined.contains("meeting-phone"), "{combined}");
+    assert!(
+        view.contains("Recorded on 2 devices (also meeting-phone)"),
+        "{view}"
+    );
+    assert_eq!(
+        split,
+        Ok(String::from(
+            "Split meeting meeting-laptop: meeting-phone is listed on its own again"
+        ))
+    );
+    assert!(apart.contains("meeting-phone |"), "{apart}");
 }

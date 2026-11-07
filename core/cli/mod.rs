@@ -15,6 +15,7 @@ use crate::{
         cluster_review::{
             NamedClusterAssignment, assign_cluster_to_named_identity, list_unknown_clusters,
         },
+        combined_meetings::{MeetingListing, split_recordings},
         deletion::{self, MeetingDeletionHooks},
         export_manager::{ExportManager, ExportWriter},
         meeting_rename::rename_meeting,
@@ -168,6 +169,12 @@ pub enum MeetingCommand {
         /// Confirms the deletion; without it nothing is deleted.
         #[arg(long)]
         yes: bool,
+    },
+    /// Lists the other devices' recordings combined into a meeting on their own again, for good.
+    /// Pass a combined recording's ID to split only that one.
+    Split {
+        /// The listed meeting, or one recording combined into it.
+        meeting_id: String,
     },
     /// Exports one meeting as Markdown, PDF, or JSON.
     Export {
@@ -370,6 +377,8 @@ pub struct MeetingListRow {
     pub created_at: String,
     /// The end of the latest transcript segment, formatted `M:SS` or `H:MM:SS`.
     pub duration: String,
+    /// How many devices recorded the meeting: more than 1 when recordings were combined (#88).
+    pub device_count: usize,
 }
 
 /// Runs foreground recordings for the CLI; implemented by the binary's composition root.
@@ -432,6 +441,8 @@ pub trait CliService {
     /// Loads display-safe voice rows.
     /// Deletes a meeting and everything it holds, and describes what happened.
     fn delete_meeting(&mut self, meeting_id: &str) -> Result<String, String>;
+    /// Splits recordings combined into a meeting apart again, and describes what happened.
+    fn split_meeting(&mut self, meeting_id: &str) -> Result<String, String>;
     /// Deletes an unknown voice and describes what happened.
     fn delete_unknown_voice(&mut self, cluster_id: Uuid) -> Result<String, String>;
     /// Deletes a saved person and describes what happened.
@@ -506,6 +517,9 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
         CliCommand::Meetings(MeetingArgs {
             command: MeetingCommand::Delete { meeting_id, yes },
         }) => confirmed(yes).and_then(|()| cli_service.delete_meeting(&meeting_id)),
+        CliCommand::Meetings(MeetingArgs {
+            command: MeetingCommand::Split { meeting_id },
+        }) => cli_service.split_meeting(&meeting_id),
         CliCommand::Voice(VoiceArgs {
             command: VoiceCommand::DeleteCluster { cluster_id, yes },
         }) => confirmed(yes).and_then(|()| cli_service.delete_unknown_voice(cluster_id)),
@@ -569,11 +583,15 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
 
 /// Formats meeting rows as a stable terminal table.
 fn format_meeting_table(meetings: Vec<MeetingListRow>) -> String {
-    std::iter::once(String::from("ID | Title | Date | Duration"))
+    std::iter::once(String::from("ID | Title | Date | Duration | Devices"))
         .chain(meetings.into_iter().map(|meeting| {
             format!(
-                "{} | {} | {} | {}",
-                meeting.meeting_id, meeting.title, meeting.created_at, meeting.duration
+                "{} | {} | {} | {} | {}",
+                meeting.meeting_id,
+                meeting.title,
+                meeting.created_at,
+                meeting.duration,
+                meeting.device_count
             )
         }))
         .collect::<Vec<_>>()
@@ -828,6 +846,22 @@ where
     }
 }
 
+impl<RecordingPort, RepositoryPort, VectorDatabasePort>
+    CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort>
+where
+    RepositoryPort: NoteRepository,
+{
+    /// Works out which meetings are listed and which devices recorded each (#88).
+    ///
+    /// Outputs: The listing, or a storage error message. Side effects: Reads meeting metadata.
+    fn meeting_listing(&self) -> Result<MeetingListing, String> {
+        self.repository
+            .meeting_recordings()
+            .map(|recordings| MeetingListing::of(&recordings))
+            .map_err(|error| error.to_string())
+    }
+}
+
 impl<RecordingPort, RepositoryPort, VectorDatabasePort> CliService
     for CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort>
 where
@@ -871,8 +905,12 @@ where
             .repository
             .list_meeting_ids()
             .map_err(|error| error.to_string())?;
+        let listing = self.meeting_listing()?;
         let mut meeting_rows = Vec::with_capacity(meeting_ids.len());
         for meeting_id in meeting_ids {
+            if !listing.is_listed(&meeting_id) {
+                continue;
+            }
             let Some(meeting_metadata) = self
                 .repository
                 .load_meeting_metadata(&meeting_id)
@@ -893,6 +931,7 @@ where
                 title: meeting_metadata.display_title(),
                 created_at: format_created_at(&meeting_metadata),
                 duration: format_duration(duration_ms),
+                device_count: listing.recorded_on(&meeting_id).len().max(1),
             });
         }
         Ok(meeting_rows)
@@ -923,8 +962,23 @@ where
             .map(|attachment| format!("- {} ({})", attachment.file_path(), attachment.mime_type()))
             .collect::<Vec<_>>()
             .join("\n");
+        let listing = self.meeting_listing()?;
+        let folded = listing.folded_into(&typed_meeting_id);
+        let devices_line = if folded.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "Recorded on {} devices (also {}); `meetings split {meeting_id}` lists them apart\n",
+                listing.recorded_on(&typed_meeting_id).len(),
+                folded
+                    .iter()
+                    .map(MeetingId::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
         Ok(format!(
-            "{display_title}\n{title_underline}\nMeeting: {meeting_id}\nCreated: {created_at}\n{language_line}Transcript:\n{transcript}\nAttachments:\n{attachment_lines}"
+            "{display_title}\n{title_underline}\nMeeting: {meeting_id}\nCreated: {created_at}\n{devices_line}{language_line}Transcript:\n{transcript}\nAttachments:\n{attachment_lines}"
         ))
     }
     /// Renames through the shared use case and prints `Renamed meeting <id>: "<old>" -> "<new>"`,
@@ -954,6 +1008,30 @@ where
         )
         .map(|()| format!("Deleted meeting {meeting_id}"))
         .map_err(|error| error.to_string())
+    }
+    /// Splits through the shared use case and prints which recordings are listed again.
+    ///
+    /// Outputs: `Split meeting <id>: <ids> is/are listed on its/their own again`, or a sentence
+    /// saying there was nothing to split, or a storage error message.
+    /// Side effects: Writes each split recording's document, which syncs to paired devices.
+    fn split_meeting(&mut self, meeting_id: &str) -> Result<String, String> {
+        let split = split_recordings(&self.repository, &MeetingId::new(meeting_id))
+            .map_err(|error| error.to_string())?;
+        Ok(match split.as_slice() {
+            [] => format!("Meeting {meeting_id} combines no other recording; nothing to split"),
+            [one] => format!(
+                "Split meeting {meeting_id}: {} is listed on its own again",
+                one.as_str()
+            ),
+            several => format!(
+                "Split meeting {meeting_id}: {} are listed on their own again",
+                several
+                    .iter()
+                    .map(MeetingId::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        })
     }
     fn delete_unknown_voice(&mut self, cluster_id: Uuid) -> Result<String, String> {
         deletion::delete_unknown_voice(&self.repository, self.deletion_hooks.as_deref(), cluster_id)

@@ -32,6 +32,7 @@ note-taker meetings list
 note-taker meetings view <meeting-id>
 note-taker meetings rename <meeting-id> <new-title>
 note-taker meetings delete <meeting-id> --yes
+note-taker meetings split <meeting-id>
 note-taker voice delete-cluster <cluster-id> --yes
 note-taker voice delete-person <identity-id> --yes
 note-taker meetings export <meeting-id> --format <markdown|pdf|json> [--output <path>] [--no-attachments] [--no-metadata]
@@ -75,11 +76,19 @@ for a previously untitled meeting. The same title rules apply as for `--title`. 
 prints `meeting <id> does not exist`, an invalid title prints `invalid title: <reason>`, and both
 exit with status 1 without writing anything.
 
-`meetings list` prints `ID | Title | Date | Duration`. Title is the stored title, or
+`meetings list` prints `ID | Title | Date | Duration | Devices`. Title is the stored title, or
 `Meeting YYYY-MM-DD HH:MM UTC` for untitled meetings. Date is the UTC creation time. Duration is
-the end of the latest transcript segment (`M:SS`, or `H:MM:SS` from one hour). `meetings view`
-prints the title, underlined, on its first line, followed by the ID, creation time, transcript,
-and attachments, and reports unknown meetings as errors. `voice assign`
+the end of the latest transcript segment (`M:SS`, or `H:MM:SS` from one hour). Devices is how many
+devices recorded the meeting: a meeting recorded on the laptop and on a paired phone (#88) is
+listed once, under the earlier recording, with `2`. `meetings view` prints the title, underlined,
+on its first line, followed by the ID, creation time, the devices line for a combined meeting,
+transcript, and attachments, and reports unknown meetings as errors.
+
+`meetings split <meeting-id>` lists the recordings combined into a meeting on their own again,
+for good: the app never combines them again. Each shows its own live transcript; the meeting keeps
+its transcript, which may already combine every device's speech. Passing a combined recording's
+ID splits only that one. `meetings delete` on a combined meeting also deletes the recordings
+combined into it. `voice assign`
 finds the clip through `NoteRepository` and delegates signature storage to `VoiceIdentityManager`;
 it never performs vector matching or SQL in the CLI.
 
