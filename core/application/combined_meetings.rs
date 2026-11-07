@@ -12,7 +12,8 @@
 //! `plan_retained_audio` then says what to do with one meeting's sealed speech (#87):
 //! - a meeting alone waits `COMBINING_GRACE` for a partner to appear, then takes the pass alone;
 //!   a device without the pass keeps it at most `KEEP_FOR_COMBINING`, then deletes it;
-//! - a device that does not combine sends its recording to the one that does;
+//! - a device that does not combine sends its recording to the one that does, for at most
+//!   `KEEP_FOR_COMBINING`;
 //! - the combining device waits until every recording of the meeting is here, at most
 //!   `KEEP_FOR_COMBINING`, then combines what it has.
 //!
@@ -163,11 +164,16 @@ pub fn plan_retained_audio(
             .iter()
             .find(|recording| &recording.meeting_id == id)
     };
+    let send_or_discard = |to: &DeviceId| {
+        if age < KEEP_FOR_COMBINING {
+            AudioPlan::Send { to: to.clone() }
+        } else {
+            AudioPlan::Discard
+        }
+    };
     let root = match find(meeting_id).and_then(|recording| recording.combined_into.as_ref()) {
         Some(combination) if combination.combine_on != *this_device => {
-            return AudioPlan::Send {
-                to: combination.combine_on.clone(),
-            };
+            return send_or_discard(&combination.combine_on);
         }
         Some(combination) => combination.into.clone(),
         None => meeting_id.clone(),
@@ -194,9 +200,7 @@ pub fn plan_retained_audio(
         };
     };
     if first_member.combine_on != *this_device {
-        return AudioPlan::Send {
-            to: first_member.combine_on.clone(),
-        };
+        return send_or_discard(&first_member.combine_on);
     }
     if !held(&root) {
         let root_recorded_here =

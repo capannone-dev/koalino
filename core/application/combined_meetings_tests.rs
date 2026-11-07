@@ -424,3 +424,20 @@ fn speech_received_after_the_first_recording_was_done_is_discarded() {
         AudioPlan::Discard
     );
 }
+
+#[test]
+fn speech_that_could_not_be_sent_for_a_day_is_discarded() {
+    let recordings = folded("laptop");
+
+    assert_eq!(
+        plan(
+            "meeting-phone",
+            &recordings,
+            &["meeting-phone"],
+            "phone",
+            KEEP_FOR_COMBINING,
+            false
+        ),
+        AudioPlan::Discard
+    );
+}
