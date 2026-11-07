@@ -7,7 +7,9 @@
 //! then the chunk sealed with AES-256-GCM through the database key's `EmbeddingCipher`. The record
 //! names the meeting in its authenticated data, so a record moved to another meeting's file fails
 //! to open. Plaintext buffers are wiped after use, and nothing here logs audio. The pass deletes
-//! the file once it is done; deleting the meeting must delete it too.
+//! the file once it is done; deleting the meeting must delete it too. Files are readable by this
+//! user only. Speech received from a paired device for combining (#88) is written to
+//! `<file>.incoming` and becomes the meeting's file only once complete.
 
 use std::{
     fs::{self, OpenOptions},
@@ -111,6 +113,24 @@ impl RetainedAudioStore {
         language: Option<TranscriptionLanguage>,
         samples: &[i16],
     ) -> Result<(), RetainedAudioError> {
+        self.append_record(
+            meeting_id,
+            &Self::file_name(meeting_id),
+            span,
+            language,
+            samples,
+        )
+    }
+
+    /// Seals one chunk for `meeting_id` and appends it to `file_name` in the folder.
+    fn append_record(
+        &self,
+        meeting_id: &MeetingId,
+        file_name: &str,
+        span: ChunkSpan,
+        language: Option<TranscriptionLanguage>,
+        samples: &[i16],
+    ) -> Result<(), RetainedAudioError> {
         let code = language
             .map_or("", TranscriptionLanguage::as_str)
             .as_bytes();
@@ -131,15 +151,77 @@ impl RetainedAudioStore {
             .map_err(|_| RetainedAudioError::Encryption)?;
         let length = u32::try_from(sealed.len()).map_err(|_| RetainedAudioError::Encryption)?;
         fs::create_dir_all(&self.directory)?;
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(self.directory.join(Self::file_name(meeting_id)))?;
+        let mut file = private_append(&self.directory.join(file_name))?;
         let mut record = Vec::with_capacity(4 + sealed.len());
         record.extend_from_slice(&length.to_le_bytes());
         record.extend_from_slice(&sealed);
         file.write_all(&record)?;
         Ok(())
+    }
+
+    /// Starts receiving a meeting's speech from a paired device (#88), dropping any earlier
+    /// unfinished copy. Until `finish_incoming`, the pass does not see it.
+    ///
+    /// Side effects: Creates an empty `<file>.incoming`.
+    pub fn begin_incoming(&self, meeting_id: &MeetingId) -> Result<(), RetainedAudioError> {
+        fs::create_dir_all(&self.directory)?;
+        let path = self.incoming_path(meeting_id);
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        private_append(&path)?;
+        Ok(())
+    }
+
+    /// Appends one received chunk to the meeting's incoming copy, sealed as `append_chunk` seals.
+    ///
+    /// Side effects: Appends a sealed record to `<file>.incoming`.
+    pub fn append_incoming(
+        &self,
+        meeting_id: &MeetingId,
+        span: ChunkSpan,
+        language: Option<TranscriptionLanguage>,
+        samples: &[i16],
+    ) -> Result<(), RetainedAudioError> {
+        self.append_record(
+            meeting_id,
+            &Self::incoming_name(meeting_id),
+            span,
+            language,
+            samples,
+        )
+    }
+
+    /// Makes a fully received copy available to the pass, replacing any earlier one.
+    ///
+    /// Side effects: Renames `<file>.incoming` to the meeting's file.
+    pub fn finish_incoming(&self, meeting_id: &MeetingId) -> Result<(), RetainedAudioError> {
+        fs::rename(
+            self.incoming_path(meeting_id),
+            self.directory.join(Self::file_name(meeting_id)),
+        )?;
+        Ok(())
+    }
+
+    /// Returns when the meeting's speech was last written here, or `None` when none is held.
+    ///
+    /// Side effects: Reads the file's metadata.
+    pub fn written_at(&self, meeting_id: &MeetingId) -> Option<std::time::SystemTime> {
+        fs::metadata(self.directory.join(Self::file_name(meeting_id)))
+            .and_then(|metadata| metadata.modified())
+            .ok()
+    }
+
+    /// The name of a meeting's copy being received.
+    fn incoming_name(meeting_id: &MeetingId) -> String {
+        format!("{}.incoming", Self::file_name(meeting_id))
+    }
+
+    /// The path of a meeting's copy being received.
+    fn incoming_path(&self, meeting_id: &MeetingId) -> PathBuf {
+        self.directory.join(Self::incoming_name(meeting_id))
     }
 
     /// Reads every chunk retained for a meeting, in the order they were appended.
@@ -179,6 +261,11 @@ impl RetainedAudioStore {
     ///
     /// Inputs: The meeting. Outputs: Whether a file existed. Side effects: Removes the file.
     pub fn delete(&self, meeting_id: &MeetingId) -> Result<bool, RetainedAudioError> {
+        match fs::remove_file(self.incoming_path(meeting_id)) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
         match fs::remove_file(self.directory.join(Self::file_name(meeting_id))) {
             Ok(()) => Ok(true),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -205,6 +292,15 @@ impl RetainedAudioStore {
         meetings.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         meetings
     }
+}
+
+/// Opens `path` for appending, creating it readable and writable by this user only.
+fn private_append(path: &std::path::Path) -> std::io::Result<fs::File> {
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options.open(path)
 }
 
 /// Splits a record's plaintext into its span, language and samples.

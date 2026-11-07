@@ -237,3 +237,83 @@ fn a_truncated_file_is_refused() {
     ));
     let _ = fs::remove_dir_all(path);
 }
+
+#[test]
+fn received_speech_is_hidden_until_complete_then_replaces_any_earlier_copy() {
+    let path = folder();
+    let store = store(&path);
+    let meeting = MeetingId::new("meeting-phone");
+    let span = ChunkSpan {
+        start_ms: 0,
+        end_ms: 1_000,
+    };
+
+    store
+        .begin_incoming(&meeting)
+        .and_then(|()| store.append_incoming(&meeting, span, None, &samples(3, 160)))
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(store.pending_meetings().is_empty(), "not complete yet");
+
+    store
+        .finish_incoming(&meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(store.pending_meetings(), vec![meeting.clone()]);
+    assert!(store.written_at(&meeting).is_some());
+
+    // A second copy starts over and replaces the first when complete.
+    store
+        .begin_incoming(&meeting)
+        .and_then(|()| store.append_incoming(&meeting, span, None, &samples(9, 80)))
+        .and_then(|()| store.finish_incoming(&meeting))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let chunks = store
+        .load(&meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(chunks.len(), 1);
+    assert_eq!(chunks[0].samples(), samples(9, 80).as_slice());
+    let _ = fs::remove_dir_all(&path);
+}
+
+#[test]
+fn deleting_also_drops_an_unfinished_copy() {
+    let path = folder();
+    let store = store(&path);
+    let meeting = MeetingId::new("meeting-phone");
+    store
+        .begin_incoming(&meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    store
+        .delete(&meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let left = fs::read_dir(&path).map(Iterator::count).unwrap_or(1);
+    assert_eq!(left, 0);
+    let _ = fs::remove_dir_all(&path);
+}
+
+#[cfg(unix)]
+#[test]
+fn retained_files_are_readable_by_their_owner_only() {
+    use std::os::unix::fs::PermissionsExt;
+    let path = folder();
+    let store = store(&path);
+    let meeting = MeetingId::new("meeting-a");
+    store
+        .append_chunk(
+            &meeting,
+            ChunkSpan {
+                start_ms: 0,
+                end_ms: 10,
+            },
+            None,
+            &samples(1, 16),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let mode = fs::metadata(path.join(RetainedAudioStore::file_name(&meeting)))
+        .map(|metadata| metadata.permissions().mode() & 0o777)
+        .unwrap_or_default();
+    assert_eq!(mode, 0o600);
+    let _ = fs::remove_dir_all(&path);
+}
