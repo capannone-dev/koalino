@@ -196,6 +196,6 @@ laptop records M1 ──┐                         ┌── phone records M2
 - **Nothing lingers:** speech not sent or not combined within 24 h is deleted, as is speech of a
   meeting split or deleted meanwhile. A phone without a pass model keeps its speech only for that.
 - **Limits:** recordings must overlap in content, so a phone that hears only the other person
-  still matches the laptop, which hears both. The gain depends on placement: on NOTSOFAR, choosing
-  the device per speaker matched the best single device, while the union of all devices bounds
-  what better placement can give (20.3% against 36.9% word error).
+  still matches the laptop, which hears both. The gain depends on placement: on NOTSOFAR's
+  far-field devices, choosing the device per speaker scored the same as one device, while the
+  union of all devices bounds what better placement can give (20.3% against 36.9% word error).
