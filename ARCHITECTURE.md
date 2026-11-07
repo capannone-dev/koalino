@@ -161,3 +161,41 @@ against the Rust golden fixtures, so both sides share one wire format.
 Live chunks give captions and provisional speakers. When a recording stops, `MeetingSession::finish_meeting` regroups the
 recording's voice windows over the whole meeting, reassigns every word, and names each speaker once. Embeddings stay in
 memory until then, and no extra audio is kept. A crash leaves the live result.
+
+## One meeting recorded on several devices (#88)
+
+The owner records a meeting on the laptop and, at the same time, on a paired phone placed near the
+other person. No device is told that the two belong together. Each records an ordinary meeting
+and keeps its speech sealed for the after-meeting pass (#87), and the recordings sync as usual.
+
+```text
+laptop records M1 ──┐                         ┌── phone records M2
+ (speech sealed)    │   CRDT sync of M1, M2   │   (speech sealed)
+                    ▼                         ▼
+     after-meeting worker on each device: find_combinations
+       M2's words match M1's (≥25% of 3-word runs within 15 s) → fold M2 into M1
+       (the earlier recording), combine_on = laptop; the fold syncs in M2's document
+                    │                         │
+   laptop: plan = Combine (waits ≤24 h        phone: plan = Send{laptop}
+   for M2's speech)                           NTR1 parts sealed with the pair key ──►
+                    ◄── NTR2 receipt per part  deletes its copy after the last receipt
+   RetainedSpeechInbox stores M2's speech (only for a meeting it combines, only from M2's device)
+                    │
+   combined pass: each recording in 30 s windows, offset refined from shared words,
+   each speaker's words from the device that heard them best → M1's transcript; audio deleted
+```
+
+- **Recognition is from the transcripts**, not from the audio: the live transcripts are already
+  on every device, so no audio leaves a device until the pair is known, and a third paired device
+  never decides.
+- **One meeting is shown.** Lists hide M2 and show M1 as "Recorded on Laptop + Pixel". Split
+  (CLI, HTTP, FFI, Flutter, web) lists M2 again for good; M2's own live transcript is kept, so
+  nothing is lost. Deleting M1 deletes M2.
+- **Devices are named by the ID written on their meetings.** P2P addresses peers by libp2p ID, so
+  each device's manifest now carries both, and the P2P task translates.
+- **Nothing lingers:** speech not sent or not combined within 24 h is deleted, as is speech of a
+  meeting split or deleted meanwhile. A phone without a pass model keeps its speech only for that.
+- **Limits:** recordings must overlap in content, so a phone that hears only the other person
+  still matches the laptop, which hears both. The gain depends on placement: on NOTSOFAR, choosing
+  the device per speaker matched the best single device, while the union of all devices bounds
+  what better placement can give (20.3% against 36.9% word error).

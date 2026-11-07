@@ -4,6 +4,13 @@
 
 `sqlite_adapter.rs` implements `NoteRepository` with SQLite; its unknown-speaker cluster SQL lives in the child module `sqlite_unknown_speaker_clusters.rs`. SQLite types remain entirely inside this adapter; application code communicates through `core/ports/storage.rs`.
 
+`sqlite_combined_meetings.rs` (#88) keeps the fold of one device's recording of a meeting into
+another's. The truth is in the meeting's CRDT document, so a fold made on one device reaches the
+others with the document; the `meetings` columns `combined_into`, `combined_offset_ms`,
+`combine_on` and `kept_apart_from` index it. Folding into itself or into an unknown meeting is
+refused. A split clears the fold and records the pair as kept apart, so they are never joined
+again.
+
 ## SQLite schema
 
 The `meetings` table stores one offline-first meeting per `meeting_id`:

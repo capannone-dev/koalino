@@ -2044,3 +2044,28 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   | **Pass, now** | **44.0%** | 10.7% | **41.8%** | 45.2% / 40.1% |
 
 - **Not tried yet:** whisper.cpp's DTW word alignment, which may place words better still.
+
+## 2026-11-07 — #88 One meeting recorded on several devices
+
+- **Why:** the owner wants to place the phone near the person they talk to and keep the laptop
+  near themselves, and get one better transcript.
+- **Recognised automatically, from the live transcripts:** shared three-word runs within 15 s of
+  wall-clock time. On NOTSOFAR, the same meeting shared at least 60% of words, different meetings
+  at most 3.6%; the threshold is 25% and 15 words. Speech-timing masks (Jaccard, correlation) did
+  not separate meetings, and comparing audio would send audio before the pair is known.
+- **Combined automatically, shown as one meeting** (owner's choice): the later recording is
+  folded into the earlier; the list shows "recorded on Laptop + Phone"; Split undoes it for good.
+  The folded recording's live transcript is kept, hidden, so Split restores it.
+- **One device combines:** a desktop that finds the pair names itself; a phone names the other
+  device. The other device sends its sealed speech over P2P (pair-key sealed parts with receipts)
+  and deletes it after the last receipt. Speech not sent or combined within 24 h is deleted.
+- **How the transcripts are combined:** each speaker's words come from the device with more words
+  for that speaker. Merging every word added duplicates (+3 points of error); picking a device per
+  30 s was worse (37.1 → 35.9 for the better device alone); picking the louder device gave nothing.
+  Per speaker matched the best single device (38.9 vs 38.9) on far-field arrays, where devices
+  are similar; the union across devices (20.3 vs 36.9) shows the room for a well-placed phone.
+- **Device IDs:** meetings carry a storage ID (`device-<uuid>`), P2P a libp2p peer ID. Device
+  manifests now carry the storage ID (optional, older devices still parse), and the P2P task
+  translates.
+- **Deleting a combined meeting deletes the recordings folded into it**, which would otherwise
+  reappear alone.

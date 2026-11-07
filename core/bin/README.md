@@ -47,7 +47,15 @@ documented nonzero status codes distinguishable from lifecycle states.
   every chunk and wipes raw audio that no engine consumed.
   `with_screen_share(monitor, interval)` (Issue #49) gives every recording a
   `ScreenShareWatcher`.
-- `refinement_worker.rs` (#87) runs the after-meeting pass on its `transcript-pass` thread.
+- `refinement_worker.rs` (#87, #88) runs the after-meeting work on its `transcript-pass` thread:
+  each round folds recordings of one meeting made here and on a paired device, then carries out
+  each retained meeting's plan (send, combine, pass alone, delete). Folding, sending and deleting
+  need no charging; passes do on a phone. A device with P2P but no pass model still runs it
+  (`RefinementWorker::without_pass`) to hand its speech to the combining device.
+  `RetainedSpeechInbox` stores speech paired devices send, only for meetings this device combines
+  and only from the device that recorded it. `pipeline_composition::start_transcript_pass`
+  connects both to the P2P task (`SpeechLink`, implemented by `P2pHandle`).
+  Originally (#87) it ran only the pass.
   `RefinementControl` says when it may run: no recording, not shutting down, and on a phone only
   while charging. The controller holds it while recording (`with_transcript_pass`) and appends
   each speech chunk to the `RetainedAudioStore`. After Stop, and at start for leftover meetings,

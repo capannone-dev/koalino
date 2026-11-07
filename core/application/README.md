@@ -358,6 +358,39 @@ groups words into segments (split at pauses over 2 s, at most 20 s). Segments ou
 audio are kept. Nothing is saved until every window is done, and `cancelled` is polled before each
 one. Saving goes through `save_transcript_segments`, so the meeting document syncs as usual.
 
+## One meeting recorded on several devices (#88)
+
+The owner can record a meeting on the laptop and, at the same time, on a paired phone placed near
+the other person. Each device records an ordinary meeting; both sync; the app then treats them as
+one meeting with one transcript built from both microphones.
+
+- `same_meeting.rs` recognises two recordings of one conversation from their live transcripts:
+  three-word runs within 15 s of each other's wall-clock time. They are one meeting when shared
+  words are at least 25% of the shorter transcript and at least 15 words. The offset between the
+  recordings is the median gap of the shared words. On NOTSOFAR, devices in the same meeting
+  shared 60% or more and different meetings at most 3.6%; speech-timing masks could not separate
+  them.
+- `combined_meetings.rs` decides. `find_combinations` folds the later recording into the earlier
+  one; only a device that recorded one of them decides, and a phone leaves the combining to the
+  other device. `plan_retained_audio` says what each device does with its sealed speech: wait for
+  a partner for `COMBINING_GRACE` (10 min), send it to the combining device, combine every
+  recording held, run the pass alone, or delete it. Nothing waits more than `KEEP_FOR_COMBINING`
+  (24 h). `MeetingListing` lists a combined meeting once with every device;
+  `split_recordings` is the Split action; `name_recording_devices` names devices from the P2P
+  status.
+- `combined_refinement.rs` runs the pass over every recording. Each is transcribed in 30 s windows
+  as in #87. The offset is refined from words both devices wrote. Each word keeps its own device's
+  speaker, mapped to the first recording's speakers by identity, else by time overlap. Each
+  speaker's words come from the device that heard that speaker best (more words), and duplicates
+  within 1 s are dropped. On NOTSOFAR, picking a device per speaker matched the best single device;
+  merging every word made it worse (duplicates); the union bound across devices was 20.3% word
+  error against 36.9% for one device, so the gain depends on placing the phone near the people
+  the laptop hears worst.
+- `speech_transfer_exchange.rs` seals the speech parts (`NTR1`, at most 12 MiB of audio each) and
+  their receipts (`NTR2`) with the pair key, bound to the sender and the receiver.
+  `p2p_speech_transfer.rs` carries them for the P2P service and translates meetings' device IDs
+  to peer IDs through the device manifests.
+
 ## Unknown-speaker clustering
 
 `unknown_speaker_clusterer.rs` groups a meeting's weak and unmatched voices so the user labels
