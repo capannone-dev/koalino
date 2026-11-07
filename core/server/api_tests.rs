@@ -1264,3 +1264,74 @@ async fn delete_identity_removes_them_from_the_gallery() {
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert_eq!(gallery["identities"], serde_json::json!([]));
 }
+
+/// Verifies a meeting recorded on two devices is listed once with both devices and the recording
+/// combined into it, and that splitting lists that recording again (#88).
+#[tokio::test]
+async fn a_combined_meeting_is_listed_once_and_can_be_split() {
+    let directory = std::env::temp_dir().join(format!("api-combined-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap_or_else(|error| panic!("{error}"));
+    let database_path = directory.join("notes.sqlite3");
+    let laptop = file_backed_stores(&database_path, "device-laptop");
+    let phone = file_backed_stores(&database_path, "device-phone");
+    let empty_document = AutoCommit::new().save();
+    laptop
+        .note_repository
+        .create_meeting(&MeetingId::new("meeting-laptop"), &empty_document)
+        .unwrap_or_else(|error| panic!("{error}"));
+    phone
+        .note_repository
+        .create_meeting(&MeetingId::new("meeting-phone"), &empty_document)
+        .unwrap_or_else(|error| panic!("{error}"));
+    laptop
+        .note_repository
+        .combine_meeting(
+            &MeetingId::new("meeting-phone"),
+            &crate::ports::meeting_document::MeetingCombination {
+                into: MeetingId::new("meeting-laptop"),
+                offset_ms: 2_000,
+                combine_on: DeviceId::new("device-laptop"),
+            },
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+    drop(phone);
+    let router = build_router(ServerAppState::new(
+        laptop.note_repository,
+        laptop.voice_store,
+    ));
+
+    let (_, combined) = send_json(&router, "GET", "/api/meetings", None).await;
+    let (_, detail) = send_json(&router, "GET", "/api/meetings/meeting-laptop", None).await;
+    let (missing_status, _) =
+        send_json(&router, "POST", "/api/meetings/meeting-missing/split", None).await;
+    let (split_status, split) =
+        send_json(&router, "POST", "/api/meetings/meeting-laptop/split", None).await;
+    let (_, apart) = send_json(&router, "GET", "/api/meetings", None).await;
+    let _ = std::fs::remove_dir_all(&directory);
+
+    let combined = combined
+        .as_array()
+        .unwrap_or_else(|| panic!("a list: {combined}"));
+    assert_eq!(combined.len(), 1, "{combined:?}");
+    assert_eq!(combined[0]["meeting_id"], "meeting-laptop");
+    assert_eq!(
+        combined[0]["recorded_on"],
+        serde_json::json!([
+            {"device_id": "device-laptop", "name": null, "this_device": false},
+            {"device_id": "device-phone", "name": null, "this_device": false}
+        ])
+    );
+    assert_eq!(
+        combined[0]["combined_recordings"],
+        serde_json::json!(["meeting-phone"])
+    );
+    assert_eq!(
+        detail["combined_recordings"],
+        serde_json::json!(["meeting-phone"])
+    );
+    assert_eq!(detail["recorded_on"].as_array().map(Vec::len), Some(2));
+    assert_eq!(missing_status, StatusCode::NOT_FOUND);
+    assert_eq!(split_status, StatusCode::OK);
+    assert_eq!(split, serde_json::json!({"split": ["meeting-phone"]}));
+    assert_eq!(apart.as_array().map(Vec::len), Some(2), "{apart}");
+}

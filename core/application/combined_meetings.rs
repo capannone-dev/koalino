@@ -139,6 +139,57 @@ impl MeetingListing {
     }
 }
 
+/// A device that recorded a meeting, as the apps show it ("recorded on Laptop + Phone").
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+pub struct RecordingDevice {
+    /// The ID written on the device's meetings.
+    pub device_id: DeviceId,
+    /// Its name: this device's own, or the name a paired device gave when pairing; `None` when
+    /// the device is not paired here or has not sent its manifest yet.
+    pub name: Option<String>,
+    /// Whether it is this device.
+    pub this_device: bool,
+}
+
+/// Names the devices that recorded a meeting from the P2P status.
+///
+/// Inputs: The devices, as `MeetingListing::recorded_on` lists them, and the P2P status (`None`
+/// without P2P, when no device has a name). Outputs: The devices in the same order.
+/// Side effects: None.
+pub fn name_recording_devices(
+    devices: &[DeviceId],
+    status: Option<&crate::application::p2p_service::P2pStatus>,
+) -> Vec<RecordingDevice> {
+    devices
+        .iter()
+        .map(|device| {
+            let this_device = status.is_some_and(|status| {
+                status.local_manifest.storage_device_id.as_ref() == Some(device)
+            });
+            let name = status.and_then(|status| {
+                if this_device {
+                    return Some(status.device_name.as_str().to_owned());
+                }
+                let peer = status
+                    .peer_manifests
+                    .iter()
+                    .find(|manifest| manifest.storage_device_id.as_ref() == Some(device))?
+                    .device_id();
+                status
+                    .trusted_devices
+                    .iter()
+                    .find(|trusted| trusted.peer_id() == peer)
+                    .map(|trusted| trusted.device_name().as_str().to_owned())
+            });
+            RecordingDevice {
+                device_id: device.clone(),
+                name,
+                this_device,
+            }
+        })
+        .collect()
+}
+
 /// Splits recordings of one meeting apart again, for good (the Split action).
 ///
 /// Inputs: The repository and either the listed meeting (all recordings folded into it are split)

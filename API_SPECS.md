@@ -360,6 +360,24 @@ sound like one person share `voice_group_id` and are listed together, Issue #82)
 `GET /api/clusters/{id}/review-clip` returns `200` with the clip as `audio/wav` and
 `Cache-Control: no-store`, or `404` when the cluster has none (Issue #63). `GET /api/telemetry` returns aggregate task count, duration, and latency.
 
+### One meeting recorded on several devices (#88)
+
+A meeting recorded on the laptop and on a paired phone is two recordings that the app combines
+into one meeting, under the earlier recording. `GET /api/meetings` lists only that meeting, and
+it and `GET /api/meetings/{id}` add:
+
+- `recorded_on`: `[{"device_id","name","this_device"}]`, the meeting's own device first. `name` is
+  this device's name, or the name a paired device gave when pairing. It is null without P2P, or
+  for a device that is not paired here or has not sent its manifest.
+- `combined_recordings`: the IDs of the recordings combined into it, which are not listed on
+  their own.
+
+`POST /api/meetings/{id}/split` lists those recordings on their own again, for good, and returns
+`200` `{"split":[<meeting IDs>]}`, empty when there was nothing to split. Passing a combined
+recording's ID splits only that one. An unknown meeting gets `404`. Each split recording shows
+its own live transcript again; the meeting keeps its transcript, which may already combine every
+device's speech. `DELETE /api/meetings/{id}` also deletes the recordings combined into it.
+
 ### Projects (Issue #85)
 
 `GET /api/meetings` items carry `project_id` (null outside any project). The routes below use the

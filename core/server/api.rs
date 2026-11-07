@@ -30,6 +30,9 @@ use crate::{
             assign_clusters_to_named_identity, find_cluster_review_clip, list_unknown_clusters,
             load_voice_library,
         },
+        combined_meetings::{
+            MeetingListing, RecordingDevice, name_recording_devices, split_recordings,
+        },
         deletion::{self, DeletionError, MeetingDeletionHooks},
         export_manager::{ExportManager, ExportWriter},
         log_control::LogControl,
@@ -213,6 +216,10 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         )
         .route("/api/meetings/{meeting_id}/export", post(export_meeting))
         .route(
+            "/api/meetings/{meeting_id}/split",
+            post(split_meeting_route),
+        )
+        .route(
             "/api/meetings/{meeting_id}/unknown-clusters",
             get(get_unknown_clusters),
         )
@@ -279,14 +286,28 @@ async fn list_meetings(
         .into_iter()
         .map(|(meeting_id, project_id)| (meeting_id, project_id.to_string()))
         .collect();
+    let listing = MeetingListing::of(
+        &repositories
+            .meeting_recordings()
+            .map_err(storage_error_status)?,
+    );
+    let p2p_status = application_state
+        .p2p_control()
+        .map(|p2p_control| p2p_control.snapshot().status);
     let mut meeting_summaries = Vec::with_capacity(meeting_ids.len());
     for meeting_id in meeting_ids {
+        if !listing.is_listed(&meeting_id) {
+            continue;
+        }
         if let Some(meeting_metadata) = repositories
             .load_meeting_metadata(&meeting_id)
             .map_err(storage_error_status)?
         {
             let mut summary = MeetingSummary::from(&meeting_metadata);
             summary.project_id = meeting_projects.get(&meeting_id).cloned();
+            summary.recorded_on =
+                name_recording_devices(&listing.recorded_on(&meeting_id), p2p_status.as_ref());
+            summary.combined_recordings = meeting_id_strings(&listing.folded_into(&meeting_id));
             meeting_summaries.push(summary);
         }
     }
@@ -360,14 +381,59 @@ async fn get_meeting(
     let attachments = repositories
         .get_attachments_for_meeting(&meeting_id)
         .map_err(storage_error_status)?;
+    let listing = MeetingListing::of(
+        &repositories
+            .meeting_recordings()
+            .map_err(storage_error_status)?,
+    );
+    let p2p_status = application_state
+        .p2p_control()
+        .map(|p2p_control| p2p_control.snapshot().status);
     Ok(Json(MeetingDetail {
         meeting_id: String::from(meeting_id.as_str()),
         title: meeting_metadata.display_title(),
         created_at: meeting_metadata.created_at().to_rfc3339(),
         transcription_languages: transcription_language_codes(&meeting_metadata),
+        recorded_on: name_recording_devices(&listing.recorded_on(&meeting_id), p2p_status.as_ref()),
+        combined_recordings: meeting_id_strings(&listing.folded_into(&meeting_id)),
         transcript,
         attachments: attachments.iter().map(AttachmentSummary::from).collect(),
     }))
+}
+
+/// Lists meeting IDs as strings. Side effects: None.
+fn meeting_id_strings(meeting_ids: &[MeetingId]) -> Vec<String> {
+    meeting_ids
+        .iter()
+        .map(|meeting_id| meeting_id.as_str().to_owned())
+        .collect()
+}
+
+/// Splits the recordings combined into a meeting apart again, for good (#88).
+///
+/// Inputs: The listed meeting's ID, or one combined recording's ID (only it is split).
+/// Outputs: `200` with `{"split": [<meeting IDs listed on their own again>]}` (empty when there
+/// was nothing to split), `404` for an unknown meeting, or a storage error status.
+/// Side effects: Writes each split recording's document and tells paired devices.
+async fn split_meeting_route(
+    Path(meeting_identifier): Path<String>,
+    State(application_state): State<ServerAppState>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    tracing::info!(endpoint = "POST /api/meetings/:meeting_id/split", meeting_id = %meeting_identifier, "headless API request received");
+    let meeting_id = MeetingId::new(meeting_identifier);
+    let repositories = application_state.repositories.lock().await;
+    repositories
+        .load_meeting_metadata(&meeting_id)
+        .map_err(storage_error_status)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let split = split_recordings(&**repositories, &meeting_id).map_err(storage_error_status)?;
+    drop(repositories);
+    for recording in &split {
+        application_state.notify_local_change(recording);
+    }
+    Ok(Json(
+        serde_json::json!({ "split": meeting_id_strings(&split) }),
+    ))
 }
 
 /// Request body for `PATCH /api/meetings/{meeting_id}`; `title` is required.
@@ -1063,6 +1129,11 @@ struct MeetingSummary {
     /// Speech-to-text languages (`auto` or Whisper codes) in first-use order; empty when none
     /// was recorded.
     transcription_languages: Vec<&'static str>,
+    /// The devices that recorded the meeting (#88); only the list sets it.
+    recorded_on: Vec<RecordingDevice>,
+    /// Other devices' recordings combined into this meeting, which Split lists again; only the
+    /// list sets it.
+    combined_recordings: Vec<String>,
 }
 impl From<&MeetingMetadata> for MeetingSummary {
     fn from(meeting_metadata: &MeetingMetadata) -> Self {
@@ -1072,6 +1143,8 @@ impl From<&MeetingMetadata> for MeetingSummary {
             created_at: meeting_metadata.created_at().to_rfc3339(),
             project_id: None,
             transcription_languages: transcription_language_codes(meeting_metadata),
+            recorded_on: Vec::new(),
+            combined_recordings: Vec::new(),
         }
     }
 }
@@ -1095,6 +1168,10 @@ struct MeetingDetail {
     created_at: String,
     /// Speech-to-text languages in first-use order; empty when none was recorded.
     transcription_languages: Vec<&'static str>,
+    /// The devices that recorded the meeting (#88).
+    recorded_on: Vec<RecordingDevice>,
+    /// Other devices' recordings combined into this meeting, which Split lists again.
+    combined_recordings: Vec<String>,
     transcript: Option<String>,
     attachments: Vec<AttachmentSummary>,
 }
