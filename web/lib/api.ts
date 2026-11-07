@@ -4,6 +4,10 @@ export type Device = { device_id: string; supports_vad: boolean; supported_model
 export type Metric = { task_type: "transcription" | "cloud_transcription" | "file_transfer" | "diarization"; duration_ms: number; latency_ms: number; power_mwh: number; recorded_at: number };
 export type DeviceTelemetry = { device_id: string; metrics: Metric[] };
 export type TelemetrySummary = { total_transcription_time_ms: number; average_latency_ms: number; total_tasks: number; power_estimate_mwh: number };
+/** A device that recorded a meeting (#88); `name` is null when the daemon does not know it. */
+export type RecordingDevice = { device_id: string; name: string | null; this_device: boolean };
+/** Which devices recorded a meeting and which recordings were combined into it (#88); older daemons omit both. */
+export type RecordedOn = { recorded_on?: RecordingDevice[]; combined_recordings?: string[] };
 /** `project_id` is the meeting's project (Issue #85): null outside any, absent from older servers. */
 /** `transcription_languages`: speech-to-text codes (`auto` or Whisper's) in first-use order; older daemons omit it. */
 export type MeetingSummary = {
@@ -12,7 +16,7 @@ export type MeetingSummary = {
   created_at: string;
   project_id?: string | null;
   transcription_languages?: string[];
-};
+} & RecordedOn;
 export type Attachment = { attachment_id: string; file_path: string; mime_type: string; original_timestamp_utc: string };
 export type MeetingDetail = {
   meeting_id: string;
@@ -21,7 +25,7 @@ export type MeetingDetail = {
   transcription_languages?: string[];
   transcript: string | null;
   attachments: Attachment[];
-};
+} & RecordedOn;
 export type VoiceIdentity = { identity_id: string; display_name: string; voice_variant_count: number };
 export type UnassignedClip = { clip_id: string; meeting_id: string; start_time_ms: number; end_time_ms: number; audio_url?: string };
 export type UnknownCluster = { cluster_id: string; meeting_id: string; total_duration_ms: number; chunk_count: number; created_at: string };
@@ -251,6 +255,20 @@ async function deleteItem(path: string): Promise<void> {
 /** Deletes a meeting with its transcript, attachments and unknown voices. See `deleteItem`. */
 export function deleteMeeting(meetingId: string): Promise<void> {
   return deleteItem(`/api/meetings/${encodeURIComponent(meetingId)}`);
+}
+
+/**
+ * Lists the recordings combined into a meeting on their own again, for good (#88).
+ *
+ * Inputs: the meeting, or one combined recording (only it is split). Outputs: the meetings listed
+ * again (empty when there was nothing to split); throws `Split failed (<status>)` otherwise.
+ * Side effects: writes the recordings' documents on the daemon, which sync to paired devices.
+ */
+export async function splitMeeting(meetingId: string): Promise<string[]> {
+  const response = await fetch(`${apiBaseUrl}/api/meetings/${encodeURIComponent(meetingId)}/split`, { method: "POST" });
+  if (!response.ok) throw new Error(`Split failed (${response.status})`);
+  const body = (await response.json()) as { split?: string[] };
+  return body.split ?? [];
 }
 
 /** Deletes an unknown voice; its transcript stays. See `deleteItem`. */

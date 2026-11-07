@@ -35,6 +35,9 @@ Projects (Issue #85), over `lib/projects-api.ts`:
   Download and Delete (confirmed). Previews never render a file's markup: pictures inline,
   Markdown and text as plain text, e-mails as headers and text. A file still syncing shows
   "Syncing…".
+- `meeting-recorded-on.tsx` says "Recorded on Laptop + Pixel" on the page of a meeting the app
+  combined from several devices' recordings (#88), and its Split button lists the other recordings
+  on their own again after an inline confirmation. The list rows carry the same line.
 - `meeting-project-picker.tsx` is the meeting page's Project selector; a failed move puts the
   previous choice back.
 `telemetry-entry.tsx` is the Settings card linking to `/settings/telemetry` (Issue #53).

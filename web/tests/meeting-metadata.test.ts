@@ -1,7 +1,7 @@
 // Specifies how the meeting page words a meeting's creation time and transcription languages.
 
-import { describe, expect, it } from "vitest";
-import { describeTranscriptionLanguages, formatMeetingCreatedAt, transcriptionLanguageName } from "@/lib/meeting-metadata";
+import { describe, expect, it, test } from "vitest";
+import { describeRecordedOn, describeTranscriptionLanguages, formatMeetingCreatedAt, transcriptionLanguageName } from "@/lib/meeting-metadata";
 
 describe("meeting metadata", () => {
   it("formats the creation time in UTC as the apps do", () => {
@@ -23,4 +23,20 @@ describe("meeting metadata", () => {
     expect(describeTranscriptionLanguages([])).toBeNull();
     expect(describeTranscriptionLanguages(undefined)).toBeNull();
   });
+});
+
+test("names the devices of a combined meeting, and nothing for one device (#88)", () => {
+  expect(
+    describeRecordedOn({
+      recorded_on: [
+        { device_id: "device-laptop", name: "Laptop", this_device: true },
+        { device_id: "device-phone", name: null, this_device: false }
+      ],
+      combined_recordings: ["meeting-phone"]
+    })
+  ).toBe("Recorded on Laptop + another device");
+  expect(
+    describeRecordedOn({ recorded_on: [{ device_id: "d", name: null, this_device: true }], combined_recordings: [] })
+  ).toBeNull();
+  expect(describeRecordedOn({})).toBeNull();
 });

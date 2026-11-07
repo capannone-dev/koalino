@@ -1,7 +1,7 @@
 // Verifies the typed API client calls the documented unknown-speaker cluster and meeting rename routes.
 
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { assignCluster, deleteMeeting, deleteSavedPerson, deleteUnknownVoice, getUnknownClusters, MeetingRenameError, renameMeeting } from "@/lib/api";
+import { assignCluster, deleteMeeting, deleteSavedPerson, deleteUnknownVoice, getUnknownClusters, MeetingRenameError, renameMeeting, splitMeeting } from "@/lib/api";
 
 const fetchMock = vi.fn();
 
@@ -95,4 +95,14 @@ test("a 409 on delete reports a recording and a 500 a failure", async () => {
   fetchMock.mockResolvedValueOnce(new Response("{}", { status: 409 })).mockResolvedValueOnce(new Response("{}", { status: 500 }));
   await expect(deleteMeeting("m")).rejects.toMatchObject({ kind: "recording" });
   await expect(deleteMeeting("m")).rejects.toMatchObject({ kind: "failed" });
+});
+
+test("splitMeeting posts to the split route and returns the recordings listed again (#88)", async () => {
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ split: ["meeting-phone"] }), { status: 200 }));
+  fetchMock.mockResolvedValueOnce(new Response("{}", { status: 404 }));
+
+  await expect(splitMeeting("a b")).resolves.toEqual(["meeting-phone"]);
+  expect(fetchMock.mock.calls[0][0]).toContain("/api/meetings/a%20b/split");
+  expect(fetchMock.mock.calls[0][1]).toEqual({ method: "POST" });
+  await expect(splitMeeting("gone")).rejects.toThrow("Split failed (404)");
 });

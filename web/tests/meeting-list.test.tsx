@@ -228,3 +228,24 @@ test("a meeting being recorded stays, and the dialog says why", async () => {
   expect(screen.getByRole("link", { name: "Project Sync" })).toBeInTheDocument();
   deleted.mockReset();
 });
+
+test("a combined meeting's row names its devices (#88)", () => {
+  render(
+    <MeetingList
+      meetings={[
+        {
+          meeting_id: "meeting-laptop",
+          title: "Supplier call",
+          created_at: "2026-11-02T15:00:00+00:00",
+          recorded_on: [
+            { device_id: "device-laptop", name: "Laptop", this_device: true },
+            { device_id: "device-phone", name: "Pixel", this_device: false }
+          ],
+          combined_recordings: ["meeting-phone"]
+        }
+      ]}
+    />
+  );
+
+  expect(screen.getByText("Recorded on Laptop + Pixel")).toBeInTheDocument();
+});

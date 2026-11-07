@@ -8,6 +8,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { RenameMeetingDialog } from "@/components/rename-meeting-dialog";
 import type { MeetingSummary } from "@/lib/api";
 import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion-messages";
+import { describeRecordedOn } from "@/lib/meeting-metadata";
 
 /** The row whose actions menu is open; `position` is set when it was opened by right-click. */
 type OpenMenu = { meetingId: string; position: { x: number; y: number } | null };
@@ -99,6 +100,9 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                   {meeting.title}
                 </Link>
                 <small className="block truncate text-muted">{meeting.meeting_id}</small>
+                {describeRecordedOn(meeting) === null ? null : (
+                  <small className="block truncate text-muted">{describeRecordedOn(meeting)}</small>
+                )}
               </div>
               <button
                 ref={(button) => {

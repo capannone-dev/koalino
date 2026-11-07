@@ -1,5 +1,7 @@
-// Formats a meeting's details for its page: when it was created, and the speech-to-text languages
-// chosen while recording it, worded as the desktop and Android apps word them.
+// Formats a meeting's details for its page: when it was created, the speech-to-text languages
+// chosen while recording it, and the devices it was recorded on, worded as the apps word them.
+
+import type { RecordedOn } from "@/lib/api";
 
 /**
  * Formats an RFC 3339 instant as `YYYY-MM-DD HH:MM UTC`, as the apps and untitled meetings' titles do.
@@ -48,4 +50,17 @@ export function describeTranscriptionLanguages(codes: readonly string[] | undefi
   if (codes === undefined || codes.length === 0) return null;
   const heading = codes.length === 1 ? "Transcription language" : "Transcription languages";
   return `${heading}: ${codes.map(transcriptionLanguageName).join(", ")}`;
+}
+
+/**
+ * Names the devices a combined meeting was recorded on (#88), as the apps do.
+ *
+ * Inputs: the daemon's `recorded_on` and `combined_recordings` (missing from older daemons).
+ * Outputs: `Recorded on Laptop + Pixel` (an unknown device is `this device` or `another device`);
+ * `null` for a meeting no other recording was combined into. Side effects: none.
+ */
+export function describeRecordedOn(meeting: RecordedOn): string | null {
+  if (!meeting.combined_recordings?.length || !meeting.recorded_on?.length) return null;
+  const names = meeting.recorded_on.map((device) => device.name ?? (device.this_device ? "this device" : "another device"));
+  return `Recorded on ${names.join(" + ")}`;
 }

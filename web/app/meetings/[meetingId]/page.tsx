@@ -1,8 +1,10 @@
 // Renders one meeting's renamable title, when it was created and the languages it was transcribed
-// in, its project (Issue #85), transcript, and metadata-only attachment list from Axum.
+// in, the devices it was recorded on with a Split action (#88), its project (Issue #85), transcript,
+// and metadata-only attachment list from Axum.
 
 import { MeetingTitleHeader } from "@/components/meeting-title-header";
 import { MeetingProjectPicker } from "@/components/meeting-project-picker";
+import { MeetingRecordedOn } from "@/components/meeting-recorded-on";
 import { getMeeting, getMeetings } from "@/lib/api";
 import { describeTranscriptionLanguages, formatMeetingCreatedAt } from "@/lib/meeting-metadata";
 import { getProjects, type ProjectSummary } from "@/lib/projects-api";
@@ -27,6 +29,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
         <time dateTime={meeting.created_at}>{formatMeetingCreatedAt(meeting.created_at)}</time>
       </p>
       {languages === null ? null : <p className="text-muted">{languages}</p>}
+      <MeetingRecordedOn meeting={meeting} />
       <p>Meeting {meeting.meeting_id}</p>
       <h2>Transcript</h2>
       <p>{meeting.transcript ?? "No transcript is available."}</p>
