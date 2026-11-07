@@ -1,0 +1,305 @@
+//! Transcribes one meeting recorded on several devices from all of them (#88).
+//!
+//! The owner may put the laptop near themselves and a phone near the person they talk to. Each
+//! device then hears its own person well and the other badly, as a close-talk microphone does
+//! (on AMI, close-talk audio cut word error by 5–10 points). After the meeting, the combining
+//! device has every recording's sealed speech (`combined_meetings`). Here:
+//!
+//! 1. each recording's speech is re-transcribed in long windows, as in the single pass (#87);
+//! 2. the clock offset from the fold is refined from words both devices wrote;
+//! 3. every word takes its speaker from its own device's final speaker pass, and each speaker of
+//!    another device is mapped to the first recording's speaker of the same person (the same named
+//!    person, else the one they share the most time with);
+//! 4. each person's words are taken from the device that wrote more of them, so in overlapping
+//!    speech each device keeps the person near it;
+//! 5. a word written for both devices within a second is kept once.
+//!
+//! On NOTSOFAR, where every device stands far from everyone, choosing a device per speaker was
+//! neutral (38.9% word error either way), so a badly placed device does not make things worse.
+//! `combine_sources` is pure; `refine_combined_meeting` drives the engine and the repository.
+
+use std::collections::HashMap;
+
+use crate::{
+    application::{
+        same_meeting::{RecordingText, comparison_key, recognise_same_meeting},
+        transcript_refinement::{
+            ChunkSpan, MeetingWord, RefinementChunk, RefinementError, RefinementOutcome, Speaker,
+            segments_of, speaker_at, transcribe_chunks,
+        },
+    },
+    domain::models::{DeviceId, MeetingId, RecordingId, TranscriptSegment},
+    ports::{ai::TranscriptionEngine, storage::NoteRepository},
+};
+
+/// Two devices' copies of a word closer than this are one word.
+const DUPLICATE_WINDOW_MS: u64 = 1_000;
+
+/// One recording's re-transcribed words and its speakers.
+pub struct SourceWords<'speakers> {
+    /// The words, in this recording's time.
+    pub words: Vec<MeetingWord>,
+    /// Where this recording sits on the first recording's timeline (0 for the first itself).
+    pub offset_ms: i64,
+    /// This recording's final speakers, in its own time.
+    pub speakers: &'speakers [TranscriptSegment],
+}
+
+/// One word placed on the first recording's timeline.
+struct PlacedWord {
+    word: MeetingWord,
+    speaker: Speaker,
+    source: usize,
+}
+
+/// Builds the meeting's segments from several recordings' words.
+///
+/// Inputs: The meeting (the first recording), its words and speakers, and the other recordings'.
+/// Outputs: Segments in the first recording's time (see the module header). Side effects: None.
+pub fn combine_sources(
+    meeting_id: &MeetingId,
+    root: &SourceWords<'_>,
+    members: &[SourceWords<'_>],
+) -> Vec<TranscriptSegment> {
+    let mut placed: Vec<PlacedWord> = Vec::new();
+    for (source, words) in std::iter::once(root).chain(members).enumerate() {
+        let speaker_map = if source == 0 {
+            HashMap::new()
+        } else {
+            map_speakers(words, root.speakers)
+        };
+        for word in &words.words {
+            let own = speaker_at(words.speakers, word.midpoint_ms());
+            let speaker = if source == 0 {
+                own
+            } else {
+                speaker_map.get(&own).copied().unwrap_or(own)
+            };
+            placed.push(PlacedWord {
+                word: word.shifted(words.offset_ms),
+                speaker,
+                source,
+            });
+        }
+    }
+    let mut counts: HashMap<Speaker, Vec<usize>> = HashMap::new();
+    for word in &placed {
+        let per_source = counts
+            .entry(word.speaker)
+            .or_insert_with(|| vec![0; members.len() + 1]);
+        per_source[word.source] += 1;
+    }
+    // The device with the most words for each person; the first recording wins a tie.
+    let chosen: HashMap<Speaker, usize> = counts
+        .into_iter()
+        .map(|(speaker, per_source)| {
+            let best = per_source
+                .iter()
+                .enumerate()
+                .fold(0, |best, (source, count)| {
+                    if *count > per_source[best] {
+                        source
+                    } else {
+                        best
+                    }
+                });
+            (speaker, best)
+        })
+        .collect();
+    let mut kept: Vec<PlacedWord> = placed
+        .into_iter()
+        .filter(|word| chosen.get(&word.speaker) == Some(&word.source))
+        .collect();
+    kept.sort_by_key(|word| (word.word.start_ms(), word.source));
+    let mut written: Vec<&PlacedWord> = Vec::with_capacity(kept.len());
+    for word in &kept {
+        let key = comparison_key(word.word.text());
+        let duplicate = written.iter().rev().take_while(|earlier| {
+            word.word.start_ms().saturating_sub(earlier.word.start_ms()) <= DUPLICATE_WINDOW_MS
+        });
+        if duplicate.into_iter().any(|earlier| {
+            earlier.source != word.source && comparison_key(earlier.word.text()) == key
+        }) {
+            continue;
+        }
+        written.push(word);
+    }
+    segments_of(
+        meeting_id,
+        written.into_iter().map(|word| (&word.word, word.speaker)),
+    )
+}
+
+/// Maps each speaker of another recording to the first recording's speaker of the same person.
+///
+/// Outputs: For each of the recording's speakers, the same named person when the first recording
+/// has them, else the first recording's speaker it shares the most time with; speakers sharing
+/// no time keep their own. Side effects: None.
+fn map_speakers(
+    member: &SourceWords<'_>,
+    root_speakers: &[TranscriptSegment],
+) -> HashMap<Speaker, Speaker> {
+    let speaker_of =
+        |segment: &TranscriptSegment| (segment.speaker_identity_id(), segment.unknown_cluster_id());
+    let mut shared: HashMap<Speaker, HashMap<Speaker, u64>> = HashMap::new();
+    for segment in member.speakers {
+        let start = segment
+            .start_time_ms()
+            .saturating_add_signed(member.offset_ms);
+        let end = segment
+            .end_time_ms()
+            .saturating_add_signed(member.offset_ms);
+        let by_root = shared.entry(speaker_of(segment)).or_default();
+        for root_segment in root_speakers {
+            let overlap = end
+                .min(root_segment.end_time_ms())
+                .saturating_sub(start.max(root_segment.start_time_ms()));
+            if overlap > 0 {
+                *by_root.entry(speaker_of(root_segment)).or_default() += overlap;
+            }
+        }
+    }
+    let named_in_root: Vec<Speaker> = root_speakers.iter().map(speaker_of).collect();
+    shared
+        .into_iter()
+        .filter_map(|(speaker, by_root)| {
+            let same_person = speaker.0.and_then(|identity| {
+                named_in_root
+                    .iter()
+                    .find(|root| root.0 == Some(identity))
+                    .copied()
+            });
+            same_person
+                .or_else(|| {
+                    by_root
+                        .into_iter()
+                        .max_by_key(|(_, overlap)| *overlap)
+                        .map(|(root, _)| root)
+                })
+                .map(|root| (speaker, root))
+        })
+        .collect()
+}
+
+/// Refines where another recording sits on the first one's timeline from words both wrote.
+///
+/// Inputs: The first recording's words, the other's (each in its own time), and the fold's
+/// offset. Outputs: The offset from the words both share, or the fold's when they share too
+/// little. Side effects: None.
+pub fn refine_offset(root: &[MeetingWord], member: &[MeetingWord], fold_offset_ms: i64) -> i64 {
+    recognise_same_meeting(
+        &RecordingText::from_words(0, root.iter().map(|word| (word.start_ms(), word.text()))),
+        &RecordingText::from_words(
+            fold_offset_ms,
+            member.iter().map(|word| (word.start_ms(), word.text())),
+        ),
+    )
+    .map_or(fold_offset_ms, |same| same.offset_ms())
+}
+
+/// One recording handed to `refine_combined_meeting`.
+pub struct CombinedRecording<'chunks> {
+    /// The recording's meeting.
+    pub meeting_id: MeetingId,
+    /// Its retained chunks in its own time.
+    pub chunks: Vec<RefinementChunk<'chunks>>,
+    /// Where it sits on the first recording's timeline, as folded (0 for the first).
+    pub offset_ms: i64,
+}
+
+/// Re-transcribes a meeting from several devices' speech and replaces the first recording's text.
+///
+/// Inputs: The first recording and the others; the engine; `provide_audio`; the repository;
+/// this device; and `cancelled`, polled before each window.
+/// Outputs: The outcome, or why nothing changed. Segments of the first recording whose middle
+/// lies outside every recording's speech are kept as they are.
+/// Side effects: Runs inference and rewrites the first recording's segments (and its synced
+/// document). The other recordings' meetings are left as they are, folded and hidden.
+pub fn refine_combined_meeting<Engine, Repository>(
+    root: &CombinedRecording<'_>,
+    members: &[CombinedRecording<'_>],
+    engine: &Engine,
+    provide_audio: &dyn Fn(&RecordingId, Vec<i16>),
+    repository: &Repository,
+    device_id: &DeviceId,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<RefinementOutcome, RefinementError>
+where
+    Engine: TranscriptionEngine + ?Sized,
+    Repository: NoteRepository + ?Sized,
+{
+    let mut window_count = 0;
+    let mut transcribed: Vec<(Vec<MeetingWord>, Vec<TranscriptSegment>, i64)> = Vec::new();
+    let mut root_words: Option<Vec<MeetingWord>> = None;
+    for recording in std::iter::once(root).chain(members) {
+        let (words, windows) = transcribe_chunks(
+            &root.meeting_id,
+            recording.meeting_id.as_str(),
+            &recording.chunks,
+            engine,
+            provide_audio,
+            device_id,
+            cancelled,
+        )?;
+        window_count += windows;
+        let offset_ms = match &root_words {
+            None => 0,
+            Some(root_words) => refine_offset(root_words, &words, recording.offset_ms),
+        };
+        if root_words.is_none() {
+            root_words = Some(words.clone());
+        }
+        let speakers = repository.load_transcript_segments(&recording.meeting_id)?;
+        transcribed.push((words, speakers, offset_ms));
+    }
+    if cancelled() {
+        return Err(RefinementError::Cancelled);
+    }
+    let mut spans: Vec<ChunkSpan> = Vec::new();
+    for (recording, (_, _, offset_ms)) in std::iter::once(root).chain(members).zip(&transcribed) {
+        spans.extend(recording.chunks.iter().map(|chunk| ChunkSpan {
+            start_ms: chunk.span.start_ms.saturating_add_signed(*offset_ms),
+            end_ms: chunk.span.end_ms.saturating_add_signed(*offset_ms),
+        }));
+    }
+    let covered = |segment: &TranscriptSegment| {
+        let middle = segment.start_time_ms()
+            + segment
+                .end_time_ms()
+                .saturating_sub(segment.start_time_ms())
+                / 2;
+        spans
+            .iter()
+            .any(|span| span.start_ms <= middle && middle <= span.end_ms)
+    };
+    let mut sources = transcribed
+        .iter()
+        .map(|(words, speakers, offset_ms)| SourceWords {
+            words: words.clone(),
+            offset_ms: *offset_ms,
+            speakers,
+        });
+    let Some(root_source) = sources.next() else {
+        return Ok(RefinementOutcome {
+            window_count,
+            segment_count: 0,
+        });
+    };
+    let member_sources: Vec<SourceWords<'_>> = sources.collect();
+    let kept: Vec<TranscriptSegment> = root_source
+        .speakers
+        .iter()
+        .filter(|segment| !covered(segment))
+        .cloned()
+        .collect();
+    let combined = combine_sources(&root.meeting_id, &root_source, &member_sources);
+    let segment_count = combined.len();
+    let mut timeline = kept;
+    timeline.extend(combined);
+    timeline.sort_by_key(TranscriptSegment::start_time_ms);
+    repository.save_transcript_segments(&root.meeting_id, &timeline)?;
+    Ok(RefinementOutcome {
+        window_count,
+        segment_count,
+    })
+}

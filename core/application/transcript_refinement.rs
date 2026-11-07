@@ -145,17 +145,42 @@ impl MeetingWord {
         }
     }
 
+    /// Returns the word as written.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// Returns when the word starts, in meeting time.
+    pub fn start_ms(&self) -> u64 {
+        self.start_ms
+    }
+
+    /// Returns when the word ends, in meeting time.
+    pub fn end_ms(&self) -> u64 {
+        self.end_ms
+    }
+
+    /// Returns the same word moved by `offset_ms`, never before the meeting's start.
+    pub(crate) fn shifted(&self, offset_ms: i64) -> Self {
+        let shift = |time_ms: u64| time_ms.saturating_add_signed(offset_ms);
+        Self {
+            text: self.text.clone(),
+            start_ms: shift(self.start_ms),
+            end_ms: shift(self.end_ms),
+        }
+    }
+
     /// Returns the moment that decides who said the word.
-    fn midpoint_ms(&self) -> u64 {
+    pub(crate) fn midpoint_ms(&self) -> u64 {
         self.start_ms + (self.end_ms - self.start_ms) / 2
     }
 }
 
 /// Who a stretch of the meeting belongs to: a named person, an unknown voice, or neither.
-type Speaker = (Option<Uuid>, Option<Uuid>);
+pub(crate) type Speaker = (Option<Uuid>, Option<Uuid>);
 
 /// Returns the speaker of the segment containing `time_ms`, else of the nearest segment.
-fn speaker_at(speakers: &[TranscriptSegment], time_ms: u64) -> Speaker {
+pub(crate) fn speaker_at(speakers: &[TranscriptSegment], time_ms: u64) -> Speaker {
     speakers
         .iter()
         .min_by_key(|segment| {
@@ -181,13 +206,29 @@ pub fn reattribute_words(
     words: &[MeetingWord],
     speakers: &[TranscriptSegment],
 ) -> Vec<TranscriptSegment> {
+    segments_of(
+        meeting_id,
+        words
+            .iter()
+            .map(|word| (word, speaker_at(speakers, word.midpoint_ms()))),
+    )
+}
+
+/// Groups words, each with its speaker, into segments.
+///
+/// Inputs: The meeting and its words in time order, each with who said it.
+/// Outputs: Segments of consecutive words with one speaker, split at pauses over 2 s and kept
+/// within 20 s; blank words are dropped. Side effects: None.
+pub(crate) fn segments_of<'word>(
+    meeting_id: &MeetingId,
+    words: impl IntoIterator<Item = (&'word MeetingWord, Speaker)>,
+) -> Vec<TranscriptSegment> {
     let mut runs: Vec<(Speaker, u64, u64, Vec<&str>)> = Vec::new();
-    for word in words {
+    for (word, speaker) in words {
         let text = word.text.trim();
         if text.is_empty() {
             continue;
         }
-        let speaker = speaker_at(speakers, word.midpoint_ms());
         match runs.last_mut() {
             Some(run)
                 if run.0 == speaker
@@ -273,40 +314,15 @@ where
     Repository: NoteRepository + ?Sized,
 {
     let spans: Vec<ChunkSpan> = chunks.iter().map(|chunk| chunk.span).collect();
-    let windows = plan_windows(&spans, REFINEMENT_WINDOW_MS);
-    let mut words: Vec<MeetingWord> = Vec::new();
-    let mut previous_text: Option<String> = None;
-    for (window_number, window) in windows.iter().enumerate() {
-        if cancelled() {
-            return Err(RefinementError::Cancelled);
-        }
-        let samples: Vec<i16> = window
-            .chunk_indexes()
-            .iter()
-            .flat_map(|index| chunks[*index].samples.iter().copied())
-            .collect();
-        let language = window
-            .chunk_indexes()
-            .first()
-            .and_then(|index| chunks[*index].language);
-        let recording_id =
-            RecordingId::new(format!("refine-{}-{window_number}", meeting_id.as_str()));
-        provide_audio(&recording_id, samples);
-        let context = TranscriptionContext::new(previous_text.take()).with_language(language);
-        let transcript = engine.transcribe(
-            &AudioRecording::new(recording_id, meeting_id.clone(), device_id.clone()),
-            &context,
-        )?;
-        words.extend(transcript.timed_words().iter().map(|word| {
-            MeetingWord::new(
-                word.text(),
-                window.to_meeting_ms(word.start_ms()),
-                window.to_meeting_ms(word.end_ms()),
-            )
-        }));
-        let text = transcript.content().trim();
-        previous_text = (!text.is_empty()).then(|| text.to_owned());
-    }
+    let (words, window_count) = transcribe_chunks(
+        meeting_id,
+        meeting_id.as_str(),
+        chunks,
+        engine,
+        provide_audio,
+        device_id,
+        cancelled,
+    )?;
     if cancelled() {
         return Err(RefinementError::Cancelled);
     }
@@ -330,7 +346,63 @@ where
     timeline.sort_by_key(TranscriptSegment::start_time_ms);
     repository.save_transcript_segments(meeting_id, &timeline)?;
     Ok(RefinementOutcome {
-        window_count: windows.len(),
+        window_count,
         segment_count,
     })
+}
+
+/// Re-transcribes speech chunks in long windows.
+///
+/// Inputs: The meeting the audio belongs to; a name for the windows' audio ids; the chunks in time
+/// order; the engine; `provide_audio`; this device; and `cancelled`, polled before each window.
+/// Outputs: The words in the chunks' time, and the number of windows, or why it stopped. Each
+/// window is prompted with the previous one's text.
+/// Side effects: Runs inference.
+pub(crate) fn transcribe_chunks<Engine>(
+    meeting_id: &MeetingId,
+    audio_name: &str,
+    chunks: &[RefinementChunk<'_>],
+    engine: &Engine,
+    provide_audio: &dyn Fn(&RecordingId, Vec<i16>),
+    device_id: &DeviceId,
+    cancelled: &dyn Fn() -> bool,
+) -> Result<(Vec<MeetingWord>, usize), RefinementError>
+where
+    Engine: TranscriptionEngine + ?Sized,
+{
+    let spans: Vec<ChunkSpan> = chunks.iter().map(|chunk| chunk.span).collect();
+    let windows = plan_windows(&spans, REFINEMENT_WINDOW_MS);
+    let mut words: Vec<MeetingWord> = Vec::new();
+    let mut previous_text: Option<String> = None;
+    for (window_number, window) in windows.iter().enumerate() {
+        if cancelled() {
+            return Err(RefinementError::Cancelled);
+        }
+        let samples: Vec<i16> = window
+            .chunk_indexes()
+            .iter()
+            .flat_map(|index| chunks[*index].samples.iter().copied())
+            .collect();
+        let language = window
+            .chunk_indexes()
+            .first()
+            .and_then(|index| chunks[*index].language);
+        let recording_id = RecordingId::new(format!("refine-{audio_name}-{window_number}"));
+        provide_audio(&recording_id, samples);
+        let context = TranscriptionContext::new(previous_text.take()).with_language(language);
+        let transcript = engine.transcribe(
+            &AudioRecording::new(recording_id, meeting_id.clone(), device_id.clone()),
+            &context,
+        )?;
+        words.extend(transcript.timed_words().iter().map(|word| {
+            MeetingWord::new(
+                word.text(),
+                window.to_meeting_ms(word.start_ms()),
+                window.to_meeting_ms(word.end_ms()),
+            )
+        }));
+        let text = transcript.content().trim();
+        previous_text = (!text.is_empty()).then(|| text.to_owned());
+    }
+    Ok((words, windows.len()))
 }

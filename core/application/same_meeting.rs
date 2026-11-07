@@ -87,6 +87,30 @@ impl RecordingText {
         }
     }
 
+    /// Builds a recording's text from timed words.
+    ///
+    /// Inputs: When the recording started (Unix milliseconds, or any common reference) and its
+    /// words with their times in the recording. Outputs: The words in time order, compared as in
+    /// `from_segments`. Side effects: None.
+    pub fn from_words<'text>(
+        started_at_ms: i64,
+        words: impl IntoIterator<Item = (u64, &'text str)>,
+    ) -> Self {
+        let mut words: Vec<SpokenWord> = words
+            .into_iter()
+            .map(|(time_ms, text)| SpokenWord {
+                time_ms,
+                key: comparison_key(text),
+            })
+            .filter(|word| !word.key.is_empty())
+            .collect();
+        words.sort_by_key(|word| word.time_ms);
+        Self {
+            started_at_ms,
+            words,
+        }
+    }
+
     /// Returns the words in time order.
     pub fn words(&self) -> &[SpokenWord] {
         &self.words
@@ -196,7 +220,7 @@ fn median(mut values: Vec<i64>) -> Option<i64> {
 }
 
 /// Lowercases a word and keeps only its letters, digits and apostrophes.
-fn comparison_key(word: &str) -> String {
+pub(crate) fn comparison_key(word: &str) -> String {
     word.chars()
         .filter(|character| character.is_alphanumeric() || *character == '\'')
         .flat_map(char::to_lowercase)

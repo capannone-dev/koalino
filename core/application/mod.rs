@@ -25,6 +25,14 @@ mod cluster_review_tests;
 pub mod cluster_share_exchange;
 #[cfg(test)]
 mod cluster_share_exchange_tests;
+/// Folds devices' recordings of one meeting and plans what happens to their speech (#88).
+pub mod combined_meetings;
+#[cfg(test)]
+mod combined_meetings_tests;
+/// Transcribes one meeting recorded on several devices from all of them (#88).
+pub mod combined_refinement;
+#[cfg(test)]
+mod combined_refinement_tests;
 /// Defines compute-routing policy seams for future distributed AI selection.
 pub mod compute_router;
 #[cfg(test)]
