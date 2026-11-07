@@ -163,3 +163,90 @@ fn folding_into_an_unknown_meeting_or_into_itself_is_refused() {
     assert!(matches!(itself, Err(StorageError::Rejected { .. })));
     assert_eq!(device.recording(&phone_meeting).combined_into, None);
 }
+
+#[test]
+fn deleting_a_combined_meeting_deletes_the_recording_folded_into_it() {
+    let laptop = Device::new("laptop");
+    let first = laptop.meeting("meeting-laptop");
+    let folded = laptop.meeting("meeting-phone");
+    let kept = laptop.meeting("meeting-other");
+    laptop
+        .repository
+        .combine_meeting(
+            &folded,
+            &MeetingCombination {
+                into: first.clone(),
+                offset_ms: 2_000,
+                combine_on: DeviceId::new("laptop"),
+            },
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    crate::application::deletion::delete_meeting(&laptop.repository, None, &first)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let left: Vec<MeetingId> = laptop
+        .repository
+        .list_meeting_ids()
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(left, vec![kept]);
+}
+
+#[test]
+fn splitting_the_listed_meeting_lists_its_folded_recordings_again() {
+    use crate::application::combined_meetings::split_recordings;
+    let laptop = Device::new("laptop");
+    let first = laptop.meeting("meeting-laptop");
+    let folded = laptop.meeting("meeting-phone");
+    laptop
+        .repository
+        .combine_meeting(
+            &folded,
+            &MeetingCombination {
+                into: first.clone(),
+                offset_ms: 2_000,
+                combine_on: DeviceId::new("laptop"),
+            },
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let split =
+        split_recordings(&laptop.repository, &first).unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(split, vec![folded.clone()]);
+    assert_eq!(laptop.recording(&folded).combined_into, None);
+    assert_eq!(
+        laptop.recording(&folded).kept_apart_from,
+        vec![first.clone()]
+    );
+    assert!(
+        split_recordings(&laptop.repository, &first)
+            .unwrap_or_else(|error| panic!("{error}"))
+            .is_empty(),
+        "nothing left to split"
+    );
+}
+
+#[test]
+fn a_folded_recording_can_be_split_by_its_own_id() {
+    use crate::application::combined_meetings::split_recordings;
+    let laptop = Device::new("laptop");
+    let first = laptop.meeting("meeting-laptop");
+    let folded = laptop.meeting("meeting-phone");
+    laptop
+        .repository
+        .combine_meeting(
+            &folded,
+            &MeetingCombination {
+                into: first,
+                offset_ms: 2_000,
+                combine_on: DeviceId::new("laptop"),
+            },
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let split =
+        split_recordings(&laptop.repository, &folded).unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(split, vec![folded]);
+}

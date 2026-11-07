@@ -17,9 +17,15 @@
 //! - the combining device waits until every recording of the meeting is here, at most
 //!   `KEEP_FOR_COMBINING`, then combines what it has.
 //!
+//! `MeetingListing` says how folded meetings are shown: once, under the first recording, as
+//! recorded on every device that took part.
+//!
 //! Everything here is pure; the after-meeting worker carries the plans out.
 
-use std::time::Duration;
+use std::{
+    collections::{HashMap, HashSet},
+    time::Duration,
+};
 
 use chrono::{DateTime, Utc};
 
@@ -29,7 +35,10 @@ use crate::{
         errors::StorageError,
         models::{DeviceId, MeetingId, TranscriptSegment},
     },
-    ports::{meeting_document::MeetingCombination, storage::MeetingRecording},
+    ports::{
+        meeting_document::MeetingCombination,
+        storage::{MeetingRecording, NoteRepository},
+    },
 };
 
 /// How long a finished recording waits for another device's recording of it to sync here.
@@ -61,6 +70,103 @@ pub enum AudioPlan {
     },
     /// Delete the speech without a pass.
     Discard,
+}
+
+/// How meetings are listed once recordings of one meeting are folded together.
+#[derive(Clone, Debug, Default)]
+pub struct MeetingListing {
+    /// Recordings folded into a meeting that is stored here, which are not listed.
+    hidden: HashSet<MeetingId>,
+    /// For each listed meeting, its devices: its own first, then its folded recordings'.
+    devices: HashMap<MeetingId, Vec<DeviceId>>,
+    /// For each listed meeting, the recordings folded into it, oldest first.
+    folded: HashMap<MeetingId, Vec<MeetingId>>,
+}
+
+impl MeetingListing {
+    /// Works out the listing from every meeting's recording facts.
+    ///
+    /// Inputs: The recordings, as `NoteRepository::meeting_recordings` lists them. Outputs: The
+    /// listing. A recording folded into a meeting not stored here is listed on its own.
+    /// Side effects: None.
+    pub fn of(recordings: &[MeetingRecording]) -> Self {
+        let stored: HashSet<&MeetingId> = recordings
+            .iter()
+            .map(|recording| &recording.meeting_id)
+            .collect();
+        let mut listing = Self::default();
+        for recording in recordings {
+            listing
+                .devices
+                .entry(recording.meeting_id.clone())
+                .or_default()
+                .insert(0, recording.acquisition_device_id.clone());
+            let Some(combination) = recording
+                .combined_into
+                .as_ref()
+                .filter(|combination| stored.contains(&combination.into))
+            else {
+                continue;
+            };
+            listing.hidden.insert(recording.meeting_id.clone());
+            listing
+                .folded
+                .entry(combination.into.clone())
+                .or_default()
+                .push(recording.meeting_id.clone());
+            let devices = listing.devices.entry(combination.into.clone()).or_default();
+            if !devices.contains(&recording.acquisition_device_id) {
+                devices.push(recording.acquisition_device_id.clone());
+            }
+        }
+        listing
+    }
+
+    /// Reports whether `meeting_id` is listed: false for a recording folded into another.
+    pub fn is_listed(&self, meeting_id: &MeetingId) -> bool {
+        !self.hidden.contains(meeting_id)
+    }
+
+    /// Returns the devices that recorded `meeting_id`: its own first, then those of the
+    /// recordings folded into it. Empty for an unknown meeting.
+    pub fn recorded_on(&self, meeting_id: &MeetingId) -> Vec<DeviceId> {
+        self.devices.get(meeting_id).cloned().unwrap_or_default()
+    }
+
+    /// Returns the recordings folded into `meeting_id`, which Split would list again.
+    pub fn folded_into(&self, meeting_id: &MeetingId) -> Vec<MeetingId> {
+        self.folded.get(meeting_id).cloned().unwrap_or_default()
+    }
+}
+
+/// Splits recordings of one meeting apart again, for good (the Split action).
+///
+/// Inputs: The repository and either the listed meeting (all recordings folded into it are split)
+/// or one folded recording (only it is split).
+/// Outputs: The recordings that are listed again; empty when there was nothing to split.
+/// Side effects: Writes each split recording's document, which syncs to paired devices. The
+/// listed meeting keeps its transcript, which may already combine every device's speech; each
+/// split recording shows its own live transcript again.
+pub fn split_recordings(
+    repository: &dyn NoteRepository,
+    meeting_id: &MeetingId,
+) -> Result<Vec<MeetingId>, StorageError> {
+    let recordings = repository.meeting_recordings()?;
+    let folded_here = recordings
+        .iter()
+        .any(|recording| recording.meeting_id == *meeting_id && recording.combined_into.is_some());
+    let to_split: Vec<MeetingId> = if folded_here {
+        vec![meeting_id.clone()]
+    } else {
+        MeetingListing::of(&recordings).folded_into(meeting_id)
+    };
+    let mut split = Vec::with_capacity(to_split.len());
+    for recording in to_split {
+        if repository.split_meeting(&recording)? {
+            split.push(recording);
+        }
+    }
+    Ok(split)
 }
 
 /// Finds recordings of one meeting made on two devices, at least one of them this one.

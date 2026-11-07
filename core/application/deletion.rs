@@ -48,11 +48,13 @@ pub enum DeletionError {
     Storage(#[from] StorageError),
 }
 
-/// Deletes a meeting and everything it holds.
+/// Deletes a meeting and everything it holds, including other devices' recordings of it that were
+/// folded into it (#88), which are not listed on their own.
 ///
 /// Inputs: The repository, the hooks (`None` skips the recording check and file removal), and the
 /// meeting.
-/// Outputs: Success, or `Recording`, `NotFound` or `Storage`; in each of those nothing changed.
+/// Outputs: Success, or `Recording`, `NotFound` or `Storage`; in each of those nothing changed
+/// (a failure deleting a folded recording after the meeting itself is returned as `Storage`).
 /// Side effects: Irreversibly deletes its rows and private files. Paired devices delete it too.
 pub fn delete_meeting(
     repository: impl NoteRepository,
@@ -64,6 +66,17 @@ pub fn delete_meeting(
             meeting_id: meeting_id.as_str().to_owned(),
         });
     }
+    let folded: Vec<MeetingId> = repository
+        .meeting_recordings()?
+        .into_iter()
+        .filter(|recording| {
+            recording
+                .combined_into
+                .as_ref()
+                .is_some_and(|combination| combination.into == *meeting_id)
+        })
+        .map(|recording| recording.meeting_id)
+        .collect();
     if !repository.delete_meeting(meeting_id)? {
         return Err(DeletionError::NotFound {
             item: format!("meeting {}", meeting_id.as_str()),
@@ -71,6 +84,12 @@ pub fn delete_meeting(
     }
     if let Some(hooks) = hooks {
         hooks.remove_files(meeting_id);
+    }
+    for folded_meeting in folded {
+        repository.delete_meeting(&folded_meeting)?;
+        if let Some(hooks) = hooks {
+            hooks.remove_files(&folded_meeting);
+        }
     }
     Ok(())
 }

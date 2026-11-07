@@ -6,7 +6,8 @@ use std::{collections::HashMap, time::Duration};
 use chrono::{DateTime, TimeZone, Utc};
 
 use super::combined_meetings::{
-    AudioPlan, COMBINING_GRACE, KEEP_FOR_COMBINING, find_combinations, plan_retained_audio,
+    AudioPlan, COMBINING_GRACE, KEEP_FOR_COMBINING, MeetingListing, find_combinations,
+    plan_retained_audio,
 };
 use crate::{
     domain::{
@@ -439,5 +440,47 @@ fn speech_that_could_not_be_sent_for_a_day_is_discarded() {
             false
         ),
         AudioPlan::Discard
+    );
+}
+
+#[test]
+fn a_folded_recording_is_listed_once_under_the_first_with_both_devices() {
+    let mut recordings = folded("laptop");
+    recordings.push(recording("meeting-alone", "laptop", 9_000));
+
+    let listing = MeetingListing::of(&recordings);
+
+    assert!(listing.is_listed(&MeetingId::new("meeting-laptop")));
+    assert!(!listing.is_listed(&MeetingId::new("meeting-phone")));
+    assert!(listing.is_listed(&MeetingId::new("meeting-alone")));
+    assert_eq!(
+        listing.recorded_on(&MeetingId::new("meeting-laptop")),
+        vec![DeviceId::new("laptop"), DeviceId::new("phone")]
+    );
+    assert_eq!(
+        listing.folded_into(&MeetingId::new("meeting-laptop")),
+        vec![MeetingId::new("meeting-phone")]
+    );
+    assert_eq!(
+        listing.recorded_on(&MeetingId::new("meeting-alone")),
+        vec![DeviceId::new("laptop")]
+    );
+    assert!(
+        listing
+            .folded_into(&MeetingId::new("meeting-alone"))
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_recording_folded_into_a_missing_meeting_is_listed_alone() {
+    let recordings = vec![folded("laptop").remove(1)];
+
+    let listing = MeetingListing::of(&recordings);
+
+    assert!(listing.is_listed(&MeetingId::new("meeting-phone")));
+    assert_eq!(
+        listing.recorded_on(&MeetingId::new("meeting-phone")),
+        vec![DeviceId::new("phone")]
     );
 }
