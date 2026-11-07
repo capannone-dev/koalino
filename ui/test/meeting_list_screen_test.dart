@@ -551,4 +551,15 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  testWidgets('a combined meeting names its devices in the row (#88)',
+      (WidgetTester tester) async {
+    await pumpMeetingList(
+      tester,
+      FakeMeetingBridge(meetings: <MeetingSummary>[combinedMeeting]),
+    );
+
+    expect(find.text('2026-11-02 15:00 UTC · 2:00 · Laptop + Pixel'),
+        findsOneWidget);
+  });
 }

@@ -15,6 +15,7 @@ import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_timeline.dart';
 import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
+import 'package:note_taker_ui/presentation/split_meeting_action.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
 /// Builds a screen about one meeting, such as the voice gallery for its unknown speakers.
@@ -395,6 +396,31 @@ final class _MeetingContent extends StatelessWidget {
                 languages,
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            if (summary.recordedOnLabel case final String devices)
+              Row(
+                children: <Widget>[
+                  Icon(Icons.devices_outlined,
+                      size: 18, color: theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Recorded on $devices',
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                  TextButton.icon(
+                    key: const ValueKey<String>('split-open-meeting'),
+                    icon: const Icon(Icons.call_split),
+                    label: const Text('Split'),
+                    onPressed: () => splitMeetingAfterAsking(
+                      context,
+                      controller: controller,
+                      meeting: summary,
+                    ),
+                  ),
+                ],
               ),
             SelectableText(
               summary.meetingId,

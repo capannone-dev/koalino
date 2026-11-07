@@ -40,6 +40,12 @@ final class FakeMeetingBridge implements MeetingBridge {
   /// When set, `deleteMeeting` records the request and then throws this error.
   Object? deleteError;
 
+  /// Meeting IDs sent to `splitMeeting`.
+  final List<String> splitRequests = <String>[];
+
+  /// When set, `splitMeeting` records the request and then throws this error.
+  Object? splitError;
+
   @override
   Future<List<MeetingSummary>> getMeetings() async {
     meetingListRequestCount += 1;
@@ -61,6 +67,14 @@ final class FakeMeetingBridge implements MeetingBridge {
   Future<void> renameMeeting(String meetingId, String newTitle) async {
     renameRequests.add((meetingId: meetingId, newTitle: newTitle));
     if (renameError case final Object error) {
+      throw error;
+    }
+  }
+
+  @override
+  Future<void> splitMeeting(String meetingId) async {
+    splitRequests.add(meetingId);
+    if (splitError case final Object error) {
       throw error;
     }
   }
@@ -111,4 +125,28 @@ final MeetingDetail untitledMeetingDetail = MeetingDetail(
   summary: untitledMeeting,
   transcript: null,
   segments: const <MeetingTranscriptSegment>[],
+);
+
+/// A meeting recorded on this laptop and on a paired phone, combined into one (#88).
+final MeetingSummary combinedMeeting = MeetingSummary(
+  meetingId: 'meeting-combined',
+  title: 'Supplier call',
+  createdAt: DateTime.utc(2026, 11, 2, 15),
+  durationMs: 120000,
+  recordedOn: const <RecordingDevice>[
+    RecordingDevice(
+        deviceId: 'device-laptop', name: 'Laptop', thisDevice: true),
+    RecordingDevice(deviceId: 'device-phone', name: 'Pixel', thisDevice: false),
+  ],
+  combinedRecordings: const <String>['meeting-phone'],
+);
+
+/// The detail of `combinedMeeting`.
+final MeetingDetail combinedMeetingDetail = MeetingDetail(
+  summary: combinedMeeting,
+  transcript: null,
+  segments: const <MeetingTranscriptSegment>[
+    MeetingTranscriptSegment(
+        startTimeMs: 0, endTimeMs: 2000, speaker: 'Bruno', text: 'Ciao.'),
+  ],
 );

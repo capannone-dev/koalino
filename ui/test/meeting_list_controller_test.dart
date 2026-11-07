@@ -68,4 +68,27 @@ void main() {
 
     expect(meetingBridge.meetingListRequestCount, 2);
   });
+
+  test('a split reloads the list and the open meeting (#88)', () async {
+    final FakeMeetingBridge meetingBridge = FakeMeetingBridge(
+      meetings: <MeetingSummary>[combinedMeeting],
+      details: <String, MeetingDetail>{
+        'meeting-combined': combinedMeetingDetail
+      },
+    );
+    final MeetingListController controller =
+        MeetingListController(meetingBridge: meetingBridge);
+    await controller.loadMeetings();
+    await controller.selectMeeting('meeting-combined');
+
+    expect(await controller.splitMeeting('meeting-combined'), isTrue);
+    expect(meetingBridge.splitRequests, <String>['meeting-combined']);
+    expect(meetingBridge.meetingListRequestCount, 2);
+    expect(meetingBridge.requestedMeetings,
+        <String>['meeting-combined', 'meeting-combined']);
+
+    meetingBridge.splitError = StateError('refused');
+    expect(await controller.splitMeeting('meeting-combined'), isFalse);
+    expect(meetingBridge.meetingListRequestCount, 2, reason: 'no reload');
+  });
 }

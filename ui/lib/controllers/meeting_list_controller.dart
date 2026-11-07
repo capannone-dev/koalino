@@ -129,6 +129,24 @@ final class MeetingListController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Lists the recordings combined into `meetingId` on their own again (#88), then reloads the
+  /// list and any open detail of it.
+  ///
+  /// Outputs: `true` once split; `false` when Rust refused, leaving everything as it was.
+  /// Side effects: Splits through the bridge, reads SQLite again, and notifies listeners.
+  Future<bool> splitMeeting(String meetingId) async {
+    try {
+      await _meetingBridge.splitMeeting(meetingId);
+    } on Object {
+      return false;
+    }
+    await loadMeetings();
+    if (_selectedMeetingId == meetingId) {
+      await selectMeeting(meetingId);
+    }
+    return true;
+  }
+
   /// Deletes `meetingId` for good and removes it from the list and any open detail.
   ///
   /// Outputs: `true` when it is gone; `false` when Rust refused, leaving everything as it was.
@@ -160,4 +178,7 @@ MeetingSummary _retitled(MeetingSummary meeting, String title) =>
       title: title,
       createdAt: meeting.createdAt,
       durationMs: meeting.durationMs,
+      transcriptionLanguages: meeting.transcriptionLanguages,
+      recordedOn: meeting.recordedOn,
+      combinedRecordings: meeting.combinedRecordings,
     );

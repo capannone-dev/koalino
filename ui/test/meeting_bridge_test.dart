@@ -6,6 +6,25 @@ import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 /// Verifies `note_taker_get_meetings` and `note_taker_get_meeting` responses decode with titles.
 void main() {
   group('meeting list decoding', () {
+    test('reads the devices that recorded a combined meeting (#88)', () {
+      final List<MeetingSummary> meetings = decodeMeetings('''
+[
+  {"meeting_id":"meeting-1","title":"Call","created_at":"2026-11-02T15:00:00+00:00",
+   "recorded_on":[
+     {"device_id":"device-laptop","name":"Laptop","this_device":true},
+     {"device_id":"device-phone","name":null,"this_device":false}],
+   "combined_recordings":["meeting-2"]},
+  {"meeting_id":"meeting-3","title":"Old","created_at":"2026-11-01T15:00:00+00:00"}
+]''');
+
+      expect(meetings[0].combinedRecordings, <String>['meeting-2']);
+      expect(meetings[0].recordedOn, hasLength(2));
+      expect(meetings[0].recordedOnLabel, 'Laptop + another device');
+      expect(meetings[1].recordedOn, isEmpty);
+      expect(meetings[1].combinedRecordings, isEmpty);
+      expect(meetings[1].recordedOnLabel, isNull);
+    });
+
     test('parses titles, creation times, and durations', () {
       final List<MeetingSummary> meetings = decodeMeetings('''
 [

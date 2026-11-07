@@ -36,6 +36,11 @@ on desktops. The detail view puts the title in a bold `headlineMedium` semantic 
 `confirm_delete_dialog.dart` asks before any irreversible deletion, and `delete_meeting_action.dart`
 uses it for the meeting list and detail, reporting a refusal in a snack bar.
 
+A meeting recorded on several devices (#88), such as the laptop and a phone near the other person,
+is one meeting: its list row and detail say "Recorded on Laptop + Pixel". The detail's Split
+button (`split_meeting_action.dart`) asks first, then lists the other devices' recordings on their
+own again, for good.
+
 `rename_meeting_dialog.dart` holds `RenameMeetingDialog` and `showRenameMeetingDialog`, shared by
 the list's context menu (long-press, right-click, Shift+F10, and a screen-reader action) and the
 detail's pencil button. It validates locally, maps Rust failures to plain messages, and confirms

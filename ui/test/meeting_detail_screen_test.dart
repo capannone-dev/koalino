@@ -20,6 +20,7 @@ Future<FakeMeetingBridge> pumpMeetingDetail(
       FakeMeetingBridge(details: <String, MeetingDetail>{
     'meeting-titled': titledMeetingDetail,
     'meeting-untitled': untitledMeetingDetail,
+    'meeting-combined': combinedMeetingDetail,
   });
   final MeetingListController controller =
       MeetingListController(meetingBridge: meetingBridge);
@@ -149,5 +150,30 @@ void main() {
     expect(
         find.text("Couldn't save the new title. Try again."), findsOneWidget);
     expect(find.text('Project Sync'), findsOneWidget);
+  });
+
+  testWidgets('a combined meeting names its devices and can be split (#88)',
+      (WidgetTester tester) async {
+    final FakeMeetingBridge meetingBridge =
+        await pumpMeetingDetail(tester, 'meeting-combined');
+
+    expect(find.text('Recorded on Laptop + Pixel'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey<String>('split-open-meeting')));
+    await tester.pumpAndSettle();
+    expect(find.text('Split this meeting?'), findsOneWidget);
+    await tester.tap(find.descendant(
+        of: find.byType(AlertDialog), matching: find.text('Split')));
+    await tester.pumpAndSettle();
+
+    expect(meetingBridge.splitRequests, <String>['meeting-combined']);
+  });
+
+  testWidgets('a meeting recorded on one device offers no split',
+      (WidgetTester tester) async {
+    await pumpMeetingDetail(tester, 'meeting-titled');
+
+    expect(find.textContaining('Recorded on'), findsNothing);
+    expect(
+        find.byKey(const ValueKey<String>('split-open-meeting')), findsNothing);
   });
 }

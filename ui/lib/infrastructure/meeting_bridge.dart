@@ -1,5 +1,5 @@
 // Defines the Dart-native boundary for reading meetings, their titles, transcripts and
-// attachments, and for renaming meetings.
+// attachments, for renaming and deleting meetings, and for splitting recordings the app combined.
 
 import 'dart:convert';
 import 'dart:ffi';
@@ -7,6 +7,37 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+
+/// A device that recorded a meeting (#88), as Rust names it.
+final class RecordingDevice {
+  /// Creates an immutable device entry.
+  const RecordingDevice({
+    required this.deviceId,
+    required this.name,
+    required this.thisDevice,
+  });
+
+  /// The ID written on the device's meetings.
+  final String deviceId;
+
+  /// This device's name or a paired device's; `null` when Rust does not know it.
+  final String? name;
+
+  /// Whether it is this device.
+  final bool thisDevice;
+
+  /// The name to show: its own, else "this device" or "another device".
+  String get label => name ?? (thisDevice ? 'this device' : 'another device');
+
+  /// Decodes one element of `recorded_on`.
+  factory RecordingDevice.fromJson(Map<String, Object?> json) {
+    return RecordingDevice(
+      deviceId: json['device_id']! as String,
+      name: json['name'] as String?,
+      thisDevice: json['this_device'] as bool? ?? false,
+    );
+  }
+}
 
 /// Describes one meeting row returned by `note_taker_get_meetings`.
 final class MeetingSummary {
@@ -17,6 +48,8 @@ final class MeetingSummary {
     required this.createdAt,
     required this.durationMs,
     this.transcriptionLanguages = const <String>[],
+    this.recordedOn = const <RecordingDevice>[],
+    this.combinedRecordings = const <String>[],
   });
 
   /// Stable meeting identifier used for every follow-up request.
@@ -34,6 +67,17 @@ final class MeetingSummary {
   /// Speech-to-text languages chosen while recording, in first-use order: `auto` or Whisper
   /// codes. Empty for meetings recorded before languages were kept, or imported ones.
   final List<String> transcriptionLanguages;
+
+  /// The devices that recorded the meeting, its own first (#88); empty from older cores.
+  final List<RecordingDevice> recordedOn;
+
+  /// Other devices' recordings the app combined into this meeting; Split lists them again.
+  final List<String> combinedRecordings;
+
+  /// "Laptop + Pixel" for a meeting combined from several devices' recordings, else `null`.
+  String? get recordedOnLabel => combinedRecordings.isEmpty
+      ? null
+      : recordedOn.map((RecordingDevice device) => device.label).join(' + ');
 
   /// Decodes one meeting object, filling a missing or blank title with `fallbackMeetingTitle`.
   ///
@@ -53,6 +97,15 @@ final class MeetingSummary {
       durationMs: (json['duration_ms'] as num?)?.toInt() ?? 0,
       transcriptionLanguages: <String>[
         ...((json['transcription_languages'] as List<Object?>?) ?? <Object?>[])
+            .whereType<String>(),
+      ],
+      recordedOn: <RecordingDevice>[
+        for (final Object? device
+            in (json['recorded_on'] as List<Object?>?) ?? <Object?>[])
+          if (device is Map<String, Object?>) RecordingDevice.fromJson(device),
+      ],
+      combinedRecordings: <String>[
+        ...((json['combined_recordings'] as List<Object?>?) ?? <Object?>[])
             .whereType<String>(),
       ],
     );
@@ -322,6 +375,13 @@ abstract interface class MeetingBridge {
   /// Inputs: The meeting. Outputs: Completes when it is gone, also when it already was.
   /// Throws `StateError` when Rust refuses, such as while it is being recorded.
   Future<void> deleteMeeting(String meetingId);
+
+  /// Lists the recordings combined into a meeting on their own again, for good (#88).
+  ///
+  /// Inputs: The meeting. Outputs: Completes once they are split, also when there was nothing to
+  /// split. Throws `StateError` when Rust refuses.
+  /// Side effects: Writes the recordings' documents, which sync to paired devices.
+  Future<void> splitMeeting(String meetingId);
 }
 
 /// Implements meeting reads with the Rust C ABI.
@@ -349,6 +409,14 @@ final class RustMeetingBridge implements MeetingBridge {
   }
 
   @override
+  Future<void> splitMeeting(String meetingId) async {
+    final int statusCode = await _splitMeeting(meetingId);
+    if (statusCode != 0) {
+      throw StateError('Rust refused the split (status $statusCode).');
+    }
+  }
+
+  @override
   Future<void> deleteMeeting(String meetingId) async {
     final int statusCode = await _deleteMeeting(meetingId);
     if (statusCode != 0 && statusCode != 5) {
@@ -366,6 +434,20 @@ Future<int> _deleteMeeting(String meetingId) => Isolate.run(() {
         return _openCoreLibrary()
             .lookupFunction<_NativeDeleteMeeting, _DartDeleteMeeting>(
                 'note_taker_delete_meeting')(nativeMeetingId);
+      } finally {
+        calloc.free(nativeMeetingId);
+      }
+    });
+
+/// Calls `note_taker_split_meeting` on a background isolate, because it writes to SQLite.
+///
+/// Declared at top level so the isolate closure captures only the string.
+Future<int> _splitMeeting(String meetingId) => Isolate.run(() {
+      final Pointer<Utf8> nativeMeetingId = meetingId.toNativeUtf8();
+      try {
+        return _openCoreLibrary()
+            .lookupFunction<_NativeDeleteMeeting, _DartDeleteMeeting>(
+                'note_taker_split_meeting')(nativeMeetingId);
       } finally {
         calloc.free(nativeMeetingId);
       }
@@ -463,7 +545,8 @@ typedef _NativeRenameMeeting = Int32 Function(
 typedef _DartRenameMeeting = int Function(
     Pointer<Utf8> meetingId, Pointer<Utf8> newTitle);
 
-/// Represents `int note_taker_delete_meeting(const char *meeting_id)`.
+/// Represents `int note_taker_delete_meeting(const char *meeting_id)`, and
+/// `note_taker_split_meeting`, which has the same signature.
 typedef _NativeDeleteMeeting = Int32 Function(Pointer<Utf8> meetingId);
 
 /// Represents the Dart callable form of `note_taker_delete_meeting`.

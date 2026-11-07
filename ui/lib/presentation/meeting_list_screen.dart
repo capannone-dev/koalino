@@ -281,7 +281,8 @@ final class _MeetingList extends StatelessWidget {
                   ),
                   subtitle: Text(
                     '${formatMeetingCreatedAt(meeting.createdAt)} · '
-                    '${formatMeetingDuration(meeting.durationMs)}',
+                    '${formatMeetingDuration(meeting.durationMs)}'
+                    '${meeting.recordedOnLabel == null ? '' : ' · ${meeting.recordedOnLabel}'}',
                   ),
                   trailing: IconButton(
                     key: ValueKey<String>('delete-${meeting.meetingId}'),
