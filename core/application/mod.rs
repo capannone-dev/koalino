@@ -103,6 +103,10 @@ mod recording_manager_tests;
 pub mod repository_sync_manager;
 #[cfg(test)]
 mod repository_sync_manager_tests;
+/// Recognises two devices' recordings of one meeting from their transcripts (#88).
+pub mod same_meeting;
+#[cfg(test)]
+mod same_meeting_tests;
 /// Samples the shared screen while recording and stores new slides on the meeting (Issue #49).
 pub mod screen_share_monitor;
 #[cfg(test)]
