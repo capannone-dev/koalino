@@ -2060,10 +2060,11 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   device. The other device sends its sealed speech over P2P (pair-key sealed parts with receipts)
   and deletes it after the last receipt. Speech not sent or combined within 24 h is deleted.
 - **How the transcripts are combined:** each speaker's words come from the device with more words
-  for that speaker. Merging every word added duplicates (+3 points of error); picking a device per
-  30 s was worse (37.1 → 35.9 for the better device alone); picking the louder device gave nothing.
-  Per speaker matched the best single device (38.9 vs 38.9) on far-field arrays, where devices
-  are similar; the union across devices (20.3 vs 36.9) shows the room for a well-placed phone.
+  for that speaker. On NOTSOFAR's far-field devices (pipeline-limits report, section 4.3), one
+  device scores 36.9% word error, the best device per meeting 34.6%, the device that wrote the
+  most words 36.2%. Merging every word added duplicates (about 3 points worse), and picking the
+  louder device gained nothing; the per-speaker choice scored the same as the single device it
+  was compared with. The union across devices (20.3%) bounds what a well-placed phone can add.
 - **Device IDs:** meetings carry a storage ID (`device-<uuid>`), P2P a libp2p peer ID. Device
   manifests now carry the storage ID (optional, older devices still parse), and the P2P task
   translates.
