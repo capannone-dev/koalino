@@ -384,3 +384,23 @@ mod whole_meeting {
         assert_eq!(texts(&repository, &meeting), vec!["live one"]);
     }
 }
+
+#[test]
+fn a_word_stretched_over_a_silence_keeps_its_own_speaker_and_length() {
+    // Whisper often gives a word every millisecond up to the next one, so a word before a long
+    // silence seems to last through it. Only its first second counts.
+    let first = Uuid::new_v4();
+    let second = Uuid::new_v4();
+    let speakers = vec![
+        TranscriptSegment::new(meeting(), 0, 2_000, Some(first), "live a"),
+        TranscriptSegment::new(meeting(), 5_000, 7_000, Some(second), "live b"),
+    ];
+    let words = [word("Ciao", 0, 500), word("sì.", 1_500, 7_000)];
+
+    let segments = reattribute_words(&meeting(), &words, &speakers);
+
+    assert_eq!(segments.len(), 1);
+    assert_eq!(segments[0].speaker_identity_id(), Some(first));
+    assert_eq!(segments[0].end_time_ms(), 2_500);
+    assert_eq!(segments[0].text(), "Ciao sì.");
+}

@@ -2023,3 +2023,24 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   (in a long enough meeting; 1/15 of the speech before that) is given to the nearest voice.
 - **Not changed:** the similarity threshold (0.15, 0.25 and 0.3 were all worse) and merging groups by
   their centres (worse on the check set).
+
+## 2026-11-07 — #87 The pass caps each word at one second
+
+- **Why:** Whisper's word times often run on to the next word, so a word before a silence seems to
+  last through it, and in the pass's 30 s windows those silences are long. Such a word took the
+  speaker of the next turn (its midpoint fell there) and stretched segments over silence. On the
+  4 AMI test meetings the pass raised speaker error from 48.2% to 52.5% (false alarm 9.5% to
+  21.0%, confusion 9.7% to 13.6%).
+- **Change:** a re-transcribed word lasts at most 1 s from its start (`WORD_MAX_MS`). A replay over
+  0.5–1.5 s caps, kept from the start or from the end, found every variant within 0.6 points on
+  AMI and 0.2 on NOTSOFAR. 1 s keeps slow words whole.
+- **Measured end to end** (CLI, live `small`, then the pass with `small`; with the speaker change
+  of #61):
+
+  | | AMI speaker error | AMI confusion | NOTSOFAR speaker error | Word error, AMI / NOTSOFAR |
+  | --- | --- | --- | --- | --- |
+  | Live | 46.9% | 8.4% | 42.6% | 49.8% / 41.8% |
+  | Pass, before | 52.5% | 13.6% | 41.9% | 45.2% / 40.1% |
+  | **Pass, now** | **44.0%** | 10.7% | **41.8%** | 45.2% / 40.1% |
+
+- **Not tried yet:** whisper.cpp's DTW word alignment, which may place words better still.

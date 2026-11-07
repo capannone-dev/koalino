@@ -27,6 +27,12 @@ pub const REFINEMENT_WINDOW_MS: u64 = 30_000;
 const SEGMENT_PAUSE_MS: u64 = 2_000;
 /// No segment grows past this length, so lines stay readable.
 const SEGMENT_MAX_MS: u64 = 20_000;
+/// Longest a word may last. Whisper's word times often run on to the next word, so a word before
+/// a silence seems to last through it, and in a 30 s window that silence can be long. Left as is,
+/// it moved the word's midpoint into the next speaker's turn and stretched segments over silence:
+/// on the AMI test meetings the pass raised speaker error from 48.2% to 58.9% in a replay, and a
+/// 1 s cap brought it to 47.0% (NOTSOFAR unchanged, 41.9% to 41.8%; `DECISION_LOG.md`).
+const WORD_MAX_MS: u64 = 1_000;
 
 /// One speech chunk's place in the meeting, in milliseconds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -129,12 +135,13 @@ pub struct MeetingWord {
 }
 
 impl MeetingWord {
-    /// Creates a word; an end before the start is raised to the start.
+    /// Creates a word; an end before the start is raised to the start, and a word longer than
+    /// `WORD_MAX_MS` is cut to that length from its start.
     pub fn new(text: impl Into<String>, start_ms: u64, end_ms: u64) -> Self {
         Self {
             text: text.into(),
             start_ms,
-            end_ms: end_ms.max(start_ms),
+            end_ms: end_ms.clamp(start_ms, start_ms.saturating_add(WORD_MAX_MS)),
         }
     }
 
