@@ -28,6 +28,7 @@ use crate::{
             assign_clusters_to_named_identity, find_cluster_review_clip, list_unknown_clusters,
             load_voice_library,
         },
+        combined_meetings::{MeetingListing, name_recording_devices, split_recordings},
         crypto::key_manager::KeyManagerConfig,
         export_manager::{ExportManager, ExportWriter, segment_speaker_label},
         meeting_rename::{MeetingRenameError, rename_meeting},
@@ -309,6 +310,28 @@ fn meeting_summary_json(
             .unwrap_or_default(),
         "transcription_languages": transcription_language_codes(meeting_metadata),
     })
+}
+
+/// Adds `recorded_on` (`[{"device_id","name","this_device"}]`) and `combined_recordings` (the
+/// recordings combined into the meeting, which are not listed alone) to a meeting's JSON (#88).
+///
+/// Side effects: None.
+fn add_recording_devices(
+    meeting_json: &mut serde_json::Value,
+    listing: &MeetingListing,
+    meeting_id: &MeetingId,
+    p2p_status: Option<&crate::application::p2p_service::P2pStatus>,
+) {
+    meeting_json["recorded_on"] = serde_json::to_value(name_recording_devices(
+        &listing.recorded_on(meeting_id),
+        p2p_status,
+    ))
+    .unwrap_or(serde_json::Value::Array(Vec::new()));
+    meeting_json["combined_recordings"] = listing
+        .folded_into(meeting_id)
+        .iter()
+        .map(|folded| serde_json::Value::from(folded.as_str()))
+        .collect();
 }
 
 /// Lists a meeting's speech-to-text languages as their text codes. Side effects: None.
@@ -1429,8 +1452,16 @@ impl FfiRuntime {
                 Ok(meeting_projects) => meeting_projects.into_iter().collect(),
                 Err(error) => return export_error_json("list_failed", &error.to_string()),
             };
+        let listing = match self.note_repository.meeting_recordings() {
+            Ok(recordings) => MeetingListing::of(&recordings),
+            Err(error) => return export_error_json("list_failed", &error.to_string()),
+        };
+        let p2p_status = self.p2p_status();
         let mut serialized_meetings = Vec::with_capacity(meeting_ids.len());
         for meeting_id in meeting_ids {
+            if !listing.is_listed(&meeting_id) {
+                continue;
+            }
             let meeting_metadata = match self.note_repository.load_meeting_metadata(&meeting_id) {
                 Ok(Some(meeting_metadata)) => meeting_metadata,
                 Ok(None) => continue,
@@ -1448,6 +1479,12 @@ impl FfiRuntime {
                                 .unwrap_or(serde_json::Value::Null),
                         );
                     }
+                    add_recording_devices(
+                        &mut meeting_json,
+                        &listing,
+                        &meeting_id,
+                        p2p_status.as_ref(),
+                    );
                     serialized_meetings.push(meeting_json);
                 }
                 Err(error) => return export_error_json("list_failed", &error.to_string()),
@@ -1497,26 +1534,78 @@ impl FfiRuntime {
             return FFI_OPERATION_REJECTED;
         }
         let meeting = MeetingId::new(meeting_id);
-        let clip_ids: Vec<Uuid> = self
-            .note_repository
-            .get_unassigned_clips(&meeting)
-            .map(|clips| clips.iter().map(UnassignedVoiceClip::clip_id).collect())
-            .unwrap_or_default();
-        match self.note_repository.delete_meeting(&meeting) {
+        // Other devices' recordings combined into it go with it (#88); they are not listed alone.
+        let folded = match self.note_repository.meeting_recordings() {
+            Ok(recordings) => MeetingListing::of(&recordings).folded_into(&meeting),
+            Err(_) => return FFI_OPERATION_REJECTED,
+        };
+        match self.delete_one_meeting(&meeting) {
             Ok(true) => {}
             Ok(false) => return FFI_MEETING_NOT_FOUND,
-            Err(_) => return FFI_OPERATION_REJECTED,
+            Err(()) => return FFI_OPERATION_REJECTED,
+        }
+        for folded_meeting in folded {
+            if self.delete_one_meeting(&folded_meeting).is_err() {
+                return FFI_OPERATION_REJECTED;
+            }
+        }
+        FFI_SUCCESS
+    }
+
+    /// Deletes one meeting's rows, review clips and attachment folder.
+    ///
+    /// Outputs: Whether it existed, or `Err` for a storage failure.
+    /// Side effects: Irreversible; paired devices delete it too.
+    fn delete_one_meeting(&mut self, meeting: &MeetingId) -> Result<bool, ()> {
+        let clip_ids: Vec<Uuid> = self
+            .note_repository
+            .get_unassigned_clips(meeting)
+            .map(|clips| clips.iter().map(UnassignedVoiceClip::clip_id).collect())
+            .unwrap_or_default();
+        if !self
+            .note_repository
+            .delete_meeting(meeting)
+            .map_err(|_| ())?
+        {
+            return Ok(false);
         }
         self.remove_review_clip_files(&clip_ids);
         if crate::adapters::storage::private_files::remove_meeting_folder(
             &self.attachment_directory,
-            meeting_id,
+            meeting.as_str(),
         )
         .is_err()
         {
             tracing::warn!("a deleted meeting's attachment files could not be removed");
         }
-        FFI_SUCCESS
+        Ok(true)
+    }
+
+    /// Lists the recordings combined into a meeting on their own again, for good (#88).
+    ///
+    /// Inputs: The listed meeting, or one combined recording (only it is split).
+    /// Outputs: `FFI_SUCCESS`, also when there was nothing to split; `FFI_INVALID_ARGUMENT` for a
+    /// blank ID; `FFI_MEETING_NOT_FOUND`; `FFI_OPERATION_REJECTED` for storage failures.
+    /// Side effects: Writes each split recording's document, which syncs to paired devices.
+    fn split_meeting(&mut self, meeting_id: &str) -> c_int {
+        if meeting_id.trim().is_empty() {
+            return FFI_INVALID_ARGUMENT;
+        }
+        let meeting = MeetingId::new(meeting_id);
+        match self.note_repository.load_meeting_metadata(&meeting) {
+            Ok(Some(_)) => {}
+            Ok(None) => return FFI_MEETING_NOT_FOUND,
+            Err(_) => return FFI_OPERATION_REJECTED,
+        }
+        match split_recordings(&self.note_repository, &meeting) {
+            Ok(_) => FFI_SUCCESS,
+            Err(_) => FFI_OPERATION_REJECTED,
+        }
+    }
+
+    /// The P2P task's latest status, used to name devices; `None` without P2P.
+    fn p2p_status(&self) -> Option<crate::application::p2p_service::P2pStatus> {
+        self.p2p.as_ref().map(|p2p| p2p.snapshot().status)
     }
 
     /// Deletes a saved person's name and voice samples.
@@ -1710,7 +1799,17 @@ impl FfiRuntime {
             Ok(attachments) => attachments,
             Err(error) => return export_error_json("load_failed", &error.to_string()),
         };
+        let listing = match self.note_repository.meeting_recordings() {
+            Ok(recordings) => MeetingListing::of(&recordings),
+            Err(error) => return export_error_json("load_failed", &error.to_string()),
+        };
         let mut meeting_json = meeting_summary_json(&meeting_metadata, &segments);
+        add_recording_devices(
+            &mut meeting_json,
+            &listing,
+            &typed_meeting_id,
+            self.p2p_status().as_ref(),
+        );
         meeting_json["attachments"] = attachments.iter().map(attachment_json).collect();
         meeting_json["transcript"] = transcript
             .map(|transcript| serde_json::Value::from(transcript.content()))
@@ -2505,6 +2604,25 @@ pub unsafe extern "C" fn note_taker_delete_meeting(meeting_id: *const c_char) ->
         return FFI_INVALID_ARGUMENT;
     };
     with_runtime(|runtime| runtime.delete_meeting(meeting_id))
+}
+
+/// Lists the recordings other devices made of a meeting, combined into it, on their own again, for
+/// good (#88). Passing a combined recording's ID splits only that one.
+///
+/// Inputs: `meeting_id` is a non-null NUL-terminated UTF-8 string.
+/// Outputs: `FFI_SUCCESS` (0), also when there was nothing to split; `FFI_INVALID_ARGUMENT` (1);
+/// `FFI_OPERATION_REJECTED` (2) for a storage failure; `FFI_RUNTIME_UNAVAILABLE` (3);
+/// `FFI_MEETING_NOT_FOUND` (5).
+/// Side effects: Writes the split recordings' documents, which sync to paired devices.
+///
+/// # Safety
+/// `meeting_id` must be null or point to a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_split_meeting(meeting_id: *const c_char) -> c_int {
+    let Some(meeting_id) = (unsafe { ffi_string(meeting_id) }) else {
+        return FFI_INVALID_ARGUMENT;
+    };
+    with_runtime(|runtime| runtime.split_meeting(meeting_id))
 }
 
 /// Deletes a saved person's name and voice samples.
@@ -3747,6 +3865,91 @@ mod ffi_contract_tests {
 
     /// Verifies deleting a meeting removes it and its private files, refuses a live or unknown
     /// meeting, and leaves a file linked from elsewhere alone.
+    /// Verifies a meeting recorded on two devices is listed once, names the recording combined
+    /// into it, splits apart again, and is deleted whole (#88).
+    #[test]
+    fn a_combined_meeting_is_listed_once_split_and_deleted_whole() {
+        let export_directory =
+            std::env::temp_dir().join(format!("note-taker-ffi-combined-{}", uuid::Uuid::new_v4()));
+        let mut ffi_runtime = FfiRuntime::in_memory_with_documents_for_tests(&export_directory)
+            .unwrap_or_else(|status| panic!("fixture runtime must initialize: status {status}"));
+        for meeting_id in ["ffi-laptop", "ffi-phone"] {
+            crate::application::meeting_crdt::MeetingCrdtService::new(&ffi_runtime.note_repository)
+                .create_meeting(&MeetingId::new(meeting_id))
+                .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        }
+        let combine = |ffi_runtime: &FfiRuntime| {
+            ffi_runtime
+                .note_repository
+                .combine_meeting(
+                    &MeetingId::new("ffi-phone"),
+                    &crate::ports::meeting_document::MeetingCombination {
+                        into: MeetingId::new("ffi-laptop"),
+                        offset_ms: 2_000,
+                        combine_on: ffi_runtime.note_repository.device_id().clone(),
+                    },
+                )
+                .unwrap_or_else(|error| panic!("{error}"));
+        };
+        let listed_ids = |ffi_runtime: &FfiRuntime| -> Vec<String> {
+            parse_response(&ffi_runtime.get_meetings())
+                .as_array()
+                .map(|meetings| {
+                    meetings
+                        .iter()
+                        .filter_map(|meeting| meeting["meeting_id"].as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        combine(&ffi_runtime);
+
+        let combined = listed_ids(&ffi_runtime);
+        let list_entry = parse_response(&ffi_runtime.get_meetings())[0].clone();
+        let detail = parse_response(&ffi_runtime.get_meeting("ffi-laptop"));
+        let invalid = ffi_runtime.split_meeting(" ");
+        let missing = ffi_runtime.split_meeting("ffi-missing");
+        let split = ffi_runtime.split_meeting("ffi-laptop");
+        let apart = listed_ids(&ffi_runtime);
+        // Fold a fresh pair to check deletion; the split pair is kept apart for good.
+        crate::application::meeting_crdt::MeetingCrdtService::new(&ffi_runtime.note_repository)
+            .create_meeting(&MeetingId::new("ffi-phone-2"))
+            .unwrap_or_else(|error| panic!("fixture meeting must persist: {error}"));
+        ffi_runtime
+            .note_repository
+            .combine_meeting(
+                &MeetingId::new("ffi-phone-2"),
+                &crate::ports::meeting_document::MeetingCombination {
+                    into: MeetingId::new("ffi-laptop"),
+                    offset_ms: 0,
+                    combine_on: ffi_runtime.note_repository.device_id().clone(),
+                },
+            )
+            .unwrap_or_else(|error| panic!("{error}"));
+        let deleted = ffi_runtime.delete_meeting("ffi-laptop");
+        let after_delete = listed_ids(&ffi_runtime);
+        let folded_gone = parse_response(&ffi_runtime.get_meeting("ffi-phone-2"));
+        let _ = std::fs::remove_dir_all(&export_directory);
+
+        assert_eq!(combined, vec![String::from("ffi-laptop")]);
+        assert_eq!(
+            list_entry["combined_recordings"],
+            serde_json::json!(["ffi-phone"])
+        );
+        assert_eq!(list_entry["recorded_on"].as_array().map(Vec::len), Some(1));
+        assert_eq!(
+            detail["combined_recordings"],
+            serde_json::json!(["ffi-phone"])
+        );
+        assert_eq!(invalid, FFI_INVALID_ARGUMENT);
+        assert_eq!(missing, FFI_MEETING_NOT_FOUND);
+        assert_eq!(split, FFI_SUCCESS);
+        assert_eq!(apart.len(), 2, "{apart:?}");
+        assert_eq!(deleted, FFI_SUCCESS);
+        assert_eq!(after_delete, vec![String::from("ffi-phone")]);
+        assert_eq!(folded_gone["error_code"], "meeting_not_found");
+    }
+
     #[test]
     fn delete_meeting_removes_it_and_its_private_files() {
         let (mut ffi_runtime, export_directory) = export_runtime();

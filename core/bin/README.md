@@ -245,7 +245,8 @@ caller-freed JSON with each meeting's ID, display title, and creation time (see 
 `2` for storage failures, `3` for an unavailable runtime, and `5` (`FFI_MEETING_NOT_FOUND`).
 `note_taker_delete_meeting`, `note_taker_delete_unknown_voice` and `note_taker_delete_saved_person`
 delete for good, here and on paired devices (see `API_SPECS.md`). The first two refuse while the
-meeting is being recorded. Startup clears review audio left by an earlier run.
+meeting is being recorded. `note_taker_split_meeting` (#88) lists recordings combined into a
+meeting on their own again; the meeting JSON names the devices that recorded it. Startup clears review audio left by an earlier run.
 `teams_bridge_composition.rs` stores the Teams meeting title on a meeting that has none yet.
 
 `ffi.rs` also exports `note_taker_export_meeting(meeting_id, format, options_json)`, which runs the

@@ -276,7 +276,9 @@ contents, EXIF data, or database-specific values.
   `transcription_languages` lists the speech-to-text languages chosen while recording (`auto` or
   Whisper codes) in first-use order; it is empty for meetings recorded before they were kept. `title`
   is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting; `created_at`
-  is RFC 3339 UTC. Errors use `{"ok":false,"error_code","error"}` with `invalid_argument`,
+  is RFC 3339 UTC. Both also carry `recorded_on` and `combined_recordings`, as in the HTTP API
+  (#88); the list leaves out recordings combined into another meeting. Errors use
+  `{"ok":false,"error_code","error"}` with `invalid_argument`,
   `meeting_not_found`, `list_failed`, `load_failed`, or `runtime_unavailable`. Free results
   with `note_taker_free_string`.
 - `int32_t note_taker_rename_meeting(const char *meeting_id, const char *new_title)` (Issue #38)
@@ -288,7 +290,12 @@ contents, EXIF data, or database-specific values.
 - `int32_t note_taker_delete_meeting(const char *meeting_id)` deletes a meeting with its transcript,
   attachments and unknown voices, here and on paired devices, for good. Files linked from elsewhere
   stay. It returns `0`; `1` for a null, non-UTF-8 or unusable ID; `2` while it is being recorded or
-  for a storage failure; `3` for unavailable runtime state; `5` for an unknown meeting.
+  for a storage failure; `3` for unavailable runtime state; `5` for an unknown meeting. Recordings
+  other devices made of the meeting, combined into it (#88), are deleted with it.
+- `int32_t note_taker_split_meeting(const char *meeting_id)` (#88) lists the recordings combined
+  into a meeting on their own again, for good; a combined recording's ID splits only that one. It
+  returns `0`, also when there was nothing to split; `1` for a null, non-UTF-8 or blank ID; `2`
+  for a storage failure; `3`; `5` for an unknown meeting.
 - `int32_t note_taker_delete_unknown_voice(const char *cluster_id)` deletes an unknown voice's
   embeddings and review audio, here and on paired devices, for good. Its transcript stays. It
   returns `0`; `1` for a malformed UUID; `2` while its meeting is recording or for a storage failure;
