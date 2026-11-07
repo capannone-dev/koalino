@@ -123,6 +123,10 @@ mod screen_share_monitor_tests;
 pub mod slide_change_detector;
 #[cfg(test)]
 mod slide_change_detector_tests;
+/// Encodes the sealed messages that carry a meeting's speech to the combining device (#88).
+pub mod speech_transfer_exchange;
+#[cfg(test)]
+mod speech_transfer_exchange_tests;
 /// Coordinates Automerge sync messages through encrypted-network and storage ports.
 pub mod sync_manager;
 #[cfg(test)]

@@ -28,6 +28,8 @@ pub mod projects;
 pub mod remote_transcription;
 /// Declares local screen-share detection, capture and slide storage contracts.
 pub mod screen_share;
+/// Declares how a meeting's retained speech moves to the device that combines it (#88).
+pub mod speech_transfer;
 /// Declares contracts for transcript and voice-vector persistence.
 pub mod storage;
 /// Declares persistence for AI performance and device-load telemetry.

@@ -34,6 +34,7 @@ use crate::{
         meeting_document::AutomergeMeetingDocumentCodec,
         p2p_service::{
             LocalCapabilities, P2pCommand, P2pCommandOutcome, P2pService, RemoteTranscriptionJob,
+            SpeechTransferJob,
         },
         pairing_manager::PairingManager,
         repository_sync_manager::RepositorySyncManager,
@@ -52,6 +53,7 @@ use crate::{
         peer_trust::{PairingTransport, TrustedPeerStore},
         projects::ProjectRepository,
         remote_transcription::{FinishedTranscription, HostedTranscription, TranscriptionHost},
+        speech_transfer::{SpeechChunk, SpeechInbox, SpeechPart, SpeechTransferError},
         storage::{AttachmentRepository, NoteRepository},
         voice::VoiceVectorDB,
     },
@@ -1453,4 +1455,158 @@ async fn a_deleted_meeting_goes_from_paired_devices_and_stays_gone() {
     assert!(!lists(&laptop, &doomed));
     assert!(!lists(&phone, &doomed));
     assert!(lists(&phone, &kept));
+}
+
+/// One part an inbox stored: the sender, the meeting, the part's index, and its samples.
+type StoredPart = (DeviceId, MeetingId, u32, Vec<i16>);
+
+/// Records the speech parts it is given, or refuses them all.
+#[derive(Clone, Default)]
+struct FakeInbox {
+    refuse: bool,
+    stored: Arc<Mutex<Vec<StoredPart>>>,
+}
+
+impl SpeechInbox for FakeInbox {
+    fn receive_part(
+        &mut self,
+        from: &DeviceId,
+        part: SpeechPart,
+    ) -> Result<(), SpeechTransferError> {
+        if self.refuse {
+            return Err(SpeechTransferError::Refused);
+        }
+        self.stored
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push((
+                from.clone(),
+                part.meeting_id,
+                part.part_index,
+                part.chunks
+                    .iter()
+                    .flat_map(|chunk| chunk.samples.iter().copied())
+                    .collect(),
+            ));
+        Ok(())
+    }
+}
+
+/// Pairs a phone and a laptop whose speech inbox is `inbox`, with agreed pair keys (#88).
+async fn paired_with_inbox(memory_address: &str, inbox: FakeInbox) -> (Service, Service) {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = memory_address
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let mut laptop = service("Laptop", laptop_adapter)
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_speech_inbox(Box::new(inbox));
+    let (phone, phone_database) = service_with_database("Phone", phone_adapter);
+    let mut phone = phone.with_pair_agreement_secret(PairAgreementSecret::generate());
+    let phone_store = trust_store_connection(&phone_database);
+    pair(&mut laptop, &mut phone, phone_address).await;
+    let laptop_id = laptop.transport().local_peer_id();
+    drive(&mut laptop, &mut phone, |_, _| {
+        phone_store.pair_key(&laptop_id).ok().flatten().is_some()
+    })
+    .await;
+    (laptop, phone)
+}
+
+/// Sends one part of the phone's speech to the laptop and returns where the outcome arrives.
+fn send_speech(
+    phone: &mut Service,
+    laptop: &Service,
+) -> std::sync::mpsc::Receiver<Result<(), SpeechTransferError>> {
+    let (reply, outcome) = std::sync::mpsc::channel();
+    phone.request_speech_transfer(SpeechTransferJob {
+        peer: laptop.transport().local_peer_id(),
+        part: SpeechPart {
+            meeting_id: MeetingId::new("meeting-phone"),
+            part_index: 0,
+            part_count: 1,
+            chunks: vec![SpeechChunk {
+                start_ms: 0,
+                end_ms: 1,
+                language: None,
+                samples: zeroize::Zeroizing::new(vec![4, -5, 6]),
+            }],
+        },
+        reply,
+    });
+    outcome
+}
+
+/// A part of the phone's speech reaches the laptop's inbox, and the phone hears it was stored.
+#[tokio::test]
+async fn speech_reaches_the_combining_device_and_is_confirmed() {
+    let inbox = FakeInbox::default();
+    let stored = Arc::clone(&inbox.stored);
+    let (mut laptop, mut phone) = paired_with_inbox("/memory/9481", inbox).await;
+
+    let outcome = send_speech(&mut phone, &laptop);
+    let mut result = None;
+    drive(&mut laptop, &mut phone, |_, _| {
+        result = outcome.try_recv().ok();
+        result.is_some()
+    })
+    .await;
+
+    assert_eq!(result, Some(Ok(())));
+    let stored = stored.lock().unwrap_or_else(PoisonError::into_inner);
+    assert_eq!(stored.len(), 1);
+    assert_eq!(stored[0].0, phone.transport().local_peer_id());
+    assert_eq!(stored[0].1, MeetingId::new("meeting-phone"));
+    assert_eq!(stored[0].3, vec![4, -5, 6]);
+}
+
+/// A device that does not take the speech says so, and the sender keeps its copy.
+#[tokio::test]
+async fn refused_speech_is_reported_to_the_sender() {
+    let inbox = FakeInbox {
+        refuse: true,
+        ..FakeInbox::default()
+    };
+    let (mut laptop, mut phone) = paired_with_inbox("/memory/9482", inbox).await;
+
+    let outcome = send_speech(&mut phone, &laptop);
+    let mut result = None;
+    drive(&mut laptop, &mut phone, |_, _| {
+        result = outcome.try_recv().ok();
+        result.is_some()
+    })
+    .await;
+
+    assert_eq!(result, Some(Err(SpeechTransferError::Refused)));
+}
+
+/// Speech for a device that is not connected fails at once.
+#[tokio::test]
+async fn speech_for_an_absent_device_fails_at_once() {
+    let adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone = service("Phone", adapter);
+    let (reply, outcome) = std::sync::mpsc::channel();
+
+    phone.request_speech_transfer(SpeechTransferJob {
+        peer: DeviceId::new("12D3KooWAway"),
+        part: SpeechPart {
+            meeting_id: MeetingId::new("meeting-phone"),
+            part_index: 0,
+            part_count: 1,
+            chunks: Vec::new(),
+        },
+        reply,
+    });
+
+    assert_eq!(
+        outcome.try_recv(),
+        Ok(Err(SpeechTransferError::Unreachable))
+    );
 }

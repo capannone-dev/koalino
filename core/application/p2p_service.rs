@@ -63,6 +63,7 @@ use crate::{
             is_project_library_message,
         },
         repository_sync_manager::{RepositorySyncManager, RepositorySyncManagerError},
+        speech_transfer_exchange::{is_speech_part, is_speech_receipt},
         transcription_exchange::{
             TranscriptionRequest, TranscriptionResponse, decode_transcription_request,
             decode_transcription_response, encode_transcription_request,
@@ -294,6 +295,11 @@ pub struct RemoteTranscriptionJob {
     pub reply: std::sync::mpsc::Sender<Result<String, TranscriptionError>>,
 }
 
+/// Carries a meeting's retained speech to the device that combines it (#88).
+#[path = "p2p_speech_transfer.rs"]
+mod speech_transfer;
+pub use speech_transfer::{SPEECH_TRANSFER_TIMEOUT, SpeechTransferJob};
+
 /// A job waiting for its answer.
 struct PendingTranscription {
     peer: DeviceId,
@@ -441,6 +447,10 @@ pub struct P2pService<Transport, Store, Repository> {
     transcription_host: Option<Box<dyn TranscriptionHost>>,
     /// Chunks sent to paired devices, by job ID.
     pending_transcriptions: HashMap<Uuid, PendingTranscription>,
+    /// Stores speech paired devices send for combining (#88); `None` refuses it.
+    speech_inbox: Option<Box<dyn crate::ports::speech_transfer::SpeechInbox>>,
+    /// Speech parts sent to paired devices, by job ID.
+    pending_speech: HashMap<Uuid, speech_transfer::PendingSpeech>,
     /// Attachment exchange with paired devices; `None` leaves attachments on this device.
     attachment_sync: Option<AttachmentSync>,
     /// The voice library to keep in step with paired devices; `None` leaves it on this device.
@@ -496,6 +506,8 @@ where
             transcription_route_store: None,
             transcription_host: None,
             pending_transcriptions: HashMap::new(),
+            speech_inbox: None,
+            pending_speech: HashMap::new(),
             attachment_sync: None,
             voice_library: None,
             shared_deletion_counts: HashMap::new(),
@@ -637,6 +649,7 @@ where
         self.share_project_library();
         self.share_attachments();
         self.expire_pending_transcriptions();
+        self.expire_pending_speech();
     }
 
     /// Sends every meeting document written since the last call to the connected peers.
@@ -747,6 +760,14 @@ where
                     self.accept_transcription_response(peer_device_id, payload);
                     return;
                 }
+                if is_speech_part(payload) {
+                    self.accept_speech_part(peer_device_id, payload);
+                    return;
+                }
+                if is_speech_receipt(payload) {
+                    self.accept_speech_receipt(peer_device_id, payload);
+                    return;
+                }
                 if is_attachment_manifest(payload) {
                     self.accept_attachment_manifest(peer_device_id, payload);
                     return;
@@ -791,6 +812,7 @@ where
                     attachment_sync.peer_lost(peer_device_id);
                 }
                 self.fail_pending_transcriptions(peer_device_id);
+                self.fail_pending_speech(peer_device_id);
                 None
             }
             // The device may have missed the voice library or attachment list, so they are sent
@@ -804,6 +826,7 @@ where
                 }
                 // A request may be what was lost, so nobody would ever answer it.
                 self.fail_pending_transcriptions(peer_device_id);
+                self.fail_pending_speech(peer_device_id);
                 None
             }
         };
