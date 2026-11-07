@@ -542,6 +542,14 @@ fn the_inbox_takes_only_speech_of_meetings_combined_here_in_order() {
         "out of order"
     );
     assert_eq!(
+        inbox.receive_part(
+            &DeviceId::new("device-c"),
+            speech_part(&phone_meeting, 0, 2)
+        ),
+        Err(SpeechTransferError::Refused),
+        "from a device that did not record it"
+    );
+    assert_eq!(
         inbox.receive_part(&phone, speech_part(&phone_meeting, 0, 2)),
         Ok(())
     );

@@ -656,8 +656,9 @@ fn borrow_chunk(chunk: &RetainedChunk) -> RefinementChunk<'_> {
 
 /// Stores speech that paired devices send for combining (#88), sealed under this device's key.
 ///
-/// Only speech of a meeting this device combines is taken: one folded into another meeting with
-/// this device named to combine it, or the first recording of such a fold. Parts must come in
+/// Only speech of a meeting this device combines is taken, from the device that recorded it: one
+/// folded into another meeting with this device named to combine it, or the first recording of
+/// such a fold. Parts must come in
 /// order; a part already stored is confirmed again, and part 0 starts over.
 pub struct RetainedSpeechInbox {
     store: Arc<RetainedAudioStore>,
@@ -688,19 +689,23 @@ impl RetainedSpeechInbox {
         }
     }
 
-    /// Reports whether this device combines `meeting_id`'s recordings.
-    fn combines_here(&self, meeting_id: &MeetingId) -> bool {
+    /// Reports whether this device combines `meeting_id`'s recordings and `from` recorded it.
+    fn combines_here(&self, meeting_id: &MeetingId, from: &DeviceId) -> bool {
         let Ok(recordings) = (self.open_repository)()
             .and_then(|repository| repository.meeting_recordings().map_err(anyhow::Error::from))
         else {
             return false;
         };
-        recordings.iter().any(|recording| {
-            recording.combined_into.as_ref().is_some_and(|combination| {
-                combination.combine_on == self.device_id
-                    && (recording.meeting_id == *meeting_id || combination.into == *meeting_id)
+        let recorded_by_sender = recordings.iter().any(|recording| {
+            recording.meeting_id == *meeting_id && recording.acquisition_device_id == *from
+        });
+        recorded_by_sender
+            && recordings.iter().any(|recording| {
+                recording.combined_into.as_ref().is_some_and(|combination| {
+                    combination.combine_on == self.device_id
+                        && (recording.meeting_id == *meeting_id || combination.into == *meeting_id)
+                })
             })
-        })
     }
 }
 
@@ -712,7 +717,7 @@ impl SpeechInbox for RetainedSpeechInbox {
     ) -> Result<(), SpeechTransferError> {
         let meeting_id = part.meeting_id.clone();
         if part.part_index == 0 {
-            if !self.combines_here(&meeting_id) {
+            if !self.combines_here(&meeting_id, from) {
                 tracing::info!(meeting_id = %meeting_id.as_str(), peer = %from.as_str(), "speech for a meeting not combined here was refused");
                 return Err(SpeechTransferError::Refused);
             }

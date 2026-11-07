@@ -3,7 +3,9 @@
 //! The after-meeting worker of the device that does not combine a meeting's recordings hands each
 //! part of its speech to the P2P task as a `SpeechTransferJob` and waits on the job's reply. The
 //! task seals the part with the pair key (`NTR1`), and the receiving device stores it through its
-//! `SpeechInbox` and answers with a receipt (`NTR2`). A job fails at once when the device is not
+//! `SpeechInbox` and answers with a receipt (`NTR2`). Meetings name devices by the ID written on
+//! them, not by peer ID; each device's manifest carries both, so the task translates between them
+//! and speech from a device whose manifest has no storage ID is refused. A job fails at once when the device is not
 //! connected or has no agreed key, and when the device leaves, drops the message, or does not
 //! answer within `SPEECH_TRANSFER_TIMEOUT`. Audio is never logged; logs carry peer IDs only.
 
@@ -32,8 +34,8 @@ pub const SPEECH_TRANSFER_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// One part of a meeting's speech to send to a paired device.
 pub struct SpeechTransferJob {
-    /// The device to send it to.
-    pub peer: DeviceId,
+    /// The device to send it to, by the ID written on its meetings.
+    pub device: DeviceId,
     /// The part; its audio is wiped once sealed.
     pub part: SpeechPart,
     /// Receives the outcome.
@@ -65,13 +67,18 @@ where
     ///
     /// Inputs: The job, whose outcome goes to its `reply`.
     /// Side effects: Sends the sealed part and drops this copy of the audio. A device that is not
-    /// connected or has no agreed pair key gets nothing, and the reply is `Unreachable`.
+    /// connected, has not sent its manifest, or has no agreed pair key gets nothing, and the reply
+    /// is `Unreachable`.
     pub fn request_speech_transfer(&mut self, job: SpeechTransferJob) {
-        let SpeechTransferJob { peer, part, reply } = job;
-        if !self.connected_peers.contains(&peer) {
+        let SpeechTransferJob {
+            device,
+            part,
+            reply,
+        } = job;
+        let Some(peer) = self.speech_peer(&device) else {
             let _ = reply.send(Err(SpeechTransferError::Unreachable));
             return;
-        }
+        };
         let Some(pair_key) = self.usable_pair_key(&peer) else {
             let _ = reply.send(Err(SpeechTransferError::Unreachable));
             return;
@@ -106,6 +113,17 @@ where
         );
     }
 
+    /// Returns the connected peer whose manifest names `device` as its storage ID.
+    fn speech_peer(&self, device: &DeviceId) -> Option<DeviceId> {
+        self.peer_manifests
+            .iter()
+            .find(|(peer, manifest)| {
+                manifest.storage_device_id.as_ref() == Some(device)
+                    && self.connected_peers.contains(*peer)
+            })
+            .map(|(peer, _)| peer.clone())
+    }
+
     /// Opens a part a paired device sent, stores it, and answers with a receipt.
     ///
     /// Side effects: Writes the speech through the inbox and sends a sealed receipt. A message
@@ -123,15 +141,19 @@ where
                 return;
             }
         };
-        let stored = match self.speech_inbox.as_mut() {
-            Some(inbox) => match inbox.receive_part(peer, part) {
+        let sender_device = self
+            .peer_manifests
+            .get(peer)
+            .and_then(|manifest| manifest.storage_device_id.clone());
+        let stored = match (self.speech_inbox.as_mut(), sender_device) {
+            (Some(inbox), Some(sender_device)) => match inbox.receive_part(&sender_device, part) {
                 Ok(()) => true,
                 Err(error) => {
                     tracing::warn!(peer = %peer.as_str(), error = %error, "a speech part was not stored");
                     false
                 }
             },
-            None => false,
+            _ => false,
         };
         let receipt = SpeechReceipt { job_id, stored };
         let sent = encode_speech_receipt(&receipt, &pair_key, &local_peer_id, peer)

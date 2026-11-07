@@ -343,6 +343,8 @@ pub struct LocalCapabilities {
     pub transcription_models: Vec<TranscriptionModel>,
     /// Which local Whisper model runs here, such as `ggml-small`, for routing and telemetry.
     pub local_whisper_model: Option<String>,
+    /// The ID this device writes on its meetings, so paired devices can address it by it (#88).
+    pub storage_device_id: Option<DeviceId>,
 }
 
 impl Default for LocalCapabilities {
@@ -355,6 +357,7 @@ impl Default for LocalCapabilities {
             gpu_vram_megabytes: 0,
             transcription_models: Vec::new(),
             local_whisper_model: None,
+            storage_device_id: None,
         }
     }
 }
@@ -2134,5 +2137,6 @@ fn local_manifest(local_peer_id: DeviceId, capabilities: LocalCapabilities) -> D
         capabilities.transcription_models,
     );
     manifest.local_whisper_model = capabilities.local_whisper_model;
+    manifest.storage_device_id = capabilities.storage_device_id;
     manifest
 }

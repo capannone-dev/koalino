@@ -1266,6 +1266,11 @@ pub struct DeviceManifest {
     /// Which local Whisper model runs here, such as `ggml-small`; absent from older devices.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local_whisper_model: Option<String>,
+    /// The ID this device writes on the meetings it records, which differs from its peer ID;
+    /// paired devices use it to tell which device recorded a meeting (#88). Absent from older
+    /// devices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_device_id: Option<DeviceId>,
 }
 
 impl DeviceManifest {
@@ -1288,6 +1293,7 @@ impl DeviceManifest {
             available_transcription_models,
             supports_vad: cfg!(feature = "vad"),
             local_whisper_model: None,
+            storage_device_id: None,
         }
     }
 

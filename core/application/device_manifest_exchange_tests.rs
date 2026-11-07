@@ -92,3 +92,28 @@ fn oversized_or_implausible_manifests_are_rejected() {
         );
     }
 }
+
+#[test]
+fn the_storage_id_travels_and_older_manifests_still_open() {
+    let mut with_storage_id = manifest();
+    with_storage_id.storage_device_id = Some(DeviceId::new("device-laptop"));
+    let encoded = encode_manifest_message(&with_storage_id)
+        .unwrap_or_else(|error| panic!("manifest must encode: {error}"));
+    assert_eq!(
+        decode_manifest_message(&encoded)
+            .and_then(Result::ok)
+            .and_then(|decoded| decoded.storage_device_id),
+        Some(DeviceId::new("device-laptop"))
+    );
+
+    // A device from before #88 sends no storage ID.
+    let older = encode_manifest_message(&manifest())
+        .unwrap_or_else(|error| panic!("manifest must encode: {error}"));
+    assert!(!String::from_utf8_lossy(&older).contains("storage_device_id"));
+    assert_eq!(
+        decode_manifest_message(&older)
+            .and_then(Result::ok)
+            .map(|decoded| decoded.storage_device_id),
+        Some(None)
+    );
+}

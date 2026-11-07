@@ -54,7 +54,8 @@ pub enum SpeechTransferError {
 pub trait SpeechSender: Send + Sync {
     /// Sends one part and waits for its receipt.
     ///
-    /// Inputs: The device and the part. Outputs: Success once the device stored it, or why not.
+    /// Inputs: The device, by the ID written on its meetings (not its peer ID), and the part.
+    /// Outputs: Success once the device stored it, or why not.
     /// Side effects: Seals the audio for that device and sends it; blocks the calling thread.
     fn send_part(&self, to: &DeviceId, part: SpeechPart) -> Result<(), SpeechTransferError>;
 }
@@ -63,7 +64,7 @@ pub trait SpeechSender: Send + Sync {
 pub trait SpeechInbox: Send {
     /// Stores one received part.
     ///
-    /// Inputs: The sending device and the part. Outputs: Whether it was stored (a part already
+    /// Inputs: The sending device, by the ID written on its meetings, and the part. Outputs: Whether it was stored (a part already
     /// stored counts as stored), or `Refused` for speech this device does not combine.
     /// Side effects: Writes the speech sealed under this device's key; a meeting's speech is
     /// available to the pass only once its last part is stored.

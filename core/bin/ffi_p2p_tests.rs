@@ -489,7 +489,8 @@ fn the_composed_task_carries_speech_to_the_combining_device() {
     let laptop_database = fresh_database("laptop");
     let phone_database = fresh_database("phone");
     let (laptop, phone) = pair_tasks(&laptop_database, &phone_database);
-    let laptop_id = laptop.snapshot().status.local_peer_id;
+    // Meetings name devices by their storage ID, which `start_task_at` derives from the name.
+    let laptop_id = DeviceId::new("device-laptop");
     let received = Arc::new(std::sync::Mutex::new(Vec::new()));
 
     // Until the pair key is agreed the part is unreachable; then refused without an inbox.

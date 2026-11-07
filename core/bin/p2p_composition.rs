@@ -350,14 +350,15 @@ impl RemoteTranscriptionGateway for P2pHandle {
 }
 
 impl SpeechSender for P2pHandle {
-    /// Hands the part to the P2P task and blocks until its receipt or the deadline.
+    /// Hands the part to the P2P task and blocks until its receipt or the deadline. `to` is the
+    /// device's storage ID, as written on its meetings.
     ///
     /// Side effects: See the trait. A full queue or a stopped task is `Unreachable` at once.
     fn send_part(&self, to: &DeviceId, part: SpeechPart) -> Result<(), SpeechTransferError> {
         let (reply, answer) = std::sync::mpsc::channel();
         self.speech_transfers
             .try_send(SpeechTransferJob {
-                peer: to.clone(),
+                device: to.clone(),
                 part,
                 reply,
             })
@@ -593,6 +594,7 @@ fn open_service(
         device_id.clone(),
         Arc::clone(&embedding_cipher),
     )?;
+    let storage_device_id = device_id.clone();
     let attachment_library = AttachmentSyncStore::new(
         open_note_repository(database_path, device_id, Arc::clone(&embedding_cipher))?,
         attachment_directory,
@@ -610,7 +612,10 @@ fn open_service(
         ),
         RepositorySyncManager::new(note_repository),
     )
-    .with_local_capabilities(config.capabilities)
+    .with_local_capabilities(LocalCapabilities {
+        storage_device_id: Some(storage_device_id),
+        ..config.capabilities
+    })
     .with_pair_agreement_secret(pair_agreement_secret)
     .with_voice_library(Box::new(voice_library))
     .with_project_library(Box::new(project_library))

@@ -956,12 +956,14 @@ async fn paired_devices_exchange_manifests_and_forget_revoked_ones() {
         gpu_vram_megabytes: 4_096,
         transcription_models: vec![TranscriptionModel::Whisper],
         local_whisper_model: None,
+        storage_device_id: None,
     });
     let mut phone = service("Phone", phone_adapter).with_local_capabilities(LocalCapabilities {
         cpu_cores: 4,
         gpu_vram_megabytes: 0,
         transcription_models: Vec::new(),
         local_whisper_model: None,
+        storage_device_id: None,
     });
     let laptop_id = laptop.transport().local_peer_id();
     let phone_id = phone.transport().local_peer_id();
@@ -1505,28 +1507,38 @@ async fn paired_with_inbox(memory_address: &str, inbox: FakeInbox) -> (Service, 
         .listen_on_memory(phone_address.clone())
         .unwrap_or_else(|error| panic!("phone must listen: {error}"));
     let mut laptop = service("Laptop", laptop_adapter)
+        .with_local_capabilities(stored_as("device-laptop"))
         .with_pair_agreement_secret(PairAgreementSecret::generate())
         .with_speech_inbox(Box::new(inbox));
     let (phone, phone_database) = service_with_database("Phone", phone_adapter);
-    let mut phone = phone.with_pair_agreement_secret(PairAgreementSecret::generate());
+    let mut phone = phone
+        .with_local_capabilities(stored_as("device-phone"))
+        .with_pair_agreement_secret(PairAgreementSecret::generate());
     let phone_store = trust_store_connection(&phone_database);
     pair(&mut laptop, &mut phone, phone_address).await;
     let laptop_id = laptop.transport().local_peer_id();
-    drive(&mut laptop, &mut phone, |_, _| {
+    drive(&mut laptop, &mut phone, |laptop, phone| {
         phone_store.pair_key(&laptop_id).ok().flatten().is_some()
+            && !laptop.status().peer_manifests.is_empty()
+            && !phone.status().peer_manifests.is_empty()
     })
     .await;
     (laptop, phone)
 }
 
+/// Capabilities that name the ID a device writes on its meetings.
+fn stored_as(storage_device_id: &str) -> LocalCapabilities {
+    LocalCapabilities {
+        storage_device_id: Some(DeviceId::new(storage_device_id)),
+        ..LocalCapabilities::default()
+    }
+}
+
 /// Sends one part of the phone's speech to the laptop and returns where the outcome arrives.
-fn send_speech(
-    phone: &mut Service,
-    laptop: &Service,
-) -> std::sync::mpsc::Receiver<Result<(), SpeechTransferError>> {
+fn send_speech(phone: &mut Service) -> std::sync::mpsc::Receiver<Result<(), SpeechTransferError>> {
     let (reply, outcome) = std::sync::mpsc::channel();
     phone.request_speech_transfer(SpeechTransferJob {
-        peer: laptop.transport().local_peer_id(),
+        device: DeviceId::new("device-laptop"),
         part: SpeechPart {
             meeting_id: MeetingId::new("meeting-phone"),
             part_index: 0,
@@ -1550,7 +1562,7 @@ async fn speech_reaches_the_combining_device_and_is_confirmed() {
     let stored = Arc::clone(&inbox.stored);
     let (mut laptop, mut phone) = paired_with_inbox("/memory/9481", inbox).await;
 
-    let outcome = send_speech(&mut phone, &laptop);
+    let outcome = send_speech(&mut phone);
     let mut result = None;
     drive(&mut laptop, &mut phone, |_, _| {
         result = outcome.try_recv().ok();
@@ -1561,7 +1573,11 @@ async fn speech_reaches_the_combining_device_and_is_confirmed() {
     assert_eq!(result, Some(Ok(())));
     let stored = stored.lock().unwrap_or_else(PoisonError::into_inner);
     assert_eq!(stored.len(), 1);
-    assert_eq!(stored[0].0, phone.transport().local_peer_id());
+    assert_eq!(
+        stored[0].0,
+        DeviceId::new("device-phone"),
+        "named as on its meetings"
+    );
     assert_eq!(stored[0].1, MeetingId::new("meeting-phone"));
     assert_eq!(stored[0].3, vec![4, -5, 6]);
 }
@@ -1575,7 +1591,7 @@ async fn refused_speech_is_reported_to_the_sender() {
     };
     let (mut laptop, mut phone) = paired_with_inbox("/memory/9482", inbox).await;
 
-    let outcome = send_speech(&mut phone, &laptop);
+    let outcome = send_speech(&mut phone);
     let mut result = None;
     drive(&mut laptop, &mut phone, |_, _| {
         result = outcome.try_recv().ok();
@@ -1595,7 +1611,7 @@ async fn speech_for_an_absent_device_fails_at_once() {
     let (reply, outcome) = std::sync::mpsc::channel();
 
     phone.request_speech_transfer(SpeechTransferJob {
-        peer: DeviceId::new("12D3KooWAway"),
+        device: DeviceId::new("device-away"),
         part: SpeechPart {
             meeting_id: MeetingId::new("meeting-phone"),
             part_index: 0,
