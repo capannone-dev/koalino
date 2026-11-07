@@ -22,7 +22,7 @@ use crate::{
     },
     domain::{
         errors::TranscriptionError,
-        models::{DeviceId, MeetingId, SpeakerIdentity, VoiceEmbedding},
+        models::{DeviceId, MeetingId, SpeakerIdentity, TranscriptSegment, VoiceEmbedding},
     },
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
     ports::crypto::EmbeddingCipher,
@@ -30,7 +30,7 @@ use crate::{
         speech_transfer::{
             SpeechChunk, SpeechInbox, SpeechLink, SpeechPart, SpeechSender, SpeechTransferError,
         },
-        storage::AttachmentRepository,
+        storage::{AttachmentRepository, NoteRepository},
         voice::VoiceVectorDB,
     },
     storage_composition::open_note_repository,
@@ -642,4 +642,230 @@ fn an_invite_finds_a_device_but_pairing_still_needs_the_code() {
     assert!(!reconnected["trusted_devices"][0]["capabilities"].is_null());
     inviter.shutdown();
     restarted.shutdown();
+}
+
+/// Lines of one conversation, one per 4 s, as both devices' live transcripts heard it.
+const TALK: [&str; 8] = [
+    "Buongiorno a tutti, iniziamo con il bilancio del trimestre.",
+    "Le vendite sono cresciute del dieci per cento rispetto a marzo.",
+    "Però i costi di spedizione sono aumentati più del previsto.",
+    "Dobbiamo rinegoziare il contratto con il corriere entro giugno.",
+    "Chi se ne occupa? Io posso chiamarli già domani mattina.",
+    "Perfetto, poi passiamo al lancio del nuovo prodotto.",
+    "Il prototipo è pronto ma mancano ancora i test sul campo.",
+    "Possiamo coinvolgere tre clienti di Milano per la prova.",
+];
+
+/// Answers every window with "testo combinato" and counts the windows.
+struct CountingEngine(Arc<std::sync::atomic::AtomicUsize>);
+
+impl crate::ports::ai::TranscriptionEngine for CountingEngine {
+    fn transcribe(
+        &self,
+        audio_recording: &crate::domain::models::AudioRecording,
+        _context: &crate::domain::models::TranscriptionContext,
+    ) -> Result<crate::domain::models::Transcript, TranscriptionError> {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        Ok(crate::domain::models::Transcript::new(
+            audio_recording.meeting_id().clone(),
+            "testo combinato",
+        )
+        .with_timed_words(vec![
+            crate::domain::models::TimedWord::new("testo", 0, 300),
+            crate::domain::models::TimedWord::new("combinato", 300, 700),
+        ]))
+    }
+}
+
+/// One device of the end-to-end test: its database, sealed speech, worker and P2P link.
+struct Device {
+    database: std::path::PathBuf,
+    device_id: DeviceId,
+    store: Arc<crate::adapters::audio::retained_audio_store::RetainedAudioStore>,
+    worker: crate::refinement_worker::RefinementWorker,
+}
+
+impl Device {
+    /// Wires a device as `start_transcript_pass` does, with a fake engine. The real clock keeps
+    /// each meeting waiting for its partner, as on real devices.
+    fn new(
+        database: &std::path::Path,
+        name: &str,
+        is_phone: bool,
+        link: &Arc<P2pHandle>,
+        windows: &Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Self {
+        use crate::refinement_worker::{
+            RefinementControl, RefinementWorker, RepositoryFactory, RetainedSpeechInbox,
+        };
+        let device_id = DeviceId::new(format!("device-{name}"));
+        let store = Arc::new(
+            crate::adapters::audio::retained_audio_store::RetainedAudioStore::new(
+                crate::refinement_worker::retained_audio_directory(database),
+                test_cipher(),
+            ),
+        );
+        let opener = || -> RepositoryFactory {
+            let database = database.to_path_buf();
+            let device_id = device_id.clone();
+            Box::new(move || {
+                Ok(Box::new(open_note_repository(
+                    &database,
+                    device_id.clone(),
+                    test_cipher(),
+                )?) as Box<dyn NoteRepository>)
+            })
+        };
+        let control = Arc::new(RefinementControl::new(is_phone));
+        if is_phone {
+            control.set_charging(true);
+        }
+        link.accept_speech_with(Box::new(RetainedSpeechInbox::new(
+            Arc::clone(&store),
+            opener(),
+            device_id.clone(),
+            Arc::clone(&control),
+        )));
+        control.set_speech_sender(Arc::clone(link) as Arc<dyn SpeechSender>);
+        let windows = Arc::clone(windows);
+        let worker = RefinementWorker::new(
+            Arc::clone(&store),
+            control,
+            Box::new(move |_audio| {
+                Ok(Box::new(CountingEngine(Arc::clone(&windows)))
+                    as Box<dyn crate::ports::ai::TranscriptionEngine>)
+            }),
+            opener(),
+            device_id.clone(),
+        );
+        Self {
+            database: database.to_path_buf(),
+            device_id,
+            store,
+            worker,
+        }
+    }
+
+    fn repository(&self) -> crate::adapters::storage::sqlite_adapter::SqliteNoteRepository {
+        open_note_repository(&self.database, self.device_id.clone(), test_cipher())
+            .unwrap_or_else(|error| panic!("{error:#}"))
+    }
+
+    /// Records `meeting` here: its live transcript (the talk heard `first_ms` in) and one second
+    /// of sealed speech.
+    fn record(&self, meeting: &str, first_ms: u64) {
+        let meeting = MeetingId::new(meeting);
+        let repository = self.repository();
+        repository
+            .create_meeting(&meeting, &automerge::AutoCommit::new().save())
+            .unwrap_or_else(|error| panic!("{error}"));
+        let segments: Vec<TranscriptSegment> = TALK
+            .iter()
+            .enumerate()
+            .map(|(index, line)| {
+                let start = first_ms + index as u64 * 4_000;
+                TranscriptSegment::new(meeting.clone(), start, start + 3_800, None, *line)
+            })
+            .collect();
+        repository
+            .save_transcript_segments(&meeting, &segments)
+            .unwrap_or_else(|error| panic!("{error}"));
+        self.store
+            .append_chunk(
+                &meeting,
+                crate::application::transcript_refinement::ChunkSpan {
+                    start_ms: 0,
+                    end_ms: 1_000,
+                },
+                None,
+                &[7; 16_000],
+            )
+            .unwrap_or_else(|error| panic!("{error}"));
+    }
+}
+
+/// End to end (#88): a laptop and a phone, paired over real P2P tasks, each record the same
+/// conversation. Their meetings sync, both devices fold the phone's recording into the laptop's,
+/// the phone sends its sealed speech, and the laptop transcribes both devices' speech in one pass.
+/// Only Whisper is faked.
+#[test]
+fn a_meeting_recorded_on_laptop_and_phone_becomes_one_transcript() {
+    let laptop_database = fresh_database("laptop");
+    let phone_database = fresh_database("phone");
+    let (laptop_task, phone_task) = pair_tasks(&laptop_database, &phone_database);
+    let (laptop_task, phone_task) = (Arc::new(laptop_task), Arc::new(phone_task));
+    let windows = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let mut laptop = Device::new(&laptop_database, "laptop", false, &laptop_task, &windows);
+    let mut phone = Device::new(&phone_database, "phone", true, &phone_task, &windows);
+
+    laptop.record("meeting-laptop", 3_000);
+    phone.record("meeting-phone", 1_000);
+    let laptop_meeting = MeetingId::new("meeting-laptop");
+    let phone_meeting = MeetingId::new("meeting-phone");
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
+    let mut rounds = 0;
+    let done = loop {
+        rounds += 1;
+        phone.worker.run_pending();
+        laptop.worker.run_pending();
+        let finished = laptop.store.pending_meetings().is_empty()
+            && phone.store.pending_meetings().is_empty()
+            && windows.load(std::sync::atomic::Ordering::SeqCst) > 0;
+        if finished || std::time::Instant::now() > deadline {
+            break finished;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    };
+    let laptop_recordings = laptop
+        .repository()
+        .meeting_recordings()
+        .unwrap_or_else(|error| panic!("{error}"));
+    let phone_recordings = phone
+        .repository()
+        .meeting_recordings()
+        .unwrap_or_else(|error| panic!("{error}"));
+    let laptop_text: Vec<String> = laptop
+        .repository()
+        .load_transcript_segments(&laptop_meeting)
+        .unwrap_or_else(|error| panic!("{error}"))
+        .iter()
+        .map(|segment| segment.text().to_owned())
+        .collect();
+    laptop_task.shutdown();
+    phone_task.shutdown();
+
+    assert!(
+        done,
+        "the speech was not combined within a minute ({rounds} rounds)"
+    );
+    assert_eq!(
+        windows.load(std::sync::atomic::Ordering::SeqCst),
+        2,
+        "one window from each device, transcribed on the laptop"
+    );
+    assert!(
+        laptop_text.iter().any(|text| text.contains("combinato")),
+        "{laptop_text:?}"
+    );
+    for recordings in [&laptop_recordings, &phone_recordings] {
+        let listing = crate::application::combined_meetings::MeetingListing::of(recordings);
+        assert!(listing.is_listed(&laptop_meeting));
+        assert!(
+            !listing.is_listed(&phone_meeting),
+            "listed once on both devices"
+        );
+        assert_eq!(
+            listing.recorded_on(&laptop_meeting),
+            vec![
+                DeviceId::new("device-laptop"),
+                DeviceId::new("device-phone")
+            ]
+        );
+    }
+    let fold = phone_recordings
+        .iter()
+        .find(|recording| recording.meeting_id == phone_meeting)
+        .and_then(|recording| recording.combined_into.clone())
+        .unwrap_or_else(|| panic!("the phone's recording must be folded"));
+    assert_eq!(fold.combine_on, DeviceId::new("device-laptop"));
 }
