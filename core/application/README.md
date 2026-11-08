@@ -386,7 +386,8 @@ one meeting with one transcript built from both microphones.
   says what each device does with its sealed speech: after `COMBINING_GRACE` (10 min) take the
   pass alone and, with P2P, keep the speech; send it to the combining device; combine every
   recording held, however late it arrives; or delete it. Nothing waits more than
-  `KEEP_FOR_COMBINING` (three weeks). `combining_status` / `CombiningView` say how far combining
+  `PlanContext::keep_for`: `KEEP_FOR_COMBINING` (three weeks) unless the owner chose 1 to 60
+  days (`keep_for_days`, #93). `combining_status` / `CombiningView` say how far combining
   got, for the apps. `MeetingListing` lists a combined meeting once with every device;
   `split_recordings` is the Split action; `name_recording_devices` names devices (also while
   away) and says whether they are connected.

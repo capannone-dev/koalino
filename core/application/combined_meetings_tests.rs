@@ -360,6 +360,7 @@ fn plan_with(
             can_pass,
             keeps_for_partners,
             held: &held_speech,
+            keep_for: KEEP_FOR_COMBINING,
         },
     )
 }
@@ -687,6 +688,7 @@ fn status(
         &held_speech,
         &DeviceId::new(device),
         at(days * 86_400),
+        KEEP_FOR_COMBINING,
     )
 }
 
@@ -834,4 +836,60 @@ fn the_combining_view_names_the_devices_it_mentions() {
     assert_eq!(json["waiting_for"][0]["name"], "Phone");
     assert_eq!(json["waiting_for"][0]["connected"], false);
     assert_eq!(json["kept_until"], at(21 * 86_400).to_rfc3339());
+}
+
+/// Verifies the owner's own window decides how long speech waits, both in the plan and in the
+/// date the apps show (#93).
+#[test]
+fn a_shorter_window_chosen_by_the_owner_deletes_speech_sooner() {
+    let recordings = vec![recording("meeting-laptop", "laptop", 0)];
+    let this_device = DeviceId::new("laptop");
+    let week = 7 * DAY;
+    let plan_at = |age| {
+        let held = |_: &MeetingId| {
+            Some(HeldSpeech {
+                age,
+                passed_alone: true,
+            })
+        };
+        plan_retained_audio(
+            &MeetingId::new("meeting-laptop"),
+            &recordings,
+            &PlanContext {
+                this_device: &this_device,
+                can_pass: true,
+                keeps_for_partners: true,
+                held: &held,
+                keep_for: week,
+            },
+        )
+    };
+    assert_eq!(plan_at(6 * DAY), AudioPlan::Wait);
+    assert_eq!(plan_at(week), AudioPlan::Discard);
+
+    let held = |_: &MeetingId| {
+        Some(HeldSpeech {
+            age: 2 * DAY,
+            passed_alone: true,
+        })
+    };
+    let kept = combining_status(
+        &MeetingId::new("meeting-laptop"),
+        &recordings,
+        &held,
+        &this_device,
+        at(2 * 86_400),
+        week,
+    );
+    assert_eq!(kept.kept_until, Some(at(7 * 86_400)));
+}
+
+/// Verifies the window the owner may choose is bounded.
+#[test]
+fn the_window_is_between_one_and_sixty_days() {
+    use super::combined_meetings::keep_for_days;
+    assert_eq!(keep_for_days(0), None);
+    assert_eq!(keep_for_days(1), Some(DAY));
+    assert_eq!(keep_for_days(60), Some(60 * DAY));
+    assert_eq!(keep_for_days(61), None);
 }

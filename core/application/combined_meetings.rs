@@ -50,11 +50,26 @@ use crate::{
 /// How long a finished recording waits for another device's recording of it to sync here before
 /// it takes the pass alone.
 pub const COMBINING_GRACE: Duration = Duration::from_secs(10 * 60);
-/// Longest a recording's speech is kept waiting to be combined: on a device that has to send it
-/// but cannot reach the combining device, on a device without the pass, or on the combining device
-/// for a recording that has not arrived. Three weeks, so a phone that meets the laptop again
-/// after a trip still delivers its speech; it stays sealed meanwhile (#87).
+/// Longest a recording's speech is kept waiting to be combined, unless the owner chose another
+/// window (#93): on a device that has to send it but cannot reach the combining device, on a
+/// device without the pass, or on the combining device for a recording that has not arrived.
+/// Three weeks, so a phone that meets the laptop again after a trip still delivers its speech; it
+/// stays sealed meanwhile (#87).
 pub const KEEP_FOR_COMBINING: Duration = Duration::from_secs(21 * 24 * 60 * 60);
+/// Shortest window, in days, the owner may choose.
+pub const MIN_KEEP_SPEECH_DAYS: u16 = 1;
+/// Longest window, in days, the owner may choose.
+pub const MAX_KEEP_SPEECH_DAYS: u16 = 60;
+
+/// Converts the owner's window in days into a duration.
+///
+/// Inputs: A number of days. Outputs: The window, or `None` outside
+/// `MIN_KEEP_SPEECH_DAYS..=MAX_KEEP_SPEECH_DAYS`. Side effects: None.
+pub fn keep_for_days(days: u16) -> Option<Duration> {
+    (MIN_KEEP_SPEECH_DAYS..=MAX_KEEP_SPEECH_DAYS)
+        .contains(&days)
+        .then(|| Duration::from_secs(u64::from(days) * 24 * 60 * 60))
+}
 /// Recordings started further apart than this are never compared.
 const MAX_START_GAP_SECONDS: i64 = 12 * 60 * 60;
 
@@ -305,6 +320,9 @@ pub struct PlanContext<'context> {
     pub keeps_for_partners: bool,
     /// The speech held here for a meeting, if any.
     pub held: &'context dyn Fn(&MeetingId) -> Option<HeldSpeech>,
+    /// How long speech waits to be combined on this device (`KEEP_FOR_COMBINING` unless the
+    /// owner chose another window, #93).
+    pub keep_for: Duration,
 }
 
 /// The recordings of one meeting: the first, and those folded into it with their offsets.
@@ -550,7 +568,7 @@ pub fn plan_retained_audio(
         return plan_alone(own, context);
     };
     if combiner != *context.this_device {
-        return if own.age < KEEP_FOR_COMBINING {
+        return if own.age < context.keep_for {
             AudioPlan::Send { to: combiner }
         } else {
             AudioPlan::Discard
@@ -560,7 +578,7 @@ pub fn plan_retained_audio(
         // The first recording's speech is gone if it was recorded here (it was combined or
         // expired); otherwise its device still has to send it.
         let root_recorded_here = group.root.acquisition_device_id == *context.this_device;
-        return if root_recorded_here || own.age >= KEEP_FOR_COMBINING {
+        return if root_recorded_here || own.age >= context.keep_for {
             AudioPlan::Discard
         } else {
             AudioPlan::Wait
@@ -579,7 +597,7 @@ pub fn plan_retained_audio(
     if held_members.len() == group.members.len() {
         return if context.can_pass {
             combine_now
-        } else if root_speech.age < KEEP_FOR_COMBINING {
+        } else if root_speech.age < context.keep_for {
             AudioPlan::Wait
         } else {
             AudioPlan::Discard
@@ -588,7 +606,7 @@ pub fn plan_retained_audio(
     if root_speech.age < COMBINING_GRACE {
         return AudioPlan::Wait;
     }
-    if root_speech.age < KEEP_FOR_COMBINING {
+    if root_speech.age < context.keep_for {
         // The first recording takes its pass alone while the others are awaited; a received
         // recording leaves that to the first recording's own plan.
         let pass_alone_now =
@@ -612,7 +630,7 @@ fn plan_alone(own: HeldSpeech, context: &PlanContext<'_>) -> AudioPlan {
         AudioPlan::Wait
     } else if !own.passed_alone && context.can_pass {
         AudioPlan::PassAlone
-    } else if (context.keeps_for_partners || !context.can_pass) && own.age < KEEP_FOR_COMBINING {
+    } else if (context.keeps_for_partners || !context.can_pass) && own.age < context.keep_for {
         AudioPlan::Wait
     } else {
         AudioPlan::Discard
@@ -653,9 +671,9 @@ pub struct CombiningStatus {
 /// Works out how far combining a listed meeting's recordings got, as this device sees it.
 ///
 /// Inputs: The listed meeting (the first recording); every meeting as a recording; the speech
-/// held here; this device; and the time now.
+/// held here; this device; the time now; and how long speech waits on this device.
 /// Outputs: The status. A meeting whose transcript notes every folded recording is `Combined` on
-/// every device; recordings made more than `KEEP_FOR_COMBINING` ago can no longer be combined.
+/// every device; recordings made more than `keep_for` ago can no longer be combined.
 /// Side effects: None.
 pub fn combining_status(
     meeting_id: &MeetingId,
@@ -663,10 +681,11 @@ pub fn combining_status(
     held: &dyn Fn(&MeetingId) -> Option<HeldSpeech>,
     this_device: &DeviceId,
     now: DateTime<Utc>,
+    keep_for: Duration,
 ) -> CombiningStatus {
     let kept_until = |meeting: &MeetingId| {
         held(meeting).and_then(|speech| {
-            let left = KEEP_FOR_COMBINING.checked_sub(speech.age)?;
+            let left = keep_for.checked_sub(speech.age)?;
             Some(now + chrono::TimeDelta::from_std(left).ok()?)
         })
     };
@@ -708,8 +727,7 @@ pub fn combining_status(
         .map(|recording| recording.created_at)
         .max()
         .unwrap_or(group.root.created_at);
-    let expired =
-        chrono::TimeDelta::from_std(KEEP_FOR_COMBINING).is_ok_and(|keep| now >= last_start + keep);
+    let expired = chrono::TimeDelta::from_std(keep_for).is_ok_and(|keep| now >= last_start + keep);
     let not_combined = || {
         status(
             CombiningState::NotCombined,
@@ -775,11 +793,11 @@ pub fn combining_view(
     recordings: &[MeetingRecording],
     held: &dyn Fn(&MeetingId) -> Option<HeldSpeech>,
     this_device: &DeviceId,
-    now: DateTime<Utc>,
+    (now, keep_for): (DateTime<Utc>, Duration),
     p2p: Option<&crate::application::p2p_service::P2pStatus>,
 ) -> CombiningView {
     CombiningView::of(
-        &combining_status(meeting_id, recordings, held, this_device, now),
+        &combining_status(meeting_id, recordings, held, this_device, now, keep_for),
         p2p,
     )
 }
