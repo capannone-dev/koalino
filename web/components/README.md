@@ -38,6 +38,9 @@ Projects (Issue #85), over `lib/projects-api.ts`:
   Download and Delete (confirmed). Previews never render a file's markup: pictures inline,
   Markdown and text as plain text, e-mails as headers and text. A file still syncing shows
   "Syncing…".
+- `meeting-transcript.tsx` renders the meeting page's transcript: one block per segment with the
+  speaker and start, `Name (?)` for a guessed speaker, an "Overlapping speech" label, and unclear
+  words in italics (#90, #91); an imported meeting shows its flat text.
 - `meeting-recorded-on.tsx` says "Recorded on Laptop + Pixel" on the page of a meeting the app
   combined from several devices' recordings (#88), and its Split button lists the other recordings
   on their own again after an inline confirmation. The list rows carry the same line.

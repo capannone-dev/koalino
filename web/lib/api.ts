@@ -29,12 +29,23 @@ export type MeetingSummary = {
   transcription_languages?: string[];
 } & RecordedOn;
 export type Attachment = { attachment_id: string; file_path: string; mime_type: string; original_timestamp_utc: string };
+/** One recorded segment with its confidence marks (#90, #91); older servers omit the marks. */
+export type TranscriptSegment = {
+  start_time_ms: number;
+  end_time_ms: number;
+  speaker: string;
+  text: string;
+  overlapping_speech?: boolean;
+  uncertain_speaker?: boolean;
+  uncertain_words?: number[];
+};
 export type MeetingDetail = {
   meeting_id: string;
   title: string;
   created_at: string;
   transcription_languages?: string[];
   transcript: string | null;
+  segments?: TranscriptSegment[];
   attachments: Attachment[];
 } & RecordedOn;
 export type VoiceIdentity = { identity_id: string; display_name: string; voice_variant_count: number };
