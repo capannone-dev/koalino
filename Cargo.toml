@@ -81,6 +81,10 @@ tower-http = { version = "0.6.6", features = ["cors", "trace"] }
 tracing = "0.1.41"
 tracing-appender = "0.2.3"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt", "json"] }
+# Opus compression of the speech kept for the after-meeting pass and sent to the combining device
+# (approved by the owner, #88): libopus 1.3.1 translated to Rust, so no C toolchain is needed on
+# any target.
+unsafe-libopus = "0.2.0"
 # `v5` derives stable local meeting UUIDs from Teams meeting IDs (Issue #33).
 uuid = { version = "1.18.1", features = ["v4", "v5"] }
 # X25519 agreement of a per-pair key between paired devices (approved by the owner, #50); the
