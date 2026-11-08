@@ -8,7 +8,8 @@ Ports define the stable contracts for audio capture, AI processing, P2P networki
 
 `speech_transfer.rs` (#88) declares `SpeechSender` and `SpeechInbox`, which move a meeting's
 retained speech to the paired device that combines it, and `SpeechLink`, a P2P task that does
-both. Devices are named by the ID written on their meetings, not by peer ID.
+both. Devices are named by the ID written on their meetings, not by peer ID. A `SpeechChunk`
+carries its speech compressed with Opus, as the sender keeps it.
 `meeting_document.rs` carries `MeetingCombination`, the fold of one device's recording into
 another's, and `storage.rs` lists `MeetingRecording`s and folds and splits them.
 

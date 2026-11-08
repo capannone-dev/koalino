@@ -6,7 +6,10 @@
 //! appended to `<directory>/<hex meeting id>.ntra` as one record: a 4-byte little-endian length,
 //! then the chunk sealed with AES-256-GCM through the database key's `EmbeddingCipher`. The record
 //! names the meeting in its authenticated data, so a record moved to another meeting's file fails
-//! to open. Plaintext buffers are wiped after use, and nothing here logs audio. The pass deletes
+//! to open. The speech is compressed with Opus (`opus_speech`) before it is sealed, about a tenth
+//! of the raw size, and is sent to a paired device as kept, so it is compressed only once. Records
+//! of builds before Opus hold raw samples under the `v1` context; they are still read (and
+//! compressed when sent), while new records use `v2`. Plaintext buffers are wiped after use, and nothing here logs audio. The pass deletes
 //! the file once it is done; deleting the meeting must delete it too. Files are readable by this
 //! user only. Speech received from a paired device for combining (#88) is written to
 //! `<file>.incoming` and becomes the meeting's file only once complete. An empty `<file>.passed`
@@ -22,6 +25,7 @@ use std::{
 
 use zeroize::Zeroizing;
 
+use super::opus_speech::{decode_speech, encode_speech};
 use crate::{
     application::transcript_refinement::ChunkSpan,
     domain::{models::MeetingId, transcription_language::TranscriptionLanguage},
@@ -31,7 +35,8 @@ use crate::{
 /// File extension of a retained meeting's audio.
 const FILE_EXTENSION: &str = "ntra";
 /// Bytes of a record's fixed header: start and end in milliseconds, then the language code's
-/// length (0 when the chunk had none), then the code and the samples.
+/// length (0 when the chunk had none), then the code and the speech: Opus under `v2`, raw 16-bit
+/// little-endian samples under `v1`.
 const HEADER_LENGTH: usize = 17;
 
 /// Why retained audio could not be written or read.
@@ -40,7 +45,7 @@ pub enum RetainedAudioError {
     /// The folder or file could not be written or read.
     #[error("retained audio storage failed: {0}")]
     Storage(#[from] std::io::Error),
-    /// The audio could not be sealed.
+    /// The audio could not be compressed or sealed.
     #[error("retained audio could not be encrypted")]
     Encryption,
     /// The file is cut short, tampered with, sealed under another key, or belongs to another
@@ -73,6 +78,50 @@ impl RetainedChunk {
     }
 }
 
+/// One retained speech chunk as it is kept and sent: compressed with Opus (#88).
+pub struct EncodedChunk {
+    span: ChunkSpan,
+    language: Option<TranscriptionLanguage>,
+    speech: Zeroizing<Vec<u8>>,
+}
+
+impl EncodedChunk {
+    /// Returns where the chunk sits in the meeting.
+    pub fn span(&self) -> ChunkSpan {
+        self.span
+    }
+
+    /// Returns the language the chunk was recorded with, if any.
+    pub fn language(&self) -> Option<TranscriptionLanguage> {
+        self.language
+    }
+
+    /// Borrows its speech as `opus_speech::encode_speech` lays it out.
+    pub fn speech(&self) -> &[u8] {
+        &self.speech
+    }
+
+    /// Takes its speech, still wiped when dropped.
+    pub fn into_speech(self) -> Zeroizing<Vec<u8>> {
+        self.speech
+    }
+}
+
+/// A record's speech as it was kept.
+enum KeptSpeech {
+    /// Opus, as this version keeps it.
+    Opus(Zeroizing<Vec<u8>>),
+    /// Raw samples, as builds before Opus kept them.
+    Raw(Zeroizing<Vec<i16>>),
+}
+
+/// One opened record.
+struct Record {
+    span: ChunkSpan,
+    language: Option<TranscriptionLanguage>,
+    speech: KeptSpeech,
+}
+
 /// Sealed, append-only files of meeting speech, one per meeting.
 pub struct RetainedAudioStore {
     directory: PathBuf,
@@ -98,8 +147,13 @@ impl RetainedAudioStore {
         format!("{hex}.{FILE_EXTENSION}")
     }
 
-    /// The authenticated data binding a record to its meeting.
+    /// The authenticated data binding a record of compressed speech to its meeting.
     fn context(meeting_id: &MeetingId) -> String {
+        format!("retained-audio:v2:{}", meeting_id.as_str())
+    }
+
+    /// The authenticated data of a raw record written before Opus.
+    fn raw_context(meeting_id: &MeetingId) -> String {
         format!("retained-audio:v1:{}", meeting_id.as_str())
     }
 
@@ -107,7 +161,8 @@ impl RetainedAudioStore {
     ///
     /// Inputs: The meeting, the chunk's place in it, its language, and its 16 kHz mono samples.
     /// Outputs: `Ok(())`, or a storage or encryption error (the recording goes on without it).
-    /// Side effects: Creates the folder and file as needed and appends a sealed record.
+    /// Side effects: Compresses the samples, creates the folder and file as needed and appends a
+    /// sealed record.
     pub fn append_chunk(
         &self,
         meeting_id: &MeetingId,
@@ -115,13 +170,14 @@ impl RetainedAudioStore {
         language: Option<TranscriptionLanguage>,
         samples: &[i16],
     ) -> Result<(), RetainedAudioError> {
+        let speech = encode_speech(samples).map_err(|_| RetainedAudioError::Encryption)?;
         self.forget_pass_alone(meeting_id)?;
         self.append_record(
             meeting_id,
             &Self::file_name(meeting_id),
             span,
             language,
-            samples,
+            &speech,
         )
     }
 
@@ -155,29 +211,27 @@ impl RetainedAudioStore {
         }
     }
 
-    /// Seals one chunk for `meeting_id` and appends it to `file_name` in the folder.
+    /// Seals one chunk's compressed speech for `meeting_id` and appends it to `file_name`.
     fn append_record(
         &self,
         meeting_id: &MeetingId,
         file_name: &str,
         span: ChunkSpan,
         language: Option<TranscriptionLanguage>,
-        samples: &[i16],
+        speech: &[u8],
     ) -> Result<(), RetainedAudioError> {
         let code = language
             .map_or("", TranscriptionLanguage::as_str)
             .as_bytes();
         let code_length = u8::try_from(code.len()).map_err(|_| RetainedAudioError::Encryption)?;
         let mut plaintext = Zeroizing::new(Vec::with_capacity(
-            HEADER_LENGTH + code.len() + samples.len() * 2,
+            HEADER_LENGTH + code.len() + speech.len(),
         ));
         plaintext.extend_from_slice(&span.start_ms.to_le_bytes());
         plaintext.extend_from_slice(&span.end_ms.to_le_bytes());
         plaintext.push(code_length);
         plaintext.extend_from_slice(code);
-        for sample in samples {
-            plaintext.extend_from_slice(&sample.to_le_bytes());
-        }
+        plaintext.extend_from_slice(speech);
         let sealed = self
             .cipher
             .seal_secret(&Self::context(meeting_id), &plaintext)
@@ -208,22 +262,27 @@ impl RetainedAudioStore {
         Ok(())
     }
 
-    /// Appends one received chunk to the meeting's incoming copy, sealed as `append_chunk` seals.
+    /// Appends one received chunk to the meeting's incoming copy, kept compressed as received.
     ///
-    /// Side effects: Appends a sealed record to `<file>.incoming`.
-    pub fn append_incoming(
+    /// Inputs: The meeting, the chunk's place and language, and its speech as a paired device
+    /// sent it (`opus_speech` layout). Outputs: `Ok(())`, `Unreadable` for speech that does not
+    /// decode, or a storage or encryption error.
+    /// Side effects: Decodes the speech once to check it, then appends a sealed record to
+    /// `<file>.incoming`.
+    pub fn append_incoming_encoded(
         &self,
         meeting_id: &MeetingId,
         span: ChunkSpan,
         language: Option<TranscriptionLanguage>,
-        samples: &[i16],
+        speech: &[u8],
     ) -> Result<(), RetainedAudioError> {
+        decode_speech(speech).map_err(|_| RetainedAudioError::Unreadable)?;
         self.append_record(
             meeting_id,
             &Self::incoming_name(meeting_id),
             span,
             language,
-            samples,
+            speech,
         )
     }
 
@@ -256,11 +315,58 @@ impl RetainedAudioStore {
         self.directory.join(Self::incoming_name(meeting_id))
     }
 
-    /// Reads every chunk retained for a meeting, in the order they were appended.
+    /// Reads every chunk retained for a meeting, decoded, in the order they were appended.
     ///
     /// Inputs: The meeting. Outputs: Its chunks (empty when nothing is retained), or `Unreadable`
-    /// for a damaged or foreign file. Side effects: Reads the file into memory.
+    /// for a damaged or foreign file. Side effects: Reads the file into memory and decodes it.
     pub fn load(&self, meeting_id: &MeetingId) -> Result<Vec<RetainedChunk>, RetainedAudioError> {
+        self.read_records(meeting_id)?
+            .into_iter()
+            .map(|record| {
+                let samples = match record.speech {
+                    KeptSpeech::Opus(speech) => {
+                        decode_speech(&speech).map_err(|_| RetainedAudioError::Unreadable)?
+                    }
+                    KeptSpeech::Raw(samples) => samples,
+                };
+                Ok(RetainedChunk {
+                    span: record.span,
+                    language: record.language,
+                    samples,
+                })
+            })
+            .collect()
+    }
+
+    /// Reads every chunk retained for a meeting as it is sent to a paired device: compressed.
+    ///
+    /// Inputs: The meeting. Outputs: Its chunks in append order; kept Opus comes back as kept,
+    /// raw speech from before Opus is compressed now. `Unreadable` for a damaged or foreign file.
+    /// Side effects: Reads the file into memory.
+    pub fn load_encoded(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<EncodedChunk>, RetainedAudioError> {
+        self.read_records(meeting_id)?
+            .into_iter()
+            .map(|record| {
+                let speech = match record.speech {
+                    KeptSpeech::Opus(speech) => speech,
+                    KeptSpeech::Raw(samples) => {
+                        encode_speech(&samples).map_err(|_| RetainedAudioError::Encryption)?
+                    }
+                };
+                Ok(EncodedChunk {
+                    span: record.span,
+                    language: record.language,
+                    speech,
+                })
+            })
+            .collect()
+    }
+
+    /// Opens every record of a meeting's file, trying the current context and then the raw one.
+    fn read_records(&self, meeting_id: &MeetingId) -> Result<Vec<Record>, RetainedAudioError> {
         let path = self.directory.join(Self::file_name(meeting_id));
         let bytes = match fs::read(&path) {
             Ok(bytes) => bytes,
@@ -268,7 +374,8 @@ impl RetainedAudioStore {
             Err(error) => return Err(error.into()),
         };
         let context = Self::context(meeting_id);
-        let mut chunks = Vec::new();
+        let raw_context = Self::raw_context(meeting_id);
+        let mut records = Vec::new();
         let mut rest = bytes.as_slice();
         while !rest.is_empty() {
             let (length_bytes, after_length) = rest
@@ -279,14 +386,20 @@ impl RetainedAudioStore {
                 return Err(RetainedAudioError::Unreadable);
             }
             let (sealed, after_record) = after_length.split_at(length);
-            let plaintext = self
-                .cipher
-                .open_secret(&context, sealed)
-                .map_err(|_| RetainedAudioError::Unreadable)?;
-            chunks.push(decode_record(&plaintext)?);
+            let record = match self.cipher.open_secret(&context, sealed) {
+                Ok(plaintext) => decode_record(&plaintext, false)?,
+                Err(_) => {
+                    let plaintext = self
+                        .cipher
+                        .open_secret(&raw_context, sealed)
+                        .map_err(|_| RetainedAudioError::Unreadable)?;
+                    decode_record(&plaintext, true)?
+                }
+            };
+            records.push(record);
             rest = after_record;
         }
-        Ok(chunks)
+        Ok(records)
     }
 
     /// Deletes a meeting's retained audio.
@@ -385,8 +498,9 @@ fn private_append(path: &std::path::Path) -> std::io::Result<fs::File> {
     options.open(path)
 }
 
-/// Splits a record's plaintext into its span, language and samples.
-fn decode_record(plaintext: &[u8]) -> Result<RetainedChunk, RetainedAudioError> {
+/// Splits a record's plaintext into its span, language and speech: raw samples when `raw` (a
+/// `v1` record), Opus otherwise.
+fn decode_record(plaintext: &[u8], raw: bool) -> Result<Record, RetainedAudioError> {
     let (header, rest) = plaintext
         .split_at_checked(HEADER_LENGTH)
         .ok_or(RetainedAudioError::Unreadable)?;
@@ -403,18 +517,24 @@ fn decode_record(plaintext: &[u8]) -> Result<RetainedChunk, RetainedAudioError> 
     let mut end = [0_u8; 8];
     start.copy_from_slice(&header[..8]);
     end.copy_from_slice(&header[8..16]);
-    let (pairs, odd_byte) = body.as_chunks::<2>();
-    if !odd_byte.is_empty() {
-        return Err(RetainedAudioError::Unreadable);
-    }
-    let samples: Vec<i16> = pairs.iter().map(|pair| i16::from_le_bytes(*pair)).collect();
-    Ok(RetainedChunk {
+    let speech = if raw {
+        let (pairs, odd_byte) = body.as_chunks::<2>();
+        if !odd_byte.is_empty() {
+            return Err(RetainedAudioError::Unreadable);
+        }
+        KeptSpeech::Raw(Zeroizing::new(
+            pairs.iter().map(|pair| i16::from_le_bytes(*pair)).collect(),
+        ))
+    } else {
+        KeptSpeech::Opus(Zeroizing::new(body.to_vec()))
+    };
+    Ok(Record {
         span: ChunkSpan {
             start_ms: u64::from_le_bytes(start),
             end_ms: u64::from_le_bytes(end),
         },
         language,
-        samples: Zeroizing::new(samples),
+        speech,
     })
 }
 

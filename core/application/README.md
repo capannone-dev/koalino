@@ -391,8 +391,10 @@ one meeting with one transcript built from both microphones.
   same as one device; merging every word made it worse (duplicates); the union bound across
   devices was 20.3% word error against 36.9% for one device, so the gain depends on placing the
   phone near the people the laptop hears worst.
-- `speech_transfer_exchange.rs` seals the speech parts (`NTR1`, at most 12 MiB of audio each) and
-  their receipts (`NTR2`) with the pair key, bound to the sender and the receiver.
+- `speech_transfer_exchange.rs` seals the speech parts (`NTR3`, at most 12 MiB of speech each,
+  about an hour) and their receipts (`NTR2`) with the pair key, bound to the sender and the
+  receiver. The speech is Opus as the sender keeps it, carried unread; the receiver checks that it
+  decodes. Parts of raw samples from builds before Opus (`NTR1`) are not recognised.
   `p2p_speech_transfer.rs` carries them for the P2P service and translates meetings' device IDs
   to peer IDs through the device manifests.
 

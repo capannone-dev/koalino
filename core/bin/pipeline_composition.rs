@@ -33,7 +33,7 @@ use crate::{
         },
         audio::{
             chunk_audio_store::ChunkAudioStore, retained_audio_store::RetainedAudioStore,
-            vad_chunker::VadConfig,
+            retained_speech_writer::RetainedSpeechWriter, vad_chunker::VadConfig,
         },
         storage::sqlite_voice_vector_db::SqliteVoiceVectorDB,
     },
@@ -985,8 +985,15 @@ pub fn start_transcript_pass(
         )));
         control.set_speech_sender(link as Arc<dyn SpeechSender>);
     }
+    let writer = match RetainedSpeechWriter::spawn(Arc::clone(&store)) {
+        Ok(writer) => Arc::new(writer),
+        Err(error) => {
+            tracing::warn!(error = %error, "speech could not be kept for the after-meeting pass");
+            return None;
+        }
+    };
     match worker.spawn() {
-        Ok(_) => Some(TranscriptPass { store, control }),
+        Ok(_) => Some(TranscriptPass { writer, control }),
         Err(error) => {
             tracing::warn!(error = %error, "the after-meeting transcript pass could not start");
             None

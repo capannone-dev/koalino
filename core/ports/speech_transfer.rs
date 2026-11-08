@@ -3,7 +3,8 @@
 //! When one meeting was recorded on two devices, the device that does not combine the recordings
 //! sends its sealed speech (#87) to the one that does, in parts that each fit one P2P message. The
 //! sender waits for each part's receipt before the next, and deletes its copy only after the last
-//! receipt. Raw audio: never logged, wiped after use.
+//! receipt. The speech travels compressed with Opus, as the device keeps it. Audio: never logged,
+//! wiped after use.
 
 use zeroize::Zeroizing;
 
@@ -20,8 +21,9 @@ pub struct SpeechChunk {
     pub end_ms: u64,
     /// The language it was recorded with, if any.
     pub language: Option<TranscriptionLanguage>,
-    /// 16 kHz mono samples, wiped when dropped.
-    pub samples: Zeroizing<Vec<i16>>,
+    /// The 16 kHz mono speech compressed as `adapters::audio::opus_speech` lays it out, wiped
+    /// when dropped. The receiver checks that it decodes.
+    pub speech: Zeroizing<Vec<u8>>,
 }
 
 /// One part of a meeting's speech.

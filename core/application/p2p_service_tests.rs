@@ -1460,7 +1460,7 @@ async fn a_deleted_meeting_goes_from_paired_devices_and_stays_gone() {
 }
 
 /// One part an inbox stored: the sender, the meeting, the part's index, and its samples.
-type StoredPart = (DeviceId, MeetingId, u32, Vec<i16>);
+type StoredPart = (DeviceId, MeetingId, u32, Vec<u8>);
 
 /// Records the speech parts it is given, or refuses them all.
 #[derive(Clone, Default)]
@@ -1487,7 +1487,7 @@ impl SpeechInbox for FakeInbox {
                 part.part_index,
                 part.chunks
                     .iter()
-                    .flat_map(|chunk| chunk.samples.iter().copied())
+                    .flat_map(|chunk| chunk.speech.iter().copied())
                     .collect(),
             ));
         Ok(())
@@ -1547,7 +1547,7 @@ fn send_speech(phone: &mut Service) -> std::sync::mpsc::Receiver<Result<(), Spee
                 start_ms: 0,
                 end_ms: 1,
                 language: None,
-                samples: zeroize::Zeroizing::new(vec![4, -5, 6]),
+                speech: zeroize::Zeroizing::new(vec![4, 5, 6]),
             }],
         },
         reply,
@@ -1579,7 +1579,7 @@ async fn speech_reaches_the_combining_device_and_is_confirmed() {
         "named as on its meetings"
     );
     assert_eq!(stored[0].1, MeetingId::new("meeting-phone"));
-    assert_eq!(stored[0].3, vec![4, -5, 6]);
+    assert_eq!(stored[0].3, vec![4, 5, 6]);
 }
 
 /// A device that does not take the speech says so, and the sender keeps its copy.

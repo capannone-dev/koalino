@@ -28,12 +28,13 @@ fn laptop() -> DeviceId {
     DeviceId::new("laptop")
 }
 
-fn chunk(start_ms: u64, samples: usize) -> SpeechChunk {
+/// A chunk of `bytes` bytes of compressed speech; the exchange carries it without reading it.
+fn chunk(start_ms: u64, bytes: usize) -> SpeechChunk {
     SpeechChunk {
         start_ms,
-        end_ms: start_ms + samples as u64 / 16,
+        end_ms: start_ms + bytes as u64 / 16,
         language: TranscriptionLanguage::parse("it").ok(),
-        samples: Zeroizing::new((0..samples).map(|index| index as i16).collect()),
+        speech: Zeroizing::new((0..bytes).map(|index| index as u8).collect()),
     }
 }
 
@@ -72,8 +73,25 @@ fn a_part_round_trips_between_the_two_devices() {
         decoded.chunks[0].language.map(|language| language.as_str()),
         Some("it")
     );
-    assert_eq!(decoded.chunks[0].samples.len(), 16_000);
-    assert_eq!(decoded.chunks[1].samples[799], 799);
+    assert_eq!(decoded.chunks[0].speech.len(), 16_000);
+    assert_eq!(decoded.chunks[1].speech[799], (799 % 256) as u8);
+}
+
+#[test]
+fn a_part_of_raw_samples_from_a_build_before_opus_is_not_taken_for_speech() {
+    let message = encode_speech_part(
+        Uuid::nil(),
+        &part(vec![chunk(0, 160)]),
+        &key(1),
+        &phone(),
+        &laptop(),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let mut older = b"NTR1".to_vec();
+    older.extend_from_slice(&message[4..]);
+
+    assert!(!is_speech_part(&older));
+    assert!(!is_speech_receipt(&older));
 }
 
 #[test]
@@ -116,9 +134,9 @@ fn a_receipt_round_trips() {
 
 #[test]
 fn chunks_are_split_into_parts_that_fit_a_message() {
-    // Ten 15 s chunks (480 kB each) with a 1 MB budget: two chunks per part.
+    // Ten chunks of 480 kB each with a 1 MB budget: two chunks per part.
     let chunks: Vec<SpeechChunk> = (0..10)
-        .map(|index| chunk(index * 20_000, 240_000))
+        .map(|index| chunk(index * 20_000, 480_000))
         .collect();
 
     let parts = split_into_parts(&MeetingId::new("meeting-phone"), chunks, 1_000_000);

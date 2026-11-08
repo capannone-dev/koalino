@@ -20,6 +20,8 @@ pub mod pcm_input;
 pub mod pcm_resampler;
 /// Keeps a meeting's speech sealed on disk until the after-meeting pass has read it (#87).
 pub mod retained_audio_store;
+/// Compresses and keeps a recording's speech on a background thread (#88).
+pub mod retained_speech_writer;
 /// Implements feature-gated 16 kHz VAD chunking over an AudioCapture source.
 pub mod vad_chunker;
 
@@ -37,5 +39,7 @@ mod pcm_input_tests;
 mod pcm_resampler_tests;
 #[cfg(test)]
 mod retained_audio_store_tests;
+#[cfg(test)]
+mod retained_speech_writer_tests;
 #[cfg(test)]
 mod vad_chunker_tests;

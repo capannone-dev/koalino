@@ -462,7 +462,7 @@ impl SpeechInbox for RecordingInbox {
             .push((
                 part.meeting_id,
                 part.part_index,
-                part.chunks[0].samples.len(),
+                part.chunks[0].speech.len(),
             ));
         Ok(())
     }
@@ -477,7 +477,7 @@ fn speech_part() -> SpeechPart {
             start_ms: 0,
             end_ms: 1_000,
             language: None,
-            samples: zeroize::Zeroizing::new(vec![3; 16_000]),
+            speech: zeroize::Zeroizing::new(vec![3; 16_000]),
         }],
     }
 }

@@ -1,17 +1,21 @@
 //! Encodes the sealed messages that carry a meeting's speech to the combining device (#88).
 //!
-//! A part is `NTR1` and its receipt `NTR2`, each followed by a body sealed with the pair key and
+//! A part is `NTR3` and its receipt `NTR2`, each followed by a body sealed with the pair key and
 //! bound to the sender and receiver (purpose = header). Inside a part:
 //!
 //! ```text
 //! job ID (16) ‖ meeting ID length (u16) ‖ meeting ID ‖ part index (u32) ‖ part count (u32)
 //! ‖ chunk count (u32) ‖ per chunk: start ms (u64), end ms (u64), language length (u8), language,
-//!   sample count (u32) ‖ every chunk's samples (i16 little-endian), in chunk order
+//!   speech length (u32) ‖ every chunk's speech, in chunk order
 //! ```
 //!
-//! A receipt is the job ID and one byte: 1 when the part was stored. Integers other than samples
-//! are big-endian. Raw audio travels only inside the sealed value and is wiped after use. The
-//! sender holds the pair key but is still peer input, so decoding bounds every value.
+//! The speech is compressed with Opus as the device keeps it (`adapters::audio::opus_speech`);
+//! this module carries it without reading it, and the receiver checks it decodes before storing
+//! it. Parts of raw samples from builds before Opus (`NTR1`) are not recognised, so a device
+//! updated on one side only keeps its speech until both are. A receipt is the job ID and one byte:
+//! 1 when the part was stored. Integers are big-endian. Speech travels only inside the sealed
+//! value and is wiped after use. The sender holds the pair key but is still peer input, so
+//! decoding bounds every value.
 
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -26,15 +30,16 @@ use crate::{
     ports::speech_transfer::{SpeechChunk, SpeechPart},
 };
 
-/// Marks a part.
-const PART_HEADER: &[u8; 4] = b"NTR1";
+/// Marks a part of compressed speech (`NTR1` carried raw samples).
+const PART_HEADER: &[u8; 4] = b"NTR3";
 /// Marks a receipt.
 const RECEIPT_HEADER: &[u8; 4] = b"NTR2";
 /// The largest message, below the transport's 16 MiB payload limit.
 const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024 - 1024;
-/// The audio a part carries at most, leaving room for the chunk table and sealing.
+/// The compressed speech a part carries at most (about an hour), leaving room for the chunk table
+/// and sealing.
 pub const PART_AUDIO_BUDGET_BYTES: usize = 12 * 1024 * 1024;
-/// Most parts one meeting may be split into (about 20 hours of speech).
+/// Most parts one meeting may be split into.
 const MAX_PARTS: u32 = 2_048;
 /// Most chunks in one part.
 const MAX_CHUNKS: u32 = 4_096;
@@ -79,7 +84,7 @@ pub fn is_speech_receipt(payload: &[u8]) -> bool {
     payload.starts_with(RECEIPT_HEADER)
 }
 
-/// Splits a meeting's speech into parts of at most `audio_budget_bytes` of audio each.
+/// Splits a meeting's speech into parts of at most `audio_budget_bytes` of speech each.
 ///
 /// Inputs: The meeting, its chunks in time order, and the budget. Outputs: The numbered parts;
 /// a chunk larger than the budget gets a part of its own, and no speech is one empty part.
@@ -92,7 +97,7 @@ pub fn split_into_parts(
     let mut groups: Vec<Vec<SpeechChunk>> = vec![Vec::new()];
     let mut group_bytes = 0;
     for chunk in chunks {
-        let chunk_bytes = chunk.samples.len() * 2;
+        let chunk_bytes = chunk.speech.len();
         if group_bytes + chunk_bytes > audio_budget_bytes
             && groups.last().is_some_and(|group| !group.is_empty())
         {
@@ -132,11 +137,7 @@ pub fn encode_speech_part(
     let meeting_id_length =
         u16::try_from(meeting_id.len()).map_err(|_| SpeechMessageError::TooLarge)?;
     let chunk_count = u32::try_from(part.chunks.len()).map_err(|_| SpeechMessageError::TooLarge)?;
-    let audio_bytes: usize = part
-        .chunks
-        .iter()
-        .map(|chunk| chunk.samples.len() * 2)
-        .sum();
+    let audio_bytes: usize = part.chunks.iter().map(|chunk| chunk.speech.len()).sum();
     let body_length =
         JOB_ID_BYTES + 2 + meeting_id.len() + 12 + part.chunks.len() * 24 + audio_bytes;
     if body_length > MAX_MESSAGE_BYTES {
@@ -151,18 +152,16 @@ pub fn encode_speech_part(
     body.extend_from_slice(&chunk_count.to_be_bytes());
     for chunk in &part.chunks {
         let language = chunk.language.map_or("", TranscriptionLanguage::as_str);
-        let samples =
-            u32::try_from(chunk.samples.len()).map_err(|_| SpeechMessageError::TooLarge)?;
+        let speech_length =
+            u32::try_from(chunk.speech.len()).map_err(|_| SpeechMessageError::TooLarge)?;
         body.extend_from_slice(&chunk.start_ms.to_be_bytes());
         body.extend_from_slice(&chunk.end_ms.to_be_bytes());
         body.push(u8::try_from(language.len()).map_err(|_| SpeechMessageError::TooLarge)?);
         body.extend_from_slice(language.as_bytes());
-        body.extend_from_slice(&samples.to_be_bytes());
+        body.extend_from_slice(&speech_length.to_be_bytes());
     }
     for chunk in &part.chunks {
-        for sample in chunk.samples.iter() {
-            body.extend_from_slice(&sample.to_le_bytes());
-        }
+        body.extend_from_slice(&chunk.speech);
     }
     seal(PART_HEADER, &body, pair_key, from, to)
 }
@@ -235,25 +234,23 @@ pub fn decode_speech_part(
                     .ok_or(SpeechMessageError::Malformed)?,
             ),
         };
-        let samples = u32::from_be_bytes(*take::<4>(&mut rest)?) as usize;
+        let speech_length = u32::from_be_bytes(*take::<4>(&mut rest)?) as usize;
         if end_ms < start_ms {
             return Err(SpeechMessageError::Malformed);
         }
-        table.push((start_ms, end_ms, language, samples));
+        table.push((start_ms, end_ms, language, speech_length));
     }
-    let total: usize = table.iter().map(|(_, _, _, samples)| samples * 2).sum();
+    let total: usize = table.iter().map(|(_, _, _, length)| length).sum();
     if total != rest.len() {
         return Err(SpeechMessageError::Malformed);
     }
     let mut chunks = Vec::with_capacity(table.len());
-    for (start_ms, end_ms, language, samples) in table {
-        let bytes = take_bytes(&mut rest, samples * 2)?;
-        let (pairs, _) = bytes.as_chunks::<2>();
+    for (start_ms, end_ms, language, speech_length) in table {
         chunks.push(SpeechChunk {
             start_ms,
             end_ms,
             language,
-            samples: Zeroizing::new(pairs.iter().map(|pair| i16::from_le_bytes(*pair)).collect()),
+            speech: Zeroizing::new(take_bytes(&mut rest, speech_length)?.to_vec()),
         });
     }
     Ok((

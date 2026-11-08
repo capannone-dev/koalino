@@ -11,8 +11,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use zeroize::Zeroizing;
-
 use crate::{
     adapters::audio::{
         chunk_audio_store::ChunkAudioStore, retained_audio_store::RetainedAudioStore,
@@ -551,7 +549,8 @@ fn speech_part(meeting: &MeetingId, part_index: u32, part_count: u32) -> SpeechP
             start_ms: u64::from(part_index) * 1_000,
             end_ms: u64::from(part_index) * 1_000 + 1_000,
             language: None,
-            samples: Zeroizing::new(vec![2; 16_000]),
+            speech: crate::adapters::audio::opus_speech::encode_speech(&[2; 16_000])
+                .unwrap_or_else(|error| panic!("{error}")),
         }],
     }
 }

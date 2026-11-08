@@ -57,8 +57,9 @@ documented nonzero status codes distinguishable from lifecycle states.
   connects both to the P2P task (`SpeechLink`, implemented by `P2pHandle`).
   Originally (#87) it ran only the pass.
   `RefinementControl` says when it may run: no recording, not shutting down, and on a phone only
-  while charging. The controller holds it while recording (`with_transcript_pass`) and appends
-  each speech chunk to the `RetainedAudioStore`. After Stop, and at start for leftover meetings,
+  while charging. The controller holds it while recording (`with_transcript_pass`) and queues
+  each speech chunk on the `RetainedSpeechWriter`, which compresses it and appends it to the
+  `RetainedAudioStore` off the capture path; Stop flushes the writer before releasing the pass. After Stop, and at start for leftover meetings,
   `RefinementWorker` loads the pass model (`NOTE_TAKER_TRANSCRIPT_PASS_MODEL`, else the live one),
   runs `refine_meeting`, and drops the model. Audio is deleted after a pass, when unreadable,
   when the meeting was deleted, or after three failures. `record start` waits for the pass after

@@ -32,8 +32,6 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use zeroize::Zeroizing;
-
 use crate::{
     adapters::audio::{
         chunk_audio_store::ChunkAudioStore,
@@ -494,7 +492,8 @@ impl RefinementWorker {
         let Some(sender) = self.control.speech_sender() else {
             return;
         };
-        let chunks = match self.store.load(meeting_id) {
+        // Kept speech is already compressed and is sent as kept.
+        let chunks = match self.store.load_encoded(meeting_id) {
             Ok(chunks) => chunks,
             Err(RetainedAudioError::Unreadable) => {
                 self.delete(meeting_id);
@@ -506,15 +505,14 @@ impl RefinementWorker {
             }
         };
         let speech: Vec<SpeechChunk> = chunks
-            .iter()
+            .into_iter()
             .map(|chunk| SpeechChunk {
                 start_ms: chunk.span().start_ms,
                 end_ms: chunk.span().end_ms,
                 language: chunk.language(),
-                samples: Zeroizing::new(chunk.samples().to_vec()),
+                speech: chunk.into_speech(),
             })
             .collect();
-        drop(chunks);
         let parts = split_into_parts(meeting_id, speech, PART_AUDIO_BUDGET_BYTES);
         let part_count = parts.len();
         for part in parts {
@@ -818,7 +816,7 @@ impl SpeechInbox for RetainedSpeechInbox {
             };
             if self
                 .store
-                .append_incoming(&meeting_id, span, chunk.language, &chunk.samples)
+                .append_incoming_encoded(&meeting_id, span, chunk.language, &chunk.speech)
                 .is_err()
             {
                 self.next_parts.remove(&meeting_id);

@@ -23,7 +23,7 @@ use crate::{
     adapters::audio::{
         chunk_audio_store::{ChunkAudioStore, encode_wav_pcm16},
         local_recorder::LocalRecorder,
-        retained_audio_store::RetainedAudioStore,
+        retained_speech_writer::RetainedSpeechWriter,
         vad_chunker::{FinalizedAudioChunk, VadChunker, VadConfig},
     },
     application::{
@@ -145,8 +145,8 @@ pub struct RecordingController {
 /// The after-meeting pass's store and control, as the recorder sees them (#87).
 #[derive(Clone)]
 pub struct TranscriptPass {
-    /// Sealed speech per meeting, read by the pass.
-    pub store: Arc<RetainedAudioStore>,
+    /// Compresses and keeps each speech chunk in the pass's store, off the capture path (#88).
+    pub writer: Arc<RetainedSpeechWriter>,
     /// Told when recordings start and stop, so the pass never runs during one.
     pub control: Arc<RefinementControl>,
 }
@@ -528,8 +528,12 @@ impl RecordingController {
     }
 
     /// Lets the after-meeting pass run again once no recording is in progress.
+    ///
+    /// Side effects: First waits until every speech chunk queued for keeping is written, so the
+    /// pass reads the whole meeting.
     fn end_transcript_pass_hold(&self) {
         if let Some(transcript_pass) = &self.transcript_pass {
+            transcript_pass.writer.flush();
             transcript_pass.control.set_recording(false);
         }
     }
@@ -686,19 +690,17 @@ fn submit_chunk(
     let audio_bytes = encode_wav_pcm16(&samples, CAPTURE_SAMPLE_RATE_HZ);
     let chunk_start_ms = capture.meeting_start_offset_ms + samples_to_ms(chunk_start_sample);
     let chunk_end_ms = capture.meeting_start_offset_ms + samples_to_ms(chunk_end_sample);
-    if let Some(transcript_pass) = transcript_pass
-        && let Err(error) = transcript_pass.store.append_chunk(
+    if let Some(transcript_pass) = transcript_pass {
+        // Compressed and sealed on the writer's thread; this call only queues a copy.
+        transcript_pass.writer.append_chunk(
             &capture.meeting_id,
             ChunkSpan {
                 start_ms: chunk_start_ms,
                 end_ms: chunk_end_ms,
             },
             language,
-            &samples,
-        )
-    {
-        // The live transcript is unaffected; the after-meeting pass will skip this chunk.
-        tracing::warn!(error = %error, "a chunk could not be kept for the after-meeting pass");
+            samples.clone(),
+        );
     }
     chunk_audio_store.insert(&recording_id, samples);
     let vad_chunk = VadAudioChunk::new(
