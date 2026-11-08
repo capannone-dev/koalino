@@ -368,8 +368,10 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
         if let Some(language) = transcription_context.language_or(self.language.as_deref()) {
             inference_parameters.set_language(Some(language));
         }
-        if let Some(previous_text) = transcription_context.previous_text() {
-            inference_parameters.set_initial_prompt(previous_text);
+        // The glossary, so names and terms are spelled as the owner wrote them.
+        let prompt = transcription_context.prompt();
+        if let Some(prompt) = prompt.as_deref() {
+            inference_parameters.set_initial_prompt(prompt);
         }
         {
             #[cfg(any(target_os = "linux", target_os = "android"))]

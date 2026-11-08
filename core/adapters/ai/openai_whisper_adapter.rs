@@ -240,6 +240,8 @@ impl TranscriptionEngine for OpenAiWhisperTranscriptionEngine {
             });
         }
         let authorization = format!("Bearer {}", self.configuration.api_key);
+        // The glossary, so names and terms are spelled as the owner wrote them.
+        let prompt = transcription_context.prompt();
         let response = self.http_client.post_transcription(
             &authorization,
             "audio_chunk.wav",
@@ -251,7 +253,7 @@ impl TranscriptionEngine for OpenAiWhisperTranscriptionEngine {
                 transcription_context
                     .language_or(self.configuration.language.as_deref())
                     .filter(|language| *language != "auto"),
-                transcription_context.previous_text(),
+                prompt.as_deref(),
             ),
         )?;
         match response.status {

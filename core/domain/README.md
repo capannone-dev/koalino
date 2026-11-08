@@ -43,3 +43,12 @@ characters, trimmed, no control characters), `Project` with the rule paired devi
 `email.rs` (Issue #85) describes an imported e-mail: `EmailMessage` (subject, people, sending time, text body,
 attachments) with `EmailPerson` and `EmailAttachment`, and the limits that bound a file the user picked
 (50 MiB, a million body characters, 100 attachments).
+
+`transcription_glossary.rs` holds `TranscriptionGlossary`, the owner's names and terms (people,
+projects, acronyms) that steer Whisper. Terms are trimmed and kept once regardless of case; one may
+not exceed 60 characters or hold a control character, and the prompt they make (`Marco Rossi,
+Kubernetes, OKR.`) may not exceed 500 characters, about Whisper's 220-token prompt. The list carries
+no words of any language, so it does not pull language detection towards English.
+`leading_echo_words` recognises Whisper writing the prompt back (two or more terms opening a
+transcript) so `without_echo` can drop it. `TranscriptionContext::prompt` (`models.rs`) puts the
+previous chunk's text first and the glossary last, because Whisper keeps the end of a long prompt.

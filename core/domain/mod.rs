@@ -17,6 +17,10 @@ mod peer_trust_tests;
 pub mod projects;
 #[cfg(test)]
 mod projects_tests;
+/// Defines the glossary of names and terms that steers transcription.
+pub mod transcription_glossary;
+#[cfg(test)]
+mod transcription_glossary_tests;
 /// Defines the language a recording is transcribed in.
 pub mod transcription_language;
 #[cfg(test)]

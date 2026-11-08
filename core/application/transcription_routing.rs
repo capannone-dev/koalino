@@ -122,7 +122,8 @@ impl TranscriptionEngine for RemoteTarget {
         let text = self.gateway.transcribe_on_peer(
             &self.peer,
             samples,
-            transcription_context.previous_text().map(str::to_owned),
+            // The host prompts its engine with this text, so the glossary reaches it too.
+            transcription_context.prompt(),
             transcription_context.language(),
         )?;
         self.chunk_samples

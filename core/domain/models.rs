@@ -606,6 +606,8 @@ pub struct AudioChunk {
 pub struct TranscriptionContext {
     previous_text: Option<String>,
     language: Option<TranscriptionLanguage>,
+    /// Names and terms to spell as the owner wrote them; never empty when set.
+    glossary: Option<crate::domain::transcription_glossary::TranscriptionGlossary>,
 }
 
 impl TranscriptionContext {
@@ -619,7 +621,46 @@ impl TranscriptionContext {
         Self {
             previous_text,
             language: None,
+            glossary: None,
         }
+    }
+
+    /// Sets the glossary this chunk is transcribed with.
+    ///
+    /// Inputs: The owner's glossary; `None` or an empty one means none.
+    /// Outputs: The context. Side effects: None.
+    pub fn with_glossary(
+        mut self,
+        glossary: Option<crate::domain::transcription_glossary::TranscriptionGlossary>,
+    ) -> Self {
+        self.glossary = glossary.filter(|glossary| !glossary.is_empty());
+        self
+    }
+
+    /// Borrows the glossary, if any. Side effects: None.
+    pub fn glossary(
+        &self,
+    ) -> Option<&crate::domain::transcription_glossary::TranscriptionGlossary> {
+        self.glossary.as_ref()
+    }
+
+    /// Returns the text an engine should be prompted with: any earlier text, then the glossary's
+    /// list, or `None` when there is neither. Whisper keeps only the end of a long prompt, so the
+    /// glossary goes last, where it is kept and read as the most recent text.
+    ///
+    /// Side effects: None.
+    pub fn prompt(&self) -> Option<String> {
+        let parts: Vec<String> = self
+            .previous_text
+            .clone()
+            .into_iter()
+            .chain(
+                self.glossary
+                    .as_ref()
+                    .and_then(crate::domain::transcription_glossary::TranscriptionGlossary::prompt),
+            )
+            .collect();
+        (!parts.is_empty()).then(|| parts.join(" "))
     }
 
     /// Sets the language this chunk is transcribed in.
