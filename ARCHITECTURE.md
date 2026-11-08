@@ -173,10 +173,11 @@ laptop records M1 ──┐                         ┌── phone records M2
  (speech sealed)    │   CRDT sync of M1, M2   │   (speech sealed)
                     ▼                         ▼
      after-meeting worker on each device: find_combinations
-       M2's words match M1's (≥25% of 3-word runs within 15 s) → fold M2 into M1
+       M1 and M2 overlap in time and share 3-word runs within 15 s (≥25%;
+       ≥10% over nearly the same span) → fold M2 into M1
        (the earlier recording), combine_on = laptop; the fold syncs in M2's document
                     │                         │
-   laptop: plan = Combine (waits ≤24 h        phone: plan = Send{laptop}
+   laptop: plan = Combine (waits ≤3 wk        phone: plan = Send{laptop}
    for M2's speech)                           NTR1 parts sealed with the pair key ──►
                     ◄── NTR2 receipt per part  deletes its copy after the last receipt
    RetainedSpeechInbox stores M2's speech (only for a meeting it combines, only from M2's device)
@@ -193,7 +194,7 @@ laptop records M1 ──┐                         ┌── phone records M2
   nothing is lost. Deleting M1 deletes M2.
 - **Devices are named by the ID written on their meetings.** P2P addresses peers by libp2p ID, so
   each device's manifest now carries both, and the P2P task translates.
-- **Nothing lingers:** speech not sent or not combined within 24 h is deleted, as is speech of a
+- **Nothing lingers:** speech not sent or not combined within three weeks is deleted, as is speech of a
   meeting split or deleted meanwhile. A phone without a pass model keeps its speech only for that.
 - **Limits:** recordings must overlap in content, so a phone that hears only the other person
   still matches the laptop, which hears both. The gain depends on placement: on NOTSOFAR's

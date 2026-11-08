@@ -365,8 +365,9 @@ the other person. Each device records an ordinary meeting; both sync; the app th
 one meeting with one transcript built from both microphones.
 
 - `same_meeting.rs` recognises two recordings of one conversation from their live transcripts:
-  three-word runs within 15 s of each other's wall-clock time. They are one meeting when shared
-  words are at least 25% of the shorter transcript and at least 15 words. The offset between the
+  three-word runs within 15 s of each other's wall-clock time. Their spans must overlap for at
+  least half of the shorter one; then they are one meeting when shared words are at least 25% of
+  the shorter transcript (10% when they cover nearly the same time) and at least 15 words. The offset between the
   recordings is the median gap of the shared words. On NOTSOFAR, devices in the same meeting
   shared 60% or more and different meetings at most 3.6%; speech-timing masks could not separate
   them.
@@ -375,7 +376,7 @@ one meeting with one transcript built from both microphones.
   other device. `plan_retained_audio` says what each device does with its sealed speech: wait for
   a partner for `COMBINING_GRACE` (10 min), send it to the combining device, combine every
   recording held, run the pass alone, or delete it. Nothing waits more than `KEEP_FOR_COMBINING`
-  (24 h). `MeetingListing` lists a combined meeting once with every device;
+  (three weeks). `MeetingListing` lists a combined meeting once with every device;
   `split_recordings` is the Split action; `name_recording_devices` names devices from the P2P
   status.
 - `combined_refinement.rs` runs the pass over every recording. Each is transcribed in 30 s windows

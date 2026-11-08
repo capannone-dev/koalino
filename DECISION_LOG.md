@@ -2051,14 +2051,20 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   near themselves, and get one better transcript.
 - **Recognised automatically, from the live transcripts:** shared three-word runs within 15 s of
   wall-clock time. On NOTSOFAR, the same meeting shared at least 60% of words, different meetings
-  at most 3.6%; the threshold is 25% and 15 words. Speech-timing masks (Jaccard, correlation) did
+  at most 3.6%; the threshold is 25% and 15 words. Shared words alone proved brittle (owner's
+  review): devices at opposite ends of a table may understand mostly different words, and a phone
+  left recording into the next conversation shares the end of the meeting. So the recordings'
+  spans must also overlap for half of the shorter one, and when they cover nearly the same time
+  (80%), 10% of shared words suffice, still at least 15. Speech-timing masks (Jaccard, correlation) did
   not separate meetings, and comparing audio would send audio before the pair is known.
 - **Combined automatically, shown as one meeting** (owner's choice): the later recording is
   folded into the earlier; the list shows "recorded on Laptop + Phone"; Split undoes it for good.
   The folded recording's live transcript is kept, hidden, so Split restores it.
 - **One device combines:** a desktop that finds the pair names itself; a phone names the other
   device. The other device sends its sealed speech over P2P (pair-key sealed parts with receipts)
-  and deletes it after the last receipt. Speech not sent or combined within 24 h is deleted.
+  and deletes it after the last receipt. Speech not sent or combined within three weeks is deleted (24 h at first;
+  raised on the owner's request so a phone away from the laptop for a while still delivers).
+  Recordings are compared for folding over the same three weeks.
 - **How the transcripts are combined:** each speaker's words come from the device with more words
   for that speaker. On NOTSOFAR's far-field devices (pipeline-limits report, section 4.3), one
   device scores 36.9% word error, the best device per meeting 34.6%, the device that wrote the
