@@ -2141,3 +2141,34 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   twice in the reference, about 6 per meeting). Term recall went from 51.3% to 54.1% and
   60.5%. DER is unchanged. So a glossary that does not fit the meeting does no harm. The terms
   are taken from the references, so the relevant row is an upper bound for a well-chosen list.
+
+## 2026-11-08 — #90 #91 Overlapping speech and transcript confidence
+
+- **Owner's request:** show where a transcript is weak instead of presenting every word as
+  equally sure. A segment carries three marks (`SegmentConfidence`):
+  - overlapping speech;
+  - an uncertain speaker;
+  - the positions of uncertain words.
+  The marks are kept in the meeting's CRDT document and in a nullable SQLite `confidence` column.
+  They reach the apps, the web and the exports (Markdown and PDF write `Name (?)`, `word (?)` and
+  "overlapping speech"; JSON carries the fields).
+- **Uncertain words:** a word takes the probability of its least sure Whisper token, and is
+  marked under 0.4. On NOTSOFAR with Whisper small, 42% of such words were wrong against 3.1% of
+  words at 0.95 or more (pipeline limits, C5). Remote and cloud chunks give no probability and
+  are never marked.
+- **Overlap:** the windowed diarizer already decodes, frame by frame, how many local speakers are
+  active. A stretch is overlap where at least half of the windows covering it hear two or more
+  voices. Spans closer than 250 ms are joined, and spans under 200 ms are dropped. They are
+  stored per meeting in meeting time; the combined pass shifts each recording's spans by its
+  offset. A segment is marked once 500 ms of it, or half of a shorter one, lies in overlap.
+- **Uncertain speaker:** a live voice match left for review, or a final pass whose nearest voice
+  turn is itself uncertain or more than 2 s away.
+- **Measurement** (NOTSOFAR 20, 10 ms frames inside the app's speech chunks; aggregates only):
+  - 17.4% of speech is flagged.
+  - Against utterance-level reference overlap (28.6% of speech): precision 91.6%, recall 55.8%.
+  - Against word-level overlap (24.7%): precision 86.4%, recall 60.9%.
+  - The flagged spans hold 64.8% of the one-stream loss, that is speaker-time beyond the first
+    voice.
+
+  So the mark rarely fires on single-speaker speech, and it points at about two thirds of where
+  words go missing. It is a reading aid; nothing is recovered from the second voice.

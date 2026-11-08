@@ -364,6 +364,63 @@ fn measure_transcription() {
     .unwrap_or_else(|error| panic!("the output must be written: {error}"));
 }
 
+/// Writes one JSON line per recording with the overlapping speech the app finds (#90): each VAD
+/// chunk diarized as a recording does, its overlap spans in recording time.
+///
+/// Inputs: Common variables and the two diarization model variables.
+/// Outputs: Panics on failure. Side effects: Runs inference and writes the spans (no audio, no
+/// embeddings) to the output.
+#[test]
+#[ignore = "needs recordings and models"]
+fn measure_overlap() {
+    let engine = WindowedDiarizationEngine::new(
+        OnnxSegmentationModel::load(&path_from_environment(
+            "NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL",
+        ))
+        .unwrap_or_else(|error| panic!("segmentation must load: {error}")),
+        OnnxSpeakerEmbeddingModel::load(&path_from_environment(
+            "NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL",
+        ))
+        .unwrap_or_else(|error| panic!("embedding must load: {error}")),
+        DiarizationTuning::default(),
+    );
+    let mut lines = Vec::new();
+    for (name, samples) in recordings() {
+        let mut overlap = Vec::new();
+        let mut speech = Vec::new();
+        for (start, length) in vad_chunk_bounds(&samples) {
+            let offset_ms = (start / SAMPLES_PER_MS) as u64;
+            speech.push(json!([
+                offset_ms,
+                offset_ms + (length / SAMPLES_PER_MS) as u64
+            ]));
+            let chunk = engine
+                .diarize_samples_with_overlap(&samples[start..start + length])
+                .unwrap_or_else(|error| panic!("diarization must run: {error}"));
+            overlap.extend(
+                chunk
+                    .overlap
+                    .iter()
+                    .map(|span| json!([offset_ms + span.start_ms, offset_ms + span.end_ms])),
+            );
+        }
+        lines.push(
+            json!({
+                "name": name,
+                "duration_ms": (samples.len() / SAMPLES_PER_MS) as u64,
+                "speech": speech,
+                "overlap": overlap,
+            })
+            .to_string(),
+        );
+    }
+    fs::write(
+        path_from_environment("NOTE_TAKER_MEASURE_OUTPUT"),
+        lines.join("\n"),
+    )
+    .unwrap_or_else(|error| panic!("the output must be written: {error}"));
+}
+
 /// Writes one JSON line per recording with diarization output for three designs:
 /// `vad_turns` (today: the real chunks diarized one at a time), `whole_turns` (today's engine over
 /// the whole recording), and `windows` (raw segmentation and embeddings on a sliding window, so the
