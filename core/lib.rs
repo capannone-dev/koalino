@@ -49,6 +49,12 @@ pub mod ffi_settings;
 /// Settings' Whisper model and OpenAI controls over the C ABI.
 #[path = "bin/ffi_transcription.rs"]
 pub mod ffi_transcription;
+/// Keeps the owner's language model connections, summary template and their keys (#95).
+#[path = "bin/llm_settings.rs"]
+pub mod llm_settings;
+#[cfg(test)]
+#[path = "bin/llm_settings_tests.rs"]
+mod llm_settings_tests;
 #[path = "bin/p2p_composition.rs"]
 pub mod p2p_composition;
 #[path = "bin/p2p_network_routes.rs"]

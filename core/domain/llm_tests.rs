@@ -158,3 +158,30 @@ fn a_template_is_filled_with_the_meeting_values() {
          terms OKR, language it."
     );
 }
+
+#[test]
+fn a_connection_id_is_safe_for_a_keychain_entry_and_a_file_name() {
+    use super::llm::{LlmConnection, LlmConnectionError, LlmKind};
+    for id in ["", "../key", "a b", "x".repeat(65).as_str()] {
+        assert_eq!(
+            LlmConnection::with_id(
+                id,
+                "L",
+                LlmKind::Anthropic,
+                "https://api.anthropic.com",
+                "m",
+                8_192
+            ),
+            Err(LlmConnectionError::InvalidId),
+            "{id:?}"
+        );
+    }
+    let fresh = LlmConnection::new(
+        "L",
+        LlmKind::Anthropic,
+        "https://api.anthropic.com",
+        "m",
+        8_192,
+    );
+    assert!(fresh.is_ok(), "a generated ID passes");
+}

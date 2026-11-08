@@ -166,6 +166,9 @@ fn is_local_v6(address: Ipv6Addr) -> bool {
 /// Why a connection was refused.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum LlmConnectionError {
+    /// The ID is not 1 to 64 letters, digits or dashes; it names a keychain entry and a file.
+    #[error("the connection ID may hold only letters, digits and dashes")]
+    InvalidId,
     /// The label is empty or too long.
     #[error("give the connection a name of at most 200 characters")]
     MissingLabel,
@@ -224,6 +227,12 @@ impl LlmConnection {
         model: &str,
         context_tokens: u32,
     ) -> Result<Self, LlmConnectionError> {
+        if id.is_empty()
+            || id.len() > 64
+            || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        {
+            return Err(LlmConnectionError::InvalidId);
+        }
         let label = label.trim();
         if label.is_empty() || label.chars().count() > MAX_FIELD_CHARACTERS {
             return Err(LlmConnectionError::MissingLabel);

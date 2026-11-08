@@ -282,6 +282,13 @@ each round, which also bounds how far back recordings are folded, and
 `note_taker_set_keep_speech_days(days)` saves it (0 saved, 1 out of range, 2 failed). `cloud_fallback.rs` transcribes a chunk locally when OpenAI fails, and
 `device_resources.rs` reads free disk space and total memory.
 
+`llm_settings.rs` keeps the language model settings (#95, #101) in `<db>.llm-settings.json`: the
+connections, the default one (the only connection when there is one), the summary template (the
+built-in one until the owner writes their own), and whether meetings are summarized
+automatically, which is on until the owner opts out. Entries edited by hand into something
+invalid are dropped when read. `LlmKeyStore` keeps each connection's API key in the keychain
+under `note-taker-llm-<id>`, or on Android in `llm-<id>.sealed`; keys never enter the JSON file.
+
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.
 
