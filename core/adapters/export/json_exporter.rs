@@ -59,6 +59,12 @@ struct JsonTranscriptSegment<'document> {
     end_time_ms: u64,
     speaker: JsonSpeaker<'document>,
     text: &'document str,
+    /// The segment lies largely in overlapping speech (#90).
+    overlapping_speech: bool,
+    /// The speaker is a guess (#91).
+    uncertain_speaker: bool,
+    /// Positions of the unclear words among the text's whitespace-separated words (#91).
+    uncertain_words: &'document [u16],
 }
 
 /// A speaker reference; `identity_id` is `null` for unattributed segments.
@@ -167,6 +173,9 @@ fn json_meeting<'document>(
                     display_name: segment.speaker(),
                 },
                 text: segment.text(),
+                overlapping_speech: segment.confidence().overlapping_speech,
+                uncertain_speaker: segment.confidence().uncertain_speaker,
+                uncertain_words: &segment.confidence().uncertain_words,
             })
             .collect(),
         attachments: document

@@ -114,12 +114,39 @@ fn render_meeting(
     if document.transcript_segments().is_empty() {
         markdown_output.push_str("_No transcript available._\n\n");
     }
+    if document
+        .transcript_segments()
+        .iter()
+        .any(|segment| !segment.confidence().is_plain())
+    {
+        markdown_output.push_str(
+            "_(?) marks a guessed speaker or an unclear word, shown in italics; \
+             (overlapping speech) marks people talking at once, where words are often missed._\n\n",
+        );
+    }
     for transcript_segment in document.transcript_segments() {
+        let words: Vec<String> = transcript_segment
+            .words_with_doubt()
+            .into_iter()
+            .map(|(word, uncertain)| {
+                if uncertain {
+                    format!("*{} (?)*", escape_markdown(word))
+                } else {
+                    escape_markdown(word)
+                }
+            })
+            .collect();
+        let overlap = if transcript_segment.confidence().overlapping_speech {
+            "(overlapping speech) "
+        } else {
+            ""
+        };
         markdown_output.push_str(&format!(
-            "**{}** — [{}] {}\n\n",
-            escape_markdown(transcript_segment.speaker()),
+            "**{}** — [{}] {}{}\n\n",
+            escape_markdown(&transcript_segment.marked_speaker()),
             format_export_offset(transcript_segment.start_time_ms()),
-            escape_markdown(transcript_segment.text()),
+            overlap,
+            words.join(" "),
         ));
     }
 

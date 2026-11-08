@@ -463,6 +463,59 @@ async fn meeting_detail_shows_a_recorded_meeting_s_segments_as_its_transcript() 
     assert_eq!(meeting_detail["transcript"], "We start\nand then");
 }
 
+/// The detail lists the segments with their speaker and how doubtful they are, so the web page
+/// can grey uncertain words and mark overlap and guessed speakers (#90, #91).
+#[tokio::test]
+async fn meeting_detail_lists_segments_with_their_confidence_marks() {
+    use crate::domain::transcript_confidence::SegmentConfidence;
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .unwrap_or_else(|error| panic!("test SQLite repository must initialize: {error}"));
+    let meeting_id = MeetingId::new("meeting-marked");
+    repository
+        .create_meeting(&meeting_id, &AutoCommit::new().save())
+        .unwrap_or_else(|error| panic!("test meeting must persist: {error}"));
+    repository
+        .save_transcript_segments(
+            &meeting_id,
+            &[
+                TranscriptSegment::new(meeting_id.clone(), 0, 2_000, None, "We start now")
+                    .with_confidence(SegmentConfidence {
+                        overlapping_speech: true,
+                        uncertain_speaker: true,
+                        uncertain_words: vec![2],
+                    }),
+                TranscriptSegment::new(meeting_id.clone(), 2_000, 3_000, None, "fine"),
+            ],
+        )
+        .unwrap_or_else(|error| panic!("test segments must persist: {error}"));
+    let router = build_router(ServerAppState::new(
+        repository,
+        InMemoryVoiceVectorDB::new(),
+    ));
+
+    let (status, meeting_detail) =
+        send_json(&router, "GET", "/api/meetings/meeting-marked", None).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        meeting_detail["segments"],
+        serde_json::json!([
+            {
+                "start_time_ms": 0, "end_time_ms": 2000, "speaker": "Unattributed",
+                "text": "We start now", "overlapping_speech": true, "uncertain_speaker": true,
+                "uncertain_words": [2]
+            },
+            {
+                "start_time_ms": 2000, "end_time_ms": 3000, "speaker": "Unattributed",
+                "text": "fine", "overlapping_speech": false, "uncertain_speaker": false,
+                "uncertain_words": []
+            }
+        ])
+    );
+}
+
 /// The speech-to-text languages recorded for a meeting appear, in first-use order, in its
 /// detail and in the meeting list, so the web meeting page can show them.
 #[tokio::test]

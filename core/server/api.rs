@@ -450,6 +450,35 @@ async fn get_meeting(
     let transcript =
         crate::application::meeting_transcript::readable_transcript(&**repositories, &meeting_id)
             .map_err(storage_error_status)?;
+    let mut stored_segments = repositories
+        .load_transcript_segments(&meeting_id)
+        .map_err(storage_error_status)?;
+    stored_segments.sort_by_key(|segment| (segment.start_time_ms(), segment.end_time_ms()));
+    let speaker_names: std::collections::HashMap<uuid::Uuid, String> = application_state
+        .voice_database
+        .lock()
+        .await
+        .list_speaker_identities()
+        .map_err(storage_error_status)?
+        .into_iter()
+        .map(|identity| (identity.identity_id(), identity.display_name().to_owned()))
+        .collect();
+    let segments = stored_segments
+        .iter()
+        .map(|segment| SegmentView {
+            start_time_ms: segment.start_time_ms(),
+            end_time_ms: segment.end_time_ms(),
+            speaker: crate::application::export_manager::segment_speaker_label(
+                segment,
+                |identity_id| speaker_names.get(&identity_id).map(String::as_str),
+            )
+            .to_owned(),
+            text: segment.text().to_owned(),
+            overlapping_speech: segment.confidence().overlapping_speech,
+            uncertain_speaker: segment.confidence().uncertain_speaker,
+            uncertain_words: segment.confidence().uncertain_words.clone(),
+        })
+        .collect();
     let attachments = repositories
         .get_attachments_for_meeting(&meeting_id)
         .map_err(storage_error_status)?;
@@ -469,6 +498,7 @@ async fn get_meeting(
         combined_recordings: meeting_id_strings(&listing.folded_into(&meeting_id)),
         combining: application_state.combining_of(&meeting_id, &recordings, p2p_status.as_ref()),
         transcript,
+        segments,
         attachments: attachments.iter().map(AttachmentSummary::from).collect(),
     }))
 }
@@ -1251,7 +1281,26 @@ struct MeetingDetail {
     /// How far combining the recordings got, as this device sees it (#88).
     combining: CombiningView,
     transcript: Option<String>,
+    /// The recorded segments in time order with their speaker and confidence marks (#90, #91);
+    /// empty for a meeting imported as text.
+    segments: Vec<SegmentView>,
     attachments: Vec<AttachmentSummary>,
+}
+
+/// Serializes one transcript segment for the meeting page.
+#[derive(Serialize)]
+struct SegmentView {
+    start_time_ms: u64,
+    end_time_ms: u64,
+    /// The person's name, `Unknown speaker`, or `Unattributed`.
+    speaker: String,
+    text: String,
+    /// The segment lies largely in overlapping speech.
+    overlapping_speech: bool,
+    /// The speaker is a guess.
+    uncertain_speaker: bool,
+    /// Positions of the uncertain words among the text's whitespace-separated words.
+    uncertain_words: Vec<u16>,
 }
 
 /// Serializes metadata for one linked attachment.

@@ -808,3 +808,74 @@ fn pdf_flattens_transparent_image_pixels_onto_white() {
     assert_eq!(flattened_image.get_pixel(0, 0).0, [255, 255, 255]);
     assert_eq!(flattened_image.get_pixel(1, 0).0, [0, 0, 255]);
 }
+
+/// Builds a meeting whose one segment is doubtful in every way (#90, #91).
+fn doubtful_export_document() -> ExportDocument {
+    use crate::domain::transcript_confidence::SegmentConfidence;
+    ExportDocument::new(
+        MeetingId::new("00000000-0000-4000-8000-000000000090"),
+        "Crosstalk",
+        fixture_start(),
+        vec![
+            ExportTranscriptSegment::new(0, 5_000, None, "Unknown speaker", "we ship on Friday")
+                .with_confidence(SegmentConfidence {
+                    overlapping_speech: true,
+                    uncertain_speaker: true,
+                    uncertain_words: vec![1, 3],
+                }),
+        ],
+        Vec::new(),
+        Vec::new(),
+    )
+}
+
+/// Verifies Markdown marks guessed speakers, overlapping speech and unclear words, and explains
+/// the marks once.
+#[test]
+fn markdown_marks_doubtful_transcript() {
+    let rendered_markdown = render_markdown(
+        &doubtful_export_document(),
+        &ExportOptions::for_format(ExportFormat::Markdown),
+        Path::new("/exports"),
+    );
+
+    assert!(
+        rendered_markdown.contains(
+            "**Unknown speaker (?)** — [00:00:00] (overlapping speech) we *ship (?)* on *Friday (?)*"
+        ),
+        "{rendered_markdown}"
+    );
+    assert!(rendered_markdown.contains("(?) marks"));
+    assert!(
+        !render_markdown(
+            &sample_export_document(),
+            &ExportOptions::for_format(ExportFormat::Markdown),
+            Path::new("/exports"),
+        )
+        .contains("(?) marks"),
+        "a transcript without marks has no legend"
+    );
+}
+
+/// Verifies the JSON export carries the marks as data.
+#[test]
+fn json_carries_confidence_marks() {
+    let parsed_json = render_json(&[doubtful_export_document()]);
+    let segment = &parsed_json["meetings"][0]["transcript_segments"][0];
+
+    assert_eq!(segment["overlapping_speech"], true);
+    assert_eq!(segment["uncertain_speaker"], true);
+    assert_eq!(segment["uncertain_words"], serde_json::json!([1, 3]));
+}
+
+/// Verifies the PDF shows the marks in its text.
+#[test]
+fn pdf_marks_doubtful_transcript() {
+    let directory = TestDirectory::new("pdf-confidence");
+    let pdf = export_pdf(&doubtful_export_document(), directory.path());
+    let text = page_texts(&pdf).join(" ");
+
+    assert!(text.contains("Unknown speaker (?)"), "{text}");
+    assert!(text.contains("overlapping speech"), "{text}");
+    assert!(text.contains("ship (?)"), "{text}");
+}

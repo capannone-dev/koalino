@@ -1871,6 +1871,9 @@ impl FfiRuntime {
                     "end_time_ms": segment.end_time_ms(),
                     "speaker": speaker,
                     "text": segment.text(),
+                    "overlapping_speech": segment.confidence().overlapping_speech,
+                    "uncertain_speaker": segment.confidence().uncertain_speaker,
+                    "uncertain_words": segment.confidence().uncertain_words,
                 })
             })
             .collect();
@@ -4278,6 +4281,9 @@ mod ffi_contract_tests {
                 "end_time_ms": 2_000,
                 "speaker": "Unattributed",
                 "text": "transcribed chunk",
+                "overlapping_speech": false,
+                "uncertain_speaker": false,
+                "uncertain_words": [],
             }])
         );
         let untitled_summary = meetings

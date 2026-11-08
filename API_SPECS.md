@@ -266,8 +266,10 @@ contents, EXIF data, or database-specific values.
   `[{"meeting_id","title","created_at","duration_ms","transcription_languages"}]`, and
   `char *note_taker_get_meeting(const char *meeting_id)` returns the same fields plus
   `transcript` (the flat transcript, null until stored) and `segments`
-  (`[{"start_time_ms","end_time_ms","speaker","text"}]` in timeline order, where `speaker` is
-  the voice-store name, `Unknown speaker`, or `Unattributed`, as in exports; Issue #36), and
+  (`[{"start_time_ms","end_time_ms","speaker","text","overlapping_speech","uncertain_speaker","uncertain_words"}]`
+  in timeline order, where `speaker` is the voice-store name, `Unknown speaker`, or
+  `Unattributed`, as in exports; Issue #36; the confidence marks are described under
+  "Transcript confidence"), and
   `attachments`
   (`[{"attachment_id","file_name","file_path","mime_type","meeting_time_ms"}]` in the order they
   were added; Issue #54). `meeting_time_ms` is where in the transcript the attachment belongs,
@@ -366,6 +368,22 @@ sound like one person share `voice_group_id` and are listed together, Issue #82)
 (identifiers and timing only); voice vectors and raw audio are never serialized.
 `GET /api/clusters/{id}/review-clip` returns `200` with the clip as `audio/wav` and
 `Cache-Control: no-store`, or `404` when the cluster has none (Issue #63). `GET /api/telemetry` returns aggregate task count, duration, and latency.
+
+### Transcript confidence (#90, #91)
+
+`GET /api/meetings/{id}` lists `segments` like `note_taker_get_meeting`:
+`[{"start_time_ms","end_time_ms","speaker","text","overlapping_speech","uncertain_speaker","uncertain_words"}]`
+in time order (empty for a meeting imported as text).
+- `overlapping_speech` (bool): diarization heard two or more voices at once for at least 0.5 s
+  of the segment (or half of a shorter one), where words are often missed.
+- `uncertain_speaker` (bool): the speaker is a guess. Either it was a weak voice match, or no
+  voice was found within 2 s of the text.
+- `uncertain_words` (int array): positions, from 0, among the text's whitespace-separated words,
+  of the words Whisper gave a probability under 0.4. Remote and OpenAI transcription give no
+  probabilities, so their words are never marked.
+
+The JSON export carries the same three fields on each segment, and the Markdown and PDF exports
+show them as `Name (?)`, `(overlapping speech)` and `word (?)`.
 
 ### One meeting recorded on several devices (#88)
 

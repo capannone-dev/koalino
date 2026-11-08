@@ -416,18 +416,31 @@ fn layout_meeting(body_layout: &mut BodyLayout, document: &ExportDocument, is_ba
         body_layout.ensure_space(2.0 * line_height(BODY_FONT_SIZE));
         body_layout.push_paragraph(
             &format!(
-                "{}  [{}]",
-                transcript_segment.speaker(),
-                format_export_offset(transcript_segment.start_time_ms())
+                "{}  [{}]{}",
+                transcript_segment.marked_speaker(),
+                format_export_offset(transcript_segment.start_time_ms()),
+                if transcript_segment.confidence().overlapping_speech {
+                    "  · overlapping speech"
+                } else {
+                    ""
+                }
             ),
             BODY_FONT_SIZE,
             FontWeight::Bold,
         );
-        body_layout.push_paragraph(
-            transcript_segment.text(),
-            BODY_FONT_SIZE,
-            FontWeight::Regular,
-        );
+        let marked_text = transcript_segment
+            .words_with_doubt()
+            .into_iter()
+            .map(|(word, uncertain)| {
+                if uncertain {
+                    format!("{word} (?)")
+                } else {
+                    word.to_owned()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        body_layout.push_paragraph(&marked_text, BODY_FONT_SIZE, FontWeight::Regular);
         body_layout.push_gap(2.0);
     }
 

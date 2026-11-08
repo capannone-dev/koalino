@@ -235,6 +235,7 @@ where
                     speaker_label,
                     segment.text(),
                 )
+                .with_confidence(segment.confidence().clone())
             })
             .collect::<Vec<_>>();
         if transcript_segments.is_empty()

@@ -29,7 +29,11 @@ carries `schema_version` and `meeting_count` metadata. An empty batch is rejecte
 - One meeting: `# <title>`, then `## Meeting metadata` (date, `HH:MM:SS` duration, participants;
   omitted when `include_metadata` is false), `## Transcript`, `## Attachments`, and
   `## Summary statistics` (word count and speaking time per speaker).
-- Transcript lines look like `**Alice** — [00:00:30] text`. Speaker names, titles, and text are
+- Transcript lines look like `**Alice** — [00:00:30] text`. A guessed speaker reads
+  `**Alice (?)**`, a segment in overlapping speech starts with `(overlapping speech)`, and an
+  unclear word reads `*word (?)*`; a legend line explains the marks when any appear (#90, #91).
+  The PDF writes the same marks in plain text, and the JSON adds `overlapping_speech`,
+  `uncertain_speaker` and `uncertain_words` to each segment. Speaker names, titles, and text are
   escaped so user content cannot inject emphasis, links, or headings.
 - Attachments link to the staged copy **relative to the Markdown file** using CommonMark angle
   brackets (`[slides.pdf](<meeting_attachments/slides.pdf>)`). Images use `![…](…)` so they show
