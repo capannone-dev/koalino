@@ -92,6 +92,22 @@ final class TranscriptionSettingsController extends ChangeNotifier {
       _run(() => _bridge.setEfficientGpu(enabled: enabled),
           success: 'Saved. The next recording uses this.');
 
+  /// Saves the glossary from text holding one term per line.
+  ///
+  /// Inputs: The text; lines are trimmed and blank ones dropped.
+  /// Side effects: Stores the terms and reloads; a refused list keeps the saved one.
+  Future<void> setGlossary(String text) {
+    final List<String> terms = text
+        .split('\n')
+        .map((String line) => line.trim())
+        .where((String line) => line.isNotEmpty)
+        .toList(growable: false);
+    return _run(() => _bridge.setGlossary(terms),
+        success: 'Saved. The next recording uses these names and terms.',
+        invalid: 'Each term can have at most 60 characters, and all of them '
+            'together at most 500.');
+  }
+
   /// Lets the GPU be tried again after a crash stopped it.
   ///
   /// Side effects: Clears the core's record and reloads.
@@ -208,7 +224,7 @@ final class TranscriptionSettingsController extends ChangeNotifier {
 
   /// Runs one change, reports the result, and reloads.
   Future<void> _run(Future<int> Function() change,
-      {required String? success}) async {
+      {required String? success, String? invalid}) async {
     _isBusy = true;
     _message = null;
     _notify();
@@ -220,6 +236,7 @@ final class TranscriptionSettingsController extends ChangeNotifier {
     }
     _message = switch (status) {
       transcriptionStatusOk => success,
+      transcriptionStatusInvalid when invalid != null => invalid,
       transcriptionStatusNoKeychain =>
         'This device has no keychain, so the key was not saved.',
       transcriptionStatusNoKey => 'Save an OpenAI key first.',

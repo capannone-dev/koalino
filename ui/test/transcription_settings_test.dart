@@ -86,6 +86,7 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
         suggestion: suggestion,
         proposal: proposal,
         efficient: efficient,
+        glossary: glossary,
       );
 
   @override
@@ -150,6 +151,19 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
 
   @override
   Future<int> removeModel(String fileName) async => transcriptionStatusOk;
+
+  /// The glossary as the core holds it.
+  List<String> glossary = <String>[];
+
+  @override
+  Future<int> setGlossary(List<String> terms) async {
+    calls.add('glossary ${terms.join('|')}');
+    if (terms.any((String term) => term.length > 60)) {
+      return transcriptionStatusInvalid;
+    }
+    glossary = terms;
+    return transcriptionStatusOk;
+  }
 }
 
 /// Pumps the page over a fake core.
@@ -399,5 +413,41 @@ void main() {
     addTearDown(controller.dispose);
     await controller.testKey();
     expect(controller.message, contains('refused'));
+  });
+
+  testWidgets('the glossary shows the saved terms and saves one per line',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()..glossary = <String>['OKR'];
+    await _pump(tester, bridge);
+    await tester.scrollUntilVisible(find.byKey(glossaryFieldKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('OKR'), findsOneWidget);
+
+    await tester.enterText(
+        find.byKey(glossaryFieldKey), 'Marco Rossi\n\n  Kubernetes \nOKR');
+    await tester.tap(find.byKey(glossarySaveKey));
+    await tester.pumpAndSettle();
+
+    expect(bridge.calls, contains('glossary Marco Rossi|Kubernetes|OKR'));
+    expect(bridge.glossary, <String>['Marco Rossi', 'Kubernetes', 'OKR']);
+    expect(find.textContaining('next recording'), findsWidgets);
+  });
+
+  testWidgets('a glossary the core refuses says why and is not lost',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge();
+    await _pump(tester, bridge);
+    await tester.scrollUntilVisible(find.byKey(glossaryFieldKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    final String longTerm = 'x' * 61;
+
+    await tester.enterText(find.byKey(glossaryFieldKey), longTerm);
+    await tester.tap(find.byKey(glossarySaveKey));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('60 characters'), findsWidgets);
+    expect(find.text(longTerm), findsOneWidget,
+        reason: 'the refused text stays');
+    expect(bridge.glossary, isEmpty);
   });
 }

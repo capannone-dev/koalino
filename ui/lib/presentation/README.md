@@ -70,7 +70,8 @@ readers), so an active recording and every screen keep their state. It forwards 
 hidden and shown to `AppLockController`.
 
 `transcription_settings_screen.dart` lists the Whisper models by size, and holds the OpenAI choice and write-only
-key field (#67).
+key field (#67). Its Glossary section takes one name or term per line; the message under Save says
+it applies from the next recording, and refused text stays in the field to correct.
 
 `settings_screen.dart` (`SettingsScreen`) is on every platform (Issue #46). Its diagnostics hold
 a Telemetry entry, which pushes the telemetry dashboard as a page (Issue #53; it used to be a

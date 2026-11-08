@@ -24,6 +24,12 @@ const Key useSuggestionKey = ValueKey<String>('use-suggestion');
 /// Finds the efficient mode switch in tests.
 const Key efficientModeKey = ValueKey<String>('efficient-mode');
 
+/// Finds the glossary's text field.
+const Key glossaryFieldKey = ValueKey<String>('glossary-field');
+
+/// Finds the button that saves the glossary.
+const Key glossarySaveKey = ValueKey<String>('glossary-save');
+
 /// Speed and accuracy hints for each size, from measurements on Italian speech (see #67, #69).
 const Map<String, String> _familyHints = <String, String>{
   'tiny': 'Fastest, least accurate',
@@ -152,6 +158,12 @@ final class _TranscriptionSettingsScreenState
                 ..._providerTiles(settings),
                 const Divider(),
                 ..._modelTiles(context, settings),
+                const Divider(),
+                // Keyed, so the message row above appearing keeps its text and state.
+                _GlossarySection(
+                    key: const ValueKey<String>('glossary-section'),
+                    controller: widget.controller,
+                    saved: settings.glossary),
               ],
             );
           },
@@ -465,3 +477,94 @@ final class _TranscriptionSettingsScreenState
     );
   }
 }
+
+/// The glossary: names and terms, one per line, that transcription spells as written.
+class _GlossarySection extends StatefulWidget {
+  const _GlossarySection(
+      {super.key, required this.controller, required this.saved});
+
+  /// Saves the terms.
+  final TranscriptionSettingsController controller;
+
+  /// The terms the core holds now.
+  final List<String> saved;
+
+  @override
+  State<_GlossarySection> createState() => _GlossarySectionState();
+}
+
+class _GlossarySectionState extends State<_GlossarySection> {
+  late final TextEditingController _terms =
+      TextEditingController(text: widget.saved.join('\n'));
+
+  /// Whether the page's last message answers this section's Save, so it is shown here too: the
+  /// page shows messages at its top, out of sight below the model list.
+  bool _savedHere = false;
+
+  @override
+  void didUpdateWidget(_GlossarySection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Shows what was saved; text the core refused stays in the field to correct.
+    if (!_sameTerms(oldWidget.saved, widget.saved)) {
+      _terms.text = widget.saved.join('\n');
+    }
+  }
+
+  @override
+  void dispose() {
+    _terms.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text('Glossary', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            const Text('Names, project names and terms, one per line. '
+                'Transcription spells them as written here.'),
+            const SizedBox(height: 8),
+            TextField(
+              key: glossaryFieldKey,
+              controller: _terms,
+              minLines: 3,
+              maxLines: 8,
+              keyboardType: TextInputType.multiline,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Marco Rossi\nKubernetes\nOKR',
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: FilledButton(
+                key: glossarySaveKey,
+                onPressed: widget.controller.isBusy
+                    ? null
+                    : () {
+                        setState(() => _savedHere = true);
+                        widget.controller.setGlossary(_terms.text);
+                      },
+                child: const Text('Save glossary'),
+              ),
+            ),
+            if (_savedHere)
+              if (widget.controller.message case final String message)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(message),
+                ),
+          ],
+        ),
+      );
+}
+
+/// Whether two term lists are equal, in order.
+bool _sameTerms(List<String> left, List<String> right) =>
+    left.length == right.length &&
+    Iterable<int>.generate(left.length)
+        .every((int index) => left[index] == right[index]);

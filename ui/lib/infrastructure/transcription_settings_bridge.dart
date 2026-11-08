@@ -11,6 +11,9 @@ import 'package:ffi/ffi.dart';
 /// Core status: done.
 const int transcriptionStatusOk = 0;
 
+/// Core status: the value was refused, such as a glossary term that is too long.
+const int transcriptionStatusInvalid = 1;
+
 /// Core status: the keychain is missing, so the key was not saved.
 const int transcriptionStatusNoKeychain = 3;
 
@@ -184,6 +187,7 @@ final class TranscriptionSettings {
     this.suggestion,
     this.proposal,
     this.efficient = const EfficientModeStatus(),
+    this.glossary = const <String>[],
   });
 
   /// Reads the view from the core's JSON.
@@ -203,6 +207,9 @@ final class TranscriptionSettings {
           ? const EfficientModeStatus()
           : EfficientModeStatus.fromJson(
               json['efficient']! as Map<String, Object?>),
+      glossary: (json['glossary'] as List<Object?>? ?? const <Object?>[])
+          .whereType<String>()
+          .toList(growable: false),
       openAiModel: json['openai_model']! as String,
       keySaved: json['key_saved']! as bool,
       environmentKey: json['environment_key']! as bool,
@@ -233,6 +240,9 @@ final class TranscriptionSettings {
 
   /// Efficient mode's state.
   final EfficientModeStatus efficient;
+
+  /// Names and terms Whisper is prompted with, in order.
+  final List<String> glossary;
 
   final String provider;
   final String openAiModel;
@@ -266,6 +276,11 @@ abstract interface class TranscriptionSettingsBridge {
 
   /// Lets the GPU be tried again after a crash stopped it.
   Future<int> retryGpu();
+
+  /// Saves the glossary of names and terms; an empty list clears it.
+  /// Outputs: A core status, `transcriptionStatusInvalid` for a term or list that is too long.
+  /// Side effects: Stores it; the next recording reads it.
+  Future<int> setGlossary(List<String> terms);
 
   /// Chooses the OpenAI model. Outputs: A core status. Side effects: Stores the choice.
   Future<int> setOpenAiModel(String model);
@@ -331,6 +346,12 @@ final class RustTranscriptionSettingsBridge
     return Isolate.run(() => _openCoreLibrary()
         .lookupFunction<Int32 Function(Int32), int Function(int)>(
             'note_taker_set_efficient_gpu')(value));
+  }
+
+  @override
+  Future<int> setGlossary(List<String> terms) {
+    final String lines = terms.join('\n');
+    return Isolate.run(() => _callWithText('note_taker_set_glossary', lines));
   }
 
   @override
