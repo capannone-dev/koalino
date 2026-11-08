@@ -1,18 +1,19 @@
 // Names the devices a meeting was recorded on when the app combined several devices' recordings
-// of it (#88), and splits them apart again after asking.
+// of it (#88), says how far combining them got, and splits them apart again after asking.
 
 "use client";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { splitMeeting, type RecordedOn } from "@/lib/api";
-import { describeRecordedOn } from "@/lib/meeting-metadata";
+import { describeCombining, describeRecordedOn } from "@/lib/meeting-metadata";
 
 /**
- * "Recorded on Laptop + Pixel" with a Split button; nothing for a meeting from one device.
+ * "Recorded on Laptop + Pixel" with a Split button, then how far combining got; nothing for a
+ * meeting from one device of an older daemon.
  *
- * Inputs: the meeting's ID, `recorded_on` and `combined_recordings`. Outputs: the line, an inline
- * confirmation, and a polite status line. Side effects: `POST /api/meetings/{id}/split` once
+ * Inputs: the meeting's ID, `recorded_on`, `combined_recordings` and `combining`. Outputs: the
+ * lines, an inline confirmation, and a polite status line. Side effects: `POST /api/meetings/{id}/split` once
  * confirmed, then refreshes the page so the list and transcript match the daemon.
  */
 export function MeetingRecordedOn({ meeting }: { meeting: RecordedOn & { meeting_id: string } }) {
@@ -21,7 +22,8 @@ export function MeetingRecordedOn({ meeting }: { meeting: RecordedOn & { meeting
   const [isSplitting, setIsSplitting] = useState(false);
   const [message, setMessage] = useState("");
   const description = describeRecordedOn(meeting);
-  if (description === null && message === "") return null;
+  const combining = describeCombining(meeting.combining);
+  if (description === null && combining === null && message === "") return null;
 
   /** Splits the meeting and reports the outcome. */
   async function split() {
@@ -80,6 +82,7 @@ export function MeetingRecordedOn({ meeting }: { meeting: RecordedOn & { meeting
           )}
         </p>
       )}
+      {combining === null ? null : <p className="text-sm text-muted">{combining}</p>}
       <p role="status" aria-live="polite" className="text-sm">
         {message}
       </p>

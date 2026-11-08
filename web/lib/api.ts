@@ -4,10 +4,21 @@ export type Device = { device_id: string; supports_vad: boolean; supported_model
 export type Metric = { task_type: "transcription" | "cloud_transcription" | "file_transfer" | "diarization"; duration_ms: number; latency_ms: number; power_mwh: number; recorded_at: number };
 export type DeviceTelemetry = { device_id: string; metrics: Metric[] };
 export type TelemetrySummary = { total_transcription_time_ms: number; average_latency_ms: number; total_tasks: number; power_estimate_mwh: number };
-/** A device that recorded a meeting (#88); `name` is null when the daemon does not know it. */
-export type RecordingDevice = { device_id: string; name: string | null; this_device: boolean };
-/** Which devices recorded a meeting and which recordings were combined into it (#88); older daemons omit both. */
-export type RecordedOn = { recorded_on?: RecordingDevice[]; combined_recordings?: string[] };
+/**
+ * A device that recorded a meeting (#88); `name` is null when the daemon does not know it, and
+ * `connected` (absent from older daemons) is null for this device and without P2P.
+ */
+export type RecordingDevice = { device_id: string; name: string | null; this_device: boolean; connected?: boolean | null };
+/** How far combining a meeting's recordings got, as the daemon's device sees it (#88). */
+export type Combining = {
+  state: "one_device" | "waiting" | "ready_to_combine" | "sending" | "combined" | "not_combined";
+  combine_on: RecordingDevice | null;
+  waiting_for: RecordingDevice[];
+  /** RFC 3339; when the audio held there is deleted if not combined by then. */
+  kept_until: string | null;
+};
+/** Which devices recorded a meeting, which recordings were combined into it, and how far combining got (#88); older daemons omit them. */
+export type RecordedOn = { recorded_on?: RecordingDevice[]; combined_recordings?: string[]; combining?: Combining };
 /** `project_id` is the meeting's project (Issue #85): null outside any, absent from older servers. */
 /** `transcription_languages`: speech-to-text codes (`auto` or Whisper's) in first-use order; older daemons omit it. */
 export type MeetingSummary = {

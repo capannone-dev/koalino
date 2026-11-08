@@ -53,3 +53,17 @@ test("a refused split says so and keeps the button", async () => {
   expect(routerRefresh).not.toHaveBeenCalled();
   expect(screen.getByRole("button", { name: "Split" })).toBeInTheDocument();
 });
+
+test("the meeting says how far combining got, also for one device", () => {
+  render(
+    <MeetingRecordedOn
+      meeting={{
+        meeting_id: "m",
+        recorded_on: [],
+        combined_recordings: [],
+        combining: { state: "one_device", combine_on: null, waiting_for: [], kept_until: null }
+      }}
+    />
+  );
+  expect(screen.getByText("Recorded on this device only.")).toBeInTheDocument();
+});
