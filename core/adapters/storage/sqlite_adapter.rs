@@ -50,6 +50,7 @@ use crate::{
             TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
         },
         projects::ProjectId,
+        transcript_confidence::{OverlapSpan, SegmentConfidence},
         transcription_language::TranscriptionLanguage,
     },
     ports::{
@@ -223,6 +224,7 @@ impl SqliteNoteRepository {
                     speaker_identity_id TEXT,
                     segment_text TEXT NOT NULL,
                     unknown_cluster_id TEXT,
+                    confidence TEXT,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
                 );
                 CREATE INDEX IF NOT EXISTS transcript_segments_meeting_index
@@ -234,6 +236,7 @@ impl SqliteNoteRepository {
         add_task_audio_duration_column(&sqlite_connection)?;
         add_document_revision_column(&sqlite_connection)?;
         add_attachment_meeting_time_column(&sqlite_connection)?;
+        add_segment_confidence_column(&sqlite_connection)?;
         attachment_sync::add_attachment_content_columns(&sqlite_connection)?;
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
         deletions::initialize_deletion_schema(&sqlite_connection)?;
@@ -751,7 +754,7 @@ impl NoteRepository for SqliteNoteRepository {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id FROM transcript_segments WHERE meeting_id = ?1 ORDER BY start_time_ms, rowid",
+                "SELECT start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id, confidence FROM transcript_segments WHERE meeting_id = ?1 ORDER BY start_time_ms, rowid",
             )
             .map_err(|error| sqlite_error("unable to prepare transcript segment query", error))?;
         let segment_rows = statement
@@ -762,6 +765,7 @@ impl NoteRepository for SqliteNoteRepository {
                     row.get::<_, Option<String>>(2)?,
                     row.get::<_, String>(3)?,
                     row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to load transcript segments", error))?;
@@ -773,6 +777,7 @@ impl NoteRepository for SqliteNoteRepository {
                     speaker_identity_id,
                     segment_text,
                     unknown_cluster_id,
+                    confidence,
                 ) = row
                     .map_err(|error| sqlite_error("unable to decode transcript segment", error))?;
                 let parsed_unknown_cluster_id = unknown_cluster_id
@@ -800,7 +805,8 @@ impl NoteRepository for SqliteNoteRepository {
                     parsed_speaker_identity_id,
                     segment_text,
                 )
-                .with_unknown_cluster_id(parsed_unknown_cluster_id))
+                .with_unknown_cluster_id(parsed_unknown_cluster_id)
+                .with_confidence(confidence_from_column(confidence.as_deref())))
             })
             .collect::<Result<Vec<_>, StorageError>>()?;
         self.log_operation("load_transcript_segments", meeting_id);
@@ -1199,6 +1205,59 @@ impl NoteRepository for SqliteNoteRepository {
         Ok(())
     }
 
+    /// Adds overlap spans to the meeting's CRDT document (#90).
+    ///
+    /// Inputs: Match `NoteRepository::record_overlap_spans`.
+    /// Outputs: Success (also without meeting documents or spans), or a storage error for an
+    /// unknown meeting.
+    /// Side effects: Writes the meeting's document, which syncs to paired devices.
+    fn record_overlap_spans(
+        &self,
+        meeting_id: &MeetingId,
+        spans: &[OverlapSpan],
+    ) -> Result<(), StorageError> {
+        let Some(document_codec) = self.document_codec.as_deref() else {
+            return Ok(());
+        };
+        if spans.is_empty() {
+            return Ok(());
+        }
+        let transaction = self
+            .connection
+            .write_transaction()
+            .map_err(|error| sqlite_error("unable to begin recording overlap", error))?;
+        let document = read_document(&transaction, meeting_id)?;
+        let updated_document = document_codec.with_overlap_spans(&document, spans)?;
+        if updated_document != document {
+            write_document(&transaction, meeting_id, &updated_document)?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit recording overlap", error))?;
+        self.log_operation("record_overlap_spans", meeting_id);
+        Ok(())
+    }
+
+    /// Reads the meeting's overlap spans from its CRDT document (#90).
+    ///
+    /// Inputs: Match `NoteRepository::load_overlap_spans`.
+    /// Outputs: Disjoint spans in time order; none without meeting documents.
+    /// Side effects: Reads the document.
+    fn load_overlap_spans(&self, meeting_id: &MeetingId) -> Result<Vec<OverlapSpan>, StorageError> {
+        let Some(document_codec) = self.document_codec.as_deref() else {
+            return Ok(Vec::new());
+        };
+        let transaction = self
+            .connection
+            .write_transaction()
+            .map_err(|error| sqlite_error("unable to begin reading overlap", error))?;
+        let document = read_document(&transaction, meeting_id)?;
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to finish reading overlap", error))?;
+        document_codec.overlap_spans(&document)
+    }
+
     /// Deletes a meeting and everything it holds, leaving a deletion record.
     ///
     /// Inputs: Match `NoteRepository::delete_meeting`.
@@ -1538,7 +1597,7 @@ fn write_segment_rows(
     for segment in segments {
         connection
             .execute(
-                "INSERT INTO transcript_segments (meeting_id, start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO transcript_segments (meeting_id, start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id, confidence) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     meeting_id.as_str(),
                     sqlite_milliseconds(segment.start_time_ms())?,
@@ -1546,6 +1605,7 @@ fn write_segment_rows(
                     segment.speaker_identity_id().map(|identity_id| identity_id.to_string()),
                     segment.text(),
                     segment.unknown_cluster_id().map(|cluster_id| cluster_id.to_string()),
+                    confidence_column(segment.confidence()),
                 ],
             )
             .map_err(|error| sqlite_error("unable to save transcript segment", error))?;
@@ -1785,6 +1845,64 @@ fn add_meeting_transcription_languages_column(
     Ok(())
 }
 
+/// Adds the nullable `transcript_segments.confidence` column (#90, #91) to older databases.
+///
+/// Outputs: Success (also when the column exists) or a storage error.
+/// Side effects: May run one `ALTER TABLE`; existing segments carry no marks.
+fn add_segment_confidence_column(sqlite_connection: &Connection) -> Result<(), StorageError> {
+    let column_count: i64 = sqlite_connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('transcript_segments') WHERE name = 'confidence'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| sqlite_error("unable to inspect transcript segments schema", error))?;
+    if column_count == 0 {
+        sqlite_connection
+            .execute(
+                "ALTER TABLE transcript_segments ADD COLUMN confidence TEXT",
+                [],
+            )
+            .map_err(|error| sqlite_error("unable to add the segment confidence column", error))?;
+    }
+    Ok(())
+}
+
+/// Encodes a segment's confidence marks for the index: `NULL` when plain, else
+/// `{"o":bool,"s":bool,"w":[positions]}`.
+fn confidence_column(confidence: &SegmentConfidence) -> Option<String> {
+    (!confidence.is_plain()).then(|| {
+        serde_json::json!({
+            "o": confidence.overlapping_speech,
+            "s": confidence.uncertain_speaker,
+            "w": confidence.uncertain_words,
+        })
+        .to_string()
+    })
+}
+
+/// Decodes `confidence_column`; anything malformed reads as plain.
+fn confidence_from_column(column: Option<&str>) -> SegmentConfidence {
+    let Some(value) = column.and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
+    else {
+        return SegmentConfidence::default();
+    };
+    SegmentConfidence {
+        overlapping_speech: value["o"].as_bool().unwrap_or(false),
+        uncertain_speaker: value["s"].as_bool().unwrap_or(false),
+        uncertain_words: value["w"]
+            .as_array()
+            .map(|positions| {
+                positions
+                    .iter()
+                    .filter_map(|position| position.as_u64())
+                    .filter_map(|position| u16::try_from(position).ok())
+                    .collect()
+            })
+            .unwrap_or_default(),
+    }
+}
+
 /// Adds the nullable `attachments.meeting_time_ms` column (Issue #54) to older databases.
 ///
 /// Outputs: Success (also when the column exists) or a storage error.
@@ -1984,6 +2102,36 @@ mod tests {
         assert_eq!(
             repository.load_transcript_segments(&meeting_id).ok(),
             Some(vec![earlier_segment])
+        );
+    }
+
+    /// Verifies a segment's confidence marks survive the index (#90, #91).
+    #[test]
+    fn segment_confidence_is_saved_and_loaded() {
+        use crate::domain::transcript_confidence::SegmentConfidence;
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let meeting_id = MeetingId::new("meeting-confidence");
+        repository
+            .create_meeting(&meeting_id, &[1_u8])
+            .unwrap_or_else(|error| panic!("meeting creation should succeed: {error}"));
+        let marked = TranscriptSegment::new(meeting_id.clone(), 0, 1_000, None, "a b c")
+            .with_confidence(SegmentConfidence {
+                overlapping_speech: true,
+                uncertain_speaker: false,
+                uncertain_words: vec![0, 2],
+            });
+        let plain = TranscriptSegment::new(meeting_id.clone(), 1_000, 2_000, None, "d");
+
+        repository
+            .save_transcript_segments(&meeting_id, &[marked.clone(), plain.clone()])
+            .unwrap_or_else(|error| panic!("segment save should succeed: {error}"));
+
+        assert_eq!(
+            repository.load_transcript_segments(&meeting_id).ok(),
+            Some(vec![marked, plain])
         );
     }
 

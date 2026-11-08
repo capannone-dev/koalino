@@ -174,6 +174,30 @@ pub trait MeetingDocumentCodec: Send + Sync {
         recordings: &[MeetingId],
     ) -> Result<Vec<u8>, StorageError>;
 
+    /// Adds stretches of overlapping speech to the meeting (#90).
+    ///
+    /// Inputs: The serialized document and spans in meeting milliseconds. Outputs: The updated
+    /// document bytes, or a storage error. Spans are only ever added, keyed by their start, so
+    /// two devices adding spans at once keep both. Side effects: None.
+    fn with_overlap_spans(
+        &self,
+        document: &[u8],
+        _spans: &[crate::domain::transcript_confidence::OverlapSpan],
+    ) -> Result<Vec<u8>, StorageError> {
+        Ok(document.to_vec())
+    }
+
+    /// Reads the meeting's overlapping speech (#90).
+    ///
+    /// Inputs: The serialized document. Outputs: Disjoint spans in time order (merged as
+    /// `merge_overlap_spans` does), or a storage error. Side effects: None.
+    fn overlap_spans(
+        &self,
+        _document: &[u8],
+    ) -> Result<Vec<crate::domain::transcript_confidence::OverlapSpan>, StorageError> {
+        Ok(Vec::new())
+    }
+
     /// Reads the index-relevant fields of a document.
     ///
     /// Inputs: The meeting the document belongs to and its bytes, which may come from a peer.

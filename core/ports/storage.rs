@@ -45,6 +45,30 @@ pub trait NoteRepository {
         Ok(())
     }
 
+    /// Adds stretches where two or more voices spoke at once to the meeting (#90).
+    ///
+    /// Inputs: The meeting and spans in meeting milliseconds. Outputs: Success, or a storage
+    /// error. Repositories without meeting documents ignore it.
+    /// Side effects: Writes the meeting's CRDT document, which syncs to paired devices.
+    fn record_overlap_spans(
+        &self,
+        _meeting_id: &MeetingId,
+        _spans: &[crate::domain::transcript_confidence::OverlapSpan],
+    ) -> Result<(), StorageError> {
+        Ok(())
+    }
+
+    /// Reads the meeting's stretches of overlapping speech (#90).
+    ///
+    /// Inputs: The meeting. Outputs: Disjoint spans in time order (none without meeting
+    /// documents), or a storage error. Side effects: Reads storage.
+    fn load_overlap_spans(
+        &self,
+        _meeting_id: &MeetingId,
+    ) -> Result<Vec<crate::domain::transcript_confidence::OverlapSpan>, StorageError> {
+        Ok(Vec::new())
+    }
+
     /// Lists every meeting with what decides whether two of them are one meeting recorded on two
     /// devices (#88).
     ///
@@ -493,6 +517,21 @@ where
         first_used_at_ms: u64,
     ) -> Result<(), StorageError> {
         (**self).record_transcription_language(meeting_id, language, first_used_at_ms)
+    }
+
+    fn record_overlap_spans(
+        &self,
+        meeting_id: &MeetingId,
+        spans: &[crate::domain::transcript_confidence::OverlapSpan],
+    ) -> Result<(), StorageError> {
+        (**self).record_overlap_spans(meeting_id, spans)
+    }
+
+    fn load_overlap_spans(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Result<Vec<crate::domain::transcript_confidence::OverlapSpan>, StorageError> {
+        (**self).load_overlap_spans(meeting_id)
     }
 
     fn apply_deletion_records(

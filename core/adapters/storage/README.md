@@ -39,7 +39,11 @@ application logs.
 
 The `transcript_segments` table stores speaker-attributed transcript intervals: owning
 `meeting_id`, `start_time_ms`/`end_time_ms` offsets from the meeting start, an optional
-`speaker_identity_id` (a `SpeakerIdentity` UUID, `NULL` when unattributed), and `segment_text`.
+`speaker_identity_id` (a `SpeakerIdentity` UUID, `NULL` when unattributed), `segment_text`, and
+`confidence`: `NULL` when plain, else `{"o":overlap,"s":guessed speaker,"w":[unclear word
+positions]}` (#90, #91; older databases gain the column on open). The meeting document holds the
+same marks per segment, and the recording's `overlap_spans`, which `record_overlap_spans` and
+`load_overlap_spans` write and read so later passes and other devices can mark overlap.
 `save_transcript_segments` replaces a meeting's rows in one transaction; `load_transcript_segments`
 returns them ordered by start time. `load_meeting_metadata` exposes the meeting's `created_at_utc`
 instant and `title` without reading transcript or CRDT payloads. Segment text follows the same at-rest policy

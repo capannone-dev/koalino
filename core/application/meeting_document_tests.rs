@@ -513,3 +513,62 @@ fn an_incomplete_combination_is_ignored() {
 
     assert_eq!(project(&document.save()).combined_into, None);
 }
+
+/// Verifies a segment's confidence marks round-trip and clear again (#90, #91).
+#[test]
+fn segment_confidence_round_trips_and_clears() {
+    use crate::domain::transcript_confidence::SegmentConfidence;
+    let marked =
+        segment(0, 1_000, None, "we agreed on Friday").with_confidence(SegmentConfidence {
+            overlapping_speech: true,
+            uncertain_speaker: true,
+            uncertain_words: vec![1, 3],
+        });
+    let document = with_segments(&empty_document(), std::slice::from_ref(&marked));
+
+    let projected = project(&document).segments.unwrap_or_default();
+    assert_eq!(projected, vec![marked.clone()]);
+
+    let plain = marked.with_confidence(SegmentConfidence::default());
+    let cleared = with_segments(&document, std::slice::from_ref(&plain));
+    assert_eq!(project(&cleared).segments.unwrap_or_default(), vec![plain]);
+}
+
+/// Verifies overlap spans are kept with the meeting, merged, and joined across devices (#90).
+#[test]
+fn overlap_spans_are_kept_merged_and_joined_across_devices() {
+    use crate::domain::transcript_confidence::OverlapSpan;
+    let codec = AutomergeMeetingDocumentCodec;
+    let document = codec
+        .with_overlap_spans(&empty_document(), &[OverlapSpan::new(1_000, 2_000)])
+        .unwrap_or_else(|error| panic!("{error}"));
+    let mut laptop = AutoCommit::load(&document).unwrap_or_else(|error| panic!("{error}"));
+    let mut phone = laptop.fork();
+    let laptop_bytes = codec
+        .with_overlap_spans(&laptop.save(), &[OverlapSpan::new(2_100, 3_000)])
+        .unwrap_or_else(|error| panic!("{error}"));
+    let phone_bytes = codec
+        .with_overlap_spans(&phone.save(), &[OverlapSpan::new(8_000, 9_000)])
+        .unwrap_or_else(|error| panic!("{error}"));
+    laptop = AutoCommit::load(&laptop_bytes).unwrap_or_else(|error| panic!("{error}"));
+    phone = AutoCommit::load(&phone_bytes).unwrap_or_else(|error| panic!("{error}"));
+    laptop
+        .merge(&mut phone)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(
+        codec
+            .overlap_spans(&laptop.save())
+            .unwrap_or_else(|error| panic!("{error}")),
+        vec![
+            OverlapSpan::new(1_000, 3_000),
+            OverlapSpan::new(8_000, 9_000)
+        ]
+    );
+    assert_eq!(
+        codec
+            .overlap_spans(&empty_document())
+            .unwrap_or_else(|error| panic!("{error}")),
+        Vec::new()
+    );
+}

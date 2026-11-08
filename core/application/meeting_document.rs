@@ -19,6 +19,11 @@
 //! | `kept_apart_from` | map from the ID of a meeting the owner split from this one to `true` (#88) |
 //! | `recorded_on_phone` | bool, written once: whether a phone recorded the meeting (#88) |
 //! | `combined_with` | map from the ID of another recording whose speech the transcript was built from to `true` (#88) |
+//! | `overlap_spans` | map from `<start_ms:012>` to the end in ms of a stretch where two or more voices spoke at once (#90); only ever added to |
+//!
+//! A segment map may also hold its confidence marks (#90, #91), each only when set:
+//! `overlapping_speech: bool`, `uncertain_speaker: bool`, and `uncertain_words: str`, the
+//! comma-separated positions of the uncertain words in its text.
 //!
 //! `cluster_resolutions` (Issue #50) maps an unknown-speaker cluster ID to the identity ID it was
 //! named as, both hyphenated UUID strings. One register per cluster, so two devices naming the
@@ -39,6 +44,7 @@ use crate::{
         errors::StorageError,
         models::{DeviceId, MeetingId, TranscriptSegment},
         projects::ProjectId,
+        transcript_confidence::{OverlapSpan, SegmentConfidence, merge_overlap_spans},
         transcription_language::TranscriptionLanguage,
     },
     ports::meeting_document::{
@@ -72,6 +78,8 @@ const RECORDED_ON_PHONE_KEY: &str = "recorded_on_phone";
 /// Root key of the recordings combined into this meeting's transcript (#88): a map, so two
 /// devices' records merge.
 const COMBINED_WITH_KEY: &str = "combined_with";
+/// Root key of the map from an overlap span's start (`<start_ms:012>`) to its end (#90).
+const OVERLAP_SPANS_KEY: &str = "overlap_spans";
 
 /// The Automerge implementation of `MeetingDocumentCodec`.
 #[derive(Clone, Copy, Debug, Default)]
@@ -354,6 +362,60 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
         Ok(automerge_document.save())
     }
 
+    /// Adds overlap spans under their start; an existing span keeps the later end.
+    ///
+    /// Side effects: None.
+    fn with_overlap_spans(
+        &self,
+        document: &[u8],
+        spans: &[OverlapSpan],
+    ) -> Result<Vec<u8>, StorageError> {
+        if spans.is_empty() {
+            return Ok(document.to_vec());
+        }
+        let mut automerge_document = load(document)?;
+        let spans_object = match automerge_document
+            .get(ROOT, OVERLAP_SPANS_KEY)
+            .map_err(|error| crdt_error("unable to read the overlap spans", error))?
+        {
+            Some((Value::Object(ObjType::Map), object_id)) => object_id,
+            _ => automerge_document
+                .put_object(ROOT, OVERLAP_SPANS_KEY, ObjType::Map)
+                .map_err(|error| crdt_error("unable to create the overlap spans", error))?,
+        };
+        for span in spans {
+            let key = format!("{:012}", span.start_ms);
+            let recorded_end = read_unsigned(&automerge_document, &spans_object, &key);
+            if recorded_end.is_none_or(|end_ms| end_ms < span.end_ms) {
+                automerge_document
+                    .put(&spans_object, key, ScalarValue::Uint(span.end_ms))
+                    .map_err(|error| crdt_error("unable to record an overlap span", error))?;
+            }
+        }
+        Ok(automerge_document.save())
+    }
+
+    /// Reads the overlap spans, skipping malformed entries, merged into disjoint spans.
+    ///
+    /// Side effects: None.
+    fn overlap_spans(&self, document: &[u8]) -> Result<Vec<OverlapSpan>, StorageError> {
+        let automerge_document = load(document)?;
+        let Ok(Some((Value::Object(ObjType::Map), spans_object))) =
+            automerge_document.get(ROOT, OVERLAP_SPANS_KEY)
+        else {
+            return Ok(Vec::new());
+        };
+        let spans = automerge_document
+            .keys(&spans_object)
+            .filter_map(|key| {
+                let start_ms = key.parse::<u64>().ok()?;
+                let end_ms = read_unsigned(&automerge_document, &spans_object, &key)?;
+                Some(OverlapSpan::new(start_ms, end_ms))
+            })
+            .collect();
+        Ok(merge_overlap_spans(spans))
+    }
+
     fn project(
         &self,
         meeting_id: &MeetingId,
@@ -504,6 +566,35 @@ fn write_segment(
         "text",
         ScalarValue::Str(segment.text().into()),
     )?;
+    let confidence = segment.confidence();
+    let uncertain_words = (!confidence.uncertain_words.is_empty()).then(|| {
+        confidence
+            .uncertain_words
+            .iter()
+            .map(u16::to_string)
+            .collect::<Vec<_>>()
+            .join(",")
+    });
+    for (field, value) in [
+        (
+            "overlapping_speech",
+            confidence
+                .overlapping_speech
+                .then_some(ScalarValue::Boolean(true)),
+        ),
+        (
+            "uncertain_speaker",
+            confidence
+                .uncertain_speaker
+                .then_some(ScalarValue::Boolean(true)),
+        ),
+        (
+            "uncertain_words",
+            uncertain_words.map(|positions| ScalarValue::Str(positions.into())),
+        ),
+    ] {
+        put_or_clear(automerge_document, &segment_object, field, value)?;
+    }
     for (field, value) in [
         ("speaker_identity_id", segment.speaker_identity_id()),
         ("unknown_cluster_id", segment.unknown_cluster_id()),
@@ -529,6 +620,53 @@ fn write_segment(
         }
     }
     Ok(())
+}
+
+/// Puts `value` at `field`, or removes the field for `None`.
+fn put_or_clear(
+    automerge_document: &mut AutoCommit,
+    object: &ObjId,
+    field: &str,
+    value: Option<ScalarValue>,
+) -> Result<(), StorageError> {
+    match value {
+        Some(value) => put_if_changed(automerge_document, object, field, value),
+        None => {
+            if automerge_document
+                .get(object, field)
+                .map_err(|error| crdt_error("unable to read a segment field", error))?
+                .is_some()
+            {
+                automerge_document
+                    .delete(object, field)
+                    .map_err(|error| crdt_error("unable to clear a segment field", error))?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Reads a segment's confidence marks; a malformed mark reads as unset.
+fn read_confidence(automerge_document: &AutoCommit, segment_object: &ObjId) -> SegmentConfidence {
+    let flag = |field: &str| {
+        matches!(
+            read_scalar(automerge_document, segment_object, field),
+            Some(ScalarValue::Boolean(true))
+        )
+    };
+    let uncertain_words = read_string(automerge_document, segment_object, "uncertain_words")
+        .map(|positions| {
+            positions
+                .split(',')
+                .filter_map(|position| position.trim().parse::<u16>().ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    SegmentConfidence {
+        overlapping_speech: flag("overlapping_speech"),
+        uncertain_speaker: flag("uncertain_speaker"),
+        uncertain_words,
+    }
 }
 
 /// Puts `value` at `field` unless it is already the current value.
@@ -659,7 +797,8 @@ fn read_segment(
             speaker_identity_id,
             text,
         )
-        .with_unknown_cluster_id(unknown_cluster_id),
+        .with_unknown_cluster_id(unknown_cluster_id)
+        .with_confidence(read_confidence(automerge_document, segment_object)),
     )
 }
 
