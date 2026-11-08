@@ -29,9 +29,6 @@ import {
   type ProjectResource
 } from "@/lib/projects-api";
 
-/** The file types Rust accepts (as the app's picker), offered by the file input. */
-export const acceptedProjectFiles = ".jpg,.jpeg,.png,.gif,.webp,.heic,.pdf,.txt,.md,.markdown,.eml,.docx,.xlsx,.pptx,.odt";
-
 const inputClass =
   "mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30";
 const primaryButtonClass = "min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled";
@@ -257,7 +254,7 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
         <div className="flex flex-wrap gap-2">
           <label className={`${primaryButtonClass} inline-flex cursor-pointer items-center focus-within:outline-2 focus-within:outline-focus`}>
             Add files
-            <input type="file" multiple accept={acceptedProjectFiles} onChange={upload} disabled={isBusy} className="sr-only" />
+            <input type="file" multiple onChange={upload} disabled={isBusy} className="sr-only" />
           </label>
           <button type="button" className={secondaryButtonClass} onClick={() => setIsWritingNote((open) => !open)} aria-expanded={isWritingNote}>
             Write a note

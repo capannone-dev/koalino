@@ -12,7 +12,8 @@ Each card names its meeting and has an audio player when a review clip exists; t
 suggests saved people, who are listed below with their sample counts (Issue #63).
 
 `meeting-list.tsx` renders the meeting index with a "⋯" actions menu per row (also opened by
-right-click) offering **Rename**. `meeting-title-header.tsx` renders a meeting detail page's
+right-click) offering **Rename**, **Add to project…** (`meeting-project-dialog.tsx`, which loads
+the projects and shows the picker, #94) and **Delete**. `meeting-title-header.tsx` renders a meeting detail page's
 heading with a pencil button. Both open `rename-meeting-dialog.tsx`, the shared modal that
 validates the title locally, calls `renameMeeting`, and maps failures to plain messages; they
 replace the title from the response without reloading (Issue #42).
@@ -47,7 +48,8 @@ Projects (Issue #85), over `lib/projects-api.ts`:
   combined from several devices' recordings (#88), and its Split button lists the other recordings
   on their own again after an inline confirmation. The list rows carry the same line.
 - `meeting-project-picker.tsx` is the meeting page's Project selector; a failed move puts the
-  previous choice back.
+  previous choice back. Its last option, "New project…", asks for a name, creates the project
+  and moves the meeting into it in one step (#94).
 `telemetry-entry.tsx` is the Settings card linking to `/settings/telemetry` (Issue #53).
 
 `telemetry-dashboard.tsx` owns the responsive Recharts visualizations and bounded WebSocket refresh

@@ -146,6 +146,6 @@ test("the meeting page's picker moves the meeting and restores the choice on fai
   expect(select.value).toBe("");
 
   fireEvent.change(select, { target: { value: "p1" } });
-  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Moved to the project"));
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Moved to Hiring"));
   expect(select.value).toBe("p1");
 });

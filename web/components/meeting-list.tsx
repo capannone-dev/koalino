@@ -1,10 +1,12 @@
-// Lists meetings with a per-row actions menu (button or right-click) that renames a meeting in place.
+// Lists meetings with a per-row actions menu (button or right-click) that renames a meeting in place,
+// adds it to a project (#94), or deletes it.
 
 "use client";
 
 import Link from "next/link";
 import { KeyboardEvent, useEffect, useRef, useState } from "react";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { MeetingProjectDialog } from "@/components/meeting-project-dialog";
 import { RenameMeetingDialog } from "@/components/rename-meeting-dialog";
 import type { MeetingSummary } from "@/lib/api";
 import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion-messages";
@@ -14,7 +16,8 @@ import { describeRecordedOn } from "@/lib/meeting-metadata";
 type OpenMenu = { meetingId: string; position: { x: number; y: number } | null };
 
 /**
- * Renders `meetings` as links to their detail pages, each with an actions menu offering Rename.
+ * Renders `meetings` as links to their detail pages, each with an actions menu offering Rename,
+ * Add to project… and Delete.
  *
  * Inputs: the server-rendered meeting summaries. Outputs: the list, its menus, the rename dialog,
  * and a polite status region announcing "Meeting renamed". Side effects: renames through the
@@ -25,6 +28,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
   const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null);
   const [renamingMeeting, setRenamingMeeting] = useState<MeetingSummary | null>(null);
   const [deletingMeeting, setDeletingMeeting] = useState<MeetingSummary | null>(null);
+  const [movingMeeting, setMovingMeeting] = useState<MeetingSummary | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
   // Each row's actions button, so focus can return to it after the menu or dialog closes.
   const actionButtons = useRef(new Map<string, HTMLButtonElement>());
@@ -149,6 +153,18 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                     onClick={() => {
                       setOpenMenu(null);
                       setStatusMessage("");
+                      setMovingMeeting(meeting);
+                    }}
+                    className="flex min-h-11 w-full items-center px-4 text-left hover:bg-surface-muted focus:bg-surface-muted focus:outline-none"
+                  >
+                    Add to project…
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOpenMenu(null);
+                      setStatusMessage("");
                       setDeletingMeeting(meeting);
                     }}
                     className="flex min-h-11 w-full items-center px-4 text-left text-danger hover:bg-surface-muted"
@@ -176,6 +192,15 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
             );
             setStatusMessage("Meeting deleted");
             setDeletingMeeting(null);
+          }}
+        />
+      ) : null}
+      {movingMeeting ? (
+        <MeetingProjectDialog
+          meeting={movingMeeting}
+          onClose={() => {
+            focusActionsButton(movingMeeting.meeting_id);
+            setMovingMeeting(null);
           }}
         />
       ) : null}
