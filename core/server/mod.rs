@@ -7,6 +7,10 @@
 pub mod api;
 #[cfg(test)]
 mod api_tests;
+/// Serves the web Settings page's glossary of names and terms.
+pub mod glossary_routes;
+#[cfg(test)]
+mod glossary_routes_tests;
 /// Serves the web Settings page's log level and log download routes (Issue #46).
 pub mod log_routes;
 #[cfg(test)]

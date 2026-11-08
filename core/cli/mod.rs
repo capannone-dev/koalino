@@ -10,6 +10,7 @@ use clap::{Args, Parser, Subcommand};
 use uuid::Uuid;
 
 use crate::adapters::observability::LogLevelControlFile;
+use crate::domain::transcription_glossary::TranscriptionGlossary;
 use crate::{
     application::{
         cluster_review::{
@@ -95,6 +96,9 @@ pub enum CliCommand {
     Voice(VoiceArgs),
     /// Lists or removes the devices paired for sync.
     Devices(DevicesArgs),
+    /// Shows or changes the names and terms transcription is prompted with, so they are spelled
+    /// right; it applies from the next recording, on every app using this database.
+    Glossary(GlossaryArgs),
     /// Displays aggregate privacy-safe telemetry.
     Telemetry,
     /// Changes a running daemon's log level without restarting it (applied within seconds).
@@ -347,6 +351,40 @@ pub enum DevicesCommand {
     },
 }
 
+/// Defines glossary actions.
+#[derive(Debug, Subcommand)]
+pub enum GlossaryCommand {
+    /// Prints the terms, one per line.
+    Show,
+    /// Replaces the glossary with these terms.
+    Set {
+        /// Names, project names, acronyms or jargon; quote a term with spaces.
+        terms: Vec<String>,
+    },
+    /// Adds terms; a term already there (in any case) is kept once.
+    Add {
+        /// The terms to add.
+        #[arg(required = true)]
+        terms: Vec<String>,
+    },
+    /// Removes terms, ignoring case.
+    Remove {
+        /// The terms to remove.
+        #[arg(required = true)]
+        terms: Vec<String>,
+    },
+    /// Removes every term.
+    Clear,
+}
+
+/// Holds a nested glossary action for clap.
+#[derive(Debug, Args)]
+pub struct GlossaryArgs {
+    /// Selects the glossary action.
+    #[command(subcommand)]
+    pub command: GlossaryCommand,
+}
+
 /// Holds a nested paired-device action for clap.
 #[derive(Debug, Args)]
 pub struct DevicesArgs {
@@ -463,6 +501,10 @@ pub trait CliService {
     fn list_paired_devices(&self) -> Result<Vec<PairedDeviceRow>, String>;
     /// Removes the paired device whose peer ID, or unique name, is `device`, and describes it.
     fn revoke_device(&mut self, device: &str) -> Result<String, String>;
+    /// Loads the saved glossary's terms, in order.
+    fn glossary(&self) -> Result<Vec<String>, String>;
+    /// Saves the glossary's terms, already validated; an empty list clears it.
+    fn save_glossary(&mut self, terms: &[String]) -> Result<(), String>;
     /// Exports one meeting through the shared export manager.
     fn export_meeting(
         &self,
@@ -576,9 +618,51 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
         CliCommand::Devices(DevicesArgs {
             command: DevicesCommand::Revoke { device },
         }) => cli_service.revoke_device(&device),
+        CliCommand::Glossary(GlossaryArgs { command }) => edit_glossary(command, cli_service),
         CliCommand::Telemetry => cli_service.telemetry(),
         CliCommand::LogLevel { directive } => cli_service.request_log_level(&directive),
     }
+}
+
+/// Carries out one glossary action.
+///
+/// Inputs: The action and the service holding the glossary.
+/// Outputs: The terms (for `show`) or a confirmation; or why the new glossary was refused, in
+/// which case nothing is saved.
+/// Side effects: Reads and, except for `show`, saves the glossary.
+fn edit_glossary(
+    command: GlossaryCommand,
+    cli_service: &mut impl CliService,
+) -> Result<String, String> {
+    let current = cli_service.glossary()?;
+    let edited: Vec<String> = match command {
+        GlossaryCommand::Show => {
+            return Ok(if current.is_empty() {
+                String::from("The glossary is empty.")
+            } else {
+                current.join("\n")
+            });
+        }
+        GlossaryCommand::Set { terms } => terms,
+        GlossaryCommand::Add { terms } => current.into_iter().chain(terms).collect(),
+        GlossaryCommand::Remove { terms } => current
+            .into_iter()
+            .filter(|kept| {
+                !terms
+                    .iter()
+                    .any(|term| term.trim().eq_ignore_ascii_case(kept))
+            })
+            .collect(),
+        GlossaryCommand::Clear => Vec::new(),
+    };
+    let glossary = TranscriptionGlossary::parse(edited.iter().map(String::as_str))
+        .map_err(|error| error.to_string())?;
+    cli_service.save_glossary(glossary.terms())?;
+    Ok(match glossary.terms().len() {
+        0 => String::from("Glossary cleared."),
+        1 => String::from("Glossary saved: 1 term. It applies from the next recording."),
+        count => format!("Glossary saved: {count} terms. It applies from the next recording."),
+    })
 }
 
 /// Formats meeting rows as a stable terminal table.
@@ -765,6 +849,8 @@ pub struct CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort> {
     export_writer: ExportWriter,
     /// Checks for a recording and removes files on deletion; `None` skips both.
     deletion_hooks: Option<Box<dyn MeetingDeletionHooks>>,
+    /// The transcription settings file holding the glossary; `None` disables `glossary`.
+    settings_file: Option<std::path::PathBuf>,
     /// This device and the folder of the speech it holds, for `meetings view`'s combining line
     /// (#88); `None` says nothing is held here.
     recording_device: Option<(
@@ -798,6 +884,7 @@ where
             voice_identity_manager: VoiceIdentityManager::new(vector_database),
             export_writer,
             deletion_hooks: None,
+            settings_file: None,
             recording_device: None,
         }
     }
@@ -873,6 +960,22 @@ where
                 )
         };
         Ok(describe_combining(&status, &name))
+    }
+
+    /// Enables `glossary` with the transcription settings file beside the database, which every
+    /// app and the daemon on that database read.
+    ///
+    /// Inputs: The settings file. Outputs: The service. Side effects: None.
+    pub fn with_settings_file(mut self, settings_file: std::path::PathBuf) -> Self {
+        self.settings_file = Some(settings_file);
+        self
+    }
+
+    /// Borrows the settings file, or explains that the glossary is not available here.
+    fn settings_file(&self) -> Result<&std::path::Path, String> {
+        self.settings_file
+            .as_deref()
+            .ok_or_else(|| String::from("the glossary is not available here"))
     }
 
     /// Enables `log-level` by naming the control file a daemon on the same database polls.
@@ -1210,6 +1313,17 @@ where
                 paired_at: format_paired_at(peer.paired_at_ms()),
             })
             .collect())
+    }
+    fn glossary(&self) -> Result<Vec<String>, String> {
+        let settings_file = self.settings_file()?;
+        Ok(crate::transcription_settings::load_settings(settings_file).glossary)
+    }
+    fn save_glossary(&mut self, terms: &[String]) -> Result<(), String> {
+        let settings_file = self.settings_file()?;
+        let glossary = TranscriptionGlossary::parse(terms.iter().map(String::as_str))
+            .map_err(|error| error.to_string())?;
+        crate::transcription_settings::save_glossary(settings_file, &glossary)
+            .map_err(|error| format!("the glossary could not be saved: {error}"))
     }
     fn revoke_device(&mut self, device: &str) -> Result<String, String> {
         let trusted_peer_store = self.trusted_peer_store()?;

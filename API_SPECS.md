@@ -430,6 +430,15 @@ files, oldest first, as one `application/x-ndjson` attachment, or `404`
 `{"error_code":"no_logs"}`. The entries were redacted when written. A process without log
 control answers `503` `{"error_code":"unavailable"}`.
 
+`GET /api/settings/glossary` returns `{"terms":["Marco Rossi","OKR"]}`, the names and terms that
+steer transcription. `PUT /api/settings/glossary` with `{"terms":[...]}` trims them, keeps each
+once regardless of case, saves them and returns the saved list; it applies from the next recording
+and to the next after-meeting pass. A term over 60 characters or holding a control character, or a
+list over 500 characters in all, returns `400` `{"error_code":"invalid_glossary","error"}`; a write
+failure `500` `save_failed`; a daemon without a settings file `503` `unavailable`. The apps use
+`note_taker_set_glossary(terms)` (newline-separated; returns 0 saved, 1 refused, 2 failed) and read
+the saved terms as `glossary` in `note_taker_get_transcription_settings()`.
+
 ### Telemetry
 
 All telemetry responses carry privacy-safe metrics only: task kinds, durations, latencies, and

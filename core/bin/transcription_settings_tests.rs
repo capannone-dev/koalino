@@ -116,6 +116,7 @@ fn settings_round_trip_without_the_key() {
         dismissed_proposals: vec!["ggml-medium.bin".to_owned()],
         transcript_pass: Some(false),
         transcript_pass_model: Some("ggml-large-v3-turbo.bin".to_owned()),
+        glossary: vec!["Marco Rossi".to_owned()],
     };
     assert_eq!(load_settings(&paths.settings_file), Default::default());
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
@@ -158,4 +159,51 @@ fn efficient_mode_defaults_to_off_for_older_settings_files() {
     saved.efficient_gpu = true;
     save_settings(&settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
     assert!(load_settings(&settings_file).efficient_gpu);
+}
+
+#[test]
+fn the_glossary_is_saved_with_the_settings_and_read_fresh_for_each_recording() {
+    use super::transcription_settings::{glossary_source, save_glossary, settings_file_for};
+    use crate::domain::transcription_glossary::TranscriptionGlossary;
+    let paths = paths("glossary");
+    let database = paths
+        .settings_file
+        .to_string_lossy()
+        .trim_end_matches(".transcription-settings.json")
+        .to_owned();
+    assert_eq!(
+        settings_file_for(std::path::Path::new(&database)),
+        paths.settings_file
+    );
+    let source = glossary_source(paths.settings_file.clone());
+    assert_eq!(source(), None, "no glossary before one is saved");
+
+    let glossary = TranscriptionGlossary::parse(["Marco Rossi", "OKR"])
+        .unwrap_or_else(|error| panic!("{error}"));
+    save_glossary(&paths.settings_file, &glossary).unwrap_or_else(|error| panic!("{error}"));
+    let mut saved = load_settings(&paths.settings_file);
+    saved.efficient_gpu = true;
+    save_settings(&paths.settings_file, &saved).unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(source(), Some(glossary));
+    assert!(
+        load_settings(&paths.settings_file).efficient_gpu,
+        "other choices are kept"
+    );
+    save_glossary(&paths.settings_file, &TranscriptionGlossary::default())
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(source(), None);
+}
+
+#[test]
+fn a_glossary_edited_into_something_invalid_is_ignored() {
+    use super::transcription_settings::glossary_source;
+    let paths = paths("glossary-invalid");
+    let saved = SavedTranscriptionSettings {
+        glossary: vec!["line\nbreak".to_owned()],
+        ..SavedTranscriptionSettings::default()
+    };
+    save_settings(&paths.settings_file, &saved).unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(glossary_source(paths.settings_file.clone())(), None);
 }

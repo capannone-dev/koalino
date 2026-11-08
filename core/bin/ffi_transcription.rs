@@ -38,6 +38,9 @@ use crate::{
         load_settings, save_settings, test_openai_key, validated_key,
     },
 };
+use crate::{
+    domain::transcription_glossary::TranscriptionGlossary, transcription_settings::save_glossary,
+};
 
 const STATUS_OK: c_int = 0;
 const STATUS_INVALID: c_int = 1;
@@ -210,6 +213,7 @@ fn settings_json() -> String {
             "efficient": suggestion.efficient,
             "reason": suggestion.reason,
         },
+        "glossary": saved.glossary,
         "efficient": {
             "gpu_name": efficient_gpu_name,
             "enabled": saved.efficient_gpu,
@@ -300,6 +304,33 @@ pub unsafe extern "C" fn note_taker_set_whisper_model(file_name: *const c_char) 
         return STATUS_INVALID;
     }
     update_settings(|saved| saved.whisper_model = Some(file_name.to_owned()))
+}
+
+/// Saves the glossary of names and terms Whisper is prompted with, from the next recording on.
+///
+/// Inputs: The terms, one per line (blank lines are ignored; an empty text clears it).
+/// Outputs: 0, 1 when a term is too long or the terms together are (see
+/// `TranscriptionGlossary::parse`), or 2 when the file can't be written.
+/// Side effects: Stores the glossary. The pipeline is not rebuilt: each recording reads it when it
+/// starts. The terms are user content and are never logged.
+///
+/// # Safety
+/// `terms` must be null or a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_set_glossary(terms: *const c_char) -> c_int {
+    let Some(terms) = (unsafe { text_argument(terms) }) else {
+        return STATUS_INVALID;
+    };
+    let Ok(glossary) = TranscriptionGlossary::parse(terms.lines()) else {
+        return STATUS_INVALID;
+    };
+    match save_glossary(&paths().settings_file, &glossary) {
+        Ok(()) => STATUS_OK,
+        Err(error) => {
+            tracing::warn!(error = %error, "unable to store the glossary");
+            STATUS_FAILED
+        }
+    }
 }
 
 /// Turns efficient mode on or off for the next recording.

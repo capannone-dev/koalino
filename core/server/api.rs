@@ -87,6 +87,8 @@ pub struct ServerAppState {
     /// This device and the speech it holds, for meetings' combining status (#88); `None` says
     /// nothing is held here.
     recording_device: Option<Arc<RecordingDeviceState>>,
+    /// The transcription settings file holding the glossary; `None` makes its routes answer 503.
+    settings_file: Option<Arc<std::path::PathBuf>>,
 }
 
 /// This device as the meetings name it, and the speech it holds for the after-meeting pass.
@@ -120,6 +122,7 @@ impl ServerAppState {
             deletion_hooks: None,
             project_files: None,
             recording_device: None,
+            settings_file: None,
         }
     }
 
@@ -181,6 +184,19 @@ impl ServerAppState {
     pub fn with_p2p_control(mut self, p2p_control: Arc<dyn P2pControl>) -> Self {
         self.p2p_control = Some(p2p_control);
         self
+    }
+
+    /// Attaches the transcription settings file, which the glossary routes read and write.
+    ///
+    /// Side effects: None; without it those routes answer 503.
+    pub fn with_settings_file(mut self, settings_file: std::path::PathBuf) -> Self {
+        self.settings_file = Some(Arc::new(settings_file));
+        self
+    }
+
+    /// The attached settings file, if any.
+    pub(super) fn settings_file(&self) -> Option<std::path::PathBuf> {
+        self.settings_file.as_deref().cloned()
     }
 
     /// Attaches the process's log control, which the Settings routes use.
@@ -304,6 +320,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .merge(super::p2p_routes::routes())
         .merge(super::project_routes::routes())
         .merge(super::log_routes::routes())
+        .merge(super::glossary_routes::routes())
         // Innermost of the three layers, so CORS still answers preflights for allowed origins
         // and refusals are traced.
         .layer(middleware::from_fn(reject_cross_site_requests))

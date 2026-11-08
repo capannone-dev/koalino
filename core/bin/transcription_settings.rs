@@ -15,7 +15,11 @@ use crate::{
     adapters::keychain::{
         platform_keychain::PlatformKeychain, sealed_file_keychain::SealedFileKeychain,
     },
-    domain::{errors::CryptoError, whisper_catalog::find_whisper_model},
+    application::pipeline::pipeline_factory::GlossarySource,
+    domain::{
+        errors::CryptoError, transcription_glossary::TranscriptionGlossary,
+        whisper_catalog::find_whisper_model,
+    },
     pipeline_composition::{PipelineConfig, TranscriptionProvider, WHISPER_MODEL_VARIABLE},
     ports::crypto::KeychainStore,
 };
@@ -56,6 +60,9 @@ pub struct SavedTranscriptionSettings {
     /// The catalog file name of the model for that pass; `None` uses the live model.
     #[serde(default)]
     pub transcript_pass_model: Option<String>,
+    /// Names and terms Whisper is prompted with, in the owner's order (user content, never logged).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub glossary: Vec<String>,
 }
 
 /// Where the settings, downloaded models and sealed key live.
@@ -87,12 +94,11 @@ impl TranscriptionPaths {
             .map_or_else(PathBuf::new, Path::to_path_buf);
         let mut gpu_attempt_marker = database_path.clone().into_os_string();
         gpu_attempt_marker.push(".gpu-attempt");
-        let mut settings_file = database_path.into_os_string();
-        settings_file.push(".transcription-settings.json");
+        let settings_file = settings_file_for(&database_path);
         let key_directory = setting("NOTE_TAKER_ENCRYPTION_KEY_DIR")
             .map_or_else(|| data_directory.join("keys"), PathBuf::from);
         Self {
-            settings_file: PathBuf::from(settings_file),
+            settings_file,
             models_directory: data_directory.join("models"),
             sealed_key_file: key_directory.join("openai_key.sealed"),
             shipped_model: setting(WHISPER_MODEL_VARIABLE).map(PathBuf::from),
@@ -158,6 +164,51 @@ pub fn save_settings(
     let temporary = settings_file.with_extension("json.tmp");
     fs::write(&temporary, bytes)?;
     fs::rename(&temporary, settings_file)
+}
+
+/// Returns the settings file kept beside a database: `<database>.transcription-settings.json`.
+///
+/// Side effects: None.
+pub fn settings_file_for(database_path: &Path) -> PathBuf {
+    let mut settings_file = database_path.as_os_str().to_owned();
+    settings_file.push(".transcription-settings.json");
+    PathBuf::from(settings_file)
+}
+
+/// Reads the saved glossary.
+///
+/// Outputs: The glossary, or `None` when there is none or the file holds one that is not valid
+/// (edited by hand, for example), which is logged without its terms. Side effects: None.
+pub fn saved_glossary(saved: &SavedTranscriptionSettings) -> Option<TranscriptionGlossary> {
+    if saved.glossary.is_empty() {
+        return None;
+    }
+    match TranscriptionGlossary::parse(saved.glossary.iter().map(String::as_str)) {
+        Ok(glossary) => Some(glossary).filter(|glossary| !glossary.is_empty()),
+        Err(error) => {
+            tracing::warn!(error = %error, "the saved glossary is not valid; transcribing without it");
+            None
+        }
+    }
+}
+
+/// Builds the source recordings and the after-meeting pass read the glossary from.
+///
+/// Inputs: The settings file. Outputs: A source that reads the file on each call, so a glossary
+/// saved by any app, the CLI or the web applies to the next recording. Side effects: None until
+/// called; each call reads the file.
+pub fn glossary_source(settings_file: PathBuf) -> GlossarySource {
+    std::sync::Arc::new(move || saved_glossary(&load_settings(&settings_file)))
+}
+
+/// Saves the glossary, keeping every other saved choice.
+///
+/// Inputs: The settings file and the glossary (empty clears it).
+/// Outputs: `Ok(())` or the write error. Side effects: Rewrites the file atomically.
+pub fn save_glossary(settings_file: &Path, glossary: &TranscriptionGlossary) -> io::Result<()> {
+    let mut saved = load_settings(settings_file);
+    saved.glossary = glossary.terms().to_vec();
+    save_settings(settings_file, &saved)
 }
 
 /// Layers the saved choices over a configuration.

@@ -57,6 +57,8 @@ struct MockCliService {
     paired_device_rows: Vec<PairedDeviceRow>,
     /// Selectors passed to `revoke_device`.
     revoked_devices: Vec<String>,
+    /// The glossary as saved through the service.
+    glossary: Vec<String>,
 }
 
 /// The arguments of one `start_recording` call.
@@ -174,6 +176,13 @@ impl CliService for MockCliService {
     fn revoke_device(&mut self, device: &str) -> Result<String, String> {
         self.revoked_devices.push(device.to_owned());
         Ok(String::from("device removed"))
+    }
+    fn glossary(&self) -> Result<Vec<String>, String> {
+        Ok(self.glossary.clone())
+    }
+    fn save_glossary(&mut self, terms: &[String]) -> Result<(), String> {
+        self.glossary = terms.to_vec();
+        Ok(())
     }
     fn export_meeting(
         &self,
@@ -1580,4 +1589,60 @@ fn core_service_lists_a_combined_meeting_once_and_splits_it() {
         ))
     );
     assert!(apart.contains("meeting-phone |"), "{apart}");
+}
+
+/// Runs one CLI invocation against `cli_service`.
+fn run(arguments: &[&str], cli_service: &mut MockCliService) -> Result<String, String> {
+    let parsed_cli = Cli::try_parse_from(arguments.iter().copied())
+        .unwrap_or_else(|error| panic!("{arguments:?} must parse: {error}"));
+    dispatch(parsed_cli.command, cli_service)
+}
+
+/// Verifies the glossary can be set, extended, trimmed, shown and cleared from the CLI.
+#[test]
+fn the_glossary_is_edited_term_by_term() {
+    let mut cli_service = MockCliService::default();
+
+    run(
+        &["note-taker", "glossary", "set", "Marco Rossi", "OKR"],
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    run(
+        &["note-taker", "glossary", "add", "Kubernetes", "okr"],
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(cli_service.glossary, ["Marco Rossi", "OKR", "Kubernetes"]);
+    run(
+        &["note-taker", "glossary", "remove", "OKR"],
+        &mut cli_service,
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let shown = run(&["note-taker", "glossary", "show"], &mut cli_service)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(shown, "Marco Rossi\nKubernetes");
+    run(&["note-taker", "glossary", "clear"], &mut cli_service)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(cli_service.glossary.is_empty());
+    assert_eq!(
+        run(&["note-taker", "glossary", "show"], &mut cli_service),
+        Ok(String::from("The glossary is empty."))
+    );
+}
+
+/// Verifies an invalid glossary is refused with the reason and nothing is saved.
+#[test]
+fn an_invalid_glossary_is_refused() {
+    let mut cli_service = MockCliService::default();
+    let long_term = "x".repeat(61);
+
+    let result = run(
+        &["note-taker", "glossary", "set", &long_term],
+        &mut cli_service,
+    );
+
+    assert!(result.is_err_and(|error| error.contains("60 characters")));
+    assert!(cli_service.glossary.is_empty());
 }

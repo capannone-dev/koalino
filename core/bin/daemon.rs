@@ -120,6 +120,9 @@ async fn main() -> Result<()> {
             note_taker_core::refinement_worker::retained_audio_directory(&database_path),
         )
         .with_log_control(Arc::clone(&log_control) as Arc<dyn LogControl>)
+        .with_settings_file(note_taker_core::transcription_settings::settings_file_for(
+            &database_path,
+        ))
         .with_deletion_hooks(Arc::new(local_meeting_files))
         .with_project_files(project_files);
     if let Some(p2p_task) = &p2p_task {

@@ -273,7 +273,9 @@ names a group's voices as one person, and `note_taker_prepare_cluster_review_cli
 All return caller-freed JSON; see `API_SPECS.md`.
 
 `transcription_settings.rs` keeps Settings' Whisper model, provider and OpenAI key, and `ffi_transcription.rs`
-exposes them over the C ABI (#67). `cloud_fallback.rs` transcribes a chunk locally when OpenAI fails, and
+exposes them over the C ABI (#67). The same file keeps the transcription glossary: `glossary_source`
+reads it fresh for each recording and after-meeting pass (`pipeline_composition.rs` wires both), and
+`note_taker_set_glossary(terms)` saves newline-separated terms (0 saved, 1 refused, 2 failed). `cloud_fallback.rs` transcribes a chunk locally when OpenAI fails, and
 `device_resources.rs` reads free disk space and total memory.
 
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`

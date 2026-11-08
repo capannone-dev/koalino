@@ -89,6 +89,9 @@ fn main() -> Result<()> {
     let mut cli_service =
         CoreCliService::new(recording_control, repository, voice_store, export_writer)
             .with_log_level_control(LogLevelControlFile::for_database(&database_path))
+            .with_settings_file(note_taker_core::transcription_settings::settings_file_for(
+                &database_path,
+            ))
             .with_deletion_hooks(Box::new(LocalMeetingFiles::for_database(&database_path)))
             .with_recording_device(
                 recording_device_id,

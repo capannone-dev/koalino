@@ -77,6 +77,12 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
     `{"error_code":"no_logs"}`. It writes through a per-request temporary directory that it removes.
   - Without a log control every route returns `503`. `log_routes_tests.rs` covers each case and
     the CORS preflight.
+- The transcription glossary (`glossary_routes.rs`) lives in the settings file that
+  `ServerAppState::with_settings_file` names:
+  - `GET /api/settings/glossary` returns `{"terms":[...]}`.
+  - `PUT /api/settings/glossary` with `{"terms":[...]}` saves the cleaned list and returns it;
+    an invalid list returns `400` `{"error_code":"invalid_glossary"}`, a write failure `500`
+    `save_failed`, and a daemon without a settings file `503` `unavailable`. Terms are never logged.
 - `GET /api/telemetry` returns `task_count`, `total_duration_ms`, and `average_latency_ms`.
 - `GET /api/devices` returns telemetry-observed devices with `device_id`, feature-gated
   `supports_vad`, observed `supported_models`, and epoch-millisecond `last_seen`. Device data is

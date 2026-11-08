@@ -45,6 +45,7 @@ note-taker devices list
 note-taker devices revoke <peer-id|name>
 note-taker telemetry
 note-taker log-level <error|warn|info|debug|trace|directive>
+note-taker glossary [show | set <term>... | add <term>... | remove <term>... | clear]
 note-taker [--log-level <level>] <command> ...
 ```
 
@@ -159,3 +160,11 @@ The recording ends when the input ends, on Ctrl+C, or when another terminal runs
 prints `Recording (meeting …, pid …)` or `Idle`. Without a transcription engine, `record start`
 fails with the variables to set. The stop request is noticed between 100 ms input blocks, so a
 silent stdin pipe that delivers no data delays it.
+
+## Transcription glossary
+
+`glossary` shows or edits the names and terms that steer transcription, kept in
+`<database>.transcription-settings.json` next to the apps' other transcription choices. Each
+argument is one term (quote multi-word names). `remove` ignores case. A change applies from the
+next recording and to the next after-meeting pass. An invalid list (a term over 60 characters,
+or more than 500 characters in all) is refused and the saved one kept.

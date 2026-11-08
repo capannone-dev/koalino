@@ -26,6 +26,7 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 
+use crate::transcription_settings::settings_file_for;
 use crate::{
     adapters::{
         ai::openai_whisper_adapter::{
@@ -828,6 +829,9 @@ pub fn spawn_recording_controller(
     let default_language = config.transcription_language();
     let worker_database_path = database_path.to_path_buf();
     let worker_device_id = device_id.clone();
+    // Read as each recording starts, so a glossary saved anywhere applies to the next one.
+    let glossary_source =
+        crate::transcription_settings::glossary_source(settings_file_for(database_path));
     let recording_manager = RecordingManager::spawn(move || -> Result<_> {
         let selected_engine = match select_transcription_engine(&config, &engine_audio_store) {
             Ok(engine) => Some(engine),
@@ -883,7 +887,8 @@ pub fn spawn_recording_controller(
             .with_diarization_engine(diarization_engine)
             .with_voice_matcher(Some(VoiceIdentityManager::new(voice_store)))
             .with_task_metrics(task_metrics)
-            .with_default_language(Some(default_language)))
+            .with_default_language(Some(default_language))
+            .with_glossary_source(Some(glossary_source)))
     })?;
     // Recordings without a chosen language carry the configured one, so it is recorded too.
     let controller = RecordingController::new(
@@ -968,6 +973,9 @@ pub fn start_transcript_pass(
                 repository_opener(),
                 device_id.clone(),
             )
+            .with_glossary_source(crate::transcription_settings::glossary_source(
+                settings_file_for(database_path),
+            ))
         }
         None => RefinementWorker::without_pass(
             Arc::clone(&store),
