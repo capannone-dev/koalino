@@ -11,8 +11,8 @@ is imported.
 
 | File | Purpose |
 | --- | --- |
-| `meeting_session.rs` | `MeetingSession`: per-recording orchestration of local VAD chunks and external bridge chunks. |
-| `alignment.rs` | Pure timestamp alignment and transcript text distribution against VAD chunk boundaries. |
+| `meeting_session.rs` | `MeetingSession`: per-recording orchestration of local VAD chunks and external bridge chunks. Each chunk's overlap spans (from `diarize_with_overlap`) are kept in meeting time and recorded with the meeting. Live and final segments carry their confidence marks: overlap, a guessed speaker (a weak match, or no voice nearby), and unclear words (#90, #91). |
+| `alignment.rs` | Pure timestamp alignment and transcript text distribution against VAD chunk boundaries; each aligned region lists its unclear words. |
 | `pipeline_factory.rs` | `PipelineFactory`: the composition root that owns the pipeline ports once and opens one session per recording. Its `GlossarySource` is read when each session opens, so a saved glossary applies from the next recording without rebuilding anything; the session prompts every chunk with it and drops its echo. |
 | `tests.rs` | Mock-port TDD specification plus an in-memory SQLite integration test of a three-chunk meeting. |
 | `pipeline_factory_tests.rs` | Factory availability, graceful degradation, meeting creation, engine reuse, and clustering policy. |

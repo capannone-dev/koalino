@@ -123,6 +123,8 @@ impl TranscriptionEngine for MockTranscriptionEngine {
 struct MockDiarizationEngine {
     scripted_results: Mutex<Vec<Result<Vec<SpeakerSegment>, DiarizationError>>>,
     call_count: Arc<AtomicUsize>,
+    /// Chunk-relative overlap reported with every successful result (#90).
+    overlap: Vec<crate::domain::transcript_confidence::OverlapSpan>,
 }
 
 impl MockDiarizationEngine {
@@ -134,7 +136,17 @@ impl MockDiarizationEngine {
         Self {
             scripted_results: Mutex::new(scripted_results.into_iter().rev().collect()),
             call_count,
+            overlap: Vec::new(),
         }
+    }
+
+    /// Reports `overlap` with every successful result.
+    fn with_overlap(
+        mut self,
+        overlap: Vec<crate::domain::transcript_confidence::OverlapSpan>,
+    ) -> Self {
+        self.overlap = overlap;
+        self
     }
 }
 
@@ -148,6 +160,17 @@ impl DiarizationEngine for MockDiarizationEngine {
             .map_err(|_| DiarizationError::Unavailable)?
             .pop()
             .unwrap_or(Err(DiarizationError::Unavailable))
+    }
+
+    /// Adds the scripted overlap to the next result.
+    async fn diarize_with_overlap(
+        &self,
+        audio_bytes: &[u8],
+    ) -> Result<crate::ports::ai::DiarizedChunk, DiarizationError> {
+        Ok(crate::ports::ai::DiarizedChunk {
+            segments: self.diarize(audio_bytes).await?,
+            overlap: self.overlap.clone(),
+        })
     }
 
     /// Reports no voice windows, so the final pass leaves the live result alone.
@@ -190,6 +213,8 @@ struct MockNoteRepository {
     saved_clips: RefCell<Vec<UnassignedVoiceClip>>,
     /// Each recorded transcription language with the offset it was first used at.
     recorded_languages: RefCell<Vec<(TranscriptionLanguage, u64)>>,
+    /// Overlap spans recorded for the meeting, in meeting time (#90).
+    recorded_overlap: RefCell<Vec<crate::domain::transcript_confidence::OverlapSpan>>,
 }
 
 impl NoteRepository for MockNoteRepository {
@@ -203,6 +228,16 @@ impl NoteRepository for MockNoteRepository {
         self.recorded_languages
             .borrow_mut()
             .push((language, first_used_at_ms));
+        Ok(())
+    }
+
+    /// Captures overlap spans for assertions.
+    fn record_overlap_spans(
+        &self,
+        _meeting_id: &MeetingId,
+        spans: &[crate::domain::transcript_confidence::OverlapSpan],
+    ) -> Result<(), StorageError> {
+        self.recorded_overlap.borrow_mut().extend_from_slice(spans);
         Ok(())
     }
 
@@ -1806,4 +1841,74 @@ async fn the_glossary_prompts_each_chunk_and_its_echo_is_dropped() {
             Some("Marco Rossi, OKR.".to_owned())
         ]
     );
+}
+
+/// Verifies diarized overlap marks the segments it covers, a weak voice match marks the speaker
+/// as uncertain, and the overlap is kept with the meeting in meeting time (#90, #91).
+#[tokio::test]
+async fn overlap_and_a_weak_voice_match_mark_the_live_segments() {
+    use crate::domain::transcript_confidence::OverlapSpan;
+    let call_count = Arc::new(AtomicUsize::new(0));
+    let diarizer = MockDiarizationEngine::scripted(
+        vec![Ok(vec![
+            SpeakerSegment::new(0, 2_000, vec![1.0]),
+            SpeakerSegment::new(2_000, 4_000, vec![0.5]),
+        ])],
+        Arc::clone(&call_count),
+    )
+    .with_overlap(vec![OverlapSpan::new(500, 1_500)]);
+    let mut session = MeetingSession::start(
+        MeetingId::new(MEETING_ID),
+        MockTranscriptionEngine::returning(&["one two three four"]),
+        Some(diarizer),
+        MockVoiceIdentityMatcher {
+            known_identity_id: Uuid::new_v4(),
+            weak_candidate_id: Uuid::new_v4(),
+        },
+        MockNoteRepository::default(),
+    )
+    .unwrap_or_else(|error| panic!("session should start: {error}"));
+
+    let segments = session
+        .process_vad_chunk(&vad_chunk(1, 10_000, 14_000))
+        .await
+        .unwrap_or_else(|error| panic!("processing should succeed: {error}"));
+
+    let marks: Vec<(bool, bool)> = segments
+        .iter()
+        .map(|segment| {
+            let confidence = segment.segment().confidence();
+            (confidence.overlapping_speech, confidence.uncertain_speaker)
+        })
+        .collect();
+    assert_eq!(marks, [(true, false), (false, true)]);
+    assert_eq!(
+        *session.note_repository().recorded_overlap.borrow(),
+        [OverlapSpan::new(10_500, 11_500)]
+    );
+}
+
+/// Verifies the words the engine was unsure of are marked by their place in the region text (#91).
+#[test]
+fn alignment_marks_the_uncertain_words_of_each_region() {
+    let known = |id: u128| SpeakerAttribution::Known {
+        identity_id: Uuid::from_u128(id),
+    };
+    let chunk_bounds = ChunkBounds::new(0, 2_000)
+        .unwrap_or_else(|error| panic!("bounds should be valid: {error}"));
+    let regions = vec![
+        SpeakerRegion::new(0, 1_000, known(1)),
+        SpeakerRegion::new(1_000, 2_000, known(2)),
+    ];
+    let timed = Transcript::new(MeetingId::new("meeting"), "a b c d").with_timed_words(vec![
+        TimedWord::new("a", 0, 100).with_probability(0.9),
+        TimedWord::new("b", 100, 200).with_probability(0.2),
+        TimedWord::new("c", 1_100, 1_200).with_probability(0.1),
+        TimedWord::new("d", 1_500, 1_600),
+    ]);
+
+    let regions = align_transcript(chunk_bounds, regions, &timed);
+
+    assert_eq!(regions[0].uncertain_words(), [1]);
+    assert_eq!(regions[1].uncertain_words(), [0]);
 }

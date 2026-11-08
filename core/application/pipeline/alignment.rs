@@ -8,7 +8,10 @@
 
 use uuid::Uuid;
 
-use crate::domain::models::{TimedWord, Transcript};
+use crate::domain::{
+    models::{TimedWord, Transcript},
+    transcript_confidence::uncertain_word_indices,
+};
 
 /// Reports VAD boundaries whose end precedes their start.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -171,6 +174,8 @@ pub struct AlignedRegion {
     end_time_ms: u64,
     attribution: SpeakerAttribution,
     text: String,
+    /// Positions of the words in `text` the engine was unsure of (#91).
+    uncertain_words: Vec<u16>,
 }
 
 impl AlignedRegion {
@@ -192,6 +197,11 @@ impl AlignedRegion {
     /// Borrows the transcript words assigned to this region.
     pub fn text(&self) -> &str {
         &self.text
+    }
+
+    /// Borrows the positions, within `text`, of the words the engine was unsure of (#91).
+    pub fn uncertain_words(&self) -> &[u16] {
+        &self.uncertain_words
     }
 }
 
@@ -235,6 +245,7 @@ pub fn align_chunk_regions(
             end_time_ms: chunk_bounds.start_offset_ms() + region.end_time_ms,
             attribution: region.attribution,
             text: region_words.join(" "),
+            uncertain_words: Vec::new(),
         });
     }
     aligned_regions
@@ -272,7 +283,7 @@ pub fn align_timed_words(
     timed_words: &[TimedWord],
 ) -> Vec<AlignedRegion> {
     let tiled_regions = chunk_tiling(speaker_regions, chunk_bounds.duration_ms());
-    let mut region_words: Vec<Vec<&str>> = vec![Vec::new(); tiled_regions.len()];
+    let mut region_words: Vec<Vec<&TimedWord>> = vec![Vec::new(); tiled_regions.len()];
     let mut current_region_index = 0;
     for timed_word in timed_words {
         let midpoint_ms = timed_word.midpoint_ms();
@@ -281,7 +292,7 @@ pub fn align_timed_words(
         {
             current_region_index += 1;
         }
-        region_words[current_region_index].push(timed_word.text());
+        region_words[current_region_index].push(timed_word);
     }
     tiled_regions
         .into_iter()
@@ -291,7 +302,12 @@ pub fn align_timed_words(
             start_time_ms: chunk_bounds.start_offset_ms() + region.start_time_ms,
             end_time_ms: chunk_bounds.start_offset_ms() + region.end_time_ms,
             attribution: region.attribution,
-            text: words.join(" "),
+            text: words
+                .iter()
+                .map(|word| word.text())
+                .collect::<Vec<_>>()
+                .join(" "),
+            uncertain_words: uncertain_word_indices(words.iter().copied()),
         })
         .collect()
 }

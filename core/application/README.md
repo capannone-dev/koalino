@@ -358,7 +358,10 @@ chunks end to end into windows of up to 30 s (`REFINEMENT_WINDOW_MS`, Whisper's 
 maps window time back to meeting time. `refine_meeting` transcribes each window through the
 `TranscriptionEngine` port, prompting it with the previous window's text, then
 `reattribute_words` gives each word the speaker of the final speaker pass at its midpoint and
-groups words into segments (split at pauses over 2 s, at most 20 s). Segments outside the retained
+groups words into segments (split at pauses over 2 s, at most 20 s). Each new segment marks its
+unclear words, a guessed speaker (the nearest speaker segment was itself a guess, or lies more
+than 2 s away), and the overlap the recording kept with the meeting (#90, #91); the combined pass
+joins every recording's overlap on the first one's timeline. Segments outside the retained
 audio are kept. Nothing is saved until every window is done, and `cancelled` is polled before each
 one. Saving goes through `save_transcript_segments`, so the meeting document syncs as usual.
 

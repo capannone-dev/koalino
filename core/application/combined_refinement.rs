@@ -25,10 +25,13 @@ use crate::{
         same_meeting::{RecordingText, comparison_key, recognise_same_meeting},
         transcript_refinement::{
             ChunkSpan, MeetingWord, RefinementChunk, RefinementError, RefinementOutcome, Speaker,
-            segments_of, speaker_at, transcribe_chunks,
+            overlap_of, segments_of, speaker_with_doubt, transcribe_chunks,
         },
     },
-    domain::models::{DeviceId, MeetingId, RecordingId, TranscriptSegment},
+    domain::{
+        models::{DeviceId, MeetingId, RecordingId, TranscriptSegment},
+        transcript_confidence::{mark_overlapping_segments, merge_overlap_spans},
+    },
     ports::{ai::TranscriptionEngine, storage::NoteRepository},
 };
 
@@ -50,6 +53,8 @@ struct PlacedWord {
     word: MeetingWord,
     speaker: Speaker,
     source: usize,
+    /// The word's speaker is a guess (#91).
+    doubtful: bool,
 }
 
 /// Builds the meeting's segments from several recordings' words.
@@ -69,7 +74,7 @@ pub fn combine_sources(
             map_speakers(words, root.speakers)
         };
         for word in &words.words {
-            let own = speaker_at(words.speakers, word.midpoint_ms());
+            let (own, doubtful) = speaker_with_doubt(words.speakers, word.midpoint_ms());
             let speaker = if source == 0 {
                 own
             } else {
@@ -79,6 +84,7 @@ pub fn combine_sources(
                 word: word.shifted(words.offset_ms),
                 speaker,
                 source,
+                doubtful,
             });
         }
     }
@@ -126,7 +132,9 @@ pub fn combine_sources(
     }
     segments_of(
         meeting_id,
-        written.into_iter().map(|word| (&word.word, word.speaker)),
+        written
+            .into_iter()
+            .map(|word| (&word.word, word.speaker, word.doubtful)),
     )
 }
 
@@ -292,7 +300,19 @@ where
         .filter(|segment| !covered(segment))
         .cloned()
         .collect();
-    let combined = combine_sources(&root.meeting_id, &root_source, &member_sources);
+    // Overlap any recording heard, on the first recording's timeline (#90).
+    let mut overlap = Vec::new();
+    for (recording, (_, _, offset_ms)) in std::iter::once(root).chain(members).zip(&transcribed) {
+        overlap.extend(
+            overlap_of(repository, &recording.meeting_id)
+                .into_iter()
+                .map(|span| span.shifted(*offset_ms)),
+        );
+    }
+    let combined = mark_overlapping_segments(
+        combine_sources(&root.meeting_id, &root_source, &member_sources),
+        &merge_overlap_spans(overlap),
+    );
     let segment_count = combined.len();
     let mut timeline = kept;
     timeline.extend(combined);

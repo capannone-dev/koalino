@@ -16,6 +16,9 @@ use crate::{
             AudioRecording, DeviceId, MeetingId, RecordingId, TranscriptSegment,
             TranscriptionContext,
         },
+        transcript_confidence::{
+            OverlapSpan, SegmentConfidence, is_uncertain_probability, mark_overlapping_segments,
+        },
         transcription_language::TranscriptionLanguage,
     },
     ports::{ai::TranscriptionEngine, storage::NoteRepository},
@@ -33,6 +36,8 @@ const SEGMENT_MAX_MS: u64 = 20_000;
 /// on the AMI test meetings the pass raised speaker error from 48.2% to 58.9% in a replay, and a
 /// 1 s cap brought it to 47.0% (NOTSOFAR unchanged, 41.9% to 41.8%; `DECISION_LOG.md`).
 const WORD_MAX_MS: u64 = 1_000;
+/// A word further than this from every speaker segment has a guessed speaker (#91).
+const SPEAKER_DOUBT_MS: u64 = 2_000;
 
 /// One speech chunk's place in the meeting, in milliseconds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -132,6 +137,8 @@ pub struct MeetingWord {
     text: String,
     start_ms: u64,
     end_ms: u64,
+    /// The engine was unsure of the word (#91).
+    uncertain: bool,
 }
 
 impl MeetingWord {
@@ -142,7 +149,19 @@ impl MeetingWord {
             text: text.into(),
             start_ms,
             end_ms: end_ms.clamp(start_ms, start_ms.saturating_add(WORD_MAX_MS)),
+            uncertain: false,
         }
+    }
+
+    /// Marks whether the engine was unsure of the word (#91). Side effects: None.
+    pub fn with_uncertain(mut self, uncertain: bool) -> Self {
+        self.uncertain = uncertain;
+        self
+    }
+
+    /// Reports whether the engine was unsure of the word.
+    pub fn is_uncertain(&self) -> bool {
+        self.uncertain
     }
 
     /// Returns the word as written.
@@ -167,6 +186,7 @@ impl MeetingWord {
             text: self.text.clone(),
             start_ms: shift(self.start_ms),
             end_ms: shift(self.end_ms),
+            uncertain: self.uncertain,
         }
     }
 
@@ -179,19 +199,25 @@ impl MeetingWord {
 /// Who a stretch of the meeting belongs to: a named person, an unknown voice, or neither.
 pub(crate) type Speaker = (Option<Uuid>, Option<Uuid>);
 
-/// Returns the speaker of the segment containing `time_ms`, else of the nearest segment.
-pub(crate) fn speaker_at(speakers: &[TranscriptSegment], time_ms: u64) -> Speaker {
+/// Returns the speaker of the segment containing `time_ms`, else of the nearest segment, and
+/// whether it is a guess (#91): that segment's own speaker was uncertain, or none lies within
+/// `SPEAKER_DOUBT_MS`.
+pub(crate) fn speaker_with_doubt(speakers: &[TranscriptSegment], time_ms: u64) -> (Speaker, bool) {
+    let distance = |segment: &TranscriptSegment| {
+        if time_ms < segment.start_time_ms() {
+            segment.start_time_ms() - time_ms
+        } else {
+            time_ms.saturating_sub(segment.end_time_ms())
+        }
+    };
     speakers
         .iter()
-        .min_by_key(|segment| {
-            if time_ms < segment.start_time_ms() {
-                segment.start_time_ms() - time_ms
-            } else {
-                time_ms.saturating_sub(segment.end_time_ms())
-            }
-        })
-        .map_or((None, None), |segment| {
-            (segment.speaker_identity_id(), segment.unknown_cluster_id())
+        .min_by_key(|segment| distance(segment))
+        .map_or(((None, None), false), |segment| {
+            (
+                (segment.speaker_identity_id(), segment.unknown_cluster_id()),
+                segment.confidence().uncertain_speaker || distance(segment) > SPEAKER_DOUBT_MS,
+            )
         })
 }
 
@@ -208,51 +234,108 @@ pub fn reattribute_words(
 ) -> Vec<TranscriptSegment> {
     segments_of(
         meeting_id,
-        words
-            .iter()
-            .map(|word| (word, speaker_at(speakers, word.midpoint_ms()))),
+        words.iter().map(|word| {
+            let (speaker, doubtful) = speaker_with_doubt(speakers, word.midpoint_ms());
+            (word, speaker, doubtful)
+        }),
     )
 }
 
 /// Groups words, each with its speaker, into segments.
 ///
-/// Inputs: The meeting and its words in time order, each with who said it.
+/// Inputs: The meeting and its words in time order, each with who said it and whether that is a
+/// guess.
 /// Outputs: Segments of consecutive words with one speaker, split at pauses over 2 s and kept
-/// within 20 s; blank words are dropped. Side effects: None.
+/// within 20 s; blank words are dropped. Each segment marks its uncertain words, and its speaker
+/// as uncertain when any of its words' speaker was a guess (#91); overlap is marked afterwards.
+/// Side effects: None.
 pub(crate) fn segments_of<'word>(
     meeting_id: &MeetingId,
-    words: impl IntoIterator<Item = (&'word MeetingWord, Speaker)>,
+    words: impl IntoIterator<Item = (&'word MeetingWord, Speaker, bool)>,
 ) -> Vec<TranscriptSegment> {
-    let mut runs: Vec<(Speaker, u64, u64, Vec<&str>)> = Vec::new();
-    for (word, speaker) in words {
+    struct Run<'text> {
+        speaker: Speaker,
+        start_ms: u64,
+        end_ms: u64,
+        texts: Vec<&'text str>,
+        uncertain: Vec<u16>,
+        doubtful: bool,
+    }
+    let mut runs: Vec<Run<'_>> = Vec::new();
+    for (word, speaker, doubtful) in words {
         let text = word.text.trim();
         if text.is_empty() {
             continue;
         }
-        match runs.last_mut() {
-            Some(run)
-                if run.0 == speaker
-                    && word.start_ms.saturating_sub(run.2) <= SEGMENT_PAUSE_MS
-                    && word.end_ms.saturating_sub(run.1) <= SEGMENT_MAX_MS =>
-            {
-                run.2 = run.2.max(word.end_ms);
-                run.3.push(text);
+        let joins = runs.last().is_some_and(|run| {
+            run.speaker == speaker
+                && word.start_ms.saturating_sub(run.end_ms) <= SEGMENT_PAUSE_MS
+                && word.end_ms.saturating_sub(run.start_ms) <= SEGMENT_MAX_MS
+        });
+        if !joins {
+            runs.push(Run {
+                speaker,
+                start_ms: word.start_ms,
+                end_ms: word.end_ms,
+                texts: Vec::new(),
+                uncertain: Vec::new(),
+                doubtful: false,
+            });
+        }
+        if let Some(run) = runs.last_mut() {
+            if word.uncertain {
+                let position = run
+                    .texts
+                    .iter()
+                    .map(|text| text.split_whitespace().count())
+                    .sum::<usize>();
+                run.uncertain.extend(
+                    (position..position + text.split_whitespace().count())
+                        .map(|word| u16::try_from(word).unwrap_or(u16::MAX)),
+                );
             }
-            _ => runs.push((speaker, word.start_ms, word.end_ms, vec![text])),
+            run.end_ms = run.end_ms.max(word.end_ms);
+            run.texts.push(text);
+            run.doubtful |= doubtful;
         }
     }
     runs.into_iter()
-        .map(|((identity_id, cluster_id), start_ms, end_ms, texts)| {
+        .map(|run| {
+            let (identity_id, cluster_id) = run.speaker;
             TranscriptSegment::new(
                 meeting_id.clone(),
-                start_ms,
-                end_ms,
+                run.start_ms,
+                run.end_ms,
                 identity_id,
-                texts.join(" "),
+                run.texts.join(" "),
             )
             .with_unknown_cluster_id(cluster_id)
+            .with_confidence(SegmentConfidence {
+                overlapping_speech: false,
+                uncertain_speaker: run.doubtful,
+                uncertain_words: run.uncertain,
+            })
         })
         .collect()
+}
+
+/// Reads a meeting's overlapping speech for a pass; a storage failure only leaves it unmarked.
+///
+/// Side effects: Reads the meeting's document; logs a failure without content.
+pub(crate) fn overlap_of<Repository: NoteRepository + ?Sized>(
+    repository: &Repository,
+    meeting_id: &MeetingId,
+) -> Vec<OverlapSpan> {
+    repository
+        .load_overlap_spans(meeting_id)
+        .unwrap_or_else(|error| {
+            tracing::warn!(
+                meeting_id = %meeting_id.as_str(),
+                error = %error,
+                "Could not read overlapping speech; the new transcript does not mark it"
+            );
+            Vec::new()
+        })
 }
 
 /// One retained speech chunk handed to `refine_meeting`.
@@ -339,7 +422,10 @@ where
     };
     let (speakers, kept): (Vec<TranscriptSegment>, Vec<TranscriptSegment>) =
         standing.into_iter().partition(|segment| covered(segment));
-    let refined = reattribute_words(meeting_id, &words, &speakers);
+    let refined = mark_overlapping_segments(
+        reattribute_words(meeting_id, &words, &speakers),
+        &overlap_of(repository, meeting_id),
+    );
     let segment_count = refined.len();
     let mut timeline = kept;
     timeline.extend(refined);
@@ -400,6 +486,7 @@ where
                 window.to_meeting_ms(word.start_ms()),
                 window.to_meeting_ms(word.end_ms()),
             )
+            .with_uncertain(is_uncertain_probability(word.probability_permille()))
         }));
         let text = transcript.content().trim();
         previous_text = (!text.is_empty()).then(|| text.to_owned());

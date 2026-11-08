@@ -209,16 +209,21 @@ mod whole_meeting {
                 return Err(TranscriptionError::Unavailable);
             }
             let words = self.answers.get(call).cloned().unwrap_or_default();
+            // A word written `?word` is one the engine was unsure of.
+            let spelled = |text: &'static str| text.trim_start_matches('?');
             let content = words
                 .iter()
-                .map(|word| word.0)
+                .map(|word| spelled(word.0))
                 .collect::<Vec<_>>()
                 .join(" ");
             Ok(
                 Transcript::new(audio_recording.meeting_id().clone(), content).with_timed_words(
                     words
                         .into_iter()
-                        .map(|(text, start, end)| TimedWord::new(text, start, end))
+                        .map(|(text, start, end)| {
+                            let probability = if text.starts_with('?') { 0.1 } else { 0.9 };
+                            TimedWord::new(spelled(text), start, end).with_probability(probability)
+                        })
                         .collect(),
                 ),
             )
@@ -352,6 +357,73 @@ mod whole_meeting {
             contexts[1].0.as_deref(),
             Some("Buongiorno a tutti."),
             "each window is prompted with the previous one's text"
+        );
+    }
+
+    /// Verifies the pass marks uncertain words, the overlap kept with the meeting, and words far
+    /// from any speaker (#90, #91).
+    #[test]
+    fn the_new_segments_carry_uncertain_words_overlap_and_doubtful_speakers() {
+        use crate::{
+            application::meeting_document::AutomergeMeetingDocumentCodec,
+            domain::transcript_confidence::OverlapSpan,
+        };
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .and_then(|repository| {
+            repository.with_document_codec(std::sync::Arc::new(AutomergeMeetingDocumentCodec))
+        })
+        .unwrap_or_else(|error| panic!("{error}"));
+        let meeting = MeetingId::new("meeting-marks");
+        repository
+            .create_meeting(&meeting, &automerge::AutoCommit::new().save())
+            .unwrap_or_else(|error| panic!("{error}"));
+        let speaker = Some(uuid::Uuid::from_u128(7));
+        repository
+            .save_transcript_segments(
+                &meeting,
+                &[TranscriptSegment::new(
+                    meeting.clone(),
+                    0,
+                    1_000,
+                    speaker,
+                    "live",
+                )],
+            )
+            .unwrap_or_else(|error| panic!("{error}"));
+        repository
+            .record_overlap_spans(&meeting, &[OverlapSpan::new(10_000, 12_000)])
+            .unwrap_or_else(|error| panic!("{error}"));
+        let engine = ScriptedEngine {
+            answers: vec![
+                vec![("Buongiorno", 100, 600), ("?tutti.", 700, 900)],
+                vec![("Parliamo", 500, 1_500), ("insieme.", 1_600, 2_400)],
+            ],
+            ..ScriptedEngine::default()
+        };
+
+        run(&engine, &repository, &meeting, None).unwrap_or_else(|error| panic!("{error}"));
+
+        let segments = repository
+            .load_transcript_segments(&meeting)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let first = &segments[0];
+        assert_eq!(first.text(), "Buongiorno tutti.");
+        assert_eq!(first.confidence().uncertain_words, [1]);
+        assert!(!first.confidence().uncertain_speaker);
+        assert!(!first.confidence().overlapping_speech);
+        let later = segments
+            .iter()
+            .find(|segment| segment.text().starts_with("Parliamo"))
+            .unwrap_or_else(|| panic!("the 40 s chunk's words must be written"));
+        assert!(
+            later.confidence().overlapping_speech,
+            "it lies in the kept overlap"
+        );
+        assert!(
+            later.confidence().uncertain_speaker,
+            "no speaker was heard within seconds of it"
         );
     }
 

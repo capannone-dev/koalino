@@ -13,7 +13,13 @@ use std::{rc::Rc, time::Instant};
 
 use uuid::Uuid;
 
-use crate::domain::transcription_glossary::TranscriptionGlossary;
+use crate::domain::{
+    transcript_confidence::{
+        OverlapSpan, SegmentConfidence, is_uncertain_probability, merge_overlap_spans,
+        overlaps_segment,
+    },
+    transcription_glossary::TranscriptionGlossary,
+};
 use crate::{
     domain::{
         errors::{StorageError, TranscriptionError},
@@ -78,6 +84,24 @@ struct TextPiece {
     start_ms: u64,
     end_ms: u64,
     text: String,
+    /// The engine was unsure of this word (#91); always `false` for a region piece.
+    uncertain: bool,
+}
+
+/// One speaker's run of text within a chunk, as the final pass builds it.
+struct FinalRun<'pieces> {
+    /// The chunk the run lies in.
+    chunk_index: usize,
+    /// The final pass's speaker.
+    speaker: usize,
+    /// Start in meeting milliseconds.
+    start_ms: u64,
+    /// End in meeting milliseconds.
+    end_ms: u64,
+    /// The run's text, in order.
+    pieces: Vec<&'pieces TextPiece>,
+    /// No voice window lay near some of the text, so its speaker is a guess.
+    speaker_guessed: bool,
 }
 
 /// Who a speaker turned out to be at the end of a recording.
@@ -108,6 +132,7 @@ fn text_pieces_of(
                 start_ms: region.start_time_ms(),
                 end_ms: region.end_time_ms(),
                 text: region.text().to_owned(),
+                uncertain: false,
             })
             .collect();
     }
@@ -118,6 +143,7 @@ fn text_pieces_of(
             start_ms: chunk_bounds.start_offset_ms() + word.start_ms(),
             end_ms: chunk_bounds.start_offset_ms() + word.end_ms(),
             text: word.text().to_owned(),
+            uncertain: is_uncertain_probability(word.probability_permille()),
         })
         .collect()
 }
@@ -270,6 +296,9 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     task_metrics: Option<Rc<TaskMetricsRecorder>>,
     /// The owner's names and terms, read when the recording started; `None` prompts nothing.
     glossary: Option<TranscriptionGlossary>,
+    /// Stretches of this recording, in meeting time, where diarization heard overlapping voices
+    /// (#90); disjoint and in time order.
+    overlap_spans: Vec<OverlapSpan>,
 }
 
 impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
@@ -318,6 +347,7 @@ where
             clustering_config: ClusteringConfig::default(),
             task_metrics: None,
             glossary: None,
+            overlap_spans: Vec::new(),
         })
     }
 
@@ -452,7 +482,8 @@ where
             chunk_bounds.start_offset_ms(),
         );
 
-        let speaker_regions = self.diarize_and_attribute(vad_chunk).await;
+        let (speaker_regions, chunk_overlap) = self.diarize_and_attribute(vad_chunk).await;
+        self.record_overlap(chunk_bounds, chunk_overlap);
         for cluster_id in speaker_regions
             .iter()
             .filter_map(|region| region.attribution().unknown_cluster_id())
@@ -477,6 +508,36 @@ where
             "Local audio chunk processed into transcript segments"
         );
         Ok(attributed_segments)
+    }
+
+    /// Keeps a chunk's overlapping speech in meeting time and records it with the meeting (#90).
+    ///
+    /// Inputs: The chunk's bounds and its chunk-relative overlap spans.
+    /// Outputs: None; a storage failure is logged, and the spans still mark this recording's
+    /// segments.
+    /// Side effects: Writes the meeting's document when there is overlap.
+    fn record_overlap(&mut self, chunk_bounds: ChunkBounds, chunk_overlap: Vec<OverlapSpan>) {
+        if chunk_overlap.is_empty() {
+            return;
+        }
+        let offset_ms = i64::try_from(chunk_bounds.start_offset_ms()).unwrap_or(i64::MAX);
+        let meeting_spans: Vec<OverlapSpan> = chunk_overlap
+            .into_iter()
+            .map(|span| span.shifted(offset_ms))
+            .collect();
+        if let Err(error) = self
+            .note_repository
+            .record_overlap_spans(&self.meeting_id, &meeting_spans)
+        {
+            tracing::warn!(
+                meeting_id = %self.meeting_id.as_str(),
+                error = %error,
+                "Could not record overlapping speech; later passes will not mark it"
+            );
+        }
+        let mut spans = std::mem::take(&mut self.overlap_spans);
+        spans.extend(meeting_spans);
+        self.overlap_spans = merge_overlap_spans(spans);
     }
 
     /// Stores the language a chunk was transcribed with in the meeting's metadata, once.
@@ -752,36 +813,66 @@ where
         text_pieces: &[TextPiece],
         attributions: &[FinalAttribution],
     ) -> Vec<TranscriptSegment> {
-        let mut runs: Vec<(usize, usize, u64, u64, Vec<&str>)> = Vec::new();
+        let mut runs: Vec<FinalRun<'_>> = Vec::new();
         for piece in text_pieces {
             let middle_ms = piece.start_ms + piece.end_ms.saturating_sub(piece.start_ms) / 2;
-            let speaker =
-                speaker_at(voice_windows, labels, piece.chunk_index, middle_ms).unwrap_or(0);
+            let found = speaker_at(voice_windows, labels, piece.chunk_index, middle_ms);
+            let speaker = found.unwrap_or(0);
             match runs.last_mut() {
-                Some(run) if run.0 == piece.chunk_index && run.1 == speaker => {
-                    run.3 = piece.end_ms;
-                    run.4.push(&piece.text);
+                Some(run) if run.chunk_index == piece.chunk_index && run.speaker == speaker => {
+                    run.end_ms = piece.end_ms;
+                    run.pieces.push(piece);
+                    run.speaker_guessed |= found.is_none();
                 }
-                _ => runs.push((
-                    piece.chunk_index,
+                _ => runs.push(FinalRun {
+                    chunk_index: piece.chunk_index,
                     speaker,
-                    piece.start_ms,
-                    piece.end_ms,
-                    vec![&piece.text],
-                )),
+                    start_ms: piece.start_ms,
+                    end_ms: piece.end_ms,
+                    pieces: vec![piece],
+                    speaker_guessed: found.is_none(),
+                }),
             }
         }
         runs.into_iter()
-            .map(|(_, speaker, start_ms, end_ms, words)| {
-                let attribution = attributions.get(speaker).copied().unwrap_or_default();
+            .map(|run| {
+                let attribution = attributions.get(run.speaker).copied().unwrap_or_default();
+                let text = run
+                    .pieces
+                    .iter()
+                    .map(|piece| piece.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                // Positions count the text's words, as a region piece may hold several.
+                let mut uncertain_words = Vec::new();
+                let mut position = 0_usize;
+                for piece in &run.pieces {
+                    let piece_words = piece.text.split_whitespace().count();
+                    if piece.uncertain {
+                        uncertain_words.extend(
+                            (position..position + piece_words)
+                                .map(|word| u16::try_from(word).unwrap_or(u16::MAX)),
+                        );
+                    }
+                    position += piece_words;
+                }
                 TranscriptSegment::new(
                     self.meeting_id.clone(),
-                    start_ms,
-                    end_ms,
+                    run.start_ms,
+                    run.end_ms,
                     attribution.identity_id,
-                    words.join(" "),
+                    text,
                 )
                 .with_unknown_cluster_id(attribution.cluster_id)
+                .with_confidence(SegmentConfidence {
+                    overlapping_speech: overlaps_segment(
+                        &self.overlap_spans,
+                        run.start_ms,
+                        run.end_ms,
+                    ),
+                    uncertain_speaker: run.speaker_guessed,
+                    uncertain_words,
+                })
             })
             .collect()
     }
@@ -895,24 +986,32 @@ where
     /// Diarizes a chunk and attributes each speaker segment through the voice-identity port.
     ///
     /// Inputs: The chunk whose audio is diarized.
-    /// Outputs: Chunk-relative attributed regions; empty when diarization is unavailable or
-    /// fails, which alignment turns into a single `Unattributed` region.
+    /// Outputs: Chunk-relative attributed regions, empty when diarization is unavailable or
+    /// fails (alignment turns that into a single `Unattributed` region), and the chunk-relative
+    /// stretches of overlapping speech (#90).
     /// Side effects: Executes diarization, queries voice identities, saves review clips, and logs.
-    async fn diarize_and_attribute(&self, vad_chunk: &VadAudioChunk) -> Vec<SpeakerRegion> {
+    async fn diarize_and_attribute(
+        &self,
+        vad_chunk: &VadAudioChunk,
+    ) -> (Vec<SpeakerRegion>, Vec<OverlapSpan>) {
         let Some(diarization_engine) = &self.diarization_engine else {
             tracing::debug!(
                 meeting_id = %self.meeting_id.as_str(),
                 "No diarization engine configured; chunk persisted as Unattributed"
             );
-            return Vec::new();
+            return (Vec::new(), Vec::new());
         };
         let diarization_started_at = Instant::now();
-        match diarization_engine.diarize(vad_chunk.audio_bytes()).await {
-            Ok(speaker_segments) => {
+        match diarization_engine
+            .diarize_with_overlap(vad_chunk.audio_bytes())
+            .await
+        {
+            Ok(diarized) => {
                 if let Some(task_metrics) = &self.task_metrics {
                     task_metrics.record_diarization(diarization_started_at.elapsed());
                 }
-                speaker_segments
+                let regions = diarized
+                    .segments
                     .iter()
                     .map(|speaker_segment| {
                         SpeakerRegion::new(
@@ -921,7 +1020,8 @@ where
                             self.attribute_speaker_segment(vad_chunk, speaker_segment),
                         )
                     })
-                    .collect()
+                    .collect();
+                (regions, diarized.overlap)
             }
             Err(error) => {
                 let chunk_bounds = vad_chunk.chunk_bounds();
@@ -932,7 +1032,7 @@ where
                     error = %error,
                     "Diarization failed; chunk persisted as Unattributed"
                 );
-                Vec::new()
+                (Vec::new(), Vec::new())
             }
         }
     }
@@ -1108,7 +1208,19 @@ where
                     aligned_region.attribution().speaker_identity_id(),
                     aligned_region.text(),
                 )
-                .with_unknown_cluster_id(aligned_region.attribution().unknown_cluster_id()),
+                .with_unknown_cluster_id(aligned_region.attribution().unknown_cluster_id())
+                .with_confidence(SegmentConfidence {
+                    overlapping_speech: overlaps_segment(
+                        &self.overlap_spans,
+                        aligned_region.start_time_ms(),
+                        aligned_region.end_time_ms(),
+                    ),
+                    uncertain_speaker: matches!(
+                        aligned_region.attribution(),
+                        SpeakerAttribution::PendingReview { .. }
+                    ),
+                    uncertain_words: aligned_region.uncertain_words().to_vec(),
+                }),
                 attribution: aligned_region.attribution().clone(),
             })
             .collect();
