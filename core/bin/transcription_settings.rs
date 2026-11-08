@@ -1,4 +1,5 @@
-//! Keeps the owner's choice of Whisper model and transcription provider, and the OpenAI key.
+//! Keeps the owner's transcription choices (Whisper model, provider, glossary, how long speech waits
+//! to be combined) and the OpenAI key.
 //!
 //! The choices live in `<db>.transcription-settings.json`. The key never does: it stays in the
 //! platform keychain, or on Android in a file sealed under the Keystore-protected database key.
@@ -7,6 +8,7 @@
 use std::{
     fs, io,
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use zeroize::Zeroizing;
@@ -15,7 +17,12 @@ use crate::{
     adapters::keychain::{
         platform_keychain::PlatformKeychain, sealed_file_keychain::SealedFileKeychain,
     },
-    application::pipeline::pipeline_factory::GlossarySource,
+    application::{
+        combined_meetings::{
+            KEEP_FOR_COMBINING, MAX_KEEP_SPEECH_DAYS, MIN_KEEP_SPEECH_DAYS, keep_for_days,
+        },
+        pipeline::pipeline_factory::GlossarySource,
+    },
     domain::{
         errors::CryptoError, transcription_glossary::TranscriptionGlossary,
         whisper_catalog::find_whisper_model,
@@ -23,6 +30,9 @@ use crate::{
     pipeline_composition::{PipelineConfig, TranscriptionProvider, WHISPER_MODEL_VARIABLE},
     ports::crypto::KeychainStore,
 };
+
+/// Reads how long speech may wait to be combined; called once per worker round or status view.
+pub type KeepForSource = std::sync::Arc<dyn Fn() -> Duration + Send + Sync>;
 
 /// Keychain service of the OpenAI key, separate from the database key's.
 const OPENAI_KEYCHAIN_SERVICE: &str = "note-taker-openai";
@@ -63,6 +73,10 @@ pub struct SavedTranscriptionSettings {
     /// Names and terms Whisper is prompted with, in the owner's order (user content, never logged).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub glossary: Vec<String>,
+    /// Days a recording's speech may wait to be combined with another device's (#93); `None`
+    /// keeps three weeks.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep_speech_days: Option<u16>,
 }
 
 /// Where the settings, downloaded models and sealed key live.
@@ -208,6 +222,67 @@ pub fn glossary_source(settings_file: PathBuf) -> GlossarySource {
 pub fn save_glossary(settings_file: &Path, glossary: &TranscriptionGlossary) -> io::Result<()> {
     let mut saved = load_settings(settings_file);
     saved.glossary = glossary.terms().to_vec();
+    save_settings(settings_file, &saved)
+}
+
+/// Reads how long speech may wait to be combined on this device (#93).
+///
+/// Inputs: The saved choices. Outputs: The chosen window, or `KEEP_FOR_COMBINING` when none was
+/// chosen or the file holds one out of range (edited by hand), which is logged. Side effects: None.
+pub fn saved_keep_for(saved: &SavedTranscriptionSettings) -> Duration {
+    match saved.keep_speech_days {
+        None => KEEP_FOR_COMBINING,
+        Some(days) => keep_for_days(days).unwrap_or_else(|| {
+            tracing::warn!(
+                days,
+                "the saved speech retention window is out of range; using three weeks"
+            );
+            KEEP_FOR_COMBINING
+        }),
+    }
+}
+
+/// Expresses a window in whole days, as Settings shows it.
+///
+/// Side effects: None.
+pub fn keep_speech_days(window: Duration) -> u16 {
+    u16::try_from(window.as_secs() / (24 * 60 * 60)).unwrap_or(u16::MAX)
+}
+
+/// Reads the window from a settings file, if the process has one.
+///
+/// Inputs: The settings file, or `None` (the window is then `KEEP_FOR_COMBINING`).
+/// Outputs: The window. Side effects: Reads the file.
+pub fn keep_for_in(settings_file: Option<&Path>) -> Duration {
+    settings_file.map_or(KEEP_FOR_COMBINING, |settings_file| {
+        saved_keep_for(&load_settings(settings_file))
+    })
+}
+
+/// Builds the source the after-meeting worker and the status views read the window from.
+///
+/// Inputs: The settings file. Outputs: A source that reads the file on each call, so a window
+/// saved by any app, the CLI or the web applies from the worker's next round.
+/// Side effects: None until called; each call reads the file.
+pub fn keep_for_source(settings_file: PathBuf) -> KeepForSource {
+    std::sync::Arc::new(move || saved_keep_for(&load_settings(&settings_file)))
+}
+
+/// Saves how many days speech may wait to be combined, keeping every other saved choice.
+///
+/// Inputs: The settings file and the days, `MIN_KEEP_SPEECH_DAYS..=MAX_KEEP_SPEECH_DAYS`.
+/// Outputs: `Ok(())`, an `InvalidInput` error for days out of range (nothing is written), or the
+/// write error. Side effects: Rewrites the file atomically. Speech already older than a shorter
+/// window is deleted at the worker's next round.
+pub fn save_keep_speech_days(settings_file: &Path, days: u16) -> io::Result<()> {
+    if keep_for_days(days).is_none() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("choose between {MIN_KEEP_SPEECH_DAYS} and {MAX_KEEP_SPEECH_DAYS} days"),
+        ));
+    }
+    let mut saved = load_settings(settings_file);
+    saved.keep_speech_days = Some(days);
     save_settings(settings_file, &saved)
 }
 

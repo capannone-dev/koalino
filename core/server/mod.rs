@@ -27,3 +27,7 @@ mod project_routes_tests;
 pub mod request_guard;
 #[cfg(test)]
 mod request_guard_tests;
+/// Serves the web Settings page's speech retention window (#93).
+pub mod retention_routes;
+#[cfg(test)]
+mod retention_routes_tests;

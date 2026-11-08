@@ -405,7 +405,8 @@ it and `GET /api/meetings/{id}` add:
   speech to `combine_on`), `combined`, or `not_combined` (speech from `waiting_for` did not
   arrive within three weeks). Devices are shaped as in `recorded_on`; `combine_on` is null for one
   device. `kept_until` (RFC 3339) is when the speech held here is deleted if not combined by
-  then, null when none is held. Speech waits sealed for at most three weeks.
+  then, null when none is held. Speech waits sealed for at most three weeks, or the window the
+  owner chose (`/api/settings/retention`).
 
 `POST /api/meetings/{id}/split` lists those recordings on their own again, for good, and returns
 `200` `{"split":[<meeting IDs>]}`, empty when there was nothing to split. Passing a combined
@@ -456,6 +457,16 @@ list over 500 characters in all, returns `400` `{"error_code":"invalid_glossary"
 failure `500` `save_failed`; a daemon without a settings file `503` `unavailable`. The apps use
 `note_taker_set_glossary(terms)` (newline-separated; returns 0 saved, 1 refused, 2 failed) and read
 the saved terms as `glossary` in `note_taker_get_transcription_settings()`.
+
+`GET /api/settings/retention` returns `{"days":21,"min_days":1,"max_days":60}`: how many days a
+recording's speech may wait to be combined with another device's recording of the same meeting
+(#93). `PUT /api/settings/retention` with `{"days":7}` saves the window and returns it. The
+after-meeting worker applies it at its next round, so speech older than a shorter window is deleted
+then, and `kept_until` in each meeting's `combining` follows it. A window outside the bounds
+returns `400` `{"error_code":"invalid_window","error"}`; a write failure `500` `save_failed`; a
+daemon without a settings file `503` `unavailable`. The apps use
+`note_taker_set_keep_speech_days(days)` (0 saved, 1 out of range, 2 failed) and read
+`keep_speech` (`{"days","min_days","max_days"}`) in `note_taker_get_transcription_settings()`.
 
 ### Telemetry
 

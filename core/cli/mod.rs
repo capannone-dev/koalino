@@ -99,6 +99,13 @@ pub enum CliCommand {
     /// Shows or changes the names and terms transcription is prompted with, so they are spelled
     /// right; it applies from the next recording, on every app using this database.
     Glossary(GlossaryArgs),
+    /// Shows or sets how many days a recording's speech may wait to be combined with another
+    /// device's recording of the same meeting (1 to 60; three weeks by default). Speech older
+    /// than a shorter window is deleted at the next round.
+    KeepSpeech {
+        /// The new window in days; omit it to show the current one.
+        days: Option<u16>,
+    },
     /// Displays aggregate privacy-safe telemetry.
     Telemetry,
     /// Changes a running daemon's log level without restarting it (applied within seconds).
@@ -505,6 +512,10 @@ pub trait CliService {
     fn glossary(&self) -> Result<Vec<String>, String>;
     /// Saves the glossary's terms, already validated; an empty list clears it.
     fn save_glossary(&mut self, terms: &[String]) -> Result<(), String>;
+    /// Loads how many days speech waits to be combined (#93).
+    fn keep_speech_days(&self) -> Result<u16, String>;
+    /// Saves that window, already checked to be in range.
+    fn save_keep_speech_days(&mut self, days: u16) -> Result<(), String>;
     /// Exports one meeting through the shared export manager.
     fn export_meeting(
         &self,
@@ -619,6 +630,7 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
             command: DevicesCommand::Revoke { device },
         }) => cli_service.revoke_device(&device),
         CliCommand::Glossary(GlossaryArgs { command }) => edit_glossary(command, cli_service),
+        CliCommand::KeepSpeech { days } => keep_speech(days, cli_service),
         CliCommand::Telemetry => cli_service.telemetry(),
         CliCommand::LogLevel { directive } => cli_service.request_log_level(&directive),
     }
@@ -663,6 +675,32 @@ fn edit_glossary(
         1 => String::from("Glossary saved: 1 term. It applies from the next recording."),
         count => format!("Glossary saved: {count} terms. It applies from the next recording."),
     })
+}
+
+/// Shows or changes the speech retention window (#93).
+///
+/// Inputs: The new window in days, or `None` to show it; the service holding it.
+/// Outputs: The window or a confirmation; or why the window was refused, in which case nothing
+/// is saved. Side effects: Saves the window when one is given.
+fn keep_speech(days: Option<u16>, cli_service: &mut impl CliService) -> Result<String, String> {
+    use crate::application::combined_meetings::{
+        MAX_KEEP_SPEECH_DAYS, MIN_KEEP_SPEECH_DAYS, keep_for_days,
+    };
+    let Some(days) = days else {
+        let current = cli_service.keep_speech_days()?;
+        return Ok(format!(
+            "Speech waits up to {current} days to be combined with another device's recording."
+        ));
+    };
+    if keep_for_days(days).is_none() {
+        return Err(format!(
+            "choose between {MIN_KEEP_SPEECH_DAYS} and {MAX_KEEP_SPEECH_DAYS} days"
+        ));
+    }
+    cli_service.save_keep_speech_days(days)?;
+    Ok(format!(
+        "Speech now waits up to {days} days to be combined; older speech is deleted at the next round."
+    ))
 }
 
 /// Formats meeting rows as a stable terminal table.
@@ -941,6 +979,7 @@ where
             &held,
             this_device,
             chrono::Utc::now(),
+            crate::transcription_settings::keep_for_in(self.settings_file.as_deref()),
         );
         let paired = self
             .trusted_peer_store
@@ -1324,6 +1363,17 @@ where
             .map_err(|error| error.to_string())?;
         crate::transcription_settings::save_glossary(settings_file, &glossary)
             .map_err(|error| format!("the glossary could not be saved: {error}"))
+    }
+    fn keep_speech_days(&self) -> Result<u16, String> {
+        let settings_file = self.settings_file()?;
+        Ok(crate::transcription_settings::keep_speech_days(
+            crate::transcription_settings::keep_for_in(Some(settings_file)),
+        ))
+    }
+    fn save_keep_speech_days(&mut self, days: u16) -> Result<(), String> {
+        let settings_file = self.settings_file()?;
+        crate::transcription_settings::save_keep_speech_days(settings_file, days)
+            .map_err(|error| format!("the window could not be saved: {error}"))
     }
     fn revoke_device(&mut self, device: &str) -> Result<String, String> {
         let trusted_peer_store = self.trusted_peer_store()?;

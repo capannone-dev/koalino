@@ -117,6 +117,7 @@ fn settings_round_trip_without_the_key() {
         transcript_pass: Some(false),
         transcript_pass_model: Some("ggml-large-v3-turbo.bin".to_owned()),
         glossary: vec!["Marco Rossi".to_owned()],
+        keep_speech_days: Some(14),
     };
     assert_eq!(load_settings(&paths.settings_file), Default::default());
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
@@ -206,4 +207,42 @@ fn a_glossary_edited_into_something_invalid_is_ignored() {
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|error| panic!("{error}"));
 
     assert_eq!(glossary_source(paths.settings_file.clone())(), None);
+}
+
+#[test]
+fn the_speech_retention_window_is_saved_in_days_and_read_fresh() {
+    use super::transcription_settings::{keep_for_source, save_keep_speech_days};
+    use crate::application::combined_meetings::KEEP_FOR_COMBINING;
+    const DAY: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+    let paths = paths("keep-speech");
+    let source = keep_for_source(paths.settings_file.clone());
+    assert_eq!(source(), KEEP_FOR_COMBINING, "three weeks until chosen");
+
+    save_keep_speech_days(&paths.settings_file, 7).unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(source(), 7 * DAY);
+    assert_eq!(
+        load_settings(&paths.settings_file).keep_speech_days,
+        Some(7)
+    );
+
+    assert!(save_keep_speech_days(&paths.settings_file, 0).is_err());
+    assert!(save_keep_speech_days(&paths.settings_file, 61).is_err());
+    assert_eq!(source(), 7 * DAY, "a refused window keeps the saved one");
+}
+
+#[test]
+fn a_retention_window_edited_out_of_range_falls_back_to_three_weeks() {
+    use super::transcription_settings::keep_for_source;
+    use crate::application::combined_meetings::KEEP_FOR_COMBINING;
+    let paths = paths("keep-speech-invalid");
+    let saved = SavedTranscriptionSettings {
+        keep_speech_days: Some(400),
+        ..SavedTranscriptionSettings::default()
+    };
+    save_settings(&paths.settings_file, &saved).unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(
+        keep_for_source(paths.settings_file.clone())(),
+        KEEP_FOR_COMBINING
+    );
 }

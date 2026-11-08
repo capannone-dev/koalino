@@ -275,7 +275,11 @@ All return caller-freed JSON; see `API_SPECS.md`.
 `transcription_settings.rs` keeps Settings' Whisper model, provider and OpenAI key, and `ffi_transcription.rs`
 exposes them over the C ABI (#67). The same file keeps the transcription glossary: `glossary_source`
 reads it fresh for each recording and after-meeting pass (`pipeline_composition.rs` wires both), and
-`note_taker_set_glossary(terms)` saves newline-separated terms (0 saved, 1 refused, 2 failed). `cloud_fallback.rs` transcribes a chunk locally when OpenAI fails, and
+`note_taker_set_glossary(terms)` saves newline-separated terms (0 saved, 1 refused, 2 failed). It
+also keeps how many days speech waits to be combined (#93, `keep_speech_days`, 1 to 60, three weeks
+by default): `keep_for_source` gives `RefinementWorker::with_keep_for_source` the window fresh at
+each round, which also bounds how far back recordings are folded, and
+`note_taker_set_keep_speech_days(days)` saves it (0 saved, 1 out of range, 2 failed). `cloud_fallback.rs` transcribes a chunk locally when OpenAI fails, and
 `device_resources.rs` reads free disk space and total memory.
 
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`

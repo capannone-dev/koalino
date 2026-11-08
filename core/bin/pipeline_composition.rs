@@ -983,7 +983,10 @@ pub fn start_transcript_pass(
             repository_opener(),
             device_id.clone(),
         ),
-    };
+    }
+    .with_keep_for_source(crate::transcription_settings::keep_for_source(
+        settings_file_for(database_path),
+    ));
     if let Some(link) = speech_link {
         link.accept_speech_with(Box::new(RetainedSpeechInbox::new(
             Arc::clone(&store),

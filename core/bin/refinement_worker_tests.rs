@@ -524,6 +524,34 @@ fn speech_that_was_not_delivered_is_kept_for_three_weeks() {
 }
 
 #[test]
+fn speech_waits_only_as_long_as_the_owner_chose() {
+    let (setup, control) = phone_setup();
+    control.set_speech_sender(Arc::new(Sender {
+        parts: Mutex::new(Vec::new()),
+        fails: Some(SpeechTransferError::Unreachable),
+    }));
+    let worker = |ahead: Duration| {
+        RefinementWorker::without_pass(
+            Arc::clone(&setup.store),
+            Arc::clone(&control),
+            setup.opener("device-a"),
+            DeviceId::new("device-a"),
+        )
+        .with_clock(after(ahead))
+        .with_keep_for_source(Arc::new(|| 3 * DAY))
+    };
+
+    worker(2 * DAY).run_pending();
+    assert_eq!(setup.store.pending_meetings(), vec![setup.meeting.clone()]);
+
+    worker(3 * DAY).run_pending();
+    assert!(
+        setup.store.pending_meetings().is_empty(),
+        "deleted after three days, not three weeks"
+    );
+}
+
+#[test]
 fn recordings_that_meet_up_to_three_weeks_later_are_still_folded() {
     // The laptop's recording reached the phone only when they met again, 20 days later.
     let (setup, control) = phone_setup();

@@ -329,6 +329,8 @@ struct RecordingContext<'context> {
     this_device: &'context crate::domain::models::DeviceId,
     /// The speech held here, when this runtime keeps any.
     retained_speech: Option<&'context RetainedSpeechIndex>,
+    /// How long speech waits to be combined on this device (#93).
+    keep_for: std::time::Duration,
 }
 
 /// Adds `recorded_on` (`[{"device_id","name","this_device","connected"}]`),
@@ -354,7 +356,7 @@ fn add_recording_devices(
         &context.recordings,
         &held,
         context.this_device,
-        chrono::Utc::now(),
+        (chrono::Utc::now(), context.keep_for),
         p2p_status,
     ))
     .unwrap_or(serde_json::Value::Null);
@@ -1656,6 +1658,7 @@ impl FfiRuntime {
             p2p_status: self.p2p_status(),
             this_device: self.note_repository.device_id(),
             retained_speech: self.retained_speech.as_ref(),
+            keep_for: crate::ffi_transcription::speech_keep_for(),
         })
     }
 

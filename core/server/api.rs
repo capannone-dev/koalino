@@ -164,7 +164,10 @@ impl ServerAppState {
             recordings,
             &held,
             state.map_or(&unknown_device, |state| &state.this_device),
-            chrono::Utc::now(),
+            (
+                chrono::Utc::now(),
+                crate::transcription_settings::keep_for_in(self.settings_file().as_deref()),
+            ),
             p2p_status,
         )
     }
@@ -321,6 +324,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .merge(super::project_routes::routes())
         .merge(super::log_routes::routes())
         .merge(super::glossary_routes::routes())
+        .merge(super::retention_routes::routes())
         // Innermost of the three layers, so CORS still answers preflights for allowed origins
         // and refusals are traced.
         .layer(middleware::from_fn(reject_cross_site_requests))

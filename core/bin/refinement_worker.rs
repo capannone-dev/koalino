@@ -13,7 +13,7 @@
 //! A finished recording waits `COMBINING_GRACE` for a paired device's recording of it only when
 //! this process runs P2P; the CLI runs the pass at once. With P2P, a recording's speech stays
 //! sealed after its pass alone, so a recording of the same meeting that reaches this device up to
-//! three weeks later is still combined with it. Nothing runs while a recording is running. Passes run on a phone only while it is charging,
+//! three weeks later (or the window the owner chose, #93) is still combined with it. Nothing runs while a recording is running. Passes run on a phone only while it is charging,
 //! and stop between windows when that changes; a device without a pass model only folds, sends
 //! and deletes. The model is loaded only for a round of work and dropped after. Retained audio
 //! never lingers: it is deleted after a combined pass, after a pass alone without P2P, after a
@@ -35,6 +35,7 @@ use std::{
 use crate::application::{
     glossary_transcription::GlossaryTranscription, pipeline::pipeline_factory::GlossarySource,
 };
+use crate::transcription_settings::KeepForSource;
 use crate::{
     adapters::audio::{
         chunk_audio_store::ChunkAudioStore,
@@ -42,8 +43,8 @@ use crate::{
     },
     application::{
         combined_meetings::{
-            AudioPlan, COMBINING_GRACE, HeldSpeech, PlanContext, combining_device,
-            find_combinations, plan_retained_audio,
+            AudioPlan, COMBINING_GRACE, HeldSpeech, KEEP_FOR_COMBINING, PlanContext,
+            combining_device, find_combinations, plan_retained_audio,
         },
         combined_refinement::{CombinedRecording, refine_combined_meeting},
         speech_transfer_exchange::{PART_AUDIO_BUDGET_BYTES, split_into_parts},
@@ -65,9 +66,6 @@ use crate::{
 const MAX_ATTEMPTS: u32 = 3;
 /// How often the worker looks again without being woken, for example after the phone is plugged in.
 const IDLE_CHECK: Duration = Duration::from_secs(300);
-/// How far back recordings are compared to find one meeting recorded on two devices: as long as
-/// speech waits to be combined (`KEEP_FOR_COMBINING`), so recordings that meet late still fold.
-const FOLD_WINDOW: chrono::TimeDelta = chrono::TimeDelta::days(21);
 
 /// Returns where a database's retained meeting audio lives: `<data folder>/retained-audio`.
 pub fn retained_audio_directory(database_path: &Path) -> PathBuf {
@@ -236,6 +234,10 @@ pub struct RefinementWorker {
     now: Box<dyn Fn() -> SystemTime + Send>,
     /// Reads the owner's glossary of names and terms when the model loads; `None` uses none.
     glossary_source: Option<GlossarySource>,
+    /// Reads how long speech waits to be combined, once per round (#93). Recordings are also
+    /// compared this far back to find one meeting recorded on two devices, so recordings that
+    /// meet late still fold.
+    keep_for: KeepForSource,
 }
 
 impl RefinementWorker {
@@ -256,6 +258,7 @@ impl RefinementWorker {
             attempts: HashMap::new(),
             now: Box::new(SystemTime::now),
             glossary_source: None,
+            keep_for: Arc::new(|| KEEP_FOR_COMBINING),
         }
     }
 
@@ -276,6 +279,7 @@ impl RefinementWorker {
             attempts: HashMap::new(),
             now: Box::new(SystemTime::now),
             glossary_source: None,
+            keep_for: Arc::new(|| KEEP_FOR_COMBINING),
         }
     }
 
@@ -286,6 +290,16 @@ impl RefinementWorker {
     #[must_use]
     pub fn with_glossary_source(mut self, glossary_source: GlossarySource) -> Self {
         self.glossary_source = Some(glossary_source);
+        self
+    }
+
+    /// Keeps speech waiting to be combined as long as `keep_for` returns at each round (#93),
+    /// instead of `KEEP_FOR_COMBINING`.
+    ///
+    /// Inputs: The source. Outputs: The worker. Side effects: None.
+    #[must_use]
+    pub fn with_keep_for_source(mut self, keep_for: KeepForSource) -> Self {
+        self.keep_for = keep_for;
         self
     }
 
@@ -370,6 +384,7 @@ impl RefinementWorker {
             can_pass: self.make_engine.is_some(),
             keeps_for_partners: has_link,
             held: &held_speech,
+            keep_for: (self.keep_for)(),
         };
         let mut engine: Option<(Box<dyn TranscriptionEngine>, Arc<ChunkAudioStore>)> = None;
         let mut handled: HashSet<MeetingId> = HashSet::new();
@@ -454,7 +469,9 @@ impl RefinementWorker {
     fn fold_recordings(&self, repository: &dyn NoteRepository) {
         self.describe_own_recordings(repository);
         let found = repository.meeting_recordings().and_then(|recordings| {
-            let since = chrono::DateTime::<chrono::Utc>::from((self.now)()) - FOLD_WINDOW;
+            let fold_window = chrono::TimeDelta::from_std((self.keep_for)())
+                .unwrap_or(chrono::TimeDelta::days(21));
+            let since = chrono::DateTime::<chrono::Utc>::from((self.now)()) - fold_window;
             find_combinations(
                 &recordings,
                 &|meeting| repository.load_transcript_segments(meeting),

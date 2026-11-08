@@ -46,6 +46,7 @@ note-taker devices revoke <peer-id|name>
 note-taker telemetry
 note-taker log-level <error|warn|info|debug|trace|directive>
 note-taker glossary [show | set <term>... | add <term>... | remove <term>... | clear]
+note-taker keep-speech [days]
 note-taker [--log-level <level>] <command> ...
 ```
 
@@ -168,3 +169,10 @@ silent stdin pipe that delivers no data delays it.
 argument is one term (quote multi-word names). `remove` ignores case. A change applies from the
 next recording and to the next after-meeting pass. An invalid list (a term over 60 characters,
 or more than 500 characters in all) is refused and the saved one kept.
+
+## Speech retention window
+
+`keep-speech` shows how many days a recording's speech may wait to be combined with another
+device's recording of the same meeting; `keep-speech <days>` changes it (1 to 60, three weeks by
+default, #93). It is kept in the same settings file, and speech older than a shorter window is
+deleted at the after-meeting worker's next round.

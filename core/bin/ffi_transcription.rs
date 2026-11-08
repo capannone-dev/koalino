@@ -35,11 +35,13 @@ use crate::{
     pipeline_composition::{OPENAI_API_KEY_VARIABLE, efficient_gpu_status, local_gpu_megabytes},
     transcription_settings::{
         OpenAiKeyStore, SavedProvider, SavedTranscriptionSettings, TranscriptionPaths,
-        load_settings, save_settings, test_openai_key, validated_key,
+        load_settings, save_settings, saved_keep_for, test_openai_key, validated_key,
     },
 };
 use crate::{
-    domain::transcription_glossary::TranscriptionGlossary, transcription_settings::save_glossary,
+    application::combined_meetings::{MAX_KEEP_SPEECH_DAYS, MIN_KEEP_SPEECH_DAYS, keep_for_days},
+    domain::transcription_glossary::TranscriptionGlossary,
+    transcription_settings::{keep_speech_days, save_glossary, save_keep_speech_days},
 };
 
 const STATUS_OK: c_int = 0;
@@ -95,6 +97,13 @@ fn download_slot() -> &'static (Mutex<DownloadStatus>, Arc<AtomicBool>) {
 /// Reads the app's paths.
 fn paths() -> TranscriptionPaths {
     TranscriptionPaths::from_lookup(&app_setting)
+}
+
+/// Reads how long speech waits to be combined on this device (#93).
+///
+/// Side effects: Reads the settings file.
+pub(crate) fn speech_keep_for() -> std::time::Duration {
+    saved_keep_for(&load_settings(&paths().settings_file))
 }
 
 /// Opens the key store.
@@ -214,6 +223,11 @@ fn settings_json() -> String {
             "reason": suggestion.reason,
         },
         "glossary": saved.glossary,
+        "keep_speech": {
+            "days": keep_speech_days(saved_keep_for(&saved)),
+            "min_days": MIN_KEEP_SPEECH_DAYS,
+            "max_days": MAX_KEEP_SPEECH_DAYS,
+        },
         "efficient": {
             "gpu_name": efficient_gpu_name,
             "enabled": saved.efficient_gpu,
@@ -328,6 +342,29 @@ pub unsafe extern "C" fn note_taker_set_glossary(terms: *const c_char) -> c_int 
         Ok(()) => STATUS_OK,
         Err(error) => {
             tracing::warn!(error = %error, "unable to store the glossary");
+            STATUS_FAILED
+        }
+    }
+}
+
+/// Sets how many days a recording's speech may wait to be combined with another device's (#93).
+///
+/// Inputs: The days, from `MIN_KEEP_SPEECH_DAYS` to `MAX_KEEP_SPEECH_DAYS`.
+/// Outputs: 0, 1 when out of range (nothing is saved), or 2 when the file can't be written.
+/// Side effects: Stores the window; the after-meeting worker reads it at its next round and
+/// deletes speech older than a shorter window then. The pipeline is not rebuilt.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_set_keep_speech_days(days: c_int) -> c_int {
+    let Some(days) = u16::try_from(days)
+        .ok()
+        .filter(|days| keep_for_days(*days).is_some())
+    else {
+        return STATUS_INVALID;
+    };
+    match save_keep_speech_days(&paths().settings_file, days) {
+        Ok(()) => STATUS_OK,
+        Err(error) => {
+            tracing::warn!(error = %error, "unable to store the speech retention window");
             STATUS_FAILED
         }
     }

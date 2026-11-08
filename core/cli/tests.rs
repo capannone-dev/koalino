@@ -59,6 +59,8 @@ struct MockCliService {
     revoked_devices: Vec<String>,
     /// The glossary as saved through the service.
     glossary: Vec<String>,
+    /// The speech retention window as saved through the service, in days; `None` is the default.
+    keep_speech_days: Option<u16>,
 }
 
 /// The arguments of one `start_recording` call.
@@ -182,6 +184,13 @@ impl CliService for MockCliService {
     }
     fn save_glossary(&mut self, terms: &[String]) -> Result<(), String> {
         self.glossary = terms.to_vec();
+        Ok(())
+    }
+    fn keep_speech_days(&self) -> Result<u16, String> {
+        Ok(self.keep_speech_days.unwrap_or(21))
+    }
+    fn save_keep_speech_days(&mut self, days: u16) -> Result<(), String> {
+        self.keep_speech_days = Some(days);
         Ok(())
     }
     fn export_meeting(
@@ -1645,4 +1654,24 @@ fn an_invalid_glossary_is_refused() {
 
     assert!(result.is_err_and(|error| error.contains("60 characters")));
     assert!(cli_service.glossary.is_empty());
+}
+
+/// Verifies the speech retention window is shown and changed in days, within 1 to 60 (#93).
+#[test]
+fn the_speech_retention_window_is_shown_and_changed_in_days() {
+    let mut cli_service = MockCliService::default();
+
+    assert_eq!(
+        run(&["note-taker", "keep-speech"], &mut cli_service),
+        Ok(String::from(
+            "Speech waits up to 21 days to be combined with another device's recording."
+        ))
+    );
+    run(&["note-taker", "keep-speech", "7"], &mut cli_service)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(cli_service.keep_speech_days, Some(7));
+
+    let refused = run(&["note-taker", "keep-speech", "90"], &mut cli_service);
+    assert!(refused.is_err_and(|error| error.contains("between 1 and 60")));
+    assert_eq!(cli_service.keep_speech_days, Some(7), "nothing saved");
 }

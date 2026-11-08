@@ -84,6 +84,11 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
   - `PUT /api/settings/glossary` with `{"terms":[...]}` saves the cleaned list and returns it;
     an invalid list returns `400` `{"error_code":"invalid_glossary"}`, a write failure `500`
     `save_failed`, and a daemon without a settings file `503` `unavailable`. Terms are never logged.
+- The speech retention window (`retention_routes.rs`, #93) lives in the same file:
+  - `GET /api/settings/retention` returns `{"days","min_days","max_days"}`.
+  - `PUT /api/settings/retention` with `{"days"}` saves a window of 1 to 60 days and returns it;
+    out of range returns `400` `invalid_window`, a write failure `500` `save_failed`, and no
+    settings file `503` `unavailable`. `retention_routes_tests.rs` covers each case.
 - `GET /api/telemetry` returns `task_count`, `total_duration_ms`, and `average_latency_ms`.
 - `GET /api/devices` returns telemetry-observed devices with `device_id`, feature-gated
   `supports_vad`, observed `supported_models`, and epoch-millisecond `last_seen`. Device data is
