@@ -108,6 +108,16 @@ final class TranscriptionSettingsController extends ChangeNotifier {
             'together at most 500.');
   }
 
+  /// Sets how many days a recording's speech waits to be combined (#93).
+  ///
+  /// Inputs: The days. Side effects: Stores the window and reloads.
+  Future<void> setKeepSpeechDays(int days) =>
+      _run(() => _bridge.setKeepSpeechDays(days),
+          success: days == 1
+              ? 'Saved. Speech now waits up to 1 day to be combined.'
+              : 'Saved. Speech now waits up to $days days to be combined.',
+          invalid: 'Choose a window between 1 and 60 days.');
+
   /// Lets the GPU be tried again after a crash stopped it.
   ///
   /// Side effects: Clears the core's record and reloads.

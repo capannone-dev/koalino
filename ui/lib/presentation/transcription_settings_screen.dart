@@ -27,6 +27,9 @@ const Key efficientModeKey = ValueKey<String>('efficient-mode');
 /// Finds the glossary's text field.
 const Key glossaryFieldKey = ValueKey<String>('glossary-field');
 
+/// Finds the speech retention window's menu (#93).
+const Key keepSpeechKey = ValueKey<String>('keep-speech');
+
 /// Finds the button that saves the glossary.
 const Key glossarySaveKey = ValueKey<String>('glossary-save');
 
@@ -164,9 +167,37 @@ final class _TranscriptionSettingsScreenState
                     key: const ValueKey<String>('glossary-section'),
                     controller: widget.controller,
                     saved: settings.glossary),
+                const Divider(),
+                _keepSpeechTile(settings.keepSpeech),
               ],
             );
           },
+        ),
+      );
+
+  /// The speech retention window: how long a recording's speech waits for another device's
+  /// recording of the same meeting before it is deleted (#93).
+  Widget _keepSpeechTile(SpeechRetention retention) => ListTile(
+        leading: const Icon(Icons.timer_outlined),
+        title: const Text('Keep speech for combining'),
+        subtitle: const Text('When a meeting was also recorded on another '
+            'device, its speech waits this long to be combined, then is '
+            'deleted.'),
+        trailing: DropdownButton<int>(
+          key: keepSpeechKey,
+          value: retention.days,
+          onChanged: widget.controller.isBusy
+              ? null
+              : (int? days) {
+                  if (days != null && days != retention.days) {
+                    widget.controller.setKeepSpeechDays(days);
+                  }
+                },
+          items: <DropdownMenuItem<int>>[
+            for (final int days in retention.choices)
+              DropdownMenuItem<int>(
+                  value: days, child: Text(days == 1 ? '1 day' : '$days days')),
+          ],
         ),
       );
 

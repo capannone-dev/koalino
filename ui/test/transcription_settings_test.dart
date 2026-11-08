@@ -87,6 +87,7 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
         proposal: proposal,
         efficient: efficient,
         glossary: glossary,
+        keepSpeech: SpeechRetention(days: keepSpeechDays),
       );
 
   @override
@@ -154,6 +155,19 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
 
   /// The glossary as the core holds it.
   List<String> glossary = <String>[];
+
+  /// How many days speech waits to be combined, as the core holds it.
+  int keepSpeechDays = 21;
+
+  @override
+  Future<int> setKeepSpeechDays(int days) async {
+    calls.add('keep $days');
+    if (days < 1 || days > 60) {
+      return transcriptionStatusInvalid;
+    }
+    keepSpeechDays = days;
+    return transcriptionStatusOk;
+  }
 
   @override
   Future<int> setGlossary(List<String> terms) async {
@@ -431,6 +445,39 @@ void main() {
     expect(bridge.calls, contains('glossary Marco Rossi|Kubernetes|OKR'));
     expect(bridge.glossary, <String>['Marco Rossi', 'Kubernetes', 'OKR']);
     expect(find.textContaining('next recording'), findsWidgets);
+  });
+
+  testWidgets('the speech retention window is chosen in days',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge();
+    await _pump(tester, bridge);
+    await tester.scrollUntilVisible(find.byKey(keepSpeechKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.byKey(keepSpeechKey));
+    await tester.pumpAndSettle();
+    expect(find.text('21 days'), findsOneWidget);
+
+    await tester.tap(find.byKey(keepSpeechKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('7 days').last);
+    await tester.pumpAndSettle();
+
+    expect(bridge.calls, contains('keep 7'));
+    expect(bridge.keepSpeechDays, 7);
+    await tester.scrollUntilVisible(find.byKey(keepSpeechKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('7 days'), findsOneWidget,
+        reason: 'the menu shows the saved window');
+  });
+
+  test('the retention window is read from the core with its bounds', () {
+    final SpeechRetention retention = SpeechRetention.fromJson(
+        <String, Object?>{'days': 9, 'min_days': 1, 'max_days': 60});
+    expect(retention.days, 9);
+    expect(retention.choices, contains(9),
+        reason: 'a window set elsewhere is offered');
+    expect(retention.choices.first, 1);
+    expect(retention.choices.last, 60);
   });
 
   testWidgets('a glossary the core refuses says why and is not lost',

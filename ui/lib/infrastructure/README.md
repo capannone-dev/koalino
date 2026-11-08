@@ -65,7 +65,8 @@ directory), and on Android it asks `WhisperModel.kt` to copy them into the data 
 
 `transcription_settings_bridge.dart` reaches the core's Whisper model and OpenAI settings (#67). The key goes
 in once and never comes back. `setGlossary` saves the glossary (one term per line) and the
-settings carry the saved terms.
+settings carry the saved terms. `setKeepSpeechDays` saves the speech retention window, which the
+settings carry as `SpeechRetention` (`days` and its bounds, #93).
 
 `language_bridge.dart` reaches the core's default language and the language of the next or current
 recording (`note_taker_get_default_language`, `note_taker_set_default_language`,

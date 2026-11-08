@@ -188,6 +188,7 @@ final class TranscriptionSettings {
     this.proposal,
     this.efficient = const EfficientModeStatus(),
     this.glossary = const <String>[],
+    this.keepSpeech = const SpeechRetention(),
   });
 
   /// Reads the view from the core's JSON.
@@ -210,6 +211,10 @@ final class TranscriptionSettings {
       glossary: (json['glossary'] as List<Object?>? ?? const <Object?>[])
           .whereType<String>()
           .toList(growable: false),
+      keepSpeech: json['keep_speech'] == null
+          ? const SpeechRetention()
+          : SpeechRetention.fromJson(
+              json['keep_speech']! as Map<String, Object?>),
       openAiModel: json['openai_model']! as String,
       keySaved: json['key_saved']! as bool,
       environmentKey: json['environment_key']! as bool,
@@ -244,6 +249,9 @@ final class TranscriptionSettings {
   /// Names and terms Whisper is prompted with, in order.
   final List<String> glossary;
 
+  /// How long a recording's speech waits to be combined with another device's (#93).
+  final SpeechRetention keepSpeech;
+
   final String provider;
   final String openAiModel;
   final bool keySaved;
@@ -254,6 +262,41 @@ final class TranscriptionSettings {
   final bool usingLocalFallback;
   final List<WhisperModelInfo> models;
   final WhisperDownload download;
+}
+
+/// How many days a recording's speech may wait to be combined with another device's recording
+/// of the same meeting before it is deleted (#93).
+final class SpeechRetention {
+  /// Creates the window; the defaults are the core's (three weeks, 1 to 60 days).
+  const SpeechRetention({this.days = 21, this.minDays = 1, this.maxDays = 60});
+
+  /// Reads `{"days","min_days","max_days"}` from the core's JSON.
+  factory SpeechRetention.fromJson(Map<String, Object?> json) =>
+      SpeechRetention(
+        days: json['days'] as int? ?? 21,
+        minDays: json['min_days'] as int? ?? 1,
+        maxDays: json['max_days'] as int? ?? 60,
+      );
+
+  /// The current window in days.
+  final int days;
+
+  /// The shortest window the core accepts.
+  final int minDays;
+
+  /// The longest window the core accepts.
+  final int maxDays;
+
+  /// The windows Settings offers, in increasing order: common ones within the bounds, plus the
+  /// current one when it was set elsewhere (the CLI or the web).
+  List<int> get choices => <int>{
+        minDays,
+        ...<int>[3, 7, 14, 21, 30, 45]
+            .where((int day) => day > minDays && day < maxDays),
+        maxDays,
+        days,
+      }.toList()
+        ..sort();
 }
 
 /// The core's transcription settings.
@@ -281,6 +324,11 @@ abstract interface class TranscriptionSettingsBridge {
   /// Outputs: A core status, `transcriptionStatusInvalid` for a term or list that is too long.
   /// Side effects: Stores it; the next recording reads it.
   Future<int> setGlossary(List<String> terms);
+
+  /// Sets how many days speech waits to be combined (#93).
+  /// Outputs: A core status, `transcriptionStatusInvalid` outside the bounds.
+  /// Side effects: Stores it; speech older than a shorter window is deleted at the next round.
+  Future<int> setKeepSpeechDays(int days);
 
   /// Chooses the OpenAI model. Outputs: A core status. Side effects: Stores the choice.
   Future<int> setOpenAiModel(String model);
@@ -353,6 +401,12 @@ final class RustTranscriptionSettingsBridge
     final String lines = terms.join('\n');
     return Isolate.run(() => _callWithText('note_taker_set_glossary', lines));
   }
+
+  @override
+  Future<int> setKeepSpeechDays(int days) =>
+      Isolate.run(() => _openCoreLibrary()
+          .lookupFunction<Int32 Function(Int32), int Function(int)>(
+              'note_taker_set_keep_speech_days')(days));
 
   @override
   Future<int> retryGpu() => Isolate.run(() => _openCoreLibrary()
