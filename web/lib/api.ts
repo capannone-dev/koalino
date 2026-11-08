@@ -299,6 +299,64 @@ export async function setGlossary(terms: string[]): Promise<string[]> {
   });
 }
 
+/** How many days a recording's speech may wait to be combined with another device's (#93). */
+export type SpeechRetention = { days: number; min_days: number; max_days: number };
+
+/** Why a retention request failed; `network` when the daemon was unreachable. */
+export type RetentionFailureKind = "invalid_window" | "unavailable" | "server" | "network";
+
+/** Thrown by the retention calls; `status` is the HTTP status, or `null` for `network`. */
+export class RetentionError extends Error {
+  constructor(
+    readonly kind: RetentionFailureKind,
+    readonly status: number | null
+  ) {
+    super(`Retention request failed (${status ?? "network"}): ${kind}`);
+    this.name = "RetentionError";
+  }
+}
+
+/** Sends one retention request, mapping an unreachable daemon and non-2xx answers to `RetentionError`. */
+async function retentionRequest(init: RequestInit): Promise<SpeechRetention> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/api/settings/retention`, init);
+  } catch {
+    throw new RetentionError("network", null);
+  }
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => ({}))) as { error_code?: unknown };
+    const kind: RetentionFailureKind =
+      errorBody.error_code === "invalid_window" ? "invalid_window" : response.status === 503 ? "unavailable" : "server";
+    throw new RetentionError(kind, response.status);
+  }
+  return (await response.json()) as SpeechRetention;
+}
+
+/**
+ * Reads how long speech waits to be combined (`GET /api/settings/retention`).
+ *
+ * Outputs: the window with its bounds. Throws `RetentionError`. Side effects: none.
+ */
+export async function getRetention(): Promise<SpeechRetention> {
+  return retentionRequest({ cache: "no-store" });
+}
+
+/**
+ * Changes how long speech waits to be combined (`PUT /api/settings/retention`).
+ *
+ * Inputs: the days, within the bounds. Outputs: the window as saved. Throws `RetentionError`
+ * (`invalid_window` outside the bounds). Side effects: rewrites the daemon's transcription
+ * settings; speech older than a shorter window is deleted at the worker's next round.
+ */
+export async function setRetention(days: number): Promise<SpeechRetention> {
+  return retentionRequest({
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ days })
+  });
+}
+
 export function webSocketUrl(): string {
   if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
   return `${apiBaseUrl.replace(/^http/, "ws")}/ws`;

@@ -21,6 +21,8 @@ replace the title from the response without reloading (Issue #42).
 
 `glossary-settings.tsx` edits the transcription glossary, one name or term per line, through
 `PUT /api/settings/glossary`; a refused list stays in the field with a plain reason.
+`retention-settings.tsx` chooses how many days speech waits to be combined with another device's
+recording (#93) through `PUT /api/settings/retention`; a refused choice goes back to the saved one.
 
 `log-settings.tsx` (Issue #46) renders the Settings page's level selector (a directive set
 elsewhere, such as `info,note_taker_core=debug`, shows as "Custom") and **Export logs**, which

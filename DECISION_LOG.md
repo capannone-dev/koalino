@@ -2172,3 +2172,20 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 
   So the mark rarely fires on single-speaker speech, and it points at about two thirds of where
   words go missing. It is a reading aid; nothing is recovered from the second voice.
+
+## 2026-11-08 — #93 The owner chooses how long speech waits to be combined
+
+- **Owner's request:** the three weeks that a recording's sealed speech waits for another device's
+  recording of the same meeting become a setting.
+- **Range:** 1 to 60 days, default 21.
+  - A day is enough for devices that meet daily.
+  - Beyond two months, keeping speech (personal data) for a pass that improves an
+    already-readable transcript is hard to justify.
+- **Storage:** the setting is kept per device as `keep_speech_days` in
+  `<db>.transcription-settings.json`, beside the glossary. It is edited from the apps (FFI), the
+  CLI (`keep-speech`) and the web (`/api/settings/retention`). It is not synced: each device holds
+  its own speech, so each device decides how long that speech lives there.
+- **Effect:** the worker reads the window at each round, both for planning and for how far back
+  it folds recordings. Shortening the window deletes speech that is already older at the next
+  round, which is what the owner asked for. A value edited out of range by hand falls back to
+  three weeks with a warning.
