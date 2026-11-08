@@ -371,14 +371,18 @@ one meeting with one transcript built from both microphones.
   recordings is the median gap of the shared words. On NOTSOFAR, devices in the same meeting
   shared 60% or more and different meetings at most 3.6%; speech-timing masks could not separate
   them.
-- `combined_meetings.rs` decides. `find_combinations` folds the later recording into the earlier
-  one; only a device that recorded one of them decides, and a phone leaves the combining to the
-  other device. `plan_retained_audio` says what each device does with its sealed speech: wait for
-  a partner for `COMBINING_GRACE` (10 min), send it to the combining device, combine every
-  recording held, run the pass alone, or delete it. Nothing waits more than `KEEP_FOR_COMBINING`
-  (three weeks). `MeetingListing` lists a combined meeting once with every device;
-  `split_recordings` is the Split action; `name_recording_devices` names devices from the P2P
-  status.
+- `combined_meetings.rs` decides. `find_combinations` folds recordings into one group, under its
+  first recording, for any number of devices: a recording joins through whichever recording of
+  the group it resembles. Only a device that recorded one of the two compared decides.
+  `combining_device` is the group's first recording made off a phone (the first phone when all
+  are phones), derived from the synced meetings so every device agrees. `plan_retained_audio`
+  says what each device does with its sealed speech: after `COMBINING_GRACE` (10 min) take the
+  pass alone and, with P2P, keep the speech; send it to the combining device; combine every
+  recording held, however late it arrives; or delete it. Nothing waits more than
+  `KEEP_FOR_COMBINING` (three weeks). `combining_status` / `CombiningView` say how far combining
+  got, for the apps. `MeetingListing` lists a combined meeting once with every device;
+  `split_recordings` is the Split action; `name_recording_devices` names devices (also while
+  away) and says whether they are connected.
 - `combined_refinement.rs` runs the pass over every recording. Each is transcribed in 30 s windows
   as in #87. The offset is refined from words both devices wrote. Each word keeps its own device's
   speaker, mapped to the first recording's speakers by identity, else by time overlap. Each

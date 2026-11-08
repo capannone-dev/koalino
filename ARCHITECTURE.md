@@ -194,6 +194,13 @@ laptop records M1 ──┐                         ┌── phone records M2
   nothing is lost. Deleting M1 deletes M2.
 - **Devices are named by the ID written on their meetings.** P2P addresses peers by libp2p ID, so
   each device's manifest now carries both, and the P2P task translates.
+- **Late and many devices:** each recording takes its pass alone after 10 minutes, so its
+  transcript improves at once, and keeps its sealed speech. A recording that syncs up to three
+  weeks later still joins and is combined. Any number of devices join one group; the first
+  device that is not a phone combines (every recording notes whether a phone made it).
+- **Status:** every app shows, under "Recorded on", how far combining got as that device sees it:
+  one device (and until when another can join), waiting for named devices' audio (connected or
+  not), ready, still sending, combined, or not combined.
 - **Nothing lingers:** speech not sent or not combined within three weeks is deleted, as is speech of a
   meeting split or deleted meanwhile. A phone without a pass model keeps its speech only for that.
 - **Limits:** recordings must overlap in content, so a phone that hears only the other person

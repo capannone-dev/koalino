@@ -2065,6 +2065,19 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   and deletes it after the last receipt. Speech not sent or combined within three weeks is deleted (24 h at first;
   raised on the owner's request so a phone away from the laptop for a while still delivers).
   Recordings are compared for folding over the same three weeks.
+- **Late combining** (owner's request: "defer it when the data from the phone and laptop are both
+  available, up to 3 weeks, encrypted meanwhile"): a recording no longer deletes its speech after
+  its pass alone; with P2P it keeps it sealed, marked as passed, until combined or for three weeks.
+  The cost is sealed raw audio on disk for up to three weeks per meeting (about 115 MB per hour of
+  speech), on every device with P2P.
+- **Any number of devices:** a recording joins a group through whichever recording it resembles,
+  always into the group's first recording. The combining device is derived, not chosen: the
+  first recording made off a phone, from a `recorded_on_phone` flag each device writes on its
+  own meetings, so devices that fold at the same time cannot disagree.
+- **Status in every app** (owner's request): a detail line under "Recorded on", derived on the
+  showing device from the synced meetings, a `combined_with` list written after a combined pass,
+  and the file times of the sealed speech (never the audio). Paired devices' storage IDs are kept
+  with the pairing so a device that is away keeps its name.
 - **How the transcripts are combined:** each speaker's words come from the device with more words
   for that speaker. On NOTSOFAR's far-field devices (pipeline-limits report, section 4.3), one
   device scores 36.9% word error, the best device per meeting 34.6%, the device that wrote the
