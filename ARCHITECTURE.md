@@ -178,7 +178,7 @@ laptop records M1 ──┐                         ┌── phone records M2
        (the earlier recording), combine_on = laptop; the fold syncs in M2's document
                     │                         │
    laptop: plan = Combine (waits ≤3 wk        phone: plan = Send{laptop}
-   for M2's speech)                           NTR1 parts sealed with the pair key ──►
+   for M2's speech)                           NTR3 parts (Opus) sealed with the pair key ──►
                     ◄── NTR2 receipt per part  deletes its copy after the last receipt
    RetainedSpeechInbox stores M2's speech (only for a meeting it combines, only from M2's device)
                     │

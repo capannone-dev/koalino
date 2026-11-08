@@ -2089,3 +2089,32 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   translates.
 - **Deleting a combined meeting deletes the recordings folded into it**, which would otherwise
   reappear alone.
+
+## 2026-11-08 — #88 Kept speech is compressed with Opus
+
+- **Owner's request:** compress the speech kept for the after-meeting pass, both on disk and
+  before it is sent to the combining device. Raw speech took about 115 MB per hour, kept for up
+  to three weeks per meeting on every device with P2P.
+- **Codec and crate:** Opus, at 16 kHz mono in 20 ms frames, voice signal, complexity 10. The
+  crate is `unsafe-libopus` 0.2.0 (BSD-3): libopus 1.3.1 translated to Rust, so Android and
+  Windows builds need no C toolchain (there is no cmake here). It runs about 20% slower than C.
+  The pure-Rust rewrites were too immature. The owner's request was taken as approval for the
+  dependency. The unsafe calls are confined to two owned handles in `opus_speech.rs`.
+- **Bitrate: 24 kbit/s**, about a tenth of the raw size (11 MB per hour). The measurement used
+  the 20 NOTSOFAR recordings of the offline-small baseline (about 2 hours): each was transcoded
+  in 30 s chunks, transcribed with Whisper small (greedy), and scored. Aggregate WER was 41.96%
+  for raw audio, 46.06% at 12 kbit/s, 45.97% at 16, 42.62% at 24 and 43.56% at 32. DER was
+  within 0.6 points of raw at every bitrate. Below 24 kbit/s Opus narrows the band and loses
+  about 4 points; from 24 up, the differences are within the run-to-run noise of greedy decoding
+  (32 scored worse than 24).
+- **Format:** a record compressed this way uses a new sealing context, `retained-audio:v2:<id>`.
+  `v1` raw records written by earlier builds are still read, so speech kept across an update is
+  neither lost nor deleted as unreadable. The kept Opus is sent as it is (parts `NTR3`), so it is
+  never compressed twice. The receiver checks that it decodes before it stores it. A raw
+  `v1` record is compressed once, when it is sent. Parts from builds before Opus (`NTR1`) are not
+  recognised, so a pair with one device not yet updated keeps its speech (up to three weeks)
+  until both are.
+- **Off the capture path:** compressing a 30 s chunk took 0.4 s on the laptop and would take
+  longer on a phone, inside the call that delivers captured audio while it holds the engine. So a
+  `retained-speech` thread compresses and appends the chunks in order. Stop flushes it before it
+  releases the pass, so the pass never reads a meeting missing its last chunks.
