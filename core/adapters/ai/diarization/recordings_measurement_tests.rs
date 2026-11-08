@@ -159,7 +159,9 @@ fn words_from_state(state: &WhisperState, offset_ms: u64) -> Vec<Value> {
 /// `MEASURE_LANGUAGE` (`it` or `auto`), `MEASURE_BEAM` (0 for greedy) and optionally
 /// `MEASURE_SILERO_MODEL`, `MEASURE_GPU_DEVICE`, `MEASURE_DTW` (`tiny`, `base`, `small`, `medium`
 /// or `turbo`: aligned word times as `dtw_ms`), and for the windows modes `MEASURE_PROMPT=off` (no
-/// previous text) and `MEASURE_WINDOW_MS` (longest window). Silero has no effect through whisper-rs:
+/// previous text), `MEASURE_WINDOW_MS` (longest window) and `MEASURE_GLOSSARY_DIR` (a folder of
+/// `<recording>.txt` term lists, one term per line, with `default.txt` for the others: each window
+/// is prompted and cleaned of echoes as the app does). Silero has no effect through whisper-rs:
 /// `WhisperState::full` calls `whisper_full_with_state`, and only `whisper_full` applies VAD.
 /// Outputs: Panics on failure, since a partial measurement must not pass for a full one.
 /// Side effects: Runs inference and writes `NOTE_TAKER_MEASURE_OUTPUT`.
@@ -216,8 +218,17 @@ fn measure_transcription() {
     )
     .unwrap_or_else(|error| panic!("the model must load: {error}"));
 
+    let glossary_dir = env::var("MEASURE_GLOSSARY_DIR")
+        .ok()
+        .map(std::path::PathBuf::from);
     let mut lines = Vec::new();
     for (name, samples) in recordings() {
+        let glossary = glossary_dir.as_ref().and_then(|folder| {
+            let text = fs::read_to_string(folder.join(format!("{name}.txt")))
+                .or_else(|_| fs::read_to_string(folder.join("default.txt")))
+                .ok()?;
+            crate::domain::transcription_glossary::TranscriptionGlossary::parse(text.lines()).ok()
+        });
         let chunks = vad_chunk_bounds_with(&samples, mode == "windows_all");
         let started = Instant::now();
         // `windows` is the after-meeting pass (#87): the same chunks joined into windows of up to
@@ -251,13 +262,28 @@ fn measure_transcription() {
                 parameters.set_print_timestamps(false);
                 parameters.set_token_timestamps(true);
                 parameters.set_language(Some(language.as_str()));
-                if prompt && !previous_text.is_empty() {
-                    parameters.set_initial_prompt(&previous_text);
+                // The app's prompt: the previous window's text, then the glossary.
+                let context = crate::domain::models::TranscriptionContext::new(
+                    (prompt && !previous_text.is_empty()).then(|| previous_text.clone()),
+                )
+                .with_glossary(glossary.clone());
+                let window_prompt = context.prompt();
+                if let Some(window_prompt) = window_prompt.as_deref() {
+                    parameters.set_initial_prompt(window_prompt);
                 }
                 state
                     .full(parameters, &audio)
                     .unwrap_or_else(|error| panic!("transcription must run: {error}"));
-                let window_words = words_from_state(&state, 0);
+                let mut window_words = words_from_state(&state, 0);
+                if let Some(glossary) = &glossary {
+                    let text = window_words
+                        .iter()
+                        .filter_map(|word| word["text"].as_str())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let echoed = glossary.leading_echo_words(&text);
+                    window_words.drain(..echoed.min(window_words.len()));
+                }
                 previous_text = window_words
                     .iter()
                     .filter_map(|word| word["text"].as_str())

@@ -2118,3 +2118,26 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   longer on a phone, inside the call that delivers captured audio while it holds the engine. So a
   `retained-speech` thread compresses and appends the chunks in order. Stop flushes it before it
   releases the pass, so the pass never reads a meeting missing its last chunks.
+
+## 2026-11-08 — Transcription glossary (names and project terms)
+
+- **Owner's request:** let the owner give names and project terms that Whisper should spell
+  right. One glossary per device, kept in `<db>.transcription-settings.json` next to the other
+  transcription choices. The apps (FFI), the CLI (`glossary`) and the web
+  (`/api/settings/glossary`) all edit it. It is read fresh when each recording and each
+  after-meeting pass starts, so nothing is rebuilt.
+- **Prompt:** Whisper's initial prompt is read as text spoken just before the audio. The glossary
+  becomes a bare list, `Marco Rossi, Kubernetes, OKR.`, with no words of any language around it,
+  so language detection is not pulled towards English. Whisper keeps the end of a prompt longer
+  than about 220 tokens, so the previous chunk's text comes first and the glossary last. Limits:
+  60 characters per term, 500 in all. Remote transcription gets the same prompt as the job's
+  previous text.
+- **Echo guard:** prompting can make Whisper write the prompt back over quiet audio. A transcript
+  that opens with two or more glossary terms in a row loses them, together with their word
+  times. One term alone is kept, as it can be a real answer ("Marco.").
+- **Measurement** (NOTSOFAR 20, 30 s windows as in the after-meeting pass, Whisper small, greedy;
+  aggregates only): mean WER 40.38 without a glossary, 39.04 with an unrelated 10-term list, and
+  38.17 with each meeting's own names and terms (capitalised mid-sentence words said at least
+  twice in the reference, about 6 per meeting). Term recall went from 51.3% to 54.1% and
+  60.5%. DER is unchanged. So a glossary that does not fit the meeting does no harm. The terms
+  are taken from the references, so the relevant row is an upper bound for a well-chosen list.
