@@ -418,3 +418,82 @@ impl PromptTemplate {
         rendered
     }
 }
+
+/// Image types every supported provider accepts.
+pub const LLM_IMAGE_MEDIA_TYPES: [&str; 4] = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+/// The largest image sent, so its base64 form stays under the providers' 5 MB limit.
+pub const MAX_LLM_IMAGE_BYTES: usize = 3_750_000;
+/// The most images sent with one request.
+pub const MAX_LLM_IMAGES: usize = 20;
+
+/// Who wrote a turn of the conversation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmRole {
+    /// The owner, or the app on the owner's behalf.
+    User,
+    /// The model.
+    Assistant,
+}
+
+/// One turn of the conversation sent to a model.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LlmTurn {
+    /// Who wrote it.
+    pub role: LlmRole,
+    /// What was written.
+    pub text: String,
+}
+
+/// An image sent with the first user turn, such as a meeting photo or a shared slide.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LlmImage {
+    media_type: &'static str,
+    bytes: Vec<u8>,
+}
+
+impl LlmImage {
+    /// Accepts an image the providers can read.
+    ///
+    /// Inputs: Its MIME type and bytes. Outputs: The image, or `None` when the type is not one of
+    /// `LLM_IMAGE_MEDIA_TYPES` or it is empty or over `MAX_LLM_IMAGE_BYTES`. Side effects: None.
+    pub fn new(media_type: &str, bytes: Vec<u8>) -> Option<Self> {
+        let media_type = LLM_IMAGE_MEDIA_TYPES
+            .into_iter()
+            .find(|known| known.eq_ignore_ascii_case(media_type))?;
+        (!bytes.is_empty() && bytes.len() <= MAX_LLM_IMAGE_BYTES)
+            .then_some(Self { media_type, bytes })
+    }
+
+    /// Returns its MIME type. Side effects: None.
+    pub fn media_type(&self) -> &'static str {
+        self.media_type
+    }
+
+    /// Returns its bytes. Side effects: None.
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+}
+
+/// One request to a model: instructions, the conversation so far, and images.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LlmRequest {
+    /// Instructions; may be empty.
+    pub system: String,
+    /// The conversation, starting with a user turn and ending with one.
+    pub turns: Vec<LlmTurn>,
+    /// Images attached to the first user turn.
+    pub images: Vec<LlmImage>,
+    /// The longest answer wanted, in tokens.
+    pub max_output_tokens: u32,
+}
+
+/// A model's answer.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LlmCompletion {
+    /// The answer's text.
+    pub text: String,
+    /// The answer stopped at the length limit.
+    pub truncated: bool,
+}

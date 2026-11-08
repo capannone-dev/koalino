@@ -286,3 +286,45 @@ pub enum ScreenShareError {
     #[error(transparent)]
     Storage(#[from] StorageError),
 }
+
+/// Why a language model gave no answer. Provider error bodies are never kept, since they can
+/// echo meeting content.
+#[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum LlmError {
+    /// The server could not be reached or did not answer in time.
+    #[error("the language model could not be reached")]
+    Unreachable,
+    /// The server refused the API key.
+    #[error("the language model refused the API key")]
+    Unauthorized,
+    /// The server asked to slow down.
+    #[error("the language model is busy or over its limit; try again later")]
+    RateLimited,
+    /// The server rejected the request, for example an unknown model.
+    #[error("the language model rejected the request (HTTP {status})")]
+    Rejected {
+        /// The HTTP status.
+        status: u16,
+    },
+    /// The server failed.
+    #[error("the language model failed (HTTP {status})")]
+    ServerFailed {
+        /// The HTTP status.
+        status: u16,
+    },
+    /// The model declined to answer.
+    #[error("the language model declined to answer")]
+    Refused,
+    /// The answer could not be read, or was empty.
+    #[error("the language model's answer could not be read")]
+    InvalidResponse,
+    /// The connection needs an API key and has none.
+    #[error("this connection needs an API key")]
+    MissingKey,
+    /// The request cannot be sent as built.
+    #[error("the request to the language model is invalid: {reason}")]
+    InvalidRequest {
+        /// What is wrong, free of meeting content.
+        reason: &'static str,
+    },
+}

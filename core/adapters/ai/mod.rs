@@ -13,6 +13,8 @@ mod gpu_attempt_guard_tests;
 pub mod gpu_thread_affinity;
 #[cfg(all(test, any(target_os = "linux", target_os = "android")))]
 mod gpu_thread_affinity_tests;
+/// Language model adapters for summaries and chat (#95).
+pub mod llm;
 /// Implements the portable transcription port with a locally loaded whisper.cpp model.
 #[cfg(feature = "local-ai")]
 pub mod local_whisper_cpp;

@@ -47,3 +47,9 @@ Efficient mode runs a model on a supported Adreno GPU with Flash Attention. It b
   chunk, survives a driver that kills the process, so the next start uses the CPU until the owner tries again.
 
 The patched whisper.cpp is in `third_party/whisper-rs-sys`; its README lists the changes.
+
+## Language models (#95)
+
+`llm/` holds the adapters that send meeting text and photos to a language model for summaries:
+OpenAI-compatible Chat Completions (OpenAI, Mistral, local LAN servers) and Anthropic's Messages
+API. See `llm/README.md`.

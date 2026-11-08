@@ -201,3 +201,17 @@ where
         (*self).voice_windows(audio_bytes).await
     }
 }
+
+/// Answers a request with a language model, local or remote.
+///
+/// Implementations block on the network, so callers run them on a background thread.
+pub trait LlmEngine: Send + Sync {
+    /// Sends one request and waits for the whole answer.
+    ///
+    /// Inputs: The instructions, conversation and images. Outputs: The answer, or why there is
+    /// none. Side effects: Sends the request, meeting content included, to the connection's server.
+    fn complete(
+        &self,
+        request: &crate::domain::llm::LlmRequest,
+    ) -> Result<crate::domain::llm::LlmCompletion, crate::domain::errors::LlmError>;
+}
