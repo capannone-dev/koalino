@@ -13,7 +13,7 @@ is imported.
 | --- | --- |
 | `meeting_session.rs` | `MeetingSession`: per-recording orchestration of local VAD chunks and external bridge chunks. |
 | `alignment.rs` | Pure timestamp alignment and transcript text distribution against VAD chunk boundaries. |
-| `pipeline_factory.rs` | `PipelineFactory`: the composition root that owns the pipeline ports once and opens one session per recording. |
+| `pipeline_factory.rs` | `PipelineFactory`: the composition root that owns the pipeline ports once and opens one session per recording. Its `GlossarySource` is read when each session opens, so a saved glossary applies from the next recording without rebuilding anything; the session prompts every chunk with it and drops its echo. |
 | `tests.rs` | Mock-port TDD specification plus an in-memory SQLite integration test of a three-chunk meeting. |
 | `pipeline_factory_tests.rs` | Factory availability, graceful degradation, meeting creation, engine reuse, and clustering policy. |
 | `task_metrics.rs` | `TaskMetricsRecorder` and `TaskProfile`: one telemetry row per completed transcription or diarization. |

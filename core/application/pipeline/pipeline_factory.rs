@@ -154,7 +154,15 @@ pub struct PipelineFactory<TranscriptionPort, DiarizationPort, MatcherPort, Repo
     task_metrics: Option<Rc<TaskMetricsRecorder>>,
     /// The engine's configured language, recorded for audio without a chosen one.
     default_language: Option<TranscriptionLanguage>,
+    /// Reads the owner's glossary as each recording starts; `None` prompts nothing.
+    glossary_source: Option<GlossarySource>,
 }
+
+/// Reads the owner's current glossary of names and terms, so a change applies to the next
+/// recording without rebuilding the pipeline. Returns `None` when there is none or it can't be read.
+pub type GlossarySource = std::sync::Arc<
+    dyn Fn() -> Option<crate::domain::transcription_glossary::TranscriptionGlossary> + Send + Sync,
+>;
 
 impl<TranscriptionPort, RepositoryPort>
     PipelineFactory<TranscriptionPort, NoDiarizationEngine, NoVoiceMatcher, RepositoryPort>
@@ -175,6 +183,7 @@ impl<TranscriptionPort, RepositoryPort>
             clustering_config: ClusteringConfig::default(),
             task_metrics: None,
             default_language: None,
+            glossary_source: None,
         }
     }
 }
@@ -199,6 +208,7 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
             clustering_config: self.clustering_config,
             task_metrics: self.task_metrics,
             default_language: self.default_language,
+            glossary_source: self.glossary_source,
         }
     }
 
@@ -221,6 +231,7 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
             clustering_config: self.clustering_config,
             task_metrics: self.task_metrics,
             default_language: self.default_language,
+            glossary_source: self.glossary_source,
         }
     }
 
@@ -254,6 +265,14 @@ impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
         default_language: Option<TranscriptionLanguage>,
     ) -> Self {
         self.default_language = default_language;
+        self
+    }
+
+    /// Prompts every later session with the glossary `glossary_source` returns when it starts.
+    ///
+    /// Inputs: The source, or `None`. Outputs: The factory. Side effects: None.
+    pub fn with_glossary_source(mut self, glossary_source: Option<GlossarySource>) -> Self {
+        self.glossary_source = glossary_source;
         self
     }
 
@@ -320,7 +339,8 @@ where
         .map(|session| {
             let session = session
                 .with_clustering_config(self.clustering_config)
-                .with_default_language(self.default_language);
+                .with_default_language(self.default_language)
+                .with_glossary(self.glossary_source.as_ref().and_then(|source| source()));
             match &self.task_metrics {
                 Some(task_metrics) => session.with_task_metrics(Rc::clone(task_metrics)),
                 None => session,

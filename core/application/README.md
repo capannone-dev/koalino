@@ -196,7 +196,11 @@ fetches what it missed when it reconnects, restarting any file that was cut off.
 `transcription_exchange.rs` encodes the sealed `NTT3`/`NTT2` messages that transcribe on a paired
 device, and `transcription_routing.rs` is the pipeline's engine (#59): per chunk it registers the
 connected manifests with `ComputeDispatcher`, follows the owner's choice, and falls back to the local
-engine on any remote failure, with the audio intact.
+engine on any remote failure, with the audio intact. A paired device receives the prompt
+(previous text, then the glossary) as the job's `previous_text`.
+
+`glossary_transcription.rs` wraps any engine so each call carries the owner's glossary and comes back
+without its echo; the after-meeting pass uses it, as its engine is loaded outside the pipeline.
 
 `ai_config.rs` keeps per-device defaults and optional task overrides provider-neutral. `ai_registry.rs`
 registers only `TranscriptionEngine` trait objects and selects an explicit provider or its fallback

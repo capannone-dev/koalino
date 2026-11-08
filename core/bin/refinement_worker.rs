@@ -32,6 +32,9 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use crate::application::{
+    glossary_transcription::GlossaryTranscription, pipeline::pipeline_factory::GlossarySource,
+};
 use crate::{
     adapters::audio::{
         chunk_audio_store::ChunkAudioStore,
@@ -231,6 +234,8 @@ pub struct RefinementWorker {
     attempts: HashMap<String, u32>,
     /// The current time; replaced in tests.
     now: Box<dyn Fn() -> SystemTime + Send>,
+    /// Reads the owner's glossary of names and terms when the model loads; `None` uses none.
+    glossary_source: Option<GlossarySource>,
 }
 
 impl RefinementWorker {
@@ -250,6 +255,7 @@ impl RefinementWorker {
             device_id,
             attempts: HashMap::new(),
             now: Box::new(SystemTime::now),
+            glossary_source: None,
         }
     }
 
@@ -269,7 +275,18 @@ impl RefinementWorker {
             device_id,
             attempts: HashMap::new(),
             now: Box::new(SystemTime::now),
+            glossary_source: None,
         }
+    }
+
+    /// Transcribes every pass with the glossary `glossary_source` returns when a round loads the
+    /// model, so a change applies from the next round.
+    ///
+    /// Inputs: The source. Outputs: The worker. Side effects: None.
+    #[must_use]
+    pub fn with_glossary_source(mut self, glossary_source: GlossarySource) -> Self {
+        self.glossary_source = Some(glossary_source);
+        self
     }
 
     /// Replaces the clock, so tests can let time pass.
@@ -413,7 +430,12 @@ impl RefinementWorker {
             let make_engine = self.make_engine.as_ref()?;
             let audio_source = Arc::new(ChunkAudioStore::new());
             match make_engine(Arc::clone(&audio_source)) {
-                Ok(loaded) => *engine = Some((loaded, audio_source)),
+                Ok(loaded) => {
+                    let glossary = self.glossary_source.as_ref().and_then(|source| source());
+                    let with_glossary: Box<dyn TranscriptionEngine> =
+                        Box::new(GlossaryTranscription::new(loaded, glossary));
+                    *engine = Some((with_glossary, audio_source));
+                }
                 Err(error) => {
                     tracing::warn!(error = %format!("{error:#}"), "the transcript pass cannot load its model");
                     return None;

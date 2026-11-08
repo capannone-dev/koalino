@@ -130,6 +130,28 @@ where
     }
 }
 
+/// Forwards transcription calls through a box, so a loaded engine can be wrapped and passed on.
+impl<T> TranscriptionEngine for Box<T>
+where
+    T: TranscriptionEngine + ?Sized,
+{
+    fn transcribe(
+        &self,
+        audio_recording: &AudioRecording,
+        transcription_context: &TranscriptionContext,
+    ) -> Result<Transcript, TranscriptionError> {
+        (**self).transcribe(audio_recording, transcription_context)
+    }
+
+    fn transcribe_external_media(
+        &self,
+        media_chunk: &ExternalMediaChunk,
+        audio_recording: &AudioRecording,
+    ) -> Result<Transcript, TranscriptionError> {
+        (**self).transcribe_external_media(media_chunk, audio_recording)
+    }
+}
+
 /// Forwards diarization calls through references so one engine can serve many sessions.
 #[async_trait::async_trait]
 impl<T> DiarizationEngine for &T

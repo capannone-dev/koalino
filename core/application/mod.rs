@@ -59,6 +59,10 @@ mod diarization_processor_tests;
 pub mod export_manager;
 #[cfg(test)]
 mod export_manager_tests;
+/// Transcribes with the owner's glossary of names and terms, around any engine.
+pub mod glossary_transcription;
+#[cfg(test)]
+mod glossary_transcription_tests;
 /// The daemon's runtime log level and log location, as a port for the HTTP routes (Issue #46).
 pub mod log_control;
 /// Coordinates Automerge meeting documents through storage ports.

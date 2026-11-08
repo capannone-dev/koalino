@@ -102,7 +102,7 @@ impl TranscriptionEngine for MockTranscriptionEngine {
     ) -> Result<Transcript, TranscriptionError> {
         self.received_previous_texts
             .borrow_mut()
-            .push(transcription_context.previous_text().map(str::to_owned));
+            .push(transcription_context.prompt());
         self.received_languages
             .borrow_mut()
             .push(transcription_context.language());
@@ -1755,4 +1755,55 @@ async fn without_voice_windows_the_live_result_stands() {
         None
     );
     assert_eq!(session.persisted_segments(), before);
+}
+
+/// Verifies the owner's glossary prompts every chunk, and an echo of it never reaches the transcript.
+#[tokio::test]
+async fn the_glossary_prompts_each_chunk_and_its_echo_is_dropped() {
+    let glossary =
+        crate::domain::transcription_glossary::TranscriptionGlossary::parse(["Marco Rossi", "OKR"])
+            .unwrap_or_else(|error| panic!("{error}"));
+    let engine =
+        MockTranscriptionEngine::returning(&["Marco Rossi, OKR. We agreed.", "Marco Rossi, OKR."]);
+    let mut session: MockSession = MeetingSession::start(
+        MeetingId::new(MEETING_ID),
+        engine,
+        None,
+        MockVoiceIdentityMatcher {
+            known_identity_id: Uuid::new_v4(),
+            weak_candidate_id: Uuid::new_v4(),
+        },
+        MockNoteRepository::default(),
+    )
+    .unwrap_or_else(|error| panic!("session should start: {error}"))
+    .with_glossary(Some(glossary));
+
+    let first = session
+        .process_vad_chunk(&vad_chunk(1, 0, 900))
+        .await
+        .unwrap_or_else(|error| panic!("processing should succeed: {error}"));
+    let second = session
+        .process_vad_chunk(&vad_chunk(2, 900, 1_800))
+        .await
+        .unwrap_or_else(|error| panic!("processing should succeed: {error}"));
+
+    let texts: Vec<&str> = first
+        .iter()
+        .map(|segment| segment.segment().text())
+        .collect();
+    assert_eq!(texts, ["We agreed."]);
+    assert!(
+        second.is_empty(),
+        "a chunk that only echoes the glossary writes nothing"
+    );
+    assert_eq!(
+        *session
+            .transcription_engine()
+            .received_previous_texts
+            .borrow(),
+        [
+            Some("Marco Rossi, OKR.".to_owned()),
+            Some("Marco Rossi, OKR.".to_owned())
+        ]
+    );
 }

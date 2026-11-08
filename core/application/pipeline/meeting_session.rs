@@ -13,6 +13,7 @@ use std::{rc::Rc, time::Instant};
 
 use uuid::Uuid;
 
+use crate::domain::transcription_glossary::TranscriptionGlossary;
 use crate::{
     domain::{
         errors::{StorageError, TranscriptionError},
@@ -267,6 +268,8 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     clustering_config: ClusteringConfig,
     /// Saves a telemetry row per completed transcription and diarization; `None` records none.
     task_metrics: Option<Rc<TaskMetricsRecorder>>,
+    /// The owner's names and terms, read when the recording started; `None` prompts nothing.
+    glossary: Option<TranscriptionGlossary>,
 }
 
 impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
@@ -314,7 +317,17 @@ where
             default_language: None,
             clustering_config: ClusteringConfig::default(),
             task_metrics: None,
+            glossary: None,
         })
+    }
+
+    /// Transcribes every later chunk with the owner's glossary of names and terms.
+    ///
+    /// Inputs: The glossary, or `None`. Outputs: The session, which prompts each chunk with it and
+    /// drops text that only echoes it. Side effects: None until a chunk is processed.
+    pub fn with_glossary(mut self, glossary: Option<TranscriptionGlossary>) -> Self {
+        self.glossary = glossary.filter(|glossary| !glossary.is_empty());
+        self
     }
 
     /// Replaces the default unknown-speaker clustering policy (threshold 0.40).
@@ -413,12 +426,18 @@ where
         let chunk_bounds = vad_chunk.chunk_bounds();
         // No previous text as a prompt: Whisper then repeated or completed the previous chunk's
         // last words (Issue #51). The chosen language keeps chunks consistent instead.
-        let transcription_context =
-            TranscriptionContext::new(None).with_language(vad_chunk.language());
+        // The glossary prompts each chunk alone, and its echo is dropped below.
+        let transcription_context = TranscriptionContext::new(None)
+            .with_language(vad_chunk.language())
+            .with_glossary(self.glossary.clone());
         let transcript = self
             .transcription_engine
             .transcribe(vad_chunk.audio_recording(), &transcription_context)
             .map_err(|error| self.log_transcription_failure(chunk_bounds, error))?;
+        let transcript = match &self.glossary {
+            Some(glossary) => glossary.without_echo(transcript),
+            None => transcript,
+        };
         if let Some(task_metrics) = &self.task_metrics {
             task_metrics.record_transcription(
                 processing_started_at.elapsed(),
