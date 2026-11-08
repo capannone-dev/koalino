@@ -506,3 +506,22 @@ pub struct LlmCompletion {
     /// The answer stopped at the length limit.
     pub truncated: bool,
 }
+
+/// A meeting's summary as stored in its document, which syncs it to paired devices.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MeetingSummary {
+    /// The summary, in Markdown.
+    pub text: String,
+    /// The connection's label when it was written.
+    pub connection_label: String,
+    /// The model that wrote it.
+    pub model: String,
+    /// When it was written or last edited.
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    /// The instructions actually sent: the template with its placeholders filled.
+    pub prompt: String,
+    /// The owner edited it, so automatic summaries leave it alone.
+    pub edited: bool,
+    /// The model stopped at its length limit, so the end may be missing.
+    pub truncated: bool,
+}

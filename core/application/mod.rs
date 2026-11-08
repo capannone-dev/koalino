@@ -77,6 +77,10 @@ pub mod meeting_recorder;
 pub mod meeting_rename;
 #[cfg(test)]
 mod meeting_rename_tests;
+/// Asks a language model for a meeting's summary, condensing long transcripts in parts (#95).
+pub mod meeting_summary;
+#[cfg(test)]
+mod meeting_summary_tests;
 #[cfg(test)]
 mod meeting_title_sync_tests;
 /// Builds the readable transcript text (segments, or the flat imported text) for read paths.
