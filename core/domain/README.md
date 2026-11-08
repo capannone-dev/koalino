@@ -52,3 +52,14 @@ no words of any language, so it does not pull language detection towards English
 `leading_echo_words` recognises Whisper writing the prompt back (two or more terms opening a
 transcript) so `without_echo` can drop it. `TranscriptionContext::prompt` (`models.rs`) puts the
 previous chunk's text first and the glossary last, because Whisper keeps the end of a long prompt.
+
+`transcript_confidence.rs` (#90, #91) judges how far a transcript can be trusted. Each
+`TranscriptSegment` carries a `SegmentConfidence` with three marks:
+- `overlapping_speech`: the segment spends at least 0.5 s, or half of a shorter segment, inside an
+  `OverlapSpan`, a stretch where diarization heard two or more voices at once;
+- `uncertain_speaker`: a weak voice match, or no voice near the text;
+- `uncertain_words`: positions of the words whose least sure token was under 0.4. `TimedWord`
+  keeps that probability in thousandths.
+
+With Whisper small on NOTSOFAR, 42% of the words under 0.4 were wrong, against 3.1% of those at
+0.95 or more. Overlap spans closer than 250 ms merge, and those under 200 ms are dropped.

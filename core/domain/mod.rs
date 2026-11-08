@@ -17,6 +17,10 @@ mod peer_trust_tests;
 pub mod projects;
 #[cfg(test)]
 mod projects_tests;
+/// Judges how far a transcript can be trusted: uncertain words, overlap and speakers.
+pub mod transcript_confidence;
+#[cfg(test)]
+mod transcript_confidence_tests;
 /// Defines the glossary of names and terms that steers transcription.
 pub mod transcription_glossary;
 #[cfg(test)]

@@ -328,9 +328,48 @@ pub struct ExportTranscriptSegment {
     speaker_identity_id: Option<Uuid>,
     speaker: String,
     text: String,
+    /// How doubtful the segment is (#90, #91).
+    confidence: crate::domain::transcript_confidence::SegmentConfidence,
 }
 
 impl ExportTranscriptSegment {
+    /// Attaches the segment's confidence marks. Side effects: None.
+    pub fn with_confidence(
+        mut self,
+        confidence: crate::domain::transcript_confidence::SegmentConfidence,
+    ) -> Self {
+        self.confidence = confidence;
+        self
+    }
+
+    /// Borrows the segment's confidence marks.
+    pub fn confidence(&self) -> &crate::domain::transcript_confidence::SegmentConfidence {
+        &self.confidence
+    }
+
+    /// Returns the speaker label, followed by ` (?)` when the speaker is a guess.
+    pub fn marked_speaker(&self) -> String {
+        if self.confidence.uncertain_speaker {
+            format!("{} (?)", self.speaker)
+        } else {
+            self.speaker.clone()
+        }
+    }
+
+    /// Splits the text into words, each with whether it was unclear.
+    ///
+    /// Outputs: The whitespace-separated words in order. Side effects: None.
+    pub fn words_with_doubt(&self) -> Vec<(&str, bool)> {
+        self.text
+            .split_whitespace()
+            .enumerate()
+            .map(|(position, word)| {
+                let uncertain = u16::try_from(position)
+                    .is_ok_and(|position| self.confidence.uncertain_words.contains(&position));
+                (word, uncertain)
+            })
+            .collect()
+    }
     /// Creates one time-bounded transcript segment with a resolved speaker label.
     ///
     /// Inputs: Offsets from the meeting start in milliseconds, the optional identity UUID, the
@@ -350,6 +389,7 @@ impl ExportTranscriptSegment {
             speaker_identity_id,
             speaker: speaker.into(),
             text: text.into(),
+            confidence: Default::default(),
         }
     }
 
@@ -1493,6 +1533,9 @@ pub struct TimedWord {
     text: String,
     start_ms: u64,
     end_ms: u64,
+    /// How sure the engine was of the word, in thousandths (its least sure token); `None` when
+    /// the engine gave no probability (#91).
+    probability_permille: Option<u16>,
 }
 
 impl TimedWord {
@@ -1507,7 +1550,30 @@ impl TimedWord {
             text: text.into(),
             start_ms,
             end_ms: end_ms.max(start_ms),
+            probability_permille: None,
         }
+    }
+
+    /// Records how sure the engine was of the word.
+    ///
+    /// Inputs: A probability in [0, 1]; values outside are clamped, and NaN records none.
+    /// Outputs: The same word with its probability in thousandths. Side effects: None.
+    pub fn with_probability(self, probability: f32) -> Self {
+        let permille =
+            (!probability.is_nan()).then(|| (probability.clamp(0.0, 1.0) * 1000.0).round() as u16);
+        self.with_probability_permille(permille)
+    }
+
+    /// Records the word's probability in thousandths, or none (values above 1000 are clamped).
+    /// Side effects: None.
+    pub fn with_probability_permille(mut self, probability_permille: Option<u16>) -> Self {
+        self.probability_permille = probability_permille.map(|permille| permille.min(1000));
+        self
+    }
+
+    /// Returns how sure the engine was of the word, in thousandths, if it said.
+    pub fn probability_permille(&self) -> Option<u16> {
+        self.probability_permille
     }
 
     /// Borrows the word's text.
@@ -2566,6 +2632,8 @@ pub struct TranscriptSegment {
     text: String,
     /// Unknown-speaker cluster the interval was grouped into, used to relink it on assignment.
     unknown_cluster_id: Option<Uuid>,
+    /// How doubtful the interval is: overlap, an uncertain speaker, uncertain words (#90, #91).
+    confidence: crate::domain::transcript_confidence::SegmentConfidence,
 }
 
 impl TranscriptSegment {
@@ -2589,7 +2657,25 @@ impl TranscriptSegment {
             speaker_identity_id,
             text: text.into(),
             unknown_cluster_id: None,
+            confidence: Default::default(),
         }
+    }
+
+    /// Attaches how doubtful the segment is (#90, #91).
+    ///
+    /// Inputs: The marks; word positions refer to this segment's text.
+    /// Outputs: The same segment carrying them. Side effects: None.
+    pub fn with_confidence(
+        mut self,
+        confidence: crate::domain::transcript_confidence::SegmentConfidence,
+    ) -> Self {
+        self.confidence = confidence;
+        self
+    }
+
+    /// Borrows how doubtful the segment is.
+    pub fn confidence(&self) -> &crate::domain::transcript_confidence::SegmentConfidence {
+        &self.confidence
     }
 
     /// Links the segment to the unknown-speaker cluster its voice was grouped into.

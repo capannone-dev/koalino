@@ -14,19 +14,22 @@ pub struct WhisperTokenTiming<'a> {
     pub start_units: i64,
     /// End in whisper.cpp timestamp units (10 ms); negative when unknown.
     pub end_units: i64,
+    /// How sure the decoder was of the token, in [0, 1].
+    pub probability: f32,
 }
 
 /// Joins tokens into words: a token starting with whitespace starts a new word.
 ///
 /// Inputs: Tokens in decoding order. Control tokens such as `[_BEG_]` or `<|it|>` are skipped.
-/// Outputs: Words with times in milliseconds from the start of the audio, without empty words.
+/// Outputs: Words with times in milliseconds from the start of the audio, without empty words,
+/// each as sure as its least sure token.
 /// Invalid UTF-8 is replaced rather than dropped, so the word count stays right.
 /// Side effects: None.
 pub fn words_from_tokens<'a>(
     tokens: impl IntoIterator<Item = WhisperTokenTiming<'a>>,
 ) -> Vec<TimedWord> {
     let mut words = Vec::new();
-    let mut pending: Option<(Vec<u8>, u64, u64)> = None;
+    let mut pending: Option<PendingWord> = None;
     for token in tokens {
         if token.bytes.starts_with(b"[_") || token.bytes.starts_with(b"<|") {
             continue;
@@ -35,13 +38,19 @@ pub fn words_from_tokens<'a>(
         let end_ms = units_to_milliseconds(token.end_units);
         let starts_word = token.bytes.first().is_some_and(u8::is_ascii_whitespace);
         match &mut pending {
-            Some((bytes, _, word_end_ms)) if !starts_word => {
-                bytes.extend_from_slice(token.bytes);
-                *word_end_ms = end_ms.max(*word_end_ms);
+            Some(word) if !starts_word => {
+                word.bytes.extend_from_slice(token.bytes);
+                word.end_ms = end_ms.max(word.end_ms);
+                word.probability = word.probability.min(token.probability);
             }
             _ => {
                 finish_word(pending.take(), &mut words);
-                pending = Some((token.bytes.to_vec(), start_ms, end_ms));
+                pending = Some(PendingWord {
+                    bytes: token.bytes.to_vec(),
+                    start_ms,
+                    end_ms,
+                    probability: token.probability,
+                });
             }
         }
     }
@@ -66,13 +75,28 @@ fn units_to_milliseconds(units: i64) -> u64 {
     u64::try_from(units).unwrap_or(0) * MILLISECONDS_PER_TIMESTAMP_UNIT
 }
 
+/// A word being joined from its tokens.
+struct PendingWord {
+    /// The bytes so far, possibly ending inside a character.
+    bytes: Vec<u8>,
+    /// Start in milliseconds.
+    start_ms: u64,
+    /// End in milliseconds.
+    end_ms: u64,
+    /// The least sure token's probability so far.
+    probability: f32,
+}
+
 /// Adds a finished word unless it is blank.
-fn finish_word(pending: Option<(Vec<u8>, u64, u64)>, words: &mut Vec<TimedWord>) {
-    if let Some((bytes, start_ms, end_ms)) = pending {
-        let text = String::from_utf8_lossy(&bytes);
+fn finish_word(pending: Option<PendingWord>, words: &mut Vec<TimedWord>) {
+    if let Some(word) = pending {
+        let text = String::from_utf8_lossy(&word.bytes);
         let trimmed = text.trim();
         if !trimmed.is_empty() {
-            words.push(TimedWord::new(trimmed, start_ms, end_ms));
+            words.push(
+                TimedWord::new(trimmed, word.start_ms, word.end_ms)
+                    .with_probability(word.probability),
+            );
         }
     }
 }

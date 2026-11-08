@@ -404,7 +404,7 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
                     && let Ok(bytes) = token.to_bytes()
                 {
                     let timing = token.token_data();
-                    spoken_tokens.push((bytes.to_vec(), timing.t0, timing.t1));
+                    spoken_tokens.push((bytes.to_vec(), timing.t0, timing.t1, timing.p));
                 }
             }
         }
@@ -412,15 +412,14 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
         // Timing only steers who said a word: if it ever disagrees with the text, the text wins
         // and the transcript falls back to splitting by time.
         let timed_words =
-            words_from_tokens(
-                spoken_tokens
-                    .iter()
-                    .map(|(bytes, t0, t1)| WhisperTokenTiming {
-                        bytes,
-                        start_units: *t0,
-                        end_units: *t1,
-                    }),
-            );
+            words_from_tokens(spoken_tokens.iter().map(|(bytes, t0, t1, probability)| {
+                WhisperTokenTiming {
+                    bytes,
+                    start_units: *t0,
+                    end_units: *t1,
+                    probability: *probability,
+                }
+            }));
         let timed_words = if words_match_text(&timed_words, &transcript_content) {
             timed_words
         } else {

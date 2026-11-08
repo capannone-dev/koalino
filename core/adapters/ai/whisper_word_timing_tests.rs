@@ -7,6 +7,7 @@ fn token(bytes: &[u8], start_units: i64, end_units: i64) -> WhisperTokenTiming<'
         bytes,
         start_units,
         end_units,
+        probability: 0.9,
     }
 }
 
@@ -64,4 +65,25 @@ fn words_must_spell_the_text() {
     assert!(words_match_text(&words, " un  due "));
     assert!(!words_match_text(&words, "un tre"));
     assert!(!words_match_text(&words, "un"));
+}
+
+/// Verifies a word is as sure as its least sure token (#91).
+#[test]
+fn a_word_takes_the_probability_of_its_least_sure_token() {
+    let words = words_from_tokens([
+        WhisperTokenTiming {
+            probability: 0.95,
+            ..token(b" Kuber", 0, 10)
+        },
+        WhisperTokenTiming {
+            probability: 0.31,
+            ..token(b"netes", 10, 20)
+        },
+        WhisperTokenTiming {
+            probability: 0.88,
+            ..token(b" now", 20, 30)
+        },
+    ]);
+    let probabilities: Vec<Option<u16>> = words.iter().map(|w| w.probability_permille()).collect();
+    assert_eq!(probabilities, [Some(310), Some(880)]);
 }
