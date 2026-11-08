@@ -422,6 +422,26 @@ final class _MeetingContent extends StatelessWidget {
                   ),
                 ],
               ),
+            if (summary.combining case final MeetingCombining combining)
+              Padding(
+                key: const ValueKey<String>('meeting-combining'),
+                padding: const EdgeInsets.only(top: 2, bottom: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(combiningIcon(combining.state),
+                        size: 18, color: theme.colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        combining.description,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             SelectableText(
               summary.meetingId,
               style: theme.textTheme.bodySmall
@@ -585,3 +605,13 @@ final class _PhotoViewer extends StatelessWidget {
     );
   }
 }
+
+/// The icon for a meeting's combining state (#88).
+IconData combiningIcon(CombiningState state) => switch (state) {
+      CombiningState.oneDevice => Icons.smartphone_outlined,
+      CombiningState.waiting => Icons.sync_outlined,
+      CombiningState.readyToCombine => Icons.hourglass_bottom_outlined,
+      CombiningState.sending => Icons.upload_outlined,
+      CombiningState.combined => Icons.check_circle_outline,
+      CombiningState.notCombined => Icons.sync_problem_outlined,
+    };

@@ -15,6 +15,7 @@ final class RecordingDevice {
     required this.deviceId,
     required this.name,
     required this.thisDevice,
+    this.connected,
   });
 
   /// The ID written on the device's meetings.
@@ -26,8 +27,15 @@ final class RecordingDevice {
   /// Whether it is this device.
   final bool thisDevice;
 
+  /// Whether it is connected now; `null` for this device and without P2P.
+  final bool? connected;
+
   /// The name to show: its own, else "this device" or "another device".
   String get label => name ?? (thisDevice ? 'this device' : 'another device');
+
+  /// The label, with "(not connected)" for a paired device that is away.
+  String get labelWithConnection =>
+      connected == false ? '$label (not connected)' : label;
 
   /// Decodes one element of `recorded_on`.
   factory RecordingDevice.fromJson(Map<String, Object?> json) {
@@ -35,6 +43,129 @@ final class RecordingDevice {
       deviceId: json['device_id']! as String,
       name: json['name'] as String?,
       thisDevice: json['this_device'] as bool? ?? false,
+      connected: json['connected'] as bool?,
+    );
+  }
+}
+
+/// How far combining a meeting's recordings got, as this device sees it (#88).
+enum CombiningState {
+  /// Only one device recorded the meeting so far.
+  oneDevice,
+
+  /// Audio from `waitingFor` still has to reach the combining device.
+  waiting,
+
+  /// Every recording's audio is here; the combined pass runs when the device is free.
+  readyToCombine,
+
+  /// This device still has to send its audio to the combining device.
+  sending,
+
+  /// The transcript is built from every recording's audio.
+  combined,
+
+  /// Audio from `waitingFor` did not arrive in time; the transcript is built without it.
+  notCombined;
+
+  /// Decodes the `state` text Rust writes; `null` for one this app does not know.
+  static CombiningState? parse(String? state) => switch (state) {
+        'one_device' => CombiningState.oneDevice,
+        'waiting' => CombiningState.waiting,
+        'ready_to_combine' => CombiningState.readyToCombine,
+        'sending' => CombiningState.sending,
+        'combined' => CombiningState.combined,
+        'not_combined' => CombiningState.notCombined,
+        _ => null,
+      };
+}
+
+/// A meeting's combining status from `combining` in the meeting JSON (#88).
+final class MeetingCombining {
+  /// Creates an immutable status.
+  const MeetingCombining({
+    required this.state,
+    this.combineOn,
+    this.waitingFor = const <RecordingDevice>[],
+    this.keptUntil,
+  });
+
+  /// How far combining got.
+  final CombiningState state;
+
+  /// The device that combines the recordings; `null` for one device.
+  final RecordingDevice? combineOn;
+
+  /// The devices whose audio is awaited, or that could not be combined.
+  final List<RecordingDevice> waitingFor;
+
+  /// When the audio held here is deleted if not combined by then; `null` when none is held.
+  final DateTime? keptUntil;
+
+  /// Whether nothing more will happen: combined, not combined, or one device with no audio kept.
+  bool get isSettled => switch (state) {
+        CombiningState.combined || CombiningState.notCombined => true,
+        CombiningState.oneDevice => keptUntil == null,
+        _ => false,
+      };
+
+  /// One or two plain sentences for the meeting's details.
+  String get description {
+    final String names = waitingFor
+        .map((RecordingDevice device) => device.labelWithConnection)
+        .join(', ');
+    final String plainNames =
+        waitingFor.map((RecordingDevice device) => device.label).join(', ');
+    final String combiner = combineOn?.labelWithConnection ?? 'another device';
+    final DateTime? until = keptUntil;
+    final String kept = until == null
+        ? ''
+        : ' It is kept encrypted until ${formatCalendarDay(until)}.';
+    return switch (state) {
+      CombiningState.oneDevice => until == null
+          ? 'Recorded on this device only.'
+          : 'Recorded on this device only. A recording of it made on another device '
+              'can still be combined until ${formatCalendarDay(until)}.',
+      CombiningState.waiting when waitingFor.isEmpty =>
+        '$combiner combines the recordings; nothing is left to send from here.',
+      CombiningState.waiting when combineOn?.thisDevice ?? false =>
+        'Waiting for audio from $names.$kept',
+      CombiningState.waiting =>
+        '$combiner combines the recordings; waiting for audio from $names.',
+      CombiningState.readyToCombine =>
+        'Audio from every device is here; the transcript is combined when this device is free.',
+      CombiningState.sending =>
+        'This device\'s audio still has to reach $combiner.$kept',
+      CombiningState.combined => 'Transcript combined from every device.',
+      CombiningState.notCombined =>
+        'Not combined: audio from $plainNames did not arrive within three weeks.',
+    };
+  }
+
+  /// Decodes `combining`; `null` for a missing value or an unknown state.
+  static MeetingCombining? fromJson(Object? json) {
+    if (json is! Map<String, Object?>) {
+      return null;
+    }
+    final CombiningState? state =
+        CombiningState.parse(json['state'] as String?);
+    if (state == null) {
+      return null;
+    }
+    final Object? combineOn = json['combine_on'];
+    final String? keptUntil = json['kept_until'] as String?;
+    return MeetingCombining(
+      state: state,
+      combineOn: combineOn is Map<String, Object?>
+          ? RecordingDevice.fromJson(combineOn)
+          : null,
+      waitingFor: <RecordingDevice>[
+        for (final Object? device
+            in (json['waiting_for'] as List<Object?>?) ?? <Object?>[])
+          if (device is Map<String, Object?>) RecordingDevice.fromJson(device),
+      ],
+      keptUntil:
+          keptUntil == null ? null : DateTime.tryParse(keptUntil)?.toUtc(),
     );
   }
 }
@@ -50,6 +181,7 @@ final class MeetingSummary {
     this.transcriptionLanguages = const <String>[],
     this.recordedOn = const <RecordingDevice>[],
     this.combinedRecordings = const <String>[],
+    this.combining,
   });
 
   /// Stable meeting identifier used for every follow-up request.
@@ -73,6 +205,9 @@ final class MeetingSummary {
 
   /// Other devices' recordings the app combined into this meeting; Split lists them again.
   final List<String> combinedRecordings;
+
+  /// How far combining the recordings got, as this device sees it; `null` from older cores.
+  final MeetingCombining? combining;
 
   /// "Laptop + Pixel" for a meeting combined from several devices' recordings, else `null`.
   String? get recordedOnLabel => combinedRecordings.isEmpty
@@ -108,6 +243,7 @@ final class MeetingSummary {
         ...((json['combined_recordings'] as List<Object?>?) ?? <Object?>[])
             .whereType<String>(),
       ],
+      combining: MeetingCombining.fromJson(json['combining']),
     );
   }
 }
@@ -236,6 +372,14 @@ String formatMeetingCreatedAt(DateTime createdAt) {
   return '${utcTime.year.toString().padLeft(4, '0')}-${twoDigits(utcTime.month)}-'
       '${twoDigits(utcTime.day)} ${twoDigits(utcTime.hour)}:'
       '${twoDigits(utcTime.minute)} UTC';
+}
+
+/// Formats an instant's UTC calendar day as `YYYY-MM-DD`.
+String formatCalendarDay(DateTime instant) {
+  final DateTime utcTime = instant.toUtc();
+  String twoDigits(int value) => value.toString().padLeft(2, '0');
+  return '${utcTime.year.toString().padLeft(4, '0')}-${twoDigits(utcTime.month)}-'
+      '${twoDigits(utcTime.day)}';
 }
 
 /// Formats milliseconds as `M:SS`, or `H:MM:SS` from one hour, truncating partial seconds.

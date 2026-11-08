@@ -139,6 +139,19 @@ final MeetingSummary combinedMeeting = MeetingSummary(
     RecordingDevice(deviceId: 'device-phone', name: 'Pixel', thisDevice: false),
   ],
   combinedRecordings: const <String>['meeting-phone'],
+  combining: MeetingCombining(
+    state: CombiningState.waiting,
+    combineOn: const RecordingDevice(
+        deviceId: 'device-laptop', name: 'Laptop', thisDevice: true),
+    waitingFor: const <RecordingDevice>[
+      RecordingDevice(
+          deviceId: 'device-phone',
+          name: 'Pixel',
+          thisDevice: false,
+          connected: false),
+    ],
+    keptUntil: DateTime.utc(2026, 11, 23),
+  ),
 );
 
 /// The detail of `combinedMeeting`.

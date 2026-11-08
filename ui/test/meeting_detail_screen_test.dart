@@ -158,6 +158,12 @@ void main() {
         await pumpMeetingDetail(tester, 'meeting-combined');
 
     expect(find.text('Recorded on Laptop + Pixel'), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey<String>('meeting-combining')),
+            matching: find.text(
+                'Waiting for audio from Pixel (not connected). It is kept encrypted until 2026-11-23.')),
+        findsOneWidget);
     await tester.tap(find.byKey(const ValueKey<String>('split-open-meeting')));
     await tester.pumpAndSettle();
     expect(find.text('Split this meeting?'), findsOneWidget);

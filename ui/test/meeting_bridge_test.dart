@@ -25,6 +25,71 @@ void main() {
       expect(meetings[1].recordedOnLabel, isNull);
     });
 
+    test('reads how far combining got and words it plainly (#88)', () {
+      final List<MeetingSummary> meetings = decodeMeetings('''
+[
+  {"meeting_id":"meeting-1","title":"Call","created_at":"2026-11-02T15:00:00+00:00",
+   "recorded_on":[
+     {"device_id":"device-laptop","name":"Laptop","this_device":true,"connected":null},
+     {"device_id":"device-phone","name":"Pixel","this_device":false,"connected":false}],
+   "combined_recordings":["meeting-2"],
+   "combining":{"state":"waiting",
+     "combine_on":{"device_id":"device-laptop","name":"Laptop","this_device":true,"connected":null},
+     "waiting_for":[{"device_id":"device-phone","name":"Pixel","this_device":false,"connected":false}],
+     "kept_until":"2026-11-23T15:00:00+00:00"}},
+  {"meeting_id":"meeting-3","title":"Alone","created_at":"2026-11-01T15:00:00+00:00",
+   "combining":{"state":"one_device","combine_on":null,"waiting_for":[],
+     "kept_until":"2026-11-22T15:00:00+00:00"}},
+  {"meeting_id":"meeting-4","title":"Old","created_at":"2026-11-01T15:00:00+00:00"}
+]''');
+
+      final MeetingCombining? waiting = meetings[0].combining;
+      expect(waiting?.state, CombiningState.waiting);
+      expect(meetings[0].recordedOn[1].connected, isFalse);
+      expect(waiting?.description,
+          'Waiting for audio from Pixel (not connected). It is kept encrypted until 2026-11-23.');
+      expect(waiting?.isSettled, isFalse);
+      expect(meetings[1].combining?.description,
+          'Recorded on this device only. A recording of it made on another device can still be combined until 2026-11-22.');
+      expect(meetings[2].combining, isNull);
+    });
+
+    test('words every combining state', () {
+      const RecordingDevice laptop = RecordingDevice(
+          deviceId: 'device-laptop',
+          name: 'Laptop',
+          thisDevice: false,
+          connected: true);
+      String describe(CombiningState state,
+              {List<RecordingDevice> waitingFor = const <RecordingDevice>[],
+              DateTime? keptUntil}) =>
+          MeetingCombining(
+                  state: state,
+                  combineOn: laptop,
+                  waitingFor: waitingFor,
+                  keptUntil: keptUntil)
+              .description;
+
+      expect(
+          describe(CombiningState.oneDevice), 'Recorded on this device only.');
+      expect(describe(CombiningState.waiting),
+          'Laptop combines the recordings; nothing is left to send from here.');
+      expect(describe(CombiningState.readyToCombine),
+          'Audio from every device is here; the transcript is combined when this device is free.');
+      expect(
+          describe(CombiningState.sending,
+              keptUntil: DateTime.utc(2026, 11, 29)),
+          'This device\'s audio still has to reach Laptop. It is kept encrypted until 2026-11-29.');
+      expect(describe(CombiningState.combined),
+          'Transcript combined from every device.');
+      expect(
+          describe(CombiningState.notCombined, waitingFor: <RecordingDevice>[
+            const RecordingDevice(
+                deviceId: 'device-phone', name: null, thisDevice: false)
+          ]),
+          'Not combined: audio from another device did not arrive within three weeks.');
+    });
+
     test('parses titles, creation times, and durations', () {
       final List<MeetingSummary> meetings = decodeMeetings('''
 [
