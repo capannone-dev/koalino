@@ -86,6 +86,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         final bool isTwoPane = constraints.maxWidth >= twoPaneBreakpoint;
         final Widget meetingList = _MeetingList(
           controller: widget.controller,
+          projectsController: widget.projectsController,
           highlightSelection: isTwoPane,
           onOpenMeeting: (MeetingSummary meeting) =>
               _openMeeting(meeting, isTwoPane: isTwoPane),
@@ -210,9 +211,13 @@ final class _MeetingList extends StatelessWidget {
     required this.controller,
     required this.highlightSelection,
     required this.onOpenMeeting,
+    this.projectsController,
   });
 
   final MeetingListController controller;
+
+  /// Offers "Add to project…" in each row's menu when given (#94).
+  final ProjectsController? projectsController;
 
   /// Whether the selected meeting is highlighted (only when its detail is visible beside it).
   final bool highlightSelection;
@@ -267,6 +272,7 @@ final class _MeetingList extends StatelessWidget {
               final MeetingSummary meeting = newestFirst[index];
               return _MeetingRow(
                 controller: controller,
+                projectsController: projectsController,
                 meeting: meeting,
                 child: ListTile(
                   leading: const Icon(Icons.event_note),
@@ -309,9 +315,12 @@ final class _MeetingList extends StatelessWidget {
 enum _MeetingRowAction {
   /// Opens the rename dialog.
   rename,
+
+  /// Opens the project chooser (#94).
+  addToProject,
 }
 
-/// Adds a context menu with "Rename" to one meeting row.
+/// Adds a context menu with "Rename" and, with projects, "Add to project…" to one meeting row.
 ///
 /// The menu opens on long-press (touch), right-click (mouse), and Shift+F10 or the context menu
 /// key (keyboard); screen readers get the same action as a custom semantics action.
@@ -320,10 +329,14 @@ final class _MeetingRow extends StatelessWidget {
     required this.controller,
     required this.meeting,
     required this.child,
+    this.projectsController,
   });
 
   final MeetingListController controller;
   final MeetingSummary meeting;
+
+  /// Offers "Add to project…" when given.
+  final ProjectsController? projectsController;
 
   /// The row's list tile.
   final Widget child;
@@ -349,18 +362,34 @@ final class _MeetingRow extends StatelessWidget {
       context: context,
       position: RelativeRect.fromRect(
           overlayPosition & Size.zero, Offset.zero & overlay.size),
-      items: const <PopupMenuEntry<_MeetingRowAction>>[
-        PopupMenuItem<_MeetingRowAction>(
+      items: <PopupMenuEntry<_MeetingRowAction>>[
+        const PopupMenuItem<_MeetingRowAction>(
           value: _MeetingRowAction.rename,
           child: ListTile(
             leading: Icon(Icons.edit_outlined),
             title: Text('Rename'),
           ),
         ),
+        if (projectsController != null)
+          const PopupMenuItem<_MeetingRowAction>(
+            value: _MeetingRowAction.addToProject,
+            child: ListTile(
+              leading: Icon(Icons.drive_file_move_outline),
+              title: Text('Add to project…'),
+            ),
+          ),
       ],
     );
-    if (action == _MeetingRowAction.rename && context.mounted) {
-      await _rename(context);
+    if (!context.mounted) {
+      return;
+    }
+    switch (action) {
+      case _MeetingRowAction.rename:
+        await _rename(context);
+      case _MeetingRowAction.addToProject:
+        await _addToProject(context);
+      case null:
+        break;
     }
   }
 
@@ -379,11 +408,22 @@ final class _MeetingRow extends StatelessWidget {
         meeting: meeting,
       );
 
+  /// Opens the project chooser for this row's meeting (#94).
+  Future<void> _addToProject(BuildContext context) async {
+    if (projectsController case final ProjectsController projects) {
+      await chooseProjectForMeeting(context,
+          controller: projects, meetingId: meeting.meetingId);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
       customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
         const CustomSemanticsAction(label: 'Rename'): () => _rename(context),
+        if (projectsController != null)
+          const CustomSemanticsAction(label: 'Add to project'): () =>
+              _addToProject(context),
         const CustomSemanticsAction(label: 'Delete'): () =>
             deleteMeetingAfterAsking(
               context,

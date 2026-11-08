@@ -109,6 +109,8 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   images show their description, so nothing reaches the network.
 - `project_dialogs.dart` holds the name, note and meeting-picker dialogs, and
   `MoveToProjectButton`, which meeting pages show to move a meeting into a project or out.
+  `chooseProjectForMeeting` is its chooser, ending in "New project…", which names, creates and
+  moves in one step; the meeting list's row menu offers it as "Add to project…" (#94).
 - `share_to_project.dart` (`IncomingShareListener`, Android) shows "Add the shared file to a
   project" when another app shares files or an e-mail: New project, or one of the projects. It
   sits inside the start-up gate, so a share that launched the app waits for the core. The

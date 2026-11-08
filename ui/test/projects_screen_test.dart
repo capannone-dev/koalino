@@ -4,10 +4,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
+import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/presentation/projects_screen.dart';
 
@@ -231,6 +233,58 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(projects.memberships, <String, String>{'meeting-1': 'p1'});
+    expect(find.text('Moved to Hiring'), findsOneWidget);
+  });
+
+  testWidgets('a meeting moves into a new project named in the chooser (#94)',
+      (WidgetTester tester) async {
+    final FakeProjects projects = FakeProjects();
+    projects.memberships.clear();
+    final ProjectsController controller = projects.controller();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(actions: <Widget>[
+          MoveToProjectButton(controller: controller, meetingId: 'meeting-1'),
+        ]),
+      ),
+    ));
+
+    await tester.tap(find.byKey(const ValueKey<String>('move-to-project')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New project…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const ValueKey<String>('project-name-field')), 'Budget');
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(projects.names['p2'], 'Budget');
+    expect(projects.memberships, <String, String>{'meeting-1': 'p2'});
+    expect(find.text('Moved to Budget'), findsOneWidget);
+  });
+
+  testWidgets('a meeting row offers Add to project on long press (#94)',
+      (WidgetTester tester) async {
+    final FakeProjects projects = FakeProjects();
+    projects.memberships.clear();
+    await tester.pumpWidget(MaterialApp(
+      home: MeetingListScreen(
+        controller: MeetingListController(
+            meetingBridge:
+                FakeMeetingBridge(meetings: <MeetingSummary>[titledMeeting])),
+        projectsController: projects.controller(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Project Sync'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add to project…'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hiring'));
+    await tester.pumpAndSettle();
+
+    expect(projects.memberships, <String, String>{'meeting-titled': 'p1'});
     expect(find.text('Moved to Hiring'), findsOneWidget);
   });
 

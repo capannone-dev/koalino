@@ -114,7 +114,7 @@ cancelled), and `setEnabled`. There is no desktop implementation.
 (with its `ProjectResourceKind`: image, markdown, pdf, email, text, document), `EmailView`, and
 `ProjectCommandException` (Rust's `error_code`). `ProjectBridge` sends one JSON command per call
 through `note_taker_project_command` on a background isolate (`runRustProjectCommand`); tests
-pass a fake runner. `PlatformProjectFilesPicker` picks the accepted types, `.eml` included.
+pass a fake runner. `PlatformProjectFilesPicker` picks any file (#94).
 
 `incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Note Taker:
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and

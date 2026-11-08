@@ -259,63 +259,101 @@ final class MoveToProjectButton extends StatelessWidget {
   final ProjectsController controller;
   final String meetingId;
 
-  /// Shows the chooser and moves the meeting.
-  ///
-  /// Side effects: Reads projects and memberships; writes the meeting's document; shows a snack
-  /// bar with the outcome.
-  Future<void> _choose(BuildContext context) async {
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    await controller.loadProjects();
-    final Map<String, String> memberships = await controller.meetingProjects();
-    if (!context.mounted) {
-      return;
-    }
-    final String current = memberships[meetingId] ?? _noProject;
-    final String? chosen = await showDialog<String>(
-      context: context,
-      builder: (BuildContext context) => SimpleDialog(
-        title: const Text('Project'),
-        children: <Widget>[
-          RadioGroup<String>(
-            groupValue: current,
-            onChanged: (String? value) => Navigator.of(context).pop(value),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const RadioListTile<String>(
-                  value: _noProject,
-                  title: Text('No project'),
-                ),
-                for (final ProjectSummary project in controller.projects)
-                  RadioListTile<String>(
-                    value: project.projectId,
-                    title: Text(project.name),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-    if (chosen == null || chosen == current) {
-      return;
-    }
-    final bool moved = await controller.moveMeeting(
-        meetingId, chosen == _noProject ? null : chosen);
-    messenger.showSnackBar(SnackBar(
-      content: Text(moved
-          ? (chosen == _noProject
-              ? 'Removed from its project'
-              : 'Moved to ${controller.projects.firstWhere((ProjectSummary project) => project.projectId == chosen).name}')
-          : 'The meeting could not be moved.'),
-    ));
-  }
-
   @override
   Widget build(BuildContext context) => IconButton(
         key: const ValueKey<String>('move-to-project'),
         tooltip: 'Move to project',
         icon: const Icon(Icons.drive_file_move_outline),
-        onPressed: () => _choose(context),
+        onPressed: () => chooseProjectForMeeting(context,
+            controller: controller, meetingId: meetingId),
       );
+}
+
+/// The chooser's value for "New project…".
+const String _newProject = '\u0000new';
+
+/// Asks which project a meeting belongs to, offering a new one, and moves it there (#94).
+///
+/// Inputs: A mounted context, the projects controller, and the meeting.
+/// Outputs: Completes when the chooser (and any naming dialog) closes.
+/// Side effects: Reads projects and memberships; may create a project; writes the meeting's
+/// document; shows a snack bar with the outcome.
+Future<void> chooseProjectForMeeting(
+  BuildContext context, {
+  required ProjectsController controller,
+  required String meetingId,
+}) async {
+  final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+  await controller.loadProjects();
+  final Map<String, String> memberships = await controller.meetingProjects();
+  if (!context.mounted) {
+    return;
+  }
+  final String current = memberships[meetingId] ?? _noProject;
+  String? chosen = await showDialog<String>(
+    context: context,
+    builder: (BuildContext context) => SimpleDialog(
+      title: const Text('Project'),
+      children: <Widget>[
+        RadioGroup<String>(
+          groupValue: current,
+          onChanged: (String? value) => Navigator.of(context).pop(value),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const RadioListTile<String>(
+                value: _noProject,
+                title: Text('No project'),
+              ),
+              for (final ProjectSummary project in controller.projects)
+                RadioListTile<String>(
+                  value: project.projectId,
+                  title: Text(project.name),
+                ),
+            ],
+          ),
+        ),
+        ListTile(
+          key: const ValueKey<String>('choose-new-project'),
+          leading: const Icon(Icons.create_new_folder_outlined),
+          title: const Text('New project…'),
+          onTap: () => Navigator.of(context).pop(_newProject),
+        ),
+      ],
+    ),
+  );
+  if (chosen == _newProject) {
+    if (!context.mounted) {
+      return;
+    }
+    final String? name = await askProjectName(context,
+        title: 'New project', confirmLabel: 'Create');
+    if (name == null) {
+      return;
+    }
+    final ProjectSummary? created = await controller.createProject(name);
+    if (created == null) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('The project could not be created.')));
+      return;
+    }
+    chosen = created.projectId;
+  }
+  if (chosen == null || chosen == current) {
+    return;
+  }
+  final String target = chosen;
+  final bool moved = await controller.moveMeeting(
+      meetingId, target == _noProject ? null : target);
+  final String? targetName = controller.projects
+      .where((ProjectSummary project) => project.projectId == target)
+      .map((ProjectSummary project) => project.name)
+      .firstOrNull;
+  messenger.showSnackBar(SnackBar(
+    content: Text(!moved
+        ? 'The meeting could not be moved.'
+        : target == _noProject
+            ? 'Removed from its project'
+            : 'Moved to ${targetName ?? 'the project'}'),
+  ));
 }

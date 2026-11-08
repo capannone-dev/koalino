@@ -12,26 +12,6 @@ import 'package:ffi/ffi.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 
-/// File types a project accepts (`AttachmentFileStore` in Rust): the meeting attachment types
-/// plus GIF pictures, `.markdown` and `.eml` e-mails.
-const List<String> projectResourceExtensions = <String>[
-  'jpg',
-  'jpeg',
-  'png',
-  'gif',
-  'webp',
-  'heic',
-  'pdf',
-  'txt',
-  'md',
-  'markdown',
-  'eml',
-  'docx',
-  'xlsx',
-  'pptx',
-  'odt',
-];
-
 /// One project in the list.
 final class ProjectSummary {
   /// Creates an immutable summary.
@@ -477,9 +457,8 @@ final class PlatformProjectFilesPicker implements ProjectFilesPicker {
   @override
   Future<List<String>> pickFiles() async {
     final FilePickerResult? selection = await FilePicker.platform.pickFiles(
+      // A project takes any file (#94); types the app cannot show open in another app.
       allowMultiple: true,
-      type: FileType.custom,
-      allowedExtensions: projectResourceExtensions,
     );
     return <String>[
       for (final PlatformFile file
