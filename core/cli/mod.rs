@@ -23,8 +23,8 @@ use crate::{
     },
     domain::{
         models::{
-            ExportDateRange, ExportFormat, ExportOptions, ExportResult, MeetingId, MeetingMetadata,
-            MeetingTitle,
+            DeviceId, ExportDateRange, ExportFormat, ExportOptions, ExportResult, MeetingId,
+            MeetingMetadata, MeetingTitle,
         },
         peer_trust::TrustedPeer,
         transcription_language::TranscriptionLanguage,
@@ -765,6 +765,12 @@ pub struct CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort> {
     export_writer: ExportWriter,
     /// Checks for a recording and removes files on deletion; `None` skips both.
     deletion_hooks: Option<Box<dyn MeetingDeletionHooks>>,
+    /// This device and the folder of the speech it holds, for `meetings view`'s combining line
+    /// (#88); `None` says nothing is held here.
+    recording_device: Option<(
+        DeviceId,
+        crate::adapters::audio::retained_audio_store::RetainedSpeechIndex,
+    )>,
 }
 
 impl<RecordingPort, RepositoryPort, VectorDatabasePort>
@@ -792,6 +798,7 @@ where
             voice_identity_manager: VoiceIdentityManager::new(vector_database),
             export_writer,
             deletion_hooks: None,
+            recording_device: None,
         }
     }
 
@@ -801,6 +808,71 @@ where
     pub fn with_deletion_hooks(mut self, deletion_hooks: Box<dyn MeetingDeletionHooks>) -> Self {
         self.deletion_hooks = Some(deletion_hooks);
         self
+    }
+
+    /// Names this device and the folder of the speech it holds, which `meetings view` reads to
+    /// say how far combining a meeting's recordings got (#88).
+    ///
+    /// Side effects: None.
+    pub fn with_recording_device(
+        mut self,
+        this_device: DeviceId,
+        retained_audio_directory: std::path::PathBuf,
+    ) -> Self {
+        self.recording_device = Some((
+            this_device,
+            crate::adapters::audio::retained_audio_store::RetainedSpeechIndex::new(
+                retained_audio_directory,
+            ),
+        ));
+        self
+    }
+
+    /// Describes how far combining a listed meeting's recordings got, for `meetings view`.
+    ///
+    /// Outputs: One line ending in a newline, or nothing for a meeting of one device whose speech
+    /// is gone. Side effects: Reads the meetings index, the retained speech folder's metadata,
+    /// and the paired devices' names.
+    fn combining_line(&self, meeting_id: &MeetingId) -> Result<String, String>
+    where
+        RepositoryPort: NoteRepository,
+    {
+        let recordings = self
+            .repository
+            .meeting_recordings()
+            .map_err(|error| error.to_string())?;
+        let now = std::time::SystemTime::now();
+        let unknown_device = DeviceId::new("");
+        let (this_device, index) = match &self.recording_device {
+            Some((device, index)) => (device, Some(index)),
+            None => (&unknown_device, None),
+        };
+        let held = |meeting: &MeetingId| index.and_then(|index| index.held_speech(meeting, now));
+        let status = crate::application::combined_meetings::combining_status(
+            meeting_id,
+            &recordings,
+            &held,
+            this_device,
+            chrono::Utc::now(),
+        );
+        let paired = self
+            .trusted_peer_store
+            .as_deref()
+            .and_then(|store| store.trusted_peers().ok())
+            .unwrap_or_default();
+        let name = |device: &DeviceId| {
+            if device == this_device {
+                return String::from("this device");
+            }
+            paired
+                .iter()
+                .find(|peer| peer.storage_device_id() == Some(device))
+                .map_or_else(
+                    || device.as_str().to_owned(),
+                    |peer| peer.device_name().as_str().to_owned(),
+                )
+        };
+        Ok(describe_combining(&status, &name))
     }
 
     /// Enables `log-level` by naming the control file a daemon on the same database polls.
@@ -977,8 +1049,9 @@ where
                     .join(", ")
             )
         };
+        let combining_line = self.combining_line(&typed_meeting_id)?;
         Ok(format!(
-            "{display_title}\n{title_underline}\nMeeting: {meeting_id}\nCreated: {created_at}\n{devices_line}{language_line}Transcript:\n{transcript}\nAttachments:\n{attachment_lines}"
+            "{display_title}\n{title_underline}\nMeeting: {meeting_id}\nCreated: {created_at}\n{devices_line}{combining_line}{language_line}Transcript:\n{transcript}\nAttachments:\n{attachment_lines}"
         ))
     }
     /// Renames through the shared use case and prints `Renamed meeting <id>: "<old>" -> "<new>"`,
@@ -1186,3 +1259,45 @@ where
 
 #[cfg(test)]
 mod tests;
+
+/// Words a meeting's combining status as one line of `meetings view` (#88).
+///
+/// Inputs: The status and how to name a device. Outputs: The line ending in a newline, or
+/// nothing for a meeting of one device whose speech is gone. Side effects: None.
+fn describe_combining(
+    status: &crate::application::combined_meetings::CombiningStatus,
+    name: &dyn Fn(&DeviceId) -> String,
+) -> String {
+    use crate::application::combined_meetings::CombiningState;
+    let names = |devices: &[DeviceId]| devices.iter().map(name).collect::<Vec<_>>().join(", ");
+    let until = status
+        .kept_until
+        .map(|until| format!("; speech kept here until {}", until.format("%Y-%m-%d")))
+        .unwrap_or_default();
+    let combine_on = status.combine_on.as_ref().map(name).unwrap_or_default();
+    let line = match status.state {
+        CombiningState::OneDevice if status.kept_until.is_none() => return String::new(),
+        CombiningState::OneDevice => {
+            format!("one device so far, a recording on another device can still join{until}")
+        }
+        CombiningState::Waiting if status.waiting_for.is_empty() => {
+            format!("waiting for {combine_on} to combine the recordings")
+        }
+        CombiningState::Waiting => format!(
+            "waiting for speech from {} to reach {combine_on}{until}",
+            names(&status.waiting_for)
+        ),
+        CombiningState::ReadyToCombine => {
+            format!("every recording is on {combine_on}; combining when the device is free")
+        }
+        CombiningState::Sending => {
+            format!("this device's speech still has to reach {combine_on}{until}")
+        }
+        CombiningState::Combined => String::from("transcript combined from every device"),
+        CombiningState::NotCombined => format!(
+            "not combined: speech from {} did not arrive in time",
+            names(&status.waiting_for)
+        ),
+    };
+    format!("Combining: {line}\n")
+}

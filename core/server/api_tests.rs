@@ -1295,10 +1295,26 @@ async fn a_combined_meeting_is_listed_once_and_can_be_split() {
         )
         .unwrap_or_else(|error| panic!("{error}"));
     drop(phone);
-    let router = build_router(ServerAppState::new(
-        laptop.note_repository,
-        laptop.voice_store,
-    ));
+    // The laptop holds its own speech and waits for the phone's.
+    let retained_directory = directory.join("retained-audio");
+    crate::adapters::audio::retained_audio_store::RetainedAudioStore::new(
+        retained_directory.clone(),
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .append_chunk(
+        &MeetingId::new("meeting-laptop"),
+        crate::application::transcript_refinement::ChunkSpan {
+            start_ms: 0,
+            end_ms: 100,
+        },
+        None,
+        &[1; 1_600],
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let router = build_router(
+        ServerAppState::new(laptop.note_repository, laptop.voice_store)
+            .with_recording_device(DeviceId::new("device-laptop"), retained_directory),
+    );
 
     let (_, combined) = send_json(&router, "GET", "/api/meetings", None).await;
     let (_, detail) = send_json(&router, "GET", "/api/meetings/meeting-laptop", None).await;
@@ -1317,8 +1333,8 @@ async fn a_combined_meeting_is_listed_once_and_can_be_split() {
     assert_eq!(
         combined[0]["recorded_on"],
         serde_json::json!([
-            {"device_id": "device-laptop", "name": null, "this_device": false},
-            {"device_id": "device-phone", "name": null, "this_device": false}
+            {"device_id": "device-laptop", "name": null, "this_device": false, "connected": null},
+            {"device_id": "device-phone", "name": null, "this_device": false, "connected": null}
         ])
     );
     assert_eq!(
@@ -1330,6 +1346,13 @@ async fn a_combined_meeting_is_listed_once_and_can_be_split() {
         serde_json::json!(["meeting-phone"])
     );
     assert_eq!(detail["recorded_on"].as_array().map(Vec::len), Some(2));
+    assert_eq!(detail["combining"]["state"], "waiting");
+    assert_eq!(
+        detail["combining"]["waiting_for"][0]["device_id"],
+        "device-phone"
+    );
+    assert!(detail["combining"]["kept_until"].is_string());
+    assert_eq!(combined[0]["combining"]["state"], "waiting");
     assert_eq!(missing_status, StatusCode::NOT_FOUND);
     assert_eq!(split_status, StatusCode::OK);
     assert_eq!(split, serde_json::json!({"split": ["meeting-phone"]}));

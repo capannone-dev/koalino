@@ -143,8 +143,7 @@ impl RetainedAudioStore {
 
     /// The path of a meeting's pass-alone note.
     fn passed_path(&self, meeting_id: &MeetingId) -> PathBuf {
-        self.directory
-            .join(format!("{}.passed", Self::file_name(meeting_id)))
+        passed_path(&self.directory, meeting_id)
     }
 
     /// Drops a meeting's pass-alone note. Side effects: Removes `<file>.passed` if present.
@@ -244,9 +243,7 @@ impl RetainedAudioStore {
     ///
     /// Side effects: Reads the file's metadata.
     pub fn written_at(&self, meeting_id: &MeetingId) -> Option<std::time::SystemTime> {
-        fs::metadata(self.directory.join(Self::file_name(meeting_id)))
-            .and_then(|metadata| metadata.modified())
-            .ok()
+        written_at(&self.directory, meeting_id)
     }
 
     /// The name of a meeting's copy being received.
@@ -329,6 +326,54 @@ impl RetainedAudioStore {
         meetings.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         meetings
     }
+}
+
+/// Reports which meetings' speech a device holds, for the apps' status (#88), without opening it.
+pub struct RetainedSpeechIndex {
+    directory: PathBuf,
+}
+
+impl RetainedSpeechIndex {
+    /// Creates the index over a store's folder.
+    ///
+    /// Inputs: The folder `RetainedAudioStore` writes. Outputs: The index. Side effects: None.
+    pub fn new(directory: PathBuf) -> Self {
+        Self { directory }
+    }
+
+    /// Returns the meeting's speech held here: how long ago it was last written, as of `now`, and
+    /// whether it already took the pass alone; `None` when none is held.
+    ///
+    /// Side effects: Reads file metadata only.
+    pub fn held_speech(
+        &self,
+        meeting_id: &MeetingId,
+        now: std::time::SystemTime,
+    ) -> Option<crate::application::combined_meetings::HeldSpeech> {
+        let written = written_at(&self.directory, meeting_id)?;
+        Some(crate::application::combined_meetings::HeldSpeech {
+            age: now.duration_since(written).unwrap_or_default(),
+            passed_alone: passed_path(&self.directory, meeting_id).exists(),
+        })
+    }
+}
+
+/// When a meeting's speech file in `directory` was last written, or `None` when it has none.
+fn written_at(
+    directory: &std::path::Path,
+    meeting_id: &MeetingId,
+) -> Option<std::time::SystemTime> {
+    fs::metadata(directory.join(RetainedAudioStore::file_name(meeting_id)))
+        .and_then(|metadata| metadata.modified())
+        .ok()
+}
+
+/// The path of a meeting's pass-alone note in `directory`.
+fn passed_path(directory: &std::path::Path, meeting_id: &MeetingId) -> PathBuf {
+    directory.join(format!(
+        "{}.passed",
+        RetainedAudioStore::file_name(meeting_id)
+    ))
 }
 
 /// Opens `path` for appending, creating it readable and writable by this user only.

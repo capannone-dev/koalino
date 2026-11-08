@@ -446,6 +446,14 @@ fn the_combining_device_passes_alone_and_keeps_its_speech_for_the_other_device()
     assert_eq!(laptop.recorded_on_phone, Some(false));
 }
 
+/// The fold joining the phone's and the laptop's recordings, whichever way it went: creation times
+/// keep whole seconds, so either may count as the earlier one.
+fn fold_of_phone_setup(setup: &Setup) -> Option<MeetingCombination> {
+    setup
+        .combination_of(&setup.meeting)
+        .or_else(|| setup.combination_of(&MeetingId::new("meeting-laptop")))
+}
+
 /// A phone ("device-a") whose meeting was folded into the laptop's ("device-b").
 fn phone_setup() -> (Setup, Arc<RefinementControl>) {
     let setup = Setup::new();
@@ -472,8 +480,7 @@ fn a_phone_folds_its_recording_and_sends_its_speech_without_charging() {
 
     assert_eq!(worker.run_pending(), 0);
 
-    let combination = setup
-        .combination_of(&setup.meeting)
+    let combination = fold_of_phone_setup(&setup)
         .unwrap_or_else(|| panic!("the phone's recording must be folded"));
     assert_eq!(combination.combine_on, DeviceId::new("device-b"));
     let parts = sender
@@ -532,7 +539,7 @@ fn recordings_that_meet_up_to_three_weeks_later_are_still_folded() {
 
     worker.run_pending();
 
-    assert!(setup.combination_of(&setup.meeting).is_some());
+    assert!(fold_of_phone_setup(&setup).is_some());
 }
 
 fn speech_part(meeting: &MeetingId, part_index: u32, part_count: u32) -> SpeechPart {

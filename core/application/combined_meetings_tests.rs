@@ -6,8 +6,9 @@ use std::{collections::HashMap, time::Duration};
 use chrono::{DateTime, TimeZone, Utc};
 
 use super::combined_meetings::{
-    AudioPlan, COMBINING_GRACE, HeldSpeech, KEEP_FOR_COMBINING, MeetingListing, PlanContext,
-    combining_device, find_combinations, plan_retained_audio,
+    AudioPlan, COMBINING_GRACE, CombiningState, CombiningStatus, CombiningView, HeldSpeech,
+    KEEP_FOR_COMBINING, MeetingListing, PlanContext, combining_device, combining_status,
+    find_combinations, name_recording_devices, plan_retained_audio,
 };
 use crate::{
     domain::{
@@ -665,4 +666,172 @@ fn a_recording_folded_into_a_missing_meeting_is_listed_alone() {
         listing.recorded_on(&MeetingId::new("meeting-phone")),
         vec![DeviceId::new("phone")]
     );
+}
+
+/// Status as `device` sees it, `now` being `days` after the recordings started.
+fn status(
+    recordings: &[MeetingRecording],
+    held: &[&str],
+    device: &str,
+    days: i64,
+) -> CombiningStatus {
+    let held_speech = |meeting: &MeetingId| {
+        held.contains(&meeting.as_str()).then_some(HeldSpeech {
+            age: Duration::from_secs(u64::try_from(days).unwrap_or_default() * 86_400),
+            passed_alone: true,
+        })
+    };
+    combining_status(
+        &MeetingId::new("meeting-laptop"),
+        recordings,
+        &held_speech,
+        &DeviceId::new(device),
+        at(days * 86_400),
+    )
+}
+
+#[test]
+fn a_meeting_of_one_device_says_how_long_its_speech_waits_for_another() {
+    let recordings = vec![recording("meeting-laptop", "laptop", 0)];
+
+    let kept = status(&recordings, &["meeting-laptop"], "laptop", 2);
+    assert_eq!(kept.state, CombiningState::OneDevice);
+    assert_eq!(kept.kept_until, Some(at(21 * 86_400)));
+
+    let done = status(&recordings, &[], "laptop", 2);
+    assert_eq!(done.state, CombiningState::OneDevice);
+    assert_eq!(done.kept_until, None);
+}
+
+#[test]
+fn the_combining_device_says_whose_speech_it_waits_for_then_that_it_is_ready() {
+    let recordings = folded("laptop");
+
+    let waiting = status(&recordings, &["meeting-laptop"], "laptop", 1);
+    assert_eq!(waiting.state, CombiningState::Waiting);
+    assert_eq!(waiting.combine_on, Some(DeviceId::new("laptop")));
+    assert_eq!(waiting.waiting_for, vec![DeviceId::new("phone")]);
+    assert_eq!(waiting.kept_until, Some(at(21 * 86_400)));
+
+    let ready = status(
+        &recordings,
+        &["meeting-laptop", "meeting-phone"],
+        "laptop",
+        1,
+    );
+    assert_eq!(ready.state, CombiningState::ReadyToCombine);
+    assert!(ready.waiting_for.is_empty());
+}
+
+#[test]
+fn the_other_device_says_it_still_has_to_send_its_speech_then_where_it_is_combined() {
+    let recordings = folded("laptop");
+
+    let sending = status(&recordings, &["meeting-phone"], "phone", 1);
+    assert_eq!(sending.state, CombiningState::Sending);
+    assert_eq!(sending.combine_on, Some(DeviceId::new("laptop")));
+
+    let sent = status(&recordings, &[], "phone", 1);
+    assert_eq!(sent.state, CombiningState::Waiting);
+    assert_eq!(sent.combine_on, Some(DeviceId::new("laptop")));
+}
+
+#[test]
+fn every_device_sees_a_meeting_combined_once_its_transcript_says_so() {
+    let mut recordings = folded("laptop");
+    recordings[0].combined_with = vec![MeetingId::new("meeting-phone")];
+
+    for device in ["laptop", "phone", "home-server"] {
+        assert_eq!(
+            status(&recordings, &[], device, 1).state,
+            CombiningState::Combined,
+            "{device}"
+        );
+    }
+}
+
+#[test]
+fn speech_that_can_no_longer_arrive_leaves_the_meeting_not_combined() {
+    let recordings = folded("laptop");
+
+    let late = status(&recordings, &[], "laptop", 22);
+    assert_eq!(late.state, CombiningState::NotCombined);
+    assert_eq!(late.waiting_for, vec![DeviceId::new("phone")]);
+    assert_eq!(
+        status(&recordings, &[], "phone", 22).state,
+        CombiningState::NotCombined
+    );
+}
+
+/// A laptop's P2P status, paired with a phone that is away and a tablet that is connected.
+fn laptop_status() -> crate::application::p2p_service::P2pStatus {
+    use crate::domain::{
+        models::DeviceManifest,
+        peer_trust::{DeviceName, TrustedPeer},
+    };
+    let name = |name: &str| DeviceName::parse(name).unwrap_or_else(|error| panic!("{error}"));
+    let manifest = |peer: &str, storage: &str| {
+        let mut manifest = DeviceManifest::new(DeviceId::new(peer), 4, 0, Vec::new());
+        manifest.storage_device_id = Some(DeviceId::new(storage));
+        manifest
+    };
+    crate::application::p2p_service::P2pStatus {
+        local_peer_id: DeviceId::new("peer-laptop"),
+        device_name: name("Laptop"),
+        transcription_route: crate::application::compute_router::ComputePreference::LocalOnly,
+        trusted_devices: vec![
+            TrustedPeer::new(DeviceId::new("peer-phone"), name("Phone"), 1)
+                .with_storage_device_id(Some(DeviceId::new("phone"))),
+            TrustedPeer::new(DeviceId::new("peer-tablet"), name("Tablet"), 2),
+        ],
+        nearby_devices: Vec::new(),
+        incoming_requests: Vec::new(),
+        outgoing_pairings: Vec::new(),
+        recent_updates: Vec::new(),
+        local_manifest: manifest("peer-laptop", "laptop"),
+        peer_manifests: vec![manifest("peer-tablet", "tablet")],
+    }
+}
+
+#[test]
+fn devices_are_named_even_while_away_and_say_whether_they_are_connected() {
+    let named = name_recording_devices(
+        &[
+            DeviceId::new("laptop"),
+            DeviceId::new("phone"),
+            DeviceId::new("tablet"),
+            DeviceId::new("unknown"),
+        ],
+        Some(&laptop_status()),
+    );
+
+    let summary: Vec<(Option<&str>, bool, Option<bool>)> = named
+        .iter()
+        .map(|device| (device.name.as_deref(), device.this_device, device.connected))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (Some("Laptop"), true, None),
+            (Some("Phone"), false, Some(false)),
+            (Some("Tablet"), false, Some(true)),
+            (None, false, Some(false)),
+        ]
+    );
+}
+
+#[test]
+fn the_combining_view_names_the_devices_it_mentions() {
+    let recordings = folded("laptop");
+    let view = CombiningView::of(
+        &status(&recordings, &["meeting-laptop"], "laptop", 1),
+        Some(&laptop_status()),
+    );
+
+    let json = serde_json::to_value(&view).unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(json["state"], "waiting");
+    assert_eq!(json["combine_on"]["name"], "Laptop");
+    assert_eq!(json["waiting_for"][0]["name"], "Phone");
+    assert_eq!(json["waiting_for"][0]["connected"], false);
+    assert_eq!(json["kept_until"], at(21 * 86_400).to_rfc3339());
 }

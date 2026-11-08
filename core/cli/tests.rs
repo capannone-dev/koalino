@@ -1569,6 +1569,10 @@ fn core_service_lists_a_combined_meeting_once_and_splits_it() {
         view.contains("Recorded on 2 devices (also meeting-phone)"),
         "{view}"
     );
+    assert!(
+        view.contains("Combining: waiting for speech from device-phone to reach device-laptop\n"),
+        "{view}"
+    );
     assert_eq!(
         split,
         Ok(String::from(

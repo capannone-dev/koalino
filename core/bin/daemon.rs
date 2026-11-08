@@ -113,7 +113,12 @@ async fn main() -> Result<()> {
         recording_controller.as_ref(),
     )
     .await;
+    let recording_device = note_repository.device_id().clone();
     let mut application_state = ServerAppState::new(note_repository, voice_store)
+        .with_recording_device(
+            recording_device,
+            note_taker_core::refinement_worker::retained_audio_directory(&database_path),
+        )
         .with_log_control(Arc::clone(&log_control) as Arc<dyn LogControl>)
         .with_deletion_hooks(Arc::new(local_meeting_files))
         .with_project_files(project_files);

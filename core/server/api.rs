@@ -31,7 +31,8 @@ use crate::{
             load_voice_library,
         },
         combined_meetings::{
-            MeetingListing, RecordingDevice, name_recording_devices, split_recordings,
+            CombiningView, MeetingListing, RecordingDevice, combining_view, name_recording_devices,
+            split_recordings,
         },
         deletion::{self, DeletionError, MeetingDeletionHooks},
         export_manager::{ExportManager, ExportWriter},
@@ -45,8 +46,8 @@ use crate::{
     domain::{
         errors::{ExportError, StorageError},
         models::{
-            AggregatedStats, Attachment, ExportFormat, ExportOptions, MeetingId, MeetingMetadata,
-            MeetingTitle, TaskMetrics, TaskType, UnassignedVoiceClip,
+            AggregatedStats, Attachment, DeviceId, ExportFormat, ExportOptions, MeetingId,
+            MeetingMetadata, MeetingTitle, TaskMetrics, TaskType, UnassignedVoiceClip,
         },
     },
     ports::{
@@ -83,6 +84,15 @@ pub struct ServerAppState {
     deletion_hooks: Option<Arc<dyn MeetingDeletionHooks>>,
     /// Where project resources live (Issue #85); `None` makes the file routes answer 503.
     project_files: Option<Arc<crate::project_commands::ProjectFiles>>,
+    /// This device and the speech it holds, for meetings' combining status (#88); `None` says
+    /// nothing is held here.
+    recording_device: Option<Arc<RecordingDeviceState>>,
+}
+
+/// This device as the meetings name it, and the speech it holds for the after-meeting pass.
+struct RecordingDeviceState {
+    this_device: DeviceId,
+    retained_speech: crate::adapters::audio::retained_audio_store::RetainedSpeechIndex,
 }
 
 impl ServerAppState {
@@ -109,7 +119,51 @@ impl ServerAppState {
             log_control: None,
             deletion_hooks: None,
             project_files: None,
+            recording_device: None,
         }
+    }
+
+    /// Attaches this device's ID and the folder of the speech it holds, which meetings'
+    /// combining status reads (#88).
+    ///
+    /// Side effects: None; without it no speech counts as held here.
+    pub fn with_recording_device(
+        mut self,
+        this_device: DeviceId,
+        retained_audio_directory: std::path::PathBuf,
+    ) -> Self {
+        self.recording_device = Some(Arc::new(RecordingDeviceState {
+            this_device,
+            retained_speech: crate::adapters::audio::retained_audio_store::RetainedSpeechIndex::new(
+                retained_audio_directory,
+            ),
+        }));
+        self
+    }
+
+    /// Works out a listed meeting's combining status as this device sees it (#88).
+    ///
+    /// Side effects: Reads the retained speech folder's metadata.
+    pub(super) fn combining_of(
+        &self,
+        meeting_id: &MeetingId,
+        recordings: &[crate::ports::storage::MeetingRecording],
+        p2p_status: Option<&crate::application::p2p_service::P2pStatus>,
+    ) -> CombiningView {
+        let now = std::time::SystemTime::now();
+        let unknown_device = DeviceId::new("");
+        let state = self.recording_device.as_deref();
+        let held = |meeting: &MeetingId| {
+            state.and_then(|state| state.retained_speech.held_speech(meeting, now))
+        };
+        combining_view(
+            meeting_id,
+            recordings,
+            &held,
+            state.map_or(&unknown_device, |state| &state.this_device),
+            chrono::Utc::now(),
+            p2p_status,
+        )
     }
 
     /// Publishes a non-sensitive lifecycle/status event to currently connected web clients.
@@ -286,11 +340,10 @@ async fn list_meetings(
         .into_iter()
         .map(|(meeting_id, project_id)| (meeting_id, project_id.to_string()))
         .collect();
-    let listing = MeetingListing::of(
-        &repositories
-            .meeting_recordings()
-            .map_err(storage_error_status)?,
-    );
+    let recordings = repositories
+        .meeting_recordings()
+        .map_err(storage_error_status)?;
+    let listing = MeetingListing::of(&recordings);
     let p2p_status = application_state
         .p2p_control()
         .map(|p2p_control| p2p_control.snapshot().status);
@@ -308,6 +361,8 @@ async fn list_meetings(
             summary.recorded_on =
                 name_recording_devices(&listing.recorded_on(&meeting_id), p2p_status.as_ref());
             summary.combined_recordings = meeting_id_strings(&listing.folded_into(&meeting_id));
+            summary.combining =
+                Some(application_state.combining_of(&meeting_id, &recordings, p2p_status.as_ref()));
             meeting_summaries.push(summary);
         }
     }
@@ -381,11 +436,10 @@ async fn get_meeting(
     let attachments = repositories
         .get_attachments_for_meeting(&meeting_id)
         .map_err(storage_error_status)?;
-    let listing = MeetingListing::of(
-        &repositories
-            .meeting_recordings()
-            .map_err(storage_error_status)?,
-    );
+    let recordings = repositories
+        .meeting_recordings()
+        .map_err(storage_error_status)?;
+    let listing = MeetingListing::of(&recordings);
     let p2p_status = application_state
         .p2p_control()
         .map(|p2p_control| p2p_control.snapshot().status);
@@ -396,6 +450,7 @@ async fn get_meeting(
         transcription_languages: transcription_language_codes(&meeting_metadata),
         recorded_on: name_recording_devices(&listing.recorded_on(&meeting_id), p2p_status.as_ref()),
         combined_recordings: meeting_id_strings(&listing.folded_into(&meeting_id)),
+        combining: application_state.combining_of(&meeting_id, &recordings, p2p_status.as_ref()),
         transcript,
         attachments: attachments.iter().map(AttachmentSummary::from).collect(),
     }))
@@ -1134,6 +1189,9 @@ struct MeetingSummary {
     /// Other devices' recordings combined into this meeting, which Split lists again; only the
     /// list sets it.
     combined_recordings: Vec<String>,
+    /// How far combining the recordings got, as this device sees it (#88); only the list sets it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    combining: Option<CombiningView>,
 }
 impl From<&MeetingMetadata> for MeetingSummary {
     fn from(meeting_metadata: &MeetingMetadata) -> Self {
@@ -1145,6 +1203,7 @@ impl From<&MeetingMetadata> for MeetingSummary {
             transcription_languages: transcription_language_codes(meeting_metadata),
             recorded_on: Vec::new(),
             combined_recordings: Vec::new(),
+            combining: None,
         }
     }
 }
@@ -1172,6 +1231,8 @@ struct MeetingDetail {
     recorded_on: Vec<RecordingDevice>,
     /// Other devices' recordings combined into this meeting, which Split lists again.
     combined_recordings: Vec<String>,
+    /// How far combining the recordings got, as this device sees it (#88).
+    combining: CombiningView,
     transcript: Option<String>,
     attachments: Vec<AttachmentSummary>,
 }

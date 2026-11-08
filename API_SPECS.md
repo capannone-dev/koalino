@@ -276,7 +276,7 @@ contents, EXIF data, or database-specific values.
   `transcription_languages` lists the speech-to-text languages chosen while recording (`auto` or
   Whisper codes) in first-use order; it is empty for meetings recorded before they were kept. `title`
   is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting; `created_at`
-  is RFC 3339 UTC. Both also carry `recorded_on` and `combined_recordings`, as in the HTTP API
+  is RFC 3339 UTC. Both also carry `recorded_on`, `combined_recordings` and `combining`, as in the HTTP API
   (#88); the list leaves out recordings combined into another meeting. Errors use
   `{"ok":false,"error_code","error"}` with `invalid_argument`,
   `meeting_not_found`, `list_failed`, `load_failed`, or `runtime_unavailable`. Free results
@@ -373,11 +373,21 @@ A meeting recorded on the laptop and on a paired phone is two recordings that th
 into one meeting, under the earlier recording. `GET /api/meetings` lists only that meeting, and
 it and `GET /api/meetings/{id}` add:
 
-- `recorded_on`: `[{"device_id","name","this_device"}]`, the meeting's own device first. `name` is
-  this device's name, or the name a paired device gave when pairing. It is null without P2P, or
-  for a device that is not paired here or has not sent its manifest.
+- `recorded_on`: `[{"device_id","name","this_device","connected"}]`, the meeting's own device
+  first. `name` is this device's name, or the name a paired device gave when pairing, kept while
+  it is away. It is null without P2P, or for a device that is not paired here or never sent its
+  manifest. `connected` says whether that device is connected now; null for this device and
+  without P2P.
 - `combined_recordings`: the IDs of the recordings combined into it, which are not listed on
   their own.
+- `combining`: `{"state","combine_on","waiting_for","kept_until"}`, how far combining the
+  recordings got as this device sees it. `state` is `one_device`, `waiting` (speech from the
+  `waiting_for` devices still has to reach `combine_on`), `ready_to_combine` (all speech is on
+  this device; the pass runs when it is free), `sending` (this device still has to send its
+  speech to `combine_on`), `combined`, or `not_combined` (speech from `waiting_for` did not
+  arrive within three weeks). Devices are shaped as in `recorded_on`; `combine_on` is null for one
+  device. `kept_until` (RFC 3339) is when the speech held here is deleted if not combined by
+  then, null when none is held. Speech waits sealed for at most three weeks.
 
 `POST /api/meetings/{id}/split` lists those recordings on their own again, for good, and returns
 `200` `{"split":[<meeting IDs>]}`, empty when there was nothing to split. Passing a combined

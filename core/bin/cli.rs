@@ -49,6 +49,7 @@ fn main() -> Result<()> {
             .with_stdout_filter(log_filters.stdout_filter),
     )?;
     let store_device_id = device_id;
+    let recording_device_id = store_device_id.clone();
     let EncryptedStores {
         note_repository: repository,
         voice_store,
@@ -88,7 +89,11 @@ fn main() -> Result<()> {
     let mut cli_service =
         CoreCliService::new(recording_control, repository, voice_store, export_writer)
             .with_log_level_control(LogLevelControlFile::for_database(&database_path))
-            .with_deletion_hooks(Box::new(LocalMeetingFiles::for_database(&database_path)));
+            .with_deletion_hooks(Box::new(LocalMeetingFiles::for_database(&database_path)))
+            .with_recording_device(
+                recording_device_id,
+                note_taker_core::refinement_worker::retained_audio_directory(&database_path),
+            );
     if let Some(trusted_peer_store) = trusted_peer_store {
         cli_service = cli_service.with_trusted_peer_store(Box::new(trusted_peer_store));
     }

@@ -12,7 +12,7 @@ use std::{
 
 use crate::{
     adapters::{
-        audio::live_microphone::LiveMicrophone,
+        audio::{live_microphone::LiveMicrophone, retained_audio_store::RetainedSpeechIndex},
         export::{default_export_directory, default_exporters},
         media::local_file_metadata::LocalFileMetadataExtractor,
         storage::{
@@ -28,7 +28,9 @@ use crate::{
             assign_clusters_to_named_identity, find_cluster_review_clip, list_unknown_clusters,
             load_voice_library,
         },
-        combined_meetings::{MeetingListing, name_recording_devices, split_recordings},
+        combined_meetings::{
+            MeetingListing, combining_view, name_recording_devices, split_recordings,
+        },
         crypto::key_manager::KeyManagerConfig,
         export_manager::{ExportManager, ExportWriter, segment_speaker_label},
         meeting_rename::{MeetingRenameError, rename_meeting},
@@ -249,6 +251,9 @@ struct FfiRuntime {
     /// The P2P pairing and sync task, when enabled and started (Issue #43). Shared so a command
     /// can wait for the task without holding the runtime lock.
     p2p: Option<Arc<P2pHandle>>,
+    /// Which meetings' speech this device holds for the after-meeting pass (#88); `None` when
+    /// the runtime keeps none (tests over in-memory SQLite).
+    retained_speech: Option<RetainedSpeechIndex>,
     /// Where recordings capture audio from; `None` when the host pushes PCM itself
     /// (`note_taker_push_audio_pcm`) or the build has no `microphone` feature (Issue #45).
     microphone_source: Option<Arc<dyn MicrophoneSource>>,
@@ -312,16 +317,47 @@ fn meeting_summary_json(
     })
 }
 
-/// Adds `recorded_on` (`[{"device_id","name","this_device"}]`) and `combined_recordings` (the
-/// recordings combined into the meeting, which are not listed alone) to a meeting's JSON (#88).
+/// What a meeting's JSON needs to say which devices recorded it and how far combining got (#88).
+struct RecordingContext<'context> {
+    /// The listing of every meeting.
+    listing: MeetingListing,
+    /// Every meeting as a recording.
+    recordings: Vec<crate::ports::storage::MeetingRecording>,
+    /// The P2P status, when P2P runs.
+    p2p_status: Option<crate::application::p2p_service::P2pStatus>,
+    /// This device, by the ID written on its meetings.
+    this_device: &'context crate::domain::models::DeviceId,
+    /// The speech held here, when this runtime keeps any.
+    retained_speech: Option<&'context RetainedSpeechIndex>,
+}
+
+/// Adds `recorded_on` (`[{"device_id","name","this_device","connected"}]`),
+/// `combined_recordings` (the recordings combined into the meeting, which are not listed alone),
+/// and `combining` (`{"state","combine_on","waiting_for","kept_until"}`) to a meeting's JSON (#88).
 ///
-/// Side effects: None.
+/// Side effects: Reads the retained speech folder's metadata.
 fn add_recording_devices(
     meeting_json: &mut serde_json::Value,
-    listing: &MeetingListing,
+    context: &RecordingContext<'_>,
     meeting_id: &MeetingId,
-    p2p_status: Option<&crate::application::p2p_service::P2pStatus>,
 ) {
+    let listing = &context.listing;
+    let p2p_status = context.p2p_status.as_ref();
+    let now = std::time::SystemTime::now();
+    let held = |meeting: &MeetingId| {
+        context
+            .retained_speech
+            .and_then(|index| index.held_speech(meeting, now))
+    };
+    meeting_json["combining"] = serde_json::to_value(combining_view(
+        meeting_id,
+        &context.recordings,
+        &held,
+        context.this_device,
+        chrono::Utc::now(),
+        p2p_status,
+    ))
+    .unwrap_or(serde_json::Value::Null);
     meeting_json["recorded_on"] = serde_json::to_value(name_recording_devices(
         &listing.recorded_on(meeting_id),
         p2p_status,
@@ -472,6 +508,9 @@ impl FfiRuntime {
             ExportWriter::new(default_exporters(), export_directory),
         );
         runtime.p2p = p2p;
+        runtime.retained_speech = Some(RetainedSpeechIndex::new(
+            crate::refinement_worker::retained_audio_directory(&database_path),
+        ));
         runtime.attachment_directory = setting("NOTE_TAKER_ATTACHMENT_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("attachments"));
@@ -504,6 +543,7 @@ impl FfiRuntime {
             attachment_directory: PathBuf::from("attachments"),
             export_writer,
             p2p: None,
+            retained_speech: None,
             microphone_source: None,
             live_microphone: None,
             microphone_ticker_running: false,
@@ -1452,11 +1492,11 @@ impl FfiRuntime {
                 Ok(meeting_projects) => meeting_projects.into_iter().collect(),
                 Err(error) => return export_error_json("list_failed", &error.to_string()),
             };
-        let listing = match self.note_repository.meeting_recordings() {
-            Ok(recordings) => MeetingListing::of(&recordings),
+        let context = match self.recording_context() {
+            Ok(context) => context,
             Err(error) => return export_error_json("list_failed", &error.to_string()),
         };
-        let p2p_status = self.p2p_status();
+        let listing = &context.listing;
         let mut serialized_meetings = Vec::with_capacity(meeting_ids.len());
         for meeting_id in meeting_ids {
             if !listing.is_listed(&meeting_id) {
@@ -1479,12 +1519,7 @@ impl FfiRuntime {
                                 .unwrap_or(serde_json::Value::Null),
                         );
                     }
-                    add_recording_devices(
-                        &mut meeting_json,
-                        &listing,
-                        &meeting_id,
-                        p2p_status.as_ref(),
-                    );
+                    add_recording_devices(&mut meeting_json, &context, &meeting_id);
                     serialized_meetings.push(meeting_json);
                 }
                 Err(error) => return export_error_json("list_failed", &error.to_string()),
@@ -1606,6 +1641,22 @@ impl FfiRuntime {
     /// The P2P task's latest status, used to name devices; `None` without P2P.
     fn p2p_status(&self) -> Option<crate::application::p2p_service::P2pStatus> {
         self.p2p.as_ref().map(|p2p| p2p.snapshot().status)
+    }
+
+    /// Gathers what meeting JSON needs about recording devices and combining (#88).
+    ///
+    /// Outputs: The context, or a storage error. Side effects: Reads the meetings index.
+    fn recording_context(
+        &self,
+    ) -> Result<RecordingContext<'_>, crate::domain::errors::StorageError> {
+        let recordings = self.note_repository.meeting_recordings()?;
+        Ok(RecordingContext {
+            listing: MeetingListing::of(&recordings),
+            recordings,
+            p2p_status: self.p2p_status(),
+            this_device: self.note_repository.device_id(),
+            retained_speech: self.retained_speech.as_ref(),
+        })
     }
 
     /// Deletes a saved person's name and voice samples.
@@ -1799,17 +1850,12 @@ impl FfiRuntime {
             Ok(attachments) => attachments,
             Err(error) => return export_error_json("load_failed", &error.to_string()),
         };
-        let listing = match self.note_repository.meeting_recordings() {
-            Ok(recordings) => MeetingListing::of(&recordings),
+        let context = match self.recording_context() {
+            Ok(context) => context,
             Err(error) => return export_error_json("load_failed", &error.to_string()),
         };
         let mut meeting_json = meeting_summary_json(&meeting_metadata, &segments);
-        add_recording_devices(
-            &mut meeting_json,
-            &listing,
-            &typed_meeting_id,
-            self.p2p_status().as_ref(),
-        );
+        add_recording_devices(&mut meeting_json, &context, &typed_meeting_id);
         meeting_json["attachments"] = attachments.iter().map(attachment_json).collect();
         meeting_json["transcript"] = transcript
             .map(|transcript| serde_json::Value::from(transcript.content()))
@@ -3937,6 +3983,12 @@ mod ffi_contract_tests {
             serde_json::json!(["ffi-phone"])
         );
         assert_eq!(list_entry["recorded_on"].as_array().map(Vec::len), Some(1));
+        // Nothing is retained in memory, so the speech can no longer be combined.
+        assert_eq!(detail["combining"]["state"], "not_combined");
+        assert_eq!(
+            detail["combining"]["combine_on"]["device_id"],
+            ffi_runtime.note_repository.device_id().as_str()
+        );
         assert_eq!(
             detail["combined_recordings"],
             serde_json::json!(["ffi-phone"])

@@ -155,16 +155,19 @@ pub struct RecordingDevice {
     /// The ID written on the device's meetings.
     pub device_id: DeviceId,
     /// Its name: this device's own, or the name a paired device gave when pairing; `None` when
-    /// the device is not paired here or has not sent its manifest yet.
+    /// the device is not paired here or never sent its manifest.
     pub name: Option<String>,
     /// Whether it is this device.
     pub this_device: bool,
+    /// Whether it is connected now; `None` for this device and without P2P.
+    pub connected: Option<bool>,
 }
 
 /// Names the devices that recorded a meeting from the P2P status.
 ///
 /// Inputs: The devices, as `MeetingListing::recorded_on` lists them, and the P2P status (`None`
-/// without P2P, when no device has a name). Outputs: The devices in the same order.
+/// without P2P, when no device has a name). Outputs: The devices in the same order. A paired
+/// device keeps its name while it is away, from the storage ID remembered with its pairing.
 /// Side effects: None.
 pub fn name_recording_devices(
     devices: &[DeviceId],
@@ -172,32 +175,84 @@ pub fn name_recording_devices(
 ) -> Vec<RecordingDevice> {
     devices
         .iter()
-        .map(|device| {
-            let this_device = status.is_some_and(|status| {
-                status.local_manifest.storage_device_id.as_ref() == Some(device)
-            });
-            let name = status.and_then(|status| {
-                if this_device {
-                    return Some(status.device_name.as_str().to_owned());
-                }
-                let peer = status
-                    .peer_manifests
-                    .iter()
-                    .find(|manifest| manifest.storage_device_id.as_ref() == Some(device))?
-                    .device_id();
-                status
-                    .trusted_devices
-                    .iter()
-                    .find(|trusted| trusted.peer_id() == peer)
-                    .map(|trusted| trusted.device_name().as_str().to_owned())
-            });
-            RecordingDevice {
-                device_id: device.clone(),
-                name,
-                this_device,
-            }
-        })
+        .map(|device| name_recording_device(device, status))
         .collect()
+}
+
+/// Names one device that recorded a meeting (see `name_recording_devices`).
+fn name_recording_device(
+    device: &DeviceId,
+    status: Option<&crate::application::p2p_service::P2pStatus>,
+) -> RecordingDevice {
+    let Some(status) = status else {
+        return RecordingDevice {
+            device_id: device.clone(),
+            name: None,
+            this_device: false,
+            connected: None,
+        };
+    };
+    if status.local_manifest.storage_device_id.as_ref() == Some(device) {
+        return RecordingDevice {
+            device_id: device.clone(),
+            name: Some(status.device_name.as_str().to_owned()),
+            this_device: true,
+            connected: None,
+        };
+    }
+    let connected_peer = status
+        .peer_manifests
+        .iter()
+        .find(|manifest| manifest.storage_device_id.as_ref() == Some(device))
+        .map(|manifest| manifest.device_id().clone());
+    let name = status
+        .trusted_devices
+        .iter()
+        .find(|trusted| {
+            trusted.storage_device_id() == Some(device)
+                || connected_peer.as_ref() == Some(trusted.peer_id())
+        })
+        .map(|trusted| trusted.device_name().as_str().to_owned());
+    RecordingDevice {
+        device_id: device.clone(),
+        name,
+        this_device: false,
+        connected: Some(connected_peer.is_some()),
+    }
+}
+
+/// A meeting's combining status with its devices named, as the apps receive it (#88).
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+pub struct CombiningView {
+    /// How far combining got.
+    pub state: CombiningState,
+    /// The device that combines the recordings; `None` for one device.
+    pub combine_on: Option<RecordingDevice>,
+    /// The devices whose speech is awaited, or that could not be combined.
+    pub waiting_for: Vec<RecordingDevice>,
+    /// When the speech held here is deleted if not combined by then (RFC 3339), or `None`.
+    pub kept_until: Option<String>,
+}
+
+impl CombiningView {
+    /// Names the devices of a status.
+    ///
+    /// Inputs: The status and the P2P status (`None` without P2P). Outputs: The view.
+    /// Side effects: None.
+    pub fn of(
+        status: &CombiningStatus,
+        p2p: Option<&crate::application::p2p_service::P2pStatus>,
+    ) -> Self {
+        Self {
+            state: status.state,
+            combine_on: status
+                .combine_on
+                .as_ref()
+                .map(|device| name_recording_device(device, p2p)),
+            waiting_for: name_recording_devices(&status.waiting_for, p2p),
+            kept_until: status.kept_until.map(|until| until.to_rfc3339()),
+        }
+    }
 }
 
 /// Splits recordings of one meeting apart again, for good (the Split action).
@@ -562,4 +617,169 @@ fn plan_alone(own: HeldSpeech, context: &PlanContext<'_>) -> AudioPlan {
     } else {
         AudioPlan::Discard
     }
+}
+
+/// How far combining a meeting's recordings got, as one device sees it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CombiningState {
+    /// Only one device recorded the meeting so far.
+    OneDevice,
+    /// Speech from `waiting_for` still has to reach the combining device.
+    Waiting,
+    /// Every recording's speech is here; the combined pass runs when the device allows.
+    ReadyToCombine,
+    /// This device still has to send its speech to the combining device.
+    Sending,
+    /// The transcript is built from every recording's speech.
+    Combined,
+    /// Speech from `waiting_for` can no longer be combined; the transcript is built without it.
+    NotCombined,
+}
+
+/// A meeting's combining status, as the apps show it in a meeting's details (#88).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CombiningStatus {
+    /// How far it got.
+    pub state: CombiningState,
+    /// The device that combines the recordings; `None` for one device.
+    pub combine_on: Option<DeviceId>,
+    /// The devices whose speech is awaited, or that could not be combined.
+    pub waiting_for: Vec<DeviceId>,
+    /// When the speech held here is deleted if it has not been combined by then.
+    pub kept_until: Option<DateTime<Utc>>,
+}
+
+/// Works out how far combining a listed meeting's recordings got, as this device sees it.
+///
+/// Inputs: The listed meeting (the first recording); every meeting as a recording; the speech
+/// held here; this device; and the time now.
+/// Outputs: The status. A meeting whose transcript notes every folded recording is `Combined` on
+/// every device; recordings made more than `KEEP_FOR_COMBINING` ago can no longer be combined.
+/// Side effects: None.
+pub fn combining_status(
+    meeting_id: &MeetingId,
+    recordings: &[MeetingRecording],
+    held: &dyn Fn(&MeetingId) -> Option<HeldSpeech>,
+    this_device: &DeviceId,
+    now: DateTime<Utc>,
+) -> CombiningStatus {
+    let kept_until = |meeting: &MeetingId| {
+        held(meeting).and_then(|speech| {
+            let left = KEEP_FOR_COMBINING.checked_sub(speech.age)?;
+            Some(now + chrono::TimeDelta::from_std(left).ok()?)
+        })
+    };
+    let status = |state, combine_on, waiting_for, kept_until| CombiningStatus {
+        state,
+        combine_on,
+        waiting_for,
+        kept_until,
+    };
+    let group = Group::of(meeting_id, recordings).filter(|group| !group.members.is_empty());
+    let (Some(group), Some(combiner)) = (group, combining_device(meeting_id, recordings)) else {
+        return status(
+            CombiningState::OneDevice,
+            None,
+            Vec::new(),
+            kept_until(meeting_id),
+        );
+    };
+    let left_out: Vec<&MeetingRecording> = group
+        .members
+        .iter()
+        .map(|(member, _)| *member)
+        .filter(|member| !group.root.combined_with.contains(&member.meeting_id))
+        .collect();
+    let devices_of = |recordings: &[&MeetingRecording]| {
+        let mut devices: Vec<DeviceId> = Vec::new();
+        for recording in recordings {
+            if !devices.contains(&recording.acquisition_device_id) {
+                devices.push(recording.acquisition_device_id.clone());
+            }
+        }
+        devices
+    };
+    if left_out.is_empty() {
+        return status(CombiningState::Combined, Some(combiner), Vec::new(), None);
+    }
+    let last_start = group
+        .recordings()
+        .map(|recording| recording.created_at)
+        .max()
+        .unwrap_or(group.root.created_at);
+    let expired =
+        chrono::TimeDelta::from_std(KEEP_FOR_COMBINING).is_ok_and(|keep| now >= last_start + keep);
+    let not_combined = || {
+        status(
+            CombiningState::NotCombined,
+            Some(combiner.clone()),
+            devices_of(&left_out),
+            None,
+        )
+    };
+    if combiner == *this_device {
+        if held(meeting_id).is_none() || expired {
+            return not_combined();
+        }
+        let missing: Vec<&MeetingRecording> = left_out
+            .iter()
+            .copied()
+            .filter(|member| held(&member.meeting_id).is_none())
+            .collect();
+        let state = if missing.is_empty() {
+            CombiningState::ReadyToCombine
+        } else {
+            CombiningState::Waiting
+        };
+        return status(
+            state,
+            Some(combiner),
+            devices_of(&missing),
+            kept_until(meeting_id),
+        );
+    }
+    let to_send = group.recordings().find(|recording| {
+        recording.acquisition_device_id == *this_device && held(&recording.meeting_id).is_some()
+    });
+    match to_send {
+        Some(recording) if !expired => status(
+            CombiningState::Sending,
+            Some(combiner),
+            Vec::new(),
+            kept_until(&recording.meeting_id),
+        ),
+        _ if expired => not_combined(),
+        _ => {
+            let others: Vec<&MeetingRecording> = left_out
+                .iter()
+                .copied()
+                .filter(|member| member.acquisition_device_id != combiner)
+                .collect();
+            status(
+                CombiningState::Waiting,
+                Some(combiner),
+                devices_of(&others),
+                None,
+            )
+        }
+    }
+}
+
+/// Works out and names a listed meeting's combining status for the apps (#88).
+///
+/// Inputs: As `combining_status`, plus the P2P status (`None` without P2P). Outputs: The view.
+/// Side effects: None.
+pub fn combining_view(
+    meeting_id: &MeetingId,
+    recordings: &[MeetingRecording],
+    held: &dyn Fn(&MeetingId) -> Option<HeldSpeech>,
+    this_device: &DeviceId,
+    now: DateTime<Utc>,
+    p2p: Option<&crate::application::p2p_service::P2pStatus>,
+) -> CombiningView {
+    CombiningView::of(
+        &combining_status(meeting_id, recordings, held, this_device, now),
+        p2p,
+    )
 }

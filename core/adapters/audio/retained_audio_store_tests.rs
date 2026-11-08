@@ -359,3 +359,35 @@ fn a_meeting_remembers_its_pass_alone_until_new_speech_or_deletion() {
     );
     let _ = fs::remove_dir_all(&path);
 }
+
+#[test]
+fn the_speech_index_reports_held_speech_without_the_key() {
+    let path = folder();
+    let store = store(&path);
+    let meeting = MeetingId::new("meeting-1");
+    let index = super::retained_audio_store::RetainedSpeechIndex::new(path.clone());
+    let later = std::time::SystemTime::now() + std::time::Duration::from_secs(3_600);
+    assert_eq!(index.held_speech(&meeting, later), None);
+
+    store
+        .append_chunk(
+            &meeting,
+            ChunkSpan {
+                start_ms: 0,
+                end_ms: 100,
+            },
+            None,
+            &samples(1, 160),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+    store
+        .mark_passed_alone(&meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let held = index
+        .held_speech(&meeting, later)
+        .unwrap_or_else(|| panic!("the speech must be reported"));
+    assert!(held.passed_alone);
+    assert!(held.age >= std::time::Duration::from_secs(3_590));
+    let _ = fs::remove_dir_all(&path);
+}
