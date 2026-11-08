@@ -250,3 +250,62 @@ fn a_folded_recording_can_be_split_by_its_own_id() {
 
     assert_eq!(split, vec![folded]);
 }
+
+#[test]
+fn a_recording_says_whether_a_phone_made_it_and_which_recordings_its_transcript_combines() {
+    let device = Device::new("laptop");
+    let laptop_meeting = device.meeting("meeting-laptop");
+    let phone_meeting = device.meeting("meeting-phone");
+    assert_eq!(device.recording(&laptop_meeting).recorded_on_phone, None);
+    assert!(device.recording(&laptop_meeting).combined_with.is_empty());
+
+    device
+        .repository
+        .describe_recording_device(&laptop_meeting, false)
+        .unwrap_or_else(|error| panic!("{error}"));
+    device
+        .repository
+        .describe_recording_device(&phone_meeting, true)
+        .unwrap_or_else(|error| panic!("{error}"));
+    device
+        .repository
+        .mark_combined(&laptop_meeting, std::slice::from_ref(&phone_meeting))
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let laptop = device.recording(&laptop_meeting);
+    assert_eq!(laptop.recorded_on_phone, Some(false));
+    assert_eq!(laptop.combined_with, vec![phone_meeting.clone()]);
+    assert_eq!(
+        device.recording(&phone_meeting).recorded_on_phone,
+        Some(true)
+    );
+}
+
+#[test]
+fn the_device_kind_and_combined_recordings_reach_a_paired_device() {
+    let laptop = Device::new("laptop");
+    let laptop_meeting = laptop.meeting("meeting-laptop");
+    let phone_meeting = laptop.meeting("meeting-phone");
+    laptop
+        .repository
+        .describe_recording_device(&laptop_meeting, false)
+        .unwrap_or_else(|error| panic!("{error}"));
+    laptop
+        .repository
+        .mark_combined(&laptop_meeting, std::slice::from_ref(&phone_meeting))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let document = laptop
+        .repository
+        .load_crdt_document(&laptop_meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let phone = Device::new("phone");
+    phone
+        .repository
+        .create_meeting(&laptop_meeting, &document)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let received = phone.recording(&laptop_meeting);
+    assert_eq!(received.recorded_on_phone, Some(false));
+    assert_eq!(received.combined_with, vec![phone_meeting]);
+}

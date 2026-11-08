@@ -601,6 +601,31 @@ impl NoteRepository for SqliteNoteRepository {
         Ok(true)
     }
 
+    fn describe_recording_device(
+        &self,
+        meeting_id: &MeetingId,
+        on_phone: bool,
+    ) -> Result<(), StorageError> {
+        self.read_combination(meeting_id)?;
+        self.rewrite_combination(meeting_id, |codec, document| {
+            codec.with_recording_device_kind(document, on_phone)
+        })?;
+        Ok(())
+    }
+
+    fn mark_combined(
+        &self,
+        meeting_id: &MeetingId,
+        recordings: &[MeetingId],
+    ) -> Result<(), StorageError> {
+        self.read_combination(meeting_id)?;
+        self.rewrite_combination(meeting_id, |codec, document| {
+            codec.with_combined_with(document, recordings)
+        })?;
+        self.log_operation("mark_combined", meeting_id);
+        Ok(())
+    }
+
     /// Reads a meeting's SQLite creation timestamp, title and transcription languages as
     /// portable metadata.
     ///

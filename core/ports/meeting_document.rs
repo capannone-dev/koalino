@@ -66,6 +66,11 @@ pub struct MeetingProjection {
     pub combined_into: Option<MeetingCombination>,
     /// Meetings the owner split from this one, which must not be joined to it again, by ID.
     pub kept_apart_from: Vec<MeetingId>,
+    /// Whether a phone recorded the meeting (#88); `None` for meetings recorded before devices
+    /// noted it.
+    pub recorded_on_phone: Option<bool>,
+    /// Other recordings whose speech this meeting's transcript was built from (#88), by ID.
+    pub combined_with: Vec<MeetingId>,
 }
 
 /// Reads and edits serialized meeting documents without exposing the CRDT library.
@@ -148,6 +153,26 @@ pub trait MeetingDocumentCodec: Send + Sync {
     /// Inputs: The serialized document and the other meeting. Outputs: The updated document bytes,
     /// or a storage error. Side effects: None.
     fn with_kept_apart(&self, document: &[u8], other: &MeetingId) -> Result<Vec<u8>, StorageError>;
+
+    /// Records whether a phone recorded the meeting, unless the document already says (#88).
+    ///
+    /// Inputs: The serialized document and whether the recording device is a phone. Outputs: The
+    /// updated document bytes, or a storage error. Side effects: None.
+    fn with_recording_device_kind(
+        &self,
+        document: &[u8],
+        on_phone: bool,
+    ) -> Result<Vec<u8>, StorageError>;
+
+    /// Records that the meeting's transcript was built from these other recordings' speech too.
+    ///
+    /// Inputs: The serialized document and the recordings. Outputs: The updated document bytes, or
+    /// a storage error; recordings already listed stay. Side effects: None.
+    fn with_combined_with(
+        &self,
+        document: &[u8],
+        recordings: &[MeetingId],
+    ) -> Result<Vec<u8>, StorageError>;
 
     /// Reads the index-relevant fields of a document.
     ///

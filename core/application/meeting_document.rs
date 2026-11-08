@@ -17,6 +17,8 @@
 //!
 //! | `combined_into` | map `{ meeting_id: str, offset_ms: int, combine_on: str }` (#88): the meeting this recording was folded into, its offset on that meeting's timeline, and the device that combines their audio; absent when it stands alone |
 //! | `kept_apart_from` | map from the ID of a meeting the owner split from this one to `true` (#88) |
+//! | `recorded_on_phone` | bool, written once: whether a phone recorded the meeting (#88) |
+//! | `combined_with` | map from the ID of another recording whose speech the transcript was built from to `true` (#88) |
 //!
 //! `cluster_resolutions` (Issue #50) maps an unknown-speaker cluster ID to the identity ID it was
 //! named as, both hyphenated UUID strings. One register per cluster, so two devices naming the
@@ -65,6 +67,11 @@ const TRANSCRIPTION_LANGUAGES_KEY: &str = "transcription_languages";
 const COMBINED_INTO_KEY: &str = "combined_into";
 /// Root key of the meetings split from this one (#88): a map, so splits on two devices merge.
 const KEPT_APART_KEY: &str = "kept_apart_from";
+/// Root key of whether a phone recorded the meeting (#88), written once by the recording device.
+const RECORDED_ON_PHONE_KEY: &str = "recorded_on_phone";
+/// Root key of the recordings combined into this meeting's transcript (#88): a map, so two
+/// devices' records merge.
+const COMBINED_WITH_KEY: &str = "combined_with";
 
 /// The Automerge implementation of `MeetingDocumentCodec`.
 #[derive(Clone, Copy, Debug, Default)]
@@ -308,6 +315,45 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
         Ok(automerge_document.save())
     }
 
+    fn with_recording_device_kind(
+        &self,
+        document: &[u8],
+        on_phone: bool,
+    ) -> Result<Vec<u8>, StorageError> {
+        let mut automerge_document = load(document)?;
+        if let Ok(Some((Value::Scalar(_), _))) = automerge_document.get(ROOT, RECORDED_ON_PHONE_KEY)
+        {
+            return Ok(document.to_vec());
+        }
+        automerge_document
+            .put(ROOT, RECORDED_ON_PHONE_KEY, ScalarValue::Boolean(on_phone))
+            .map_err(|error| crdt_error("unable to record the recording device", error))?;
+        Ok(automerge_document.save())
+    }
+
+    fn with_combined_with(
+        &self,
+        document: &[u8],
+        recordings: &[MeetingId],
+    ) -> Result<Vec<u8>, StorageError> {
+        let mut automerge_document = load(document)?;
+        let object = match automerge_document.get(ROOT, COMBINED_WITH_KEY) {
+            Ok(Some((Value::Object(ObjType::Map), object))) => object,
+            _ => automerge_document
+                .put_object(ROOT, COMBINED_WITH_KEY, ObjType::Map)
+                .map_err(|error| crdt_error("unable to write the combined recordings", error))?,
+        };
+        for recording in recordings {
+            put_if_changed(
+                &mut automerge_document,
+                &object,
+                recording.as_str(),
+                ScalarValue::Boolean(true),
+            )?;
+        }
+        Ok(automerge_document.save())
+    }
+
     fn project(
         &self,
         meeting_id: &MeetingId,
@@ -373,6 +419,23 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
             _ => Vec::new(),
         };
         kept_apart_from.sort_by(|first, second| first.as_str().cmp(second.as_str()));
+        let recorded_on_phone = match automerge_document.get(ROOT, RECORDED_ON_PHONE_KEY) {
+            Ok(Some((Value::Scalar(value), _))) => match value.as_ref() {
+                ScalarValue::Boolean(on_phone) => Some(*on_phone),
+                _ => None,
+            },
+            _ => None,
+        };
+        let mut combined_with: Vec<MeetingId> =
+            match automerge_document.get(ROOT, COMBINED_WITH_KEY) {
+                Ok(Some((Value::Object(ObjType::Map), object))) => automerge_document
+                    .keys(&object)
+                    .filter(|key| !key.is_empty())
+                    .map(MeetingId::new)
+                    .collect(),
+                _ => Vec::new(),
+            };
+        combined_with.sort_by(|first, second| first.as_str().cmp(second.as_str()));
         Ok(MeetingProjection {
             origin,
             transcript,
@@ -382,6 +445,8 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
             transcription_languages,
             combined_into,
             kept_apart_from,
+            recorded_on_phone,
+            combined_with,
         })
     }
 }

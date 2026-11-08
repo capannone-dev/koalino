@@ -79,6 +79,34 @@ pub trait NoteRepository {
         Err(StorageError::Unavailable)
     }
 
+    /// Notes on a meeting recorded here whether this device is a phone, unless it says already
+    /// (#88). Paired devices use it to agree which device combines a meeting's recordings.
+    ///
+    /// Inputs: The meeting and whether this device is a phone. Outputs: Success, a rejection for
+    /// an unknown meeting, or a storage error; repositories without meeting documents refuse.
+    /// Side effects: Writes the meeting's CRDT document and index, which syncs to paired devices.
+    fn describe_recording_device(
+        &self,
+        _meeting_id: &MeetingId,
+        _on_phone: bool,
+    ) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
+    }
+
+    /// Records that a meeting's transcript was built from these folded recordings' speech too.
+    ///
+    /// Inputs: The meeting the recordings were folded into and the recordings. Outputs: Success, a
+    /// rejection for an unknown meeting, or a storage error; repositories without meeting
+    /// documents refuse.
+    /// Side effects: Writes the meeting's CRDT document and index, which syncs to paired devices.
+    fn mark_combined(
+        &self,
+        _meeting_id: &MeetingId,
+        _recordings: &[MeetingId],
+    ) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
+    }
+
     /// Deletes a meeting and everything it holds, and records that it was deleted.
     ///
     /// Inputs: The meeting; an unknown one changes nothing.
@@ -421,6 +449,10 @@ pub struct MeetingRecording {
     pub combined_into: Option<MeetingCombination>,
     /// Meetings the owner split from it.
     pub kept_apart_from: Vec<MeetingId>,
+    /// Whether a phone recorded it; `None` when its device has not said yet.
+    pub recorded_on_phone: Option<bool>,
+    /// Other recordings whose speech its transcript was built from.
+    pub combined_with: Vec<MeetingId>,
 }
 
 /// Meetings whose documents changed since a revision (Issue #43).
@@ -488,6 +520,22 @@ where
 
     fn split_meeting(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
         (**self).split_meeting(meeting_id)
+    }
+
+    fn describe_recording_device(
+        &self,
+        meeting_id: &MeetingId,
+        on_phone: bool,
+    ) -> Result<(), StorageError> {
+        (**self).describe_recording_device(meeting_id, on_phone)
+    }
+
+    fn mark_combined(
+        &self,
+        meeting_id: &MeetingId,
+        recordings: &[MeetingId],
+    ) -> Result<(), StorageError> {
+        (**self).mark_combined(meeting_id, recordings)
     }
 
     fn document_changes_since(&self, after_revision: u64) -> Result<DocumentChanges, StorageError> {

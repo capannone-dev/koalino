@@ -10,6 +10,8 @@
 //! | `combined_offset_ms` | where it sits on that meeting's timeline |
 //! | `combine_on` | the device that combines their audio |
 //! | `kept_apart_from` | IDs of meetings split from it, one per line, or `NULL` |
+//! | `recorded_on_phone` | 1 when a phone recorded it, 0 when not, `NULL` when not yet said |
+//! | `combined_with` | IDs of recordings its transcript was built from, one per line, or `NULL` |
 
 use crate::adapters::storage::sqlite_adapter::WriteTransaction;
 use rusqlite::{Connection, OptionalExtension, params};
@@ -38,6 +40,8 @@ pub(super) fn initialize_combination_schema(connection: &Connection) -> Result<(
         ("combined_offset_ms", "INTEGER"),
         ("combine_on", "TEXT"),
         ("kept_apart_from", "TEXT"),
+        ("recorded_on_phone", "INTEGER"),
+        ("combined_with", "TEXT"),
     ] {
         let present: i64 = connection
             .query_row(
@@ -64,29 +68,46 @@ pub(super) fn project_combination(
     projection: &MeetingProjection,
 ) -> Result<(), StorageError> {
     let combination = projection.combined_into.as_ref();
-    let kept_apart = (!projection.kept_apart_from.is_empty()).then(|| {
-        projection
-            .kept_apart_from
-            .iter()
-            .map(MeetingId::as_str)
-            .collect::<Vec<_>>()
-            .join("\n")
-    });
+    let kept_apart = joined_lines(&projection.kept_apart_from);
+    let combined_with = joined_lines(&projection.combined_with);
     connection
         .execute(
             "UPDATE meetings SET combined_into = ?1, combined_offset_ms = ?2, combine_on = ?3,
-                 kept_apart_from = ?4
-             WHERE meeting_id = ?5",
+                 kept_apart_from = ?4, recorded_on_phone = ?5, combined_with = ?6
+             WHERE meeting_id = ?7",
             params![
                 combination.map(|combination| combination.into.as_str()),
                 combination.map(|combination| combination.offset_ms),
                 combination.map(|combination| combination.combine_on.as_str()),
                 kept_apart,
+                projection.recorded_on_phone,
+                combined_with,
                 meeting_id.as_str(),
             ],
         )
         .map_err(|error| sqlite_error("unable to project the meeting's combination", error))?;
     Ok(())
+}
+
+/// Joins meeting IDs one per line, or `None` for none.
+fn joined_lines(meetings: &[MeetingId]) -> Option<String> {
+    (!meetings.is_empty()).then(|| {
+        meetings
+            .iter()
+            .map(MeetingId::as_str)
+            .collect::<Vec<_>>()
+            .join("\n")
+    })
+}
+
+/// Splits meeting IDs stored one per line.
+fn split_lines(stored: Option<&str>) -> Vec<MeetingId> {
+    stored
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(MeetingId::new)
+        .collect()
 }
 
 impl SqliteNoteRepository {
@@ -96,7 +117,8 @@ impl SqliteNoteRepository {
             .connection
             .prepare(
                 "SELECT meeting_id, created_at_utc, acquisition_device_id, combined_into,
-                        combined_offset_ms, combine_on, kept_apart_from
+                        combined_offset_ms, combine_on, kept_apart_from, recorded_on_phone,
+                        combined_with
                  FROM meetings ORDER BY created_at_utc, meeting_id",
             )
             .map_err(|error| sqlite_error("unable to list meeting recordings", error))?;
@@ -110,13 +132,24 @@ impl SqliteNoteRepository {
                     row.get::<_, Option<i64>>(4)?,
                     row.get::<_, Option<String>>(5)?,
                     row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<bool>>(7)?,
+                    row.get::<_, Option<String>>(8)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to list meeting recordings", error))?;
         let mut recordings = Vec::new();
         for row in rows {
-            let (meeting_id, created_at, device_id, into, offset_ms, combine_on, kept_apart) =
-                row.map_err(|error| sqlite_error("unable to read a meeting recording", error))?;
+            let (
+                meeting_id,
+                created_at,
+                device_id,
+                into,
+                offset_ms,
+                combine_on,
+                kept_apart,
+                recorded_on_phone,
+                combined_with,
+            ) = row.map_err(|error| sqlite_error("unable to read a meeting recording", error))?;
             let combined_into = match (into, offset_ms, combine_on) {
                 (Some(into), Some(offset_ms), Some(combine_on)) => Some(MeetingCombination {
                     into: MeetingId::new(into),
@@ -130,13 +163,9 @@ impl SqliteNoteRepository {
                 created_at: parse_sqlite_timestamp(&created_at)?,
                 acquisition_device_id: DeviceId::new(device_id),
                 combined_into,
-                kept_apart_from: kept_apart
-                    .as_deref()
-                    .unwrap_or_default()
-                    .lines()
-                    .filter(|line| !line.is_empty())
-                    .map(MeetingId::new)
-                    .collect(),
+                kept_apart_from: split_lines(kept_apart.as_deref()),
+                recorded_on_phone,
+                combined_with: split_lines(combined_with.as_deref()),
             });
         }
         Ok(recordings)
