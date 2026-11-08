@@ -317,3 +317,45 @@ fn retained_files_are_readable_by_their_owner_only() {
     assert_eq!(mode, 0o600);
     let _ = fs::remove_dir_all(&path);
 }
+
+#[test]
+fn a_meeting_remembers_its_pass_alone_until_new_speech_or_deletion() {
+    let path = folder();
+    let store = store(&path);
+    let meeting = MeetingId::new("meeting-1");
+    let span = ChunkSpan {
+        start_ms: 0,
+        end_ms: 100,
+    };
+    store
+        .append_chunk(&meeting, span, None, &samples(1, 160))
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(!store.passed_alone(&meeting));
+
+    store
+        .mark_passed_alone(&meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(store.passed_alone(&meeting));
+    assert_eq!(store.pending_meetings(), vec![meeting.clone()]);
+
+    // The recording went on: the pass must run again.
+    store
+        .append_chunk(&meeting, span, None, &samples(2, 160))
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(!store.passed_alone(&meeting));
+
+    store
+        .mark_passed_alone(&meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+    store
+        .delete(&meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(!store.passed_alone(&meeting));
+    assert_eq!(
+        fs::read_dir(&path)
+            .map(|entries| entries.count())
+            .unwrap_or_default(),
+        0
+    );
+    let _ = fs::remove_dir_all(&path);
+}

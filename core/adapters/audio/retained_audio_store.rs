@@ -9,7 +9,9 @@
 //! to open. Plaintext buffers are wiped after use, and nothing here logs audio. The pass deletes
 //! the file once it is done; deleting the meeting must delete it too. Files are readable by this
 //! user only. Speech received from a paired device for combining (#88) is written to
-//! `<file>.incoming` and becomes the meeting's file only once complete.
+//! `<file>.incoming` and becomes the meeting's file only once complete. An empty `<file>.passed`
+//! notes that the meeting already took the pass alone while its speech waits to be combined with
+//! a late recording; new speech or deletion drops it.
 
 use std::{
     fs::{self, OpenOptions},
@@ -113,6 +115,7 @@ impl RetainedAudioStore {
         language: Option<TranscriptionLanguage>,
         samples: &[i16],
     ) -> Result<(), RetainedAudioError> {
+        self.forget_pass_alone(meeting_id)?;
         self.append_record(
             meeting_id,
             &Self::file_name(meeting_id),
@@ -120,6 +123,37 @@ impl RetainedAudioStore {
             language,
             samples,
         )
+    }
+
+    /// Notes that the meeting took the pass alone with the speech held now (#88).
+    ///
+    /// Side effects: Creates an empty `<file>.passed`, readable by this user only.
+    pub fn mark_passed_alone(&self, meeting_id: &MeetingId) -> Result<(), RetainedAudioError> {
+        fs::create_dir_all(&self.directory)?;
+        private_append(&self.passed_path(meeting_id))?;
+        Ok(())
+    }
+
+    /// Reports whether the meeting took the pass alone since its speech last changed.
+    ///
+    /// Side effects: Reads the folder.
+    pub fn passed_alone(&self, meeting_id: &MeetingId) -> bool {
+        self.passed_path(meeting_id).exists()
+    }
+
+    /// The path of a meeting's pass-alone note.
+    fn passed_path(&self, meeting_id: &MeetingId) -> PathBuf {
+        self.directory
+            .join(format!("{}.passed", Self::file_name(meeting_id)))
+    }
+
+    /// Drops a meeting's pass-alone note. Side effects: Removes `<file>.passed` if present.
+    fn forget_pass_alone(&self, meeting_id: &MeetingId) -> Result<(), RetainedAudioError> {
+        match fs::remove_file(self.passed_path(meeting_id)) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.into()),
+        }
     }
 
     /// Seals one chunk for `meeting_id` and appends it to `file_name` in the folder.
@@ -198,6 +232,7 @@ impl RetainedAudioStore {
     ///
     /// Side effects: Renames `<file>.incoming` to the meeting's file.
     pub fn finish_incoming(&self, meeting_id: &MeetingId) -> Result<(), RetainedAudioError> {
+        self.forget_pass_alone(meeting_id)?;
         fs::rename(
             self.incoming_path(meeting_id),
             self.directory.join(Self::file_name(meeting_id)),
@@ -259,8 +294,10 @@ impl RetainedAudioStore {
 
     /// Deletes a meeting's retained audio.
     ///
-    /// Inputs: The meeting. Outputs: Whether a file existed. Side effects: Removes the file.
+    /// Inputs: The meeting. Outputs: Whether a file existed. Side effects: Removes the file, any
+    /// unfinished received copy, and the pass-alone note.
     pub fn delete(&self, meeting_id: &MeetingId) -> Result<bool, RetainedAudioError> {
+        self.forget_pass_alone(meeting_id)?;
         match fs::remove_file(self.incoming_path(meeting_id)) {
             Ok(()) => {}
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}

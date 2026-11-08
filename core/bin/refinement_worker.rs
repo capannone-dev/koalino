@@ -11,11 +11,14 @@
 //!    (`application::transcript_refinement`), or deletes speech nobody will use.
 //!
 //! A finished recording waits `COMBINING_GRACE` for a paired device's recording of it only when
-//! this process runs P2P; the CLI runs the pass at once. Nothing runs while a recording is running. Passes run on a phone only while it is charging,
+//! this process runs P2P; the CLI runs the pass at once. With P2P, a recording's speech stays
+//! sealed after its pass alone, so a recording of the same meeting that reaches this device up to
+//! three weeks later is still combined with it. Nothing runs while a recording is running. Passes run on a phone only while it is charging,
 //! and stop between windows when that changes; a device without a pass model only folds, sends
 //! and deletes. The model is loaded only for a round of work and dropped after. Retained audio
-//! never lingers: it is deleted after a pass or a confirmed transfer, when unreadable, when its
-//! meeting is gone, after three failed attempts, or when it has waited three weeks to be combined. `RetainedSpeechInbox`
+//! never lingers: it is deleted after a combined pass, after a pass alone without P2P, after a
+//! confirmed transfer, when unreadable, when its meeting is gone, after three failed attempts, or
+//! when it has waited three weeks to be combined. `RetainedSpeechInbox`
 //! stores speech paired devices send for combining. Logs carry meeting ids and counts only.
 
 use std::{
@@ -37,7 +40,10 @@ use crate::{
         retained_audio_store::{RetainedAudioError, RetainedAudioStore, RetainedChunk},
     },
     application::{
-        combined_meetings::{AudioPlan, COMBINING_GRACE, find_combinations, plan_retained_audio},
+        combined_meetings::{
+            AudioPlan, COMBINING_GRACE, HeldSpeech, PlanContext, combining_device,
+            find_combinations, plan_retained_audio,
+        },
         combined_refinement::{CombinedRecording, refine_combined_meeting},
         speech_transfer_exchange::{PART_AUDIO_BUDGET_BYTES, split_into_parts},
         transcript_refinement::{
@@ -319,10 +325,37 @@ impl RefinementWorker {
                 return 0;
             }
         };
-        let held: HashSet<MeetingId> = pending.iter().cloned().collect();
         // Without P2P (the CLI), no paired device's recording can arrive, so a meeting does not
-        // wait the grace period for one.
+        // wait the grace period for one, nor keep its speech after the pass.
         let has_link = self.control.speech_sender().is_some();
+        let now = (self.now)();
+        let held: HashMap<MeetingId, HeldSpeech> = pending
+            .iter()
+            .map(|meeting_id| {
+                let age = self
+                    .store
+                    .written_at(meeting_id)
+                    .and_then(|written| now.duration_since(written).ok())
+                    .unwrap_or_default();
+                let age = if has_link {
+                    age
+                } else {
+                    age.max(COMBINING_GRACE)
+                };
+                let speech = HeldSpeech {
+                    age,
+                    passed_alone: self.store.passed_alone(meeting_id),
+                };
+                (meeting_id.clone(), speech)
+            })
+            .collect();
+        let held_speech = |meeting: &MeetingId| held.get(meeting).copied();
+        let context = PlanContext {
+            this_device: &self.device_id.clone(),
+            can_pass: self.make_engine.is_some(),
+            keeps_for_partners: has_link,
+            held: &held_speech,
+        };
         let mut engine: Option<(Box<dyn TranscriptionEngine>, Arc<ChunkAudioStore>)> = None;
         let mut handled: HashSet<MeetingId> = HashSet::new();
         let mut refined = 0;
@@ -334,24 +367,7 @@ impl RefinementWorker {
                 self.delete(&meeting_id);
                 continue;
             }
-            let age = self
-                .store
-                .written_at(&meeting_id)
-                .and_then(|written| (self.now)().duration_since(written).ok())
-                .unwrap_or_default();
-            let age = if has_link {
-                age
-            } else {
-                age.max(COMBINING_GRACE)
-            };
-            let plan = plan_retained_audio(
-                &meeting_id,
-                &recordings,
-                &|meeting| held.contains(meeting),
-                &self.device_id,
-                age,
-                self.make_engine.is_some(),
-            );
+            let plan = plan_retained_audio(&meeting_id, &recordings, &context);
             match plan {
                 AudioPlan::Wait => {}
                 AudioPlan::Discard => {
@@ -372,9 +388,13 @@ impl RefinementWorker {
                             handled.extend(members.iter().map(|(member, _)| member.clone()));
                             self.combine(&root, &members, engine, audio_source, repository.as_ref())
                         }
-                        _ => {
-                            self.refine_one(&meeting_id, engine, audio_source, repository.as_ref())
-                        }
+                        _ => self.refine_one(
+                            &meeting_id,
+                            engine,
+                            audio_source,
+                            repository.as_ref(),
+                            has_link,
+                        ),
                     };
                     refined += usize::from(succeeded);
                     audio_source.clear();
@@ -412,6 +432,7 @@ impl RefinementWorker {
     /// Side effects: Reads recent transcripts and writes folds, which sync to paired devices.
     /// Failures are logged and retried next round.
     fn fold_recordings(&self, repository: &dyn NoteRepository) {
+        self.describe_own_recordings(repository);
         let found = repository.meeting_recordings().and_then(|recordings| {
             let since = chrono::DateTime::<chrono::Utc>::from((self.now)()) - FOLD_WINDOW;
             find_combinations(
@@ -440,6 +461,27 @@ impl RefinementWorker {
                 Err(error) => {
                     tracing::warn!(meeting_id = %meeting_id.as_str(), error = %error, "a recording could not be folded");
                 }
+            }
+        }
+    }
+
+    /// Notes on each meeting recorded here whether this device is a phone, so paired devices agree
+    /// which device combines a meeting (#88).
+    ///
+    /// Side effects: Writes the documents of meetings that do not say yet, which sync to paired
+    /// devices. Failures are logged and retried next round.
+    fn describe_own_recordings(&self, repository: &dyn NoteRepository) {
+        let Ok(recordings) = repository.meeting_recordings() else {
+            return;
+        };
+        for recording in recordings.iter().filter(|recording| {
+            recording.acquisition_device_id == self.device_id
+                && recording.recorded_on_phone.is_none()
+        }) {
+            if let Err(error) =
+                repository.describe_recording_device(&recording.meeting_id, self.control.is_phone())
+            {
+                tracing::warn!(meeting_id = %recording.meeting_id.as_str(), error = %error, "the recording device could not be noted");
             }
         }
     }
@@ -545,25 +587,36 @@ impl RefinementWorker {
         drop(member_recordings);
         drop(root_recording);
         drop(loaded);
-        self.settle(
+        let combined = self.settle(
             root,
             &all,
             outcome,
             "Meeting re-transcribed from every device that recorded it",
-        )
+            false,
+        );
+        if combined {
+            let members: Vec<MeetingId> =
+                members.iter().map(|(member, _)| member.clone()).collect();
+            if let Err(error) = repository.mark_combined(root, &members) {
+                tracing::warn!(meeting_id = %root.as_str(), error = %error, "the combined recordings could not be noted");
+            }
+        }
+        combined
     }
 
     /// Decides what happens to the audio after a pass over `meetings` (the first is the transcript
     /// rewritten).
     ///
-    /// Outputs: Whether the transcript was replaced. Side effects: Deletes the audio after success
-    /// or after three failures; logs counts only.
+    /// Outputs: Whether the transcript was replaced. Side effects: After success, deletes the audio,
+    /// or with `keep` marks it as passed alone and keeps it for a recording that may join later;
+    /// deletes it after three failures; logs counts only.
     fn settle(
         &mut self,
         root: &MeetingId,
         meetings: &[MeetingId],
         outcome: Result<RefinementOutcome, RefinementError>,
         done: &'static str,
+        keep: bool,
     ) -> bool {
         match outcome {
             Ok(outcome) => {
@@ -575,7 +628,14 @@ impl RefinementWorker {
                     "{done}"
                 );
                 for meeting_id in meetings {
-                    self.delete(meeting_id);
+                    if keep {
+                        if let Err(error) = self.store.mark_passed_alone(meeting_id) {
+                            tracing::warn!(meeting_id = %meeting_id.as_str(), error = %error, "the pass could not be noted; deleting the audio");
+                            self.delete(meeting_id);
+                        }
+                    } else {
+                        self.delete(meeting_id);
+                    }
                 }
                 true
             }
@@ -597,13 +657,15 @@ impl RefinementWorker {
 
     /// Runs the pass for one meeting alone and decides what happens to its audio.
     ///
-    /// Outputs: Whether the transcript was replaced.
+    /// Inputs: The meeting, the loaded engine, and whether to keep the speech afterwards for a
+    /// recording that may join the meeting later. Outputs: Whether the transcript was replaced.
     fn refine_one(
         &mut self,
         meeting_id: &MeetingId,
         engine: &dyn TranscriptionEngine,
         audio_source: &ChunkAudioStore,
         repository: &dyn NoteRepository,
+        keep: bool,
     ) -> bool {
         let chunks = match self.store.load(meeting_id) {
             Ok(chunks) => chunks,
@@ -643,6 +705,7 @@ impl RefinementWorker {
             std::slice::from_ref(meeting_id),
             outcome,
             "Meeting transcript re-transcribed after the meeting",
+            keep,
         )
     }
 
@@ -709,13 +772,16 @@ impl RetainedSpeechInbox {
         let recorded_by_sender = recordings.iter().any(|recording| {
             recording.meeting_id == *meeting_id && recording.acquisition_device_id == *from
         });
+        let root = recordings
+            .iter()
+            .find(|recording| recording.meeting_id == *meeting_id)
+            .and_then(|recording| recording.combined_into.as_ref())
+            .map_or_else(
+                || meeting_id.clone(),
+                |combination| combination.into.clone(),
+            );
         recorded_by_sender
-            && recordings.iter().any(|recording| {
-                recording.combined_into.as_ref().is_some_and(|combination| {
-                    combination.combine_on == self.device_id
-                        && (recording.meeting_id == *meeting_id || combination.into == *meeting_id)
-                })
-            })
+            && combining_device(&root, &recordings).is_some_and(|device| device == self.device_id)
     }
 }
 

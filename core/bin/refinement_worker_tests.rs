@@ -409,19 +409,41 @@ fn a_meeting_recorded_on_two_devices_is_folded_and_combined_once() {
 }
 
 #[test]
-fn the_combining_device_waits_for_the_other_devices_speech() {
+fn the_combining_device_passes_alone_and_keeps_its_speech_for_the_other_device() {
     let setup = Setup::new();
     let phone_meeting = MeetingId::new("meeting-phone");
     setup.record_talk(&setup.meeting, "device-a", 3_000);
     setup.record_talk(&phone_meeting, "device-b", 1_000);
     let control = Arc::new(RefinementControl::new(false));
+    control.set_speech_sender(Arc::new(Sender {
+        parts: Mutex::new(Vec::new()),
+        fails: None,
+    }));
     let calls = Arc::new(AtomicUsize::new(0));
 
-    assert_eq!(setup.worker(&control, false, &calls).run_pending(), 0);
-
+    assert_eq!(setup.worker(&control, false, &calls).run_pending(), 1);
     assert!(setup.combination_of(&phone_meeting).is_some());
-    assert_eq!(calls.load(Ordering::SeqCst), 0);
     assert_eq!(setup.store.pending_meetings(), vec![setup.meeting.clone()]);
+    assert!(setup.store.passed_alone(&setup.meeting));
+
+    // It does not pass again while it waits.
+    assert_eq!(setup.worker(&control, false, &calls).run_pending(), 0);
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+    // The phone's speech arrives days later: one combined pass, then nothing is kept.
+    setup.retain(&phone_meeting);
+    let late = |worker: RefinementWorker| worker.with_clock(after(5 * DAY));
+    assert_eq!(late(setup.worker(&control, false, &calls)).run_pending(), 1);
+    assert!(setup.store.pending_meetings().is_empty());
+    let laptop = setup
+        .repository()
+        .meeting_recordings()
+        .unwrap_or_else(|error| panic!("{error}"))
+        .into_iter()
+        .find(|recording| recording.meeting_id == setup.meeting)
+        .unwrap_or_else(|| panic!("the meeting must be listed"));
+    assert_eq!(laptop.combined_with, vec![phone_meeting]);
+    assert_eq!(laptop.recorded_on_phone, Some(false));
 }
 
 /// A phone ("device-a") whose meeting was folded into the laptop's ("device-b").
