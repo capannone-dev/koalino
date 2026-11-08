@@ -11,7 +11,7 @@ embeddings against enrolled voices and clusters the unknown ones (`diarization_p
 | --- | --- |
 | `wav_input.rs` | Decodes the recorder's WAV; any other format is refused, never resampled. |
 | `powerset.rs` | Decodes pyannote segmentation-3.0's seven powerset classes into up to three active local speakers per frame. |
-| `windowed_engine.rs` | Runs the segmentation model over 10 s windows (5 s step), embeds each local speaker, links speakers across windows by cosine similarity, and assembles turns (drops blips under `min_turn_ms`, bridges pauses up to `max_merge_gap_ms`). |
+| `windowed_engine.rs` | Runs the segmentation model over 10 s windows (5 s step), embeds each local speaker, links speakers across windows by cosine similarity, and assembles turns (drops blips under `min_turn_ms`, bridges pauses up to `max_merge_gap_ms`). `diarize_samples_with_overlap` also reports where most frames covering an instant hold two or more local speakers, as `OverlapSpan`s (#90). |
 | `onnx_models.rs` | `diarization` feature: runs the models exported by `tools/diarization/export_models.py` with ONNX Runtime. |
 | `recordings_measurement_tests.rs` | `#[ignore]`d: runs the real models over local recordings for `tools/diarization/evaluate_pipeline.py`. |
 | `*_tests.rs` | Unit tests with fake models; no weights are loaded, except one `#[ignore]`d test that takes exported models from the environment. |

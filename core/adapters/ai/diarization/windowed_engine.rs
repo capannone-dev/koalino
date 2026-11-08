@@ -29,7 +29,8 @@ use super::{
 };
 use crate::{
     domain::errors::DiarizationError,
-    ports::ai::{DiarizationEngine, SpeakerSegment},
+    domain::transcript_confidence::{OverlapSpan, merge_overlap_spans},
+    ports::ai::{DiarizationEngine, DiarizedChunk, SpeakerSegment},
 };
 
 /// Samples in one segmentation window: 10 s at 16 kHz.
@@ -180,8 +181,22 @@ where
         &self,
         samples: &[f32],
     ) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        Ok(self.diarize_samples_with_overlap(samples)?.segments)
+    }
+
+    /// Diarizes 16 kHz samples synchronously and reports where voices overlap (#90).
+    ///
+    /// Inputs: The chunk's samples in [-1, 1].
+    /// Outputs: Turns in time order with chunk-relative milliseconds, and the stretches where
+    /// most frames covering an instant hold two or more local speakers (merged, slivers dropped);
+    /// or the first model error.
+    /// Side effects: Runs inference (CPU-heavy).
+    pub fn diarize_samples_with_overlap(
+        &self,
+        samples: &[f32],
+    ) -> Result<DiarizedChunk, DiarizationError> {
         if samples.is_empty() {
-            return Ok(Vec::new());
+            return Ok(DiarizedChunk::default());
         }
         let windows = window_starts(samples.len())
             .into_iter()
@@ -189,19 +204,22 @@ where
             .collect::<Result<Vec<_>, _>>()?;
         let (speakers, local_links) = self.link_speakers(samples, &windows)?;
         if speakers.is_empty() {
-            return Ok(Vec::new());
+            return Ok(DiarizedChunk::default());
         }
         let turns = self.assemble_turns(samples.len(), &windows, &local_links, speakers.len());
-        Ok(turns
-            .into_iter()
-            .map(|turn| {
-                SpeakerSegment::new(
-                    turn.start_ms,
-                    turn.end_ms,
-                    speakers[turn.speaker].centroid(),
-                )
-            })
-            .collect())
+        Ok(DiarizedChunk {
+            segments: turns
+                .into_iter()
+                .map(|turn| {
+                    SpeakerSegment::new(
+                        turn.start_ms,
+                        turn.end_ms,
+                        speakers[turn.speaker].centroid(),
+                    )
+                })
+                .collect(),
+            overlap: overlap_spans(samples.len(), &windows),
+        })
     }
 
     /// Measures the voice in 2 s windows every second, as the whole-meeting grouping needs (#73).
@@ -481,6 +499,18 @@ where
     /// thread cannot start or dies.
     /// Side effects: Runs inference off the calling thread; never logs audio or embeddings.
     async fn diarize(&self, audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+        Ok(self.diarize_with_overlap(audio_bytes).await?.segments)
+    }
+
+    /// Diarizes the chunk on its own thread, as `diarize` does, and reports overlap (#90).
+    ///
+    /// Outputs: See `diarize_samples_with_overlap`; `InvalidAudio` for another format, or
+    /// `Unavailable` when the thread cannot start or dies.
+    /// Side effects: Runs inference off the calling thread; never logs audio or embeddings.
+    async fn diarize_with_overlap(
+        &self,
+        audio_bytes: &[u8],
+    ) -> Result<DiarizedChunk, DiarizationError> {
         let samples = decode_wav_pcm16_mono(audio_bytes)?;
         let engine = self.clone();
         let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
@@ -488,7 +518,7 @@ where
             .name(String::from("diarization"))
             .spawn(move || {
                 // The receiver is gone only when the caller dropped the future.
-                let _ = result_sender.send(engine.diarize_samples(&samples));
+                let _ = result_sender.send(engine.diarize_samples_with_overlap(&samples));
             })
             .map_err(|_| DiarizationError::Unavailable)?;
         result_receiver
@@ -542,4 +572,35 @@ fn unit(vector: &[f32]) -> Option<Vec<f32>> {
 /// Cosine similarity of two unit vectors.
 fn cosine(left: &[f32], right: &[f32]) -> f32 {
     left.iter().zip(right).map(|(a, b)| a * b).sum()
+}
+
+/// Finds where two or more voices speak at once (#90).
+///
+/// Inputs: The chunk length in samples and its windows' decoded frames.
+/// Outputs: Chunk-relative spans covering the cells where at least half of the frames covering
+/// them hold two or more local speakers, merged and without slivers (`merge_overlap_spans`).
+/// Side effects: None.
+fn overlap_spans(chunk_length: usize, windows: &[WindowActivity]) -> Vec<OverlapSpan> {
+    let cell_samples = windows.first().map_or(1.0, |window| window.frame_samples);
+    let cell_count = (chunk_length as f64 / cell_samples).ceil() as usize;
+    let mut coverage = vec![0_u32; cell_count];
+    let mut overlapping = vec![0_u32; cell_count];
+    for window in windows {
+        for (frame, active) in window.frames.iter().enumerate() {
+            let center = window.start_sample as f64 + (frame as f64 + 0.5) * window.frame_samples;
+            let cell = ((center / cell_samples) as usize).min(cell_count.saturating_sub(1));
+            coverage[cell] += 1;
+            if active.iter().filter(|is_active| **is_active).count() >= 2 {
+                overlapping[cell] += 1;
+            }
+        }
+    }
+    let to_ms = |cell: usize| -> u64 {
+        ((cell as f64 * cell_samples).min(chunk_length as f64) / SAMPLES_PER_MS).round() as u64
+    };
+    let spans = (0..cell_count)
+        .filter(|cell| overlapping[*cell] > 0 && overlapping[*cell] * 2 >= coverage[*cell])
+        .map(|cell| OverlapSpan::new(to_ms(cell), to_ms(cell + 1)))
+        .collect();
+    merge_overlap_spans(spans)
 }

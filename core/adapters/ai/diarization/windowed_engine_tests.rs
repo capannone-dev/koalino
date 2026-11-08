@@ -26,6 +26,8 @@ const FAKE_FRAMES: usize = 100;
 const VOICE_A: f32 = 0.1;
 /// Amplitude of speaker B's fake voice.
 const VOICE_B: f32 = 0.2;
+/// Amplitude of A and B talking at once.
+const VOICES_TOGETHER: f32 = 0.4;
 
 /// Tells speakers apart by amplitude. Every second call swaps the local labels of A and B, as a
 /// real model may number the same voices differently in another window.
@@ -63,6 +65,8 @@ impl SegmentationModel for AmplitudeSegmentation {
                             2
                         }
                     }
+                    // Local speakers 1 and 2 together, whichever way they are numbered.
+                    Some(VoiceLabel::Together) => 4,
                 };
                 scores[class] = 1.0;
                 scores
@@ -75,6 +79,7 @@ impl SegmentationModel for AmplitudeSegmentation {
 enum VoiceLabel {
     A,
     B,
+    Together,
 }
 
 /// Which fake voice dominates `samples`, by mean amplitude.
@@ -84,8 +89,10 @@ fn voice_of(samples: &[f32]) -> Option<VoiceLabel> {
         None
     } else if mean < (VOICE_A + VOICE_B) / 2.0 {
         Some(VoiceLabel::A)
-    } else {
+    } else if mean < (VOICE_B + VOICES_TOGETHER) / 2.0 {
         Some(VoiceLabel::B)
+    } else {
+        Some(VoiceLabel::Together)
     }
 }
 
@@ -101,7 +108,7 @@ impl SpeakerEmbeddingModel for AmplitudeEmbedding {
         Ok(match voice_of(samples) {
             Some(VoiceLabel::A) => vec![1.0, 0.0],
             Some(VoiceLabel::B) => vec![0.0, 1.0],
-            None => vec![0.5, 0.5],
+            Some(VoiceLabel::Together) | None => vec![0.5, 0.5],
         })
     }
 }
@@ -302,4 +309,42 @@ fn voice_windows_report_a_model_failure() {
             .voice_windows_for_samples(&vec![VOICE_A; RATE])
             .is_err()
     );
+}
+
+/// Verifies the stretch where two voices speak at once comes back as overlap, in chunk time (#90).
+#[test]
+fn two_voices_at_once_are_reported_as_overlap() {
+    let samples = audio(&[(VOICE_A, 3.0), (VOICES_TOGETHER, 2.0), (VOICE_B, 3.0)]);
+    let engine = WindowedDiarizationEngine::new(
+        AmplitudeSegmentation::default(),
+        AmplitudeEmbedding::default(),
+        DiarizationTuning::default(),
+    );
+
+    let chunk = engine
+        .diarize_samples_with_overlap(&samples)
+        .unwrap_or_else(|error| panic!("fake models must diarize: {error}"));
+
+    assert!(!chunk.segments.is_empty());
+    assert_eq!(chunk.overlap.len(), 1, "one stretch of overlap");
+    let span = chunk.overlap[0];
+    assert!(span.start_ms.abs_diff(3_000) <= 200, "starts near 3 s");
+    assert!(span.end_ms.abs_diff(5_000) <= 200, "ends near 5 s");
+}
+
+/// Verifies one voice at a time has no overlap.
+#[test]
+fn one_voice_at_a_time_has_no_overlap() {
+    let samples = audio(&[(VOICE_A, 3.0), (VOICE_B, 3.0)]);
+    let engine = WindowedDiarizationEngine::new(
+        AmplitudeSegmentation::default(),
+        AmplitudeEmbedding::default(),
+        DiarizationTuning::default(),
+    );
+
+    let chunk = engine
+        .diarize_samples_with_overlap(&samples)
+        .unwrap_or_else(|error| panic!("fake models must diarize: {error}"));
+
+    assert!(chunk.overlap.is_empty());
 }

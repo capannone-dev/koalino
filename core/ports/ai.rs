@@ -86,15 +86,40 @@ pub trait TranscriptionEngine {
     }
 }
 
+/// One chunk's diarization: who spoke when, and where voices overlapped (#90).
+#[derive(Clone, Debug, Default)]
+pub struct DiarizedChunk {
+    /// Speaker segments in time order, relative to the chunk.
+    pub segments: Vec<SpeakerSegment>,
+    /// Stretches, relative to the chunk, where two or more voices speak at once.
+    pub overlap: Vec<crate::domain::transcript_confidence::OverlapSpan>,
+}
+
 /// Separates speaker segments and derives embeddings without exposing model implementation details.
 #[async_trait::async_trait]
-pub trait DiarizationEngine {
+pub trait DiarizationEngine: Sync {
     /// Requests diarization for opaque audio bytes.
     ///
     /// Inputs: `audio_bytes` contains the audio to analyze and must never be logged by an implementation.
     /// Outputs: Time-bounded speaker segments with derived embeddings or a portable diarization error.
     /// Side effects: An implementation may execute local or remote AI workloads.
     async fn diarize(&self, audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError>;
+
+    /// Diarizes a chunk and also reports where two or more voices speak at once (#90).
+    ///
+    /// Inputs: `audio_bytes` as for `diarize`.
+    /// Outputs: The speaker segments and the chunk-relative overlap spans, in time order; an
+    /// engine that cannot tell overlap reports none.
+    /// Side effects: As for `diarize`.
+    async fn diarize_with_overlap(
+        &self,
+        audio_bytes: &[u8],
+    ) -> Result<DiarizedChunk, DiarizationError> {
+        Ok(DiarizedChunk {
+            segments: self.diarize(audio_bytes).await?,
+            overlap: Vec::new(),
+        })
+    }
 
     /// Measures the voice in short overlapping windows, for grouping over the whole meeting (#73).
     ///
@@ -160,6 +185,13 @@ where
 {
     async fn diarize(&self, audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
         (*self).diarize(audio_bytes).await
+    }
+
+    async fn diarize_with_overlap(
+        &self,
+        audio_bytes: &[u8],
+    ) -> Result<DiarizedChunk, DiarizationError> {
+        (*self).diarize_with_overlap(audio_bytes).await
     }
 
     async fn voice_windows(
