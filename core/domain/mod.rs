@@ -4,6 +4,10 @@
 pub mod email;
 /// Defines failures that may cross a hexagonal boundary.
 pub mod errors;
+/// Defines LLM connections, the endpoint rule and the summary prompt template (#95).
+pub mod llm;
+#[cfg(test)]
+mod llm_tests;
 /// Defines typed meeting-note business concepts.
 pub mod models;
 /// Defines paired devices and the numeric-comparison pairing code (Issue #43).
