@@ -29,7 +29,8 @@ can't cross isolates; only Dart strings and ints come back.
 
 `RustRecordingBridge` binds start (also resume), pause, and stop, and runs each on a background
 isolate. `startRecordingWithTitle` calls `note_taker_start_recording_with_title`,
-sending a null pointer for the meeting ID and for a blank title. `meeting_bridge.dart` defines the
+sending a null pointer for the meeting ID and for a blank title. `meeting_bridge.dart` (whose segments carry `overlappingSpeech`, `uncertainSpeaker` and
+`uncertainWords`, read as plain from an older core) defines the
 `MeetingSummary`, `MeetingDetail`, and `MeetingTranscriptSegment` models, and the pure JSON
 decoders with their fallback-title and formatting helpers. It also defines `RustMeetingBridge`,
 which calls `note_taker_get_meetings` and `note_taker_get_meeting` on a background isolate and

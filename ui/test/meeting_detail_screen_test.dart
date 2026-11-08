@@ -21,6 +21,7 @@ Future<FakeMeetingBridge> pumpMeetingDetail(
     'meeting-titled': titledMeetingDetail,
     'meeting-untitled': untitledMeetingDetail,
     'meeting-combined': combinedMeetingDetail,
+    'meeting-doubtful': doubtfulMeetingDetail,
   });
   final MeetingListController controller =
       MeetingListController(meetingBridge: meetingBridge);
@@ -69,6 +70,30 @@ void main() {
     expect(find.text('Alice · 0:00'), findsOneWidget);
     expect(find.text('Hello team.'), findsOneWidget);
     expect(find.text('Unattributed · 1:01'), findsOneWidget);
+  });
+
+  testWidgets('marks a guessed speaker, overlapping speech and unclear words',
+      (WidgetTester tester) async {
+    await pumpMeetingDetail(tester, 'meeting-doubtful');
+
+    expect(find.text('Unknown speaker (?) · 0:00'), findsOneWidget);
+    expect(find.text('Overlapping speech'), findsOneWidget);
+    final Finder text = find.text('we ship on Friday', findRichText: true);
+    expect(text, findsOneWidget);
+    final TextSpan span =
+        tester.renderObject<RenderParagraph>(text).text as TextSpan;
+    final List<TextSpan> words = <TextSpan>[];
+    span.visitChildren((InlineSpan child) {
+      if (child is TextSpan) words.add(child);
+      return true;
+    });
+    final BuildContext context = tester.element(text);
+    final TextSpan unclear =
+        words.firstWhere((TextSpan word) => word.text == 'ship');
+    expect(unclear.style!.color, Theme.of(context).colorScheme.outline);
+    expect(unclear.style!.fontStyle, FontStyle.italic);
+    expect(words.firstWhere((TextSpan word) => word.text == 'Friday').style,
+        isNull);
   });
 
   testWidgets('shows the fallback title and an empty transcript message',

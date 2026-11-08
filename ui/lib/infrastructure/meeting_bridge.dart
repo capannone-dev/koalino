@@ -256,6 +256,9 @@ final class MeetingTranscriptSegment {
     required this.endTimeMs,
     required this.speaker,
     required this.text,
+    this.overlappingSpeech = false,
+    this.uncertainSpeaker = false,
+    this.uncertainWords = const <int>[],
   });
 
   /// Offset of the segment start from the meeting start.
@@ -270,13 +273,31 @@ final class MeetingTranscriptSegment {
   /// Transcribed text of the segment.
   final String text;
 
-  /// Decodes one element of the `segments` array.
+  /// Whether the segment lies largely in overlapping speech, where words are often missed (#90).
+  final bool overlappingSpeech;
+
+  /// Whether the speaker is a guess (#91).
+  final bool uncertainSpeaker;
+
+  /// Positions of the unclear words among the text's whitespace-separated words (#91).
+  final List<int> uncertainWords;
+
+  /// Decodes one element of the `segments` array; a core without the marks reads as plain.
   factory MeetingTranscriptSegment.fromJson(Map<String, Object?> json) {
+    final Object? positions = json['uncertain_words'];
     return MeetingTranscriptSegment(
       startTimeMs: (json['start_time_ms']! as num).toInt(),
       endTimeMs: (json['end_time_ms']! as num).toInt(),
       speaker: json['speaker']! as String,
       text: json['text']! as String,
+      overlappingSpeech: json['overlapping_speech'] == true,
+      uncertainSpeaker: json['uncertain_speaker'] == true,
+      uncertainWords: positions is List<Object?>
+          ? positions
+              .whereType<num>()
+              .map((num position) => position.toInt())
+              .toList(growable: false)
+          : const <int>[],
     );
   }
 }

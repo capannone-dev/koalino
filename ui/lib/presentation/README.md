@@ -12,6 +12,9 @@ Meeting attachments (Issue #54):
   - The transcript places each attachment with `buildMeetingTimeline`: a photo shows as a
     picture (tap for full screen), a document as a card, and anything added after the meeting
     under "Added after the meeting".
+  - Each segment shows how far it can be trusted (#90, #91): a guessed speaker reads
+    `Name (?)`, overlapping speech gets an "Overlapping speech" label, and unclear words are in
+    italics in the outline colour.
 - **Record screen:** offers Take photos (where a camera exists) and Attach files while
   recording or paused. They act on the meeting Rust reports as active, so what they add lands
   at that point of the transcript; on Linux, Attach files is the only way.

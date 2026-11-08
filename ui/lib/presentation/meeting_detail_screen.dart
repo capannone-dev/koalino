@@ -493,19 +493,81 @@ final class _MeetingContent extends StatelessWidget {
   }
 
   /// Builds one segment: speaker and start time above its text.
-  Widget _segmentBlock(ThemeData theme, MeetingTranscriptSegment segment) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            '${segment.speaker} · ${formatMeetingDuration(segment.startTimeMs)}',
-            style: theme.textTheme.labelLarge
-                ?.copyWith(color: theme.colorScheme.primary),
-          ),
-          const SizedBox(height: 4),
-          Text(segment.text, style: theme.textTheme.bodyLarge),
-        ],
-      );
+  ///
+  /// A guessed speaker reads `Name (?)`, overlapping speech gets a small label, and unclear
+  /// words are shown in italics in the outline colour (#90, #91).
+  Widget _segmentBlock(ThemeData theme, MeetingTranscriptSegment segment) {
+    final String speaker =
+        segment.uncertainSpeaker ? '${segment.speaker} (?)' : segment.speaker;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Wrap(
+          spacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: <Widget>[
+            _withTooltip(
+              segment.uncertainSpeaker ? 'The speaker is a guess' : null,
+              Text(
+                '$speaker · ${formatMeetingDuration(segment.startTimeMs)}',
+                style: theme.textTheme.labelLarge
+                    ?.copyWith(color: theme.colorScheme.primary),
+              ),
+            ),
+            if (segment.overlappingSpeech)
+              Tooltip(
+                message: 'People talked at once here; words may be missing',
+                child: Text(
+                  'Overlapping speech',
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: theme.colorScheme.tertiary),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        _segmentText(theme, segment),
+      ],
+    );
+  }
+
+  /// Wraps `child` in a tooltip when there is a `message`.
+  Widget _withTooltip(String? message, Widget child) =>
+      message == null ? child : Tooltip(message: message, child: child);
+
+  /// Shows a segment's text, with unclear words in italics in the outline colour.
+  Widget _segmentText(ThemeData theme, MeetingTranscriptSegment segment) {
+    if (segment.uncertainWords.isEmpty) {
+      return Text(segment.text, style: theme.textTheme.bodyLarge);
+    }
+    final Set<int> unclear = segment.uncertainWords.toSet();
+    final List<String> words = segment.text.split(RegExp(r'\s+'))
+      ..removeWhere((String word) => word.isEmpty);
+    final TextStyle unclearStyle = TextStyle(
+      color: theme.colorScheme.outline,
+      fontStyle: FontStyle.italic,
+    );
+    return Semantics(
+      label: segment.text,
+      hint: 'Some words were unclear',
+      child: Text.rich(
+        TextSpan(
+          children: <TextSpan>[
+            for (int position = 0;
+                position < words.length;
+                position++) ...<TextSpan>[
+              if (position > 0) const TextSpan(text: ' '),
+              TextSpan(
+                text: words[position],
+                style: unclear.contains(position) ? unclearStyle : null,
+              ),
+            ],
+          ],
+        ),
+        style: theme.textTheme.bodyLarge,
+      ),
+    );
+  }
 }
 
 /// Tallest a photo is shown in the transcript, in logical pixels.

@@ -159,6 +159,21 @@ void main() {
       expect(meeting.segments[1].text, 'Hi.');
     });
 
+    test('parses confidence marks and defaults them for older cores', () {
+      final MeetingDetail meeting = decodeMeetingDetail('''
+{"meeting_id":"m","created_at":"2026-01-15T14:30:00Z","transcript":null,
+ "segments":[{"start_time_ms":0,"end_time_ms":1500,"speaker":"Alice","text":"we ship now",
+   "overlapping_speech":true,"uncertain_speaker":true,"uncertain_words":[1]},
+  {"start_time_ms":1500,"end_time_ms":2000,"speaker":"Bob","text":"ok"}]}''');
+
+      expect(meeting.segments[0].overlappingSpeech, isTrue);
+      expect(meeting.segments[0].uncertainSpeaker, isTrue);
+      expect(meeting.segments[0].uncertainWords, <int>[1]);
+      expect(meeting.segments[1].overlappingSpeech, isFalse);
+      expect(meeting.segments[1].uncertainSpeaker, isFalse);
+      expect(meeting.segments[1].uncertainWords, isEmpty);
+    });
+
     test('accepts responses without segments and uses the fallback title', () {
       final MeetingDetail meeting = decodeMeetingDetail(
           '{"meeting_id":"m","created_at":"2026-01-15T14:30:00Z","transcript":"Flat."}');

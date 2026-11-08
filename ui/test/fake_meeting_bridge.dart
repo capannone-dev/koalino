@@ -163,3 +163,25 @@ final MeetingDetail combinedMeetingDetail = MeetingDetail(
         startTimeMs: 0, endTimeMs: 2000, speaker: 'Bruno', text: 'Ciao.'),
   ],
 );
+
+/// A meeting whose one segment is doubtful in every way (#90, #91).
+final MeetingDetail doubtfulMeetingDetail = MeetingDetail(
+  summary: MeetingSummary(
+    meetingId: 'meeting-doubtful',
+    title: 'Crosstalk',
+    createdAt: DateTime.utc(2026, 11, 8, 10),
+    durationMs: 5000,
+  ),
+  transcript: null,
+  segments: const <MeetingTranscriptSegment>[
+    MeetingTranscriptSegment(
+      startTimeMs: 0,
+      endTimeMs: 5000,
+      speaker: 'Unknown speaker',
+      text: 'we ship on Friday',
+      overlappingSpeech: true,
+      uncertainSpeaker: true,
+      uncertainWords: <int>[1],
+    ),
+  ],
+);
