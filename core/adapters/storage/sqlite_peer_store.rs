@@ -136,6 +136,19 @@ impl SqlitePeerStore {
                 .execute_batch("ALTER TABLE p2p_trusted_peers ADD COLUMN sealed_pair_key BLOB")
                 .map_err(|error| sqlite_error("unable to add the pair-key column", error))?;
         }
+        let has_storage_id_column: bool = connection
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM pragma_table_info('p2p_trusted_peers')
+                 WHERE name = 'storage_device_id')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| sqlite_error("unable to inspect the trusted-peer columns", error))?;
+        if !has_storage_id_column {
+            connection
+                .execute_batch("ALTER TABLE p2p_trusted_peers ADD COLUMN storage_device_id TEXT")
+                .map_err(|error| sqlite_error("unable to add the storage-ID column", error))?;
+        }
         Ok(Self { connection, cipher })
     }
 }
@@ -332,8 +345,8 @@ impl TrustedPeerStore for SqlitePeerStore {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT peer_id, device_name, paired_at_ms FROM p2p_trusted_peers
-                 ORDER BY paired_at_ms, peer_id",
+                "SELECT peer_id, device_name, paired_at_ms, storage_device_id
+                 FROM p2p_trusted_peers ORDER BY paired_at_ms, peer_id",
             )
             .map_err(|error| sqlite_error("unable to prepare the trusted-peer listing", error))?;
         let rows = statement
@@ -342,12 +355,13 @@ impl TrustedPeerStore for SqlitePeerStore {
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, i64>(2)?,
+                    row.get::<_, Option<String>>(3)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to list trusted peers", error))?;
         let mut peers = Vec::new();
         for row in rows {
-            let (peer_id, device_name, paired_at_ms) =
+            let (peer_id, device_name, paired_at_ms, storage_device_id) =
                 row.map_err(|error| sqlite_error("unable to read a trusted peer", error))?;
             let device_name =
                 DeviceName::parse(&device_name).map_err(|error| StorageError::Rejected {
@@ -356,11 +370,10 @@ impl TrustedPeerStore for SqlitePeerStore {
             let paired_at_ms = u64::try_from(paired_at_ms).map_err(|_| StorageError::Rejected {
                 reason: String::from("stored pairing time is negative"),
             })?;
-            peers.push(TrustedPeer::new(
-                DeviceId::new(peer_id),
-                device_name,
-                paired_at_ms,
-            ));
+            peers.push(
+                TrustedPeer::new(DeviceId::new(peer_id), device_name, paired_at_ms)
+                    .with_storage_device_id(storage_device_id.map(DeviceId::new)),
+            );
         }
         Ok(peers)
     }
@@ -438,5 +451,21 @@ impl TrustedPeerStore for SqlitePeerStore {
                     reason: String::from("the stored pair key has the wrong length"),
                 })?;
         Ok(Some(PairKey::from_bytes(key_bytes)))
+    }
+
+    /// Sets the device's storage ID. Side effects: Updates at most one row; logs nothing.
+    fn remember_storage_device_id(
+        &self,
+        peer_id: &DeviceId,
+        storage_device_id: &DeviceId,
+    ) -> Result<(), StorageError> {
+        self.connection
+            .execute(
+                "UPDATE p2p_trusted_peers SET storage_device_id = ?2
+                 WHERE peer_id = ?1 AND storage_device_id IS NOT ?2",
+                params![peer_id.as_str(), storage_device_id.as_str()],
+            )
+            .map_err(|error| sqlite_error("unable to remember the device's storage ID", error))?;
+        Ok(())
     }
 }

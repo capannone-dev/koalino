@@ -60,6 +60,8 @@ pub struct TrustedPeer {
     peer_id: DeviceId,
     device_name: DeviceName,
     paired_at_ms: u64,
+    /// The ID the device writes on the meetings it records (#88), once its manifest said.
+    storage_device_id: Option<DeviceId>,
 }
 
 impl TrustedPeer {
@@ -73,7 +75,22 @@ impl TrustedPeer {
             peer_id,
             device_name,
             paired_at_ms,
+            storage_device_id: None,
         }
+    }
+
+    /// Returns the record with the ID the device writes on its meetings.
+    ///
+    /// Inputs: That ID, from the device's manifest. Outputs: The record. Side effects: None.
+    pub fn with_storage_device_id(mut self, storage_device_id: Option<DeviceId>) -> Self {
+        self.storage_device_id = storage_device_id;
+        self
+    }
+
+    /// The ID the device writes on the meetings it records (#88); `None` until its manifest
+    /// said, or for devices older than #88.
+    pub fn storage_device_id(&self) -> Option<&DeviceId> {
+        self.storage_device_id.as_ref()
     }
 
     /// The peer's authenticated peer ID.

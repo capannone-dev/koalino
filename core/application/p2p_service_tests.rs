@@ -1626,3 +1626,20 @@ async fn speech_for_an_absent_device_fails_at_once() {
         Ok(Err(SpeechTransferError::Unreachable))
     );
 }
+
+/// A paired device's storage ID is remembered, so its meetings keep its name while it is away.
+#[tokio::test]
+async fn a_paired_device_s_storage_id_is_remembered_with_its_pairing() {
+    let (laptop, phone) = paired_with_inbox("/memory/9487", FakeInbox::default()).await;
+
+    let remembered = |service: &Service| {
+        service
+            .status()
+            .trusted_devices
+            .iter()
+            .filter_map(|peer| peer.storage_device_id().cloned())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(remembered(&laptop), vec![DeviceId::new("device-phone")]);
+    assert_eq!(remembered(&phone), vec![DeviceId::new("device-laptop")]);
+}

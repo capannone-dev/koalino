@@ -102,6 +102,20 @@ pub trait TrustedPeerStore {
     /// Outputs: The key, `None` when the device is unpaired or has not sent its public key yet, or
     /// a storage error (including a sealed key that cannot be opened). Side effects: None.
     fn pair_key(&self, peer_id: &DeviceId) -> Result<Option<PairKey>, StorageError>;
+
+    /// Remembers the ID a paired device writes on its meetings, so they keep its name while it is
+    /// away (#88).
+    ///
+    /// Inputs: The paired device and the ID from its manifest. Outputs: Success (nothing happens
+    /// for an unpaired device), or a storage error. Side effects: Updates the device's row; stores
+    /// that keep nothing ignore it.
+    fn remember_storage_device_id(
+        &self,
+        _peer_id: &DeviceId,
+        _storage_device_id: &DeviceId,
+    ) -> Result<(), StorageError> {
+        Ok(())
+    }
 }
 
 /// Something that happened during pairing, reported by the transport.

@@ -1908,6 +1908,7 @@ where
     ) {
         match decoded {
             Ok(manifest) if manifest.device_id() == peer_device_id => {
+                self.remember_storage_device_id(peer_device_id, &manifest);
                 let first_from_peer = self
                     .peer_manifests
                     .insert(peer_device_id.clone(), manifest)
@@ -1925,6 +1926,31 @@ where
                 error = %error,
                 "a manifest was rejected"
             ),
+        }
+    }
+
+    /// Remembers the storage ID a paired device's manifest names, when it is new (#88).
+    ///
+    /// Side effects: Updates the trusted-peer store and this service's list; a failure is logged.
+    fn remember_storage_device_id(&mut self, peer_device_id: &DeviceId, manifest: &DeviceManifest) {
+        let Some(storage_device_id) = manifest.storage_device_id.as_ref() else {
+            return;
+        };
+        let known = self.trusted_devices.iter().any(|device| {
+            device.peer_id() == peer_device_id
+                && device.storage_device_id() == Some(storage_device_id)
+        });
+        if known {
+            return;
+        }
+        let remembered = self
+            .pairing_manager
+            .store()
+            .remember_storage_device_id(peer_device_id, storage_device_id)
+            .map_err(P2pServiceError::from)
+            .and_then(|()| self.refresh_trusted_devices());
+        if let Err(error) = remembered {
+            tracing::warn!(peer = %peer_device_id.as_str(), error = %error, "a paired device's storage ID could not be remembered");
         }
     }
 
