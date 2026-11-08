@@ -43,9 +43,11 @@ use crate::{
 
 /// How long a finished recording waits for another device's recording of it to sync here.
 pub const COMBINING_GRACE: Duration = Duration::from_secs(10 * 60);
-/// Longest a recording's speech is kept waiting to be combined: on a device without the pass, or
-/// on the combining device for a recording that has not arrived.
-pub const KEEP_FOR_COMBINING: Duration = Duration::from_secs(24 * 60 * 60);
+/// Longest a recording's speech is kept waiting to be combined: on a device that has to send it
+/// but cannot reach the combining device, on a device without the pass, or on the combining device
+/// for a recording that has not arrived. Three weeks, so a phone that meets the laptop again
+/// after a trip still delivers its speech; it stays sealed meanwhile (#87).
+pub const KEEP_FOR_COMBINING: Duration = Duration::from_secs(21 * 24 * 60 * 60);
 /// Recordings started further apart than this are never compared.
 const MAX_START_GAP_SECONDS: i64 = 12 * 60 * 60;
 

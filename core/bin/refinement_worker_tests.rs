@@ -466,8 +466,10 @@ fn a_phone_folds_its_recording_and_sends_its_speech_without_charging() {
     assert!(setup.store.pending_meetings().is_empty());
 }
 
+const DAY: Duration = Duration::from_secs(24 * 60 * 60);
+
 #[test]
-fn speech_that_was_not_delivered_is_kept_until_a_day_has_passed() {
+fn speech_that_was_not_delivered_is_kept_for_three_weeks() {
     let (setup, control) = phone_setup();
     control.set_speech_sender(Arc::new(Sender {
         parts: Mutex::new(Vec::new()),
@@ -486,8 +488,29 @@ fn speech_that_was_not_delivered_is_kept_until_a_day_has_passed() {
     worker(Duration::ZERO).run_pending();
     assert_eq!(setup.store.pending_meetings(), vec![setup.meeting.clone()]);
 
+    worker(20 * DAY).run_pending();
+    assert_eq!(setup.store.pending_meetings(), vec![setup.meeting.clone()]);
+
     worker(KEEP_FOR_COMBINING).run_pending();
+    assert_eq!(KEEP_FOR_COMBINING, 21 * DAY);
     assert!(setup.store.pending_meetings().is_empty());
+}
+
+#[test]
+fn recordings_that_meet_up_to_three_weeks_later_are_still_folded() {
+    // The laptop's recording reached the phone only when they met again, 20 days later.
+    let (setup, control) = phone_setup();
+    let mut worker = RefinementWorker::without_pass(
+        Arc::clone(&setup.store),
+        Arc::clone(&control),
+        setup.opener("device-a"),
+        DeviceId::new("device-a"),
+    )
+    .with_clock(after(20 * DAY));
+
+    worker.run_pending();
+
+    assert!(setup.combination_of(&setup.meeting).is_some());
 }
 
 fn speech_part(meeting: &MeetingId, part_index: u32, part_count: u32) -> SpeechPart {

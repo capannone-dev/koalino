@@ -15,7 +15,7 @@
 //! and stop between windows when that changes; a device without a pass model only folds, sends
 //! and deletes. The model is loaded only for a round of work and dropped after. Retained audio
 //! never lingers: it is deleted after a pass or a confirmed transfer, when unreadable, when its
-//! meeting is gone, after three failed attempts, or when it has waited a day. `RetainedSpeechInbox`
+//! meeting is gone, after three failed attempts, or when it has waited three weeks to be combined. `RetainedSpeechInbox`
 //! stores speech paired devices send for combining. Logs carry meeting ids and counts only.
 
 use std::{
@@ -58,8 +58,9 @@ use crate::{
 const MAX_ATTEMPTS: u32 = 3;
 /// How often the worker looks again without being woken, for example after the phone is plugged in.
 const IDLE_CHECK: Duration = Duration::from_secs(300);
-/// How far back recordings are compared to find one meeting recorded on two devices.
-const FOLD_WINDOW: chrono::TimeDelta = chrono::TimeDelta::days(2);
+/// How far back recordings are compared to find one meeting recorded on two devices: as long as
+/// speech waits to be combined (`KEEP_FOR_COMBINING`), so recordings that meet late still fold.
+const FOLD_WINDOW: chrono::TimeDelta = chrono::TimeDelta::days(21);
 
 /// Returns where a database's retained meeting audio lives: `<data folder>/retained-audio`.
 pub fn retained_audio_directory(database_path: &Path) -> PathBuf {
