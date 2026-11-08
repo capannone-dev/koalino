@@ -150,3 +150,56 @@ fn words_are_spread_over_their_segment_and_compared_without_case_or_punctuation(
         .collect();
     assert_eq!(words, vec![(1_000, "sì"), (1_333, "va"), (1_666, "bene")]);
 }
+
+#[test]
+fn a_recording_that_overlaps_the_other_only_briefly_is_another_meeting() {
+    // The phone was started for the last 10 s of the meeting and kept recording the next
+    // conversation for almost two minutes: what it shares is real, but the two recordings mostly
+    // cover different times.
+    let laptop = RecordingText::from_segments(1_000_000, &segments(&CONVERSATION, 0));
+    let mut phone_segments = segments(&CONVERSATION[8..], 2_000);
+    phone_segments.extend(segments(&OTHER_CONVERSATION[..2], 100_000));
+    let phone = RecordingText::from_segments(1_030_000, &phone_segments);
+
+    assert!(recognise_same_meeting(&laptop, &phone).is_none());
+}
+
+#[test]
+fn recordings_of_the_same_span_need_fewer_shared_words() {
+    // The phone sat by the other person and the laptop by the owner, so they mostly understood
+    // different words; over the same span of time, two shared lines are enough.
+    // The phone was started 400 ms after the laptop.
+    let laptop = RecordingText::from_segments(1_000_000, &segments(&CONVERSATION, 400));
+    let phone_lines: Vec<&str> = OTHER_CONVERSATION
+        .iter()
+        .enumerate()
+        .map(|(index, line)| match index {
+            2 | 5 => CONVERSATION[index],
+            _ => *line,
+        })
+        .collect();
+    let phone = RecordingText::from_segments(1_000_400, &segments(&phone_lines, 0));
+
+    let found = recognise_same_meeting(&laptop, &phone);
+
+    let found = found.unwrap_or_else(|| panic!("the same span was not recognised"));
+    assert!(
+        found.shared_share() < 0.25,
+        "share {}",
+        found.shared_share()
+    );
+    assert_eq!(found.offset_ms(), 400);
+}
+
+#[test]
+fn recordings_of_the_same_span_still_need_some_shared_words() {
+    let laptop = RecordingText::from_segments(1_000_000, &segments(&CONVERSATION, 0));
+    let phone_lines: Vec<&str> = OTHER_CONVERSATION
+        .iter()
+        .enumerate()
+        .map(|(index, line)| if index == 5 { CONVERSATION[5] } else { *line })
+        .collect();
+    let phone = RecordingText::from_segments(1_000_000, &segments(&phone_lines, 0));
+
+    assert!(recognise_same_meeting(&laptop, &phone).is_none());
+}

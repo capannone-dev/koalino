@@ -6,13 +6,21 @@
 //! meetings never do. Speech timing alone does not tell them apart, because busy meetings have
 //! little silence.
 //!
-//! The rule: count the words of each transcript that start a run of three words also found in the
-//! other within `TIME_TOLERANCE_MS` of wall-clock time (clocks of paired devices agree to well
-//! within that). Two recordings are one meeting when those words are at least `MIN_SHARED_SHARE`
-//! of the shorter transcript and at least `MIN_SHARED_WORDS`.
+//! The rule has two parts. First, the recordings must cover the same time: their wall-clock spans
+//! (from each recording's start to its last transcribed moment) must overlap for at least
+//! `MIN_TIME_OVERLAP` of the shorter span, so a phone left recording into the next conversation
+//! does not join the meeting it caught the end of. Second, count the words of each transcript in a
+//! run of three words also found in the other within `TIME_TOLERANCE_MS` of wall-clock time
+//! (clocks of paired devices agree to well within that). Two recordings are one meeting when those
+//! words are at least `MIN_SHARED_SHARE` of the shorter transcript and at least `MIN_SHARED_WORDS`.
+//! Recordings of nearly the same span (`CLOSE_TIME_OVERLAP`) need only `CLOSE_SHARED_SHARE`, still
+//! with `MIN_SHARED_WORDS`: two devices at opposite ends of a table may understand mostly different
+//! words, and the shared span already says much. Some shared words are always needed, both to tell
+//! two conversations held at once apart and to measure the clock offset.
 //!
 //! Calibrated on NOTSOFAR: 92 device pairs of the same meeting share 60–89% (at least 60% even in
-//! the first 2 minutes), and 190 pairs of different meetings at most 3.6% (`DECISION_LOG.md`).
+//! the first 2 minutes), and 190 pairs of different meetings, compared as if recorded at the same
+//! time, at most 3.6% (`DECISION_LOG.md`); the close-span threshold keeps well above that.
 //! The clock offset between the recordings is the median gap between the shared words. Everything
 //! here is pure and logs nothing.
 
@@ -27,6 +35,12 @@ const TIME_TOLERANCE_MS: i64 = 15_000;
 const MIN_SHARED_SHARE: f64 = 0.25;
 /// Fewest shared words: a greeting heard by two devices is not a meeting.
 const MIN_SHARED_WORDS: usize = 15;
+/// Smallest share of the shorter recording's span that the other must also cover.
+const MIN_TIME_OVERLAP: f64 = 0.5;
+/// Share of the shorter span from which recordings count as covering the same time.
+const CLOSE_TIME_OVERLAP: f64 = 0.8;
+/// Smallest shared share for recordings of the same time; under 3.6% for different meetings.
+const CLOSE_SHARED_SHARE: f64 = 0.10;
 /// Words in a shared run.
 const RUN_LENGTH: usize = 3;
 
@@ -53,6 +67,8 @@ impl SpokenWord {
 #[derive(Clone, Debug, Default)]
 pub struct RecordingText {
     started_at_ms: i64,
+    /// The last transcribed moment, in milliseconds from the recording's start.
+    ends_at_ms: u64,
     words: Vec<SpokenWord>,
 }
 
@@ -62,6 +78,7 @@ impl RecordingText {
     /// Inputs: When the recording started (Unix milliseconds on its device's clock) and its
     /// segments. Outputs: Each segment's words, spread evenly over its span (segments carry no
     /// word times), lowercased and stripped of punctuation; words of punctuation alone are dropped.
+    /// The recording's span ends with its last segment.
     /// Side effects: None.
     pub fn from_segments(started_at_ms: i64, segments: &[TranscriptSegment]) -> Self {
         let mut words = Vec::new();
@@ -81,8 +98,14 @@ impl RecordingText {
             }));
         }
         words.sort_by_key(|word| word.time_ms);
+        let ends_at_ms = segments
+            .iter()
+            .map(TranscriptSegment::end_time_ms)
+            .max()
+            .unwrap_or_default();
         Self {
             started_at_ms,
+            ends_at_ms,
             words,
         }
     }
@@ -91,7 +114,7 @@ impl RecordingText {
     ///
     /// Inputs: When the recording started (Unix milliseconds, or any common reference) and its
     /// words with their times in the recording. Outputs: The words in time order, compared as in
-    /// `from_segments`. Side effects: None.
+    /// `from_segments`; the span ends with the last word. Side effects: None.
     pub fn from_words<'text>(
         started_at_ms: i64,
         words: impl IntoIterator<Item = (u64, &'text str)>,
@@ -105,8 +128,10 @@ impl RecordingText {
             .filter(|word| !word.key.is_empty())
             .collect();
         words.sort_by_key(|word| word.time_ms);
+        let ends_at_ms = words.last().map(|word| word.time_ms).unwrap_or_default();
         Self {
             started_at_ms,
+            ends_at_ms,
             words,
         }
     }
@@ -114,6 +139,15 @@ impl RecordingText {
     /// Returns the words in time order.
     pub fn words(&self) -> &[SpokenWord] {
         &self.words
+    }
+
+    /// Returns the recording's wall-clock span, start and end in Unix milliseconds.
+    fn wall_span(&self) -> (i64, i64) {
+        (
+            self.started_at_ms,
+            self.started_at_ms
+                .saturating_add(signed_ms(self.ends_at_ms)),
+        )
     }
 
     /// Returns a word's wall-clock time.
@@ -146,13 +180,23 @@ impl SameMeeting {
 /// Decides whether two recordings are the same meeting.
 ///
 /// Inputs: The two recordings' texts, from different devices.
-/// Outputs: The match and the clock offset between them, or `None` when they share too little.
-/// The result does not depend on the order, except that the offset changes sign.
+/// Outputs: The match and the clock offset between them, or `None` when they cover different
+/// times or share too little. The result does not depend on the order, except that the offset
+/// changes sign.
 /// Side effects: None.
 pub fn recognise_same_meeting(
     first: &RecordingText,
     second: &RecordingText,
 ) -> Option<SameMeeting> {
+    let time_overlap = time_overlap(first, second);
+    if time_overlap < MIN_TIME_OVERLAP {
+        return None;
+    }
+    let min_share = if time_overlap >= CLOSE_TIME_OVERLAP {
+        CLOSE_SHARED_SHARE
+    } else {
+        MIN_SHARED_SHARE
+    };
     let shorter = first.words.len().min(second.words.len());
     if shorter < MIN_SHARED_WORDS {
         return None;
@@ -161,13 +205,30 @@ pub fn recognise_same_meeting(
     let (second_shared, _) = shared_words(second, first);
     let shared = first_shared.min(second_shared);
     let shared_share = shared as f64 / shorter as f64;
-    if shared < MIN_SHARED_WORDS || shared_share < MIN_SHARED_SHARE {
+    if shared < MIN_SHARED_WORDS || shared_share < min_share {
         return None;
     }
     Some(SameMeeting {
         offset_ms: median(gaps)?,
         shared_share,
     })
+}
+
+/// Returns the share of the shorter recording's wall-clock span that the other also covers, from
+/// 0 to 1. A recording of no length overlaps one running within `TIME_TOLERANCE_MS` of it.
+fn time_overlap(first: &RecordingText, second: &RecordingText) -> f64 {
+    let (first_start, first_end) = first.wall_span();
+    let (second_start, second_end) = second.wall_span();
+    let shorter = (first_end - first_start).min(second_end - second_start);
+    let overlap = first_end.min(second_end) - first_start.max(second_start);
+    if shorter <= 0 {
+        return if overlap >= -TIME_TOLERANCE_MS {
+            1.0
+        } else {
+            0.0
+        };
+    }
+    (overlap as f64 / shorter as f64).clamp(0.0, 1.0)
 }
 
 /// Counts the words of `text` inside a run of three also found in `other` at about the same
