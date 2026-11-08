@@ -339,12 +339,18 @@ impl ProjectRepository for SqliteNoteRepository {
             .connection
             .write_transaction()
             .map_err(|error| sqlite_error("unable to begin moving a meeting", error))?;
-        let document = read_document(&transaction, meeting_id)?;
+        let document = read_document(&transaction, self.embedding_cipher.as_ref(), meeting_id)?;
         let moved = document_codec.with_project(&document, project_id)?;
         if moved != document {
-            write_document(&transaction, meeting_id, &moved)?;
+            write_document(
+                &transaction,
+                self.embedding_cipher.as_ref(),
+                meeting_id,
+                &moved,
+            )?;
             apply_projection(
                 &transaction,
+                self.embedding_cipher.as_ref(),
                 meeting_id,
                 &document_codec.project(meeting_id, &moved)?,
             )?;

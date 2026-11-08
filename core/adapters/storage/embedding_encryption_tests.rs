@@ -263,8 +263,12 @@ fn old_unencrypted_database_is_reencrypted_on_first_open() {
             &storage.voice_store(&setup_cipher),
         )
     };
-    // Rewrite the file into the exact pre-#31 layout: plaintext BLOBs and no format column.
+    // Rewrite the file into the exact pre-#31 layout: plaintext BLOBs and no format column. The
+    // meeting document was sealed with the setup key, so it goes back to clear too (#92).
     let legacy_connection = storage.raw_connection();
+    legacy_connection
+        .execute("UPDATE meetings SET automerge_document = X'01'", [])
+        .unwrap_or_else(|error| panic!("document must be rewritten as legacy: {error}"));
     for (table, column) in EMBEDDING_COLUMNS {
         let plaintext = match table {
             "voice_variants" => plaintext_bytes(&VARIANT_EMBEDDING),
@@ -498,8 +502,12 @@ fn old_plaintext_clip_audio_is_sealed_on_first_open() {
         )
     };
     // Rewrite the clip into the pre-#50 layout: plaintext audio and no format column. Its
-    // embedding was sealed with the setup key, so make it plaintext too for the new key.
+    // embedding and the meeting document were sealed with the setup key, so make them plaintext
+    // too for the new key.
     let legacy_connection = storage.raw_connection();
+    legacy_connection
+        .execute("UPDATE meetings SET automerge_document = X'01'", [])
+        .unwrap_or_else(|error| panic!("document must be rewritten as legacy: {error}"));
     legacy_connection
         .execute(
             "UPDATE unassigned_voice_clips SET audio_bytes = ?1, derived_embedding = ?2, embedding_format = 0",

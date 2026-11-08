@@ -395,11 +395,16 @@ impl SqliteNoteRepository {
                 .map_err(|error| sqlite_error("unable to look up the cluster's meeting", error))?;
             if let Some(meeting_id) = meeting_id.map(MeetingId::new) {
                 let document = document_codec.with_cluster_resolution(
-                    &read_document(&transaction, &meeting_id)?,
+                    &read_document(&transaction, self.embedding_cipher.as_ref(), &meeting_id)?,
                     cluster_id,
                     identity_id,
                 )?;
-                write_document(&transaction, &meeting_id, &document)?;
+                write_document(
+                    &transaction,
+                    self.embedding_cipher.as_ref(),
+                    &meeting_id,
+                    &document,
+                )?;
             }
         }
         let updated_rows = transaction

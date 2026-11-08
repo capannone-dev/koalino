@@ -37,6 +37,10 @@ pub mod sqlite_encryption_metadata;
 mod sqlite_external_identities_tests;
 #[cfg(test)]
 mod sqlite_meeting_document_tests;
+/// Seals transcripts, transcript segments and meeting documents at rest (#92).
+mod sqlite_note_encryption;
+#[cfg(test)]
+mod sqlite_note_encryption_tests;
 /// Persists the sealed P2P node identity and the trusted-peer allowlist in SQLite.
 pub mod sqlite_peer_store;
 #[cfg(test)]

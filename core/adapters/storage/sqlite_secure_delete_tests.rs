@@ -63,6 +63,14 @@ fn a_deleted_meeting_leaves_no_readable_text_in_the_file() {
     let text = String::from_utf8_lossy(MARKER).into_owned();
     repository
         .create_meeting(&meeting_id, &[1])
+        // The title is the one meeting text stored in clear (#92), so it is what can linger.
+        .and_then(|()| {
+            repository.save_meeting_title(
+                &meeting_id,
+                &crate::domain::models::MeetingTitle::parse(&text)
+                    .unwrap_or_else(|error| panic!("{error}")),
+            )
+        })
         .and_then(|()| repository.save_transcript(&Transcript::new(meeting_id.clone(), text)))
         .unwrap_or_else(|error| panic!("meeting must be stored: {error}"));
     assert!(database.holds_marker(), "the test must see stored text");

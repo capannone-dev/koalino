@@ -268,12 +268,19 @@ fn a_second_recording_is_refused() {
     let _ = fs::remove_dir_all(&directory);
 }
 
+/// The database key every file-backed repository of a test shares, as the CLI binary and its
+/// recording worker share the keychain's key: meeting text is sealed under it (#92).
+fn file_cipher() -> Arc<dyn crate::ports::crypto::EmbeddingCipher> {
+    use crate::application::crypto::voice_encryptor::{EncryptionKey, VoiceEncryptor};
+    Arc::new(VoiceEncryptor::new(&EncryptionKey::from_bytes([3; 32])))
+}
+
 /// Opens a file-backed repository, as the CLI binary and its recording worker each do.
 fn open_file_repository(database_path: &Path) -> anyhow::Result<SqliteNoteRepository> {
     Ok(SqliteNoteRepository::open(
         database_path,
         DeviceId::new("cli-test"),
-        ephemeral_cipher(),
+        file_cipher(),
     )?)
 }
 
@@ -359,7 +366,7 @@ fn record_start_records_the_chosen_or_configured_language() {
         crate::storage_composition::open_note_repository(
             path,
             DeviceId::new("cli-test"),
-            ephemeral_cipher(),
+            file_cipher(),
         )
     };
     let recording_control = PipelineRecordingControl::new(

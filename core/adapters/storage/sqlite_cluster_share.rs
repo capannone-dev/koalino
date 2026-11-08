@@ -201,7 +201,11 @@ impl SqliteNoteRepository {
             let resolved_in_document = document_codec
                 .project(
                     cluster.meeting_id(),
-                    &read_document(&transaction, cluster.meeting_id())?,
+                    &read_document(
+                        &transaction,
+                        self.embedding_cipher.as_ref(),
+                        cluster.meeting_id(),
+                    )?,
                 )?
                 .cluster_resolutions
                 .iter()

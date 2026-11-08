@@ -41,6 +41,7 @@ use super::sqlite_embedding_encryption::{
     CLIP_EMBEDDINGS, CLUSTER_CHUNK_EMBEDDINGS, CLUSTER_REPRESENTATIVE_EMBEDDINGS,
     SEALED_EMBEDDING_FORMAT,
 };
+use super::sqlite_note_encryption::{self as note_encryption, NoteField};
 use crate::{
     domain::{
         errors::StorageError,
@@ -62,6 +63,7 @@ use crate::{
         telemetry::MetricsRepository,
     },
 };
+use rusqlite::types::Value as SqliteValue;
 
 /// How long a write waits for a lock held by another connection (the voice store, or another
 /// process such as the daemon) to the same database file.
@@ -250,6 +252,7 @@ impl SqliteNoteRepository {
             embedding_column.prepare(&sqlite_connection, embedding_cipher.as_ref())?;
         }
         prepare_clip_audio(&sqlite_connection, embedding_cipher.as_ref())?;
+        note_encryption::seal_clear_notes(&sqlite_connection, embedding_cipher.as_ref())?;
         tracing::info!(device_id = %device_id.as_str(), "SQLite meeting repository initialized");
         Ok(Self {
             connection: sqlite_connection,
@@ -320,7 +323,8 @@ impl SqliteNoteRepository {
         }
         let mut migrated_meetings = 0_usize;
         for meeting_id in self.list_meeting_ids()? {
-            let original_document = read_document(&transaction, &meeting_id)?;
+            let original_document =
+                read_document(&transaction, self.embedding_cipher.as_ref(), &meeting_id)?;
             let projection = document_codec.project(&meeting_id, &original_document)?;
             let mut document = original_document.clone();
             if projection.origin.is_none() {
@@ -351,7 +355,12 @@ impl SqliteNoteRepository {
                 }
             }
             if document != original_document {
-                write_document(&transaction, &meeting_id, &document)?;
+                write_document(
+                    &transaction,
+                    self.embedding_cipher.as_ref(),
+                    &meeting_id,
+                    &document,
+                )?;
                 migrated_meetings += 1;
             }
         }
@@ -730,11 +739,23 @@ impl NoteRepository for SqliteNoteRepository {
             .write_transaction()
             .map_err(|error| sqlite_error("unable to begin segment transaction", error))?;
         if let Some(document_codec) = self.document_codec.as_deref() {
-            let document = document_codec
-                .with_segments(&read_document(&transaction, meeting_id)?, segments)?;
-            write_document(&transaction, meeting_id, &document)?;
+            let document = document_codec.with_segments(
+                &read_document(&transaction, self.embedding_cipher.as_ref(), meeting_id)?,
+                segments,
+            )?;
+            write_document(
+                &transaction,
+                self.embedding_cipher.as_ref(),
+                meeting_id,
+                &document,
+            )?;
         }
-        write_segment_rows(&transaction, meeting_id, segments)?;
+        write_segment_rows(
+            &transaction,
+            self.embedding_cipher.as_ref(),
+            meeting_id,
+            segments,
+        )?;
         transaction
             .commit()
             .map_err(|error| sqlite_error("unable to commit transcript segments", error))?;
@@ -763,7 +784,7 @@ impl NoteRepository for SqliteNoteRepository {
                     row.get::<_, i64>(0)?,
                     row.get::<_, i64>(1)?,
                     row.get::<_, Option<String>>(2)?,
-                    row.get::<_, String>(3)?,
+                    row.get::<_, SqliteValue>(3)?,
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
                 ))
@@ -803,7 +824,12 @@ impl NoteRepository for SqliteNoteRepository {
                     u64::try_from(start_time_ms).unwrap_or_default(),
                     u64::try_from(end_time_ms).unwrap_or_default(),
                     parsed_speaker_identity_id,
-                    segment_text,
+                    note_encryption::open_text(
+                        self.embedding_cipher.as_ref(),
+                        NoteField::SegmentText,
+                        meeting_id,
+                        segment_text,
+                    )?,
                 )
                 .with_unknown_cluster_id(parsed_unknown_cluster_id)
                 .with_confidence(confidence_from_column(confidence.as_deref())))
@@ -829,7 +855,16 @@ impl NoteRepository for SqliteNoteRepository {
                     &format!(
                         "INSERT INTO meetings (meeting_id, acquisition_device_id, automerge_document, document_revision) VALUES (?1, ?2, ?3, {NEXT_DOCUMENT_REVISION_SQL})"
                     ),
-                    params![meeting_id.as_str(), self.device_id.as_str(), initial_crdt_document],
+                    params![
+                        meeting_id.as_str(),
+                        self.device_id.as_str(),
+                        note_encryption::seal_field(
+                            self.embedding_cipher.as_ref(),
+                            NoteField::Document,
+                            meeting_id,
+                            initial_crdt_document,
+                        )?
+                    ],
                 )
                 .map_err(|error| sqlite_error("unable to create meeting", error))?;
             self.log_operation("create_meeting", meeting_id);
@@ -860,12 +895,18 @@ impl NoteRepository for SqliteNoteRepository {
                     meeting_id.as_str(),
                     sqlite_timestamp_text(origin.created_at),
                     origin.acquisition_device_id.as_str(),
-                    document
+                    note_encryption::seal_field(
+                        self.embedding_cipher.as_ref(),
+                        NoteField::Document,
+                        meeting_id,
+                        &document,
+                    )?
                 ],
             )
             .map_err(|error| sqlite_error("unable to create meeting", error))?;
         apply_projection(
             &transaction,
+            self.embedding_cipher.as_ref(),
             meeting_id,
             &document_codec.project(meeting_id, &document)?,
         )?;
@@ -889,14 +930,27 @@ impl NoteRepository for SqliteNoteRepository {
                 .write_transaction()
                 .map_err(|error| sqlite_error("unable to begin transcript transaction", error))?;
             let document = document_codec.with_transcript(
-                &read_document(&transaction, meeting_id)?,
+                &read_document(&transaction, self.embedding_cipher.as_ref(), meeting_id)?,
                 transcript.content(),
             )?;
-            write_document(&transaction, meeting_id, &document)?;
+            write_document(
+                &transaction,
+                self.embedding_cipher.as_ref(),
+                meeting_id,
+                &document,
+            )?;
             transaction
                 .execute(
                     "UPDATE meetings SET transcript = ?1 WHERE meeting_id = ?2",
-                    params![transcript.content(), meeting_id.as_str()],
+                    params![
+                        note_encryption::seal_text(
+                            self.embedding_cipher.as_ref(),
+                            NoteField::Transcript,
+                            meeting_id,
+                            transcript.content(),
+                        )?,
+                        meeting_id.as_str()
+                    ],
                 )
                 .map_err(|error| sqlite_error("unable to save transcript", error))?;
             transaction
@@ -909,7 +963,15 @@ impl NoteRepository for SqliteNoteRepository {
             .connection
             .execute(
                 "UPDATE meetings SET transcript = ?1 WHERE meeting_id = ?2",
-                params![transcript.content(), transcript.meeting_id().as_str()],
+                params![
+                    note_encryption::seal_text(
+                        self.embedding_cipher.as_ref(),
+                        NoteField::Transcript,
+                        transcript.meeting_id(),
+                        transcript.content(),
+                    )?,
+                    transcript.meeting_id().as_str()
+                ],
             )
             .map_err(|error| sqlite_error("unable to save transcript", error))?;
         ensure_meeting_was_updated(updated_row_count, transcript.meeting_id())?;
@@ -928,14 +990,25 @@ impl NoteRepository for SqliteNoteRepository {
             .query_row(
                 "SELECT transcript FROM meetings WHERE meeting_id = ?1",
                 params![meeting_id.as_str()],
-                |row| row.get::<_, Option<String>>(0),
+                |row| row.get::<_, SqliteValue>(0),
             )
             .optional()
             .map_err(|error| sqlite_error("unable to load transcript", error))?
             .ok_or_else(|| missing_meeting_error(meeting_id))?;
         self.log_operation("load_transcript", meeting_id);
-        Ok(optional_transcript
-            .map(|transcript_content| Transcript::new(meeting_id.clone(), transcript_content)))
+        if optional_transcript == SqliteValue::Null {
+            return Ok(None);
+        }
+        let transcript_content = note_encryption::open_text(
+            self.embedding_cipher.as_ref(),
+            NoteField::Transcript,
+            meeting_id,
+            optional_transcript,
+        )?;
+        Ok(Some(Transcript::new(
+            meeting_id.clone(),
+            transcript_content,
+        )))
     }
 
     /// Replaces opaque Automerge bytes only for an existing meeting row.
@@ -979,11 +1052,17 @@ impl NoteRepository for SqliteNoteRepository {
             .connection
             .write_transaction()
             .map_err(|error| sqlite_error("unable to begin document transaction", error))?;
-        write_document(&transaction, meeting_id, crdt_document)?;
+        write_document(
+            &transaction,
+            self.embedding_cipher.as_ref(),
+            meeting_id,
+            crdt_document,
+        )?;
         // The document may carry a peer's changes; the index follows it.
         if let Some(document_codec) = self.document_codec.as_deref() {
             apply_projection(
                 &transaction,
+                self.embedding_cipher.as_ref(),
                 meeting_id,
                 &document_codec.project(meeting_id, crdt_document)?,
             )?;
@@ -1001,16 +1080,8 @@ impl NoteRepository for SqliteNoteRepository {
     /// Outputs: Serialized CRDT bytes or a portable storage error.
     /// Side effects: Reads one SQLite row and emits a debug trace event without CRDT bytes.
     fn load_crdt_document(&self, meeting_id: &MeetingId) -> Result<Vec<u8>, StorageError> {
-        let serialized_document = self
-            .connection
-            .query_row(
-                "SELECT automerge_document FROM meetings WHERE meeting_id = ?1",
-                params![meeting_id.as_str()],
-                |row| row.get::<_, Vec<u8>>(0),
-            )
-            .optional()
-            .map_err(|error| sqlite_error("unable to load CRDT document", error))?
-            .ok_or_else(|| missing_meeting_error(meeting_id))?;
+        let serialized_document =
+            read_document(&self.connection, self.embedding_cipher.as_ref(), meeting_id)?;
         self.log_operation("load_crdt_document", meeting_id);
         Ok(serialized_document)
     }
@@ -1187,13 +1258,19 @@ impl NoteRepository for SqliteNoteRepository {
             .connection
             .write_transaction()
             .map_err(|error| sqlite_error("unable to begin recording a language", error))?;
-        let document = read_document(&transaction, meeting_id)?;
+        let document = read_document(&transaction, self.embedding_cipher.as_ref(), meeting_id)?;
         let updated_document =
             document_codec.with_transcription_language(&document, language, first_used_at_ms)?;
         if updated_document != document {
-            write_document(&transaction, meeting_id, &updated_document)?;
+            write_document(
+                &transaction,
+                self.embedding_cipher.as_ref(),
+                meeting_id,
+                &updated_document,
+            )?;
             apply_projection(
                 &transaction,
+                self.embedding_cipher.as_ref(),
                 meeting_id,
                 &document_codec.project(meeting_id, &updated_document)?,
             )?;
@@ -1226,10 +1303,15 @@ impl NoteRepository for SqliteNoteRepository {
             .connection
             .write_transaction()
             .map_err(|error| sqlite_error("unable to begin recording overlap", error))?;
-        let document = read_document(&transaction, meeting_id)?;
+        let document = read_document(&transaction, self.embedding_cipher.as_ref(), meeting_id)?;
         let updated_document = document_codec.with_overlap_spans(&document, spans)?;
         if updated_document != document {
-            write_document(&transaction, meeting_id, &updated_document)?;
+            write_document(
+                &transaction,
+                self.embedding_cipher.as_ref(),
+                meeting_id,
+                &updated_document,
+            )?;
         }
         transaction
             .commit()
@@ -1251,7 +1333,7 @@ impl NoteRepository for SqliteNoteRepository {
             .connection
             .write_transaction()
             .map_err(|error| sqlite_error("unable to begin reading overlap", error))?;
-        let document = read_document(&transaction, meeting_id)?;
+        let document = read_document(&transaction, self.embedding_cipher.as_ref(), meeting_id)?;
         transaction
             .commit()
             .map_err(|error| sqlite_error("unable to finish reading overlap", error))?;
@@ -1549,8 +1631,12 @@ fn parse_task_type(task_type: &str) -> Result<TaskType, StorageError> {
 /// Reads a meeting's serialized document.
 ///
 /// Outputs: The document bytes, or a rejection for an unknown meeting. Side effects: None.
-fn read_document(connection: &Connection, meeting_id: &MeetingId) -> Result<Vec<u8>, StorageError> {
-    connection
+fn read_document(
+    connection: &Connection,
+    cipher: &dyn EmbeddingCipher,
+    meeting_id: &MeetingId,
+) -> Result<Vec<u8>, StorageError> {
+    let stored = connection
         .query_row(
             "SELECT automerge_document FROM meetings WHERE meeting_id = ?1",
             params![meeting_id.as_str()],
@@ -1558,17 +1644,25 @@ fn read_document(connection: &Connection, meeting_id: &MeetingId) -> Result<Vec<
         )
         .optional()
         .map_err(|error| sqlite_error("unable to load CRDT document", error))?
-        .ok_or_else(|| missing_meeting_error(meeting_id))
+        .ok_or_else(|| missing_meeting_error(meeting_id))?;
+    note_encryption::open_document(cipher, meeting_id, stored)
 }
 
-/// Replaces a meeting's serialized document.
+/// Replaces a meeting's serialized document, sealed (#92).
 ///
 /// Outputs: Success, or a rejection for an unknown meeting. Side effects: Updates one row.
 fn write_document(
     connection: &Connection,
+    cipher: &dyn EmbeddingCipher,
     meeting_id: &MeetingId,
     document: &[u8],
 ) -> Result<(), StorageError> {
+    let document = note_encryption::seal_field(
+        cipher,
+        note_encryption::NoteField::Document,
+        meeting_id,
+        document,
+    )?;
     let updated_row_count = connection
         .execute(
             &format!(
@@ -1585,6 +1679,7 @@ fn write_document(
 /// Side effects: Deletes and inserts rows; callers provide the transaction.
 fn write_segment_rows(
     connection: &Connection,
+    cipher: &dyn EmbeddingCipher,
     meeting_id: &MeetingId,
     segments: &[TranscriptSegment],
 ) -> Result<(), StorageError> {
@@ -1603,7 +1698,12 @@ fn write_segment_rows(
                     sqlite_milliseconds(segment.start_time_ms())?,
                     sqlite_milliseconds(segment.end_time_ms())?,
                     segment.speaker_identity_id().map(|identity_id| identity_id.to_string()),
-                    segment.text(),
+                    note_encryption::seal_text(
+                        cipher,
+                        note_encryption::NoteField::SegmentText,
+                        meeting_id,
+                        segment.text(),
+                    )?,
                     segment.unknown_cluster_id().map(|cluster_id| cluster_id.to_string()),
                     confidence_column(segment.confidence()),
                 ],
@@ -1621,6 +1721,7 @@ fn write_segment_rows(
 /// Callers provide the transaction.
 fn apply_projection(
     connection: &Connection,
+    cipher: &dyn EmbeddingCipher,
     meeting_id: &MeetingId,
     projection: &MeetingProjection,
 ) -> Result<(), StorageError> {
@@ -1628,12 +1729,20 @@ fn apply_projection(
         connection
             .execute(
                 "UPDATE meetings SET transcript = ?1 WHERE meeting_id = ?2",
-                params![transcript, meeting_id.as_str()],
+                params![
+                    note_encryption::seal_text(
+                        cipher,
+                        note_encryption::NoteField::Transcript,
+                        meeting_id,
+                        transcript
+                    )?,
+                    meeting_id.as_str()
+                ],
             )
             .map_err(|error| sqlite_error("unable to project the transcript", error))?;
     }
     if let Some(segments) = &projection.segments {
-        write_segment_rows(connection, meeting_id, segments)?;
+        write_segment_rows(connection, cipher, meeting_id, segments)?;
     }
     connection
         .execute(

@@ -192,13 +192,19 @@ impl SqliteNoteRepository {
             .connection
             .write_transaction()
             .map_err(|error| sqlite_error("unable to begin combining meetings", error))?;
-        let document = read_document(&transaction, meeting_id)?;
+        let document = read_document(&transaction, self.embedding_cipher.as_ref(), meeting_id)?;
         let changed = change(document_codec, &document)?;
         let differs = changed != document;
         if differs {
-            write_document(&transaction, meeting_id, &changed)?;
+            write_document(
+                &transaction,
+                self.embedding_cipher.as_ref(),
+                meeting_id,
+                &changed,
+            )?;
             apply_projection(
                 &transaction,
+                self.embedding_cipher.as_ref(),
                 meeting_id,
                 &document_codec.project(meeting_id, &changed)?,
             )?;
