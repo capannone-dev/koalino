@@ -5,7 +5,8 @@
 //! `<attachment_directory>/<meeting ID>/<attachment UUID>-<original name>` (folder 0700, file
 //! 0600 on Unix) and links the copy to the meeting through the `AttachmentRepository`, with the
 //! meeting time when the attachment belongs at a point of the transcript. The source stays where
-//! it was, and its owner deletes it. Only pictures and common document types are accepted, up to
+//! it was, and its owner deletes it. A meeting accepts only pictures and common document types,
+//! and a project any file (#94, `application/octet-stream` when the app cannot show it), up to
 //! `MAX_ATTACHMENT_BYTES`. If the row cannot be saved, the copy is removed again. File contents
 //! and names are never logged.
 //!
@@ -98,7 +99,7 @@ impl AttachmentFileStore {
         let attachment = self.copy_and_link(
             attachment_repository,
             meeting_id.as_str(),
-            source_path,
+            (source_path, supported_mime_type(source_path)?),
             |attachment| {
                 let attachment = Attachment::new(
                     attachment.attachment_id(),
@@ -145,7 +146,7 @@ impl AttachmentFileStore {
         let resource = self.copy_and_link(
             attachment_repository,
             &project_folder_name(project_id),
-            source_path,
+            (source_path, project_mime_type(source_path)),
             |attachment| attachment.with_project_id(project_id),
         )?;
         tracing::info!(
@@ -217,7 +218,8 @@ impl AttachmentFileStore {
         RepositoryPort: AttachmentRepository + ?Sized,
     {
         let named_as = named_as.file_name().map(PathBuf::from).unwrap_or_default();
-        if supported_mime_type(&named_as)? == "message/rfc822" {
+        let mime_type = project_mime_type(&named_as);
+        if mime_type == "message/rfc822" {
             return self.import_project_email_contents(
                 attachment_repository,
                 email_reader,
@@ -229,7 +231,7 @@ impl AttachmentFileStore {
         let resource = self.store_and_link(
             attachment_repository,
             &project_folder_name(project_id),
-            &named_as,
+            (&named_as, mime_type),
             &mut &contents[..],
             |attachment| attachment.with_project_id(project_id),
         )?;
@@ -272,7 +274,7 @@ impl AttachmentFileStore {
         let resource = self.store_and_link(
             attachment_repository,
             &project_folder_name(project_id),
-            &PathBuf::from(format!("{title}.md")),
+            (&PathBuf::from(format!("{title}.md")), "text/markdown"),
             &mut markdown.as_bytes(),
             |attachment| attachment.with_project_id(project_id),
         )?;
@@ -310,7 +312,7 @@ impl AttachmentFileStore {
         let stored_email = self.store_and_link(
             attachment_repository,
             &folder_name,
-            source_path,
+            (source_path, "message/rfc822"),
             &mut &raw_email[..],
             owned_by_project,
         )?;
@@ -322,11 +324,11 @@ impl AttachmentFileStore {
                 .file_name()
                 .map(PathBuf::from)
                 .unwrap_or_default();
-            let stored = supported_mime_type(&attachment_name).and_then(|_| {
+            let stored = supported_mime_type(&attachment_name).and_then(|mime_type| {
                 self.store_and_link(
                     attachment_repository,
                     &folder_name,
-                    &attachment_name,
+                    (&attachment_name, mime_type),
                     &mut attachment.contents.as_slice(),
                     owned_by_project,
                 )
@@ -359,18 +361,17 @@ impl AttachmentFileStore {
         &self,
         attachment_repository: &RepositoryPort,
         folder_name: &str,
-        source_path: &Path,
+        (source_path, mime_type): (&Path, &'static str),
         owned_by: impl FnOnce(Attachment) -> Attachment,
     ) -> Result<Attachment, StorageError>
     where
         RepositoryPort: AttachmentRepository + ?Sized,
     {
-        supported_mime_type(source_path)?;
         let mut source_file = open_regular_file(source_path)?;
         self.store_and_link(
             attachment_repository,
             folder_name,
-            source_path,
+            (source_path, mime_type),
             &mut source_file,
             owned_by,
         )
@@ -379,8 +380,8 @@ impl AttachmentFileStore {
     /// Writes `contents` into `<attachment_directory>/<folder_name>/<new ID>-<safe name>` and
     /// saves the row that `owned_by` builds from an unowned attachment describing the file.
     ///
-    /// Inputs: The repository, the owner's folder, the name the file is known by (its extension
-    /// gives the type), its contents, and the owner.
+    /// Inputs: The repository, the owner's folder, the name the file is known by with its type
+    /// (already checked by the caller), its contents, and the owner.
     /// Outputs: The saved attachment, or a rejection for an unsupported type, contents above
     /// `MAX_ATTACHMENT_BYTES`, or a row that cannot be saved.
     /// Side effects: Creates folders and one file, writes one row, and removes the file again
@@ -389,14 +390,13 @@ impl AttachmentFileStore {
         &self,
         attachment_repository: &RepositoryPort,
         folder_name: &str,
-        named_as: &Path,
+        (named_as, mime_type): (&Path, &'static str),
         contents: &mut impl Read,
         owned_by: impl FnOnce(Attachment) -> Attachment,
     ) -> Result<Attachment, StorageError>
     where
         RepositoryPort: AttachmentRepository + ?Sized,
     {
-        let mime_type = supported_mime_type(named_as)?;
         let attachment_id = Uuid::new_v4();
         let owner_directory = self.attachment_directory.join(folder_name);
         create_private_directory(&owner_directory)?;
@@ -464,6 +464,18 @@ pub(super) fn supported_mime_type(source_path: &Path) -> Result<&'static str, St
         }),
     }
 }
+
+/// Gives the type a project resource is kept with (#94): any file is accepted, and one of a type
+/// the app does not show is `application/octet-stream`, only downloaded or opened with another
+/// app.
+///
+/// Side effects: None.
+pub(super) fn project_mime_type(source_path: &Path) -> &'static str {
+    supported_mime_type(source_path).unwrap_or(UNKNOWN_MIME_TYPE)
+}
+
+/// The type of a project resource the app does not show.
+pub(super) const UNKNOWN_MIME_TYPE: &str = "application/octet-stream";
 
 /// Opens a regular file no larger than `MAX_ATTACHMENT_BYTES`.
 ///

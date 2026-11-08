@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use super::{
-    attachment_file_store::{kept_file_name, supported_mime_type},
+    attachment_file_store::{kept_file_name, project_mime_type, supported_mime_type},
     private_files::{
         create_private_directory, file_error, is_plain_folder_name, remove_meeting_folder,
     },
@@ -218,7 +218,11 @@ impl AttachmentLibrary for AttachmentSyncStore {
     }
 
     fn begin_incoming(&mut self, attachment: &SharedAttachment) -> Result<(), StorageError> {
-        let allowed_type = supported_mime_type(Path::new(&attachment.file_name))?;
+        // A project takes any file (#94); a meeting only the types the app shows.
+        let allowed_type = match attachment.owner {
+            AttachmentOwner::Project(_) => project_mime_type(Path::new(&attachment.file_name)),
+            AttachmentOwner::Meeting(_) => supported_mime_type(Path::new(&attachment.file_name))?,
+        };
         if allowed_type != attachment.mime_type || attachment.size_bytes > MAX_FILE_TRANSFER_BYTES {
             return Err(StorageError::Rejected {
                 reason: String::from("an attachment's type or size is not acceptable"),

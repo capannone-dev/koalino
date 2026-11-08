@@ -231,7 +231,9 @@ photos to `<attachment dir>/<meeting ID>/<attachment UUID>-<name>`, then links e
 meeting through `AttachmentRepository`, with a meeting time when given.
 - **Permissions:** folders are 0700 and files 0600 on Unix.
 - **Names:** reduced to ASCII letters, digits, `.`, `-` and `_`, and at most 80 characters.
-- **Accepted:** only pictures and common document types, up to 100 MiB.
+- **Accepted:** for meetings, only pictures and common document types; for projects, any file
+  (#94), kept as `application/octet-stream` when the app cannot show its type. Up to 100 MiB.
+  Received resources follow the same rule, and a type that does not match the name is refused.
 - **Sources** are left for the caller.
 - **Cleanup:** a copy whose row is rejected is removed again.
 - **Project resources (#85):** `import_project_file` copies into `<attachment dir>/project-<uuid>/`;

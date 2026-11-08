@@ -392,3 +392,32 @@ fn unusable_metadata_is_refused_before_anything_is_written() {
     );
     assert!(!fixture.directory.join("other").exists());
 }
+
+/// A project resource of a type the app does not show arrives as `application/octet-stream`
+/// (#94); a meeting attachment of that type, or one claiming another type, is still refused.
+#[test]
+fn a_project_resource_of_any_type_arrives_but_a_meeting_one_does_not() {
+    let mut fixture = Fixture::new();
+    let project = fixture
+        .repository
+        .create_project(&ProjectName::parse("Site").unwrap_or_else(|error| panic!("{error}")))
+        .unwrap_or_else(|error| panic!("project must be created: {error}"));
+    let mut resource = incoming(b"AC1032");
+    resource.owner = AttachmentOwner::Project(project.project_id());
+    resource.file_name = "site.dwg".to_owned();
+    resource.mime_type = "application/octet-stream".to_owned();
+    resource.meeting_time_ms = None;
+
+    receive(&mut fixture, &resource, b"AC1032")
+        .unwrap_or_else(|error| panic!("the resource must be stored: {error}"));
+
+    let mut disguised = resource.clone();
+    disguised.attachment_id = Uuid::from_u128(0xAC);
+    disguised.mime_type = "text/html".to_owned();
+    assert!(fixture.store.begin_incoming(&disguised).is_err());
+    let mut meeting_file = incoming(b"MZ");
+    meeting_file.attachment_id = Uuid::from_u128(0xAD);
+    meeting_file.file_name = "setup.exe".to_owned();
+    meeting_file.mime_type = "application/octet-stream".to_owned();
+    assert!(fixture.store.begin_incoming(&meeting_file).is_err());
+}

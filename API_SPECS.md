@@ -430,7 +430,7 @@ same commands as the app (`core/bin/project_commands.rs`); resources never carry
 | `POST /api/projects/{project_id}/resources?name=<file name>`, the file as the body (up to 100 MiB) | `201` `{"added","skipped_attachments"}` |
 | `POST /api/projects/{project_id}/notes` `{"title","text"}` | `201`, the resource |
 | `DELETE /api/projects/{project_id}/resources/{attachment_id}` | `204` |
-| `GET /api/projects/{project_id}/resources/{attachment_id}/file` | `200`, the bytes |
+| `GET /api/projects/{project_id}/resources/{attachment_id}/file` | `200`, the bytes (`Content-Disposition: attachment` for the `document` kind, `inline` otherwise) |
 | `GET /api/projects/{project_id}/resources/{attachment_id}/email` | `200` `{"subject","from","to","cc","sent_at","body_text","body_truncated","attachments"}` (HTML bodies as plain text) |
 
 Failures answer `{"error_code","error"}`: `400` for a bad ID, name, title or file type, `404` for

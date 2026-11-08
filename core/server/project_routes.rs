@@ -19,7 +19,8 @@
 //! process has no project files (`ServerAppState::with_project_files`); 500 for storage errors.
 //!
 //! A resource's bytes are served with its stored type, `nosniff` and a sandboxing Content Security
-//! Policy, so a file can never run script on the API's origin. Resources never carry local paths.
+//! Policy, so a file can never run script on the API's origin. A resource the app does not show
+//! (`document` kind, such as any file type a project took, #94) is sent as a download. Resources never carry local paths.
 //! File work runs on a blocking thread. Names, notes and e-mail contents are never logged.
 
 use std::sync::Arc;
@@ -41,7 +42,8 @@ use crate::{
     project_commands::{
         ProjectCommandError, ProjectFiles, delete_project, delete_resource, email_json,
         existing_project, list_projects, move_meeting, parse_name, parse_project_id,
-        project_detail, read_email, resource_file_name, resource_json, resource_of, summary_json,
+        project_detail, read_email, resource_file_name, resource_json, resource_kind, resource_of,
+        summary_json,
     },
 };
 
@@ -386,7 +388,16 @@ async fn resource_file(
         resource.mime_type().to_owned()
     };
     // The stored name holds only ASCII letters, digits, `.`, `-` and `_`.
-    let disposition = format!("inline; filename=\"{}\"", resource_file_name(&resource));
+    // A file the app does not show (#94) is only downloaded, never rendered by the browser.
+    let presentation = if resource_kind(resource.mime_type()) == "document" {
+        "attachment"
+    } else {
+        "inline"
+    };
+    let disposition = format!(
+        "{presentation}; filename=\"{}\"",
+        resource_file_name(&resource)
+    );
     let mut response = contents.into_response();
     let headers = response.headers_mut();
     for (name, value) in [

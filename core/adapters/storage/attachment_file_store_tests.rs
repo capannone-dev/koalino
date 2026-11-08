@@ -488,3 +488,37 @@ fn a_file_that_is_not_an_email_is_refused() {
             == 0
     );
 }
+
+/// Verifies a project takes any file, kept as `application/octet-stream` when its type is not one
+/// the app shows, while a meeting still takes only pictures and documents (#94).
+#[test]
+fn a_project_takes_any_file_but_a_meeting_only_pictures_and_documents() {
+    let sources = TemporaryDirectory::new("sources");
+    let attachment_directory = TemporaryDirectory::new("attachments");
+    let (repository, project_id) = repository_with_project();
+
+    let model = store(&attachment_directory)
+        .import_project_file(
+            &repository,
+            project_id,
+            &sources.file("site.dwg", b"AC1032"),
+        )
+        .unwrap_or_else(|error| panic!("any file should be accepted: {error}"));
+    let nameless = store(&attachment_directory)
+        .import_project_file(&repository, project_id, &sources.file("Makefile", b"all:"))
+        .unwrap_or_else(|error| panic!("a file without extension should be accepted: {error}"));
+
+    assert_eq!(model.mime_type(), "application/octet-stream");
+    assert_eq!(nameless.mime_type(), "application/octet-stream");
+    let meeting_repository = repository_with_meeting();
+    assert!(
+        store(&attachment_directory)
+            .import_file(
+                &meeting_repository,
+                &meeting_id(),
+                &sources.file("setup.exe", b"MZ"),
+                None
+            )
+            .is_err()
+    );
+}

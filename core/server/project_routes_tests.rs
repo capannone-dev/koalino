@@ -213,12 +213,25 @@ async fn uploads_and_notes_become_resources_served_safely_and_deletable() {
             email.to_vec(),
         )
         .await;
-    let (refused_status, _, _) = fixture
+    let (any_status, _, any_body) = fixture
         .raw(
             "POST",
-            &format!("/api/projects/{project_id}/resources?name=setup.exe"),
+            &format!("/api/projects/{project_id}/resources?name=site.dwg"),
             Some("application/octet-stream"),
-            b"MZ".to_vec(),
+            b"AC1032".to_vec(),
+        )
+        .await;
+    let any: Value = serde_json::from_slice(&any_body).unwrap_or_default();
+    let any_id = any["added"][0]["attachment_id"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let (_, any_headers, _) = fixture
+        .raw(
+            "GET",
+            &format!("/api/projects/{project_id}/resources/{any_id}/file"),
+            None,
+            Vec::new(),
         )
         .await;
     let (note_status, note) = fixture
@@ -275,7 +288,22 @@ async fn uploads_and_notes_become_resources_served_safely_and_deletable() {
         uploaded["added"][0].get("file_path").is_none(),
         "{uploaded}"
     );
-    assert_eq!(refused_status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        any_status,
+        StatusCode::CREATED,
+        "any file type is accepted (#94)"
+    );
+    assert_eq!(any["added"][0]["kind"], "document");
+    assert_eq!(
+        any_headers[header::CONTENT_TYPE],
+        "application/octet-stream"
+    );
+    assert!(
+        any_headers[header::CONTENT_DISPOSITION]
+            .to_str()
+            .is_ok_and(|disposition| disposition.starts_with("attachment;")),
+        "a file the browser cannot show safely is only downloaded"
+    );
     assert_eq!(note_status, StatusCode::CREATED);
     assert_eq!(read["subject"], "Offer");
     assert_eq!(file_status, StatusCode::OK);

@@ -182,18 +182,21 @@ fn files_notes_and_emails_become_resources_that_can_be_read_and_deleted() {
     let fixture = Fixture::new();
     let project_id = fixture.create("Hiring");
     let picture = fixture.source("board.png", b"\x89PNG");
+    // Any file type is accepted (#94); a file that is gone is the one that fails.
     let program = fixture.source("setup.exe", b"MZ");
+    let missing = format!("{program}.gone");
     let email = fixture.source(
         "offer.eml",
         b"From: Anna <anna@example.com>\r\nSubject: Offer\r\nContent-Type: text/plain\r\n\r\nYes!\r\n",
     );
 
-    let added = fixture.run(json!({"command": "add_files", "project_id": project_id, "paths": [picture, program, email]}));
+    let added = fixture.run(json!({"command": "add_files", "project_id": project_id, "paths": [picture, program, missing, email]}));
     let note = fixture.run(json!({"command": "add_note", "project_id": project_id, "title": "Plan", "text": "Call Anna"}));
     let detail = fixture.run(json!({"command": "detail", "project_id": project_id}));
 
-    assert_eq!(added["added"].as_array().map(Vec::len), Some(2), "{added}");
-    assert_eq!(added["failed"][0]["path"], program.as_str());
+    assert_eq!(added["added"].as_array().map(Vec::len), Some(3), "{added}");
+    assert_eq!(added["added"][1]["kind"], "document");
+    assert_eq!(added["failed"][0]["path"], missing.as_str());
     assert_eq!(note["resource"]["file_name"], "Plan.md");
     assert_eq!(note["resource"]["kind"], "markdown");
     let resources = detail["resources"].as_array().cloned().unwrap_or_default();
@@ -201,7 +204,7 @@ fn files_notes_and_emails_become_resources_that_can_be_read_and_deleted() {
         .iter()
         .filter_map(|resource| resource["kind"].as_str())
         .collect();
-    assert_eq!(kinds, vec!["image", "email", "markdown"]);
+    assert_eq!(kinds, vec!["image", "document", "email", "markdown"]);
     let note_path = note["resource"]["file_path"]
         .as_str()
         .unwrap_or_default()
@@ -211,7 +214,7 @@ fn files_notes_and_emails_become_resources_that_can_be_read_and_deleted() {
         Some("# Plan\n\nCall Anna\n")
     );
 
-    let email_id = resources[1]["attachment_id"].clone();
+    let email_id = resources[2]["attachment_id"].clone();
     let read = fixture
         .run(json!({"command": "read_email", "project_id": project_id, "attachment_id": email_id}));
     assert_eq!(read["email"]["subject"], "Offer");
