@@ -58,7 +58,7 @@
  transcript_segments (SQLite) → ExportManager / CLI / HTTP / FFI
 ```
 
-## Voice embedding encryption at rest (Issue #31)
+## Encryption at rest: voice embeddings (Issue #31) and meeting text (#92)
 
 ```text
  CLI / daemon / FFI ─▶ storage_composition::open_encrypted_stores
@@ -71,6 +71,7 @@
                           verify key-check value (wrong key → stop)
                         2 SqliteNoteRepository / SqliteVoiceVectorDB (Arc<dyn EmbeddingCipher>)
                           re-encrypt embedding_format = 0 rows, then seal/open every embedding
+                          seal clear transcripts, segment texts and meeting documents (#92)
  ports::crypto::EmbeddingCipher ◀── application::crypto::VoiceEncryptor (AES-256-GCM)
 ```
 

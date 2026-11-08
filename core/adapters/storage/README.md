@@ -166,6 +166,23 @@ and marks it in `audio_format` (`0` plaintext from before #50, `1` sealed). Open
 adds the column when missing and seals format `0` clips once, in one transaction. Reads accept
 only sealed audio.
 
+Meeting text is sealed too (#92). `sqlite_note_encryption.rs` seals the values below with the
+context `note-field:v1:<field>:<meeting id>`, so a value moved onto another meeting's row does
+not open:
+
+| Table | Column | Field |
+| --- | --- | --- |
+| `meetings` | `transcript` | `meetings:transcript` |
+| `meetings` | `automerge_document` | `meetings:automerge_document` |
+| `transcript_segments` | `segment_text` | `transcript_segments:segment_text` |
+
+Sealed text is stored as a BLOB in the TEXT column. Values from before #92 still read: a TEXT
+value, or a document without the sealed header. Every opening seals the clear values left, in one
+transaction, and `secure_delete` overwrites the pages they leave. A sealed value that does not
+open (wrong key, wrong meeting, tampering) is an error. Titles, project names and attachment
+names stay in clear for the meeting list. Attachment files are kept in clear in private folders
+(0700/0600), so other apps can open them; sealing them is tracked in #99.
+
 `sqlite_cluster_share.rs`, a child module of `sqlite_adapter`, exports and imports the cluster
 shares copied to paired devices (Issue #50):
 - `unresolved_cluster_digests` counts each unresolved cluster's chunks and clips, so the P2P task

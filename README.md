@@ -5,7 +5,7 @@
 Note Taker is a decentralized, offline-first meeting-notes application. It records meetings,
 transcribes them with Whisper (on-device with whisper.cpp, or with the OpenAI API by opt-in),
 groups transcript segments into known and unknown voices, and keeps notes in a CRDT-backed SQLite
-store. Voice embeddings are encrypted at rest. The Rust core uses hexagonal architecture
+store. Voice embeddings, transcripts and meeting documents are encrypted at rest. The Rust core uses hexagonal architecture
 (ports and adapters), so you can swap the AI, network, storage, and export implementations
 without touching domain logic.
 

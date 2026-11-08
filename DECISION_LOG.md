@@ -2189,3 +2189,25 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   it folds recordings. Shortening the window deletes speech that is already older at the next
   round, which is what the owner asked for. A value edited out of range by hand falls back to
   three weeks with a warning.
+
+## 2026-11-08 — #92 Meeting text is sealed at rest
+
+- **Problem:** voice embeddings, review clips and retained speech were sealed, but transcripts,
+  transcript segments and the meeting CRDT documents (which hold notes and every transcript
+  field) were stored in clear, against CONTRIBUTING.md §7.
+- **Choice:** seal them with the existing AES-256-GCM `EmbeddingCipher` and the database key.
+  Each value is bound to its field and meeting (`note-field:v1:<field>:<meeting id>`), so a
+  value moved onto another meeting's row does not open. SQLCipher was set aside: it is a new C
+  dependency, and this machine has no cmake to build it. No SQL query filters or searches on
+  these columns, so nothing has to move from SQL to Rust.
+- **Migration:** text columns tell clear values from sealed ones by SQLite type (TEXT vs BLOB);
+  documents by the sealed header. Every opening seals what is left in clear in one transaction,
+  so a database written by an older build on a shared device is sealed at its next opening.
+  `secure_delete` overwrites the freed pages.
+- **Stays in clear:**
+  - Titles, project names and attachment names, which the meeting list shows. The plan the
+    owner approved keeps them readable.
+  - Attachment files, which stay in private 0700/0600 folders so the owner can open them with
+    other apps and the planned notes folder (#98) can mirror them. Sealing them is tracked in #99.
+- **Cost:** sealing a value adds 32 bytes (header, nonce, tag) and one AES-GCM pass per save, negligible next
+  to the Automerge encoding.
