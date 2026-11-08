@@ -233,6 +233,61 @@ export async function fetchLogExport(): Promise<LogDownload> {
   return { fileName, blob: await response.blob() };
 }
 
+/** Why a glossary request failed; `network` when the daemon was unreachable. */
+export type GlossaryFailureKind = "invalid_glossary" | "unavailable" | "server" | "network";
+
+/** Thrown by the glossary calls; `status` is the HTTP status, or `null` for `network`. */
+export class GlossaryError extends Error {
+  constructor(
+    readonly kind: GlossaryFailureKind,
+    readonly status: number | null
+  ) {
+    super(`Glossary request failed (${status ?? "network"}): ${kind}`);
+    this.name = "GlossaryError";
+  }
+}
+
+/** Sends one glossary request, mapping an unreachable daemon and non-2xx answers to `GlossaryError`. */
+async function glossaryRequest(init: RequestInit): Promise<string[]> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}/api/settings/glossary`, init);
+  } catch {
+    throw new GlossaryError("network", null);
+  }
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => ({}))) as { error_code?: unknown };
+    const kind: GlossaryFailureKind =
+      errorBody.error_code === "invalid_glossary" ? "invalid_glossary" : response.status === 503 ? "unavailable" : "server";
+    throw new GlossaryError(kind, response.status);
+  }
+  return ((await response.json()) as { terms: string[] }).terms;
+}
+
+/**
+ * Reads the glossary of names and terms transcription is prompted with (`GET /api/settings/glossary`).
+ *
+ * Outputs: the terms in order. Throws `GlossaryError`. Side effects: none.
+ */
+export async function getGlossary(): Promise<string[]> {
+  return glossaryRequest({ cache: "no-store" });
+}
+
+/**
+ * Replaces the glossary (`PUT /api/settings/glossary`); it applies from the next recording.
+ *
+ * Inputs: the terms; the server trims them and drops blanks and repeats.
+ * Outputs: the terms as saved. Throws `GlossaryError` (`invalid_glossary` for a term over 60
+ * characters or a list over 500). Side effects: rewrites the daemon's transcription settings.
+ */
+export async function setGlossary(terms: string[]): Promise<string[]> {
+  return glossaryRequest({
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ terms })
+  });
+}
+
 export function webSocketUrl(): string {
   if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
   return `${apiBaseUrl.replace(/^http/, "ws")}/ws`;

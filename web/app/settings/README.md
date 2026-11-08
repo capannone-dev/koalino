@@ -6,4 +6,5 @@
 `LogSettings` (`components/log-settings.tsx`), which changes the level
 (`PUT /api/settings/log-level`, until the daemon restarts) and downloads the newest week of logs
 (`GET /api/logs/export`) (REQUIREMENTS 6.1, 6.2; Issue #46). When the daemon cannot be reached the
-selector is disabled and the page says so.
+selector is disabled and the page says so. It also reads the glossary (`GET /api/settings/glossary`)
+and renders `GlossarySettings` (`components/glossary-settings.tsx`).
