@@ -1,4 +1,4 @@
-<!-- This directory contains network infrastructure adapters: libp2p peer sync and the localhost Teams bot bridge. Neither exposes its library types above the ports layer. -->
+<!-- This directory contains network infrastructure adapters: libp2p peer sync and the localhost Teams bridge and the browser extension host that feeds it. Neither exposes its library types above the ports layer. -->
 
 # Network adapters
 
@@ -85,3 +85,7 @@ between peers.
 connects over a WebSocket on `127.0.0.1`, which is never exposed to the network, and streams
 Protobuf frames that the adapter decodes into `ExternalMediaChunk` and `SlideCapture`. See
 `teams_bridge/README.md`.
+
+`browser_host/` (Issue #102) is the other end of that channel for the browser extension: the
+`browser-host` native messaging host turns the extension's JSON messages into the same Protobuf
+frames and sends them to the bridge as a local client. See `browser_host/README.md`.

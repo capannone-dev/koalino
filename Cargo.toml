@@ -32,6 +32,10 @@ name = "cli"
 path = "core/bin/cli.rs"
 
 [[bin]]
+name = "browser-host"
+path = "core/bin/browser_host.rs"
+
+[[bin]]
 name = "daemon"
 path = "core/bin/daemon.rs"
 
@@ -42,6 +46,9 @@ anyhow = "1.0.100"
 # Argon2id passphrase key derivation; only the raw `hash_password_into` API is needed.
 argon2 = { version = "0.5.3", default-features = false, features = ["alloc", "zeroize"] }
 async-trait = "0.1.89"
+# Decodes the browser extension's audio and slides, which native messaging carries as base64 JSON
+# strings (#102). Already in the build through reqwest.
+base64 = "0.22.1"
 automerge = "0.6.1"
 axum = { version = "0.8.6", features = ["json", "ws"] }
 chrono = { version = "0.4.42", default-features = false, features = ["clock", "std"] }

@@ -1,5 +1,8 @@
 //! Groups libp2p-backed implementations of encrypted P2P network ports.
 
+/// The browser extension's native messaging host: JSON from the browser to the Teams bridge
+/// (Issue #102).
+pub mod browser_host;
 /// Defines the attachment-only request-response protocol and its framing codec.
 pub mod file_transfer_behaviour;
 /// Configures a Noise-encrypted, Yamux-multiplexed libp2p swarm with mDNS discovery.
