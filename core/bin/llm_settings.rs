@@ -296,3 +296,53 @@ impl LlmKeyStore {
         }
     }
 }
+
+/// Keeps the API key of each connection; tests replace it with an in-memory one.
+pub trait LlmKeyring: Send + Sync {
+    /// Reads a connection's key. Outputs: The key, `None` when none is saved, or the store's
+    /// error; never logged. Side effects: Queries the store.
+    fn load(&self, connection_id: &str) -> Result<Option<Zeroizing<String>>, CryptoError>;
+    /// Saves a connection's key. Side effects: Writes the store.
+    fn save(&self, connection_id: &str, key: &str) -> Result<(), CryptoError>;
+    /// Deletes a connection's key; a missing one is not an error. Side effects: Writes the store.
+    fn remove(&self, connection_id: &str) -> Result<(), CryptoError>;
+}
+
+/// The platform keychain, or sealed files on Android, through `LlmKeyStore`.
+pub struct PlatformLlmKeyring {
+    key_directory: PathBuf,
+    host_key: Option<Zeroizing<Vec<u8>>>,
+}
+
+impl PlatformLlmKeyring {
+    /// Creates the keyring.
+    ///
+    /// Inputs: The folder for sealed keys and the host-provided database key (Android).
+    /// Outputs: The keyring. Side effects: None.
+    pub fn new(key_directory: PathBuf, host_key: Option<Vec<u8>>) -> Self {
+        Self {
+            key_directory,
+            host_key: host_key.map(Zeroizing::new),
+        }
+    }
+
+    fn store(&self, connection_id: &str) -> LlmKeyStore {
+        LlmKeyStore::open(
+            &self.key_directory,
+            self.host_key.as_ref().map(|key| key.to_vec()),
+            connection_id,
+        )
+    }
+}
+
+impl LlmKeyring for PlatformLlmKeyring {
+    fn load(&self, connection_id: &str) -> Result<Option<Zeroizing<String>>, CryptoError> {
+        self.store(connection_id).load()
+    }
+    fn save(&self, connection_id: &str, key: &str) -> Result<(), CryptoError> {
+        self.store(connection_id).save(key)
+    }
+    fn remove(&self, connection_id: &str) -> Result<(), CryptoError> {
+        self.store(connection_id).remove()
+    }
+}

@@ -295,6 +295,14 @@ under 3.75 MB), the project, the language and the meeting's own prompt; `run_sum
 model with no lock held; `store_summary` writes the result into the meeting document in one
 transaction. `set_meeting_prompt` checks and stores a meeting's own template.
 
+`llm_commands.rs` (#95) runs the language model commands shared by the app and the web API, as
+`project_commands.rs` does for projects: `settings`, `save_connection`, `delete_connection`,
+`update` and `test_connection` (a fixed one-line request with no meeting content). Keys are
+write-only: answers carry `has_key`, never the key. `summarize_with` writes a meeting's summary
+with the named or default connection; the caller passes a `prepare` and a `store` step, so its
+repository is not held while the model works. `PlatformLlmKeyring` (in `llm_settings.rs`) keeps
+the keys; tests use an in-memory one.
+
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.
 
