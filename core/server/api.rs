@@ -89,6 +89,8 @@ pub struct ServerAppState {
     recording_device: Option<Arc<RecordingDeviceState>>,
     /// The transcription settings file holding the glossary; `None` makes its routes answer 503.
     settings_file: Option<Arc<std::path::PathBuf>>,
+    /// Language model connections and summaries (#95); `None` makes their routes answer 503.
+    llm: Option<Arc<crate::llm_commands::LlmServices>>,
 }
 
 /// This device as the meetings name it, and the speech it holds for the after-meeting pass.
@@ -123,6 +125,7 @@ impl ServerAppState {
             project_files: None,
             recording_device: None,
             settings_file: None,
+            llm: None,
         }
     }
 
@@ -234,6 +237,24 @@ impl ServerAppState {
         self.project_files.clone()
     }
 
+    /// Attaches the language model services, which the summary and AI settings routes use.
+    ///
+    /// Side effects: None; without them those routes answer 503.
+    pub fn with_llm_services(mut self, llm: Arc<crate::llm_commands::LlmServices>) -> Self {
+        self.llm = Some(llm);
+        self
+    }
+
+    /// The attached language model services, if any.
+    pub(super) fn llm(&self) -> Option<Arc<crate::llm_commands::LlmServices>> {
+        self.llm.clone()
+    }
+
+    /// The shared voice database, for routes that take the lock themselves.
+    pub(super) fn voice_database(&self) -> Arc<Mutex<Box<dyn VoiceVectorDB + Send>>> {
+        Arc::clone(&self.voice_database)
+    }
+
     /// The shared repositories, for routes that take the lock themselves.
     pub(super) fn repositories(&self) -> Arc<Mutex<Box<dyn ServerRepository>>> {
         Arc::clone(&self.repositories)
@@ -325,6 +346,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .merge(super::log_routes::routes())
         .merge(super::glossary_routes::routes())
         .merge(super::retention_routes::routes())
+        .merge(super::llm_routes::routes())
         // Innermost of the three layers, so CORS still answers preflights for allowed origins
         // and refusals are traced.
         .layer(middleware::from_fn(reject_cross_site_requests))

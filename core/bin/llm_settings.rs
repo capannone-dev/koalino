@@ -346,3 +346,32 @@ impl LlmKeyring for PlatformLlmKeyring {
         self.store(connection_id).remove()
     }
 }
+
+/// Keys kept in memory, for tests.
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct MemoryLlmKeyring(std::sync::Mutex<std::collections::HashMap<String, String>>);
+
+#[cfg(test)]
+impl LlmKeyring for MemoryLlmKeyring {
+    fn load(&self, connection_id: &str) -> Result<Option<Zeroizing<String>>, CryptoError> {
+        Ok(self
+            .0
+            .lock()
+            .ok()
+            .and_then(|keys| keys.get(connection_id).cloned())
+            .map(Zeroizing::new))
+    }
+    fn save(&self, connection_id: &str, key: &str) -> Result<(), CryptoError> {
+        if let Ok(mut keys) = self.0.lock() {
+            keys.insert(connection_id.to_owned(), key.to_owned());
+        }
+        Ok(())
+    }
+    fn remove(&self, connection_id: &str) -> Result<(), CryptoError> {
+        if let Ok(mut keys) = self.0.lock() {
+            keys.remove(connection_id);
+        }
+        Ok(())
+    }
+}

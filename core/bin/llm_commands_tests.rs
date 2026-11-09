@@ -3,7 +3,6 @@
 //! writing a meeting's summary with a fake model.
 
 use std::{
-    collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -13,44 +12,17 @@ use zeroize::Zeroizing;
 
 use super::{
     llm_commands::{LlmServices, run_llm_command, summarize_with},
-    llm_settings::LlmKeyring,
+    llm_settings::MemoryLlmKeyring,
     meeting_summaries::PreparedSummary,
 };
 use crate::{
     application::meeting_summary::{SpokenLine, SummaryMaterial},
     domain::{
-        errors::{CryptoError, LlmError},
+        errors::LlmError,
         llm::{LlmCompletion, LlmConnection, LlmRequest, MeetingSummary},
     },
     ports::ai::LlmEngine,
 };
-
-/// Keys kept in memory.
-#[derive(Default)]
-struct MemoryKeys(Mutex<HashMap<String, String>>);
-
-impl LlmKeyring for MemoryKeys {
-    fn load(&self, connection_id: &str) -> Result<Option<Zeroizing<String>>, CryptoError> {
-        Ok(self
-            .0
-            .lock()
-            .ok()
-            .and_then(|keys| keys.get(connection_id).cloned())
-            .map(Zeroizing::new))
-    }
-    fn save(&self, connection_id: &str, key: &str) -> Result<(), CryptoError> {
-        if let Ok(mut keys) = self.0.lock() {
-            keys.insert(connection_id.to_owned(), key.to_owned());
-        }
-        Ok(())
-    }
-    fn remove(&self, connection_id: &str) -> Result<(), CryptoError> {
-        if let Ok(mut keys) = self.0.lock() {
-            keys.remove(connection_id);
-        }
-        Ok(())
-    }
-}
 
 /// Answers every request with a fixed text and keeps the keys it was built with.
 struct EchoEngine(String);
@@ -71,7 +43,7 @@ fn services(name: &str) -> (LlmServices, Arc<Mutex<Vec<Option<String>>>>) {
     let seen = Arc::clone(&keys_seen);
     let services = LlmServices::new(
         folder.join("db.sqlite3.llm-settings.json"),
-        Arc::new(MemoryKeys::default()),
+        Arc::new(MemoryLlmKeyring::default()),
         "Laptop",
     )
     .with_transcription_settings(PathBuf::from("/nonexistent"))

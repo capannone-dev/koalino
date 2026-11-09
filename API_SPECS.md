@@ -468,6 +468,41 @@ daemon without a settings file `503` `unavailable`. The apps use
 `note_taker_set_keep_speech_days(days)` (0 saved, 1 out of range, 2 failed) and read
 `keep_speech` (`{"days","min_days","max_days"}`) in `note_taker_get_transcription_settings()`.
 
+### AI connections and meeting summaries (#95)
+
+`GET /api/settings/llm` returns `{"ok":true,"connections":[...],"default_connection","template",
+"default_template","custom_template","auto_summarize","placeholders"}`. Each connection is
+`{"id","label","kind","base_url","model","context_tokens","plain_http","has_key","is_default"}`,
+where `kind` is `open_ai_compatible` (OpenAI, Mistral, Ollama, llama.cpp, LM Studio, vLLM) or
+`anthropic`. Keys are write-only: no answer ever carries one.
+
+- `POST /api/settings/llm/connections` creates a connection from `{"label","kind","base_url",
+  "model","context_tokens","api_key"?}`; `PUT /api/settings/llm/connections/{id}` edits one (an
+  absent `api_key` keeps the saved key, `"clear_key":true` removes it). Both return
+  `{"connection"}`. `base_url` must be HTTPS, or plain HTTP to a loopback or private LAN address.
+- `DELETE /api/settings/llm/connections/{id}` removes it and its key.
+- `POST /api/settings/llm/connections/{id}/test` sends a fixed one-line request (no meeting
+  content) and returns `{"reply"}`.
+- `PUT /api/settings/llm` with any of `{"default_connection","template","auto_summarize"}` changes
+  only the fields named; `"template":null` goes back to the built-in template. Templates may use
+  `{{title}}`, `{{date}}`, `{{time}}`, `{{duration}}`, `{{device}}`, `{{project}}`,
+  `{{speakers}}`, `{{glossary}}` and `{{language}}`.
+- `GET /api/meetings/{id}/summary` returns `{"summary": {"text","connection_label","model",
+  "created_at","prompt","edited","truncated"} or null, "meeting_prompt": text or null}`.
+- `POST /api/meetings/{id}/summary` with `{"connection_id"?}` sends the meeting's transcript,
+  notes and photos to that connection (the default when absent), stores the summary in the
+  meeting document, which syncs to paired devices, and returns `{"summary","parts",
+  "images_sent","images_skipped"}`. It can take minutes with a local model.
+- `PUT /api/meetings/{id}/summary-prompt` with `{"prompt": text or null}` sets or clears the
+  meeting's own template.
+
+Errors are `{"ok":false,"error_code","error"}`: `400` `invalid_request`, `invalid_connection`,
+`invalid_template`; `404` `connection_not_found`, `meeting_not_found`; `409` `no_connection`,
+`missing_key`, `nothing_to_summarize`; `422` `too_long`; `502` `llm_unreachable`,
+`llm_unauthorized`, `llm_rate_limited`, `llm_rejected`, `llm_failed`, `llm_refused`,
+`llm_invalid_response`; `500` `keychain_failed`, `save_failed`, `storage_failed`; `503`
+`unavailable`.
+
 ### Telemetry
 
 All telemetry responses carry privacy-safe metrics only: task kinds, durations, latencies, and
