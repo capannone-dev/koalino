@@ -135,6 +135,10 @@ mod same_meeting_tests;
 pub mod screen_share_monitor;
 #[cfg(test)]
 mod screen_share_monitor_tests;
+/// Searches meetings and projects for the owner's words (#100).
+pub mod search;
+#[cfg(test)]
+mod search_tests;
 /// Decides which screen frames are new slides (Issue #49).
 pub mod slide_change_detector;
 #[cfg(test)]

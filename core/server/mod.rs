@@ -39,3 +39,7 @@ mod request_guard_tests;
 pub mod retention_routes;
 #[cfg(test)]
 mod retention_routes_tests;
+/// Searches meetings and projects (#100).
+pub mod search_routes;
+#[cfg(test)]
+mod search_routes_tests;

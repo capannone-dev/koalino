@@ -520,3 +520,11 @@ text (marked `edited`, or written by hand when there is none), and single transc
 which keep their speaker, timing and overlap mark and lose their uncertain-word marks. A segment
 edit sets the document's `transcript_edited` flag; `refinement_worker.rs` reads it and no longer
 re-transcribes that meeting.
+
+`search.rs` (#100) finds the owner's words. Text is sealed at rest (#92), so it reads each
+meeting (title, summary, notes, transcript) and each project file's text through the repository
+and matches in memory, keeping nothing. Matching ignores case and accents (`fold`) and needs
+every word of the query in one passage: a transcript segment, or one line of other text. Scopes
+are every meeting, every project (names, files, meetings), or one project. Hits come with a
+snippet split into matched and unmatched parts, at most `MAX_HITS` (200). Speaker names and file
+text come from the host (`SearchSources`).

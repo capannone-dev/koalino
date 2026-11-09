@@ -1486,6 +1486,34 @@ impl FfiRuntime {
         run_project_command(&self.note_repository, &project_files, request_json, true)
     }
 
+    /// Searches meetings or projects (#100); see `search_commands` for the request and answer.
+    ///
+    /// Side effects: Reads (and so unseals) meetings, the voice library and project files.
+    fn search(&mut self, request_json: &str) -> String {
+        let request =
+            match serde_json::from_str::<crate::search_commands::SearchRequest>(request_json) {
+                Ok(request) => request,
+                Err(_) => {
+                    return export_error_json("invalid_request", "the search request is not valid");
+                }
+            };
+        let speaker_names = match crate::search_commands::speaker_names(
+            self.voice_identity_manager.vector_database(),
+        ) {
+            Ok(names) => names,
+            Err(_) => {
+                return export_error_json("storage_failed", "the voice library could not be read");
+            }
+        };
+        let project_files = ProjectFiles::new(
+            self.attachment_directory.clone(),
+            self.note_repository.device_id().clone(),
+        );
+        let sources =
+            crate::search_commands::HostSearchSources::new(speaker_names, Some(&project_files));
+        crate::search_commands::run_search(&self.note_repository, &sources, &request).to_string()
+    }
+
     fn get_meetings(&self) -> String {
         let meeting_ids = match self.note_repository.list_meeting_ids() {
             Ok(meeting_ids) => meeting_ids,
@@ -2335,6 +2363,31 @@ pub unsafe extern "C" fn note_taker_project_command(request_json: *const c_char)
                 |_| export_error_json("runtime_unavailable", "the native runtime is unavailable"),
             )
         }
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Searches meetings or projects (#100).
+///
+/// Inputs: A UTF-8 JSON request `{"query","scope"?,"project_id"?}` (see `search_commands`).
+/// Outputs: Caller-freed JSON (`note_taker_free_string`): the hits, or a refusal with its
+/// `error_code`. Side effects: Reads (and so unseals) meetings and project files; the query is
+/// never logged.
+///
+/// # Safety
+///
+/// `request_json` must be null or a valid NUL-terminated C string that stays alive during the
+/// call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_search(request_json: *const c_char) -> *mut c_char {
+    let response_json = match unsafe { ffi_string(request_json) } {
+        None => export_error_json("invalid_request", "the request must be a UTF-8 C string"),
+        Some(request_json) => with_runtime_json(|runtime| Ok(runtime.search(request_json)))
+            .unwrap_or_else(|_| {
+                export_error_json("runtime_unavailable", "the native runtime is unavailable")
+            }),
     };
     CString::new(response_json)
         .map(CString::into_raw)

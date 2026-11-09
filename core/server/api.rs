@@ -377,6 +377,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .merge(super::retention_routes::routes())
         .merge(super::llm_routes::routes())
         .merge(super::edit_routes::routes())
+        .merge(super::search_routes::routes())
         // Innermost of the three layers, so CORS still answers preflights for allowed origins
         // and refusals are traced.
         .layer(middleware::from_fn(reject_cross_site_requests))

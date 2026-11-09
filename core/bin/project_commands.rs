@@ -64,6 +64,9 @@ impl<T> ProjectCommandRepository for T where
 {
 }
 
+/// How much of a text file search reads (#100).
+const MAX_SEARCHED_TEXT_BYTES: u64 = 2 * 1024 * 1024;
+
 /// The files side of projects: where resources live and how e-mails are read.
 #[derive(Clone, Debug)]
 pub struct ProjectFiles {
@@ -118,6 +121,47 @@ impl ProjectFiles {
     ) -> Result<Attachment, StorageError> {
         self.file_store
             .import_project_note(repository, project_id, title, text)
+    }
+
+    /// Reads a resource's text for search (#100): a text or Markdown file (its first 2 MiB), or
+    /// an e-mail's subject, senders and body. Other files have no text here.
+    ///
+    /// Outputs: The text, or `None` for other kinds and for a file missing or unreadable here
+    /// (one still syncing). Side effects: Reads the file.
+    pub fn searchable_text(&self, resource: &Attachment) -> Option<String> {
+        use std::io::Read as _;
+        match resource.mime_type() {
+            "text/plain" | "text/markdown" => {
+                let mut contents = Vec::new();
+                std::fs::File::open(resource.file_path())
+                    .ok()?
+                    .take(MAX_SEARCHED_TEXT_BYTES)
+                    .read_to_end(&mut contents)
+                    .ok()?;
+                Some(String::from_utf8_lossy(&contents).into_owned())
+            }
+            "message/rfc822" => {
+                let raw_email = std::fs::read(resource.file_path()).ok()?;
+                let email = self.email_reader.read_email(&raw_email).ok()?;
+                let senders: Vec<String> = email
+                    .from
+                    .iter()
+                    .map(|person| match &person.name {
+                        Some(name) => {
+                            format!("{name} <{}>", person.address.as_deref().unwrap_or(""))
+                        }
+                        None => person.address.clone().unwrap_or_default(),
+                    })
+                    .collect();
+                Some(format!(
+                    "{}\n{}\n{}",
+                    email.subject.unwrap_or_default(),
+                    senders.join(", "),
+                    email.body_text
+                ))
+            }
+            _ => None,
+        }
     }
 
     /// Finds one resource of a project.
@@ -638,14 +682,7 @@ pub fn resource_kind(mime_type: &str) -> &'static str {
 /// The name a resource is shown with: its stored file name without the `<attachment ID>-`
 /// prefix.
 pub fn resource_file_name(resource: &Attachment) -> String {
-    let stored_name = Path::new(resource.file_path())
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    stored_name
-        .strip_prefix(&format!("{}-", resource.attachment_id()))
-        .map(str::to_owned)
-        .unwrap_or(stored_name)
+    resource.shown_file_name()
 }
 
 /// Serializes one resource.

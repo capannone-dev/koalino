@@ -48,6 +48,7 @@ note-taker log-level <error|warn|info|debug|trace|directive>
 note-taker glossary [show | set <term>... | add <term>... | remove <term>... | clear]
 note-taker keep-speech [days]
 note-taker summary <meeting-id> [--connection <id>] [--show]
+note-taker search <word>... [--projects | --project <id>]
 note-taker ai [list | add --label L --kind openai|anthropic --url U --model M [--context N] | remove <id> | default <id> | test <id> | auto on|off]
 note-taker [--log-level <level>] <command> ...
 ```
@@ -186,3 +187,9 @@ connection's server. `--show` prints the stored summary instead. `ai` manages th
 lands in the shell history, and keeps it in the system keychain; `list` never shows keys; `test`
 sends a one-line request holding no meeting content; `auto on|off` turns automatic summaries on or
 off.
+
+`search <word>...` (#100) prints where the words were said or written, one line per hit:
+`[meeting ID] title · where: snippet`, with matched words in brackets (`1:01 Anna` for a
+transcript passage, `summary`, `notes`, `title`, or a project file). It searches every meeting by
+default, every project with `--projects`, or one with `--project <id>`. Case and accents are
+ignored, and every word must be in the same passage.

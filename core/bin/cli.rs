@@ -96,6 +96,12 @@ fn main() -> Result<()> {
             .with_llm_services(std::sync::Arc::new(
                 note_taker_core::llm_commands::LlmServices::for_database(&database_path),
             ))
+            .with_project_files(
+                LocalMeetingFiles::for_database(&database_path)
+                    .attachment_directory()
+                    .to_path_buf(),
+                recording_device_id.clone(),
+            )
             .with_recording_device(
                 recording_device_id,
                 note_taker_core::refinement_worker::retained_audio_directory(&database_path),

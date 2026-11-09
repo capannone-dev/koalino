@@ -1758,3 +1758,61 @@ fn ai_connections_are_added_and_listed_and_a_missing_summary_is_reported() {
     assert_eq!(shown, "This meeting has no summary yet.");
     drop(std::fs::remove_dir_all(folder));
 }
+
+/// Verifies `search` finds a transcript passage, says where it is and marks the words (#100).
+#[test]
+fn search_lists_where_the_words_were_said() {
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .and_then(|repository| {
+        repository.with_document_codec(std::sync::Arc::new(
+            crate::application::meeting_document::AutomergeMeetingDocumentCodec,
+        ))
+    })
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    let meeting_id = crate::domain::models::MeetingId::new("m-1");
+    crate::application::meeting_crdt::MeetingCrdtService::new(&repository)
+        .create_titled_meeting(
+            &meeting_id,
+            &crate::domain::models::MeetingTitle::parse("Budget review")
+                .unwrap_or_else(|error| panic!("{error}")),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+    repository
+        .save_transcript_segments(
+            &meeting_id,
+            &[crate::domain::models::TranscriptSegment::new(
+                meeting_id.clone(),
+                61_000,
+                64_000,
+                None,
+                "Il budget è approvato.",
+            )],
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+    let mut cli_service = CoreCliService::new(
+        NoRecordingControl,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    );
+    let run = |cli_service: &mut _, arguments: &[&str]| {
+        let parsed = Cli::try_parse_from(arguments).unwrap_or_else(|error| panic!("{error}"));
+        super::dispatch(parsed.command, cli_service)
+    };
+
+    let found = run(&mut cli_service, &["cli", "search", "approvato", "BUDGET"])
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(
+        found,
+        "1 result\n[m-1] Budget review · 1:01 Unattributed: Il [budget] è [approvato]."
+    );
+    let none = run(&mut cli_service, &["cli", "search", "courier"])
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(none, "No results.");
+    assert!(run(&mut cli_service, &["cli", "search", "x"]).is_err());
+    let projects = run(&mut cli_service, &["cli", "search", "--projects", "budget"])
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(projects, "No results.", "the meeting is in no project");
+}

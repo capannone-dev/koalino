@@ -122,6 +122,20 @@ pub enum CliCommand {
     /// Lists, adds and removes the AI connections summaries use, and turns automatic summaries
     /// on or off.
     Ai(AiArgs),
+    /// Finds where words were said or written: every meeting's title, summary, notes and
+    /// transcript, or with `--projects` / `--project` the projects' names, files and meetings.
+    /// Case and accents are ignored; every word must be in the same passage.
+    Search {
+        /// The words to find.
+        #[arg(required = true, num_args = 1..)]
+        words: Vec<String>,
+        /// Searches every project instead of every meeting.
+        #[arg(long, conflicts_with = "project")]
+        projects: bool,
+        /// Searches one project, by ID (see `projects` in the app or the web).
+        #[arg(long)]
+        project: Option<String>,
+    },
     /// Displays aggregate privacy-safe telemetry.
     Telemetry,
     /// Changes a running daemon's log level without restarting it (applied within seconds).
@@ -621,6 +635,13 @@ pub trait CliService {
     fn llm_command(&mut self, _request: &serde_json::Value) -> Result<serde_json::Value, String> {
         Err(String::from("AI connections are not available here"))
     }
+    /// Runs a search (see `search_commands.rs`) and returns its JSON answer (#100).
+    fn search(
+        &self,
+        _request: &crate::search_commands::SearchRequest,
+    ) -> Result<serde_json::Value, String> {
+        Err(String::from("search is not available here"))
+    }
 }
 
 /// Dispatches a clap-validated command to an injected service.
@@ -740,8 +761,110 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
             show: false,
         } => cli_service.summarize_meeting(&meeting_id, connection.as_deref()),
         CliCommand::Ai(AiArgs { command }) => run_ai(command, cli_service),
+        CliCommand::Search {
+            words,
+            projects,
+            project,
+        } => {
+            let request = crate::search_commands::SearchRequest {
+                query: words.join(" "),
+                scope: Some(String::from(match (&project, projects) {
+                    (Some(_), _) => "project",
+                    (None, true) => "projects",
+                    (None, false) => "meetings",
+                })),
+                project_id: project,
+            };
+            format_search(&cli_service.search(&request)?)
+        }
         CliCommand::Telemetry => cli_service.telemetry(),
         CliCommand::LogLevel { directive } => cli_service.request_log_level(&directive),
+    }
+}
+
+/// Words a search answer for the terminal: one line per hit, `[meeting ID] title · where:
+/// snippet`, with the matched words in brackets.
+///
+/// Inputs: The JSON answer of `search_commands::run_search`. Outputs: The lines, `No results.`,
+/// or the refusal's message. Side effects: None.
+fn format_search(answer: &serde_json::Value) -> Result<String, String> {
+    if answer["ok"] != true {
+        return Err(answer["error"]
+            .as_str()
+            .unwrap_or("the search failed")
+            .to_owned());
+    }
+    let hits = answer["hits"].as_array().cloned().unwrap_or_default();
+    if hits.is_empty() {
+        return Ok(String::from("No results."));
+    }
+    let text = |value: &serde_json::Value| value.as_str().unwrap_or_default().to_owned();
+    let mut lines = vec![if answer["truncated"] == true {
+        format!(
+            "{} results (more not shown; add words to narrow the search)",
+            hits.len()
+        )
+    } else if hits.len() == 1 {
+        String::from("1 result")
+    } else {
+        format!("{} results", hits.len())
+    }];
+    for hit in &hits {
+        let owner = if hit["meeting"].is_object() {
+            format!(
+                "[{}] {}",
+                text(&hit["meeting"]["meeting_id"]),
+                text(&hit["meeting"]["title"])
+            )
+        } else {
+            format!("[project] {}", text(&hit["project"]["name"]))
+        };
+        let place = match hit["place"].as_str().unwrap_or_default() {
+            "meeting_title" => String::from("title"),
+            "summary" => String::from("summary"),
+            "notes" => String::from("notes"),
+            "transcript" => format!(
+                "{} {}",
+                format_offset(hit["start_time_ms"].as_u64().unwrap_or_default()),
+                text(&hit["speaker"])
+            ),
+            "transcript_text" => String::from("transcript"),
+            "project_name" => String::from("name"),
+            "resource_name" => format!("file {}", text(&hit["resource"]["file_name"])),
+            _ => format!("in {}", text(&hit["resource"]["file_name"])),
+        };
+        let snippet: String = hit["snippet"]
+            .as_array()
+            .map(|parts| {
+                parts
+                    .iter()
+                    .map(|part| {
+                        if part["match"] == true {
+                            format!("[{}]", text(&part["text"]))
+                        } else {
+                            text(&part["text"])
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        lines.push(format!("{owner} · {place}: {snippet}"));
+    }
+    Ok(lines.join("\n"))
+}
+
+/// Formats an offset in a meeting as `m:ss`, or `h:mm:ss` past an hour.
+fn format_offset(offset_ms: u64) -> String {
+    let seconds = offset_ms / 1_000;
+    if seconds >= 3_600 {
+        format!(
+            "{}:{:02}:{:02}",
+            seconds / 3_600,
+            (seconds / 60) % 60,
+            seconds % 60
+        )
+    } else {
+        format!("{}:{:02}", seconds / 60, seconds % 60)
     }
 }
 
@@ -1092,6 +1215,8 @@ pub struct CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort> {
     settings_file: Option<std::path::PathBuf>,
     /// AI connections and summaries (#95); `None` disables `summary` and `ai`.
     llm: Option<std::sync::Arc<crate::llm_commands::LlmServices>>,
+    /// Project files, so `search` reads their text (#100); `None` finds files by name only.
+    project_files: Option<crate::project_commands::ProjectFiles>,
     /// This device and the folder of the speech it holds, for `meetings view`'s combining line
     /// (#88); `None` says nothing is held here.
     recording_device: Option<(
@@ -1127,6 +1252,7 @@ where
             deletion_hooks: None,
             settings_file: None,
             llm: None,
+            project_files: None,
             recording_device: None,
         }
     }
@@ -1212,6 +1338,21 @@ where
                 )
         };
         Ok(describe_combining(&status, &name))
+    }
+
+    /// Lets `search` read project files' text in `attachment_directory` (#100).
+    ///
+    /// Inputs: The attachment folder and this device. Outputs: The service. Side effects: None.
+    pub fn with_project_files(
+        mut self,
+        attachment_directory: PathBuf,
+        device_id: DeviceId,
+    ) -> Self {
+        self.project_files = Some(crate::project_commands::ProjectFiles::new(
+            attachment_directory,
+            device_id,
+        ));
+        self
     }
 
     /// Enables `glossary` with the transcription settings file beside the database, which every
@@ -1343,6 +1484,21 @@ where
             .as_str()
             .unwrap_or_default()
             .to_owned())
+    }
+    fn search(
+        &self,
+        request: &crate::search_commands::SearchRequest,
+    ) -> Result<serde_json::Value, String> {
+        let names =
+            crate::search_commands::speaker_names(self.voice_identity_manager.vector_database())
+                .map_err(|error| error.to_string())?;
+        let sources =
+            crate::search_commands::HostSearchSources::new(names, self.project_files.as_ref());
+        Ok(crate::search_commands::run_search(
+            &self.repository,
+            &sources,
+            request,
+        ))
     }
     fn meeting_summary(&self, meeting_id: &str) -> Result<Option<String>, String> {
         crate::meeting_summaries::load_summary(&self.repository, &MeetingId::new(meeting_id))

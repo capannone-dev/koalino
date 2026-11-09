@@ -95,7 +95,15 @@ where
     Repository: NoteRepository + ?Sized,
 {
     require_meeting(repository, meeting_id)?;
-    let document = load(&repository.load_crdt_document(meeting_id)?)?;
+    Ok(read_notes(&repository.load_crdt_document(meeting_id)?)?)
+}
+
+/// Reads the owner's notes from a serialized meeting document.
+///
+/// Outputs: The notes, `None` when there are none, or a storage error for a corrupt document.
+/// Side effects: None.
+pub fn read_notes(document: &[u8]) -> Result<Option<String>, StorageError> {
+    let document = load(document)?;
     Ok(match document.get(ROOT, NOTES_KEY) {
         Ok(Some((Value::Scalar(value), _))) => match value.as_ref() {
             ScalarValue::Str(text) => Some(text.to_string()),

@@ -107,6 +107,12 @@ mod refinement_worker_tests;
 /// Samples local screen shares beside a recording, on its own thread (Issue #49).
 #[path = "bin/screen_share_watcher.rs"]
 pub mod screen_share_watcher;
+/// The search answer shared by the app, the web and the CLI (#100).
+#[path = "bin/search_commands.rs"]
+pub mod search_commands;
+#[cfg(test)]
+#[path = "bin/search_commands_tests.rs"]
+mod search_commands_tests;
 /// Exposes the headless Axum API composition without leaking HTTP details into application services.
 pub mod server;
 #[path = "bin/storage_composition.rs"]

@@ -235,6 +235,12 @@ and meeting summaries" below). Keys are write-only.
   removed it. Error codes: `invalid_request`, `meeting_not_found`, `segment_not_found`, `empty`,
   `too_long`, `storage_failed`, `runtime_unavailable`.
 
+### Search C ABI (#100)
+
+- `char *note_taker_search(const char *request_json)` searches and returns caller-freed JSON.
+  The request is `{"query","scope"?,"project_id"?}`, and the answer is as for
+  `GET /api/search` below. Extra error code: `runtime_unavailable`.
+
 ### Projects C ABI (Issue #85)
 
 - `char *note_taker_project_command(const char *request_json)` runs one Projects command and
@@ -547,6 +553,27 @@ Errors are `{"ok":false,"error_code","error"}`: `400` `invalid_request`, `invali
   deletes the speech it kept.
 - Failures: `400` `invalid_request`, `empty` or `too_long`; `404` `meeting_not_found` or
   `segment_not_found`; `500` `storage_failed`. Every edit syncs to paired devices.
+
+### Search (#100)
+
+- `GET /api/search?q=<words>&scope=<meetings|projects|project>&project=<id>` finds where words
+  were said or written. `scope` defaults to `meetings`: every meeting's title, summary, notes and
+  transcript. `projects` covers every project's name, files (names; the text of text, Markdown
+  and e-mail files) and meetings; `project` covers one, and needs `project`. Case and accents
+  are ignored, and every word must be in the same passage (a transcript segment, or one line).
+- The answer is `{"ok":true,"hits":[...],"truncated":bool}`, at most 200 hits: meetings newest
+  first, then each meeting's title, summary, notes and transcript in time order. Projects come
+  by name, each with its name, its files as added, then its meetings. A hit is:
+  - `place`: `meeting_title`, `summary`, `notes`, `transcript`, `transcript_text`,
+    `project_name`, `resource_name` or `resource_text`;
+  - `meeting`: `{"meeting_id","title","created_at"}` or null;
+  - `project`: `{"project_id","name"}` or null;
+  - `resource`: `{"attachment_id","file_name","mime_type","kind"}` or null;
+  - `snippet`: `[{"text","match"}]`, the passage, cut around the first match when long;
+  - for `transcript`, also `start_time_ms`, `end_time_ms` and `speaker`.
+- Failures: `400` `invalid_request`, `empty`, `too_short` (under 2 characters) or `too_long`
+  (over 200); `404` `project_not_found`; `500` `storage_failed`. Search reads sealed text in
+  memory only; the query is never logged.
 
 ### Telemetry
 

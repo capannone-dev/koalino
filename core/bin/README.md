@@ -315,6 +315,12 @@ has none: `summary <meeting>` writes one by hand.
 `ffi_edits.rs` (#96) gives the app `note_taker_meeting_edit`: the notes, the summary's text and
 single transcript segments, through `application/meeting_edits.rs` (the same rules as the web).
 
+`search_commands.rs` (#100) is the search answer shared by the app (`note_taker_search` in
+`ffi.rs`), the web (`server/search_routes.rs`) and the CLI (`search`): the request's scope, each
+hit as JSON, and stable error codes. `HostSearchSources` gives `application/search.rs` the saved
+people's names and project files' text (`ProjectFiles::searchable_text`: text and Markdown files,
+e-mails).
+
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.
 

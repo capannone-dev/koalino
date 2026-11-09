@@ -1038,6 +1038,20 @@ impl Attachment {
         &self.mime_type
     }
 
+    /// The name the file is shown with: its stored file name without the `<attachment ID>-`
+    /// prefix that keeps stored names unique.
+    /// Inputs: None. Outputs: The name, empty when the path has none. Side effects: None.
+    pub fn shown_file_name(&self) -> String {
+        let stored_name = std::path::Path::new(&self.file_path)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        stored_name
+            .strip_prefix(&format!("{}-", self.attachment_id))
+            .map(str::to_owned)
+            .unwrap_or(stored_name)
+    }
+
     /// Returns the original UTC timestamp obtained through a metadata adapter.
     /// Inputs: None.
     /// Outputs: The attachment acquisition timestamp.
