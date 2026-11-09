@@ -2386,6 +2386,25 @@ fn with_runtime_json(
     }
 }
 
+/// Lends the runtime's meeting repository and voice database to another FFI module (#95).
+///
+/// Inputs: The work, run while the runtime lock is held, so it must be short.
+/// Outputs: Its result, or `None` when the runtime cannot be created or locked.
+/// Side effects: Creates the runtime on first use.
+pub(crate) fn with_runtime_repositories<Output>(
+    work: impl FnOnce(&SqliteNoteRepository, &SqliteVoiceVectorDB) -> Output,
+) -> Option<Output> {
+    let mut output = None;
+    let _ = with_runtime_json(|runtime| {
+        output = Some(work(
+            &runtime.note_repository,
+            runtime.voice_identity_manager.vector_database(),
+        ));
+        Ok(String::new())
+    });
+    output
+}
+
 /// Starts the Rust-owned recording session for a Flutter caller.
 ///
 /// Inputs: None.
@@ -3116,7 +3135,7 @@ fn cluster_assignment_error_json(error: &ClusterReviewError) -> String {
 ///
 /// # Safety
 /// Non-null `value` must point to a valid NUL-terminated C string.
-unsafe fn ffi_string<'a>(value: *const c_char) -> Option<&'a str> {
+pub(crate) unsafe fn ffi_string<'a>(value: *const c_char) -> Option<&'a str> {
     if value.is_null() {
         return None;
     }

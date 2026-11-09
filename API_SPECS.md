@@ -208,6 +208,24 @@ from a background isolate.
 The ABI returns JSON strings rather than nested Rust structs. It neither accepts nor returns file
 contents, EXIF data, or database-specific values.
 
+### AI connections and summaries C ABI (#95)
+
+Each returns owned JSON (free with `note_taker_free_string`), `{"ok":true,...}` or
+`{"ok":false,"error_code","error"}`, with the error codes of the web routes (see "AI connections
+and meeting summaries" below). Keys are write-only.
+
+- `char *note_taker_llm_command(const char *request_json)` runs `settings`, `save_connection`,
+  `delete_connection`, `update` or `test_connection`, tagged by `command`, with the same fields as
+  the web routes.
+- `char *note_taker_summarize_meeting(const char *meeting_id, const char *connection_id)` writes
+  the meeting's summary with that connection, or the default one when `connection_id` is null or
+  empty. It blocks while the model works (minutes with a local model), so call it off the UI
+  thread; the runtime is locked only while the meeting is read and the summary stored.
+- `char *note_taker_get_meeting_summary(const char *meeting_id)` returns `summary` (or null) and
+  `meeting_prompt` (or null).
+- `char *note_taker_set_meeting_summary_prompt(const char *meeting_id, const char *prompt)` sets
+  the meeting's own template, or clears it when `prompt` is null or blank.
+
 ### Projects C ABI (Issue #85)
 
 - `char *note_taker_project_command(const char *request_json)` runs one Projects command and

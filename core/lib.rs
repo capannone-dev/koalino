@@ -37,6 +37,10 @@ pub mod ffi_android;
 /// Keeps the owner's default transcription language.
 #[path = "bin/ffi_language.rs"]
 pub mod ffi_language;
+/// AI connections and meeting summaries over the C ABI (#95).
+#[path = "bin/ffi_llm.rs"]
+pub mod ffi_llm;
+/// Settings' Whisper model and OpenAI controls over the C ABI.
 /// The app's log level and log export over the C ABI (Issue #46).
 #[path = "bin/ffi_logging.rs"]
 pub mod ffi_logging;
@@ -46,7 +50,6 @@ pub mod ffi_p2p;
 /// Holds the settings the Flutter app passes to `note_taker_configure`, over the environment.
 #[path = "bin/ffi_settings.rs"]
 pub mod ffi_settings;
-/// Settings' Whisper model and OpenAI controls over the C ABI.
 #[path = "bin/ffi_transcription.rs"]
 pub mod ffi_transcription;
 /// Runs the language model commands shared by the app and the web API (#95).
