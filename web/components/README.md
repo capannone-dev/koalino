@@ -13,7 +13,8 @@ suggests saved people, who are listed below with their sample counts (Issue #63)
 
 `meeting-list.tsx` renders the meeting index with a "⋯" actions menu per row (also opened by
 right-click) offering **Rename**, **Add to project…** (`meeting-project-dialog.tsx`, which loads
-the projects and shows the picker, #94) and **Delete**. `meeting-title-header.tsx` renders a meeting detail page's
+the projects and shows the picker, #94), **Summary and prompt…** (#95, a link to the meeting's
+summary panel) and **Delete**; each row also has a summary icon linking there. `meeting-title-header.tsx` renders a meeting detail page's
 heading with a pencil button. Both open `rename-meeting-dialog.tsx`, the shared modal that
 validates the title locally, calls `renameMeeting`, and maps failures to plain messages; they
 replace the title from the response without reloading (Issue #42).
@@ -22,6 +23,11 @@ replace the title from the response without reloading (Issue #42).
 
 `glossary-settings.tsx` edits the transcription glossary, one name or term per line, through
 `PUT /api/settings/glossary`; a refused list stays in the field with a plain reason.
+`ai-settings.tsx` (#95) lists the AI connections (OpenAI-compatible or Anthropic; keys are
+write-only and only shown as "API key saved"), adds, edits, tests and removes them, picks the
+default, edits the summary prompt template and turns automatic summaries on or off (#101), all
+through `lib/llm-api.ts`. `meeting-summary-panel.tsx` shows a meeting's stored summary, writes one
+with a chosen connection and edits the meeting's own prompt.
 `retention-settings.tsx` chooses how many days speech waits to be combined with another device's
 recording (#93) through `PUT /api/settings/retention`; a refused choice goes back to the saved one.
 

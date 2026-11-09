@@ -1,5 +1,5 @@
-// Lists meetings with a per-row actions menu (button or right-click) that renames a meeting in place,
-// adds it to a project (#94), or deletes it.
+// Lists meetings with a summary button (#95) and a per-row actions menu (button or right-click)
+// that opens the summary, renames a meeting in place, adds it to a project (#94), or deletes it.
 
 "use client";
 
@@ -108,6 +108,14 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                   <small className="block truncate text-muted">{describeRecordedOn(meeting)}</small>
                 )}
               </div>
+              <Link
+                href={`/meetings/${encodeURIComponent(meeting.meeting_id)}#summary`}
+                aria-label={`Summary of ${meeting.title}`}
+                title="Summary"
+                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
+              >
+                <SummaryIcon />
+              </Link>
               <button
                 ref={(button) => {
                   if (button) actionButtons.current.set(meeting.meeting_id, button);
@@ -159,6 +167,13 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                   >
                     Add to project…
                   </button>
+                  <Link
+                    role="menuitem"
+                    href={`/meetings/${encodeURIComponent(meeting.meeting_id)}#summary`}
+                    className="flex min-h-11 w-full items-center px-4 text-left hover:bg-surface-muted focus:bg-surface-muted focus:outline-none"
+                  >
+                    Summary and prompt…
+                  </Link>
                   <button
                     type="button"
                     role="menuitem"
@@ -218,5 +233,15 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
         />
       ) : null}
     </>
+  );
+}
+
+/** A page with lines and a short bar: a summary of notes. Decorative; the link carries the name. */
+function SummaryIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h9l4 4v14H6z" />
+      <path d="M9 10h7M9 14h7M9 18h4" />
+    </svg>
   );
 }

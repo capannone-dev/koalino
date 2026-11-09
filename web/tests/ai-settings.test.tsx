@@ -1,0 +1,104 @@
+// Verifies the web Settings page's AI connections (#95): listing connections without their keys,
+// adding one, testing it, the default, the prompt, and automatic summaries (#101).
+
+import { fireEvent, render, screen } from "@testing-library/react";
+import { beforeEach, expect, test, vi } from "vitest";
+import { AiSettings } from "@/components/ai-settings";
+import * as api from "@/lib/llm-api";
+
+vi.mock("@/lib/llm-api", async () => ({
+  ...(await vi.importActual<typeof api>("@/lib/llm-api")),
+  getLlmSettings: vi.fn(),
+  saveLlmConnection: vi.fn(),
+  testLlmConnection: vi.fn(),
+  updateLlmSettings: vi.fn(),
+  deleteLlmConnection: vi.fn()
+}));
+
+const office: api.LlmConnection = {
+  id: "c-1",
+  label: "Office server",
+  kind: "open_ai_compatible",
+  base_url: "http://192.168.1.5:11434/v1",
+  model: "llama3.1:8b",
+  context_tokens: 8192,
+  plain_http: true,
+  has_key: false,
+  is_default: true
+};
+
+const settings: api.LlmSettings = {
+  connections: [office],
+  default_connection: "c-1",
+  template: "Summarize {{title}}.",
+  default_template: "Built in",
+  custom_template: true,
+  auto_summarize: true,
+  placeholders: ["title", "date"]
+};
+
+beforeEach(() => {
+  vi.mocked(api.getLlmSettings).mockReset();
+  vi.mocked(api.saveLlmConnection).mockReset();
+  vi.mocked(api.testLlmConnection).mockReset();
+  vi.mocked(api.updateLlmSettings).mockReset();
+});
+
+test("lists connections with their default, a plain-http warning and no key", () => {
+  render(<AiSettings initial={settings} />);
+
+  expect(screen.getByText("Office server")).toBeInTheDocument();
+  expect(screen.getByText("Default")).toBeInTheDocument();
+  expect(screen.getByText(/Unencrypted http/)).toBeInTheDocument();
+  expect(screen.getByText("No API key")).toBeInTheDocument();
+  expect(screen.getByLabelText("Summary prompt")).toHaveValue("Summarize {{title}}.");
+  expect(screen.getByLabelText(/Summarize meetings automatically/)).toBeChecked();
+});
+
+test("adding a connection sends its key once and lists it", async () => {
+  const added: api.LlmConnection = { ...office, id: "c-2", label: "Claude", kind: "anthropic", base_url: "https://api.anthropic.com", model: "claude-opus-5-5", plain_http: false, has_key: true, is_default: false };
+  vi.mocked(api.saveLlmConnection).mockResolvedValue(added);
+  vi.mocked(api.getLlmSettings).mockResolvedValue({ ...settings, connections: [office, added] });
+  render(<AiSettings initial={settings} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
+  fireEvent.change(screen.getByLabelText("Start from"), { target: { value: "Anthropic" } });
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Claude" } });
+  fireEvent.change(screen.getByLabelText("API key"), { target: { value: "sk-ant-1" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
+
+  expect(await screen.findByText("Saved Claude.")).toBeInTheDocument();
+  expect(api.saveLlmConnection).toHaveBeenCalledWith(
+    expect.objectContaining({ label: "Claude", kind: "anthropic", base_url: "https://api.anthropic.com", model: "claude-opus-5-5", api_key: "sk-ant-1" }),
+    undefined
+  );
+  expect(screen.getByText("API key saved")).toBeInTheDocument();
+  expect(screen.queryByDisplayValue("sk-ant-1")).not.toBeInTheDocument();
+});
+
+test("testing a connection shows its reply, and failures are plain", async () => {
+  vi.mocked(api.testLlmConnection).mockResolvedValueOnce("OK");
+  render(<AiSettings initial={settings} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Test" }));
+  expect(await screen.findByText("Office server answered: OK")).toBeInTheDocument();
+
+  vi.mocked(api.testLlmConnection).mockRejectedValueOnce(new api.LlmApiError("llm_unreachable", 502));
+  fireEvent.click(screen.getByRole("button", { name: "Test" }));
+  expect(await screen.findByText("The AI server could not be reached.")).toBeInTheDocument();
+});
+
+test("automatic summaries can be turned off", async () => {
+  vi.mocked(api.updateLlmSettings).mockResolvedValue({ ...settings, auto_summarize: false });
+  render(<AiSettings initial={settings} />);
+
+  fireEvent.click(screen.getByLabelText(/Summarize meetings automatically/));
+
+  expect(await screen.findByText("Automatic summaries are off.")).toBeInTheDocument();
+  expect(api.updateLlmSettings).toHaveBeenCalledWith({ auto_summarize: false });
+});
+
+test("without the server the settings say so", () => {
+  render(<AiSettings initial={null} />);
+  expect(screen.getByText(/Can't read the AI settings/)).toBeInTheDocument();
+});
