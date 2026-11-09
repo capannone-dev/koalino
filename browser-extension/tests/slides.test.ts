@@ -49,7 +49,44 @@ describe("findSlideBox", () => {
   });
 });
 
+/**
+ * A 640×360 shared window with one text slide, modelled on the #102 live test: same layout on
+ * every slide, only the title and bullet lengths differ. `textWidths` are the title and bullet
+ * widths in pixels; `pointer` is the mouse pointer's top-left corner.
+ */
+function textSlide(textWidths: number[], pointer?: { x: number; y: number }): RgbaImage {
+  const image = frame(640, 360, 33);
+  paint(image, { left: 0, top: 0, right: 640, bottom: 30 }, [240, 240, 240]);
+  paint(image, { left: 100, top: 60, right: 540, bottom: 308 }, [255, 255, 255]);
+  paint(image, { left: 100, top: 296, right: 540, bottom: 308 }, [30, 70, 120]);
+  textWidths.forEach((width, line) => {
+    const top = line === 0 ? 80 : 104 + line * 18;
+    paint(image, { left: 125, top, right: 125 + width, bottom: top + (line === 0 ? 14 : 8) }, [20, 40, 70]);
+  });
+  if (pointer) paint(image, { left: pointer.x, top: pointer.y, right: pointer.x + 8, bottom: pointer.y + 13 }, [0, 0, 0]);
+  return image;
+}
+
 describe("SlideChangeDetector", () => {
+  it("keeps a slide whose layout matches the last one and only its text changed", () => {
+    const detector = new SlideChangeDetector();
+    const first = signatureOf(textSlide([200, 100, 115, 140]));
+    const third = signatureOf(textSlide([150, 95, 100, 105]));
+    detector.offer(first);
+    expect(detector.offer(first)).toBe(true);
+    detector.offer(third);
+    expect(detector.offer(third)).toBe(true);
+  });
+
+  it("does not keep the same slide again when only the pointer moved", () => {
+    const detector = new SlideChangeDetector();
+    const words = [200, 100, 115, 140];
+    detector.offer(signatureOf(textSlide(words, { x: 300, y: 200 })));
+    expect(detector.offer(signatureOf(textSlide(words, { x: 300, y: 200 })))).toBe(true);
+    detector.offer(signatureOf(textSlide(words, { x: 420, y: 240 })));
+    expect(detector.offer(signatureOf(textSlide(words, { x: 420, y: 240 })))).toBe(false);
+  });
+
   it("keeps the first frame once it holds still, then each changed and settled frame", () => {
     const detector = new SlideChangeDetector();
     const first = signatureOf(sharedWindow());

@@ -29,8 +29,8 @@ Limits found in the #102 probes:
 
 - Teams publishes the transcript only to the organizer's organisation. As a guest, the
   extension keeps the captions and the live transcript panel.
-- Debian's Firefox ESR has OpenH264 turned off, so it shows no screen share and no slides can be
-  kept.
+- Debian's Firefox ESR turns OpenH264 off (`/etc/firefox-esr/firefox-esr.js`), so Teams shows no
+  screen share and no slides can be kept. Turn it back on in the profile's `user.js` (see below).
 
 ## How it reaches the app
 
@@ -48,7 +48,7 @@ native messaging host `browser-host` (`core/bin/browser_host.rs`,
 
 | Path | Purpose |
 | --- | --- |
-| `src/page/` | `hook.ts`, the page-world script (audio taps, transcript copy). |
+| `src/page/` | `hook.ts`, the page-world script (audio taps, transcript copy, share frames for slides). |
 | `src/content/` | The content script: call detection, consent, recording, Teams automation, overlay. |
 | `src/background/` | The background: the native host connection and the popup's state. |
 | `src/popup/` | The popup: connection status and settings. |
@@ -78,6 +78,19 @@ node build.mjs        # dist/firefox and dist/chromium
    - Firefox: `about:debugging` → This Firefox → Load Temporary Add-on → `dist/firefox/manifest.json`.
      Unsigned add-ons stay installed only in ESR, Developer Edition or Nightly with
      `xpinstall.signatures.required` set to false.
+4. Firefox does not grant a hand-loaded extension its site access. The extension then opens its
+   popup in a tab: press **Allow on Teams** and accept, then reload any open Teams tab. The popup
+   shows the same button later if the access is removed.
+5. Debian's Firefox ESR only: add to the profile's `user.js` and restart Firefox, so screen shares
+   (and slides) show:
+
+   ```js
+   user_pref("media.gmp-gmpopenh264.enabled", true);
+   user_pref("media.gmp-gmpopenh264.visible", true);
+   user_pref("media.peerconnection.video.h264_enabled", true);
+   ```
+
+   Firefox then downloads the OpenH264 plugin from Cisco on its own.
 
 ## Privacy
 

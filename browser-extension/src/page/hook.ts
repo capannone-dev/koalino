@@ -10,10 +10,18 @@
  * - Teams transcript: responses of the page's own transcript requests (`/transcripts/…`) are
  *   copied; the extension never makes such requests itself and never uses the page's tokens.
  *
+ * - Screen share: on `analyse-share` the shared screen's video is drawn on a canvas here and only
+ *   its small signature is posted; on `encode-slide` that frame is cropped to the slide and posted
+ *   as a base64 JPEG. Pixels are read in this world because in Firefox a content script reading a
+ *   page video's pixels, or awaiting the page's promises, either crawls through per-byte wrappers
+ *   (it froze Teams in the #102 live test) or is denied; plain strings and numbers cross cleanly.
+ *
  * Audio is tapped only between the content script's `start-audio` and `stop-audio`, converted to
  * 16 kHz PCM, and posted to the content script about once a second. Nothing is logged.
  */
 import { resampleTo16k } from "../lib/pcm";
+import { findSlideBox, signatureOf } from "../lib/slides";
+import { findShareVideo } from "../lib/teamsDom";
 import { AudioTrack, CONTENT_SOURCE, HOOK_SOURCE, HookCommand, HookMessage } from "../lib/messages";
 
 /** Samples per audio callback (about 85 ms at 48 kHz). */
@@ -168,10 +176,78 @@ function stopAudio(): void {
   silentSink = null;
 }
 
+/** Share frames wider than this are scaled down before analysis (keeps slides legible). */
+const MAXIMUM_FRAME_WIDTH = 1920;
+/** JPEG quality of a kept slide. */
+const SLIDE_JPEG_QUALITY = 0.88;
+
+/** The canvas the last analysed share frame was drawn on, reused between frames. */
+let frameCanvas: HTMLCanvasElement | null = null;
+
+/**
+ * Draws the shown screen share and posts whether one is shown and its frame's signature.
+ * Side effects: Redraws `frameCanvas`; posts a `share-frame` message.
+ */
+function analyseShare(): void {
+  const video = findShareVideo(document);
+  if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+    post({ source: HOOK_SOURCE, kind: "share-frame", present: video !== null, signature: [] });
+    return;
+  }
+  const scale = Math.min(1, MAXIMUM_FRAME_WIDTH / video.videoWidth);
+  const width = Math.round(video.videoWidth * scale);
+  const height = Math.round(video.videoHeight * scale);
+  frameCanvas ??= document.createElement("canvas");
+  if (frameCanvas.width !== width || frameCanvas.height !== height) {
+    frameCanvas.width = width;
+    frameCanvas.height = height;
+  }
+  const canvasContext = frameCanvas.getContext("2d", { willReadFrequently: true });
+  if (!canvasContext) return;
+  canvasContext.drawImage(video, 0, 0, width, height);
+  const pixels = canvasContext.getImageData(0, 0, width, height);
+  const signature = signatureOf({ width, height, data: pixels.data });
+  post({ source: HOOK_SOURCE, kind: "share-frame", present: true, signature: Array.from(signature) });
+}
+
+/**
+ * Crops the last analysed frame to the slide and posts it as base64 JPEG ("" when it cannot).
+ * Side effects: Posts a `slide-image` message.
+ */
+function encodeSlide(): void {
+  const source = frameCanvas;
+  const sourceContext = source?.getContext("2d", { willReadFrequently: true });
+  if (!source || !sourceContext || source.width === 0) {
+    post({ source: HOOK_SOURCE, kind: "slide-image", image: "" });
+    return;
+  }
+  const pixels = sourceContext.getImageData(0, 0, source.width, source.height);
+  const box = findSlideBox({ width: source.width, height: source.height, data: pixels.data }) ?? {
+    left: 0,
+    top: 0,
+    right: source.width,
+    bottom: source.height,
+  };
+  const slide = document.createElement("canvas");
+  slide.width = box.right - box.left;
+  slide.height = box.bottom - box.top;
+  slide.getContext("2d")?.drawImage(source, box.left, box.top, slide.width, slide.height, 0, 0, slide.width, slide.height);
+  const dataUrl = slide.toDataURL("image/jpeg", SLIDE_JPEG_QUALITY);
+  const comma = dataUrl.indexOf(",");
+  post({ source: HOOK_SOURCE, kind: "slide-image", image: comma >= 0 ? dataUrl.slice(comma + 1) : "" });
+}
+
 window.addEventListener("message", (event: MessageEvent<HookCommand>) => {
   if (event.source !== window || event.data?.source !== CONTENT_SOURCE) return;
   if (event.data.command === "start-audio") startAudio();
   if (event.data.command === "stop-audio") stopAudio();
+  try {
+    if (event.data.command === "analyse-share") analyseShare();
+    if (event.data.command === "encode-slide") encodeSlide();
+  } catch {
+    // A tainted or vanished video: report nothing rather than disturb the page.
+    if (event.data.command === "encode-slide") post({ source: HOOK_SOURCE, kind: "slide-image", image: "" });
+  }
 });
 
 hookGetUserMedia();

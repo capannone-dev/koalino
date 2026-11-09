@@ -2,7 +2,7 @@
  * Specifies one recording in the content script: what it sends to Note Taker and when.
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { MeetingRecorder, OWNER_PARTICIPANT_ID, RecorderPorts } from "../src/content/recorder";
+import { MeetingRecorder, RecorderPorts, ownerParticipantId } from "../src/content/recorder";
 import { HostMessage } from "../src/lib/messages";
 
 /** A recorder with a controllable clock and the messages it sent. */
@@ -13,7 +13,6 @@ function recorderFixture() {
     send: (message) => sent.push(message),
     now: () => clock,
     root: document,
-    encodeSlide: async () => new Uint8Array([0xff, 0xd8, 0xff]),
   };
   const recorder = new MeetingRecorder({ meetingId: "browser-teams-1", title: "Weekly sync", ownerName: "Ada" }, ports);
   return {
@@ -32,6 +31,22 @@ beforeEach(() => {
   document.body.innerHTML = "";
 });
 
+describe("ownerParticipantId", () => {
+  it("is the same for one owner however the name is spaced or cased", () => {
+    expect(ownerParticipantId(" Ada  Lovelace ")).toBe(ownerParticipantId("ada lovelace"));
+  });
+
+  // The app keeps the first name it saw for a participant ID, so a fixed ID kept a wrong name
+  // ("Your profile") from an earlier version for good, and two owners of one browser would merge.
+  it("differs between owners", () => {
+    expect(ownerParticipantId("Ada Lovelace")).not.toBe(ownerParticipantId("Grace Hopper"));
+  });
+
+  it("is the plain owner ID when the name is unknown", () => {
+    expect(ownerParticipantId("Me")).toBe("browser-owner");
+  });
+});
+
 describe("MeetingRecorder", () => {
   it("announces the meeting with the owner", () => {
     const { sent } = recorderFixture();
@@ -40,7 +55,7 @@ describe("MeetingRecorder", () => {
       meetingId: "browser-teams-1",
       title: "Weekly sync",
       startTimeMs: 1_000_000,
-      participants: [{ id: OWNER_PARTICIPANT_ID, name: "Ada" }],
+      participants: [{ id: ownerParticipantId("Ada"), name: "Ada" }],
     });
   });
 
@@ -64,7 +79,7 @@ describe("MeetingRecorder", () => {
       recorder.addAudio("microphone", second(400));
     }
     const [chunk] = sent.filter((message) => message.type === "audio");
-    expect(chunk?.type === "audio" && chunk.participant?.id).toBe(OWNER_PARTICIPANT_ID);
+    expect(chunk?.type === "audio" && chunk.participant?.id).toBe(ownerParticipantId("Ada"));
   });
 
   it("restarts a track's timing after a gap", () => {
@@ -99,12 +114,23 @@ describe("MeetingRecorder", () => {
     expect(captions?.type === "document" && captions.text).toContain("00:00:02.000 --> 00:00:02.000\n<v Alan>Hello there.</v>");
   });
 
-  it("keeps a slide once the share settles", async () => {
+  it("keeps a slide once the share settles, stamped when it settled", () => {
+    const { sent, recorder, advance } = recorderFixture();
+    const signature = new Array<number>(32 * 18).fill(200);
+    expect(recorder.offerShareSignature(signature)).toBe(false);
+    advance(1_000);
+    expect(recorder.offerShareSignature(signature)).toBe(true);
+    expect(recorder.offerShareSignature(signature)).toBe(false);
+    advance(500);
+    recorder.sendSlide("/9j/AA==");
+    const slides = sent.filter((message) => message.type === "slide");
+    expect(slides).toEqual([{ type: "slide", timestampMs: 1_000, image: "/9j/AA==" }]);
+    expect(recorder.counts().slides).toBe(1);
+  });
+
+  it("sends no slide that was not asked for", () => {
     const { sent, recorder } = recorderFixture();
-    const frame = { width: 64, height: 36, data: new Uint8ClampedArray(64 * 36 * 4).fill(200) };
-    await recorder.offerShareFrame(frame);
-    await recorder.offerShareFrame(frame);
-    await recorder.offerShareFrame(frame);
-    expect(sent.filter((message) => message.type === "slide")).toHaveLength(1);
+    recorder.sendSlide("/9j/AA==");
+    expect(sent.filter((message) => message.type === "slide")).toHaveLength(0);
   });
 });

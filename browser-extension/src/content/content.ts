@@ -30,11 +30,9 @@ import {
 } from "../lib/messages";
 import { RecordedMeeting, matchRecapToMeeting, newMeetingId, pendingTranscriptMeetings } from "../lib/meetings";
 import { ExtensionSettings, DEFAULT_SETTINGS } from "../lib/settings";
-import { RgbaImage } from "../lib/slides";
 import { loadMeetings, loadSettings, saveMeeting, saveSettings, settingsChanged } from "../lib/storage";
 import {
   findRecapCards,
-  findShareVideo,
   isInCall,
   isTeamsTranscriptRunning,
   meetingTitleFromDocumentTitle,
@@ -47,8 +45,6 @@ const TICK_MS = 1_000;
 const CAPTIONS_DELAY_MS = 3_000;
 /** How often recap cards are looked for outside calls. */
 const RECAP_CHECK_MS = 5_000;
-/** The largest share frame analysed, in pixels of width. */
-const MAXIMUM_FRAME_WIDTH = 1920;
 
 type CallState = "idle" | "asking" | "declined" | "recording";
 
@@ -127,7 +123,7 @@ function startRecording(): void {
   const title = meetingTitleFromDocumentTitle(document.title);
   recorder = new MeetingRecorder(
     { meetingId, title, ownerName: ownerName(document) },
-    { send: toHost, now: Date.now, root: document, encodeSlide },
+    { send: toHost, now: Date.now, root: document },
   );
   record = {
     meetingId,
@@ -142,6 +138,8 @@ function startRecording(): void {
   recordingStartedAt = startMs;
   captionsAttempted = false;
   transcriptionAttempted = false;
+  lastProblem = null;
+  lastProgress = "";
   shareShown = false;
   overlayStatus = "\u0000";
   toHook("start-audio");
@@ -178,43 +176,6 @@ function onConsent(answer: "record" | "always" | "not-now"): void {
   startRecording();
 }
 
-/**
- * Draws the share video into an RGBA frame.
- * Outputs: The frame, or null when the video has no picture yet.
- */
-function grabFrame(video: HTMLVideoElement): RgbaImage | null {
-  if (video.videoWidth === 0 || video.videoHeight === 0) return null;
-  const scale = Math.min(1, MAXIMUM_FRAME_WIDTH / video.videoWidth);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(video.videoWidth * scale);
-  canvas.height = Math.round(video.videoHeight * scale);
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) return null;
-  context.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
-  lastFrameCanvas = canvas;
-  return { width: pixels.width, height: pixels.height, data: pixels.data };
-}
-
-/** The canvas of the frame last analysed (for encoding the kept slide). */
-let lastFrameCanvas: HTMLCanvasElement | null = null;
-
-/** Encodes the kept slide, cropped, as JPEG. */
-async function encodeSlide(
-  image: RgbaImage,
-  box: { left: number; top: number; right: number; bottom: number } | null,
-): Promise<Uint8Array | null> {
-  const source = lastFrameCanvas;
-  if (!source || source.width !== image.width) return null;
-  const crop = box ?? { left: 0, top: 0, right: image.width, bottom: image.height };
-  const canvas = document.createElement("canvas");
-  canvas.width = crop.right - crop.left;
-  canvas.height = crop.bottom - crop.top;
-  canvas.getContext("2d")?.drawImage(source, crop.left, crop.top, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.88));
-  return blob ? new Uint8Array(await blob.arrayBuffer()) : null;
-}
-
 /** One check of the page while recording. */
 async function whileRecording(): Promise<void> {
   if (!recorder) return;
@@ -234,16 +195,25 @@ async function whileRecording(): Promise<void> {
     void startTeamsTranscription(document);
   }
   if (settings.captureSlides) {
-    const video = findShareVideo(document);
-    if (!video) {
-      if (shareShown) recorder.resetSlides();
-      shareShown = false;
-    } else {
-      shareShown = true;
-      const frame = grabFrame(video);
-      if (frame) await recorder.offerShareFrame(frame);
-    }
+    // The page hook draws the frame and answers with "share-frame" (see the message listener).
+    toHook("analyse-share");
   }
+  reportProgress();
+}
+
+/** The last step that failed while recording, as "<step>: <error name>". */
+let lastProblem: string | null = null;
+/** The progress line last sent to the background, to send only changes. */
+let lastProgress = "";
+
+/** Tells the background what was sent so far, when it changed. */
+function reportProgress(): void {
+  if (!recorder || !record) return;
+  const progress = { title: record.title, ...recorder.counts(), problem: lastProblem };
+  const serialized = JSON.stringify(progress);
+  if (serialized === lastProgress) return;
+  lastProgress = serialized;
+  toBackground({ kind: "progress", progress });
 }
 
 /** Waits for the page hook to deliver a transcript file. */
@@ -329,7 +299,28 @@ window.addEventListener("message", (event: MessageEvent<HookMessage>) => {
   if (event.source !== window || event.data?.source !== HOOK_SOURCE) return;
   if (event.data.kind === "audio") recorder?.addAudio(event.data.track, new Int16Array(event.data.samples));
   if (event.data.kind === "transcript-file") void onTranscriptFile(event.data.text);
+  if (event.data.kind === "share-frame") onShareFrame(event.data.present, event.data.signature);
+  if (event.data.kind === "slide-image") {
+    if (event.data.image === "") lastProblem = "slides: the shared screen could not be read";
+    recorder?.sendSlide(event.data.image);
+  }
 });
+
+/**
+ * Handles the hook's analysis of the screen share.
+ * Inputs: Whether a share is shown and its frame's signature (empty while it has no picture).
+ * Side effects: Restarts slide detection when a share ends; asks the hook to encode a settled slide.
+ */
+function onShareFrame(present: boolean, signature: number[]): void {
+  if (!recorder || state !== "recording") return;
+  if (!present) {
+    if (shareShown) recorder.resetSlides();
+    shareShown = false;
+    return;
+  }
+  shareShown = true;
+  if (signature.length > 0 && recorder.offerShareSignature(signature)) toHook("encode-slide");
+}
 
 window.addEventListener("pagehide", () => {
   if (state === "recording") stopRecording();

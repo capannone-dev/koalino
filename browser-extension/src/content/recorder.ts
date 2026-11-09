@@ -10,13 +10,29 @@
 import { CaptionCollector, TranscriptPanelCollector } from "../lib/captions";
 import { HostMessage, HostParticipant, AudioTrack } from "../lib/messages";
 import { PcmChunker, base64FromBytes, bytesFromSamples, isSilent, TARGET_SAMPLE_RATE } from "../lib/pcm";
-import { RgbaImage, SlideChangeDetector, findSlideBox, signatureOf } from "../lib/slides";
+import { SlideChangeDetector } from "../lib/slides";
 import { readCaptions, readTranscriptPanel, isTeamsTranscriptRunning } from "../lib/teamsDom";
 
 /** A gap this large between the audio received and the clock restarts a track's timing. */
 const TIMING_GAP_MS = 3_000;
-/** The owner's microphone track, as Teams participant. */
-export const OWNER_PARTICIPANT_ID = "browser-owner";
+/** The owner's microphone track, as Teams participant, when the owner's name is unknown. */
+const OWNER_PARTICIPANT_ID = "browser-owner";
+
+/**
+ * The participant ID of the owner's microphone track.
+ *
+ * The app maps a participant ID to a person once and keeps that person's name, so the ID carries
+ * the owner's name: another owner of the same browser, or a name read correctly after a Teams
+ * change, gets a person of their own instead of inheriting an earlier one.
+ *
+ * Inputs: The owner's name from the Teams page ("Me" when unknown).
+ * Outputs: `browser-owner:<name>` in lower case with single spaces, or `browser-owner`.
+ * Side effects: None.
+ */
+export function ownerParticipantId(ownerName: string): string {
+  const normalized = ownerName.trim().replace(/\s+/g, " ").toLowerCase();
+  return normalized === "" || normalized === "me" ? OWNER_PARTICIPANT_ID : `${OWNER_PARTICIPANT_ID}:${normalized}`;
+}
 
 /** What the recorder needs from the browser. */
 export interface RecorderPorts {
@@ -26,8 +42,6 @@ export interface RecorderPorts {
   now(): number;
   /** The page to read captions and the transcript panel from. */
   root: ParentNode;
-  /** Encodes a cropped slide as JPEG bytes (null when it cannot). */
-  encodeSlide?(image: RgbaImage, box: { left: number; top: number; right: number; bottom: number } | null): Promise<Uint8Array | null>;
 }
 
 /** The meeting being recorded. */
@@ -57,6 +71,8 @@ export class MeetingRecorder {
   private stopped = false;
   private sentChunks = 0;
   private sentSlides = 0;
+  /** When the slide awaiting `sendSlide` settled, in meeting time. */
+  private pendingSlideMs: number | null = null;
 
   /** Starts the recording and announces the meeting. Side effects: Sends `meeting`. */
   constructor(
@@ -75,7 +91,7 @@ export class MeetingRecorder {
 
   /** The owner as the microphone track's participant. */
   private owner(): HostParticipant {
-    return { id: OWNER_PARTICIPANT_ID, name: this.meeting.ownerName };
+    return { id: ownerParticipantId(this.meeting.ownerName), name: this.meeting.ownerName };
   }
 
   /** Milliseconds since the recording started. */
@@ -135,19 +151,29 @@ export class MeetingRecorder {
   }
 
   /**
-   * Offers a frame of the screen share (call about once a second while one is shown).
+   * Offers the signature of a screen-share frame (`signatureOf`, computed by the page hook; call
+   * about once a second while a share is shown).
    *
-   * Inputs: The frame. Side effects: Sends it as a slide, cropped to the slide, once it changed
-   * and settled.
+   * Inputs: The signature. Outputs: `true` when the share changed and settled, so that frame
+   * should be sent with `sendSlide`. Side effects: Remembers when it settled.
    */
-  async offerShareFrame(frame: RgbaImage): Promise<void> {
-    if (this.stopped || !this.ports.encodeSlide) return;
-    if (!this.slides.offer(signatureOf(frame))) return;
-    const timestampMs = this.elapsedMs();
-    const jpeg = await this.ports.encodeSlide(frame, findSlideBox(frame));
-    if (!jpeg || this.stopped) return;
+  offerShareSignature(signature: ArrayLike<number>): boolean {
+    if (this.stopped || !this.slides.offer(Float32Array.from(signature))) return false;
+    this.pendingSlideMs = this.elapsedMs();
+    return true;
+  }
+
+  /**
+   * Sends the slide asked for by `offerShareSignature`, stamped with when it settled.
+   *
+   * Inputs: The cropped slide as base64 JPEG. Side effects: Sends it once; otherwise nothing.
+   */
+  sendSlide(imageBase64: string): void {
+    const timestampMs = this.pendingSlideMs;
+    this.pendingSlideMs = null;
+    if (this.stopped || timestampMs === null || imageBase64 === "") return;
     this.sentSlides += 1;
-    this.ports.send({ type: "slide", timestampMs, image: base64FromBytes(jpeg) });
+    this.ports.send({ type: "slide", timestampMs, image: imageBase64 });
   }
 
   /** A new share started: the next settled frame is kept even if it looks like the last. */

@@ -23,12 +23,18 @@ export type AudioTrack = "microphone" | "remote";
 /** From the page hook to the content script. */
 export type HookMessage =
   | { source: typeof HOOK_SOURCE; kind: "audio"; track: AudioTrack; samples: ArrayBuffer }
-  | { source: typeof HOOK_SOURCE; kind: "transcript-file"; text: string; contentType: string };
+  | { source: typeof HOOK_SOURCE; kind: "transcript-file"; text: string; contentType: string }
+  /** Answer to `analyse-share`: whether a share is shown and its frame's `signatureOf`. */
+  | { source: typeof HOOK_SOURCE; kind: "share-frame"; present: boolean; signature: number[] }
+  /** Answer to `encode-slide`: the last analysed frame cropped to the slide, base64 JPEG ("" when none). */
+  | { source: typeof HOOK_SOURCE; kind: "slide-image"; image: string };
 
 /** From the content script to the page hook. */
 export type HookCommand =
   | { source: typeof CONTENT_SOURCE; command: "start-audio" }
-  | { source: typeof CONTENT_SOURCE; command: "stop-audio" };
+  | { source: typeof CONTENT_SOURCE; command: "stop-audio" }
+  | { source: typeof CONTENT_SOURCE; command: "analyse-share" }
+  | { source: typeof CONTENT_SOURCE; command: "encode-slide" };
 
 /** A participant as the host expects it. */
 export interface HostParticipant {
@@ -66,10 +72,39 @@ export interface ConnectionState {
   hostError?: string;
 }
 
+/** What a tab has sent to Note Taker for the meeting it records, for the popup. */
+export interface RecordingProgress {
+  title: string;
+  audioChunks: number;
+  slides: number;
+  captions: number;
+  /** The last thing that failed, as "<step>: <error name>"; never page content. */
+  problem: string | null;
+}
+
 /** From the content script to the background. */
 export type TabMessage =
   | { kind: "host"; message: HostMessage }
-  | { kind: "recording"; recording: boolean; title: string };
+  | { kind: "recording"; recording: boolean; title: string }
+  | { kind: "progress"; progress: RecordingProgress };
+
+/** "1 slide" or "2 slides". */
+function count(amount: number, noun: string): string {
+  return `${amount} ${noun}${amount === 1 ? "" : "s"}`;
+}
+
+/**
+ * The popup's line for a recording in progress.
+ *
+ * Inputs: The progress. Outputs: "<title>: N audio chunks, N slides, N captions", with the last
+ * problem in brackets. Side effects: None.
+ */
+export function describeProgress(progress: RecordingProgress): string {
+  const line =
+    `${progress.title || "Teams meeting"}: ${count(progress.audioChunks, "audio chunk")}, ` +
+    `${count(progress.slides, "slide")}, ${count(progress.captions, "caption")}`;
+  return progress.problem ? `${line} (problem: ${progress.problem})` : line;
+}
 
 /** From the background to a content script. */
 export type BackgroundMessage = { kind: "connection"; state: ConnectionState };

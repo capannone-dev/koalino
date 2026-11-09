@@ -7,6 +7,9 @@
  * while the background runs; after the browser stops it, the next message starts it again. In
  * Chrome the background is a service worker that open ports keep alive; in Firefox it is an event
  * page. Message contents are never logged.
+ *
+ * After it is installed without access to the Teams sites (Firefox, when loaded by hand), it opens
+ * its settings page in a tab, where the owner can allow it.
  */
 import {
   BackgroundMessage,
@@ -16,7 +19,9 @@ import {
   HostReply,
   PORT_NAME,
   TabMessage,
+  describeProgress,
 } from "../lib/messages";
+import { hasTeamsAccess } from "../lib/siteAccess";
 
 /** Requests the popup sends. */
 type PopupRequest = { kind: "get-state" } | { kind: "check-host" };
@@ -32,7 +37,7 @@ let hostPort: chrome.runtime.Port | null = null;
 let connection: ConnectionState = { host: "unknown", bridge: "unknown" };
 let rejected = 0;
 const tabs = new Set<chrome.runtime.Port>();
-/** Meeting titles being recorded, by tab port. */
+/** What each recording tab shows in the popup: its title, then its progress line. */
 const recordings = new Map<chrome.runtime.Port, string>();
 
 /** Tells every tab the connection state. */
@@ -98,6 +103,7 @@ chrome.runtime.onConnect.addListener((port) => {
       if (message.recording) recordings.set(port, message.title || "Teams meeting");
       else recordings.delete(port);
     }
+    if (message.kind === "progress" && recordings.has(port)) recordings.set(port, describeProgress(message.progress));
   });
   port.onDisconnect.addListener(() => {
     tabs.delete(port);
@@ -110,4 +116,10 @@ chrome.runtime.onMessage.addListener((request: PopupRequest, _sender, respond) =
   const state: PopupState = { connection, recordings: [...recordings.values()], rejected };
   respond(state);
   return false;
+});
+
+chrome.runtime.onInstalled.addListener(() => {
+  void hasTeamsAccess(chrome.permissions, chrome.runtime.getManifest()).then((granted) => {
+    if (!granted) void chrome.tabs.create({ url: chrome.runtime.getURL("popup.html") });
+  });
 });

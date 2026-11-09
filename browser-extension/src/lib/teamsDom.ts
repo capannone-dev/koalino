@@ -61,7 +61,8 @@ export function meetingTitleFromDocumentTitle(documentTitle: string): string {
     .split("|")
     .map((part) => part.trim())
     .filter((part) => part !== "" && !SECTION_TITLES.has(part.toLowerCase()));
-  return parts[0] ?? "";
+  // Teams appends "(External)" or "(Guest)" to chats with people outside the organisation.
+  return (parts[0] ?? "").replace(/\s*\((external|guest)\)$/i, "");
 }
 
 /** The visible text of an element (jsdom has no `innerText`). */
@@ -241,8 +242,12 @@ export function findShareVideo(root: ParentNode): HTMLVideoElement | null {
  * Inputs: The document. Outputs: The name, or "Me". Side effects: None.
  */
 export function ownerName(root: ParentNode): string {
-  const avatar = root.querySelector('[data-tid="me-control-avatar-trigger"], [data-tid="me-control-avatar"]');
-  const label = avatar?.getAttribute("aria-label") ?? "";
+  const picture = root.querySelector('[data-tid="me-control-avatar"]')?.getAttribute("aria-label") ?? "";
+  const fromPicture = /^profile picture of (.+?)\.?$/i.exec(picture.trim())?.[1]?.trim();
+  if (fromPicture) return fromPicture;
+  const label = root.querySelector('[data-tid="me-control-avatar-trigger"]')?.getAttribute("aria-label") ?? "";
+  // "Your profile, status …" names nobody.
+  if (/^your profile\b/i.test(label.trim())) return "Me";
   const name = label.replace(/^(profile|account manager)( for)?,?\s*/i, "").split(",")[0]?.trim() ?? "";
   return name !== "" ? name : "Me";
 }

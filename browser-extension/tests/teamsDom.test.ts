@@ -8,6 +8,7 @@ import {
   isInCall,
   isTeamsTranscriptRunning,
   meetingTitleFromDocumentTitle,
+  ownerName,
   parseRecapTimeRange,
   readCaptions,
   readTranscriptPanel,
@@ -34,6 +35,10 @@ describe("call state", () => {
     expect(meetingTitleFromDocumentTitle("(3) Calendar | Weekly sync | Microsoft Teams")).toBe("Weekly sync");
     expect(meetingTitleFromDocumentTitle("Meeting with Ada | Microsoft Teams")).toBe("Meeting with Ada");
     expect(meetingTitleFromDocumentTitle("Microsoft Teams")).toBe("");
+    // Teams marks chats with people outside the organisation; the recap card shows no marker.
+    expect(
+      meetingTitleFromDocumentTitle("Chat | Meeting with Ada (External) | Microsoft Teams"),
+    ).toBe("Meeting with Ada");
   });
 });
 
@@ -108,5 +113,26 @@ describe("recap cards", () => {
       endMs: new Date(2026, 0, 2, 12, 30).getTime(),
     });
     expect(parseRecapTimeRange("no date here")).toBeNull();
+  });
+});
+
+describe("ownerName", () => {
+  it("reads the name from the profile picture, not the profile button", () => {
+    // Work account in Firefox, #102 live test.
+    document.body.innerHTML = `
+      <button data-tid="me-control-avatar-trigger" aria-label="Your profile, status In a call">
+        <span data-tid="me-control-avatar" aria-label="Profile picture of Ada Lovelace.">AL</span>
+      </button>`;
+    expect(ownerName(document)).toBe("Ada Lovelace");
+  });
+
+  it("reads an older profile button label", () => {
+    document.body.innerHTML = '<button data-tid="me-control-avatar-trigger" aria-label="Profile, Ada Lovelace, Available"></button>';
+    expect(ownerName(document)).toBe("Ada Lovelace");
+  });
+
+  it("falls back to Me", () => {
+    document.body.innerHTML = '<button data-tid="me-control-avatar-trigger" aria-label="Your profile, status Available"></button>';
+    expect(ownerName(document)).toBe("Me");
   });
 });

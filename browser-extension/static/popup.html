@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- The extension's popup: connection status, current recordings and settings (Issue #102). -->
+<!-- The extension's popup: Teams access, connection status, current recordings and settings (Issue #102). It also opens in a tab after install when Teams access is missing. -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -12,10 +12,15 @@
       label { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
       .hint { color: #6b7280; font-size: 12px; }
       button { font: inherit; margin-top: 6px; }
+      #recordings { white-space: pre-line; }
     </style>
   </head>
   <body>
     <h1>Note Taker</h1>
+    <div id="access" class="status bad" hidden>
+      <div id="access-text">Note Taker may not run on Teams yet, so it cannot record your meetings.</div>
+      <button id="allow" type="button">Allow on Teams</button>
+    </div>
     <div class="status">
       <div id="host"></div>
       <div id="recordings"></div>

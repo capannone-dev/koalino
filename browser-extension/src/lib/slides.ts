@@ -134,12 +134,15 @@ function evenBand(image: RgbaImage, top: number, bottom: number, left: number, r
   return Math.sqrt(variance) <= BAND_DEVIATION;
 }
 
-/** Columns and rows of a frame signature. */
-const SIGNATURE_WIDTH = 32;
-const SIGNATURE_HEIGHT = 18;
+/**
+ * Columns and rows of a frame signature: fine enough that a changed line of slide text moves
+ * several cells (one cell is about 20 pixels of a 1280-pixel share).
+ */
+const SIGNATURE_WIDTH = 64;
+const SIGNATURE_HEIGHT = 36;
 
 /**
- * A small greyscale summary of a frame (32×18 cell averages), cheap to compare.
+ * A small greyscale summary of a frame (64×36 cell averages), cheap to compare.
  *
  * Inputs: The frame. Outputs: The cell brightnesses. Side effects: None.
  */
@@ -168,9 +171,27 @@ function distance(first: Float32Array, second: Float32Array): number {
   return sum / first.length;
 }
 
-/** Content differs from the last kept slide when signatures differ by more than this. */
-const CHANGED = 2.5;
-/** Two consecutive frames are still when they differ by less than this. */
+/** Number of cells whose brightness differs by more than `step`. */
+function changedCells(first: Float32Array, second: Float32Array, step: number): number {
+  let count = 0;
+  for (let index = 0; index < first.length; index += 1) {
+    if (Math.abs((first[index] ?? 0) - (second[index] ?? 0)) > step) count += 1;
+  }
+  return count;
+}
+
+/**
+ * A cell changed when its brightness moved by more than this (video compression noise stays near
+ * 2; a line of text appearing or disappearing moves a cell by 15 to 90 in the #102 live test).
+ */
+const CHANGED_CELL_STEP = 12;
+/**
+ * Content differs from the last kept slide when at least this many cells changed. The mouse
+ * pointer covers at most four cells; slides sharing a layout differed in about 47 in the live test.
+ * A mean over the whole frame missed them: text is a small share of a slide.
+ */
+const CHANGED_CELLS = 8;
+/** Two consecutive frames are still when they differ by less than this on average. */
 const STILL = 0.8;
 
 /**
@@ -191,7 +212,7 @@ export class SlideChangeDetector {
     const previous = this.previous;
     this.previous = signature;
     if (!previous || distance(previous, signature) >= STILL) return false;
-    if (this.kept && distance(this.kept, signature) <= CHANGED) return false;
+    if (this.kept && changedCells(this.kept, signature, CHANGED_CELL_STEP) < CHANGED_CELLS) return false;
     this.kept = signature;
     return true;
   }
