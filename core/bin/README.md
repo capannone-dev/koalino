@@ -289,6 +289,12 @@ automatically, which is on until the owner opts out. Entries edited by hand into
 invalid are dropped when read. `LlmKeyStore` keeps each connection's API key in the keychain
 under `note-taker-llm-<id>`, or on Android in `llm-<id>.sealed`; keys never enter the JSON file.
 
+`meeting_summaries.rs` (#95) is shared by the app, the web API and the CLI. `prepare_summary` reads
+the labelled transcript, the owner's notes, the image attachments (oldest first, at most 20, each
+under 3.75 MB), the project, the language and the meeting's own prompt; `run_summary` asks the
+model with no lock held; `store_summary` writes the result into the meeting document in one
+transaction. `set_meeting_prompt` checks and stores a meeting's own template.
+
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.
 

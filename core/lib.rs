@@ -55,6 +55,12 @@ pub mod llm_settings;
 #[cfg(test)]
 #[path = "bin/llm_settings_tests.rs"]
 mod llm_settings_tests;
+/// Prepares, writes and keeps meeting summaries for the app, web API and CLI (#95).
+#[path = "bin/meeting_summaries.rs"]
+pub mod meeting_summaries;
+#[cfg(test)]
+#[path = "bin/meeting_summaries_tests.rs"]
+mod meeting_summaries_tests;
 #[path = "bin/p2p_composition.rs"]
 pub mod p2p_composition;
 #[path = "bin/p2p_network_routes.rs"]
