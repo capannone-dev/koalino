@@ -40,10 +40,13 @@ pub mod ffi;
 #[cfg(target_os = "android")]
 #[path = "bin/ffi_android.rs"]
 pub mod ffi_android;
+/// AI connections and meeting summaries over the C ABI (#95).
+/// The owner's edits to a meeting over the C ABI (#96).
+#[path = "bin/ffi_edits.rs"]
+pub mod ffi_edits;
 /// Keeps the owner's default transcription language.
 #[path = "bin/ffi_language.rs"]
 pub mod ffi_language;
-/// AI connections and meeting summaries over the C ABI (#95).
 #[path = "bin/ffi_llm.rs"]
 pub mod ffi_llm;
 /// Settings' Whisper model and OpenAI controls over the C ABI.

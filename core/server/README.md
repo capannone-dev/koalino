@@ -89,6 +89,11 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
   - `PUT /api/settings/retention` with `{"days"}` saves a window of 1 to 60 days and returns it;
     out of range returns `400` `invalid_window`, a write failure `500` `save_failed`, and no
     settings file `503` `unavailable`. `retention_routes_tests.rs` covers each case.
+- AI connections and summaries (`llm_routes.rs`, #95) run the commands the app uses
+  (`bin/llm_commands.rs`); `start_auto_summaries` runs the daemon's automatic summaries (#101).
+- The owner's edits (`edit_routes.rs`, #96): `GET`/`PUT /api/meetings/{id}/notes`,
+  `PUT /api/meetings/{id}/summary` (the text, marked edited) and `PUT /api/meetings/{id}/segments`
+  (one segment by start and end; blank text removes it). See API_SPECS.md.
 - `GET /api/telemetry` returns `task_count`, `total_duration_ms`, and `average_latency_ms`.
 - `GET /api/devices` returns telemetry-observed devices with `device_id`, feature-gated
   `supports_vad`, observed `supported_models`, and epoch-millisecond `last_seen`. Device data is

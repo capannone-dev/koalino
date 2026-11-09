@@ -7,6 +7,10 @@
 pub mod api;
 #[cfg(test)]
 mod api_tests;
+/// Serves the owner's edits to a meeting's notes, summary and transcript (#96).
+pub mod edit_routes;
+#[cfg(test)]
+mod edit_routes_tests;
 /// Serves the web Settings page's glossary of names and terms.
 pub mod glossary_routes;
 #[cfg(test)]

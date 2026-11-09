@@ -226,6 +226,15 @@ and meeting summaries" below). Keys are write-only.
 - `char *note_taker_set_meeting_summary_prompt(const char *meeting_id, const char *prompt)` sets
   the meeting's own template, or clears it when `prompt` is null or blank.
 
+### Meeting edits C ABI (#96)
+
+- `char *note_taker_meeting_edit(const char *request_json)` runs one edit tagged by `command` and
+  returns caller-freed JSON: `notes` (`meeting_id`) → `notes`; `set_notes` (`meeting_id`, `text`)
+  → `notes`; `edit_summary` (`meeting_id`, `text`) → `summary`, marked `edited`; `edit_segment`
+  (`meeting_id`, `start_time_ms`, `end_time_ms`, `text`) → `segment`, or null when blank text
+  removed it. Error codes: `invalid_request`, `meeting_not_found`, `segment_not_found`, `empty`,
+  `too_long`, `storage_failed`, `runtime_unavailable`.
+
 ### Projects C ABI (Issue #85)
 
 - `char *note_taker_project_command(const char *request_json)` runs one Projects command and
@@ -523,6 +532,21 @@ Errors are `{"ok":false,"error_code","error"}`: `400` `invalid_request`, `invali
 `llm_unauthorized`, `llm_rate_limited`, `llm_rejected`, `llm_failed`, `llm_refused`,
 `llm_invalid_response`; `500` `keychain_failed`, `save_failed`, `storage_failed`; `503`
 `unavailable`.
+
+### Meeting edits (#96)
+
+- `GET /api/meetings/{id}/notes` returns `{"notes": text or null}`, the owner's Markdown notes.
+- `PUT /api/meetings/{id}/notes` with `{"text"}` (at most 200,000 characters) replaces them.
+- `PUT /api/meetings/{id}/summary` with `{"text"}` replaces the summary's text, or writes one by
+  hand, and returns `{"summary"}` marked `edited`. Blank text is `400` `empty`. Automatic
+  summaries never replace a meeting's summary.
+- `PUT /api/meetings/{id}/segments` with `{"start_time_ms","end_time_ms","text"}` corrects one
+  segment (as listed in the meeting's `segments`), keeping its speaker and timing; blank text
+  removes it. The answer is `{"segment": {"start_time_ms","end_time_ms","text"} or null}`. The
+  first edit flags the transcript as edited: the after-meeting pass then leaves it alone and
+  deletes the speech it kept.
+- Failures: `400` `invalid_request`, `empty` or `too_long`; `404` `meeting_not_found` or
+  `segment_not_found`; `500` `storage_failed`. Every edit syncs to paired devices.
 
 ### Telemetry
 

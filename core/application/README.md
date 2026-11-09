@@ -514,3 +514,9 @@ summary is written from those notes, so nothing is cut. A server that cannot rea
 once more without them. `meeting_summary_document.rs` keeps the summary (`summary` map) and the
 meeting's own prompt (`summary_prompt`) in the meeting document, so both sync and are sealed at
 rest; writes go through `NoteRepository::edit_crdt_document`, one SQLite transaction.
+
+`meeting_edits.rs` (#96) holds the owner's edits: the Markdown notes (`note_text`), the summary's
+text (marked `edited`, or written by hand when there is none), and single transcript segments,
+which keep their speaker, timing and overlap mark and lose their uncertain-word marks. A segment
+edit sets the document's `transcript_edited` flag; `refinement_worker.rs` reads it and no longer
+re-transcribes that meeting.

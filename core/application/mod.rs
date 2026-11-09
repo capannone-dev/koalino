@@ -71,6 +71,10 @@ pub mod meeting_crdt;
 pub mod meeting_document;
 #[cfg(test)]
 mod meeting_document_tests;
+/// The owner's edits to a meeting's notes, summary and transcript segments (#96).
+pub mod meeting_edits;
+#[cfg(test)]
+mod meeting_edits_tests;
 /// Coordinates recording transcription and transcript persistence.
 pub mod meeting_recorder;
 /// Renames a meeting after validating the new title, for the CLI, HTTP, and FFI adapters.

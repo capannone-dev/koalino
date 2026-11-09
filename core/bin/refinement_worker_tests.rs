@@ -308,6 +308,28 @@ fn a_pass_replaces_the_text_and_deletes_the_audio() {
 }
 
 #[test]
+fn a_transcript_the_owner_edited_is_left_alone_and_its_audio_deleted() {
+    let setup = Setup::new();
+    crate::application::meeting_edits::edit_segment(
+        &setup.repository(),
+        &setup.meeting,
+        0,
+        900,
+        "corretto",
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    let control = Arc::new(RefinementControl::new(false));
+    let calls = Arc::new(AtomicUsize::new(0));
+
+    let refined = setup.worker(&control, false, &calls).run_pending();
+
+    assert_eq!(refined, 0);
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(setup.texts(), vec!["corretto"]);
+    assert!(setup.store.pending_meetings().is_empty());
+}
+
+#[test]
 fn nothing_runs_while_recording() {
     let setup = Setup::new();
     let control = Arc::new(RefinementControl::new(false));

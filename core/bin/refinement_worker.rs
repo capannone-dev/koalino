@@ -18,7 +18,8 @@
 //! and deletes. The model is loaded only for a round of work and dropped after. Retained audio
 //! never lingers: it is deleted after a combined pass, after a pass alone without P2P, after a
 //! confirmed transfer, when unreadable, when its meeting is gone, after three failed attempts, or
-//! when it has waited three weeks to be combined. `RetainedSpeechInbox`
+//! when it has waited three weeks to be combined, or when the owner edited the meeting's
+//! transcript (#96), which no pass replaces. `RetainedSpeechInbox`
 //! stores speech paired devices send for combining. Logs carry meeting ids and counts only.
 
 use std::{
@@ -406,6 +407,17 @@ impl RefinementWorker {
                 }
                 AudioPlan::Send { to } => self.send(&meeting_id, &to),
                 AudioPlan::PassAlone | AudioPlan::Combine { .. } => {
+                    let target = match &plan {
+                        AudioPlan::Combine { root, .. } => root,
+                        _ => &meeting_id,
+                    };
+                    if owner_edited(repository.as_ref(), target) {
+                        // A pass would replace the owner's corrections (#96).
+                        tracing::info!(meeting_id = %target.as_str(), "the owner edited this transcript; the after-meeting pass leaves it");
+                        // Each recording folded into it reaches here too and loses its speech.
+                        self.delete(&meeting_id);
+                        continue;
+                    }
                     if !self.control.may_run() {
                         continue;
                     }
@@ -879,6 +891,14 @@ impl SpeechInbox for RetainedSpeechInbox {
 
 /// Reports whether the meeting still stands: false only when it was deleted meanwhile, so a failed
 /// lookup never costs a meeting its pass.
+/// Reports whether the owner edited the meeting's transcript (#96); an unreadable document
+/// counts as not edited, so the pass still runs.
+fn owner_edited(repository: &dyn NoteRepository, meeting_id: &MeetingId) -> bool {
+    repository
+        .load_crdt_document(meeting_id)
+        .is_ok_and(|document| crate::application::meeting_edits::read_transcript_edited(&document))
+}
+
 fn meeting_exists(repository: &dyn NoteRepository, meeting_id: &MeetingId) -> bool {
     !repository.is_meeting_deleted(meeting_id).unwrap_or(false)
 }

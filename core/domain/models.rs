@@ -2661,6 +2661,17 @@ impl TranscriptSegment {
         }
     }
 
+    /// Replaces the text after the owner corrects it (#96), keeping speaker, timing and the
+    /// overlap and speaker marks; the uncertain-word marks described the old words, so they go.
+    ///
+    /// Inputs: The new text. Outputs: The segment. Side effects: None.
+    #[must_use]
+    pub fn with_text(mut self, text: impl Into<String>) -> Self {
+        self.text = text.into();
+        self.confidence.uncertain_words.clear();
+        self
+    }
+
     /// Attaches how doubtful the segment is (#90, #91).
     ///
     /// Inputs: The marks; word positions refer to this segment's text.

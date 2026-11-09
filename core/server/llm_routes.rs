@@ -58,7 +58,9 @@ pub(super) fn routes() -> Router<ServerAppState> {
         )
         .route(
             "/api/meetings/{meeting_id}/summary",
-            get(read_summary).post(write_summary),
+            get(read_summary)
+                .post(write_summary)
+                .put(super::edit_routes::replace_summary_text),
         )
         .route(
             "/api/meetings/{meeting_id}/summary-prompt",

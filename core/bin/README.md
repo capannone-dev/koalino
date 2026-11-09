@@ -312,6 +312,9 @@ the after-meeting pass, and it has no summary; it is left for a manual summary a
 when the runtime opens) and `server/llm_routes.rs::start_auto_summaries` for the daemon. The CLI
 has none: `summary <meeting>` writes one by hand.
 
+`ffi_edits.rs` (#96) gives the app `note_taker_meeting_edit`: the notes, the summary's text and
+single transcript segments, through `application/meeting_edits.rs` (the same rules as the web).
+
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.
 
