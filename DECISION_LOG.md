@@ -2351,3 +2351,31 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **Cost:** a round reads every meeting through the repository (like search, #100) and hashes the
   text files in the folder. That is fine for personal libraries. Rounds could later be driven by
   change notifications if it is not.
+
+## 2026-11-09 — #97 Chat with notes: budgeted context, no index, history per device
+
+- **Problem:** the owner wants to ask questions about one meeting, one project, or everything.
+  With many meetings, everything does not fit any model's context.
+- **Decision: gather, rank, fit, and say what was included.**
+  - A meeting chat sends the whole meeting (summary, notes, transcript) and its photos.
+  - A project chat sends the files' text first (usually short and to the point), then the
+    meetings newest first, plus the newest 4 images.
+  - The "everything" chat starts with a list of every meeting and project (titles, dates,
+    projects), so questions like "when did we meet about X" can be answered without the
+    transcripts. Then come the meetings and files ranked by how many of the question's words
+    (4+ letters, case and accents ignored) they contain, newest first among equals.
+  - `fit_context` gives everything when it fits. Otherwise it gives summaries and notes in
+    place of transcripts in rank order, dropping the last items, then restores whole meetings
+    in rank order while they fit. Each answer lists what was given and what was left out, and
+    the model is told what was left out.
+  - No embedding index or vector search: it would need a new model or library, and the
+    word-overlap ranking with summaries fits personal libraries. It can be swapped in behind
+    `gather_material` later.
+- **History:** kept per device in SQLite, sealed per message (`chat-message:v1:<chat>:<pos>`),
+  at most 200 messages per chat, not synced. Each question carries the most recent turns that
+  fit a quarter of the room. Deleting a meeting or project deletes its chat.
+- **Connections:** the same ones as summaries (#95); the apps use the default one, while the CLI
+  and the API can name another. Material goes only to the connection the owner configured. Tests
+  use fake engines; no meeting content reached a cloud provider.
+- **Blocking:** hosts hold their store only while gathering and storing, never while the model
+  answers, as summaries do.
