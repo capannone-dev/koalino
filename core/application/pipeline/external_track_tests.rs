@@ -13,8 +13,8 @@ use crate::{
     domain::{
         errors::StorageError,
         models::{
-            AudioRecording, DeviceId, ExternalMediaChunk, ExternalParticipant, MeetingId,
-            RecordingId, SpeakerIdentity,
+            AudioRecording, DeviceId, ExternalMediaChunk, ExternalParticipant, ExternalTrackKind,
+            MeetingId, RecordingId, SpeakerIdentity,
         },
     },
     ports::{ai::SpeakerSegment, external_bridge::IdentityMapper},
@@ -24,6 +24,7 @@ use crate::{
 struct OfferRecordingMapper {
     identity: SpeakerIdentity,
     offered: RefCell<Vec<Vec<f32>>>,
+    mapped: RefCell<usize>,
 }
 
 impl OfferRecordingMapper {
@@ -32,6 +33,7 @@ impl OfferRecordingMapper {
         Self {
             identity: SpeakerIdentity::new(Uuid::new_v4(), "Meeting Room 4"),
             offered: RefCell::new(Vec::new()),
+            mapped: RefCell::new(0),
         }
     }
 
@@ -49,6 +51,7 @@ impl IdentityMapper for OfferRecordingMapper {
         &self,
         _external: ExternalParticipant,
     ) -> Result<SpeakerIdentity, StorageError> {
+        *self.mapped.borrow_mut() += 1;
         Ok(self.identity.clone())
     }
 
@@ -222,4 +225,50 @@ async fn a_voice_that_sounds_like_someone_else_is_not_offered() {
     }
 
     assert!(mapper.offered.borrow().is_empty());
+}
+
+#[tokio::test]
+async fn a_mixed_remote_track_has_its_voices_matched_from_the_first_chunk() {
+    // A browser receives every remote participant mixed into one track (#102): even a single
+    // voice in it is matched against the gallery, never credited to the track's participant.
+    let mut fixture = session_fixture(
+        MockTranscriptionEngine::returning(&["hello there", "good morning all"]),
+        vec![
+            Ok(vec![SpeakerSegment::new(0, 10_000, vec![1.0, 0.0])]),
+            Ok(vec![SpeakerSegment::new(0, 10_000, UNKNOWN_VOICE.to_vec())]),
+        ],
+    );
+    let known_identity_id = fixture.known_identity_id;
+    let mapper = OfferRecordingMapper::new();
+    let mut attributions = Vec::new();
+    for start_ms in [0, 10_000] {
+        let (media_chunk, recording) = track_chunk(start_ms);
+        let media_chunk = media_chunk.with_track_kind(ExternalTrackKind::MixedRemote);
+        let produced = fixture
+            .session
+            .process_external_chunk(&mapper, &media_chunk, &recording, 10_000)
+            .await
+            .unwrap_or_else(|error| panic!("chunk should process: {error}"));
+        attributions.push(produced[0].attribution().clone());
+    }
+
+    assert_eq!(
+        attributions[0],
+        SpeakerAttribution::Known {
+            identity_id: known_identity_id
+        }
+    );
+    assert!(matches!(
+        attributions[1],
+        SpeakerAttribution::Unknown { .. }
+    ));
+    assert_eq!(
+        *mapper.mapped.borrow(),
+        0,
+        "a mixed track maps no participant"
+    );
+    assert!(
+        mapper.offered.borrow().is_empty(),
+        "a mixed track is never kept"
+    );
 }

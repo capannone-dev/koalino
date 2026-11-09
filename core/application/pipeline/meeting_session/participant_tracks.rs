@@ -6,7 +6,8 @@
 //! their own names or join unknown-speaker clusters for review, and nothing more is credited to
 //! the room. After enough clean speech of one voice, the voice is offered to the identity mapper
 //! for the gallery, unless it sounds like someone else already in it; the mapper keeps it only
-//! when the owner opted in. The judgement itself lives in `domain::participant_track_voices`.
+//! when the owner opted in. A browser's mixed remote track (#102) carries several voices from its
+//! first chunk. The judgement itself lives in `domain::participant_track_voices`.
 //! Audio, text and embeddings are never logged.
 
 use std::time::Instant;
@@ -17,8 +18,9 @@ use crate::{
         meeting_session::{MeetingSession, VadAudioChunk},
     },
     domain::{
+        models::ExternalTrackKind,
         models::{AudioRecording, ExternalMediaChunk, SpeakerIdentity, VoiceMatchResult},
-        participant_track_voices::{TrackVerdict, VoiceTurn},
+        participant_track_voices::{ParticipantTrackVoices, TrackVerdict, VoiceTurn},
     },
     ports::{
         ai::{DiarizationEngine, TranscriptionEngine},
@@ -100,7 +102,10 @@ where
         let track = self
             .participant_tracks
             .entry(media_chunk.external_participant().external_id().to_owned())
-            .or_default();
+            .or_insert_with(|| match media_chunk.track_kind() {
+                ExternalTrackKind::Participant => ParticipantTrackVoices::default(),
+                ExternalTrackKind::MixedRemote => ParticipantTrackVoices::carrying_several_voices(),
+            });
         let verdict = track.observe(&policy, chunk_voices);
         let offered_voice = track.enrolment_candidate(&policy);
         if offered_voice.is_some() {

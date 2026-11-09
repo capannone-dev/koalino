@@ -191,6 +191,17 @@ pub struct ParticipantTrackVoices {
 }
 
 impl ParticipantTrackVoices {
+    /// A track known from the start to carry several voices, such as a browser's mixed remote
+    /// audio (#102): every chunk has its voices separated and nothing is kept for the gallery.
+    ///
+    /// Outputs: The track. Side effects: None.
+    pub fn carrying_several_voices() -> Self {
+        Self {
+            several_voices: true,
+            ..Self::default()
+        }
+    }
+
     /// Takes in one chunk's judgement and says how to credit the chunk.
     ///
     /// Inputs: The policy and the chunk's `ChunkVoices`.

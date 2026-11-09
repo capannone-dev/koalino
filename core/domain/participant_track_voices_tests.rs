@@ -208,3 +208,15 @@ fn a_silent_chunk_changes_nothing() {
     );
     assert!(!track.has_several_voices());
 }
+
+#[test]
+fn a_track_known_to_carry_several_voices_separates_them_from_the_start() {
+    let policy = TrackVoicePolicy::default();
+    let mut track = ParticipantTrackVoices::carrying_several_voices();
+    assert!(track.has_several_voices());
+    assert_eq!(
+        track.observe(&policy, one_voice(30_000, &VOICE_A)),
+        TrackVerdict::SeparateVoices
+    );
+    assert_eq!(track.enrolment_candidate(&policy), None, "never kept");
+}

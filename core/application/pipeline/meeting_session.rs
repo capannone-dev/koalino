@@ -29,9 +29,9 @@ use crate::{
     domain::{
         errors::{StorageError, TranscriptionError},
         models::{
-            AudioRecording, ExternalMediaChunk, MeetingId, SpeakerIdentity, Transcript,
-            TranscriptSegment, TranscriptionContext, UnassignedVoiceClip, UnknownSpeakerChunk,
-            UnknownSpeakerCluster, VoiceMatchResult, WeakVoiceMatchCandidate,
+            AudioRecording, ExternalMediaChunk, ExternalTrackKind, MeetingId, SpeakerIdentity,
+            Transcript, TranscriptSegment, TranscriptionContext, UnassignedVoiceClip,
+            UnknownSpeakerChunk, UnknownSpeakerCluster, VoiceMatchResult, WeakVoiceMatchCandidate,
         },
     },
     ports::{
@@ -898,7 +898,8 @@ where
     /// Outputs: The newly persisted segments (none for a blank transcript), or an error when the
     /// meeting mismatches, transcription fails, or storage fails. The participant gets the chunk
     /// while its track carries one voice (or diarization is missing); a track with several voices
-    /// has each voice matched against the gallery (#103). A mapping failure degrades the
+    /// has each voice matched against the gallery (#103), as does a browser's mixed remote track
+    /// from its first chunk, without any mapping (#102). A mapping failure degrades the
     /// participant's part to `Unknown` without a review clip.
     /// Side effects: Runs transcription and diarization, may persist an identity mapping, may
     /// cluster unknown voices and save review clips, may offer the participant's voice to the
@@ -925,19 +926,24 @@ where
         self.record_chunk_language(self.default_language, chunk_start_ms);
 
         let external_participant = media_chunk.external_participant();
-        let mapped_identity =
-            match identity_mapper.map_external_to_local(external_participant.clone()) {
-                Ok(local_identity) => Some(local_identity),
-                Err(error) => {
-                    tracing::warn!(
-                        meeting_id = %self.meeting_id.as_str(),
-                        external_id = %external_participant.external_id(),
-                        error = %error,
-                        "External identity mapping failed; segment persisted as Unknown"
-                    );
-                    None
+        // A mixed remote track (#102) is nobody's own voice, so it maps to no identity.
+        let mapped_identity = match media_chunk.track_kind() {
+            ExternalTrackKind::MixedRemote => None,
+            ExternalTrackKind::Participant => {
+                match identity_mapper.map_external_to_local(external_participant.clone()) {
+                    Ok(local_identity) => Some(local_identity),
+                    Err(error) => {
+                        tracing::warn!(
+                            meeting_id = %self.meeting_id.as_str(),
+                            external_id = %external_participant.external_id(),
+                            error = %error,
+                            "External identity mapping failed; segment persisted as Unknown"
+                        );
+                        None
+                    }
                 }
-            };
+            }
+        };
         let participant = mapped_identity.as_ref().map_or(
             SpeakerAttribution::Unknown {
                 clip_id: None,
