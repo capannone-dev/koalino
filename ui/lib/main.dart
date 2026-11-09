@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/core_startup_controller.dart';
@@ -184,6 +185,11 @@ final class NoteTakerApp extends StatelessWidget {
         meetingScreenBuilder: (BuildContext context, String meetingId) =>
             _MeetingsDestination(openMeetingId: meetingId),
         summariesController: _summariesController,
+        searchBridge: const SearchBridge(),
+        meetingMomentBuilder:
+            (BuildContext context, String meetingId, int? startTimeMs) =>
+                _MeetingsDestination(
+                    openMeetingId: meetingId, openAtMs: startTimeMs),
       ),
       settingsScreenBuilder: (BuildContext context) => _SettingsDestination(
         appLockController: appLockController,
@@ -231,10 +237,13 @@ void _quit() {
 /// Owns a meeting controller for as long as the Meetings destination is shown, or one meeting's
 /// page opened from a project (`openMeetingId`).
 final class _MeetingsDestination extends StatefulWidget {
-  const _MeetingsDestination({this.openMeetingId});
+  const _MeetingsDestination({this.openMeetingId, this.openAtMs});
 
   /// The meeting to show alone, or `null` for the meeting list.
   final String? openMeetingId;
+
+  /// The transcript passage to scroll `openMeetingId` to, such as a search result (#100).
+  final int? openAtMs;
 
   @override
   State<_MeetingsDestination> createState() => _MeetingsDestinationState();
@@ -276,6 +285,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
         projectsController: _projectsController,
         summariesController: _summariesController,
         editController: _meetingEditController,
+        focusStartMs: widget.openAtMs,
       );
     }
     return MeetingListScreen(
@@ -288,6 +298,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
       projectsController: _projectsController,
       summariesController: _summariesController,
       editController: _meetingEditController,
+      searchBridge: const SearchBridge(),
     );
   }
 }

@@ -120,6 +120,12 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   (the Notes section of an open meeting, read again each time a meeting is shown), and
   `EditableSegment`, which opens a dialog to correct a transcript passage on a long press, a
   right-click or the screen reader's "Edit text" action; leaving the text empty removes it.
+- `search_screen.dart` (#100) is the search page, opened from the search button of the Meetings
+  screen (every meeting), the Projects screen (every project) and a project's page (that
+  project). Each result names its meeting or project and where the match is, and marks the
+  matched words. A meeting result opens the meeting scrolled to the passage
+  (`MeetingDetailScreen.focusStartMs`, which marks it); a file result opens the file
+  (`openProjectSearchHit`).
 - `ai_settings_screen.dart` (#95) is Settings → AI connections: add (from a preset), edit, test,
   remove and choose the default connection; the summary prompt template with its placeholders;
   and automatic summaries (#101). Keys are typed in a hidden field and never shown again.

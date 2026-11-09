@@ -7,7 +7,9 @@ import 'package:flutter/services.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
+import 'package:note_taker_ui/presentation/search_screen.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
@@ -41,6 +43,7 @@ final class MeetingListScreen extends StatefulWidget {
     this.projectsController,
     this.summariesController,
     this.editController,
+    this.searchBridge,
     super.key,
   });
 
@@ -58,6 +61,9 @@ final class MeetingListScreen extends StatefulWidget {
 
   /// Shows the open meeting's notes and lets the owner correct its transcript when given (#96).
   final MeetingEditController? editController;
+
+  /// Adds Search over every meeting when given (#100).
+  final SearchBridge? searchBridge;
 
   @override
   State<MeetingListScreen> createState() => _MeetingListScreenState();
@@ -77,10 +83,34 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
     if (isTwoPane) {
       return;
     }
+    _pushMeeting(context, meeting.meetingId);
+  }
+
+  /// Opens the search page over every meeting; a result opens its meeting at the passage.
+  void _search(SearchBridge bridge) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (BuildContext context) => SearchScreen(
+        bridge: bridge,
+        scope: SearchScope.meetings,
+        title: 'Search meetings',
+        onOpen: (BuildContext context, SearchHit hit) {
+          if (hit.meetingId case final String meetingId) {
+            widget.controller.selectMeeting(meetingId);
+            _pushMeeting(context, meetingId, focusStartMs: hit.startTimeMs);
+          }
+        },
+      ),
+    ));
+  }
+
+  /// Pushes a meeting's page, scrolled to `focusStartMs` when given.
+  void _pushMeeting(BuildContext context, String meetingId,
+      {int? focusStartMs}) {
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (BuildContext context) => MeetingDetailScreen(
         controller: widget.controller,
-        meetingId: meeting.meetingId,
+        meetingId: meetingId,
+        focusStartMs: focusStartMs,
         attachmentsController: widget.attachmentsController,
         photoScreenBuilder: widget.photoScreenBuilder,
         speakersScreenBuilder: widget.speakersScreenBuilder,
@@ -109,6 +139,12 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
           appBar: AppBar(
             title: const Text('Meetings'),
             actions: <Widget>[
+              if (widget.searchBridge case final SearchBridge bridge)
+                IconButton(
+                  tooltip: 'Search meetings',
+                  icon: const Icon(Icons.search),
+                  onPressed: () => _search(bridge),
+                ),
               IconButton(
                 tooltip: 'Refresh',
                 icon: const Icon(Icons.refresh),

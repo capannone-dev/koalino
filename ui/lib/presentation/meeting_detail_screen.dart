@@ -5,6 +5,7 @@ import 'dart:io';
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
@@ -49,11 +50,15 @@ final class MeetingDetailScreen extends StatefulWidget {
     this.projectsController,
     this.summariesController,
     this.editController,
+    this.focusStartMs,
     super.key,
   });
 
   final MeetingListController controller;
   final String meetingId;
+
+  /// Scrolls to and marks the transcript passage starting here, such as a search result (#100).
+  final int? focusStartMs;
   final MeetingAttachmentsController? attachmentsController;
   final MeetingScreenBuilder? photoScreenBuilder;
   final MeetingScreenBuilder? speakersScreenBuilder;
@@ -141,7 +146,9 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
         ],
       ),
       body: MeetingDetailView(
-          controller: widget.controller, editController: widget.editController),
+          controller: widget.controller,
+          editController: widget.editController,
+          focusStartMs: widget.focusStartMs),
     );
   }
 }
@@ -319,10 +326,16 @@ final class MeetingDetailView extends StatelessWidget {
   /// Creates a view observing `controller`'s selection; `editController` adds the notes and
   /// transcript corrections (#96).
   const MeetingDetailView(
-      {required this.controller, this.editController, super.key});
+      {required this.controller,
+      this.editController,
+      this.focusStartMs,
+      super.key});
 
   final MeetingListController controller;
   final MeetingEditController? editController;
+
+  /// Scrolls to and marks the transcript passage starting here (#100).
+  final int? focusStartMs;
 
   /// Builds a loading indicator, an error, a selection prompt, or the meeting content.
   ///
@@ -344,7 +357,8 @@ final class MeetingDetailView extends StatelessWidget {
           final MeetingDetail meeting => _MeetingContent(
               controller: controller,
               meeting: meeting,
-              editController: editController),
+              editController: editController,
+              focusStartMs: focusStartMs),
           null => const Center(
               child: Text('Select a meeting to see its transcript.')),
         };
@@ -356,11 +370,32 @@ final class MeetingDetailView extends StatelessWidget {
 /// Lays out the title header (with its rename action), metadata, and transcript of a meeting.
 final class _MeetingContent extends StatelessWidget {
   const _MeetingContent(
-      {required this.controller, required this.meeting, this.editController});
+      {required this.controller,
+      required this.meeting,
+      this.editController,
+      this.focusStartMs});
 
   final MeetingListController controller;
   final MeetingDetail meeting;
   final MeetingEditController? editController;
+  final int? focusStartMs;
+
+  /// The start of the passage to scroll to: the one starting at `focusStartMs`, or the last one
+  /// starting before it; null without a focus or segments.
+  int? get _focusedStart {
+    final int? focus = focusStartMs;
+    if (focus == null) {
+      return null;
+    }
+    int? best;
+    for (final MeetingTranscriptSegment segment in meeting.segments) {
+      if (segment.startTimeMs <= focus &&
+          (best == null || segment.startTimeMs > best)) {
+        best = segment.startTimeMs;
+      }
+    }
+    return best;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -372,6 +407,10 @@ final class _MeetingContent extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: _maxReadableWidth),
         child: ListView(
           padding: const EdgeInsets.all(24),
+          // A passage to scroll to must be built, so build the whole transcript then.
+          scrollCacheExtent: focusStartMs == null
+              ? null
+              : const ScrollCacheExtent.pixels(double.maxFinite),
           children: <Widget>[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -504,23 +543,21 @@ final class _MeetingContent extends StatelessWidget {
   /// Builds one block per segment and attachment in timeline order, or the flat transcript or
   /// an empty-transcript message followed by the attachments.
   List<Widget> _transcriptChildren(ThemeData theme) {
+    final int? focusedStart = _focusedStart;
     final List<MeetingTimelineEntry> timeline = buildMeetingTimeline(
         segments: meeting.segments, attachments: meeting.attachments);
     final List<Widget> entries = timeline
         .map((MeetingTimelineEntry entry) => Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: switch (entry) {
+                SegmentEntry(:final MeetingTranscriptSegment segment)
+                    when segment.startTimeMs == focusedStart =>
+                  _FocusedSegment(
+                    key: focusedSegmentKey,
+                    child: _editable(theme, segment),
+                  ),
                 SegmentEntry(:final MeetingTranscriptSegment segment) =>
-                  switch (editController) {
-                    final MeetingEditController edits => EditableSegment(
-                        controller: edits,
-                        meetings: controller,
-                        meetingId: meeting.summary.meetingId,
-                        segment: segment,
-                        child: _segmentBlock(theme, segment),
-                      ),
-                    null => _segmentBlock(theme, segment),
-                  },
+                  _editable(theme, segment),
                 AttachmentEntry(:final MeetingAttachment attachment) =>
                   MeetingAttachmentView(attachment: attachment),
               },
@@ -544,6 +581,19 @@ final class _MeetingContent extends StatelessWidget {
       ...entries,
     ];
   }
+
+  /// Builds a segment, correctable when there is an edit controller.
+  Widget _editable(ThemeData theme, MeetingTranscriptSegment segment) =>
+      switch (editController) {
+        final MeetingEditController edits => EditableSegment(
+            controller: edits,
+            meetings: controller,
+            meetingId: meeting.summary.meetingId,
+            segment: segment,
+            child: _segmentBlock(theme, segment),
+          ),
+        null => _segmentBlock(theme, segment),
+      };
 
   /// Builds one segment: speaker and start time above its text.
   ///
@@ -619,6 +669,44 @@ final class _MeetingContent extends StatelessWidget {
         ),
         style: theme.textTheme.bodyLarge,
       ),
+    );
+  }
+}
+
+/// Key of the transcript passage a meeting page was opened at (#100), for tests.
+const Key focusedSegmentKey = ValueKey<String>('focused-segment');
+
+/// Marks the passage a meeting page was opened at and scrolls it into view once.
+final class _FocusedSegment extends StatefulWidget {
+  const _FocusedSegment({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  State<_FocusedSegment> createState() => _FocusedSegmentState();
+}
+
+final class _FocusedSegmentState extends State<_FocusedSegment> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Scrollable.ensureVisible(context,
+            alignment: 0.2, duration: const Duration(milliseconds: 300));
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colors.tertiaryContainer.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(padding: const EdgeInsets.all(8), child: widget.child),
     );
   }
 }

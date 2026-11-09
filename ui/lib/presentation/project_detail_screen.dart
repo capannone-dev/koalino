@@ -1,5 +1,6 @@
 // One project's page (Issue #85): its meetings, newest first, and its resources (files, notes
-// and e-mails), with actions to add files, write a note, add meetings, rename and delete.
+// and e-mails), with actions to add files, write a note, add meetings, rename and delete, and to
+// search this project's files and meetings (#100).
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -7,11 +8,13 @@ import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
+import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/presentation/confirm_delete_dialog.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
+import 'package:note_taker_ui/presentation/search_screen.dart';
 
 /// Shows and changes one project.
 final class ProjectDetailScreen extends StatelessWidget {
@@ -22,6 +25,8 @@ final class ProjectDetailScreen extends StatelessWidget {
     this.meetingScreenBuilder,
     this.pdfViewBuilder = defaultPdfView,
     this.summariesController,
+    this.searchBridge,
+    this.meetingMomentBuilder,
     super.key,
   });
 
@@ -32,6 +37,31 @@ final class ProjectDetailScreen extends StatelessWidget {
 
   /// Adds a summary button and menu (long press, right-click) to each meeting when given (#95).
   final SummariesController? summariesController;
+
+  /// Adds Search over this project when given (#100).
+  final SearchBridge? searchBridge;
+
+  /// Opens a meeting at a passage search found.
+  final MeetingMomentBuilder? meetingMomentBuilder;
+
+  /// Opens the search page over this project.
+  void _search(BuildContext context, SearchBridge bridge, String name) {
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (BuildContext context) => SearchScreen(
+        bridge: bridge,
+        scope: SearchScope.project,
+        projectId: projectId,
+        title: 'Search $name',
+        onOpen: (BuildContext context, SearchHit hit) => openProjectSearchHit(
+          context,
+          hit,
+          controller: controller,
+          meetingBuilder: meetingMomentBuilder,
+          projectPageBuilder: null,
+        ),
+      ),
+    ));
+  }
 
   /// Shows `message` in a snack bar.
   static void _tell(BuildContext context, String message) =>
@@ -145,6 +175,16 @@ final class ProjectDetailScreen extends StatelessWidget {
           appBar: AppBar(
             title: Text(project?.name ?? 'Project'),
             actions: <Widget>[
+              if ((searchBridge, project)
+                  case (
+                    final SearchBridge bridge,
+                    final ProjectSummary project
+                  ))
+                IconButton(
+                  tooltip: 'Search this project',
+                  icon: const Icon(Icons.search),
+                  onPressed: () => _search(context, bridge, project.name),
+                ),
               IconButton(
                 key: const ValueKey<String>('add-project-files'),
                 tooltip: 'Add files',

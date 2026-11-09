@@ -129,6 +129,11 @@ and single transcript segments, through `note_taker_meeting_edit` (one JSON requ
 a background isolate through `callRustLlm`). `MeetingEditException` words the core's `error_code`
 (`empty`, `too_long`, `segment_not_found`, ...). Note text is never logged.
 
+`search_bridge.dart` (#100) is `SearchBridge.search(query, scope, projectId:)` over
+`note_taker_search` (on a background isolate through `callRustLlm`), with `SearchHit` (where the
+match is: `placeLabel` such as `1:01 · Anna`, and the snippet's `SnippetPart`s),
+`SearchResults` and `SearchException`, which words the core's `error_code`.
+
 `incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Note Taker:
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and
 `IncomingShareBridge` (`arrivals`, `takePending`, `release`). `AndroidIncomingShareBridge` talks
