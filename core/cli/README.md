@@ -50,6 +50,7 @@ note-taker keep-speech [days]
 note-taker summary <meeting-id> [--connection <id>] [--show]
 note-taker search <word>... [--projects | --project <id>]
 note-taker notes-folder [status | on [<path>] | off | sync]
+note-taker chat <question>... [--meeting <id> | --project <id>] [--history | --clear]
 note-taker ai [list | add --label L --kind openai|anthropic --url U --model M [--context N] | remove <id> | default <id> | test <id> | auto on|off]
 note-taker [--log-level <level>] <command> ...
 ```
@@ -194,6 +195,11 @@ off.
 transcript passage, `summary`, `notes`, `title`, or a project file). It searches every meeting by
 default, every project with `--projects`, or one with `--project <id>`. Case and accents are
 ignored, and every word must be in the same passage.
+
+`chat <question>... [--meeting <id> | --project <id>] [--connection <id>]` (#97) asks the
+default AI connection about every meeting, summary and project, or about one meeting or
+project, and prints the answer with what the model was given. `--history` prints the chat so
+far and `--clear` deletes it. Chats are kept on this device, sealed.
 
 `notes-folder [status | on [<path>] | off | sync]` (#98) shows or changes the notes folder: plain
 files mirroring projects and meetings (see `bin/README.md`). `on` writes it at once, in `<path>`,

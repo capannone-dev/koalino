@@ -2473,6 +2473,29 @@ pub(crate) fn with_runtime_repositories<Output>(
     output
 }
 
+/// Lends the runtime's repository, voice database and project files to the chat (#97).
+///
+/// Inputs: The work, run while the runtime lock is held, so it must be short (no model calls).
+/// Outputs: Its result, or `None` when the runtime cannot be created or locked.
+pub(crate) fn with_runtime_chat_sources<Output>(
+    work: impl FnOnce(&SqliteNoteRepository, &SqliteVoiceVectorDB, &ProjectFiles) -> Output,
+) -> Option<Output> {
+    let mut output = None;
+    let _ = with_runtime_json(|runtime| {
+        let project_files = ProjectFiles::new(
+            runtime.attachment_directory.clone(),
+            runtime.note_repository.device_id().clone(),
+        );
+        output = Some(work(
+            &runtime.note_repository,
+            runtime.voice_identity_manager.vector_database(),
+            &project_files,
+        ));
+        Ok(String::new())
+    });
+    output
+}
+
 /// Runs one notes folder round (#98) against the runtime's store, then tells paired devices
 /// about the meetings it changed.
 ///

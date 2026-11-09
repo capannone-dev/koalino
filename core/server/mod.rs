@@ -7,6 +7,10 @@
 pub mod api;
 #[cfg(test)]
 mod api_tests;
+/// Serves chat with notes (#97).
+pub mod chat_routes;
+#[cfg(test)]
+mod chat_routes_tests;
 /// Serves the owner's edits to a meeting's notes, summary and transcript (#96).
 pub mod edit_routes;
 #[cfg(test)]

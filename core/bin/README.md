@@ -321,6 +321,14 @@ hit as JSON, and stable error codes. `HostSearchSources` gives `application/sear
 people's names and project files' text (`ProjectFiles::searchable_text`: text and Markdown files,
 e-mails).
 
+`notes_chat_commands.rs` (#97) is chat with notes for the app (`ffi_chat.rs`,
+`note_taker_chat`), the daemon (`server/chat_routes.rs`) and the CLI (`chat`). `gather_material`
+reads what a chat is about. For a meeting: its summary, notes, transcript and photos. For a
+project: its files' text and newest images, then its meetings newest first. For everything: a
+list of all meetings and projects, then the meetings (and matching files) that best match the
+question. `ask_with` holds the store only while reading and storing, never while the model
+answers.
+
 `notes_folder.rs` (#98) keeps the opt-in notes folder: a tree of plain files mirroring projects
 (`<Project>/`, with their files) and meetings (`<Project or No project>/<YYYY-MM-DD HH-MM Title>/`
 with `notes.md`, `summary.md`, a read-only `transcript.md` and `attachments/`). `run_round` reads

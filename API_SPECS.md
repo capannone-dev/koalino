@@ -241,6 +241,13 @@ and meeting summaries" below). Keys are write-only.
   The request is `{"query","scope"?,"project_id"?}`, and the answer is as for
   `GET /api/search` below. Extra error code: `runtime_unavailable`.
 
+### Chat C ABI (#97)
+
+- `char *note_taker_chat(const char *request_json)` runs one command and returns caller-freed
+  JSON: `{"command":"history"|"ask"|"clear","scope":"meeting"|"project"|"all","id"?,
+  "question"?,"connection_id"?}`. Answers and errors are as for `/api/chat` below, plus
+  `runtime_unavailable`. `ask` blocks until the model answers.
+
 ### Notes folder C ABI (#98)
 
 - `char *note_taker_notes_folder(const char *request_json)` runs one command and returns
@@ -581,6 +588,27 @@ Errors are `{"ok":false,"error_code","error"}`: `400` `invalid_request`, `invali
 - Failures: `400` `invalid_request`, `empty`, `too_short` (under 2 characters) or `too_long`
   (over 200); `404` `project_not_found`; `500` `storage_failed`. Search reads sealed text in
   memory only; the query is never logged.
+
+### Chat (#97)
+
+- `GET /api/chat?scope=meeting|project|all&id=` answers `{"ok":true,"messages":[...]}`, oldest
+  first. A message is `{"role":"user"|"assistant","text","created_at","included","omitted",
+  "connection"}`; `included` and `omitted` say what the model was given and what was left out
+  for length.
+- `POST /api/chat` `{"scope","id"?,"question","connection_id"?}` asks the connection (the
+  default one without `connection_id`) and answers `{"ok":true,"question","answer",
+  "truncated","images_sent"}`; both messages are kept.
+  - A meeting chat sends its summary, notes, transcript and photos.
+  - A project chat sends its files' text and newest images, then its meetings, newest first.
+  - The `all` chat sends a list of every meeting and project, then the meetings and files that
+    best match the question.
+  - What does not fit the connection's context becomes the summary only, then is left out.
+- `DELETE /api/chat?scope=&id=` deletes the chat: `{"ok":true,"cleared":bool}`.
+- Chats are kept on the daemon's device, sealed, and are not synced. Deleting a meeting or a
+  project deletes its chat.
+- Failures: `400` `invalid_request`, `empty`, `too_long` (over 4 000 characters); `404`
+  `meeting_not_found`, `project_not_found`, `connection_not_found`; `409` `no_connection`,
+  `missing_key`, `nothing_to_chat`, `context_too_small`; `502` `llm_*`; `503` `unavailable`.
 
 ### Notes folder (#98)
 

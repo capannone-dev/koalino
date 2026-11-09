@@ -61,12 +61,22 @@ use crate::{
 /// Combines the repository capabilities required by the headless server boundary, including
 /// projects (Issue #85).
 pub trait ServerRepository:
-    NoteRepository + AttachmentRepository + MetricsRepository + ProjectRepository + Send
+    NoteRepository
+    + AttachmentRepository
+    + MetricsRepository
+    + ProjectRepository
+    + crate::ports::chat::ChatHistoryRepository
+    + Send
 {
 }
 
 impl<T> ServerRepository for T where
-    T: NoteRepository + AttachmentRepository + MetricsRepository + ProjectRepository + Send
+    T: NoteRepository
+        + AttachmentRepository
+        + MetricsRepository
+        + ProjectRepository
+        + crate::ports::chat::ChatHistoryRepository
+        + Send
 {
 }
 
@@ -400,6 +410,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .merge(super::edit_routes::routes())
         .merge(super::search_routes::routes())
         .merge(super::notes_folder_routes::routes())
+        .merge(super::chat_routes::routes())
         // Innermost of the three layers, so CORS still answers preflights for allowed origins
         // and refusals are traced.
         .layer(middleware::from_fn(reject_cross_site_requests))

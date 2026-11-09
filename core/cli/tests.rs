@@ -1869,3 +1869,98 @@ fn notes_folder_turns_on_and_writes_the_folder() {
     assert!(off.starts_with("Notes folder: off"), "{off}");
     drop(std::fs::remove_dir_all(folder));
 }
+
+/// Answers every chat question the same way; nothing leaves the machine.
+struct FixedAnswer;
+
+impl crate::ports::ai::LlmEngine for FixedAnswer {
+    fn complete(
+        &self,
+        _request: &crate::domain::llm::LlmRequest,
+    ) -> Result<crate::domain::llm::LlmCompletion, crate::domain::errors::LlmError> {
+        Ok(crate::domain::llm::LlmCompletion {
+            text: String::from("Nothing was decided."),
+            truncated: false,
+        })
+    }
+}
+
+/// Verifies `chat` asks about everything, says what the model was given, keeps the chat and
+/// deletes it (#97).
+#[test]
+fn chat_asks_shows_and_clears_the_chat() {
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .and_then(|repository| {
+        repository.with_document_codec(std::sync::Arc::new(
+            crate::application::meeting_document::AutomergeMeetingDocumentCodec,
+        ))
+    })
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    crate::application::meeting_crdt::MeetingCrdtService::new(&repository)
+        .create_meeting(&crate::domain::models::MeetingId::new("m-1"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let folder = std::env::temp_dir().join(format!("cli-chat-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
+    let services = crate::llm_commands::LlmServices::new(
+        folder.join("db.llm-settings.json"),
+        std::sync::Arc::new(crate::llm_settings::MemoryLlmKeyring::default()),
+        "Laptop",
+    )
+    .with_engine_factory(std::sync::Arc::new(|_, _| {
+        Ok(Box::new(FixedAnswer) as Box<dyn crate::ports::ai::LlmEngine>)
+    }));
+    let saved = crate::llm_commands::run_llm_command(
+        &services,
+        r#"{"command":"save_connection","label":"Local","kind":"open_ai_compatible","base_url":"http://127.0.0.1:8080/v1","model":"m","context_tokens":8192}"#,
+    );
+    assert!(saved.contains("\"ok\":true"), "{saved}");
+    let mut cli_service = CoreCliService::new(
+        NoRecordingControl,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    )
+    .with_llm_services(std::sync::Arc::new(services));
+    let run = |cli_service: &mut _, arguments: &[&str]| {
+        let parsed = Cli::try_parse_from(arguments).unwrap_or_else(|error| panic!("{error}"));
+        super::dispatch(parsed.command, cli_service)
+    };
+
+    assert_eq!(
+        run(&mut cli_service, &["cli", "chat", "--history"])
+            .unwrap_or_else(|error| panic!("{error}")),
+        "This chat is empty."
+    );
+    assert!(
+        run(&mut cli_service, &["cli", "chat"]).is_err(),
+        "a question is needed"
+    );
+    let answer = run(
+        &mut cli_service,
+        &["cli", "chat", "What", "was", "decided?"],
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    assert!(
+        answer.starts_with("Nothing was decided.\n\nGiven: List of all meetings and projects"),
+        "{answer}"
+    );
+    let history = run(&mut cli_service, &["cli", "chat", "--history"])
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(
+        history.starts_with("You: What was decided?\n\nAI: Nothing was decided."),
+        "{history}"
+    );
+    assert_eq!(
+        run(&mut cli_service, &["cli", "chat", "--clear"])
+            .unwrap_or_else(|error| panic!("{error}")),
+        "Chat deleted."
+    );
+    let missing = run(
+        &mut cli_service,
+        &["cli", "chat", "--meeting", "nope", "Hi?"],
+    );
+    assert!(missing.is_err());
+    drop(std::fs::remove_dir_all(folder));
+}

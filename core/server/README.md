@@ -96,6 +96,8 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
   (one segment by start and end; blank text removes it). See API_SPECS.md.
 - Search (`search_routes.rs`, #100): `GET /api/search?q=&scope=meetings|projects|project&project=`
   answers with the hits of `bin/search_commands.rs`. See API_SPECS.md.
+- Chat (`chat_routes.rs`, #97): `GET`/`POST`/`DELETE /api/chat` over
+  `bin/notes_chat_commands.rs`. See API_SPECS.md.
 - Notes folder (`notes_folder_routes.rs`, #98): `GET`/`PUT /api/settings/notes-folder` and
   `POST /api/settings/notes-folder/sync` over `bin/notes_folder_commands.rs`;
   `start_notes_folder` runs the daemon's rounds. The folder is on the daemon's machine.

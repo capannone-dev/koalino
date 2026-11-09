@@ -136,6 +136,28 @@ pub enum CliCommand {
         #[arg(long)]
         project: Option<String>,
     },
+    /// Asks the default AI connection about your notes: every meeting, summary and project, or
+    /// one meeting or project. The chat is kept on this device, sealed, and each question carries
+    /// the recent ones. The answer says what the model was given.
+    Chat {
+        /// The question.
+        words: Vec<String>,
+        /// Talks about one meeting.
+        #[arg(long, conflicts_with = "project")]
+        meeting: Option<String>,
+        /// Talks about one project, by ID.
+        #[arg(long)]
+        project: Option<String>,
+        /// Uses this connection instead of the default one.
+        #[arg(long)]
+        connection: Option<String>,
+        /// Prints the chat so far instead of asking.
+        #[arg(long, conflicts_with = "clear")]
+        history: bool,
+        /// Deletes the chat.
+        #[arg(long)]
+        clear: bool,
+    },
     /// Shows, turns on or off, or syncs now the notes folder: plain files mirroring projects
     /// and meetings, editable with any editor (#98). The folder is a decrypted copy, so it is off
     /// until turned on.
@@ -642,6 +664,10 @@ pub trait CliService {
     fn llm_command(&mut self, _request: &serde_json::Value) -> Result<serde_json::Value, String> {
         Err(String::from("AI connections are not available here"))
     }
+    /// Runs a chat command (see `notes_chat_commands.rs`) and returns its answer (#97).
+    fn chat(&mut self, _request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        Err(String::from("chat is not available here"))
+    }
     /// Runs a notes folder command (see `notes_folder_commands.rs`) and returns its answer.
     fn notes_folder(&mut self, _request: &serde_json::Value) -> Result<serde_json::Value, String> {
         Err(String::from("the notes folder is not available here"))
@@ -788,6 +814,38 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
             };
             format_search(&cli_service.search(&request)?)
         }
+        CliCommand::Chat {
+            words,
+            meeting,
+            project,
+            connection,
+            history,
+            clear,
+        } => {
+            let (scope, id) = match (meeting, project) {
+                (Some(meeting), _) => ("meeting", Some(meeting)),
+                (None, Some(project)) => ("project", Some(project)),
+                (None, None) => ("all", None),
+            };
+            let command = if history {
+                "history"
+            } else if clear {
+                "clear"
+            } else {
+                "ask"
+            };
+            if command == "ask" && words.is_empty() {
+                return Err(String::from("type a question, or use --history or --clear"));
+            }
+            let request = serde_json::json!({
+                "command": command,
+                "scope": scope,
+                "id": id,
+                "question": words.join(" "),
+                "connection_id": connection,
+            });
+            format_chat(&cli_service.chat(&request)?)
+        }
         CliCommand::NotesFolder { action } => {
             let request = match action.unwrap_or(NotesFolderAction::Status) {
                 NotesFolderAction::Status => serde_json::json!({"command": "get"}),
@@ -802,6 +860,65 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
         CliCommand::Telemetry => cli_service.telemetry(),
         CliCommand::LogLevel { directive } => cli_service.request_log_level(&directive),
     }
+}
+
+/// Words a chat answer for the terminal: the answer and what it was given, the chat so far, or
+/// whether it was cleared.
+fn format_chat(answer: &serde_json::Value) -> Result<String, String> {
+    if answer["ok"] != true {
+        return Err(answer["error"]
+            .as_str()
+            .unwrap_or("the chat failed")
+            .to_owned());
+    }
+    let list = |value: &serde_json::Value| -> Vec<String> {
+        value
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let describe = |message: &serde_json::Value| -> String {
+        let mut text = message["text"].as_str().unwrap_or_default().to_owned();
+        let included = list(&message["included"]);
+        if !included.is_empty() {
+            text.push_str(&format!("\n\nGiven: {}", included.join("; ")));
+        }
+        let omitted = list(&message["omitted"]);
+        if !omitted.is_empty() {
+            text.push_str(&format!("\nLeft out for length: {}", omitted.join("; ")));
+        }
+        text
+    };
+    if answer["answer"].is_object() {
+        return Ok(describe(&answer["answer"]));
+    }
+    if let Some(messages) = answer["messages"].as_array() {
+        if messages.is_empty() {
+            return Ok(String::from("This chat is empty."));
+        }
+        return Ok(messages
+            .iter()
+            .map(|message| {
+                let who = if message["role"] == "user" {
+                    "You"
+                } else {
+                    "AI"
+                };
+                format!("{who}: {}", describe(message))
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n"));
+    }
+    Ok(if answer["cleared"] == true {
+        String::from("Chat deleted.")
+    } else {
+        String::from("This chat was already empty.")
+    })
 }
 
 /// What `notes-folder` does.
@@ -1521,7 +1638,8 @@ where
     RepositoryPort: NoteRepository
         + AttachmentRepository
         + MetricsRepository
-        + crate::ports::projects::ProjectRepository,
+        + crate::ports::projects::ProjectRepository
+        + crate::ports::chat::ChatHistoryRepository,
     VectorDatabasePort: VoiceVectorDB,
 {
     fn summarize_meeting(
@@ -1582,6 +1700,38 @@ where
             &self.repository,
             &sources,
             request,
+        ))
+    }
+    fn chat(&mut self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        use crate::notes_chat_commands::{
+            ChatCommand, ask_with, gather_for_ask, parse_chat_request, run_chat_store_command,
+            store_messages,
+        };
+        let command = match parse_chat_request(&request.to_string()) {
+            Ok(command) => command,
+            Err(error) => return Ok(error.to_json()),
+        };
+        let ChatCommand::Ask {
+            scope,
+            question,
+            connection_id,
+        } = command
+        else {
+            return Ok(run_chat_store_command(&self.repository, &command));
+        };
+        let llm = self
+            .llm
+            .clone()
+            .ok_or_else(|| String::from("AI connections are not available here"))?;
+        let repository = &self.repository;
+        let voices = self.voice_identity_manager.vector_database();
+        let files = self.project_files.as_ref();
+        Ok(ask_with(
+            &llm,
+            connection_id.as_deref(),
+            &question,
+            || gather_for_ask(repository, voices, files, &scope, &question),
+            |messages| store_messages(repository, &scope, messages),
         ))
     }
     fn notes_folder(&mut self, request: &serde_json::Value) -> Result<serde_json::Value, String> {

@@ -49,7 +49,7 @@ static SERVICES: OnceLock<Arc<LlmServices>> = OnceLock::new();
 
 /// Builds or borrows the services: settings beside the database, keys in the keychain (sealed
 /// under the host key on Android), the glossary and this device's name.
-fn services() -> Arc<LlmServices> {
+pub(crate) fn services() -> Arc<LlmServices> {
     Arc::clone(SERVICES.get_or_init(|| {
         let paths = TranscriptionPaths::from_lookup(&app_setting);
         let database = database_path();

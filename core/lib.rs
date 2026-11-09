@@ -41,6 +41,9 @@ pub mod ffi;
 #[path = "bin/ffi_android.rs"]
 pub mod ffi_android;
 /// AI connections and meeting summaries over the C ABI (#95).
+/// Chat with notes over the C ABI (#97).
+#[path = "bin/ffi_chat.rs"]
+pub mod ffi_chat;
 /// The owner's edits to a meeting over the C ABI (#96).
 #[path = "bin/ffi_edits.rs"]
 pub mod ffi_edits;
@@ -82,6 +85,12 @@ pub mod meeting_summaries;
 #[cfg(test)]
 #[path = "bin/meeting_summaries_tests.rs"]
 mod meeting_summaries_tests;
+/// Chat with notes for the app, the daemon and the CLI (#97).
+#[path = "bin/notes_chat_commands.rs"]
+pub mod notes_chat_commands;
+#[cfg(test)]
+#[path = "bin/notes_chat_commands_tests.rs"]
+mod notes_chat_commands_tests;
 /// Keeps the opt-in notes folder: plain files mirroring projects and meetings (#98).
 #[path = "bin/notes_folder.rs"]
 pub mod notes_folder;
