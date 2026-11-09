@@ -138,6 +138,12 @@ match is: `placeLabel` such as `1:01 · Anna`, and the snippet's `SnippetPart`s)
 `clear(topic)` over `note_taker_chat` (on a background isolate through `callRustLlm`), with
 `ChatTopic` (a meeting, a project or everything), `ChatEntry` and `ChatException`.
 
+`clear_copy_bridge.dart` (#99) gives the viewers clear copies of sealed attachments:
+`clearCopyResolver` (replaceable in tests) defaults to `rememberedClearCopy`, which calls
+`note_taker_clear_copy` on a background isolate and reuses a copy for 20 minutes (the core keeps
+it 30). Failures carry the core's code in `ClearCopyException`. The `filePath` of attachments and
+resources names the sealed file, which only the core can read.
+
 `notes_folder_bridge.dart` (#98) is `NotesFolderBridge.status()`, `set(enabled:, path:)` and
 `syncNow()` over `note_taker_notes_folder` (on a background isolate through `callRustLlm`, since a
 round writes the whole folder), with `NotesFolderStatus` and `NotesFolderException`.

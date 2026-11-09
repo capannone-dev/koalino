@@ -114,6 +114,11 @@ an e-mail and an add-files answer, and refusals. `projects_screen_test.dart` dri
 document viewers, deleting a resource, moving a meeting from its page, the add-files message, and
 the Markdown view. `fake_project_runner.dart` scripts `note_taker_project_command`.
 
+`flutter_test_config.dart` runs before every test file and makes `clearCopyResolver` answer at
+once with `/clear-copies/<id>`, since tests load no native core (#99). `clear_copy_test.dart`
+covers decoding the core's answer, `ClearFile` with and without a copy, and a project PDF opening
+from its clear copy.
+
 `summaries_controller_test.dart`, `meeting_summary_screen_test.dart` and
 `ai_settings_screen_test.dart` cover AI connections and summaries (#95) over `fake_llm_core.dart`,
 which scripts the core's answers per function or command (some held until the test releases

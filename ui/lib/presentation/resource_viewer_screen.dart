@@ -1,6 +1,7 @@
 // Shows one project resource inside the app (Issue #85): pictures full screen, Markdown rendered,
 // PDFs with PDFium (`pdfrx`), e-mails as headers and plain text, and text files as text. Office
-// documents cannot be shown and say so. Nothing here reaches the network.
+// documents cannot be shown and say so. Files are sealed at rest, so each view reads a short-lived
+// clear copy the core makes (#99). Nothing here reaches the network.
 
 import 'dart:convert';
 import 'dart:io';
@@ -8,6 +9,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
+import 'package:note_taker_ui/presentation/clear_file.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
 import 'package:pdfrx/pdfrx.dart';
 
@@ -46,31 +48,41 @@ final class ResourceViewerScreen extends StatelessWidget {
               text: 'This file is still on its way from a paired device.',
             )
           : switch (resource.kind) {
-              ProjectResourceKind.image => InteractiveViewer(
-                  maxScale: 8,
-                  child: Center(
-                    child: Image.file(
-                      File(resource.filePath),
-                      semanticLabel: resource.fileName,
-                      errorBuilder: (_, __, ___) => const _Message(
-                        icon: Icons.broken_image_outlined,
-                        text: 'This picture cannot be shown.',
+              ProjectResourceKind.image => _Clear(
+                  resource: resource,
+                  builder: (String path) => InteractiveViewer(
+                    maxScale: 8,
+                    child: Center(
+                      child: Image.file(
+                        File(path),
+                        semanticLabel: resource.fileName,
+                        errorBuilder: (_, __, ___) => const _Message(
+                          icon: Icons.broken_image_outlined,
+                          text: 'This picture cannot be shown.',
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ProjectResourceKind.markdown => _FileText(
-                  filePath: resource.filePath,
-                  builder: (String text) => MarkdownView(markdownText: text),
-                ),
-              ProjectResourceKind.text => _FileText(
-                  filePath: resource.filePath,
-                  builder: (String text) => SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: SelectableText(text),
+              ProjectResourceKind.markdown => _Clear(
+                  resource: resource,
+                  builder: (String path) => _FileText(
+                    filePath: path,
+                    builder: (String text) => MarkdownView(markdownText: text),
                   ),
                 ),
-              ProjectResourceKind.pdf => pdfViewBuilder(resource.filePath),
+              ProjectResourceKind.text => _Clear(
+                  resource: resource,
+                  builder: (String path) => _FileText(
+                    filePath: path,
+                    builder: (String text) => SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: SelectableText(text),
+                    ),
+                  ),
+                ),
+              ProjectResourceKind.pdf =>
+                _Clear(resource: resource, builder: pdfViewBuilder),
               ProjectResourceKind.email => _EmailView(
                   load: () =>
                       controller.readEmail(projectId, resource.attachmentId),
@@ -80,6 +92,26 @@ final class ResourceViewerScreen extends StatelessWidget {
                   text: "This kind of document can't be shown in the app yet.",
                 ),
             },
+    );
+  }
+}
+
+/// Shows a resource through its clear copy (#99), or says it cannot be opened.
+final class _Clear extends StatelessWidget {
+  const _Clear({required this.resource, required this.builder});
+
+  final ProjectResource resource;
+  final Widget Function(String path) builder;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClearFile(
+      attachmentId: resource.attachmentId,
+      builder: (BuildContext context, String path) => builder(path),
+      unavailableBuilder: (BuildContext context) => const _Message(
+        icon: Icons.error_outline,
+        text: 'This file cannot be opened.',
+      ),
     );
   }
 }

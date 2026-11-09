@@ -126,6 +126,9 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   matched words. A meeting result opens the meeting scrolled to the passage
   (`MeetingDetailScreen.focusStartMs`, which marks it); a file result opens the file
   (`openProjectSearchHit`).
+- `clear_file.dart` (#99) is `ClearFile`: it asks for an attachment's clear copy, shows a progress
+  indicator meanwhile, then builds the view from the copy's path, or an "unavailable" view. Meeting
+  photos (inline and full screen) and project pictures, Markdown, text and PDFs use it.
 - `chat_screen.dart` (#97) is the chat page (`openChat`): the kept messages, a question field,
   and under each answer what the model was given, what was left out and which connection
   answered. It opens from the Meetings screen (every note), a meeting (its app bar, or the
