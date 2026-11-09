@@ -2294,3 +2294,34 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   (`note_taker_meeting_edit`), web and app. The app edits a passage by long press, right-click
   or a screen-reader action, and Markdown in a full-page editor with a preview.
 - **Limits:** 200,000 characters for notes and summaries, 20,000 for a passage.
+
+## 2026-11-09 — #100 Search reads sealed text in memory, without an index
+
+- **Problem:** the owner wants to find quickly where something was said or written: in every
+  meeting, in every project, or in one project. Meeting text and documents are sealed at rest
+  (#92), so SQL `LIKE` can't see them.
+- **Decision: decrypt-then-filter, with no index.** Each search reads every meeting in scope
+  (title, summary, notes, segments) and each project file's text through the repository, which
+  unseals it, and matches in memory. Nothing it reads is kept.
+  - The issue suggested an in-memory index rebuilt on change. It would need invalidation on
+    every write and sync path, and it would keep the whole notebook unsealed in memory. A full
+    scan of the scratch database answers instantly. An index can be added behind `search` if
+    real libraries get slow, without changing any caller.
+- **Matching:**
+  - Case- and accent-insensitive (a small Latin fold, so no new dependency).
+  - Every word of the query must be in the same passage: a transcript segment, or one line of a
+    title, summary, notes or file. That is closer to "where was this said" than phrase matching,
+    and more precise than matching words anywhere in a meeting.
+  - At least 2 and at most 200 characters; at most 200 hits.
+- **Where hits open:**
+  - A transcript hit carries its time and speaker. The web links to `#t-<start ms>`; the app
+    opens the meeting scrolled to the passage and marks it.
+  - File hits open the file.
+  - Snippets come as matched and unmatched parts, so no viewer has to count characters across
+    UTF-8 and UTF-16.
+- **File text:**
+  - Text and Markdown files (their first 2 MiB) and e-mails (subject, senders, body).
+  - PDFs and office documents are found by name only: extracting their text would need a new
+    library.
+- **Privacy:** the query and the text found are never logged. The web route and FFI read
+  under the same repository lock as other reads.
