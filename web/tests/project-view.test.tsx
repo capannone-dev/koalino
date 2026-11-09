@@ -12,6 +12,11 @@ import * as projectsApi from "@/lib/projects-api";
 
 const push = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh: vi.fn() }) }));
+// The project page also holds its chat (#97), which is not under test here.
+vi.mock("@/lib/chat-api", async () => ({
+  ...(await vi.importActual<typeof import("@/lib/chat-api")>("@/lib/chat-api")),
+  getChat: vi.fn().mockResolvedValue([])
+}));
 vi.mock("@/lib/projects-api", async () => ({
   ...(await vi.importActual<typeof projectsApi>("@/lib/projects-api")),
   createProject: vi.fn(),

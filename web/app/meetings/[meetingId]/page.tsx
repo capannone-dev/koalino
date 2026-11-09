@@ -1,7 +1,9 @@
 // Renders one meeting's renamable title, when it was created and the languages it was transcribed
 // in, the devices it was recorded on with a Split action (#88), its project (Issue #85), its AI
-// summary (#95), notes and editable transcript (#96), and metadata-only attachment list from Axum.
+// summary (#95), notes and editable transcript (#96), a chat about it (#97), and metadata-only
+// attachment list from Axum.
 
+import { ChatPanel } from "@/components/chat-panel";
 import { MeetingTitleHeader } from "@/components/meeting-title-header";
 import { MeetingProjectPicker } from "@/components/meeting-project-picker";
 import { MeetingRecordedOn } from "@/components/meeting-recorded-on";
@@ -47,6 +49,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
         defaultTemplate={llmSettings?.template ?? ""}
       />
       <MeetingNotes meetingId={meeting.meeting_id} notes={notes} />
+      <ChatPanel topic={{ scope: "meeting", id: meeting.meeting_id }} heading="Chat about this meeting" />
       <h2>Transcript</h2>
       <MeetingTranscript meetingId={meeting.meeting_id} segments={meeting.segments} transcript={meeting.transcript} />
       <h2>Attachments</h2>

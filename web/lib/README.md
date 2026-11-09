@@ -42,6 +42,9 @@ connections and summaries.
 `SearchApiError` and `searchErrorMessage` (never the server's text). `hitHref` gives the page and
 anchor a hit opens, and `hitPlaceLabel` says where in its meeting or project it is.
 
+`chat-api.ts` (#97) is `getChat`, `askChat` and `clearChat` over `/api/chat`, with
+`ChatApiError` and `chatErrorMessage` (never the server's text).
+
 `notes-folder-api.ts` (#98) is `getNotesFolder`, `setNotesFolder(enabled, path)` and
 `syncNotesFolder` over `/api/settings/notes-folder`, with `NotesFolderError` and
 `notesFolderMessage` (never the server's text).

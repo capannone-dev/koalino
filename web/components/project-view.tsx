@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChangeEvent, FormEvent, useState } from "react";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { ChatPanel } from "@/components/chat-panel";
 import { SearchPanel } from "@/components/search-panel";
 import type { MeetingSummary } from "@/lib/api";
 import {
@@ -213,6 +214,7 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
       </header>
 
       <SearchPanel scope="project" projectId={projectId} label="Search this project" />
+      <ChatPanel topic={{ scope: "project", id: projectId }} heading="Chat about this project" />
 
       <section aria-labelledby="project-meetings" className="space-y-3">
         <h2 id="project-meetings" className="text-xl font-semibold">
