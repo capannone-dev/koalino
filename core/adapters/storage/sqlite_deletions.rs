@@ -134,6 +134,8 @@ fn remove_meeting(
         "DELETE FROM transcript_segments WHERE meeting_id = ?1",
         "DELETE FROM attachments WHERE meeting_id = ?1",
         "DELETE FROM meetings WHERE meeting_id = ?1",
+        // Its chat (#97), kept on this device only.
+        "DELETE FROM chat_messages WHERE chat_key = 'meeting:' || ?1",
     ] {
         connection
             .execute(statement, params![meeting_id.as_str()])

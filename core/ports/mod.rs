@@ -4,6 +4,8 @@
 pub mod ai;
 /// Declares portable lifecycle and stream contracts for audio capture.
 pub mod audio;
+/// Keeps chats with notes, per device and sealed (#97).
+pub mod chat;
 /// Declares at-rest encryption contracts for voice embeddings and their key metadata.
 pub mod crypto;
 /// Declares how imported e-mails are read (Issue #85).

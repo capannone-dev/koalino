@@ -171,6 +171,13 @@ fn remove_project(
             params![project_text],
         )
         .map_err(|error| sqlite_error("unable to delete a project's resources", error))?;
+    // Its chat (#97), kept on this device only.
+    connection
+        .execute(
+            "DELETE FROM chat_messages WHERE chat_key = 'project:' || ?1",
+            params![project_text],
+        )
+        .map_err(|error| sqlite_error("unable to delete a project's chat", error))?;
     connection
         .execute(
             "INSERT OR IGNORE INTO project_tombstones (project_id, deleted_at_utc) VALUES (?1, ?2)",

@@ -264,6 +264,11 @@ stop paired devices restoring them. Records hold an ID and a time and are kept f
 `document_revision_floor` keeps a deleted meeting's revision from being reused, because a watcher
 that saw it would miss the next write.
 
+`sqlite_chat_history.rs` (#97) keeps chats in `chat_messages`, one row per message by chat and
+position. The text, what an answer included and left out, and its connection are one sealed
+value bound to the chat and position (`chat-message:v1:<chat>:<position>`). Deleting a meeting
+or a project deletes its chat.
+
 `sqlite_projects.rs` (Issue #85) stores projects in `projects` and deletions in `project_tombstones` (kept forever, so a
 deleted project never returns). `meetings.project_id` indexes the project named in each meeting's CRDT document, written
 by the projection; `attachments.project_id` marks a project's resources, which never join the unlinked import queue. A

@@ -21,6 +21,8 @@ pub mod slide_attachment_store;
 mod slide_attachment_store_tests;
 /// Implements the note repository port using SQLite tables and CRDT byte blobs.
 pub mod sqlite_adapter;
+#[cfg(test)]
+mod sqlite_chat_history_tests;
 /// Seals review-clip audio through the cipher port and seals legacy plaintext clips once.
 mod sqlite_clip_audio_encryption;
 #[cfg(test)]

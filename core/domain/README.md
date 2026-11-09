@@ -64,6 +64,11 @@ previous chunk's text first and the glossary last, because Whisper keeps the end
 With Whisper small on NOTSOFAR, 42% of the words under 0.4 were wrong, against 3.1% of those at
 0.95 or more. Overlap spans closer than 250 ms merge, and those under 200 ms are dropped.
 
+`chat.rs` (#97) defines chats with notes: `ChatScope` (one meeting, one project, or everything;
+stored under `meeting:<id>`, `project:<id>` or `all`), `ChatMessage` (with what an answer
+included and left out, and its connection) and the limits (4 000-character questions, 200 kept
+messages per chat).
+
 `llm.rs` (#95) describes a connection to a language model and the summary prompt. `LlmConnection`
 has an id, label, `LlmKind` (`OpenAiCompatible`, covering OpenAI, Mistral and local servers such as
 Ollama, llama.cpp, LM Studio and vLLM; or `Anthropic`, through its native Messages API), base URL,

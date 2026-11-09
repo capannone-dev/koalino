@@ -106,6 +106,9 @@ object, such as the HTTP server's `dyn ServerRepository`, without owning it.
 `file_transfer.rs` moves attachments between paired devices (#57), and `remote_transcription.rs`
 declares the host, stored choice and sample access behind transcription on a paired device (#59).
 
+`chat.rs` (#97) declares `ChatHistoryRepository`: a chat's messages, adding to it (keeping the
+newest 200) and deleting it. Chats stay on one device and are sealed at rest.
+
 `projects.rs` (Issue #85) declares `ProjectRepository` (create, rename, delete, list projects, move a meeting in or
 out, list a project's meetings and resources) and `ProjectLibrarySync` (digest, export and merge the project list
 with paired devices). A meeting's project lives in its CRDT document (`MeetingDocumentCodec::with_project`).

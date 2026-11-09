@@ -25,6 +25,9 @@ mod cluster_share;
 #[path = "sqlite_deletions.rs"]
 mod deletions;
 
+/// Keeps chats with notes, sealed (#97).
+#[path = "sqlite_chat_history.rs"]
+mod chat_history;
 /// Indexes meetings folded into another device's recording of the same meeting (#88).
 #[path = "sqlite_combined_meetings.rs"]
 mod combined_meetings;
@@ -243,6 +246,7 @@ impl SqliteNoteRepository {
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
         deletions::initialize_deletion_schema(&sqlite_connection)?;
         projects::initialize_project_schema(&sqlite_connection)?;
+        chat_history::initialize_chat_schema(&sqlite_connection)?;
         combined_meetings::initialize_combination_schema(&sqlite_connection)?;
         for embedding_column in [
             &CLIP_EMBEDDINGS,
