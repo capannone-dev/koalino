@@ -33,3 +33,11 @@ name in the query), `addProjectNote`, `deleteProjectResource`, `getProjectEmail`
 otherwise `unexpected`); `projectErrorMessage` turns it into a plain message, never the server's
 text. `projectNameError` checks names with Rust's rules. `MeetingSummary.project_id` (in `api.ts`)
 is the meeting's project, absent from older servers.
+
+`edits-api.ts` (#96) edits a meeting: `getMeetingNotes`, `saveMeetingNotes`, `editSummaryText`
+and `editSegment`, with `EditApiError` and `editErrorMessage`. `llm-api.ts` (#95) holds the AI
+connections and summaries.
+
+`search-api.ts` (#100) is `searchNotes(query, scope, projectId?)` over `GET /api/search`, with
+`SearchApiError` and `searchErrorMessage` (never the server's text). `hitHref` gives the page and
+anchor a hit opens, and `hitPlaceLabel` says where in its meeting or project it is.

@@ -80,3 +80,10 @@ body { background: var(--color-canvas); color: var(--color-ink); }
   border-color: var(--color-line) !important;
   color: var(--color-ink);
 }
+
+/* A search result's link lands on a passage, note or file (#100); outline it so it is found. */
+:target {
+  outline: 2px solid var(--color-warning);
+  outline-offset: 4px;
+  border-radius: 0.5rem;
+}

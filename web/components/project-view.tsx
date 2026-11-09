@@ -1,7 +1,8 @@
 // One project's page (Issue #85): its meetings, files, notes and e-mails. Files are uploaded,
 // notes written, meetings added or removed, and each resource previewed in the page: pictures
 // inline, text and Markdown as plain text, e-mails as headers and text. PDFs and other documents
-// open from the daemon, which serves them sandboxed.
+// open from the daemon, which serves them sandboxed. A search box finds words in this project's
+// files and meetings only (#100).
 
 "use client";
 
@@ -9,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChangeEvent, FormEvent, useState } from "react";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { SearchPanel } from "@/components/search-panel";
 import type { MeetingSummary } from "@/lib/api";
 import {
   addProjectNote,
@@ -210,6 +212,8 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
         </p>
       </header>
 
+      <SearchPanel scope="project" projectId={projectId} label="Search this project" />
+
       <section aria-labelledby="project-meetings" className="space-y-3">
         <h2 id="project-meetings" className="text-xl font-semibold">
           Meetings
@@ -278,7 +282,7 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
         {detail.resources.length === 0 ? <p className="text-muted">No files yet. Add PDFs, pictures, Markdown, or e-mails saved as .eml.</p> : null}
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface empty:hidden">
           {detail.resources.map((resource) => (
-            <li key={resource.attachment_id} className="space-y-2 px-4 py-3">
+            <li key={resource.attachment_id} id={`file-${resource.attachment_id}`} className="scroll-mt-20 space-y-2 px-4 py-3">
               <div className="flex flex-wrap items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <span className="block font-medium break-words">{resource.file_name}</span>

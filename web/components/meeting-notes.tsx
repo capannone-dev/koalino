@@ -43,7 +43,7 @@ export function MeetingNotes({ meetingId, notes }: { meetingId: string; notes: s
 
   const hasNotes = current !== null && current.trim().length > 0;
   return (
-    <section aria-labelledby={`${meetingId}-notes-heading`} className="card space-y-3">
+    <section id="notes" aria-labelledby={`${meetingId}-notes-heading`} className="card scroll-mt-20 space-y-3">
       <h2 id={`${meetingId}-notes-heading`}>Notes</h2>
       {editing === null ? (
         <>

@@ -34,6 +34,12 @@ the summary's text, or takes one written by hand ("Written by you."). `meeting-t
 given the meeting's ID, corrects one segment at a time with a pencil button, keeping its speaker
 and timing; emptying a segment removes it, and the status line says the meeting is no longer
 re-transcribed.
+`search-panel.tsx` (#100) is the search box on the meetings page (every meeting), the projects
+page (every project) and a project's page (that project), through `lib/search-api.ts`. Each
+result names its meeting or project and where the match is (`1:01 · Anna`, `Summary`,
+`In plan.md`), marks the matched words, and links to the passage (`#t-<start ms>` in the
+transcript), `#summary`, `#notes`, or the file (`#file-<id>` on the project page). The page
+outlines the `:target` it lands on.
 `retention-settings.tsx` chooses how many days speech waits to be combined with another device's
 recording (#93) through `PUT /api/settings/retention`; a refused choice goes back to the saved one.
 

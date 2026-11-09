@@ -104,7 +104,7 @@ export function MeetingTranscript({
   }
 
   if (current.length === 0) {
-    return <p>{transcript ?? "No transcript is available."}</p>;
+    return <p id="transcript">{transcript ?? "No transcript is available."}</p>;
   }
   return (
     <>
@@ -115,7 +115,7 @@ export function MeetingTranscript({
           const at = formatOffset(segment.start_time_ms);
           const fieldId = `${fieldPrefix}-${key}`;
           return (
-            <li key={key}>
+            <li key={key} id={`t-${segment.start_time_ms}`} className="scroll-mt-20">
               <p className="text-sm font-medium text-accent-text">
                 <span title={segment.uncertain_speaker ? "The speaker is a guess" : undefined}>{`${speaker} · ${at}`}</span>
                 {segment.overlapping_speech ? (
