@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
+import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/project_detail_screen.dart';
@@ -20,12 +21,16 @@ final class ProjectsScreen extends StatefulWidget {
     required this.controller,
     this.meetingScreenBuilder,
     this.pdfViewBuilder = defaultPdfView,
+    this.summariesController,
     super.key,
   });
 
   final ProjectsController controller;
   final MeetingScreenBuilder? meetingScreenBuilder;
   final PdfViewBuilder pdfViewBuilder;
+
+  /// Offers meeting summaries in the projects' meeting lists when given (#95).
+  final SummariesController? summariesController;
 
   @override
   State<ProjectsScreen> createState() => _ProjectsScreenState();
@@ -48,6 +53,7 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
         projectId: projectId,
         meetingScreenBuilder: widget.meetingScreenBuilder,
         pdfViewBuilder: widget.pdfViewBuilder,
+        summariesController: widget.summariesController,
       ),
     ));
   }

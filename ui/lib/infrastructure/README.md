@@ -116,6 +116,14 @@ cancelled), and `setEnabled`. There is no desktop implementation.
 through `note_taker_project_command` on a background isolate (`runRustProjectCommand`); tests
 pass a fake runner. `PlatformProjectFilesPicker` picks any file (#94).
 
+`llm_bridge.dart` (#95) defines `LlmConnection`, `LlmSettings`, `StoredSummary`,
+`MeetingSummaryState`, `SummaryResult`, the `llmPresets` (OpenAI, Anthropic, Mistral, a local
+Ollama server) and `LlmException`, which words the core's `error_code` for people. `LlmBridge`
+calls `note_taker_llm_command`, `note_taker_summarize_meeting`, `note_taker_get_meeting_summary`
+and `note_taker_set_meeting_summary_prompt` on a background isolate (`callRustLlm`), since a
+summary waits on the model for minutes; tests pass a fake call. API keys are sent once and never
+read back.
+
 `incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Note Taker:
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and
 `IncomingShareBridge` (`arrivals`, `takePending`, `release`). `AndroidIncomingShareBridge` talks

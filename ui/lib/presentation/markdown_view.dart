@@ -8,23 +8,38 @@ import 'package:markdown/markdown.dart' as md;
 
 /// Shows Markdown text as Material 3 widgets.
 final class MarkdownView extends StatelessWidget {
-  /// Creates the view for `markdownText`.
-  const MarkdownView({required this.markdownText, super.key});
+  /// Creates the view for `markdownText`; `embedded` lays it out as a column for use inside
+  /// another scrolling view (a meeting summary, #95) instead of scrolling on its own.
+  const MarkdownView({
+    required this.markdownText,
+    this.embedded = false,
+    super.key,
+  });
 
   /// The Markdown source.
   final String markdownText;
+
+  /// Whether it sits inside another scrolling view.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final List<md.Node> nodes =
         md.Document(extensionSet: md.ExtensionSet.gitHubFlavored)
             .parseLines(markdownText.replaceAll('\r\n', '\n').split('\n'));
+    final List<Widget> blocks = <Widget>[
+      for (final md.Node node in nodes) _MarkdownBlock(node: node),
+    ];
+    if (embedded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: blocks,
+      );
+    }
     return SelectionArea(
       child: ListView(
         padding: const EdgeInsets.all(16),
-        children: <Widget>[
-          for (final md.Node node in nodes) _MarkdownBlock(node: node),
-        ],
+        children: blocks,
       ),
     );
   }

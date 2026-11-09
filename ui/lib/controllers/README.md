@@ -72,6 +72,11 @@ transcribed; the core stores and applies it.
 
 `transcription_settings_controller.dart` holds the Transcription page: models, downloads and OpenAI (#67).
 
+`summaries_controller.dart` (#95) holds the AI settings and each meeting's summary for Settings,
+the meeting lists and the summary page. It lives as long as the app, so a summary keeps being
+written when its page is left; it ignores a second request for a meeting already being summarized
+and never lets a slower read replace a summary or prompt written meanwhile.
+
 `transcription_language_controller.dart` holds the default language and the language of the next or
 current recording, and returns to the default when a recording ends (Issue #62).
 `describeTranscriptionLanguages` names a meeting's languages for its detail screen.

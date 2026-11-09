@@ -107,6 +107,15 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   HTML into text), and text files. Office documents say they can't be shown yet.
 - `markdown_view.dart` renders Markdown with the pure-Dart `markdown` parser. Links are inert and
   images show their description, so nothing reaches the network.
+- `meeting_summary_screen.dart` (#95) is a meeting's summary page: the stored summary (Markdown,
+  shown with `MarkdownView(embedded: true)`), "Summarize with" a connection, and the meeting's own
+  prompt. `MeetingSummaryButton` (the summary icon beside each meeting in the meeting list, a
+  project's meetings, and an open meeting's app bar) opens it and spins while a summary is
+  written; `showMeetingSummaryMenu` (row long press or right-click) offers Summarize with ▸ each
+  connection, the meeting's prompt, and a return to the Settings prompt.
+- `ai_settings_screen.dart` (#95) is Settings → AI connections: add (from a preset), edit, test,
+  remove and choose the default connection; the summary prompt template with its placeholders;
+  and automatic summaries (#101). Keys are typed in a hidden field and never shown again.
 - `project_dialogs.dart` holds the name, note and meeting-picker dialogs, and
   `MoveToProjectButton`, which meeting pages show to move a meeting into a project or out.
   `chooseProjectForMeeting` is its chooser, ending in "New project…", which names, creates and

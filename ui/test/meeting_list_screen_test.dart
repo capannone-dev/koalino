@@ -7,18 +7,22 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
+import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 
+import 'fake_llm_core.dart';
 import 'fake_meeting_bridge.dart';
 
 /// Pumps the meeting list at `size` (logical pixels) around `meetingBridge`.
 Future<void> pumpMeetingList(
     WidgetTester tester, FakeMeetingBridge meetingBridge,
     {Size size = const Size(390, 844),
-    MeetingScreenBuilder? speakersScreenBuilder}) async {
+    MeetingScreenBuilder? speakersScreenBuilder,
+    SummariesController? summariesController}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
@@ -27,6 +31,7 @@ Future<void> pumpMeetingList(
       home: MeetingListScreen(
         controller: MeetingListController(meetingBridge: meetingBridge),
         speakersScreenBuilder: speakersScreenBuilder,
+        summariesController: summariesController,
       ),
     ),
   );
@@ -561,5 +566,40 @@ void main() {
 
     expect(find.text('2026-11-02 15:00 UTC · 2:00 · Laptop + Pixel'),
         findsOneWidget);
+  });
+
+  group('summaries (#95)', () {
+    testWidgets('each row has a summary button that opens the summary',
+        (WidgetTester tester) async {
+      final FakeLlmCore core = FakeLlmCore()
+        ..answer('command:settings', settings())
+        ..answer('note_taker_get_meeting_summary', <String, Object?>{
+          'ok': true,
+          'summary': summary,
+          'meeting_prompt': null,
+        });
+      await pumpMeetingList(
+        tester,
+        FakeMeetingBridge(meetings: <MeetingSummary>[titledMeeting]),
+        summariesController:
+            SummariesController(bridge: LlmBridge(call: core.call)),
+      );
+
+      await tester.tap(find.byTooltip('Summary of Project Sync'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Summary'), findsOneWidget);
+      expect(find.text('Budget approved.'), findsOneWidget);
+    });
+
+    testWidgets('the row menu offers Summary… only with summaries',
+        (WidgetTester tester) async {
+      await pumpMeetingList(
+          tester, FakeMeetingBridge(meetings: <MeetingSummary>[titledMeeting]));
+      await tester.longPress(find.text('Project Sync'));
+      await tester.pumpAndSettle();
+      expect(find.text('Summary…'), findsNothing);
+      expect(find.byTooltip('Summary of Project Sync'), findsNothing);
+    });
   });
 }

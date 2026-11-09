@@ -9,6 +9,8 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/core_startup_controller.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
@@ -180,6 +182,7 @@ final class NoteTakerApp extends StatelessWidget {
         controller: _projectsController,
         meetingScreenBuilder: (BuildContext context, String meetingId) =>
             _MeetingsDestination(openMeetingId: meetingId),
+        summariesController: _summariesController,
       ),
       settingsScreenBuilder: (BuildContext context) => _SettingsDestination(
         appLockController: appLockController,
@@ -270,6 +273,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
         speakersScreenBuilder: (BuildContext context, String meetingId) =>
             _VoiceGalleryDestination(meetingId: meetingId),
         projectsController: _projectsController,
+        summariesController: _summariesController,
       );
     }
     return MeetingListScreen(
@@ -280,9 +284,15 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
       speakersScreenBuilder: (BuildContext context, String meetingId) =>
           _VoiceGalleryDestination(meetingId: meetingId),
       projectsController: _projectsController,
+      summariesController: _summariesController,
     );
   }
 }
+
+/// AI connections and meeting summaries (#95), shared by Settings and every meeting list; a
+/// summary keeps being written when its page is left, so this lives as long as the app.
+final SummariesController _summariesController =
+    SummariesController(bridge: const LlmBridge());
 
 /// Projects state (Issue #85), shared by the Projects tab, meeting pages and files shared from
 /// other apps; it holds no resources, so it lives as long as the app.
@@ -459,6 +469,7 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         languageController: widget.languageController,
         networkSettingsController: _networkSettingsController,
         transcriptionSettingsBridge: const RustTranscriptionSettingsBridge(),
+        summariesController: _summariesController,
       );
 }
 

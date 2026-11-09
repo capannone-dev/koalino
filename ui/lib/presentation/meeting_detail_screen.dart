@@ -5,6 +5,8 @@ import 'dart:io';
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
@@ -43,6 +45,7 @@ final class MeetingDetailScreen extends StatefulWidget {
     this.speakersScreenBuilder,
     this.exportController,
     this.projectsController,
+    this.summariesController,
     super.key,
   });
 
@@ -55,6 +58,9 @@ final class MeetingDetailScreen extends StatefulWidget {
 
   /// Offers Move to project when given (Issue #85).
   final ProjectsController? projectsController;
+
+  /// Adds the Summary button when given (#95).
+  final SummariesController? summariesController;
 
   @override
   State<MeetingDetailScreen> createState() => _MeetingDetailScreenState();
@@ -81,6 +87,18 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
       appBar: AppBar(
         title: const Text('Meeting'),
         actions: <Widget>[
+          if (widget.summariesController
+              case final SummariesController summaries)
+            ListenableBuilder(
+              listenable: widget.controller,
+              builder: (BuildContext context, Widget? child) =>
+                  MeetingSummaryButton(
+                controller: summaries,
+                meetingId: widget.meetingId,
+                title: widget.controller.selectedMeeting?.summary.title ??
+                    'this meeting',
+              ),
+            ),
           if (widget.speakersScreenBuilder
               case final MeetingScreenBuilder builder)
             NameSpeakersButton(

@@ -113,3 +113,10 @@ an e-mail and an add-files answer, and refusals. `projects_screen_test.dart` dri
 `FakeProjects`: creating with name validation, a project's meetings and resources, the e-mail and
 document viewers, deleting a resource, moving a meeting from its page, the add-files message, and
 the Markdown view. `fake_project_runner.dart` scripts `note_taker_project_command`.
+
+`summaries_controller_test.dart`, `meeting_summary_screen_test.dart` and
+`ai_settings_screen_test.dart` cover AI connections and summaries (#95) over `fake_llm_core.dart`,
+which scripts the core's answers per function or command (some held until the test releases
+them): requests (a key only when typed), progress, reports, failures in plain words, the
+meeting's own prompt, the row menu, and automatic summaries. `meeting_list_screen_test.dart`
+checks the summary button on each row.

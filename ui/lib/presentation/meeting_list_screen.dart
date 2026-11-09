@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
+import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
@@ -36,6 +38,7 @@ final class MeetingListScreen extends StatefulWidget {
     this.speakersScreenBuilder,
     this.exportController,
     this.projectsController,
+    this.summariesController,
     super.key,
   });
 
@@ -47,6 +50,9 @@ final class MeetingListScreen extends StatefulWidget {
 
   /// Offers Move to project for the open meeting when given (Issue #85).
   final ProjectsController? projectsController;
+
+  /// Adds a summary button and menu to each meeting, and to the open one, when given (#95).
+  final SummariesController? summariesController;
 
   @override
   State<MeetingListScreen> createState() => _MeetingListScreenState();
@@ -75,6 +81,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         speakersScreenBuilder: widget.speakersScreenBuilder,
         exportController: widget.exportController,
         projectsController: widget.projectsController,
+        summariesController: widget.summariesController,
       ),
     ));
   }
@@ -87,6 +94,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         final Widget meetingList = _MeetingList(
           controller: widget.controller,
           projectsController: widget.projectsController,
+          summariesController: widget.summariesController,
           highlightSelection: isTwoPane,
           onOpenMeeting: (MeetingSummary meeting) =>
               _openMeeting(meeting, isTwoPane: isTwoPane),
@@ -212,12 +220,16 @@ final class _MeetingList extends StatelessWidget {
     required this.highlightSelection,
     required this.onOpenMeeting,
     this.projectsController,
+    this.summariesController,
   });
 
   final MeetingListController controller;
 
   /// Offers "Add to project…" in each row's menu when given (#94).
   final ProjectsController? projectsController;
+
+  /// Adds the summary button and "Summary…" to each row when given (#95).
+  final SummariesController? summariesController;
 
   /// Whether the selected meeting is highlighted (only when its detail is visible beside it).
   final bool highlightSelection;
@@ -273,6 +285,7 @@ final class _MeetingList extends StatelessWidget {
               return _MeetingRow(
                 controller: controller,
                 projectsController: projectsController,
+                summariesController: summariesController,
                 meeting: meeting,
                 child: ListTile(
                   leading: const Icon(Icons.event_note),
@@ -290,15 +303,27 @@ final class _MeetingList extends StatelessWidget {
                     '${formatMeetingDuration(meeting.durationMs)}'
                     '${meeting.recordedOnLabel == null ? '' : ' · ${meeting.recordedOnLabel}'}',
                   ),
-                  trailing: IconButton(
-                    key: ValueKey<String>('delete-${meeting.meetingId}'),
-                    tooltip: 'Delete meeting',
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => deleteMeetingAfterAsking(
-                      context,
-                      controller: controller,
-                      meeting: meeting,
-                    ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      if (summariesController
+                          case final SummariesController summaries)
+                        MeetingSummaryButton(
+                          controller: summaries,
+                          meetingId: meeting.meetingId,
+                          title: meeting.title,
+                        ),
+                      IconButton(
+                        key: ValueKey<String>('delete-${meeting.meetingId}'),
+                        tooltip: 'Delete meeting',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => deleteMeetingAfterAsking(
+                          context,
+                          controller: controller,
+                          meeting: meeting,
+                        ),
+                      ),
+                    ],
                   ),
                   onTap: () => onOpenMeeting(meeting),
                 ),
@@ -318,6 +343,9 @@ enum _MeetingRowAction {
 
   /// Opens the project chooser (#94).
   addToProject,
+
+  /// Opens the summary menu (#95).
+  summary,
 }
 
 /// Adds a context menu with "Rename" and, with projects, "Add to project…" to one meeting row.
@@ -330,6 +358,7 @@ final class _MeetingRow extends StatelessWidget {
     required this.meeting,
     required this.child,
     this.projectsController,
+    this.summariesController,
   });
 
   final MeetingListController controller;
@@ -337,6 +366,9 @@ final class _MeetingRow extends StatelessWidget {
 
   /// Offers "Add to project…" when given.
   final ProjectsController? projectsController;
+
+  /// Offers "Summary…" when given (#95).
+  final SummariesController? summariesController;
 
   /// The row's list tile.
   final Widget child;
@@ -378,6 +410,14 @@ final class _MeetingRow extends StatelessWidget {
               title: Text('Add to project…'),
             ),
           ),
+        if (summariesController != null)
+          const PopupMenuItem<_MeetingRowAction>(
+            value: _MeetingRowAction.summary,
+            child: ListTile(
+              leading: Icon(Icons.summarize_outlined),
+              title: Text('Summary…'),
+            ),
+          ),
       ],
     );
     if (!context.mounted) {
@@ -388,6 +428,8 @@ final class _MeetingRow extends StatelessWidget {
         await _rename(context);
       case _MeetingRowAction.addToProject:
         await _addToProject(context);
+      case _MeetingRowAction.summary:
+        await _summary(context);
       case null:
         break;
     }
@@ -416,6 +458,14 @@ final class _MeetingRow extends StatelessWidget {
     }
   }
 
+  /// Opens the summary menu for this row's meeting (#95).
+  Future<void> _summary(BuildContext context) async {
+    if (summariesController case final SummariesController summaries) {
+      await showMeetingSummaryMenu(context,
+          controller: summaries, meeting: meeting);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Semantics(
@@ -424,6 +474,9 @@ final class _MeetingRow extends StatelessWidget {
         if (projectsController != null)
           const CustomSemanticsAction(label: 'Add to project'): () =>
               _addToProject(context),
+        if (summariesController != null)
+          const CustomSemanticsAction(label: 'Summary'): () =>
+              _summary(context),
         const CustomSemanticsAction(label: 'Delete'): () =>
             deleteMeetingAfterAsking(
               context,

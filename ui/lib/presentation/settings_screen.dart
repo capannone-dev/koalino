@@ -7,6 +7,8 @@
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/network_settings_controller.dart';
+import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/presentation/ai_settings_screen.dart';
 import 'package:note_taker_ui/controllers/log_settings_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_route_controller.dart';
@@ -46,6 +48,7 @@ final class SettingsScreen extends StatelessWidget {
     this.languageController,
     this.networkSettingsController,
     this.transcriptionSettingsBridge,
+    this.summariesController,
     super.key,
   });
 
@@ -61,6 +64,9 @@ final class SettingsScreen extends StatelessWidget {
 
   /// Adds the Transcription page (Whisper model and OpenAI, Issue #67) when given.
   final TranscriptionSettingsBridge? transcriptionSettingsBridge;
+
+  /// Adds the AI connections page (summaries, #95) when given.
+  final SummariesController? summariesController;
 
   @override
   Widget build(BuildContext context) {
@@ -116,6 +122,21 @@ final class SettingsScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+              ),
+              const Divider(),
+            ],
+            if (summariesController
+                case final SummariesController summaries) ...<Widget>[
+              ListTile(
+                leading: const Icon(Icons.auto_awesome_outlined),
+                title: const Text('AI connections'),
+                subtitle: const Text(
+                    'Language models for meeting summaries, and the summary prompt.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (BuildContext context) =>
+                      AiSettingsScreen(controller: summaries),
+                )),
               ),
               const Divider(),
             ],

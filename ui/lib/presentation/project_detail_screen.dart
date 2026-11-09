@@ -2,11 +2,14 @@
 // and e-mails), with actions to add files, write a note, add meetings, rename and delete.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
+import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/presentation/confirm_delete_dialog.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
+import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
 
@@ -18,6 +21,7 @@ final class ProjectDetailScreen extends StatelessWidget {
     required this.projectId,
     this.meetingScreenBuilder,
     this.pdfViewBuilder = defaultPdfView,
+    this.summariesController,
     super.key,
   });
 
@@ -25,6 +29,9 @@ final class ProjectDetailScreen extends StatelessWidget {
   final String projectId;
   final MeetingScreenBuilder? meetingScreenBuilder;
   final PdfViewBuilder pdfViewBuilder;
+
+  /// Adds a summary button and menu (long press, right-click) to each meeting when given (#95).
+  final SummariesController? summariesController;
 
   /// Shows `message` in a snack bar.
   static void _tell(BuildContext context, String message) =>
@@ -197,6 +204,27 @@ final class _ProjectBody extends StatelessWidget {
   final ProjectDetailScreen screen;
   final ProjectDetail detail;
 
+  /// Opens the meeting's summary menu on long press or right-click, when summaries are offered.
+  Widget _withSummaryMenu(
+      BuildContext context, MeetingSummary meeting, Widget row) {
+    final SummariesController? summaries = screen.summariesController;
+    if (summaries == null) {
+      return row;
+    }
+    void open() => showMeetingSummaryMenu(context,
+        controller: summaries, meeting: meeting);
+    return Semantics(
+      customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
+        const CustomSemanticsAction(label: 'Summary'): open,
+      },
+      child: GestureDetector(
+        onLongPress: open,
+        onSecondaryTap: open,
+        child: row,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
@@ -219,27 +247,43 @@ final class _ProjectBody extends StatelessWidget {
               subtitle: Text('Add them here, or from a meeting\'s page.'),
             ),
           for (final MeetingSummary meeting in detail.meetings)
-            ListTile(
-              key: ValueKey<String>('project-meeting-${meeting.meetingId}'),
-              leading: const Icon(Icons.event_note_outlined),
-              title: Text(meeting.title),
-              subtitle: Text(
-                  localizations.formatMediumDate(meeting.createdAt.toLocal())),
-              onTap: switch (screen.meetingScreenBuilder) {
-                // On return, the meeting may have moved to another project.
-                final MeetingScreenBuilder builder => () =>
-                    Navigator.of(context)
-                        .push(MaterialPageRoute<void>(
-                          builder: (BuildContext context) =>
-                              builder(context, meeting.meetingId),
-                        ))
-                        .then((_) => screen.controller.refresh()),
-                null => null,
-              },
-              trailing: IconButton(
-                tooltip: 'Remove from project',
-                icon: const Icon(Icons.remove_circle_outline),
-                onPressed: () => screen._removeMeeting(context, meeting),
+            _withSummaryMenu(
+              context,
+              meeting,
+              ListTile(
+                key: ValueKey<String>('project-meeting-${meeting.meetingId}'),
+                leading: const Icon(Icons.event_note_outlined),
+                title: Text(meeting.title),
+                subtitle: Text(localizations
+                    .formatMediumDate(meeting.createdAt.toLocal())),
+                onTap: switch (screen.meetingScreenBuilder) {
+                  // On return, the meeting may have moved to another project.
+                  final MeetingScreenBuilder builder => () =>
+                      Navigator.of(context)
+                          .push(MaterialPageRoute<void>(
+                            builder: (BuildContext context) =>
+                                builder(context, meeting.meetingId),
+                          ))
+                          .then((_) => screen.controller.refresh()),
+                  null => null,
+                },
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    if (screen.summariesController
+                        case final SummariesController summaries)
+                      MeetingSummaryButton(
+                        controller: summaries,
+                        meetingId: meeting.meetingId,
+                        title: meeting.title,
+                      ),
+                    IconButton(
+                      tooltip: 'Remove from project',
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed: () => screen._removeMeeting(context, meeting),
+                    ),
+                  ],
+                ),
               ),
             ),
           header('Files, notes and e-mails'),
