@@ -2379,3 +2379,38 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   use fake engines; no meeting content reached a cloud provider.
 - **Blocking:** hosts hold their store only while gathering and storing, never while the model
   answers, as summaries do.
+
+## 2026-11-09 — #99 Attachment files are sealed at rest; viewers get short-lived clear copies
+
+- **Problem:** since #92 notes, transcripts and documents are sealed in SQLite, but attachment
+  files (meeting photos and files, slides, project resources, files from paired devices) were
+  kept in clear in private 0700/0600 folders. CONTRIBUTING.md §7 asks for sensitive data to be
+  encrypted at rest.
+- **Decision (the owner chose it): seal every attachment file with the database key; readers
+  decrypt.**
+  - Format: `NTSEALF1`, a random file ID, then records of up to 256 KiB sealed with AES-256-GCM
+    through the existing cipher. Each record's context names the file ID, its kind and position;
+    a final record holds the clear length. Reordered, dropped, moved, cut or altered records are
+    refused. Records keep memory bounded (100 MiB files) and let P2P serve a chunk at any offset
+    without decrypting the whole file.
+  - The file ID is in the file, not the attachment ID, so readers need only the path. Swapping
+    whole files between attachments needs write access to the folder, which could delete them
+    anyway.
+  - Every core reader decrypts in memory: exports (staged clear copies, an explicit export),
+    summaries and chat (images), project commands and web downloads, search, P2P sync and the
+    notes folder (a decrypted copy by the owner's choice, #98).
+  - P2P hashes, sizes and chunks are of the clear contents, sent over the encrypted transport;
+    each device seals what it receives with its own key, part by part, so clear bytes never touch
+    its disk.
+  - The app's image, text and PDF views read files, so `note_taker_clear_copy` writes a clear
+    copy into a private `clear-copies` folder. Copies are removed 30 minutes after they were made
+    (when another copy is made) and the folder is emptied at every start. This is the smallest
+    clear footprint that keeps the viewers; reading bytes over FFI into memory would need a
+    second PDF path and copies of large files across the FFI boundary.
+- **Migration:** files from before #99 are still read as they are. The app and the daemon seal
+  them on a background thread at start (the CLI in line), each written beside the original and
+  renamed over it, so a crash leaves either the clear or the sealed file. A file deleted while it
+  is sealed is not brought back.
+- **Not covered:** clear copies exist while a file is open in the app; the notes folder is clear by
+  design; exports are clear by design. Verify on the owner's devices before closing the issue in
+  their eyes: the first start seals the existing library.
