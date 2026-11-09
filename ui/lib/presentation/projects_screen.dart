@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
+import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/project_detail_screen.dart';
@@ -26,6 +27,7 @@ final class ProjectsScreen extends StatefulWidget {
     this.pdfViewBuilder = defaultPdfView,
     this.summariesController,
     this.searchBridge,
+    this.chatBridge,
     this.meetingMomentBuilder,
     super.key,
   });
@@ -39,6 +41,9 @@ final class ProjectsScreen extends StatefulWidget {
 
   /// Adds Search to this tab and to each project's page when given (#100).
   final SearchBridge? searchBridge;
+
+  /// Adds each project's chat when given (#97).
+  final ChatBridge? chatBridge;
 
   /// Opens a meeting at a passage found by search; `meetingScreenBuilder` (at the top) otherwise.
   final MeetingMomentBuilder? meetingMomentBuilder;
@@ -82,6 +87,7 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
         pdfViewBuilder: widget.pdfViewBuilder,
         summariesController: widget.summariesController,
         searchBridge: widget.searchBridge,
+        chatBridge: widget.chatBridge,
         meetingMomentBuilder: widget.searchMeetingBuilder,
       );
 

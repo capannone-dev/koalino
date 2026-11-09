@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
+import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
@@ -187,6 +188,7 @@ final class NoteTakerApp extends StatelessWidget {
             _MeetingsDestination(openMeetingId: meetingId),
         summariesController: _summariesController,
         searchBridge: const SearchBridge(),
+        chatBridge: const ChatBridge(),
         meetingMomentBuilder:
             (BuildContext context, String meetingId, int? startTimeMs) =>
                 _MeetingsDestination(
@@ -300,6 +302,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
       summariesController: _summariesController,
       editController: _meetingEditController,
       searchBridge: const SearchBridge(),
+      chatBridge: const ChatBridge(),
     );
   }
 }

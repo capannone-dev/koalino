@@ -6,6 +6,8 @@ import 'dart:io';
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
+import 'package:note_taker_ui/presentation/chat_screen.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
@@ -50,6 +52,7 @@ final class MeetingDetailScreen extends StatefulWidget {
     this.projectsController,
     this.summariesController,
     this.editController,
+    this.chatBridge,
     this.focusStartMs,
     super.key,
   });
@@ -72,6 +75,9 @@ final class MeetingDetailScreen extends StatefulWidget {
 
   /// Shows the notes and lets the owner correct the transcript when given (#96).
   final MeetingEditController? editController;
+
+  /// Adds Chat about this meeting when given (#97).
+  final ChatBridge? chatBridge;
 
   @override
   State<MeetingDetailScreen> createState() => _MeetingDetailScreenState();
@@ -98,6 +104,16 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
       appBar: AppBar(
         title: const Text('Meeting'),
         actions: <Widget>[
+          if (widget.chatBridge case final ChatBridge bridge)
+            IconButton(
+              tooltip: 'Chat about this meeting',
+              icon: const Icon(Icons.chat_outlined),
+              onPressed: () => openChat(context,
+                  bridge: bridge,
+                  topic: ChatTopic.meeting(widget.meetingId),
+                  title:
+                      'Chat: ${widget.controller.selectedMeeting?.summary.title ?? 'meeting'}'),
+            ),
           if (widget.summariesController
               case final SummariesController summaries)
             ListenableBuilder(

@@ -134,6 +134,10 @@ a background isolate through `callRustLlm`). `MeetingEditException` words the co
 match is: `placeLabel` such as `1:01 · Anna`, and the snippet's `SnippetPart`s),
 `SearchResults` and `SearchException`, which words the core's `error_code`.
 
+`chat_bridge.dart` (#97) is `ChatBridge.history(topic)`, `ask(topic, question)` and
+`clear(topic)` over `note_taker_chat` (on a background isolate through `callRustLlm`), with
+`ChatTopic` (a meeting, a project or everything), `ChatEntry` and `ChatException`.
+
 `notes_folder_bridge.dart` (#98) is `NotesFolderBridge.status()`, `set(enabled:, path:)` and
 `syncNow()` over `note_taker_notes_folder` (on a background isolate through `callRustLlm`, since a
 round writes the whole folder), with `NotesFolderStatus` and `NotesFolderException`.

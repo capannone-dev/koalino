@@ -8,12 +8,14 @@ import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
+import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/presentation/confirm_delete_dialog.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
+import 'package:note_taker_ui/presentation/chat_screen.dart';
 import 'package:note_taker_ui/presentation/search_screen.dart';
 
 /// Shows and changes one project.
@@ -26,6 +28,7 @@ final class ProjectDetailScreen extends StatelessWidget {
     this.pdfViewBuilder = defaultPdfView,
     this.summariesController,
     this.searchBridge,
+    this.chatBridge,
     this.meetingMomentBuilder,
     super.key,
   });
@@ -40,6 +43,9 @@ final class ProjectDetailScreen extends StatelessWidget {
 
   /// Adds Search over this project when given (#100).
   final SearchBridge? searchBridge;
+
+  /// Adds Chat about this project when given (#97).
+  final ChatBridge? chatBridge;
 
   /// Opens a meeting at a passage search found.
   final MeetingMomentBuilder? meetingMomentBuilder;
@@ -184,6 +190,16 @@ final class ProjectDetailScreen extends StatelessWidget {
                   tooltip: 'Search this project',
                   icon: const Icon(Icons.search),
                   onPressed: () => _search(context, bridge, project.name),
+                ),
+              if ((chatBridge, project)
+                  case (final ChatBridge bridge, final ProjectSummary project))
+                IconButton(
+                  tooltip: 'Chat about this project',
+                  icon: const Icon(Icons.chat_outlined),
+                  onPressed: () => openChat(context,
+                      bridge: bridge,
+                      topic: ChatTopic.project(projectId),
+                      title: 'Chat: ${project.name}'),
                 ),
               IconButton(
                 key: const ValueKey<String>('add-project-files'),

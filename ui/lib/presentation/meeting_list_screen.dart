@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
+import 'package:note_taker_ui/presentation/chat_screen.dart';
 import 'package:note_taker_ui/presentation/search_screen.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
@@ -44,6 +46,7 @@ final class MeetingListScreen extends StatefulWidget {
     this.summariesController,
     this.editController,
     this.searchBridge,
+    this.chatBridge,
     super.key,
   });
 
@@ -64,6 +67,9 @@ final class MeetingListScreen extends StatefulWidget {
 
   /// Adds Search over every meeting when given (#100).
   final SearchBridge? searchBridge;
+
+  /// Adds the chat over every meeting, summary and project, and a meeting's chat (#97).
+  final ChatBridge? chatBridge;
 
   @override
   State<MeetingListScreen> createState() => _MeetingListScreenState();
@@ -118,6 +124,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         projectsController: widget.projectsController,
         summariesController: widget.summariesController,
         editController: widget.editController,
+        chatBridge: widget.chatBridge,
       ),
     ));
   }
@@ -145,6 +152,33 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                   icon: const Icon(Icons.search),
                   onPressed: () => _search(bridge),
                 ),
+              if (widget.chatBridge case final ChatBridge bridge)
+                IconButton(
+                  tooltip: 'Chat with all your notes',
+                  icon: const Icon(Icons.forum_outlined),
+                  onPressed: () => openChat(context,
+                      bridge: bridge,
+                      topic: const ChatTopic.everything(),
+                      title: 'Chat with all notes'),
+                ),
+              if (isTwoPane)
+                if (widget.chatBridge case final ChatBridge bridge)
+                  AnimatedBuilder(
+                    animation: widget.controller,
+                    builder: (BuildContext context, Widget? child) =>
+                        switch (widget.controller.selectedMeeting) {
+                      final MeetingDetail meeting => IconButton(
+                          tooltip: 'Chat about this meeting',
+                          icon: const Icon(Icons.chat_outlined),
+                          onPressed: () => openChat(context,
+                              bridge: bridge,
+                              topic:
+                                  ChatTopic.meeting(meeting.summary.meetingId),
+                              title: 'Chat: ${meeting.summary.title}'),
+                        ),
+                      _ => const SizedBox.shrink(),
+                    },
+                  ),
               IconButton(
                 tooltip: 'Refresh',
                 icon: const Icon(Icons.refresh),
