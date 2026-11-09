@@ -777,6 +777,15 @@ async fn the_transcription_choice_is_validated_and_kept() {
     );
 }
 
+/// Reads a stored file's clear contents with the database's key (#99).
+fn clear_contents(database_path: &PathBuf, file_path: &str) -> Option<Vec<u8>> {
+    pipeline_connection(database_path, "Reader")
+        .sealed_files()
+        .read_all(std::path::Path::new(file_path))
+        .ok()
+        .map(|contents| contents.to_vec())
+}
+
 /// Adds a file to `meeting_id` through the same store the app uses.
 fn attach_file(
     database_path: &PathBuf,
@@ -791,14 +800,14 @@ fn attach_file(
     let source = directory.join(name);
     std::fs::write(&source, contents)
         .unwrap_or_else(|error| panic!("source must be written: {error}"));
-    AttachmentFileStore::new(directory.join("attachments"), DeviceId::new("Laptop"))
-        .import_file(
-            &pipeline_connection(database_path, "Laptop"),
-            meeting_id,
-            &source,
-            Some(meeting_time_ms),
-        )
-        .unwrap_or_else(|error| panic!("the file must attach: {error}"))
+    let repository = pipeline_connection(database_path, "Laptop");
+    AttachmentFileStore::new(
+        directory.join("attachments"),
+        DeviceId::new("Laptop"),
+        repository.sealed_files(),
+    )
+    .import_file(&repository, meeting_id, &source, Some(meeting_time_ms))
+    .unwrap_or_else(|error| panic!("the file must attach: {error}"))
 }
 
 /// A library over `database_path` keeping files in `attachments` beside it.
@@ -863,7 +872,10 @@ async fn attachments_reach_paired_devices_even_after_being_apart() {
     assert_eq!(received[0].meeting_time_ms(), Some(42_000));
     assert_eq!(received[0].mime_type(), "image/png");
     assert_ne!(received[0].file_path(), sent.file_path());
-    assert_eq!(std::fs::read(received[0].file_path()).ok(), Some(photo));
+    assert_eq!(
+        clear_contents(&phone_database, received[0].file_path()),
+        Some(photo)
+    );
 
     // Apart: the phone goes away and the laptop gets another attachment.
     let phone_id = phone.transport().local_peer_id();
@@ -892,7 +904,7 @@ async fn attachments_reach_paired_devices_even_after_being_apart() {
         .find(|attachment| attachment.attachment_id() == later.attachment_id())
         .unwrap_or_else(|| panic!("the later attachment must arrive"));
     assert_eq!(
-        std::fs::read(arrived.file_path()).ok(),
+        clear_contents(&phone_database, arrived.file_path()),
         Some(b"later".to_vec())
     );
     assert_eq!(arrived.mime_type(), "text/plain");

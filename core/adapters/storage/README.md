@@ -180,8 +180,26 @@ Sealed text is stored as a BLOB in the TEXT column. Values from before #92 still
 value, or a document without the sealed header. Every opening seals the clear values left, in one
 transaction, and `secure_delete` overwrites the pages they leave. A sealed value that does not
 open (wrong key, wrong meeting, tampering) is an error. Titles, project names and attachment
-names stay in clear for the meeting list. Attachment files are kept in clear in private folders
-(0700/0600), so other apps can open them; sealing them is tracked in #99.
+names stay in clear for the meeting list. Attachment files are sealed too (#99, below).
+
+`sealed_files.rs` (`SealedFiles`, #99) seals attachment files at rest: meeting photos and files,
+slides, project resources, and files received from paired devices.
+- **Format:** `NTSEALF1`, a random 16-byte file ID, then records of up to 256 KiB, each a 9-byte
+  header (kind, clear length, sealed length) and the record sealed with AES-256-GCM by the
+  database key. A record's context (`attachment-file:v1:<file ID>:<data|end>:<index>`) binds it to
+  its file and position. A last `end` record holds the clear length, so a cut file is refused.
+- **Reading:** `open` gives a reader that decrypts one record at a time, can start at any clear
+  offset (P2P chunks), and wipes each record when done. `read_all`, `clear_len` and `copy_clear`
+  are built on it. A file that is cut, altered or sealed with another key is refused.
+- **Writing:** `write_new` never overwrites; `create_appender` writes a file in parts (P2P).
+- **Before #99:** clear files are still read as they are. `seal_in_place` seals one atomically
+  (written beside it, then renamed over it), and `SqliteNoteRepository::attachment_sealing_job`
+  lists every attachment for a background pass that the app and the daemon start at launch (the
+  CLI runs it in line).
+- **Readers:** exports stage clear copies through the `AttachmentFileReader` port; summaries and
+  chat read images through `AttachmentRepository::read_attachment_file`; project commands, web
+  downloads, search and the notes folder read through `ProjectFiles`; the app's viewers use the
+  clear copies of `bin/clear_copies.rs`.
 
 `sqlite_cluster_share.rs`, a child module of `sqlite_adapter`, exports and imports the cluster
 shares copied to paired devices (Issue #50):
@@ -211,6 +229,8 @@ identities, so it must never be selected as the production biometric store.
 with `sqlite_attachment_sync.rs` for its rows. It hashes linked attachments one at a time, serves
 chunks only of files linked to a meeting, and writes arriving files to a private partial file. The
 file moves into the meeting's folder, and its row is written, only after the size and SHA-256 match.
+Hashes, sizes and chunks are of the clear contents, which cross the encrypted P2P transport; each
+device seals what it receives with its own key, part by part as it arrives (#99).
 Peer names are reduced to safe characters; a type must match its extension among those that can be
 attached locally; a meeting ID must be a plain folder name.
 
@@ -229,7 +249,7 @@ impl, which the bridge pump thread needs. Only IDs and names are stored.
 `attachment_file_store.rs` (`AttachmentFileStore`, Issue #54) copies picked files and camera
 photos to `<attachment dir>/<meeting ID>/<attachment UUID>-<name>`, then links each copy to its
 meeting through `AttachmentRepository`, with a meeting time when given.
-- **Permissions:** folders are 0700 and files 0600 on Unix.
+- **Permissions:** folders are 0700 and files 0600 on Unix; files are sealed (#99).
 - **Names:** reduced to ASCII letters, digits, `.`, `-` and `_`, and at most 80 characters.
 - **Accepted:** for meetings, only pictures and common document types; for projects, any file
   (#94), kept as `application/octet-stream` when the app cannot show its type. Up to 100 MiB.
@@ -248,8 +268,7 @@ private, never-overwriting file creation.
 for Teams screen-share captures. Each PNG or JPEG (recognized by its signature) is written to
 `<slide dir>/<meeting UUID>/slide-<ms>-<attachment UUID>.<ext>`, with directories 0700 and files
 0600 on Unix, and linked to its meeting through `AttachmentRepository`. If the row is rejected
-(unknown meeting), the file is deleted again. Slide files are not encrypted, the same policy as
-manually added attachments.
+(unknown meeting), the file is deleted again. Slide files are sealed like every attachment (#99).
 It also implements `MeetingSlideSink` for local screen shares (Issue #49), which use a recorded
 meeting's ID (`meeting-<uuid>`) as the folder name and the meeting time in milliseconds as
 `<ms>`. A meeting ID that is not a plain folder name (anything besides ASCII letters, digits,

@@ -3,7 +3,7 @@
 //! Picked files can live anywhere: Android hands out cache copies that the system may clear, and
 //! camera photos land in a temporary folder. So each import copies the file to
 //! `<attachment_directory>/<meeting ID>/<attachment UUID>-<original name>` (folder 0700, file
-//! 0600 on Unix) and links the copy to the meeting through the `AttachmentRepository`, with the
+//! 0600 on Unix, sealed with the database key since #99, see `sealed_files`) and links the copy to the meeting through the `AttachmentRepository`, with the
 //! meeting time when the attachment belongs at a point of the transcript. The source stays where
 //! it was, and its owner deletes it. A meeting accepts only pictures and common document types,
 //! and a project any file (#94, `application/octet-stream` when the app cannot show it), up to
@@ -24,8 +24,9 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{
-    adapters::storage::private_files::{
-        create_private_directory, file_error, is_plain_folder_name, write_private_file,
+    adapters::storage::{
+        private_files::{create_private_directory, file_error, is_plain_folder_name},
+        sealed_files::SealedFiles,
     },
     domain::{
         email::MAX_EMAIL_BYTES,
@@ -57,18 +58,30 @@ const MAX_KEPT_NAME_CHARACTERS: usize = 80;
 pub struct AttachmentFileStore {
     attachment_directory: PathBuf,
     device_id: DeviceId,
+    /// Seals each stored file with the database key (#99).
+    sealed_files: SealedFiles,
 }
 
 impl AttachmentFileStore {
     /// Creates a store; folders are created on the first import.
     ///
-    /// Inputs: The attachment root (normally `<data directory>/attachments`) and this device's
-    /// ID. Outputs: The store. Side effects: None.
-    pub fn new(attachment_directory: PathBuf, device_id: DeviceId) -> Self {
+    /// Inputs: The attachment root (normally `<data directory>/attachments`), this device's ID,
+    /// and the sealer holding the database key. Outputs: The store. Side effects: None.
+    pub fn new(
+        attachment_directory: PathBuf,
+        device_id: DeviceId,
+        sealed_files: SealedFiles,
+    ) -> Self {
         Self {
             attachment_directory,
             device_id,
+            sealed_files,
         }
+    }
+
+    /// The sealer the store writes with, for reading stored files back.
+    pub fn sealed_files(&self) -> &SealedFiles {
+        &self.sealed_files
     }
 
     /// Copies one file into the meeting's folder and links it to the meeting.
@@ -403,8 +416,9 @@ impl AttachmentFileStore {
         let copy_path =
             owner_directory.join(format!("{attachment_id}-{}", kept_file_name(named_as)));
         // Reading one byte past the limit tells an oversized file from one exactly at it.
-        let copied_bytes =
-            write_private_file(&copy_path, &mut contents.take(MAX_ATTACHMENT_BYTES + 1))?;
+        let copied_bytes = self
+            .sealed_files
+            .write_new(&copy_path, &mut contents.take(MAX_ATTACHMENT_BYTES + 1))?;
         if copied_bytes > MAX_ATTACHMENT_BYTES {
             remove_copy(&copy_path, attachment_id);
             return Err(too_large());

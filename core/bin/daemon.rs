@@ -105,7 +105,15 @@ async fn main() -> Result<()> {
     let project_files = Arc::new(ProjectFiles::new(
         local_meeting_files.attachment_directory().to_path_buf(),
         device_id.clone(),
+        note_repository.sealed_files(),
     ));
+    // Seal files kept in clear from before #99, without holding up start-up.
+    match note_repository.attachment_sealing_job() {
+        Ok(job) => job.spawn(),
+        Err(error) => {
+            tracing::warn!(error = %error, "attachment files could not be listed for sealing")
+        }
+    }
     let teams_bridge = start_teams_bridge_from_environment(
         &database_path,
         device_id,

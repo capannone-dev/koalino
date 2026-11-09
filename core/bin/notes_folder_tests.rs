@@ -55,7 +55,11 @@ impl Fixture {
             repository.with_document_codec(Arc::new(AutomergeMeetingDocumentCodec))
         })
         .unwrap_or_else(|e| panic!("{e}"));
-        let files = ProjectFiles::new(scratch.join("attachments"), DeviceId::new("device"));
+        let files = ProjectFiles::new(
+            scratch.join("attachments"),
+            DeviceId::new("device"),
+            repository.sealed_files(),
+        );
         Self {
             root: scratch.join("NoteTaker"),
             scratch,
@@ -133,8 +137,15 @@ impl Drop for Fixture {
     }
 }
 
+/// Reads a file in the folder, or a stored file (sealed with the fixture's key, #99).
 fn read(path: &Path) -> String {
-    std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+    let sealed_files = crate::adapters::storage::sealed_files::SealedFiles::new(Arc::new(
+        VoiceEncryptor::new(&EncryptionKey::from_bytes([7; 32])),
+    ));
+    let bytes = sealed_files
+        .read_all(path)
+        .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    String::from_utf8(bytes.to_vec()).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
 /// Makes a file look older, so a round treats it as finished.

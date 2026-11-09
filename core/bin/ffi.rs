@@ -520,6 +520,15 @@ impl FfiRuntime {
         runtime.attachment_directory = setting("NOTE_TAKER_ATTACHMENT_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("attachments"));
+        // Clear copies left by the last run are removed (#99), and files kept in clear from
+        // before #99 are sealed without holding up start-up.
+        crate::clear_copies::ClearCopies::beside(&runtime.attachment_directory).wipe();
+        match runtime.note_repository.attachment_sealing_job() {
+            Ok(job) => job.spawn(),
+            Err(error) => {
+                tracing::warn!(error = %error, "attachment files could not be listed for sealing");
+            }
+        }
         runtime.microphone_source = default_microphone_source();
         runtime.spawn_microphone_ticker = spawn_global_microphone_ticker;
         Ok(runtime)
@@ -538,6 +547,9 @@ impl FfiRuntime {
         review_clip_directory: PathBuf,
         export_writer: ExportWriter,
     ) -> Self {
+        // Exports open sealed attachment files with the database key (#99).
+        let export_writer =
+            export_writer.with_attachment_files(Arc::new(note_repository.sealed_files()));
         Self {
             recording_controller: None,
             recording_controller_builder,
@@ -1475,15 +1487,24 @@ impl FfiRuntime {
     /// lists the speech-to-text language codes in first-use order; or
     /// `{"ok":false,"error_code":"list_failed","error"}`.
     /// Side effects: Reads SQLite meeting metadata and segment offsets.
+    /// The files side of projects over this runtime's attachment folder, sealing with the
+    /// database key (#99).
+    ///
+    /// Side effects: None.
+    fn project_files(&self) -> ProjectFiles {
+        ProjectFiles::new(
+            self.attachment_directory.clone(),
+            self.note_repository.device_id().clone(),
+            self.note_repository.sealed_files(),
+        )
+    }
+
     /// Runs one Projects command against this runtime's database and attachment folder.
     ///
     /// Inputs: The JSON request. Outputs: The JSON answer, with local file paths.
     /// Side effects: Those of the command (see `project_commands`).
     fn project_command(&mut self, request_json: &str) -> String {
-        let project_files = ProjectFiles::new(
-            self.attachment_directory.clone(),
-            self.note_repository.device_id().clone(),
-        );
+        let project_files = self.project_files();
         run_project_command(&self.note_repository, &project_files, request_json, true)
     }
 
@@ -1506,10 +1527,7 @@ impl FfiRuntime {
                 return export_error_json("storage_failed", "the voice library could not be read");
             }
         };
-        let project_files = ProjectFiles::new(
-            self.attachment_directory.clone(),
-            self.note_repository.device_id().clone(),
-        );
+        let project_files = self.project_files();
         let sources =
             crate::search_commands::HostSearchSources::new(speaker_names, Some(&project_files));
         crate::search_commands::run_search(&self.note_repository, &sources, &request).to_string()
@@ -1805,6 +1823,7 @@ impl FfiRuntime {
         let file_store = AttachmentFileStore::new(
             self.attachment_directory.clone(),
             self.note_repository.device_id().clone(),
+            self.note_repository.sealed_files(),
         );
         let mut attached = Vec::new();
         let mut failed = Vec::new();
@@ -2454,6 +2473,75 @@ pub(crate) fn runtime_recording_meeting() -> Option<MeetingId> {
         .map(MeetingId::new)
 }
 
+/// Gives a clear copy of one attachment or project resource for the app's viewers (#99).
+///
+/// Inputs: `attachment_id`, a NUL-terminated UTF-8 attachment ID.
+/// Outputs: An owned JSON string (free with `note_taker_free_string`):
+/// `{"ok":true,"path":"<copy>"}`, or `{"ok":false,"error_code","error"}` with
+/// `invalid_argument`, `not_found` (no such attachment, or its file has not arrived),
+/// `unreadable` or `runtime_unavailable`. Null only if allocation fails.
+/// Side effects: Writes the copy into the private `clear-copies` folder beside the attachments
+/// and removes old copies there (see `clear_copies`). The runtime lock is held only to look the
+/// attachment up, not while the file is decrypted, so callers use a background isolate.
+///
+/// # Safety
+/// `attachment_id` must be null or a valid NUL-terminated C string that stays alive for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_clear_copy(attachment_id: *const c_char) -> *mut c_char {
+    let response_json = match unsafe { ffi_string(attachment_id) }
+        .and_then(|text| uuid::Uuid::parse_str(text.trim()).ok())
+    {
+        None => export_error_json(
+            "invalid_argument",
+            "attachment_id must be an attachment ID as a UTF-8 C string",
+        ),
+        Some(attachment_id) => clear_copy_json(attachment_id),
+    };
+    CString::new(response_json)
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Looks the attachment up under the runtime lock, then makes its clear copy outside it.
+fn clear_copy_json(attachment_id: uuid::Uuid) -> String {
+    let mut found = None;
+    let looked_up =
+        with_runtime_json(|runtime| {
+            found = Some(runtime.note_repository.attachment_by_id(attachment_id).map(
+                |attachment| {
+                    attachment.map(|attachment| {
+                        (
+                            runtime.note_repository.sealed_files(),
+                            PathBuf::from(attachment.file_path()),
+                            crate::clear_copies::ClearCopies::beside(&runtime.attachment_directory),
+                        )
+                    })
+                },
+            ));
+            Ok(String::new())
+        });
+    let (sealed_files, stored_path, copies) = match (looked_up, found) {
+        (Ok(_), Some(Ok(Some(source)))) => source,
+        (Ok(_), Some(Ok(None))) => {
+            return export_error_json("not_found", "there is no such attachment");
+        }
+        (Ok(_), Some(Err(_))) => {
+            return export_error_json("storage_failed", "the attachment could not be read");
+        }
+        _ => return export_error_json("runtime_unavailable", "the native runtime is unavailable"),
+    };
+    if !stored_path.is_file() {
+        return export_error_json("not_found", "the file has not arrived on this device yet");
+    }
+    match copies.copy(&sealed_files, attachment_id, &stored_path) {
+        Ok(copy) => serde_json::json!({"ok": true, "path": copy.to_string_lossy()}).to_string(),
+        Err(_) => export_error_json(
+            "unreadable",
+            "the file cannot be opened: it is damaged or was sealed with another key",
+        ),
+    }
+}
+
 /// Lends the runtime's meeting repository and voice database to another FFI module (#95).
 ///
 /// Inputs: The work, run while the runtime lock is held, so it must be short.
@@ -2482,10 +2570,7 @@ pub(crate) fn with_runtime_chat_sources<Output>(
 ) -> Option<Output> {
     let mut output = None;
     let _ = with_runtime_json(|runtime| {
-        let project_files = ProjectFiles::new(
-            runtime.attachment_directory.clone(),
-            runtime.note_repository.device_id().clone(),
-        );
+        let project_files = runtime.project_files();
         output = Some(work(
             &runtime.note_repository,
             runtime.voice_identity_manager.vector_database(),
@@ -2511,10 +2596,7 @@ pub(crate) fn run_notes_folder_round(
         let speaker_names =
             crate::search_commands::speaker_names(runtime.voice_identity_manager.vector_database());
         output = Some(speaker_names.map_err(Into::into).and_then(|speaker_names| {
-            let project_files = ProjectFiles::new(
-                runtime.attachment_directory.clone(),
-                runtime.note_repository.device_id().clone(),
-            );
+            let project_files = runtime.project_files();
             crate::notes_folder::run_round(
                 &runtime.note_repository,
                 &project_files,

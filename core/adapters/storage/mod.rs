@@ -15,6 +15,10 @@ mod embedding_encryption_tests;
 pub mod in_memory_voice_vector_db;
 /// Creates private attachment folders and files shared by the attachment stores.
 pub mod private_files;
+/// Seals attachment files at rest and reads them back (#99).
+pub mod sealed_files;
+#[cfg(test)]
+mod sealed_files_tests;
 /// Stores Teams screen-share captures as image files linked to their meeting.
 pub mod slide_attachment_store;
 #[cfg(test)]

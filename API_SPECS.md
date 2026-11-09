@@ -248,6 +248,16 @@ and meeting summaries" below). Keys are write-only.
   "question"?,"connection_id"?}`. Answers and errors are as for `/api/chat` below, plus
   `runtime_unavailable`. `ask` blocks until the model answers.
 
+### Clear copies C ABI (#99)
+
+- `char *note_taker_clear_copy(const char *attachment_id)` decrypts one attachment or project
+  resource into the app's private `clear-copies` folder and returns caller-freed JSON:
+  `{"ok":true,"path":"<copy>"}`, or `{"ok":false,"error_code","error"}` with `invalid_argument`,
+  `not_found` (no such attachment, or its file has not arrived), `unreadable`, `storage_failed`
+  or `runtime_unavailable`. Attachment files are sealed at rest; the `file_path` fields in other
+  answers name the sealed file, which only the core can read. Copies are removed 30 minutes after
+  they were made and when the app starts. Blocks while the file is decrypted.
+
 ### Notes folder C ABI (#98)
 
 - `char *note_taker_notes_folder(const char *request_json)` runs one command and returns

@@ -229,8 +229,20 @@ fn a_verified_file_is_stored_privately_with_its_metadata() {
     assert_eq!(stored[0].meeting_time_ms(), Some(42_000));
     assert_eq!(stored[0].original_device_id(), "phone");
     assert_eq!(
-        std::fs::read(stored[0].file_path()).ok(),
+        fixture
+            .repository
+            .sealed_files()
+            .read_all(std::path::Path::new(stored[0].file_path()))
+            .ok()
+            .map(|contents| contents.to_vec()),
         Some(b"picture".to_vec())
+    );
+    assert!(
+        crate::adapters::storage::sealed_files::is_sealed(std::path::Path::new(
+            stored[0].file_path()
+        ))
+        .unwrap_or(false),
+        "a received file is sealed at rest (#99)"
     );
     assert_eq!(
         stored_files(&fixture),

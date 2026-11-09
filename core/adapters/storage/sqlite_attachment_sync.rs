@@ -2,13 +2,18 @@
 //!
 //! A linked attachment gets a content hash and size once, recorded in its row, so listing them for
 //! a manifest never rereads files. Only rows linked to a meeting, or project resources (Issue #85),
-//! are ever listed or looked up by hash. This child module of `sqlite_adapter` reads metadata only and never logs names.
+//! are ever listed or looked up by hash. This child module of `sqlite_adapter` reads metadata only
+//! and never logs names; it also hands out the sealer for attachment files and seals the files
+//! kept in clear from before #99.
+
+use std::{path::Path, sync::Arc};
 
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, OptionalExtension, params};
 use uuid::Uuid;
 
 use super::{SqliteNoteRepository, sqlite_error};
+use crate::adapters::storage::sealed_files::SealedFiles;
 use crate::domain::{
     errors::StorageError,
     models::{AttachmentOwner, MeetingId, SharedAttachment},
@@ -47,6 +52,44 @@ pub(super) fn add_attachment_content_columns(connection: &Connection) -> Result<
 }
 
 impl SqliteNoteRepository {
+    /// Seals and opens attachment files with this database's key (#99).
+    ///
+    /// Outputs: The sealer. Side effects: None.
+    pub fn sealed_files(&self) -> SealedFiles {
+        SealedFiles::new(Arc::clone(&self.embedding_cipher))
+    }
+
+    /// Seals every attachment file still kept in clear from before #99, each replaced
+    /// atomically; files that are missing or already sealed are skipped.
+    ///
+    /// Outputs: How many files were sealed now, or a storage error for the query. A file that
+    /// cannot be sealed is logged with its attachment ID only and left as it is, to be tried at
+    /// the next start. Side effects: Reads attachment rows; rewrites clear files. Blocks for as
+    /// long as the files take to seal: hosts run it on a background thread.
+    pub fn seal_clear_attachment_files(&self) -> Result<usize, StorageError> {
+        Ok(self.attachment_sealing_job()?.run())
+    }
+
+    /// Prepares `seal_clear_attachment_files` to run on another thread: lists the files now,
+    /// seals them when the job runs.
+    ///
+    /// Outputs: The job, or a storage error for the query. Side effects: Reads attachment rows.
+    pub fn attachment_sealing_job(&self) -> Result<AttachmentSealingJob, StorageError> {
+        let mut statement = self
+            .connection
+            .prepare("SELECT attachment_id, file_path FROM attachments ORDER BY rowid")
+            .map_err(|error| sqlite_error("unable to prepare the attachment query", error))?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|error| sqlite_error("unable to list attachments", error))?
+            .collect::<Result<_, _>>()
+            .map_err(|error| sqlite_error("unable to read an attachment", error))?;
+        Ok(AttachmentSealingJob {
+            sealed_files: self.sealed_files(),
+            rows,
+        })
+    }
+
     /// Lists linked attachments and project resources without a content hash.
     ///
     /// Outputs: (attachment ID, file path) pairs, or a storage error. Side effects: Reads rows.
@@ -175,6 +218,20 @@ impl SqliteNoteRepository {
         .collect()
     }
 
+    /// Loads one attachment or project resource by its ID (#99).
+    ///
+    /// Outputs: The attachment, `None` when there is no such row, or a storage error.
+    /// Side effects: Reads one row.
+    pub fn attachment_by_id(
+        &self,
+        attachment_id: Uuid,
+    ) -> Result<Option<crate::domain::models::Attachment>, StorageError> {
+        Ok(self
+            .load_attachments(super::AttachmentOwnerFilter::Id(attachment_id))?
+            .into_iter()
+            .next())
+    }
+
     /// Tells whether an attachment row exists, linked or not.
     ///
     /// Outputs: Whether it exists, or a storage error. Side effects: Reads one row.
@@ -292,4 +349,57 @@ impl SqliteNoteRepository {
         }
         Ok(())
     }
+}
+
+/// Attachment files to seal on a background thread (#99).
+pub struct AttachmentSealingJob {
+    sealed_files: SealedFiles,
+    rows: Vec<(String, String)>,
+}
+
+impl AttachmentSealingJob {
+    /// Seals the listed files still in clear.
+    ///
+    /// Outputs: How many were sealed. Side effects: Rewrites clear files; logs IDs of failures.
+    pub fn run(self) -> usize {
+        seal_clear_files(&self.sealed_files, &self.rows)
+    }
+
+    /// Runs the job on a thread of its own.
+    ///
+    /// Side effects: Spawns a thread; a failure to spawn is logged and the files wait for the
+    /// next start.
+    pub fn spawn(self) {
+        if let Err(error) = std::thread::Builder::new()
+            .name(String::from("attachment-sealing"))
+            .spawn(move || self.run())
+        {
+            tracing::warn!(error = %error, "attachment sealing could not start");
+        }
+    }
+}
+
+/// Seals the clear files among `(attachment ID, path)` rows; see
+/// `SqliteNoteRepository::seal_clear_attachment_files`.
+///
+/// Outputs: How many were sealed. Side effects: Rewrites clear files; logs IDs of failures.
+pub(crate) fn seal_clear_files(sealed_files: &SealedFiles, rows: &[(String, String)]) -> usize {
+    let mut sealed = 0;
+    for (attachment_id, file_path) in rows {
+        let path = Path::new(file_path);
+        if !path.is_file() {
+            continue;
+        }
+        match sealed_files.seal_in_place(path) {
+            Ok(true) => sealed += 1,
+            Ok(false) => {}
+            Err(_) => {
+                tracing::warn!(%attachment_id, "an attachment file could not be sealed");
+            }
+        }
+    }
+    if sealed > 0 {
+        tracing::info!(sealed_count = sealed, "attachment files sealed at rest");
+    }
+    sealed
 }

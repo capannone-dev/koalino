@@ -342,7 +342,15 @@ remembers what was written, so edits made while the app was closed are recognise
 `get`, `set` and `sync_now`. The app reaches it through `ffi_notes_folder.rs`
 (`note_taker_notes_folder`, rounds through `ffi::run_notes_folder_round`), the daemon through
 `server/notes_folder_routes.rs`, and the CLI through `notes-folder`. Rounds announce the meetings
-they changed to paired devices (not from the CLI, which runs no P2P task).
+they changed to paired devices (not from the CLI, which runs no P2P task). The folder holds clear
+copies of the sealed attachment files (#99): it is a decrypted copy by the owner's choice.
+
+`clear_copies.rs` (#99) gives the app's viewers clear copies of sealed attachments: `ffi.rs`'s
+`note_taker_clear_copy` looks an attachment up by ID and decrypts it into the private
+`clear-copies` folder beside the attachment folder (`<attachment ID>-<name>`, 0600). A copy is
+reused while fresh, removed 30 minutes after it was made once another copy is made, and the folder
+is emptied whenever the app starts. The app's start also seals, on a background thread, attachment
+files kept in clear from before #99; the daemon does the same, and the CLI seals them in line.
 
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.

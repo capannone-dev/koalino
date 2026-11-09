@@ -3,7 +3,8 @@
 //! Implements the `AttachmentWorkflow` port (Teams bridge captures) and the `MeetingSlideSink`
 //! port (local screen shares, Issue #49): each slide is written to
 //! `<slide_directory>/<meeting ID>/slide-<timestamp ms>-<attachment UUID>.<png|jpg>` (directory
-//! 0700, file 0600 on Unix) and recorded through the `AttachmentRepository` as an attachment of
+//! 0700, file 0600 on Unix, sealed with the database key since #99) and recorded through the
+//! `AttachmentRepository` as an attachment of
 //! the meeting, so it appears next to manually added attachments. Meeting IDs that are not plain
 //! folder names are rejected, so no file lands outside the slide directory. Only PNG and JPEG images,
 //! recognized by their signature, are accepted. If the attachment row cannot be saved (for
@@ -15,8 +16,9 @@ use chrono::Utc;
 use uuid::Uuid;
 
 use crate::{
-    adapters::storage::private_files::{
-        create_private_directory, is_plain_folder_name, write_private_file,
+    adapters::storage::{
+        private_files::{create_private_directory, is_plain_folder_name},
+        sealed_files::SealedFiles,
     },
     domain::{
         errors::StorageError,
@@ -38,6 +40,8 @@ pub struct SlideAttachmentStore<RepositoryPort> {
     slide_directory: PathBuf,
     attachment_repository: RepositoryPort,
     device_id: DeviceId,
+    /// Seals each slide with the database key (#99).
+    sealed_files: SealedFiles,
 }
 
 impl<RepositoryPort> SlideAttachmentStore<RepositoryPort>
@@ -47,18 +51,21 @@ where
     /// Creates a store; directories are created on the first capture.
     ///
     /// Inputs: The slide root (normally `~/.note_taker/slides`), the repository that records
-    /// attachments, and this device's ID (stored as the attachment's origin).
+    /// attachments, this device's ID (stored as the attachment's origin), and the sealer
+    /// holding the database key.
     /// Outputs: The store.
     /// Side effects: None.
     pub fn new(
         slide_directory: PathBuf,
         attachment_repository: RepositoryPort,
         device_id: DeviceId,
+        sealed_files: SealedFiles,
     ) -> Self {
         Self {
             slide_directory,
             attachment_repository,
             device_id,
+            sealed_files,
         }
     }
 
@@ -139,7 +146,8 @@ where
         let slide_path = meeting_directory.join(format!(
             "slide-{timestamp_ms:010}-{attachment_id}.{extension}"
         ));
-        write_private_file(&slide_path, &mut &image_bytes[..])?;
+        self.sealed_files
+            .write_new(&slide_path, &mut &image_bytes[..])?;
 
         let attachment = Attachment::new(
             attachment_id,

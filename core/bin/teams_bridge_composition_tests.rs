@@ -238,11 +238,16 @@ async fn five_audio_chunks_are_processed_by_the_meeting_session() {
             recording_manager: Arc::clone(&recording_manager),
             chunk_audio_store: Arc::clone(&chunk_audio_store),
             identity_mapper: Arc::new(TeamsIdentityMapper::new(std::sync::Mutex::new(voice_store))),
-            slide_workflow: SlideAttachmentStore::new(
-                installation.slide_directory.clone(),
-                installation.note_repository(),
-                DeviceId::new("device-test"),
-            ),
+            slide_workflow: {
+                let note_repository = installation.note_repository();
+                let sealed_files = note_repository.sealed_files();
+                SlideAttachmentStore::new(
+                    installation.slide_directory.clone(),
+                    note_repository,
+                    DeviceId::new("device-test"),
+                    sealed_files,
+                )
+            },
             device_id: DeviceId::new("device-test"),
         },
     )

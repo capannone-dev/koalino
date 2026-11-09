@@ -361,6 +361,7 @@ fn the_composed_task_syncs_attachments() {
     AttachmentFileStore::new(
         laptop_folder.join("attachments"),
         DeviceId::new("device-laptop"),
+        on_laptop.sealed_files(),
     )
     .import_file(&on_laptop, &meeting_id, &source, Some(7_000))
     .unwrap_or_else(|error| panic!("the photo must attach: {error}"));
@@ -395,7 +396,21 @@ fn the_composed_task_syncs_attachments() {
                 .join("attachments")
         )
     );
-    assert_eq!(std::fs::read(received[0].file_path()).ok(), Some(photo));
+    // Sealed on the phone with its key (#99); the clear contents crossed the encrypted link.
+    assert!(
+        crate::adapters::storage::sealed_files::is_sealed(std::path::Path::new(
+            received[0].file_path()
+        ))
+        .unwrap_or(false)
+    );
+    assert_eq!(
+        on_phone
+            .sealed_files()
+            .read_all(std::path::Path::new(received[0].file_path()))
+            .ok()
+            .map(|contents| contents.to_vec()),
+        Some(photo)
+    );
 }
 
 /// The choice goes through the JSON commands and shows in the status; asking a paired device with

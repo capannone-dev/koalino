@@ -8,7 +8,8 @@ use uuid::Uuid;
 
 use crate::{
     adapters::storage::{
-        slide_attachment_store::SlideAttachmentStore, sqlite_adapter::SqliteNoteRepository,
+        sealed_files::is_sealed, slide_attachment_store::SlideAttachmentStore,
+        sqlite_adapter::SqliteNoteRepository,
     },
     application::{crypto::voice_encryptor::ephemeral_cipher, meeting_crdt::MeetingCrdtService},
     domain::models::{DeviceId, MeetingId, SlideCapture},
@@ -48,16 +49,26 @@ fn repository_with_meeting(meeting_uuid: Uuid) -> SqliteNoteRepository {
     repository
 }
 
+/// A store over `slide_directory`, sealing with the repository's key.
+fn slide_store(
+    slide_directory: &TemporaryDirectory,
+    repository: SqliteNoteRepository,
+) -> SlideAttachmentStore<SqliteNoteRepository> {
+    let sealed_files = repository.sealed_files();
+    SlideAttachmentStore::new(
+        slide_directory.0.clone(),
+        repository,
+        DeviceId::new("device-test"),
+        sealed_files,
+    )
+}
+
 /// Verifies a capture is written to disk and linked to its meeting as a PNG attachment.
 #[test]
 fn slide_capture_is_saved_and_linked_to_the_meeting() {
     let slide_directory = TemporaryDirectory::new();
     let meeting_uuid = Uuid::new_v4();
-    let store = SlideAttachmentStore::new(
-        slide_directory.0.clone(),
-        repository_with_meeting(meeting_uuid),
-        DeviceId::new("device-test"),
-    );
+    let store = slide_store(&slide_directory, repository_with_meeting(meeting_uuid));
     store
         .handle_slide_capture(SlideCapture::new(
             meeting_uuid,
@@ -77,9 +88,16 @@ fn slide_capture_is_saved_and_linked_to_the_meeting() {
     let saved_path = Path::new(attachment.file_path());
     assert!(saved_path.starts_with(&slide_directory.0));
     assert!(saved_path.to_string_lossy().ends_with(".png"));
-    let saved_bytes = std::fs::read(saved_path)
+    let saved_bytes = store
+        .attachment_repository()
+        .sealed_files()
+        .read_all(saved_path)
         .unwrap_or_else(|error| panic!("slide file should exist: {error}"));
-    assert_eq!(saved_bytes, PNG_BYTES);
+    assert_eq!(saved_bytes.as_slice(), PNG_BYTES);
+    assert!(
+        is_sealed(saved_path).unwrap_or(false),
+        "slides are sealed (#99)"
+    );
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -96,11 +114,7 @@ fn slide_capture_is_saved_and_linked_to_the_meeting() {
 fn image_formats_are_detected_from_their_signature() {
     let slide_directory = TemporaryDirectory::new();
     let meeting_uuid = Uuid::new_v4();
-    let store = SlideAttachmentStore::new(
-        slide_directory.0.clone(),
-        repository_with_meeting(meeting_uuid),
-        DeviceId::new("device-test"),
-    );
+    let store = slide_store(&slide_directory, repository_with_meeting(meeting_uuid));
     let capture = |image_bytes: &[u8]| {
         SlideCapture::new(
             meeting_uuid,
@@ -126,11 +140,7 @@ fn image_formats_are_detected_from_their_signature() {
 #[test]
 fn capture_for_an_unknown_meeting_is_rejected_without_leaving_a_file() {
     let slide_directory = TemporaryDirectory::new();
-    let store = SlideAttachmentStore::new(
-        slide_directory.0.clone(),
-        repository_with_meeting(Uuid::new_v4()),
-        DeviceId::new("device-test"),
-    );
+    let store = slide_store(&slide_directory, repository_with_meeting(Uuid::new_v4()));
     let unknown_meeting = Uuid::new_v4();
     let outcome = store.handle_slide_capture(SlideCapture::new(
         unknown_meeting,
@@ -162,11 +172,7 @@ fn repository_with_named_meeting(meeting_id: &MeetingId) -> SqliteNoteRepository
 fn local_slide_is_attached_to_a_recorded_meeting() {
     let slide_directory = TemporaryDirectory::new();
     let meeting_id = MeetingId::new(format!("meeting-{}", Uuid::new_v4()));
-    let store = SlideAttachmentStore::new(
-        slide_directory.0.clone(),
-        repository_with_named_meeting(&meeting_id),
-        DeviceId::new("device-test"),
-    );
+    let store = slide_store(&slide_directory, repository_with_named_meeting(&meeting_id));
 
     store
         .attach_slide(&meeting_id, PNG_BYTES, 6_000)
@@ -194,11 +200,7 @@ fn local_slide_is_attached_to_a_recorded_meeting() {
 #[test]
 fn meeting_ids_that_are_not_plain_folder_names_are_rejected() {
     let slide_directory = TemporaryDirectory::new();
-    let store = SlideAttachmentStore::new(
-        slide_directory.0.clone(),
-        repository_with_meeting(Uuid::new_v4()),
-        DeviceId::new("device-test"),
-    );
+    let store = slide_store(&slide_directory, repository_with_meeting(Uuid::new_v4()));
 
     for unsafe_id in ["../outside", "a/b", "", ".", "..", "with space"] {
         let outcome = store.attach_slide(&MeetingId::new(unsafe_id), PNG_BYTES, 1);

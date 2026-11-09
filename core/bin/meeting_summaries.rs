@@ -117,7 +117,11 @@ where
     let images = attachments
         .into_iter()
         .filter_map(|attachment| {
-            read_image(Path::new(attachment.file_path()), attachment.mime_type())
+            read_image(
+                repository,
+                Path::new(attachment.file_path()),
+                attachment.mime_type(),
+            )
         })
         .take(MAX_LLM_IMAGES)
         .collect();
@@ -144,13 +148,15 @@ where
     })
 }
 
-/// Reads an image file the model can take, skipping one too large or unreadable.
-fn read_image(path: &Path, mime_type: &str) -> Option<LlmImage> {
-    let size = std::fs::metadata(path).ok()?.len();
-    if size == 0 || size > MAX_LLM_IMAGE_BYTES as u64 {
-        return None;
-    }
-    LlmImage::new(mime_type, std::fs::read(path).ok()?)
+/// Reads (and unseals, #99) an image file the model can take, skipping one too large or
+/// unreadable.
+pub(crate) fn read_image<Repository: AttachmentRepository + ?Sized>(
+    repository: &Repository,
+    path: &Path,
+    mime_type: &str,
+) -> Option<LlmImage> {
+    let contents = repository.read_attachment_file(path, MAX_LLM_IMAGE_BYTES as u64)?;
+    LlmImage::new(mime_type, contents.to_vec())
 }
 
 /// Finds the name of the meeting's project.

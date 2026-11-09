@@ -197,8 +197,11 @@ async fn detail(
         endpoint = "GET /api/projects/{id}",
         "headless API request received"
     );
-    let repositories = application_state.repositories().lock_owned().await;
-    Ok(Json(project_detail(&**repositories, &project_id, false)?))
+    let detail = with_files(&application_state, move |repository, files| {
+        project_detail(repository, files, &project_id, false)
+    })
+    .await?;
+    Ok(Json(detail))
 }
 
 /// Renames a project.
@@ -295,15 +298,16 @@ async fn upload(
         endpoint = "POST /api/projects/{id}/resources",
         "headless API request received"
     );
-    let imported = with_files(&application_state, move |repository, files| {
+    let (imported, added) = with_files(&application_state, move |repository, files| {
         let project_id = existing_project(repository, &project_id)?.project_id();
-        Ok(files.add_contents(repository, project_id, &query.name, &contents)?)
+        let imported = files.add_contents(repository, project_id, &query.name, &contents)?;
+        let added: Vec<Value> = std::iter::once(&imported.email)
+            .chain(imported.extracted.iter())
+            .map(|resource| resource_json(files, resource, false))
+            .collect();
+        Ok((imported, added))
     })
     .await?;
-    let added: Vec<Value> = std::iter::once(&imported.email)
-        .chain(imported.extracted.iter())
-        .map(|resource| resource_json(resource, false))
-        .collect();
     Ok((
         StatusCode::CREATED,
         Json(json!({ "added": added, "skipped_attachments": imported.skipped_attachments })),
@@ -330,10 +334,11 @@ async fn add_note(
     );
     let resource = with_files(&application_state, move |repository, files| {
         let project_id = existing_project(repository, &project_id)?.project_id();
-        Ok(files.add_note(repository, project_id, &request.title, &request.text)?)
+        let resource = files.add_note(repository, project_id, &request.title, &request.text)?;
+        Ok(resource_json(files, &resource, false))
     })
     .await?;
-    Ok((StatusCode::CREATED, Json(resource_json(&resource, false))))
+    Ok((StatusCode::CREATED, Json(resource)))
 }
 
 /// Deletes one resource and its file.
@@ -373,13 +378,14 @@ async fn resource_file(
             parse_project_id(&project_id)?,
             &attachment_id,
         )?;
-        let contents = std::fs::read(resource.file_path()).map_err(|_| {
+        // Decrypted for this response only (#99).
+        let contents = files.read_file(&resource).map_err(|_| {
             ProjectCommandError::new(
                 "resource_not_found",
                 "the resource's file has not arrived here yet",
             )
         })?;
-        Ok((resource, contents))
+        Ok((resource, contents.to_vec()))
     })
     .await?;
     let content_type = if resource.mime_type().starts_with("text/") {

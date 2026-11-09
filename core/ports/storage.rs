@@ -452,8 +452,33 @@ pub trait NoteRepository {
     }
 }
 
+/// Reads stored attachment files, which are sealed at rest (#99).
+pub trait AttachmentFileReader: Send + Sync {
+    /// Writes a clear copy of a stored file, replacing `destination`.
+    ///
+    /// Inputs: The stored file and where the copy goes. Outputs: The number of bytes copied, or
+    /// a rejection for a missing or unreadable file. Side effects: Creates or replaces
+    /// `destination`, readable only by this user.
+    fn copy_clear(
+        &self,
+        stored_path: &std::path::Path,
+        destination: &std::path::Path,
+    ) -> Result<u64, StorageError>;
+}
+
 /// Persists attachment metadata independently from filesystem metadata extraction.
 pub trait AttachmentRepository {
+    /// Reads the clear contents of a stored attachment file, which is sealed at rest (#99).
+    ///
+    /// Inputs: The stored file's path and the most bytes wanted. Outputs: The contents (wiped
+    /// when dropped), or `None` when the file is missing, unreadable, empty or larger than
+    /// `max_bytes`. Side effects: Reads and decrypts the file.
+    fn read_attachment_file(
+        &self,
+        stored_path: &std::path::Path,
+        max_bytes: u64,
+    ) -> Option<zeroize::Zeroizing<Vec<u8>>>;
+
     /// Saves an attachment record, whether already linked or awaiting user confirmation.
     ///
     /// Inputs: `attachment` contains no file bytes, only metadata and an optional meeting ID.

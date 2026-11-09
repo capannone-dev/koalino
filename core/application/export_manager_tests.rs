@@ -76,15 +76,19 @@ impl ExportFixture {
         let source_directory = fixture_root.join("sources");
         fs::create_dir_all(&source_directory)
             .unwrap_or_else(|error| panic!("source directory must be creatable: {error}"));
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("fixture repository must open: {error}"));
+        // Stored files are sealed (#99): exports stage clear copies through the repository's key.
+        let writer = ExportWriter::new(default_exporters(), fixture_root.join("exports"))
+            .with_attachment_files(std::sync::Arc::new(repository.sealed_files()));
         Self {
-            repository: SqliteNoteRepository::open_in_memory(
-                crate::application::crypto::voice_encryptor::ephemeral_cipher(),
-            )
-            .unwrap_or_else(|error| panic!("fixture repository must open: {error}")),
+            repository,
             voice_database: NamedVoiceDatabase {
                 identities: vec![SpeakerIdentity::new(ALICE_IDENTITY, "Alice")],
             },
-            writer: ExportWriter::new(default_exporters(), fixture_root.join("exports")),
+            writer,
             output_directory: fixture_root.join("exports"),
             source_directory,
         }
@@ -132,7 +136,8 @@ impl ExportFixture {
         meeting_id
     }
 
-    /// Writes a source file and links it to `meeting_id` as an attachment.
+    /// Writes a stored file, sealed as the app keeps it (#99), and links it to `meeting_id` as an
+    /// attachment.
     fn attach_file(
         &self,
         meeting_id: &MeetingId,
@@ -141,7 +146,9 @@ impl ExportFixture {
         contents: &[u8],
     ) -> PathBuf {
         let source_path = self.source_directory.join(file_name);
-        fs::write(&source_path, contents)
+        self.repository
+            .sealed_files()
+            .write_new(&source_path, &mut &contents[..])
             .unwrap_or_else(|error| panic!("attachment source must be writable: {error}"));
         self.link_attachment(meeting_id, &source_path, mime_type);
         source_path

@@ -531,7 +531,7 @@ where
     read_back(repository, files, root, state, now, &mut report)?;
     import_new(repository, files, root, state, now, &mut report)?;
     let plan = plan_tree(repository, speaker_names, state)?;
-    write_tree(root, state, plan, &mut report)?;
+    write_tree(root, state, plan, files, &mut report)?;
     if report.written > 0 || report.imported > 0 {
         tracing::info!(
             written = report.written,
@@ -1113,6 +1113,7 @@ fn write_tree(
     root: &Path,
     state: &mut FolderState,
     plan: Plan,
+    files: &ProjectFiles,
     report: &mut RoundReport,
 ) -> Result<(), NotesFolderError> {
     let previous_projects = std::mem::take(&mut state.project_dirs);
@@ -1163,8 +1164,8 @@ fn write_tree(
                     continue;
                 }
                 if path.exists() {
-                    let same = match (fs::read(&path), fs::read(source)) {
-                        (Ok(disk), Ok(stored)) => disk == stored,
+                    let same = match (fs::read(&path), files.sealed_files().read_all(source)) {
+                        (Ok(disk), Ok(stored)) => disk == *stored,
                         _ => false,
                     };
                     if same {
@@ -1181,7 +1182,11 @@ fn write_tree(
                     create_private_dir(parent)?;
                 }
                 set_read_only(&path, false);
-                fs::copy(source, &path)?;
+                // The folder holds clear copies of the sealed files (#99), by the owner's choice.
+                if files.sealed_files().copy_clear(source, &path).is_err() {
+                    // Unreadable here (cut short or still arriving); tried again next round.
+                    continue;
+                }
                 if let Some(record) = FileRecord::copied(&path, desired.origin.clone()) {
                     state.files.insert(desired.relative.clone(), record);
                 }

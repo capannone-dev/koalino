@@ -6,11 +6,14 @@
 //! name, type and meeting ID are peer input: the name is reduced to safe characters, the type must
 //! match the extension among those that can be attached locally, and the meeting ID must be a plain
 //! folder name. Serving reads only files of attachments linked to a meeting. Logs carry IDs only.
+//!
+//! Files are sealed at rest with each device's own key (#99), so the hash, the size and the chunks
+//! exchanged are those of the clear contents, sent over the encrypted P2P transport. A received
+//! file is sealed part by part as it arrives, so its clear contents never touch the disk.
 
 use std::{
-    collections::HashSet,
-    fs::{File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    collections::{HashMap, HashSet},
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -22,6 +25,7 @@ use super::{
     private_files::{
         create_private_directory, file_error, is_plain_folder_name, remove_meeting_folder,
     },
+    sealed_files::{SealedAppender, SealedFiles},
     sqlite_adapter::SqliteNoteRepository,
 };
 use crate::{
@@ -39,6 +43,8 @@ pub struct AttachmentSyncStore {
     /// Rows whose file could not be hashed, skipped until the next start so they don't hold up
     /// the others.
     unhashable: HashSet<String>,
+    /// Files being received, sealed as their parts arrive (#99), by attachment ID.
+    incoming: HashMap<Uuid, SealedAppender>,
 }
 
 impl AttachmentSyncStore {
@@ -51,6 +57,7 @@ impl AttachmentSyncStore {
             repository,
             attachment_directory,
             unhashable: HashSet::new(),
+            incoming: HashMap::new(),
         }
     }
 
@@ -82,13 +89,16 @@ impl AttachmentSyncStore {
     }
 }
 
-/// Computes a file's SHA-256 and length without loading it.
+/// Computes the SHA-256 and length of a file's clear contents without loading it whole.
 ///
-/// Inputs: The open file, at its start. Outputs: The lowercase hexadecimal hash and the length.
-/// Side effects: Reads the file.
-fn hash_file(file: &mut File) -> std::io::Result<(String, u64)> {
+/// Inputs: The sealer and the file (sealed, or clear from before #99). Outputs: The lowercase
+/// hexadecimal hash and the clear length, or a rejection for an unreadable file.
+/// Side effects: Reads (and decrypts) the file.
+fn hash_file(sealed_files: &SealedFiles, path: &Path) -> Result<(String, u64), StorageError> {
+    let mut reader = sealed_files.open(path)?;
     let mut hasher = Sha256::new();
-    let size_bytes = std::io::copy(file, &mut hasher)?;
+    let size_bytes = std::io::copy(&mut reader, &mut hasher)
+        .map_err(|error| file_error("unable to read an attachment", &error))?;
     Ok((format!("{:x}", hasher.finalize()), size_bytes))
 }
 
@@ -162,7 +172,7 @@ impl AttachmentLibrary for AttachmentSyncStore {
         else {
             return Ok(());
         };
-        let hashed = File::open(&file_path).and_then(|mut file| hash_file(&mut file));
+        let hashed = hash_file(&self.repository.sealed_files(), Path::new(&file_path));
         match hashed {
             Ok((content_hash, size_bytes)) if size_bytes <= MAX_FILE_TRANSFER_BYTES => self
                 .repository
@@ -171,8 +181,8 @@ impl AttachmentLibrary for AttachmentSyncStore {
                 self.unhashable.insert(attachment_id);
                 Ok(())
             }
-            Err(error) => {
-                tracing::warn!(%attachment_id, error = %error, "an attachment file could not be read");
+            Err(_) => {
+                tracing::warn!(%attachment_id, "an attachment file could not be read");
                 self.unhashable.insert(attachment_id);
                 Ok(())
             }
@@ -195,22 +205,25 @@ impl AttachmentLibrary for AttachmentSyncStore {
         let Some(file_path) = self.repository.shared_attachment_path(hash)? else {
             return Ok(None);
         };
-        let mut file = match File::open(&file_path) {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(error) => return Err(file_error("unable to open a shared attachment", &error)),
-        };
-        let total_size = file
-            .metadata()
-            .map_err(|error| file_error("unable to read a shared attachment", &error))?
-            .len();
+        let file_path = Path::new(&file_path);
+        if !file_path.exists() {
+            return Ok(None);
+        }
+        // The chunk is sent over the encrypted P2P transport as clear contents: the paired
+        // device seals it with its own key.
+        let mut reader = self.repository.sealed_files().open(file_path)?;
+        let total_size = reader
+            .clear_len()
+            .map_err(|error| file_error("unable to read a shared attachment", &error))?;
         if offset > total_size {
             return Ok(None);
         }
         let mut data = Vec::with_capacity(FILE_TRANSFER_CHUNK_BYTES);
-        file.seek(SeekFrom::Start(offset))
-            .and_then(|_| {
-                file.take(FILE_TRANSFER_CHUNK_BYTES as u64)
+        reader
+            .seek_to(offset)
+            .and_then(|()| {
+                reader
+                    .take(FILE_TRANSFER_CHUNK_BYTES as u64)
                     .read_to_end(&mut data)
             })
             .map_err(|error| file_error("unable to read a shared attachment", &error))?;
@@ -230,14 +243,15 @@ impl AttachmentLibrary for AttachmentSyncStore {
         }
         create_private_directory(&self.owner_directory(&attachment.owner)?)?;
         let partial_path = self.partial_path(attachment)?;
+        if let Some(appender) = self.incoming.remove(&attachment.attachment_id) {
+            appender.discard();
+        }
         let _ = std::fs::remove_file(&partial_path);
-        let mut open_options = OpenOptions::new();
-        open_options.write(true).create_new(true);
-        #[cfg(unix)]
-        std::os::unix::fs::OpenOptionsExt::mode(&mut open_options, 0o600);
-        open_options
-            .open(&partial_path)
-            .map_err(|error| file_error("unable to create a partial attachment", &error))?;
+        let appender = self
+            .repository
+            .sealed_files()
+            .create_appender(&partial_path)?;
+        self.incoming.insert(attachment.attachment_id, appender);
         Ok(())
     }
 
@@ -246,21 +260,24 @@ impl AttachmentLibrary for AttachmentSyncStore {
         attachment: &SharedAttachment,
         data: &[u8],
     ) -> Result<(), StorageError> {
-        OpenOptions::new()
-            .append(true)
-            .open(self.partial_path(attachment)?)
-            .and_then(|mut file| file.write_all(data))
-            .map_err(|error| file_error("unable to write a partial attachment", &error))
+        match self.incoming.get_mut(&attachment.attachment_id) {
+            Some(appender) => appender.append(data),
+            None => Err(StorageError::Rejected {
+                reason: String::from("a partial attachment was not started"),
+            }),
+        }
     }
 
     fn finish_incoming(&mut self, attachment: &SharedAttachment) -> Result<(), StorageError> {
         let partial_path = self.partial_path(attachment)?;
-        let verified = File::open(&partial_path)
-            .and_then(|mut file| {
-                file.sync_all()?;
-                hash_file(&mut file)
-            })
-            .map_err(|error| file_error("unable to verify a received attachment", &error));
+        let verified = match self.incoming.remove(&attachment.attachment_id) {
+            Some(appender) => appender
+                .finish()
+                .and_then(|_| hash_file(&self.repository.sealed_files(), &partial_path)),
+            None => Err(StorageError::Rejected {
+                reason: String::from("a partial attachment was not started"),
+            }),
+        };
         match verified {
             Ok((content_hash, size_bytes))
                 if content_hash == attachment.content_hash
@@ -294,6 +311,9 @@ impl AttachmentLibrary for AttachmentSyncStore {
     }
 
     fn discard_incoming(&mut self, attachment: &SharedAttachment) {
+        if let Some(appender) = self.incoming.remove(&attachment.attachment_id) {
+            appender.discard();
+        }
         if let Ok(partial_path) = self.partial_path(attachment)
             && let Err(error) = std::fs::remove_file(partial_path)
             && error.kind() != std::io::ErrorKind::NotFound

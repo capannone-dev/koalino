@@ -149,7 +149,11 @@ fn a_meeting_chat_gets_its_summary_notes_and_transcript() {
 fn a_project_chat_gets_its_files_then_its_meetings_newest_first() {
     let folder = std::env::temp_dir().join(format!("chat-project-{}", uuid::Uuid::new_v4()));
     let repository = repository();
-    let files = ProjectFiles::new(folder.join("attachments"), DeviceId::new("device"));
+    let files = ProjectFiles::new(
+        folder.join("attachments"),
+        DeviceId::new("device"),
+        repository.sealed_files(),
+    );
     let project = repository
         .create_project(&ProjectName::parse("Launch").unwrap_or_else(|error| panic!("{error}")))
         .unwrap_or_else(|error| panic!("{error}"))

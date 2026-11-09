@@ -402,6 +402,19 @@ impl SqliteNoteRepository {
 }
 
 impl AttachmentRepository for SqliteNoteRepository {
+    fn read_attachment_file(
+        &self,
+        stored_path: &std::path::Path,
+        max_bytes: u64,
+    ) -> Option<zeroize::Zeroizing<Vec<u8>>> {
+        let sealed_files = self.sealed_files();
+        let length = sealed_files.clear_len(stored_path).ok()?;
+        if length == 0 || length > max_bytes {
+            return None;
+        }
+        sealed_files.read_all(stored_path).ok()
+    }
+
     /// Saves user-approved attachment metadata after verifying any requested meeting exists.
     ///
     /// Inputs: `attachment` contains metadata only and may omit its meeting until confirmation.
@@ -486,6 +499,10 @@ impl SqliteNoteRepository {
                 "meeting_id IS NULL AND project_id IS NULL AND ?1 IS NULL",
                 None,
             ),
+            AttachmentOwnerFilter::Id(attachment_id) => {
+                project_text = attachment_id.to_string();
+                ("attachment_id = ?1", Some(project_text.as_str()))
+            }
         };
         let query = format!("{COLUMNS} WHERE {condition} ORDER BY rowid");
         let query = query.as_str();
@@ -558,6 +575,8 @@ pub(super) enum AttachmentOwnerFilter<'owner> {
     Project(ProjectId),
     /// Imports waiting for the owner to pick a meeting.
     Unlinked,
+    /// One attachment or resource, whoever owns it (#99).
+    Id(uuid::Uuid),
 }
 
 impl NoteRepository for SqliteNoteRepository {

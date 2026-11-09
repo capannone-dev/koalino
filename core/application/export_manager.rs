@@ -11,6 +11,7 @@ use std::{
     collections::HashMap,
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use anyhow::{Context, Result};
@@ -27,7 +28,7 @@ use crate::{
     },
     ports::{
         export::MeetingExporter,
-        storage::{AttachmentRepository, NoteRepository},
+        storage::{AttachmentFileReader, AttachmentRepository, NoteRepository},
         voice::VoiceVectorDB,
     },
 };
@@ -299,6 +300,9 @@ where
 pub struct ExportWriter {
     exporters: Vec<Box<dyn MeetingExporter>>,
     output_directory: PathBuf,
+    /// Opens sealed attachment files when staging them (#99); `None` copies files as they are,
+    /// which only suits clear files (tests).
+    attachment_files: Option<Arc<dyn AttachmentFileReader>>,
 }
 
 impl ExportWriter {
@@ -314,7 +318,20 @@ impl ExportWriter {
         Self {
             exporters,
             output_directory: output_directory.as_ref().to_path_buf(),
+            attachment_files: None,
         }
+    }
+
+    /// Stages attachments through `attachment_files`, which opens sealed files (#99). Every host
+    /// exporting stored attachments sets it.
+    ///
+    /// Inputs: The reader holding the database key. Outputs: The writer. Side effects: None.
+    pub fn with_attachment_files(
+        mut self,
+        attachment_files: Arc<dyn AttachmentFileReader>,
+    ) -> Self {
+        self.attachment_files = Some(attachment_files);
+        self
     }
 
     /// Borrows the directory used for generated filenames.
@@ -361,7 +378,9 @@ impl ExportWriter {
             _ => None,
         };
         let documents = match &staging_directory {
-            Some(staging) => stage_attachments(documents, staging.path())?,
+            Some(staging) => {
+                stage_attachments(documents, staging.path(), self.attachment_files.as_deref())?
+            }
             None => documents,
         };
         let export_outcome = exporter.export_meetings(&documents, options, &output_path);
@@ -426,7 +445,8 @@ impl StagingDirectory {
 
 /// Copies each readable attachment into `staging_directory` and records the copy's path.
 ///
-/// Inputs: Extracted `documents` and the staging directory.
+/// Inputs: Extracted `documents`, the staging directory, and the reader of sealed files (#99;
+/// `None` copies files as they are).
 /// Outputs: Documents whose attachments carry `staged_path` when copying succeeded, or
 /// `ExportError::Io` when the staging directory cannot be created.
 /// Side effects: Creates the staging directory and copies files. Unreadable sources are logged by
@@ -434,6 +454,7 @@ impl StagingDirectory {
 fn stage_attachments(
     documents: Vec<ExportDocument>,
     staging_directory: &Path,
+    attachment_files: Option<&dyn AttachmentFileReader>,
 ) -> Result<Vec<ExportDocument>> {
     fs::create_dir_all(staging_directory).map_err(|error| ExportError::Io {
         reason: format!("unable to create attachment staging directory: {error}"),
@@ -454,17 +475,20 @@ fn stage_attachments(
                         );
                     }
                     let staged_path = staging_directory.join(&staged_file_name);
-                    match fs::copy(attachment.file_path(), &staged_path) {
-                        Ok(_) => {
-                            used_file_names.push(staged_file_name);
-                            attachment
-                                .clone()
-                                .with_staged_path(staged_path.to_string_lossy())
-                        }
-                        Err(_) => {
-                            tracing::warn!(attachment_id = %attachment.attachment_id(), "export could not read attachment source; listing it as unavailable");
-                            attachment.clone()
-                        }
+                    let copied = match attachment_files {
+                        Some(reader) => reader
+                            .copy_clear(Path::new(attachment.file_path()), &staged_path)
+                            .is_ok(),
+                        None => fs::copy(attachment.file_path(), &staged_path).is_ok(),
+                    };
+                    if copied {
+                        used_file_names.push(staged_file_name);
+                        attachment
+                            .clone()
+                            .with_staged_path(staged_path.to_string_lossy())
+                    } else {
+                        tracing::warn!(attachment_id = %attachment.attachment_id(), "export could not read attachment source; listing it as unavailable");
+                        attachment.clone()
                     }
                 })
                 .collect();

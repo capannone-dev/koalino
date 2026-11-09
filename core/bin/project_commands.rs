@@ -38,6 +38,7 @@ use crate::{
         storage::{
             attachment_file_store::{AttachmentFileStore, ProjectEmailImport, project_folder_name},
             private_files::remove_meeting_folder,
+            sealed_files::SealedFiles,
         },
     },
     domain::{
@@ -78,11 +79,20 @@ pub struct ProjectFiles {
 impl ProjectFiles {
     /// Creates the files side over the attachment folder.
     ///
-    /// Inputs: The attachment root (normally `<data directory>/attachments`) and this device's
-    /// ID, recorded as the origin of added resources. Outputs: The value. Side effects: None.
-    pub fn new(attachment_directory: PathBuf, device_id: DeviceId) -> Self {
+    /// Inputs: The attachment root (normally `<data directory>/attachments`), this device's ID,
+    /// recorded as the origin of added resources, and the sealer holding the database key
+    /// (#99). Outputs: The value. Side effects: None.
+    pub fn new(
+        attachment_directory: PathBuf,
+        device_id: DeviceId,
+        sealed_files: SealedFiles,
+    ) -> Self {
         Self {
-            file_store: AttachmentFileStore::new(attachment_directory.clone(), device_id),
+            file_store: AttachmentFileStore::new(
+                attachment_directory.clone(),
+                device_id,
+                sealed_files,
+            ),
             attachment_directory,
             email_reader: MailParserEmailReader::new(),
         }
@@ -128,6 +138,32 @@ impl ProjectFiles {
     ///
     /// Outputs: The stored attachment, or a storage rejection (an unreadable or refused file).
     /// Side effects: Copies the file into the attachment folder and writes one row.
+    /// The sealer stored files are written with (#99), for reading them back.
+    pub fn sealed_files(&self) -> &SealedFiles {
+        self.file_store.sealed_files()
+    }
+
+    /// Reads a stored file's clear contents.
+    ///
+    /// Outputs: The contents (wiped when dropped), or a rejection for a missing or unreadable
+    /// file. Side effects: Reads and decrypts the file.
+    pub fn read_file(
+        &self,
+        stored: &Attachment,
+    ) -> Result<zeroize::Zeroizing<Vec<u8>>, StorageError> {
+        self.sealed_files().read_all(Path::new(stored.file_path()))
+    }
+
+    /// The length of a stored file's clear contents; `None` when it is missing or unreadable
+    /// (a resource still syncing).
+    ///
+    /// Side effects: Reads the file's record headers.
+    pub fn clear_len(&self, stored: &Attachment) -> Option<u64> {
+        self.sealed_files()
+            .clear_len(Path::new(stored.file_path()))
+            .ok()
+    }
+
     pub fn attach_to_meeting<RepositoryPort: ProjectCommandRepository + ?Sized>(
         &self,
         repository: &RepositoryPort,
@@ -147,8 +183,9 @@ impl ProjectFiles {
         use std::io::Read as _;
         match resource.mime_type() {
             "text/plain" | "text/markdown" => {
-                let mut contents = Vec::new();
-                std::fs::File::open(resource.file_path())
+                let mut contents = zeroize::Zeroizing::new(Vec::new());
+                self.sealed_files()
+                    .open(Path::new(resource.file_path()))
                     .ok()?
                     .take(MAX_SEARCHED_TEXT_BYTES)
                     .read_to_end(&mut contents)
@@ -156,7 +193,7 @@ impl ProjectFiles {
                 Some(String::from_utf8_lossy(&contents).into_owned())
             }
             "message/rfc822" => {
-                let raw_email = std::fs::read(resource.file_path()).ok()?;
+                let raw_email = self.read_file(resource).ok()?;
                 let email = self.email_reader.read_email(&raw_email).ok()?;
                 let senders: Vec<String> = email
                     .from
@@ -319,7 +356,7 @@ fn run<RepositoryPort: ProjectCommandRepository + ?Sized>(
             "deleted": delete_project(repository, files, parse_project_id(&project_id)?)?
         })),
         ProjectCommand::Detail { project_id } => {
-            project_detail(repository, &project_id, include_paths)
+            project_detail(repository, files, &project_id, include_paths)
         }
         ProjectCommand::MoveMeeting {
             meeting_id,
@@ -355,7 +392,7 @@ fn run<RepositoryPort: ProjectCommandRepository + ?Sized>(
         } => {
             let project_id = existing_project(repository, &project_id)?.project_id();
             let resource = files.add_note(repository, project_id, &title, &text)?;
-            Ok(json!({ "resource": resource_json(&resource, include_paths) }))
+            Ok(json!({ "resource": resource_json(files, &resource, include_paths) }))
         }
         ProjectCommand::DeleteResource {
             project_id,
@@ -463,6 +500,7 @@ pub fn delete_project<RepositoryPort: ProjectCommandRepository + ?Sized>(
 /// Outputs: `{"project","meetings","resources"}`, or an error. Side effects: Reads rows.
 pub fn project_detail<RepositoryPort: ProjectCommandRepository + ?Sized>(
     repository: &RepositoryPort,
+    files: &ProjectFiles,
     project_id: &str,
     include_paths: bool,
 ) -> Result<Value, ProjectCommandError> {
@@ -489,7 +527,7 @@ pub fn project_detail<RepositoryPort: ProjectCommandRepository + ?Sized>(
     let resources: Vec<Value> = repository
         .project_resources(project_id)?
         .iter()
-        .map(|resource| resource_json(resource, include_paths))
+        .map(|resource| resource_json(files, resource, include_paths))
         .collect();
     Ok(json!({
         "project": summary_json(&summary_of(repository, &project)?),
@@ -559,12 +597,12 @@ fn add_files<RepositoryPort: ProjectCommandRepository + ?Sized>(
         };
         match imported {
             Ok(imported) => {
-                added.push(resource_json(&imported.email, include_paths));
+                added.push(resource_json(files, &imported.email, include_paths));
                 added.extend(
                     imported
                         .extracted
                         .iter()
-                        .map(|resource| resource_json(resource, include_paths)),
+                        .map(|resource| resource_json(files, resource, include_paths)),
                 );
                 skipped_attachments += imported.skipped_attachments;
             }
@@ -618,7 +656,7 @@ pub fn read_email<RepositoryPort: ProjectCommandRepository + ?Sized>(
             "the resource is not an e-mail",
         ));
     }
-    let raw_email = std::fs::read(resource.file_path()).map_err(|_| {
+    let raw_email = files.read_file(&resource).map_err(|_| {
         ProjectCommandError::new("resource_not_found", "the e-mail file is missing")
     })?;
     files
@@ -703,12 +741,10 @@ pub fn resource_file_name(resource: &Attachment) -> String {
 /// Serializes one resource.
 ///
 /// Outputs: `{"attachment_id","file_name","mime_type","kind","added_at","size_bytes"}` plus
-/// `file_path` when `include_path` is set; `size_bytes` is null when the file is not here yet
-/// (still syncing). Side effects: Reads the file's size.
-pub fn resource_json(resource: &Attachment, include_path: bool) -> Value {
-    let size_bytes = std::fs::metadata(resource.file_path())
-        .ok()
-        .map(|metadata| metadata.len());
+/// `file_path` when `include_path` is set; `size_bytes` (of the clear contents) is null when the
+/// file is not here yet (still syncing). Side effects: Reads the file's record headers.
+pub fn resource_json(files: &ProjectFiles, resource: &Attachment, include_path: bool) -> Value {
+    let size_bytes = files.clear_len(resource);
     let mut fields = json!({
         "attachment_id": resource.attachment_id().to_string(),
         "file_name": resource_file_name(resource),

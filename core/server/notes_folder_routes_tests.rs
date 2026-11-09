@@ -81,6 +81,9 @@ async fn turning_the_folder_on_writes_it() {
             .with_project_files(Arc::new(ProjectFiles::new(
                 scratch.join("attachments"),
                 DeviceId::new("device"),
+                crate::adapters::storage::sealed_files::SealedFiles::new(
+                    crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+                ),
             )))
             .with_notes_folder(Arc::new(NotesFolderKeeper::for_database(
                 &scratch.join("db.sqlite3"),

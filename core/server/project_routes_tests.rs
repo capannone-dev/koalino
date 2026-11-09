@@ -43,11 +43,13 @@ impl Fixture {
         MeetingCrdtService::new(&repository)
             .create_meeting(&MeetingId::new("meeting-1"))
             .unwrap_or_else(|error| panic!("meeting must be created: {error}"));
+        let sealed_files = repository.sealed_files();
         let mut state = ServerAppState::new(repository, InMemoryVoiceVectorDB::new());
         if with_files {
             state = state.with_project_files(Arc::new(ProjectFiles::new(
                 directory.join("attachments"),
                 DeviceId::new("server"),
+                sealed_files,
             )));
         }
         Self {

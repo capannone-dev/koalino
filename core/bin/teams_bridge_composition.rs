@@ -312,6 +312,7 @@ pub fn open_teams_bridge_ports(
         },
         Path::to_path_buf,
     );
+    let sealed_files = attachment_repository.sealed_files();
     Ok(TeamsBridgePorts {
         recording_manager,
         chunk_audio_store,
@@ -320,6 +321,7 @@ pub fn open_teams_bridge_ports(
             slide_directory,
             attachment_repository,
             device_id.clone(),
+            sealed_files,
         ),
         device_id,
     })

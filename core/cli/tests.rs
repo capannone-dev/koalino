@@ -1835,6 +1835,7 @@ fn notes_folder_turns_on_and_writes_the_folder() {
     crate::application::meeting_crdt::MeetingCrdtService::new(&repository)
         .create_meeting(&crate::domain::models::MeetingId::new("m-1"))
         .unwrap_or_else(|error| panic!("{error}"));
+    let sealed_files = repository.sealed_files();
     let mut cli_service = CoreCliService::new(
         NoRecordingControl,
         repository,
@@ -1844,6 +1845,7 @@ fn notes_folder_turns_on_and_writes_the_folder() {
     .with_project_files(
         folder.join("attachments"),
         crate::domain::models::DeviceId::new("device"),
+        sealed_files,
     )
     .with_notes_folder(&folder.join("db.sqlite3"), None);
     let run = |cli_service: &mut _, arguments: &[&str]| {

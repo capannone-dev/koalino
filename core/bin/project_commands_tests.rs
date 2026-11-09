@@ -35,7 +35,11 @@ impl Fixture {
                 repository.with_document_codec(Arc::new(AutomergeMeetingDocumentCodec))
             })
             .unwrap_or_else(|error| panic!("repository must open: {error}"));
-        let files = ProjectFiles::new(directory.join("attachments"), DeviceId::new("device"));
+        let files = ProjectFiles::new(
+            directory.join("attachments"),
+            DeviceId::new("device"),
+            repository.sealed_files(),
+        );
         Self {
             directory,
             repository,
@@ -210,7 +214,13 @@ fn files_notes_and_emails_become_resources_that_can_be_read_and_deleted() {
         .unwrap_or_default()
         .to_owned();
     assert_eq!(
-        std::fs::read_to_string(&note_path).ok().as_deref(),
+        fixture
+            .repository
+            .sealed_files()
+            .read_all(std::path::Path::new(&note_path))
+            .ok()
+            .map(|contents| String::from_utf8_lossy(&contents).into_owned())
+            .as_deref(),
         Some("# Plan\n\nCall Anna\n")
     );
 

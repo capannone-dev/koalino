@@ -1543,15 +1543,18 @@ where
 
     /// Lets `search` read project files' text in `attachment_directory` (#100).
     ///
-    /// Inputs: The attachment folder and this device. Outputs: The service. Side effects: None.
+    /// Inputs: The attachment folder, this device, and the sealer holding the database key
+    /// (#99). Outputs: The service. Side effects: None.
     pub fn with_project_files(
         mut self,
         attachment_directory: PathBuf,
         device_id: DeviceId,
+        sealed_files: crate::adapters::storage::sealed_files::SealedFiles,
     ) -> Self {
         self.project_files = Some(crate::project_commands::ProjectFiles::new(
             attachment_directory,
             device_id,
+            sealed_files,
         ));
         self
     }

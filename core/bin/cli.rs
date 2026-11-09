@@ -85,7 +85,13 @@ fn main() -> Result<()> {
     let recording_control = recording_control.with_microphone_source(Arc::new(
         note_taker_core::adapters::audio::cpal_microphone::CpalMicrophone::new(),
     ));
-    let export_writer = ExportWriter::new(default_exporters(), default_export_directory());
+    let sealed_files = repository.sealed_files();
+    // Seals files kept in clear from before #99; only the first run after the update has any.
+    if let Err(error) = repository.seal_clear_attachment_files() {
+        tracing::warn!(error = %error, "attachment files could not be listed for sealing");
+    }
+    let export_writer = ExportWriter::new(default_exporters(), default_export_directory())
+        .with_attachment_files(Arc::new(sealed_files.clone()));
     let mut cli_service =
         CoreCliService::new(recording_control, repository, voice_store, export_writer)
             .with_log_level_control(LogLevelControlFile::for_database(&database_path))
@@ -102,6 +108,7 @@ fn main() -> Result<()> {
                     .attachment_directory()
                     .to_path_buf(),
                 recording_device_id.clone(),
+                sealed_files,
             )
             .with_recording_device(
                 recording_device_id,

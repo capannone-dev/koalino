@@ -732,7 +732,12 @@ async fn export_meeting(
     let request_directory = std::env::temp_dir()
         .join("note-taker-http-exports")
         .join(uuid::Uuid::new_v4().to_string());
-    let export_writer = ExportWriter::new(default_exporters(), &request_directory);
+    let mut export_writer = ExportWriter::new(default_exporters(), &request_directory);
+    // Staged attachments are opened with the database key (#99).
+    if let Some(project_files) = &application_state.project_files {
+        export_writer =
+            export_writer.with_attachment_files(Arc::new(project_files.sealed_files().clone()));
+    }
     let document = {
         let repositories = application_state.repositories.lock().await;
         let voice_database = application_state.voice_database.lock().await;

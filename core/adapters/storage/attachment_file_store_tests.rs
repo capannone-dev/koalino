@@ -15,6 +15,7 @@ use crate::{
         email::mail_parser_reader::MailParserEmailReader,
         storage::{
             attachment_file_store::{AttachmentFileStore, project_folder_name},
+            sealed_files::is_sealed,
             sqlite_adapter::SqliteNoteRepository,
         },
     },
@@ -69,12 +70,25 @@ fn repository_with_meeting() -> SqliteNoteRepository {
     repository
 }
 
-/// A store writing into a fresh attachment directory.
-fn store(attachment_directory: &TemporaryDirectory) -> AttachmentFileStore {
+/// A store writing into a fresh attachment directory, sealing with the repository's key.
+fn store(
+    attachment_directory: &TemporaryDirectory,
+    repository: &SqliteNoteRepository,
+) -> AttachmentFileStore {
     AttachmentFileStore::new(
         attachment_directory.0.join("attachments"),
         DeviceId::new("device-test"),
+        repository.sealed_files(),
     )
+}
+
+/// Reads a stored file's clear contents; `None` when it cannot be opened.
+fn clear(repository: &SqliteNoteRepository, path: impl AsRef<Path>) -> Option<Vec<u8>> {
+    repository
+        .sealed_files()
+        .read_all(path.as_ref())
+        .ok()
+        .map(|contents| contents.to_vec())
 }
 
 /// Lists the files left in the meeting's attachment folder.
@@ -102,7 +116,7 @@ fn a_photo_is_copied_privately_and_placed_at_its_meeting_time() {
     let photo = sources.file("CAP0001.jpg", b"\xFF\xD8\xFFphoto");
     let repository = repository_with_meeting();
 
-    let attachment = store(&attachment_directory)
+    let attachment = store(&attachment_directory, &repository)
         .import_file(&repository, &meeting_id(), &photo, Some(42_000))
         .unwrap_or_else(|error| panic!("photo should be imported: {error}"));
 
@@ -121,8 +135,12 @@ fn a_photo_is_copied_privately_and_placed_at_its_meeting_time() {
     );
     assert!(copy.to_string_lossy().ends_with("-CAP0001.jpg"));
     assert_eq!(
-        std::fs::read(copy).unwrap_or_default(),
+        clear(&repository, copy).unwrap_or_default(),
         b"\xFF\xD8\xFFphoto".to_vec()
+    );
+    assert!(
+        is_sealed(copy).unwrap_or(false),
+        "the copy is sealed at rest (#99)"
     );
     assert!(photo.exists(), "the source belongs to the caller");
     #[cfg(unix)]
@@ -146,7 +164,7 @@ fn documents_are_accepted_with_their_types() {
     let sources = TemporaryDirectory::new("sources");
     let attachment_directory = TemporaryDirectory::new("attachments");
     let repository = repository_with_meeting();
-    let store = store(&attachment_directory);
+    let store = store(&attachment_directory, &repository);
 
     let mime_types: Vec<String> = [
         "Agenda.PDF",
@@ -185,7 +203,7 @@ fn unsupported_or_missing_files_are_rejected() {
     let sources = TemporaryDirectory::new("sources");
     let attachment_directory = TemporaryDirectory::new("attachments");
     let repository = repository_with_meeting();
-    let store = store(&attachment_directory);
+    let store = store(&attachment_directory, &repository);
 
     for source in [
         sources.file("tool.exe", b"MZ"),
@@ -212,8 +230,9 @@ fn unsafe_meeting_ids_are_rejected() {
     let photo = sources.file("photo.jpg", b"\xFF\xD8\xFF");
 
     for unsafe_id in ["../outside", "a/b", "", ".."] {
-        let outcome = store(&attachment_directory).import_file(
-            &repository_with_meeting(),
+        let repository = repository_with_meeting();
+        let outcome = store(&attachment_directory, &repository).import_file(
+            &repository,
             &MeetingId::new(unsafe_id),
             &photo,
             None,
@@ -231,7 +250,7 @@ fn an_unknown_meeting_leaves_no_copy() {
     let repository = SqliteNoteRepository::open_in_memory(ephemeral_cipher())
         .unwrap_or_else(|error| panic!("repository should open: {error}"));
 
-    let outcome = store(&attachment_directory).import_file(
+    let outcome = store(&attachment_directory, &repository).import_file(
         &repository,
         &meeting_id(),
         &sources.file("photo.jpg", b"\xFF\xD8\xFF"),
@@ -249,7 +268,7 @@ fn file_names_are_reduced_to_safe_characters() {
     let attachment_directory = TemporaryDirectory::new("attachments");
     let repository = repository_with_meeting();
 
-    let attachment = store(&attachment_directory)
+    let attachment = store(&attachment_directory, &repository)
         .import_file(
             &repository,
             &meeting_id(),
@@ -286,7 +305,7 @@ fn a_project_resource_is_copied_into_the_project_folder() {
     let (repository, project_id) = repository_with_project();
     let source = sources.file("Interview notes.md", b"# Notes");
 
-    let resource = store(&attachment_directory)
+    let resource = store(&attachment_directory, &repository)
         .import_project_file(&repository, project_id, &source)
         .unwrap_or_else(|error| panic!("resource should be imported: {error}"));
 
@@ -304,7 +323,7 @@ fn a_project_resource_is_copied_into_the_project_folder() {
                 .as_path()
         )
     );
-    assert_eq!(std::fs::read(copy).ok(), Some(b"# Notes".to_vec()));
+    assert_eq!(clear(&repository, copy), Some(b"# Notes".to_vec()));
     assert!(source.exists());
     assert_eq!(
         repository.project_resources(project_id).unwrap_or_default(),
@@ -318,7 +337,7 @@ fn emails_and_gifs_are_accepted() {
     let sources = TemporaryDirectory::new("sources");
     let attachment_directory = TemporaryDirectory::new("attachments");
     let (repository, project_id) = repository_with_project();
-    let store = store(&attachment_directory);
+    let store = store(&attachment_directory, &repository);
 
     let mime_types: Vec<String> = ["Offer.eml", "reaction.gif", "readme.markdown"]
         .iter()
@@ -345,7 +364,7 @@ fn an_unknown_project_leaves_no_copy() {
     let (repository, _) = repository_with_project();
     let unknown = ProjectId::new_random();
 
-    let result = store(&attachment_directory).import_project_file(
+    let result = store(&attachment_directory, &repository).import_project_file(
         &repository,
         unknown,
         &sources.file("notes.md", b"x"),
@@ -401,7 +420,7 @@ fn an_email_is_kept_and_its_supported_attachments_become_resources() {
     let (repository, project_id) = repository_with_project();
     let source = sources.file("Candidates.eml", EMAIL_WITH_FILES.as_bytes());
 
-    let imported = store(&attachment_directory)
+    let imported = store(&attachment_directory, &repository)
         .import_project_email(
             &repository,
             &MailParserEmailReader::new(),
@@ -412,7 +431,7 @@ fn an_email_is_kept_and_its_supported_attachments_become_resources() {
 
     assert_eq!(imported.email.mime_type(), "message/rfc822");
     assert_eq!(
-        std::fs::read(imported.email.file_path()).ok(),
+        clear(&repository, imported.email.file_path()),
         Some(EMAIL_WITH_FILES.as_bytes().to_vec())
     );
     let extracted: Vec<(String, &str)> = imported
@@ -435,7 +454,7 @@ fn an_email_is_kept_and_its_supported_attachments_become_resources() {
         vec![("cv_anna.pdf".to_owned(), "application/pdf")]
     );
     assert_eq!(
-        std::fs::read(imported.extracted[0].file_path()).ok(),
+        clear(&repository, imported.extracted[0].file_path()),
         Some(b"%PDF-1.4\n".to_vec())
     );
     assert_eq!(imported.skipped_attachments, 2);
@@ -456,7 +475,7 @@ fn a_file_that_is_not_an_email_is_refused() {
     let (repository, project_id) = repository_with_project();
     let empty = sources.file("empty.eml", b"");
     let named_otherwise = sources.file("notes.md", EMAIL_WITH_FILES.as_bytes());
-    let file_store = store(&attachment_directory);
+    let file_store = store(&attachment_directory, &repository);
 
     for source in [empty, named_otherwise] {
         assert!(
@@ -497,14 +516,14 @@ fn a_project_takes_any_file_but_a_meeting_only_pictures_and_documents() {
     let attachment_directory = TemporaryDirectory::new("attachments");
     let (repository, project_id) = repository_with_project();
 
-    let model = store(&attachment_directory)
+    let model = store(&attachment_directory, &repository)
         .import_project_file(
             &repository,
             project_id,
             &sources.file("site.dwg", b"AC1032"),
         )
         .unwrap_or_else(|error| panic!("any file should be accepted: {error}"));
-    let nameless = store(&attachment_directory)
+    let nameless = store(&attachment_directory, &repository)
         .import_project_file(&repository, project_id, &sources.file("Makefile", b"all:"))
         .unwrap_or_else(|error| panic!("a file without extension should be accepted: {error}"));
 
@@ -512,7 +531,7 @@ fn a_project_takes_any_file_but_a_meeting_only_pictures_and_documents() {
     assert_eq!(nameless.mime_type(), "application/octet-stream");
     let meeting_repository = repository_with_meeting();
     assert!(
-        store(&attachment_directory)
+        store(&attachment_directory, &repository)
             .import_file(
                 &meeting_repository,
                 &meeting_id(),
@@ -521,4 +540,41 @@ fn a_project_takes_any_file_but_a_meeting_only_pictures_and_documents() {
             )
             .is_err()
     );
+}
+
+/// Verifies files kept in clear before #99 are sealed once by the start-up pass and stay
+/// readable, and a file that has gone is skipped.
+#[test]
+fn files_kept_in_clear_before_sealing_are_sealed_once() {
+    let sources = TemporaryDirectory::new("sources");
+    let attachment_directory = TemporaryDirectory::new("attachments");
+    let repository = repository_with_meeting();
+    let file_store = store(&attachment_directory, &repository);
+    let kept = file_store
+        .import_file(
+            &repository,
+            &meeting_id(),
+            &sources.file("a.jpg", b"\xFF\xD8\xFF"),
+            None,
+        )
+        .unwrap_or_else(|error| panic!("photo should be imported: {error}"));
+    let gone = file_store
+        .import_file(
+            &repository,
+            &meeting_id(),
+            &sources.file("b.jpg", b"\xFF\xD8\xFF"),
+            None,
+        )
+        .unwrap_or_else(|error| panic!("photo should be imported: {error}"));
+    // As written before #99.
+    std::fs::write(kept.file_path(), b"clear photo").unwrap_or_default();
+    std::fs::remove_file(gone.file_path()).unwrap_or_default();
+
+    assert_eq!(repository.seal_clear_attachment_files().ok(), Some(1));
+    assert!(is_sealed(Path::new(kept.file_path())).unwrap_or(false));
+    assert_eq!(
+        clear(&repository, kept.file_path()),
+        Some(b"clear photo".to_vec())
+    );
+    assert_eq!(repository.seal_clear_attachment_files().ok(), Some(0));
 }

@@ -36,7 +36,7 @@ use crate::{
     domain::{
         chat::{ChatMessage, ChatRole, ChatScope},
         errors::StorageError,
-        llm::{LlmImage, MAX_LLM_IMAGE_BYTES},
+        llm::LlmImage,
         models::{ExportFormat, ExportOptions, MeetingId},
         projects::ProjectId,
     },
@@ -258,18 +258,6 @@ fn file_item(
     })
 }
 
-/// Reads an image file the model can take.
-fn read_image(resource: &crate::domain::models::Attachment) -> Option<LlmImage> {
-    let size = std::fs::metadata(resource.file_path()).ok()?.len();
-    if size == 0 || size > MAX_LLM_IMAGE_BYTES as u64 {
-        return None;
-    }
-    LlmImage::new(
-        resource.mime_type(),
-        std::fs::read(resource.file_path()).ok()?,
-    )
-}
-
 /// Reads what a chat is about.
 ///
 /// Inputs: The repository, the voice library (for speakers' names), the project files (for
@@ -352,7 +340,13 @@ where
         .iter()
         .rev()
         .filter(|resource| resource.mime_type().starts_with("image/"))
-        .filter_map(read_image)
+        .filter_map(|resource| {
+            crate::meeting_summaries::read_image(
+                repository,
+                std::path::Path::new(resource.file_path()),
+                resource.mime_type(),
+            )
+        })
         .take(MAX_PROJECT_IMAGES)
         .collect();
     let listed = listed_meetings(repository).map_err(|error| storage(&error))?;
