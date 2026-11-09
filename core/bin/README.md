@@ -279,7 +279,10 @@ reads it fresh for each recording and after-meeting pass (`pipeline_composition.
 also keeps how many days speech waits to be combined (#93, `keep_speech_days`, 1 to 60, three weeks
 by default): `keep_for_source` gives `RefinementWorker::with_keep_for_source` the window fresh at
 each round, which also bounds how far back recordings are folded, and
-`note_taker_set_keep_speech_days(days)` saves it (0 saved, 1 out of range, 2 failed). `cloud_fallback.rs` transcribes a chunk locally when OpenAI fails, and
+`note_taker_set_keep_speech_days(days)` saves it (0 saved, 1 out of range, 2 failed). It also keeps
+whether online-meeting participants' voices are kept in the gallery (#103, `keep_meeting_voices`,
+off by default): `teams_bridge_composition.rs` gives `TeamsIdentityMapper::with_voice_keeping` a
+closure that reads `keeps_meeting_voices` at every offer. `cloud_fallback.rs` transcribes a chunk locally when OpenAI fails, and
 `device_resources.rs` reads free disk space and total memory.
 
 `llm_settings.rs` keeps the language model settings (#95, #101) in `<db>.llm-settings.json`: the

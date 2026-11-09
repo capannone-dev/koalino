@@ -21,7 +21,10 @@ Meeting rename tests (Issue #42):
   `color-scheme: light dark`, and that no component uses a fixed palette colour that would not
   switch.
 
-Settings tests (Issue #46):
+Settings tests (Issue #46, #103):
+
+- `meeting-voices-settings.test.tsx` covers the switch off by default, switching it on, a failed
+  save going back to the saved choice, and the disabled switch without a server.
 
 - `log-settings-api.test.ts` covers the level `GET` and `PUT`, the failure kinds, an unreachable
   daemon, and the log download with its file name.

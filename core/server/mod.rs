@@ -27,6 +27,10 @@ mod llm_routes_tests;
 pub mod log_routes;
 #[cfg(test)]
 mod log_routes_tests;
+/// Serves the web Settings page's switch for keeping meeting participants' voices (#103).
+pub mod meeting_voices_routes;
+#[cfg(test)]
+mod meeting_voices_routes_tests;
 /// Serves the notes folder's Settings and runs the daemon's rounds (#98).
 pub mod notes_folder_routes;
 #[cfg(test)]

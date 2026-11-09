@@ -406,6 +406,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .merge(super::log_routes::routes())
         .merge(super::glossary_routes::routes())
         .merge(super::retention_routes::routes())
+        .merge(super::meeting_voices_routes::routes())
         .merge(super::llm_routes::routes())
         .merge(super::edit_routes::routes())
         .merge(super::search_routes::routes())

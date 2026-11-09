@@ -182,6 +182,14 @@ device's recording of the same meeting; `keep-speech <days>` changes it (1 to 60
 default, #93). It is kept in the same settings file, and speech older than a shorter window is
 deleted at the after-meeting worker's next round.
 
+## Meeting participants' voices
+
+`meeting-voices` shows whether an online-meeting participant's voice is kept in the voice gallery;
+`meeting-voices on|off` switches it (#103). It is off by default because voice prints are
+biometric. When on, a participant whose track carried one voice for about 30 s gets that voice in
+the gallery, unless it sounds like someone else already there. A meeting room or other track with
+several voices is never kept. It is kept in the same settings file and read at every offer.
+
 `summary <meeting-id>` writes the meeting's summary with the default AI connection (or the one
 `--connection` names) and prints it; the meeting's transcript, notes and photos are sent to that
 connection's server. `--show` prints the stored summary instead. `ai` manages the connections

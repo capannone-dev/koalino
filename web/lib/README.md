@@ -45,6 +45,9 @@ anchor a hit opens, and `hitPlaceLabel` says where in its meeting or project it 
 `chat-api.ts` (#97) is `getChat`, `askChat` and `clearChat` over `/api/chat`, with
 `ChatApiError` and `chatErrorMessage` (never the server's text).
 
+`meeting-voices-api.ts` (#103) is `getMeetingVoices` and `setMeetingVoices(keep)` over
+`/api/settings/meeting-voices`, with `MeetingVoicesError` (`unavailable`, `server`, `network`).
+
 `notes-folder-api.ts` (#98) is `getNotesFolder`, `setNotesFolder(enabled, path)` and
 `syncNotesFolder` over `/api/settings/notes-folder`, with `NotesFolderError` and
 `notesFolderMessage` (never the server's text).

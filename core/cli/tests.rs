@@ -61,6 +61,8 @@ struct MockCliService {
     glossary: Vec<String>,
     /// The speech retention window as saved through the service, in days; `None` is the default.
     keep_speech_days: Option<u16>,
+    /// Whether participants' voices are kept, as saved through the service (#103).
+    keep_meeting_voices: bool,
 }
 
 /// The arguments of one `start_recording` call.
@@ -188,6 +190,13 @@ impl CliService for MockCliService {
     }
     fn keep_speech_days(&self) -> Result<u16, String> {
         Ok(self.keep_speech_days.unwrap_or(21))
+    }
+    fn keeps_meeting_voices(&self) -> Result<bool, String> {
+        Ok(self.keep_meeting_voices)
+    }
+    fn save_keep_meeting_voices(&mut self, keep: bool) -> Result<(), String> {
+        self.keep_meeting_voices = keep;
+        Ok(())
     }
     fn save_keep_speech_days(&mut self, days: u16) -> Result<(), String> {
         self.keep_speech_days = Some(days);
@@ -1674,6 +1683,25 @@ fn the_speech_retention_window_is_shown_and_changed_in_days() {
     let refused = run(&["note-taker", "keep-speech", "90"], &mut cli_service);
     assert!(refused.is_err_and(|error| error.contains("between 1 and 60")));
     assert_eq!(cli_service.keep_speech_days, Some(7), "nothing saved");
+}
+
+/// Verifies keeping online-meeting participants' voices is shown, switched on and off (#103).
+#[test]
+fn keeping_meeting_voices_is_shown_and_switched() {
+    let mut cli_service = MockCliService::default();
+
+    let shown = run(&["note-taker", "meeting-voices"], &mut cli_service)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(shown.contains("not kept"), "{shown}");
+    run(&["note-taker", "meeting-voices", "on"], &mut cli_service)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(cli_service.keep_meeting_voices);
+    let shown = run(&["note-taker", "meeting-voices"], &mut cli_service)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(shown.contains("are kept"), "{shown}");
+    run(&["note-taker", "meeting-voices", "off"], &mut cli_service)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(!cli_service.keep_meeting_voices);
 }
 
 /// Verifies `ai add`, `ai list` and `summary --show` work against the shared AI commands (#95),

@@ -118,6 +118,7 @@ fn settings_round_trip_without_the_key() {
         transcript_pass_model: Some("ggml-large-v3-turbo.bin".to_owned()),
         glossary: vec!["Marco Rossi".to_owned()],
         keep_speech_days: Some(14),
+        keep_meeting_voices: true,
     };
     assert_eq!(load_settings(&paths.settings_file), Default::default());
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
@@ -245,4 +246,20 @@ fn a_retention_window_edited_out_of_range_falls_back_to_three_weeks() {
         keep_for_source(paths.settings_file.clone())(),
         KEEP_FOR_COMBINING
     );
+}
+
+/// Verifies keeping online-meeting participants' voices is off until chosen, and read fresh (#103).
+#[test]
+fn keeping_meeting_voices_is_off_until_chosen() {
+    use super::transcription_settings::{keeps_meeting_voices, save_keep_meeting_voices};
+    let paths = paths("meeting-voices");
+    assert!(
+        !keeps_meeting_voices(&paths.settings_file),
+        "off by default"
+    );
+
+    save_keep_meeting_voices(&paths.settings_file, true).unwrap_or_else(|error| panic!("{error}"));
+    assert!(keeps_meeting_voices(&paths.settings_file));
+    save_keep_meeting_voices(&paths.settings_file, false).unwrap_or_else(|error| panic!("{error}"));
+    assert!(!keeps_meeting_voices(&paths.settings_file));
 }

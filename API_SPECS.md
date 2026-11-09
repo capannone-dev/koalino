@@ -417,6 +417,21 @@ The core never accepts background-service handles, callbacks, or retained pointe
 `SlideCapture` values. An external participant always contains both a stable `external_id` for
 mapping and a `display_name` for first-time local identity naming; optional email is metadata only.
 `TeamsIdentityMapper` persists the external-to-local association through `ExternalIdentityRepository`.
+
+A participant's stream is a track that may carry several people (a meeting room, #103), so the
+session diarizes every chunk and credits it to the participant only while one voice speaks; see
+`core/application/pipeline/README.md`. `IdentityMapper::keep_participant_voice(identity,
+embedding) -> bool` is offered the voice once per meeting, after 30 s of clean speech of one voice
+that the gallery does not match to someone else. Its default keeps nothing. `TeamsIdentityMapper`
+stores it through `ExternalIdentityRepository::store_participant_voice` only when its voice-keeping
+setting answers true. The daemon reads `keep_meeting_voices` from the transcription settings file
+at every offer.
+
+`GET /api/settings/meeting-voices` returns `{"keep":false}`: whether participants' voices are kept
+(off by default). `PUT /api/settings/meeting-voices` with `{"keep":true}` saves it and returns it.
+A write failure returns `500` `{"error_code":"save_failed","error"}`, and a daemon without a
+settings file `503` `unavailable`. The CLI uses `meeting-voices [on|off]`.
+
 `TeamsProcessor` uses only these ports plus `VoiceEmbeddingExtractor`, `VoiceVectorDB`,
 `TranscriptionEngine`, and `AttachmentWorkflow`; no external service SDK type reaches the core.
 

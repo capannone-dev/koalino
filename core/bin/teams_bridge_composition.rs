@@ -60,6 +60,7 @@ use crate::{
     ports::{crypto::EmbeddingCipher, external_bridge::AttachmentWorkflow},
     recording_controller::RecordingController,
     storage_composition::open_note_repository,
+    transcription_settings::{keeps_meeting_voices, settings_file_for},
 };
 
 #[cfg(test)]
@@ -313,10 +314,15 @@ pub fn open_teams_bridge_ports(
         Path::to_path_buf,
     );
     let sealed_files = attachment_repository.sealed_files();
+    // Read at every offer, so switching it in Settings applies without a restart (#103).
+    let settings_file = settings_file_for(database_path);
     Ok(TeamsBridgePorts {
         recording_manager,
         chunk_audio_store,
-        identity_mapper: Arc::new(TeamsIdentityMapper::new(std::sync::Mutex::new(voice_store))),
+        identity_mapper: Arc::new(
+            TeamsIdentityMapper::new(std::sync::Mutex::new(voice_store))
+                .with_voice_keeping(Box::new(move || keeps_meeting_voices(&settings_file))),
+        ),
         slide_workflow: SlideAttachmentStore::new(
             slide_directory,
             attachment_repository,

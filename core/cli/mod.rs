@@ -106,6 +106,13 @@ pub enum CliCommand {
         /// The new window in days; omit it to show the current one.
         days: Option<u16>,
     },
+    /// Shows or switches whether an online-meeting participant's voice is kept in the voice
+    /// gallery after enough speech of that one voice (off by default; voice prints are biometric).
+    /// A meeting room or other track with several voices is never kept.
+    MeetingVoices {
+        /// `on` or `off`; omit it to show the current choice.
+        choice: Option<OnOff>,
+    },
     /// Writes a meeting's summary with an AI connection (the default unless `--connection` names
     /// one), or shows the stored one with `--show`. The meeting's transcript, notes and photos
     /// are sent to that connection's server.
@@ -181,6 +188,15 @@ pub struct AiArgs {
     /// The action.
     #[command(subcommand)]
     pub command: AiCommand,
+}
+
+/// A switch given on the command line.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
+pub enum OnOff {
+    /// Switch on.
+    On,
+    /// Switch off.
+    Off,
 }
 
 /// The protocol of a new AI connection.
@@ -639,6 +655,10 @@ pub trait CliService {
     fn keep_speech_days(&self) -> Result<u16, String>;
     /// Saves that window, already checked to be in range.
     fn save_keep_speech_days(&mut self, days: u16) -> Result<(), String>;
+    /// Loads whether online-meeting participants' voices are kept (#103).
+    fn keeps_meeting_voices(&self) -> Result<bool, String>;
+    /// Saves that choice.
+    fn save_keep_meeting_voices(&mut self, keep: bool) -> Result<(), String>;
     /// Exports one meeting through the shared export manager.
     fn export_meeting(
         &self,
@@ -785,6 +805,7 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
         }) => cli_service.revoke_device(&device),
         CliCommand::Glossary(GlossaryArgs { command }) => edit_glossary(command, cli_service),
         CliCommand::KeepSpeech { days } => keep_speech(days, cli_service),
+        CliCommand::MeetingVoices { choice } => meeting_voices(choice, cli_service),
         CliCommand::Summary {
             meeting_id,
             connection: _,
@@ -1208,6 +1229,36 @@ fn keep_speech(days: Option<u16>, cli_service: &mut impl CliService) -> Result<S
     Ok(format!(
         "Speech now waits up to {days} days to be combined; older speech is deleted at the next round."
     ))
+}
+
+/// Shows or switches keeping online-meeting participants' voices (#103).
+///
+/// Inputs: `on`/`off`, or `None` to show the choice; the service holding it.
+/// Outputs: The choice or a confirmation. Side effects: Saves the choice when one is given.
+fn meeting_voices(
+    choice: Option<OnOff>,
+    cli_service: &mut impl CliService,
+) -> Result<String, String> {
+    let Some(choice) = choice else {
+        return Ok(if cli_service.keeps_meeting_voices()? {
+            String::from(
+                "Meeting participants' voices are kept in the voice gallery after enough speech of one voice.",
+            )
+        } else {
+            String::from("Meeting participants' voices are not kept in the voice gallery.")
+        });
+    };
+    let keep = choice == OnOff::On;
+    cli_service.save_keep_meeting_voices(keep)?;
+    Ok(if keep {
+        String::from(
+            "Meeting participants' voices will be kept in the voice gallery; meeting rooms never are.",
+        )
+    } else {
+        String::from(
+            "Meeting participants' voices will no longer be kept; kept voices stay until removed.",
+        )
+    })
 }
 
 /// Formats meeting rows as a stable terminal table.
@@ -2063,6 +2114,16 @@ where
         let settings_file = self.settings_file()?;
         crate::transcription_settings::save_keep_speech_days(settings_file, days)
             .map_err(|error| format!("the window could not be saved: {error}"))
+    }
+    fn keeps_meeting_voices(&self) -> Result<bool, String> {
+        Ok(crate::transcription_settings::keeps_meeting_voices(
+            self.settings_file()?,
+        ))
+    }
+    fn save_keep_meeting_voices(&mut self, keep: bool) -> Result<(), String> {
+        let settings_file = self.settings_file()?;
+        crate::transcription_settings::save_keep_meeting_voices(settings_file, keep)
+            .map_err(|error| format!("the choice could not be saved: {error}"))
     }
     fn revoke_device(&mut self, device: &str) -> Result<String, String> {
         let trusted_peer_store = self.trusted_peer_store()?;

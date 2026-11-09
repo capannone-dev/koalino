@@ -89,6 +89,10 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
   - `PUT /api/settings/retention` with `{"days"}` saves a window of 1 to 60 days and returns it;
     out of range returns `400` `invalid_window`, a write failure `500` `save_failed`, and no
     settings file `503` `unavailable`. `retention_routes_tests.rs` covers each case.
+- Keeping online-meeting participants' voices (`meeting_voices_routes.rs`, #103) lives in the same
+  file: `GET /api/settings/meeting-voices` returns `{"keep"}` (`false` until chosen), and
+  `PUT /api/settings/meeting-voices` with `{"keep"}` saves it and returns it. A write failure
+  returns `500` `save_failed`, and no settings file `503` `unavailable`.
 - AI connections and summaries (`llm_routes.rs`, #95) run the commands the app uses
   (`bin/llm_commands.rs`); `start_auto_summaries` runs the daemon's automatic summaries (#101).
 - The owner's edits (`edit_routes.rs`, #96): `GET`/`PUT /api/meetings/{id}/notes`,

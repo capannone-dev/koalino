@@ -77,6 +77,10 @@ pub struct SavedTranscriptionSettings {
     /// keeps three weeks.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keep_speech_days: Option<u16>,
+    /// Whether online-meeting participants' voices may be kept in the voice gallery (#103). Voice
+    /// prints are biometric, so this is off until the owner turns it on.
+    #[serde(default)]
+    pub keep_meeting_voices: bool,
 }
 
 /// Where the settings, downloaded models and sealed key live.
@@ -283,6 +287,25 @@ pub fn save_keep_speech_days(settings_file: &Path, days: u16) -> io::Result<()> 
     }
     let mut saved = load_settings(settings_file);
     saved.keep_speech_days = Some(days);
+    save_settings(settings_file, &saved)
+}
+
+/// Whether online-meeting participants' voices may be kept in the gallery (#103).
+///
+/// Inputs: The settings file. Outputs: The saved choice; `false` when unset or unreadable.
+/// Side effects: Reads the file, so a change applies at the next offer without a restart.
+pub fn keeps_meeting_voices(settings_file: &Path) -> bool {
+    load_settings(settings_file).keep_meeting_voices
+}
+
+/// Saves whether online-meeting participants' voices may be kept, keeping every other choice.
+///
+/// Inputs: The settings file and the choice. Outputs: `Ok(())` or the write error.
+/// Side effects: Rewrites the file atomically. Voices kept earlier stay in the gallery; the
+/// owner removes them there.
+pub fn save_keep_meeting_voices(settings_file: &Path, keep: bool) -> io::Result<()> {
+    let mut saved = load_settings(settings_file);
+    saved.keep_meeting_voices = keep;
     save_settings(settings_file, &saved)
 }
 

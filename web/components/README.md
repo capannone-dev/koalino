@@ -48,6 +48,10 @@ says what the model was given, what was left out and which connection answered.
 `notes-folder-settings.tsx` (#98) is Settings' notes folder on the server's computer: the folder,
 a switch that turns it on (writing it at once) or off, Sync now, the last round, and the warning
 that the folder is a decrypted copy.
+`meeting-voices-settings.tsx` (#103) is the Settings switch *Keep meeting participants' voices*
+(off by default) through `PUT /api/settings/meeting-voices`. It explains that rooms are never kept,
+and a failed save goes back to the saved choice.
+
 `retention-settings.tsx` chooses how many days speech waits to be combined with another device's
 recording (#93) through `PUT /api/settings/retention`; a refused choice goes back to the saved one.
 
