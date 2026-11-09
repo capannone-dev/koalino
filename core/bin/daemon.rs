@@ -125,7 +125,9 @@ async fn main() -> Result<()> {
         ))
         .with_deletion_hooks(Arc::new(local_meeting_files))
         .with_project_files(project_files)
-        .with_llm_services(Arc::new(llm_services(&database_path)));
+        .with_llm_services(Arc::new(
+            note_taker_core::llm_commands::LlmServices::for_database(&database_path),
+        ));
     if let Some(p2p_task) = &p2p_task {
         application_state =
             application_state.with_p2p_control(Arc::clone(p2p_task) as Arc<dyn P2pControl>);
@@ -314,31 +316,4 @@ async fn shutdown_signal() {
         () = interrupt => tracing::info!("SIGINT received; shutting down"),
         () = terminate => tracing::info!("SIGTERM received; shutting down"),
     }
-}
-
-/// Builds the AI connection services (#95): settings beside the database, keys in the platform
-/// keychain, the glossary from the transcription settings, and this device's name.
-///
-/// Side effects: None until a route uses them.
-fn llm_services(database_path: &std::path::Path) -> note_taker_core::llm_commands::LlmServices {
-    use note_taker_core::{llm_commands::LlmServices, llm_settings};
-    let key_directory = env::var("NOTE_TAKER_ENCRYPTION_KEY_DIR").map_or_else(
-        |_| {
-            database_path
-                .parent()
-                .map_or_else(std::path::PathBuf::new, std::path::Path::to_path_buf)
-                .join("keys")
-        },
-        std::path::PathBuf::from,
-    );
-    let device_name =
-        env::var("NOTE_TAKER_DEVICE_NAME").unwrap_or_else(|_| String::from("this server"));
-    LlmServices::new(
-        llm_settings::llm_settings_file_for(database_path),
-        Arc::new(llm_settings::PlatformLlmKeyring::new(key_directory, None)),
-        &device_name,
-    )
-    .with_transcription_settings(note_taker_core::transcription_settings::settings_file_for(
-        database_path,
-    ))
 }

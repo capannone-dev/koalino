@@ -82,6 +82,36 @@ impl LlmServices {
         }
     }
 
+    /// Builds the services of a daemon or CLI on a database: settings beside it, keys in the
+    /// platform keychain, the glossary from the transcription settings, and the device name from
+    /// `NOTE_TAKER_DEVICE_NAME`.
+    ///
+    /// Side effects: Reads the environment.
+    pub fn for_database(database_path: &std::path::Path) -> Self {
+        let key_directory = std::env::var("NOTE_TAKER_ENCRYPTION_KEY_DIR").map_or_else(
+            |_| {
+                database_path
+                    .parent()
+                    .map_or_else(PathBuf::new, std::path::Path::to_path_buf)
+                    .join("keys")
+            },
+            PathBuf::from,
+        );
+        let device_name = std::env::var("NOTE_TAKER_DEVICE_NAME")
+            .unwrap_or_else(|_| String::from("this computer"));
+        Self::new(
+            super::llm_settings::llm_settings_file_for(database_path),
+            Arc::new(super::llm_settings::PlatformLlmKeyring::new(
+                key_directory,
+                None,
+            )),
+            &device_name,
+        )
+        .with_transcription_settings(super::transcription_settings::settings_file_for(
+            database_path,
+        ))
+    }
+
     /// Reads the glossary from the transcription settings file. Side effects: None.
     pub fn with_transcription_settings(mut self, settings_file: PathBuf) -> Self {
         self.transcription_settings = Some(settings_file);

@@ -93,6 +93,9 @@ fn main() -> Result<()> {
                 &database_path,
             ))
             .with_deletion_hooks(Box::new(LocalMeetingFiles::for_database(&database_path)))
+            .with_llm_services(std::sync::Arc::new(
+                note_taker_core::llm_commands::LlmServices::for_database(&database_path),
+            ))
             .with_recording_device(
                 recording_device_id,
                 note_taker_core::refinement_worker::retained_audio_directory(&database_path),

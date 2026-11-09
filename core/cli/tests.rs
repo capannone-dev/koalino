@@ -1675,3 +1675,86 @@ fn the_speech_retention_window_is_shown_and_changed_in_days() {
     assert!(refused.is_err_and(|error| error.contains("between 1 and 60")));
     assert_eq!(cli_service.keep_speech_days, Some(7), "nothing saved");
 }
+
+/// Verifies `ai add`, `ai list` and `summary --show` work against the shared AI commands (#95),
+/// with keys kept out of the output and nothing sent to a model.
+#[test]
+fn ai_connections_are_added_and_listed_and_a_missing_summary_is_reported() {
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .and_then(|repository| {
+        repository.with_document_codec(std::sync::Arc::new(
+            crate::application::meeting_document::AutomergeMeetingDocumentCodec,
+        ))
+    })
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    crate::application::meeting_crdt::MeetingCrdtService::new(&repository)
+        .create_meeting(&crate::domain::models::MeetingId::new("m-1"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let folder = std::env::temp_dir().join(format!("cli-ai-{}", Uuid::new_v4()));
+    let services = crate::llm_commands::LlmServices::new(
+        folder.join("db.llm-settings.json"),
+        std::sync::Arc::new(crate::llm_settings::MemoryLlmKeyring::default()),
+        "Laptop",
+    );
+    let mut cli_service = CoreCliService::new(
+        NoRecordingControl,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    )
+    .with_llm_services(std::sync::Arc::new(services));
+    let run = |cli_service: &mut _, arguments: &[&str]| {
+        let parsed = Cli::try_parse_from(arguments).unwrap_or_else(|error| panic!("{error}"));
+        super::dispatch(parsed.command, cli_service)
+    };
+
+    let added = run(
+        &mut cli_service,
+        &[
+            "cli",
+            "ai",
+            "add",
+            "--label",
+            "LAN",
+            "--kind",
+            "openai",
+            "--url",
+            "http://192.168.1.5:11434/v1",
+            "--model",
+            "llama3.1:8b",
+        ],
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    assert!(added.starts_with("Added LAN ("), "{added}");
+    let listed =
+        run(&mut cli_service, &["cli", "ai", "list"]).unwrap_or_else(|error| panic!("{error}"));
+    assert!(listed.contains("Automatic summaries: on"), "{listed}");
+    assert!(
+        listed.contains("* "),
+        "the only connection is the default: {listed}"
+    );
+    assert!(listed.contains("llama3.1:8b"));
+    let refused = run(
+        &mut cli_service,
+        &[
+            "cli",
+            "ai",
+            "add",
+            "--label",
+            "Bad",
+            "--kind",
+            "openai",
+            "--url",
+            "http://example.com/v1",
+            "--model",
+            "m",
+        ],
+    );
+    assert!(refused.is_err());
+    let shown = run(&mut cli_service, &["cli", "summary", "m-1", "--show"])
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(shown, "This meeting has no summary yet.");
+    drop(std::fs::remove_dir_all(folder));
+}

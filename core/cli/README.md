@@ -47,6 +47,8 @@ note-taker telemetry
 note-taker log-level <error|warn|info|debug|trace|directive>
 note-taker glossary [show | set <term>... | add <term>... | remove <term>... | clear]
 note-taker keep-speech [days]
+note-taker summary <meeting-id> [--connection <id>] [--show]
+note-taker ai [list | add --label L --kind openai|anthropic --url U --model M [--context N] | remove <id> | default <id> | test <id> | auto on|off]
 note-taker [--log-level <level>] <command> ...
 ```
 
@@ -176,3 +178,11 @@ or more than 500 characters in all) is refused and the saved one kept.
 device's recording of the same meeting; `keep-speech <days>` changes it (1 to 60, three weeks by
 default, #93). It is kept in the same settings file, and speech older than a shorter window is
 deleted at the after-meeting worker's next round.
+
+`summary <meeting-id>` writes the meeting's summary with the default AI connection (or the one
+`--connection` names) and prints it; the meeting's transcript, notes and photos are sent to that
+connection's server. `--show` prints the stored summary instead. `ai` manages the connections
+(#95): `add` reads an API key, when one is needed, from `NOTE_TAKER_LLM_API_KEY`, so it never
+lands in the shell history, and keeps it in the system keychain; `list` never shows keys; `test`
+sends a one-line request holding no meeting content; `auto on|off` turns automatic summaries on or
+off.

@@ -106,6 +106,22 @@ pub enum CliCommand {
         /// The new window in days; omit it to show the current one.
         days: Option<u16>,
     },
+    /// Writes a meeting's summary with an AI connection (the default unless `--connection` names
+    /// one), or shows the stored one with `--show`. The meeting's transcript, notes and photos
+    /// are sent to that connection's server.
+    Summary {
+        /// The meeting to summarize.
+        meeting_id: String,
+        /// The connection to use, by ID (see `ai list`).
+        #[arg(long)]
+        connection: Option<String>,
+        /// Shows the stored summary instead of writing a new one.
+        #[arg(long)]
+        show: bool,
+    },
+    /// Lists, adds and removes the AI connections summaries use, and turns automatic summaries
+    /// on or off.
+    Ai(AiArgs),
     /// Displays aggregate privacy-safe telemetry.
     Telemetry,
     /// Changes a running daemon's log level without restarting it (applied within seconds).
@@ -113,6 +129,70 @@ pub enum CliCommand {
         /// `error`, `warn`, `info`, `debug`, `trace`, or a `tracing` directive such as
         /// `note_taker_core=debug,info`.
         directive: String,
+    },
+}
+
+/// Wraps the AI connection actions.
+#[derive(Debug, Args)]
+pub struct AiArgs {
+    /// The action.
+    #[command(subcommand)]
+    pub command: AiCommand,
+}
+
+/// The protocol of a new AI connection.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub enum AiKind {
+    /// OpenAI's Chat Completions, also spoken by Mistral, Ollama, llama.cpp, LM Studio and vLLM.
+    Openai,
+    /// Anthropic's Messages API.
+    Anthropic,
+}
+
+/// AI connection actions (#95).
+#[derive(Debug, Subcommand)]
+pub enum AiCommand {
+    /// Lists the connections, the default one and whether summaries are automatic.
+    List,
+    /// Adds a connection. Its API key, if it needs one, is read from `NOTE_TAKER_LLM_API_KEY`,
+    /// so it never lands in the shell history, and kept in the system keychain.
+    Add {
+        /// A name for it, such as `Office server`.
+        #[arg(long)]
+        label: String,
+        /// The protocol it speaks.
+        #[arg(long, value_enum)]
+        kind: AiKind,
+        /// Its address: HTTPS, or plain HTTP on this machine or the local network.
+        #[arg(long)]
+        url: String,
+        /// The model, such as `llama3.1:8b` or `claude-opus-5-5`.
+        #[arg(long)]
+        model: String,
+        /// How many tokens the model reads at once.
+        #[arg(long, default_value_t = 32_768)]
+        context: u32,
+    },
+    /// Removes a connection and its key.
+    Remove {
+        /// The connection's ID.
+        id: String,
+    },
+    /// Makes a connection the default.
+    Default {
+        /// The connection's ID.
+        id: String,
+    },
+    /// Sends a one-line test request, holding no meeting content.
+    Test {
+        /// The connection's ID.
+        id: String,
+    },
+    /// Turns automatic summaries on or off.
+    Auto {
+        /// `on` or `off`.
+        #[arg(value_parser = ["on", "off"])]
+        state: String,
     },
 }
 
@@ -525,6 +605,22 @@ pub trait CliService {
     ) -> Result<String, String>;
     /// Exports every meeting matching the options' date range into one file.
     fn export_all(&self, options: &ExportOptions, output: Option<&Path>) -> Result<String, String>;
+    /// Writes a meeting's summary and returns it (#95).
+    fn summarize_meeting(
+        &mut self,
+        _meeting_id: &str,
+        _connection: Option<&str>,
+    ) -> Result<String, String> {
+        Err(String::from("summaries are not available here"))
+    }
+    /// Returns a meeting's stored summary, or `None`.
+    fn meeting_summary(&self, _meeting_id: &str) -> Result<Option<String>, String> {
+        Err(String::from("summaries are not available here"))
+    }
+    /// Runs one AI settings command (see `llm_commands.rs`) and returns its answer.
+    fn llm_command(&mut self, _request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        Err(String::from("AI connections are not available here"))
+    }
 }
 
 /// Dispatches a clap-validated command to an injected service.
@@ -631,6 +727,19 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
         }) => cli_service.revoke_device(&device),
         CliCommand::Glossary(GlossaryArgs { command }) => edit_glossary(command, cli_service),
         CliCommand::KeepSpeech { days } => keep_speech(days, cli_service),
+        CliCommand::Summary {
+            meeting_id,
+            connection: _,
+            show: true,
+        } => Ok(cli_service
+            .meeting_summary(&meeting_id)?
+            .unwrap_or_else(|| String::from("This meeting has no summary yet."))),
+        CliCommand::Summary {
+            meeting_id,
+            connection,
+            show: false,
+        } => cli_service.summarize_meeting(&meeting_id, connection.as_deref()),
+        CliCommand::Ai(AiArgs { command }) => run_ai(command, cli_service),
         CliCommand::Telemetry => cli_service.telemetry(),
         CliCommand::LogLevel { directive } => cli_service.request_log_level(&directive),
     }
@@ -675,6 +784,98 @@ fn edit_glossary(
         1 => String::from("Glossary saved: 1 term. It applies from the next recording."),
         count => format!("Glossary saved: {count} terms. It applies from the next recording."),
     })
+}
+
+/// Carries out one AI connection action (#95).
+///
+/// Inputs: The action and the service. Outputs: A table or a confirmation, or the command's
+/// error. Side effects: As the action says; `test` sends one request to the server.
+fn run_ai(command: AiCommand, cli_service: &mut impl CliService) -> Result<String, String> {
+    use serde_json::json;
+    let request = match command {
+        AiCommand::List => json!({"command": "settings"}),
+        AiCommand::Add {
+            label,
+            kind,
+            url,
+            model,
+            context,
+        } => json!({
+            "command": "save_connection",
+            "label": label,
+            "kind": match kind {
+                AiKind::Openai => "open_ai_compatible",
+                AiKind::Anthropic => "anthropic",
+            },
+            "base_url": url,
+            "model": model,
+            "context_tokens": context,
+            "api_key": std::env::var("NOTE_TAKER_LLM_API_KEY").ok(),
+        }),
+        AiCommand::Remove { id } => json!({"command": "delete_connection", "id": id}),
+        AiCommand::Default { id } => json!({"command": "update", "default_connection": id}),
+        AiCommand::Test { id } => json!({"command": "test_connection", "id": id}),
+        AiCommand::Auto { state } => json!({"command": "update", "auto_summarize": state == "on"}),
+    };
+    let answer = cli_service.llm_command(&request)?;
+    if answer["ok"] != true {
+        return Err(answer["error"]
+            .as_str()
+            .unwrap_or("the command failed")
+            .to_owned());
+    }
+    Ok(match request["command"].as_str() {
+        Some("save_connection") => format!(
+            "Added {} ({}).",
+            answer["connection"]["label"].as_str().unwrap_or_default(),
+            answer["connection"]["id"].as_str().unwrap_or_default()
+        ),
+        Some("delete_connection") => String::from("Connection removed."),
+        Some("test_connection") => format!(
+            "The connection answered: {}",
+            answer["reply"].as_str().unwrap_or_default()
+        ),
+        _ => format_ai_settings(&answer),
+    })
+}
+
+/// Formats the AI settings as a table, keys left out.
+fn format_ai_settings(settings: &serde_json::Value) -> String {
+    let mut lines = vec![format!(
+        "Automatic summaries: {}",
+        if settings["auto_summarize"] == true {
+            "on"
+        } else {
+            "off"
+        }
+    )];
+    let connections = settings["connections"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    if connections.is_empty() {
+        lines.push(String::from("No AI connection yet; add one with `ai add`."));
+    }
+    for connection in connections {
+        lines.push(format!(
+            "{}{}  {}  {}  {}{}",
+            if connection["is_default"] == true {
+                "* "
+            } else {
+                "  "
+            },
+            connection["id"].as_str().unwrap_or_default(),
+            connection["label"].as_str().unwrap_or_default(),
+            connection["model"].as_str().unwrap_or_default(),
+            connection["base_url"].as_str().unwrap_or_default(),
+            if connection["has_key"] == true {
+                "  (key saved)"
+            } else {
+                ""
+            },
+        ));
+    }
+    lines.join("\n")
 }
 
 /// Shows or changes the speech retention window (#93).
@@ -889,6 +1090,8 @@ pub struct CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort> {
     deletion_hooks: Option<Box<dyn MeetingDeletionHooks>>,
     /// The transcription settings file holding the glossary; `None` disables `glossary`.
     settings_file: Option<std::path::PathBuf>,
+    /// AI connections and summaries (#95); `None` disables `summary` and `ai`.
+    llm: Option<std::sync::Arc<crate::llm_commands::LlmServices>>,
     /// This device and the folder of the speech it holds, for `meetings view`'s combining line
     /// (#88); `None` says nothing is held here.
     recording_device: Option<(
@@ -923,8 +1126,18 @@ where
             export_writer,
             deletion_hooks: None,
             settings_file: None,
+            llm: None,
             recording_device: None,
         }
+    }
+
+    /// Enables `summary` and `ai` with the AI connection services. Side effects: None.
+    pub fn with_llm_services(
+        mut self,
+        llm: std::sync::Arc<crate::llm_commands::LlmServices>,
+    ) -> Self {
+        self.llm = Some(llm);
+        self
     }
 
     /// Attaches what deleting a meeting needs from outside the database.
@@ -1080,9 +1293,73 @@ impl<RecordingPort, RepositoryPort, VectorDatabasePort> CliService
     for CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort>
 where
     RecordingPort: RecordingControl,
-    RepositoryPort: NoteRepository + AttachmentRepository + MetricsRepository,
+    RepositoryPort: NoteRepository
+        + AttachmentRepository
+        + MetricsRepository
+        + crate::ports::projects::ProjectRepository,
     VectorDatabasePort: VoiceVectorDB,
 {
+    fn summarize_meeting(
+        &mut self,
+        meeting_id: &str,
+        connection: Option<&str>,
+    ) -> Result<String, String> {
+        let llm = self
+            .llm
+            .clone()
+            .ok_or_else(|| String::from("summaries are not available here"))?;
+        let meeting_id = MeetingId::new(meeting_id);
+        if self
+            .repository
+            .load_meeting_metadata(&meeting_id)
+            .map_err(|error| error.to_string())?
+            .is_none()
+        {
+            return Err(String::from("there is no such meeting"));
+        }
+        let repository = &self.repository;
+        let voices = self.voice_identity_manager.vector_database();
+        let answer = crate::llm_commands::summarize_with(
+            &llm,
+            connection,
+            |glossary, device_name| {
+                crate::meeting_summaries::prepare_summary(
+                    repository,
+                    voices,
+                    &meeting_id,
+                    glossary,
+                    device_name,
+                )
+            },
+            |summary| crate::meeting_summaries::store_summary(repository, &meeting_id, summary),
+        );
+        if answer["ok"] != true {
+            return Err(answer["error"]
+                .as_str()
+                .unwrap_or("the summary failed")
+                .to_owned());
+        }
+        Ok(answer["summary"]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned())
+    }
+    fn meeting_summary(&self, meeting_id: &str) -> Result<Option<String>, String> {
+        crate::meeting_summaries::load_summary(&self.repository, &MeetingId::new(meeting_id))
+            .map(|summary| summary.map(|summary| summary.text))
+            .map_err(|error| error.to_string())
+    }
+    fn llm_command(&mut self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let llm = self
+            .llm
+            .as_deref()
+            .ok_or_else(|| String::from("AI connections are not available here"))?;
+        serde_json::from_str(&crate::llm_commands::run_llm_command(
+            llm,
+            &request.to_string(),
+        ))
+        .map_err(|error| error.to_string())
+    }
     fn start_recording(
         &mut self,
         meeting_id: Option<&str>,
