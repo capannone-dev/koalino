@@ -13,6 +13,7 @@ import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/core_startup_controller.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
@@ -487,6 +488,10 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         networkSettingsController: _networkSettingsController,
         transcriptionSettingsBridge: const RustTranscriptionSettingsBridge(),
         summariesController: _summariesController,
+        // A folder of plain files is a desktop feature (#98).
+        notesFolderBridge: Platform.isAndroid || Platform.isIOS
+            ? null
+            : const NotesFolderBridge(),
       );
 }
 

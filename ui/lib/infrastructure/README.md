@@ -134,6 +134,10 @@ a background isolate through `callRustLlm`). `MeetingEditException` words the co
 match is: `placeLabel` such as `1:01 · Anna`, and the snippet's `SnippetPart`s),
 `SearchResults` and `SearchException`, which words the core's `error_code`.
 
+`notes_folder_bridge.dart` (#98) is `NotesFolderBridge.status()`, `set(enabled:, path:)` and
+`syncNow()` over `note_taker_notes_folder` (on a background isolate through `callRustLlm`, since a
+round writes the whole folder), with `NotesFolderStatus` and `NotesFolderException`.
+
 `incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Note Taker:
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and
 `IncomingShareBridge` (`arrivals`, `takePending`, `release`). `AndroidIncomingShareBridge` talks

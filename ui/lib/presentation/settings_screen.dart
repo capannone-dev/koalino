@@ -16,6 +16,8 @@ import 'package:note_taker_ui/controllers/transcription_settings_controller.dart
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
+import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
+import 'package:note_taker_ui/presentation/notes_folder_screen.dart';
 import 'package:note_taker_ui/presentation/transcription_settings_screen.dart';
 
 /// Finds the default language selector in tests.
@@ -49,6 +51,7 @@ final class SettingsScreen extends StatelessWidget {
     this.networkSettingsController,
     this.transcriptionSettingsBridge,
     this.summariesController,
+    this.notesFolderBridge,
     super.key,
   });
 
@@ -67,6 +70,9 @@ final class SettingsScreen extends StatelessWidget {
 
   /// Adds the AI connections page (summaries, #95) when given.
   final SummariesController? summariesController;
+
+  /// Adds the notes folder page (#98, desktops) when given.
+  final NotesFolderBridge? notesFolderBridge;
 
   @override
   Widget build(BuildContext context) {
@@ -136,6 +142,21 @@ final class SettingsScreen extends StatelessWidget {
                 onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (BuildContext context) =>
                       AiSettingsScreen(controller: summaries),
+                )),
+              ),
+              const Divider(),
+            ],
+            if (notesFolderBridge
+                case final NotesFolderBridge notesFolder) ...<Widget>[
+              ListTile(
+                leading: const Icon(Icons.folder_copy_outlined),
+                title: const Text('Notes folder'),
+                subtitle: const Text(
+                    'Keep projects and meetings as files you can edit with any editor.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (BuildContext context) =>
+                      NotesFolderScreen(bridge: notesFolder),
                 )),
               ),
               const Divider(),

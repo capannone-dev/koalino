@@ -126,6 +126,9 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   matched words. A meeting result opens the meeting scrolled to the passage
   (`MeetingDetailScreen.focusStartMs`, which marks it); a file result opens the file
   (`openProjectSearchHit`).
+- `notes_folder_screen.dart` (#98) is Settings → Notes folder on desktops: the folder (typed or
+  chosen with the system dialog), the switch, Sync now, the last round, and the warning that the
+  folder is a decrypted copy.
 - `ai_settings_screen.dart` (#95) is Settings → AI connections: add (from a preset), edit, test,
   remove and choose the default connection; the summary prompt template with its placeholders;
   and automatic summaries (#101). Keys are typed in a hidden field and never shown again.
