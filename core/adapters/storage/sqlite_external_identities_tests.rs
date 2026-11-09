@@ -130,3 +130,73 @@ fn blank_external_ids_are_rejected() {
         .save_external_mapping("  ", &SpeakerIdentity::new(Uuid::new_v4(), "Nobody"));
     assert!(outcome.is_err());
 }
+
+/// Maps one participant and returns the mapper with its identity.
+fn mapped_participant(
+    database: &TemporaryDatabase,
+    keep_voices: bool,
+) -> (
+    TeamsIdentityMapper<std::sync::Mutex<SqliteVoiceVectorDB>>,
+    SpeakerIdentity,
+) {
+    let mapper = TeamsIdentityMapper::new(std::sync::Mutex::new(database.open()))
+        .with_voice_keeping(Box::new(move || keep_voices));
+    let identity = mapper
+        .map_external_to_local(ExternalParticipant::new(
+            "teams-user-9".to_owned(),
+            "Grace Hopper".to_owned(),
+            None,
+        ))
+        .unwrap_or_else(|error| panic!("mapping should succeed: {error}"));
+    (mapper, identity)
+}
+
+/// Verifies a participant's voice is not kept unless the owner opted in (#103).
+#[test]
+fn participant_voices_are_not_kept_by_default() {
+    let database = TemporaryDatabase::new();
+    let mapper = TeamsIdentityMapper::new(std::sync::Mutex::new(database.open()));
+    let identity = mapper
+        .map_external_to_local(ExternalParticipant::new(
+            "teams-user-9".to_owned(),
+            "Grace Hopper".to_owned(),
+            None,
+        ))
+        .unwrap_or_else(|error| panic!("mapping should succeed: {error}"));
+
+    let kept = mapper
+        .keep_participant_voice(&identity, vec![0.6, 0.8])
+        .unwrap_or_else(|error| panic!("offering should succeed: {error}"));
+
+    assert!(!kept);
+    assert_eq!(voice_count(&database, &identity), 0);
+    let (switched_off, identity) = mapped_participant(&database, false);
+    assert!(
+        !switched_off
+            .keep_participant_voice(&identity, vec![0.6, 0.8])
+            .unwrap_or_else(|error| panic!("offering should succeed: {error}"))
+    );
+    assert_eq!(voice_count(&database, &identity), 0);
+}
+
+/// Verifies an opted-in owner gets the participant's voice in the gallery (#103).
+#[test]
+fn participant_voices_are_kept_when_opted_in() {
+    let database = TemporaryDatabase::new();
+    let (mapper, identity) = mapped_participant(&database, true);
+
+    let kept = mapper
+        .keep_participant_voice(&identity, vec![0.6, 0.8])
+        .unwrap_or_else(|error| panic!("keeping should succeed: {error}"));
+
+    assert!(kept);
+    assert_eq!(voice_count(&database, &identity), 1);
+}
+
+/// Counts the stored voice variants of `identity`.
+fn voice_count(database: &TemporaryDatabase, identity: &SpeakerIdentity) -> usize {
+    database
+        .open()
+        .voice_variant_count(identity.identity_id())
+        .unwrap_or_else(|error| panic!("count should load: {error}"))
+}

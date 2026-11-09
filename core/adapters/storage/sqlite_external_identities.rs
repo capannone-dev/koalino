@@ -11,7 +11,10 @@ use rusqlite::{Connection, OptionalExtension, params};
 use super::{SqliteVoiceVectorDB, parse_uuid};
 use crate::{
     adapters::storage::sqlite_adapter::sqlite_error,
-    domain::{errors::StorageError, models::SpeakerIdentity},
+    domain::{
+        errors::StorageError,
+        models::{SpeakerIdentity, VoiceEmbedding},
+    },
     ports::{external_bridge::ExternalIdentityRepository, voice::VoiceVectorDB},
 };
 
@@ -97,5 +100,14 @@ impl ExternalIdentityRepository for SqliteVoiceVectorDB {
             .map_err(|error| sqlite_error("unable to save external identity mapping", error))?;
         tracing::debug!(identity_id = %identity.identity_id(), "External identity mapping saved");
         Ok(())
+    }
+
+    /// Stores a participant's voice as a variant of its identity (#103).
+    ///
+    /// Inputs: The voice variant; its identity must exist.
+    /// Outputs: Success or a storage error.
+    /// Side effects: Writes one encrypted embedding row; never logs the vector.
+    fn store_participant_voice(&self, embedding: VoiceEmbedding) -> Result<(), StorageError> {
+        self.store_embedding(embedding)
     }
 }

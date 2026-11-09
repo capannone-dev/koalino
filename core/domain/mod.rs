@@ -16,6 +16,10 @@ pub mod models;
 pub mod network_addresses;
 #[cfg(test)]
 mod network_addresses_tests;
+/// Judges whether an online-meeting participant's track carries one voice or several (#103).
+pub mod participant_track_voices;
+#[cfg(test)]
+mod participant_track_voices_tests;
 pub mod peer_trust;
 #[cfg(test)]
 mod peer_trust_tests;

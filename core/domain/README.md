@@ -53,6 +53,15 @@ no words of any language, so it does not pull language detection towards English
 transcript) so `without_echo` can drop it. `TranscriptionContext::prompt` (`models.rs`) puts the
 previous chunk's text first and the glossary last, because Whisper keeps the end of a long prompt.
 
+`participant_track_voices.rs` (#103) judges an online-meeting participant's audio track.
+`TrackVoicePolicy::classify_chunk` groups a chunk's diarized turns by voice (cosine above 0.40, the
+unknown-speaker clustering cut-off). It answers `OneVoice` when one voice holds 90% of the speech
+or the others stay under 2 s, otherwise `SeveralVoices`. `ParticipantTrackVoices::observe` follows
+the track: it keeps the participant while one voice speaks. It switches for good to
+`SeparateVoices` on a chunk with several voices, or on a single voice unlike the track's voice once
+that is known (5 s). `enrolment_candidate` offers the voice once, after 30 s of clean speech
+(overlap excluded), never for several voices. Embeddings are never logged.
+
 `transcript_confidence.rs` (#90, #91) judges how far a transcript can be trusted. Each
 `TranscriptSegment` carries a `SegmentConfidence` with three marks:
 - `overlapping_speech`: the segment spends at least 0.5 s, or half of a shorter segment, inside an

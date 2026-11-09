@@ -4,7 +4,9 @@ use std::sync::mpsc::Receiver;
 
 use crate::domain::{
     errors::{ExternalBridgeError, StorageError},
-    models::{ExternalMediaChunk, ExternalParticipant, SlideCapture, SpeakerIdentity},
+    models::{
+        ExternalMediaChunk, ExternalParticipant, SlideCapture, SpeakerIdentity, VoiceEmbedding,
+    },
 };
 
 /// Subscribes to provider-isolated external media without exposing provider SDK types.
@@ -35,6 +37,24 @@ pub trait IdentityMapper {
         &self,
         external: ExternalParticipant,
     ) -> Result<SpeakerIdentity, StorageError>;
+
+    /// Offers a participant's voice for the voice gallery (#103).
+    ///
+    /// The session offers a voice only from a track that carried one voice for long enough, and
+    /// only when it does not sound like someone else in the gallery. Voice prints are biometric,
+    /// so implementations keep it only when the owner opted in.
+    /// Inputs: The participant's mapped `identity` and the voice's mean `embedding` (never logged).
+    /// Outputs: `true` when the voice was kept, `false` when keeping is off (the default), or a
+    /// storage failure.
+    /// Side effects: May store one voice variant for the identity.
+    fn keep_participant_voice(
+        &self,
+        identity: &SpeakerIdentity,
+        embedding: Vec<f32>,
+    ) -> Result<bool, StorageError> {
+        let _ = (identity, embedding);
+        Ok(false)
+    }
 }
 
 /// Persists stable external-ID to local-identity associations without provider SDK knowledge.
@@ -59,6 +79,18 @@ pub trait ExternalIdentityRepository {
         external_id: &str,
         identity: &SpeakerIdentity,
     ) -> Result<(), StorageError>;
+
+    /// Stores a participant's voice variant in the gallery (#103).
+    ///
+    /// Inputs: The embedding, whose identity must already be saved (the mapping saves it).
+    /// Outputs: Success, or a storage failure; repositories without a gallery reject it.
+    /// Side effects: Writes one encrypted voice variant; never logs the vector.
+    fn store_participant_voice(&self, embedding: VoiceEmbedding) -> Result<(), StorageError> {
+        let _ = embedding;
+        Err(StorageError::Rejected {
+            reason: String::from("this repository keeps no voices"),
+        })
+    }
 }
 
 impl<RepositoryPort> ExternalIdentityRepository for std::sync::Mutex<RepositoryPort>
@@ -92,6 +124,16 @@ where
         self.lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .save_external_mapping(external_id, identity)
+    }
+
+    /// Locks the inner repository and stores the voice (recovers from poisoning).
+    ///
+    /// Inputs: The voice variant. Outputs: The inner repository's answer.
+    /// Side effects: Holds the lock for the duration of the write.
+    fn store_participant_voice(&self, embedding: VoiceEmbedding) -> Result<(), StorageError> {
+        self.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .store_participant_voice(embedding)
     }
 }
 

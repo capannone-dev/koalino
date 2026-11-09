@@ -1,19 +1,24 @@
 //! Orchestrates one meeting's audio chunks into persisted, speaker-attributed transcript segments.
 //!
 //! Local VAD chunks flow transcribe → diarize → match voice → cluster unknown voices →
-//! align/merge → persist. External bridge chunks (e.g. Teams) skip diarization and use the
-//! guaranteed mapped identity. Weak and unmatched voices are grouped per meeting by
+//! align/merge → persist. External bridge chunks (e.g. Teams) are one participant's track: they
+//! go to the mapped identity while the track carries one voice, and are matched voice by voice
+//! once it carries several (a meeting room, #103; see `participant_tracks`). Weak and unmatched voices are grouped per meeting by
 //! `UnknownSpeakerClusterer`, so each cluster carries one review clip and its segments can be
 //! re-attributed together. The session depends only on the `TranscriptionEngine`,
 //! `DiarizationEngine`, `VoiceIdentityMatcher`, `IdentityMapper`, `NoteRepository`, and (for
 //! cluster assignment) `VoiceVectorDB` ports. It never logs transcript text, audio, or embeddings.
 
 use crate::domain::transcription_language::TranscriptionLanguage;
-use std::{rc::Rc, time::Instant};
+use std::{collections::HashMap, rc::Rc, time::Instant};
+
+/// Credits participant tracks by the voices they carry (#103).
+mod participant_tracks;
 
 use uuid::Uuid;
 
 use crate::domain::{
+    participant_track_voices::{ParticipantTrackVoices, TrackVoicePolicy},
     transcript_confidence::{
         OverlapSpan, SegmentConfidence, is_uncertain_probability, merge_overlap_spans,
         overlaps_segment,
@@ -299,6 +304,10 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     /// Stretches of this recording, in meeting time, where diarization heard overlapping voices
     /// (#90); disjoint and in time order.
     overlap_spans: Vec<OverlapSpan>,
+    /// What each online-meeting participant's track carried so far, by external ID (#103).
+    participant_tracks: HashMap<String, ParticipantTrackVoices>,
+    /// The thresholds that judge a participant's track.
+    track_voice_policy: TrackVoicePolicy,
 }
 
 impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
@@ -348,6 +357,8 @@ where
             task_metrics: None,
             glossary: None,
             overlap_spans: Vec::new(),
+            participant_tracks: HashMap::new(),
+            track_voice_policy: TrackVoicePolicy::default(),
         })
     }
 
@@ -877,18 +888,22 @@ where
             .collect()
     }
 
-    /// Processes one isolated external-bridge chunk using its guaranteed participant identity.
+    /// Processes one chunk of an online-meeting participant's track.
     ///
-    /// Inputs: `identity_mapper` resolves the chunk's external participant; `media_chunk` carries
-    /// the isolated audio whose `timestamp_ms` is taken as the meeting-relative start (the bridge
-    /// stream is assumed to start with the meeting); `audio_recording` identifies the chunk for
-    /// transcription and must belong to this meeting; `duration_ms` is the chunk length.
-    /// Outputs: The newly persisted segment (empty for a blank transcript), or an error when the
-    /// meeting mismatches, transcription fails, or storage fails. A mapping failure degrades the
-    /// segment to `Unknown` without a review clip.
-    /// Side effects: Never calls diarization; runs transcription, may persist an identity mapping
-    /// through the mapper, rewrites the meeting's segments, and emits safe structured logs.
-    pub fn process_external_chunk<MapperPort>(
+    /// Inputs: `identity_mapper` resolves the chunk's external participant and may keep its
+    /// voice; `media_chunk` carries the track's audio whose `timestamp_ms` is taken as the
+    /// meeting-relative start (the bridge stream is assumed to start with the meeting);
+    /// `audio_recording` identifies the chunk for transcription and must belong to this meeting;
+    /// `duration_ms` is the chunk length.
+    /// Outputs: The newly persisted segments (none for a blank transcript), or an error when the
+    /// meeting mismatches, transcription fails, or storage fails. The participant gets the chunk
+    /// while its track carries one voice (or diarization is missing); a track with several voices
+    /// has each voice matched against the gallery (#103). A mapping failure degrades the
+    /// participant's part to `Unknown` without a review clip.
+    /// Side effects: Runs transcription and diarization, may persist an identity mapping, may
+    /// cluster unknown voices and save review clips, may offer the participant's voice to the
+    /// gallery, rewrites the meeting's segments, and emits safe structured logs.
+    pub async fn process_external_chunk<MapperPort>(
         &mut self,
         identity_mapper: &MapperPort,
         media_chunk: &ExternalMediaChunk,
@@ -910,29 +925,47 @@ where
         self.record_chunk_language(self.default_language, chunk_start_ms);
 
         let external_participant = media_chunk.external_participant();
-        let attribution = match identity_mapper.map_external_to_local(external_participant.clone())
-        {
-            Ok(local_identity) => SpeakerAttribution::Known {
-                identity_id: local_identity.identity_id(),
-            },
-            Err(error) => {
-                tracing::warn!(
-                    meeting_id = %self.meeting_id.as_str(),
-                    external_id = %external_participant.external_id(),
-                    error = %error,
-                    "External identity mapping failed; segment persisted as Unknown"
-                );
-                SpeakerAttribution::Unknown {
-                    clip_id: None,
-                    cluster_id: None,
+        let mapped_identity =
+            match identity_mapper.map_external_to_local(external_participant.clone()) {
+                Ok(local_identity) => Some(local_identity),
+                Err(error) => {
+                    tracing::warn!(
+                        meeting_id = %self.meeting_id.as_str(),
+                        external_id = %external_participant.external_id(),
+                        error = %error,
+                        "External identity mapping failed; segment persisted as Unknown"
+                    );
+                    None
                 }
-            }
-        };
-        let aligned_regions = align_transcript(
-            chunk_bounds,
-            vec![SpeakerRegion::new(0, duration_ms, attribution)],
-            &transcript,
+            };
+        let participant = mapped_identity.as_ref().map_or(
+            SpeakerAttribution::Unknown {
+                clip_id: None,
+                cluster_id: None,
+            },
+            |identity| SpeakerAttribution::Known {
+                identity_id: identity.identity_id(),
+            },
         );
+        let speaker_regions = self
+            .participant_track_regions(
+                identity_mapper,
+                media_chunk,
+                audio_recording,
+                chunk_bounds,
+                mapped_identity.as_ref(),
+                participant,
+            )
+            .await;
+        for cluster_id in speaker_regions
+            .iter()
+            .filter_map(|region| region.attribution().unknown_cluster_id())
+        {
+            if !self.live_cluster_ids.contains(&cluster_id) {
+                self.live_cluster_ids.push(cluster_id);
+            }
+        }
+        let aligned_regions = align_transcript(chunk_bounds, speaker_regions, &transcript);
         let attributed_segments = self.persist_aligned_regions(aligned_regions)?;
         tracing::info!(
             meeting_id = %self.meeting_id.as_str(),
@@ -940,7 +973,7 @@ where
             chunk_start_ms = chunk_bounds.start_offset_ms(),
             chunk_end_ms = chunk_bounds.end_offset_ms(),
             segment_count = attributed_segments.len(),
-            "External bridge chunk processed without diarization"
+            "External bridge chunk processed"
         );
         Ok(attributed_segments)
     }

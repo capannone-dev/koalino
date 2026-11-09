@@ -47,6 +47,10 @@ use crate::{
     },
 };
 
+/// How a participant track is credited (#103).
+#[path = "external_track_tests.rs"]
+mod external_track_tests;
+
 const MEETING_ID: &str = "meeting-pipeline";
 
 /// Returns scripted transcripts in call order, or a scripted failure for every call.
@@ -543,7 +547,7 @@ async fn no_voice_match_marks_unknown_and_saves_clip() {
     );
 }
 
-/// Verifies guaranteed external identities bypass diarization and are persisted as known speakers.
+/// Verifies a participant's chunk goes to the participant when diarization is unavailable.
 #[tokio::test]
 async fn teams_external_chunk_uses_mapped_identity_without_diarization() {
     let mut fixture = session_fixture(MockTranscriptionEngine::returning(&["from teams"]), vec![]);
@@ -566,9 +570,12 @@ async fn teams_external_chunk_uses_mapped_identity_without_diarization() {
     let produced_segments = fixture
         .session
         .process_external_chunk(&identity_mapper, &media_chunk, &audio_recording, 2_500)
+        .await
         .unwrap_or_else(|error| panic!("external processing should succeed: {error}"));
 
-    assert_eq!(fixture.diarization_call_count.load(Ordering::SeqCst), 0);
+    // Diarization was asked (the scripted engine has nothing and fails), so the chunk falls back
+    // to the participant.
+    assert_eq!(fixture.diarization_call_count.load(Ordering::SeqCst), 1);
     assert_eq!(
         produced_segments[0].attribution(),
         &SpeakerAttribution::Known {
@@ -614,6 +621,7 @@ async fn teams_mapping_failure_persists_unknown_segment() {
     let produced_segments = fixture
         .session
         .process_external_chunk(&identity_mapper, &media_chunk, &audio_recording, 1_000)
+        .await
         .unwrap_or_else(|error| panic!("external processing should degrade: {error}"));
 
     assert_eq!(
@@ -1531,6 +1539,7 @@ async fn the_configured_default_is_recorded_for_chunks_without_a_choice() {
 
     session
         .process_external_chunk(&identity_mapper, &media_chunk, &audio_recording, 2_500)
+        .await
         .unwrap_or_else(|error| panic!("external chunk should process: {error}"));
     for (number, start, language) in [(1, 50_000, italian), (2, 60_000, None)] {
         session

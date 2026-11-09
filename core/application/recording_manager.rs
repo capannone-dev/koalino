@@ -124,6 +124,15 @@ impl IdentityMapper for SharedMapperAdapter<'_> {
     ) -> Result<SpeakerIdentity, StorageError> {
         self.0.map_external_to_local(external)
     }
+
+    /// Delegates to the shared mapper.
+    fn keep_participant_voice(
+        &self,
+        identity: &SpeakerIdentity,
+        embedding: Vec<f32>,
+    ) -> Result<bool, StorageError> {
+        self.0.keep_participant_voice(identity, embedding)
+    }
 }
 
 /// A repository query run on the worker thread, which owns the repository.
@@ -702,7 +711,8 @@ where
 ///
 /// Inputs: The open external meeting and the chunk.
 /// Outputs: The produced segment count, or the session error (also logged and counted).
-/// Side effects: Transcribes, maps the participant, and persists segments.
+/// Side effects: Transcribes and diarizes, maps the participant (and may offer its voice to the
+/// gallery, #103), and persists segments.
 fn process_external_chunk<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>(
     external_meeting: &mut ActiveExternalMeeting<
         '_,
@@ -721,12 +731,12 @@ where
 {
     let identity_mapper = SharedMapperAdapter(external_meeting.identity_mapper.as_ref());
     let recording = &mut external_meeting.recording;
-    match recording.session.process_external_chunk(
+    match futures::executor::block_on(recording.session.process_external_chunk(
         &identity_mapper,
         &request.media_chunk,
         &request.audio_recording,
         request.duration_ms,
-    ) {
+    )) {
         Ok(produced_segments) => {
             recording.processed_chunk_count += 1;
             recording.segment_count += produced_segments.len();

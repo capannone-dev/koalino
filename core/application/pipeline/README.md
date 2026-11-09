@@ -11,6 +11,8 @@ is imported.
 
 | File | Purpose |
 | --- | --- |
+| `meeting_session/` | Parts of `MeetingSession` in their own files: `participant_tracks.rs` credits an online-meeting participant's track by the voices it carries (#103). |
+| `external_track_tests.rs` | Participant tracks (#103): one voice goes to the participant, a room's voices are matched one by one, people taking turns in a room are told apart, and a voice is offered once after 30 s unless it sounds like someone else. |
 | `meeting_session.rs` | `MeetingSession`: per-recording orchestration of local VAD chunks and external bridge chunks. Each chunk's overlap spans (from `diarize_with_overlap`) are kept in meeting time and recorded with the meeting. Live and final segments carry their confidence marks: overlap, a guessed speaker (a weak match, or no voice nearby), and unclear words (#90, #91). |
 | `alignment.rs` | Pure timestamp alignment and transcript text distribution against VAD chunk boundaries; each aligned region lists its unclear words. |
 | `pipeline_factory.rs` | `PipelineFactory`: the composition root that owns the pipeline ports once and opens one session per recording. Its `GlossarySource` is read when each session opens, so a saved glossary applies from the next recording without rebuilding anything; the session prompts every chunk with it and drops its echo. |
@@ -80,11 +82,28 @@ VadAudioChunk (recording, meeting-relative start/end, opaque audio)
 
 ## External bridge (Teams) flow
 
-`process_external_chunk` never calls diarization: the bridge guarantees one isolated speaker per
-stream. It transcribes through `transcribe_external_media` and then resolves the participant through
-`IdentityMapper`. It persists one `Known` segment from `timestamp_ms` to
-`timestamp_ms + duration_ms`. A mapping failure degrades the segment to `Unknown`, with no review
-clip because there is no embedding to review. Voice auto-enrollment stays in `TeamsProcessor`.
+A bridge stream is one participant's track, and usually one person speaks on it. In a hybrid
+meeting, though, a meeting room or a shared laptop joins as one participant with several people
+behind it (#103). `process_external_chunk` transcribes through `transcribe_external_media`,
+resolves the participant through `IdentityMapper`, and then diarizes the chunk
+(`meeting_session/participant_tracks.rs`, policy in `domain/participant_track_voices.rs`):
+- While the track carries one voice, the chunk goes to the participant as one `Known` region from
+  `timestamp_ms` to `timestamp_ms + duration_ms`, as before. The same happens without a
+  diarization engine or when diarization fails.
+- Once the track carries several voices, either in one chunk (no voice holds 90% of the speech and
+  the others have 2 s or more) or as a clearly different voice in a later chunk, every later chunk
+  is matched voice by voice against the gallery, like local audio. A room's people get their names,
+  or join unknown-speaker clusters with review clips. Nothing more is credited to the room. Chunks
+  credited before the second voice appeared stay credited.
+- After 30 s of clean speech of the one voice, the voice is offered once per meeting through
+  `IdentityMapper::keep_participant_voice`, unless the gallery matches it to someone else. The
+  bridge's `TeamsIdentityMapper` keeps it only when the owner turned on *Keep meeting
+  participants' voices* (off by default; voice prints are biometric). A track with several voices
+  is never offered.
+
+A mapping failure degrades the participant's part to `Unknown`, with no review clip.
+`TeamsProcessor` (in `application/`) still stores an embedding per chunk without these checks; it
+is not wired into the bridge and must not be.
 
 ## Timestamp alignment
 

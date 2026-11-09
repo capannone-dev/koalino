@@ -58,9 +58,14 @@ pub enum TeamsProcessingError {
     Transcription(#[from] TranscriptionError),
 }
 
+/// Answers whether the owner opted in to keeping online-meeting participants' voices (#103).
+pub type VoiceKeepingSetting = Box<dyn Fn() -> bool + Send + Sync>;
+
 /// Implements stable external-ID mapping and auto-names new local identities from bridge metadata.
 pub struct TeamsIdentityMapper<RepositoryPort> {
     external_identity_repository: RepositoryPort,
+    /// Read each time a voice is offered, so a changed setting applies at once; off by default.
+    keeps_voices: VoiceKeepingSetting,
 }
 
 impl<RepositoryPort> TeamsIdentityMapper<RepositoryPort>
@@ -75,7 +80,18 @@ where
     pub fn new(external_identity_repository: RepositoryPort) -> Self {
         Self {
             external_identity_repository,
+            keeps_voices: Box::new(|| false),
         }
+    }
+
+    /// Lets offered participant voices into the gallery when `keeps_voices` answers `true`.
+    ///
+    /// Inputs: The owner's opt-in, read at every offer (usually from the settings file).
+    /// Outputs: The mapper. Side effects: None.
+    #[must_use]
+    pub fn with_voice_keeping(mut self, keeps_voices: VoiceKeepingSetting) -> Self {
+        self.keeps_voices = keeps_voices;
+        self
     }
 }
 
@@ -110,9 +126,42 @@ where
         );
         Ok(created_identity)
     }
+
+    /// Keeps the voice as a new variant of `identity` when the owner opted in.
+    ///
+    /// Inputs: The mapped identity and the voice's mean embedding (never logged).
+    /// Outputs: `true` when stored, `false` when keeping is off, or a storage failure.
+    /// Side effects: Reads the opt-in; may write one encrypted voice variant and log its ID.
+    fn keep_participant_voice(
+        &self,
+        identity: &crate::domain::models::SpeakerIdentity,
+        embedding: Vec<f32>,
+    ) -> Result<bool, StorageError> {
+        if !(self.keeps_voices)() {
+            return Ok(false);
+        }
+        let variant_id = Uuid::new_v4();
+        self.external_identity_repository
+            .store_participant_voice(VoiceEmbedding::new(
+                identity.identity_id(),
+                variant_id,
+                embedding,
+            ))?;
+        tracing::info!(
+            identity_id = %identity.identity_id(),
+            variant_id = %variant_id,
+            "Kept an online-meeting participant's voice in the gallery"
+        );
+        Ok(true)
+    }
 }
 
 /// Auto-enrolls guaranteed external identities without provider-SDK knowledge.
+///
+/// Not wired into the bridge, and it must not be: it stores an embedding for every chunk, without
+/// checking that one person speaks, so a meeting room's blended voice would enter the gallery.
+/// The live path (`MeetingSession::process_external_chunk`) separates a track's voices and keeps a
+/// voice only on the owner's opt-in (#103).
 pub struct TeamsProcessor<
     BridgePort,
     MapperPort,
