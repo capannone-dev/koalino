@@ -99,6 +99,10 @@ mod meeting_transcript_tests;
 pub mod network_events;
 #[cfg(test)]
 mod network_events_tests;
+/// Asks a language model about one meeting, one project or everything (#97).
+pub mod notes_chat;
+#[cfg(test)]
+mod notes_chat_tests;
 /// Combines pairing and repository sync on one transport for the daemon's P2P task.
 pub mod p2p_service;
 #[cfg(test)]

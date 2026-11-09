@@ -528,3 +528,13 @@ every word of the query in one passage: a transcript segment, or one line of oth
 are every meeting, every project (names, files, meetings), or one project. Hits come with a
 snippet split into matched and unmatched parts, at most `MAX_HITS` (200). Speaker names and file
 text come from the host (`SearchSources`).
+
+`notes_chat.rs` (#97) asks a language model about the owner's notes. The host gathers the
+material as `ContextItem`s, most important first; a meeting has a short version (summary and
+notes) beside the whole (with the transcript). `fit_context` gives everything when it fits.
+Otherwise it gives short versions in order while they fit (the last items are left out), then
+whole ones again while they fit; a single item larger than the context is cut. `relevance`
+orders material for a question by the question's words it contains. `ask` puts the material in
+the instructions, then the chat's most recent turns and the question, and returns the answer
+with what was included and left out. A server that cannot read images is asked again without
+them.
