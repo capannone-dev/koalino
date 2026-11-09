@@ -454,6 +454,20 @@ impl RetainedSpeechIndex {
         Self { directory }
     }
 
+    /// Reports whether any meeting's speech waits here, so the app can start the pass for speech
+    /// left from an earlier run (#87).
+    ///
+    /// Outputs: True when the folder holds a speech file; false when it is empty or missing.
+    /// Side effects: Lists the folder only.
+    pub fn holds_any(&self) -> bool {
+        let suffix = format!(".{FILE_EXTENSION}");
+        fs::read_dir(&self.directory).is_ok_and(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .any(|entry| entry.file_name().to_string_lossy().ends_with(&suffix))
+        })
+    }
+
     /// Returns the meeting's speech held here: how long ago it was last written, as of `now`, and
     /// whether it already took the pass alone; `None` when none is held.
     ///

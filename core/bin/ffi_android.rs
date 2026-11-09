@@ -10,6 +10,9 @@
 //! recording through the same lifecycle functions Dart calls, so its actions work while the app
 //! is in the background or the screen is locked.
 //!
+//! `MainActivity.kt` reports whether the phone is charging, because a phone runs the
+//! after-meeting pass only then (#87).
+//!
 //! The Kotlin side is `com.example.note_taker_ui.NativeCore`. It loads this library with
 //! `System.loadLibrary("note_taker_core")`, which returns the instance Dart already opened, so
 //! both share the runtime's statics.
@@ -18,13 +21,14 @@ use jni::{
     EnvUnowned,
     errors::ThrowRuntimeExAndDefault,
     objects::{JByteArray, JClass},
-    sys::jint,
+    sys::{jboolean, jint},
 };
 use zeroize::Zeroizing;
 
 use crate::ffi::{
     FFI_INVALID_ARGUMENT, HOST_ENCRYPTION_KEY_LENGTH, note_taker_pause_recording,
-    note_taker_start_recording, note_taker_stop_recording, store_host_encryption_key,
+    note_taker_set_charging, note_taker_start_recording, note_taker_stop_recording,
+    store_host_encryption_key,
 };
 
 /// Implements `NativeCore.provideEncryptionKey(key: ByteArray): Int`.
@@ -90,4 +94,19 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_stopRecording
     _class: JClass<'caller>,
 ) -> jint {
     note_taker_stop_recording()
+}
+
+/// Implements `NativeCore.setCharging(charging: Boolean): Int` (#87).
+///
+/// Inputs: Whether the phone is charging.
+/// Outputs: The status of `note_taker_set_charging`.
+/// Side effects: As `note_taker_set_charging`: may load the model to start a waiting pass, so
+/// call it off the main thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_setCharging<'caller>(
+    _unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    charging: jboolean,
+) -> jint {
+    note_taker_set_charging(jint::from(charging))
 }

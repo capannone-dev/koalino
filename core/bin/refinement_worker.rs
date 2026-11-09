@@ -190,6 +190,11 @@ impl RefinementControl {
         }
     }
 
+    /// Reports the last charging state the platform gave. Side effects: None.
+    pub fn is_charging(&self) -> bool {
+        self.charging.load(Ordering::SeqCst)
+    }
+
     /// Records whether the device is charging. Side effects: Wakes the worker when it starts.
     pub fn set_charging(&self, charging: bool) {
         let was_charging = self.charging.swap(charging, Ordering::SeqCst);

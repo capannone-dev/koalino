@@ -451,6 +451,34 @@ fn the_speech_index_reports_held_speech_without_the_key() {
 }
 
 #[test]
+fn the_speech_index_tells_whether_any_speech_waits() {
+    let path = folder();
+    let index = super::retained_audio_store::RetainedSpeechIndex::new(path.clone());
+    assert!(!index.holds_any(), "an empty folder holds nothing");
+    assert!(
+        !super::retained_audio_store::RetainedSpeechIndex::new(path.join("missing")).holds_any(),
+        "a missing folder holds nothing"
+    );
+    fs::write(path.join("notes.txt"), b"other").unwrap_or_else(|error| panic!("{error}"));
+    assert!(!index.holds_any(), "other files are not speech");
+
+    store(&path)
+        .append_chunk(
+            &MeetingId::new("meeting-1"),
+            ChunkSpan {
+                start_ms: 0,
+                end_ms: 100,
+            },
+            None,
+            &samples(1, 160),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert!(index.holds_any());
+    let _ = fs::remove_dir_all(&path);
+}
+
+#[test]
 fn speech_is_kept_compressed_to_a_fraction_of_its_raw_size() {
     let path = folder();
     let store = store(&path);

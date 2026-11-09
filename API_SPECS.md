@@ -294,6 +294,16 @@ and meeting summaries" below). Keys are write-only.
   `resource_not_found`, `not_an_email`, `rejected`, `storage_failed`, `runtime_unavailable`.
 - `note_taker_get_meetings` items carry `project_id` (null outside any project).
 
+### Charging (after-meeting pass, #87)
+
+- `int32_t note_taker_set_charging(int32_t charging)` reports whether the device is charging
+  (nonzero) and returns `0`, or `3` when the runtime lock is poisoned. A phone runs the
+  after-meeting pass only while charging. The state is remembered, so a report made before the
+  app has opened the database applies once it does; the call never creates the runtime. With a
+  runtime, charging while speech from an earlier run waits builds the meeting pipeline so the pass
+  starts, which loads the model: call it off the main thread. Android calls it through JNI
+  (`NativeCore.setCharging`). Desktop builds never need it.
+
 ### Background recording and lock-screen C ABI
 
 - `int32_t note_taker_start_recording(void)`, `note_taker_pause_recording(void)`, and

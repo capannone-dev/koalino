@@ -254,6 +254,9 @@ struct FfiRuntime {
     /// Which meetings' speech this device holds for the after-meeting pass (#88); `None` when
     /// the runtime keeps none (tests over in-memory SQLite).
     retained_speech: Option<RetainedSpeechIndex>,
+    /// The last charging state the platform reported; a phone's after-meeting pass runs only
+    /// while charging (#87).
+    charging: bool,
     /// Where recordings capture audio from; `None` when the host pushes PCM itself
     /// (`note_taker_push_audio_pcm`) or the build has no `microphone` feature (Issue #45).
     microphone_source: Option<Arc<dyn MicrophoneSource>>,
@@ -517,6 +520,8 @@ impl FfiRuntime {
         runtime.retained_speech = Some(RetainedSpeechIndex::new(
             crate::refinement_worker::retained_audio_directory(&database_path),
         ));
+        // The platform may report charging before the runtime exists.
+        runtime.charging = REPORTED_CHARGING.load(std::sync::atomic::Ordering::SeqCst);
         runtime.attachment_directory = setting("NOTE_TAKER_ATTACHMENT_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("attachments"));
@@ -562,6 +567,7 @@ impl FfiRuntime {
             export_writer,
             p2p: None,
             retained_speech: None,
+            charging: false,
             microphone_source: None,
             live_microphone: None,
             microphone_ticker_running: false,
@@ -673,6 +679,15 @@ impl FfiRuntime {
         recording_controller_builder: RecordingControllerBuilder,
     ) -> Self {
         self.recording_controller_builder = recording_controller_builder;
+        self
+    }
+
+    /// Reports speech held for the after-meeting pass from `retained_speech`'s folder.
+    ///
+    /// Inputs: The index. Outputs: The runtime using it. Side effects: None.
+    #[cfg(test)]
+    fn with_retained_speech(mut self, retained_speech: RetainedSpeechIndex) -> Self {
+        self.retained_speech = Some(retained_speech);
         self
     }
 
@@ -1314,11 +1329,38 @@ impl FfiRuntime {
                 tracing::error!(error = %format!("{error:#}"), "Meeting pipeline is unavailable");
                 FFI_PIPELINE_UNAVAILABLE
             })?;
+            if let Some(control) = recording_controller.transcript_pass_control() {
+                control.set_charging(self.charging);
+            }
             self.recording_controller = Some(recording_controller);
         }
         self.recording_controller
             .as_mut()
             .ok_or(FFI_RUNTIME_UNAVAILABLE)
+    }
+
+    /// Passes the platform's charging state to the after-meeting pass (#87).
+    ///
+    /// Inputs: Whether the device is charging.
+    /// Outputs: None.
+    /// Side effects: Remembers the state for a pipeline built later. When charging while speech
+    /// from an earlier run waits and no pipeline exists yet, builds it so the pass starts; that
+    /// loads the model, so call this off the main thread. A failed build is logged and retried
+    /// at the next report.
+    fn report_charging(&mut self, charging: bool) {
+        self.charging = charging;
+        let speech_waits = self
+            .retained_speech
+            .as_ref()
+            .is_some_and(RetainedSpeechIndex::holds_any);
+        if self.recording_controller.is_none() && !(charging && speech_waits) {
+            return;
+        }
+        if let Ok(controller) = self.recording_controller()
+            && let Some(control) = controller.transcript_pass_control()
+        {
+            control.set_charging(charging);
+        }
     }
 
     /// Starts a recording with a generated meeting ID, or resumes a paused one.
@@ -2628,6 +2670,32 @@ pub extern "C" fn note_taker_start_recording() -> c_int {
     with_runtime(FfiRuntime::start_recording)
 }
 
+/// The last charging state the platform reported, kept for a runtime created after the report.
+static REPORTED_CHARGING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Reports whether the device is charging, so a phone runs the after-meeting pass then (#87).
+///
+/// Inputs: Nonzero while charging.
+/// Outputs: `FFI_SUCCESS`, or `FFI_RUNTIME_UNAVAILABLE` when the runtime lock is poisoned.
+/// Side effects: Remembers the state. It never creates the runtime: before the app has opened the
+/// database the state waits for it. With a runtime, charging while speech from an earlier run
+/// waits builds the meeting pipeline, which loads the model; call it off the main thread.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_set_charging(charging: c_int) -> c_int {
+    let charging = charging != 0;
+    REPORTED_CHARGING.store(charging, std::sync::atomic::Ordering::SeqCst);
+    let Some(runtime_mutex) = FFI_RUNTIME.get() else {
+        return FFI_SUCCESS;
+    };
+    let Ok(mut runtime_guard) = runtime_mutex.lock() else {
+        return FFI_RUNTIME_UNAVAILABLE;
+    };
+    if let Some(runtime) = runtime_guard.as_mut() {
+        runtime.report_charging(charging);
+    }
+    FFI_SUCCESS
+}
+
 /// Pauses the Rust-owned recording session from UI, lock-screen, or background service threads.
 ///
 /// Inputs: None.
@@ -3456,6 +3524,10 @@ fn spawn_global_microphone_ticker() {
 #[cfg(test)]
 #[path = "ffi_microphone_tests.rs"]
 mod ffi_microphone_tests;
+
+#[cfg(test)]
+#[path = "ffi_power_tests.rs"]
+mod ffi_power_tests;
 
 #[cfg(test)]
 mod ffi_contract_tests {
