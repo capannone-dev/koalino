@@ -2325,3 +2325,29 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
     library.
 - **Privacy:** the query and the text found are never logged. The web route and FFI read
   under the same repository lock as other reads.
+
+## 2026-11-09 — #98 The notes folder: an opt-in plain-file mirror, last writer wins
+
+- **Problem:** the owner wants projects and meetings as ordinary files, readable and editable
+  with any editor, and new files dropped in to reach the app.
+- **Decision: the store stays the source of truth; the folder is a mirror kept by rounds.**
+  - Every 30 seconds, and on demand, a round reads edits back, imports new files, then writes the
+    tree. Polling, with no file-watcher library. Edits made while the app was closed are seen at
+    the next start, because what was written is remembered beside the database.
+  - **Last writer wins.** A file edit becomes an ordinary edit in the store (the meeting document
+    for notes and summaries, a replaced resource for project files), so it syncs like an edit in
+    the app. An app edit made after it overwrites the file at the next round.
+  - **Renames and deletions in the folder are not propagated.** The app writes the file back and
+    never imports a renamed copy (recognised by size and time, or content up to 4 MiB). That
+    rules out deleting notes by tidying a folder.
+  - `transcript.md` is regenerated and read-only. Its speakers and times can't survive free
+    editing; passages are corrected in the app (#96).
+  - A file found where the app writes one, with other content, is kept as `<name> (on disk)`.
+- **Off by default, per device, desktop only.** The folder is a decrypted copy of sealed data
+  (#92), so turning it on shows that warning, suggests an encrypted disk, and refuses a
+  filesystem root or the home folder itself. Folders are created owner-only (0700).
+- **Attachment sealing (#99) is unaffected:** the folder copies attachments as stored. Sealing
+  them later only changes how the copy is read.
+- **Cost:** a round reads every meeting through the repository (like search, #100) and hashes the
+  text files in the folder. That is fine for personal libraries. Rounds could later be driven by
+  change notifications if it is not.
