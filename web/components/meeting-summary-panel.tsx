@@ -1,10 +1,12 @@
 // Renders a meeting's AI summary (#95) on its page: the stored summary, a button to write or
 // rewrite it with the default connection or another one, and the meeting's own prompt, which
-// replaces the Settings prompt for this meeting only.
+// replaces the Settings prompt for this meeting only. The owner can also edit the summary's text,
+// or write one by hand (#96); an edited summary is never replaced automatically.
 
 "use client";
 
 import { useId, useState } from "react";
+import { editErrorMessage, editSummaryText } from "@/lib/edits-api";
 import {
   llmErrorMessage,
   setMeetingPrompt,
@@ -51,6 +53,8 @@ export function MeetingSummaryPanel({
   );
   const [prompt, setPrompt] = useState(meetingPrompt);
   const [editingPrompt, setEditingPrompt] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState<string | null>(null);
+  const textFieldId = useId();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const connectionFieldId = useId();
@@ -70,6 +74,21 @@ export function MeetingSummaryPanel({
       setMessage(["Summary written.", ...notes].join(" "));
     } catch (error) {
       setMessage(llmErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Saves the summary text the owner edited or wrote. */
+  async function saveText(text: string) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      setCurrent(await editSummaryText(meetingId, text));
+      setEditingText(null);
+      setMessage("Summary saved.");
+    } catch (error) {
+      setMessage(editErrorMessage(error));
     } finally {
       setBusy(false);
     }
@@ -96,17 +115,51 @@ export function MeetingSummaryPanel({
   return (
     <section id="summary" aria-labelledby={`${meetingId}-summary-heading`} className="card space-y-3">
       <h2 id={`${meetingId}-summary-heading`}>Summary</h2>
-      {current ? (
+      {editingText !== null ? (
+        <div className="space-y-2">
+          <label htmlFor={textFieldId} className="block font-semibold">
+            Summary (Markdown)
+          </label>
+          <textarea
+            id={textFieldId}
+            className={`${fieldClass} min-h-60 py-2 font-mono`}
+            value={editingText}
+            onChange={(event) => setEditingText(event.target.value)}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={buttonClass} disabled={busy} onClick={() => void saveText(editingText)}>
+              Save summary
+            </button>
+            <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : current ? (
         <div className="space-y-1">
           <div className="whitespace-pre-wrap break-words">{current.text}</div>
           <p className="text-sm text-muted">
-            Written by {current.model} ({current.connection_label})
-            {current.edited ? ", edited" : ""}
-            {current.truncated ? ". The model stopped early, so the end may be missing" : ""}.
+            {current.connection_label === "" && current.model === "" ? (
+              "Written by you."
+            ) : (
+              <>
+                Written by {current.model} ({current.connection_label})
+                {current.edited ? ", edited" : ""}
+                {current.truncated ? ". The model stopped early, so the end may be missing" : ""}.
+              </>
+            )}
           </p>
+          <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText(current.text)}>
+            Edit summary
+          </button>
         </div>
       ) : (
-        <p className="text-muted">No summary yet.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-muted">No summary yet.</p>
+          <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText("")}>
+            Write a summary
+          </button>
+        </div>
       )}
       {unavailable ? <p className="text-muted">AI connections are unavailable on this server.</p> : null}
       {noConnection ? <p className="text-muted">Add an AI connection in Settings to write summaries.</p> : null}

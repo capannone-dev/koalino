@@ -5,6 +5,12 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { MeetingSummaryPanel } from "@/components/meeting-summary-panel";
 import * as api from "@/lib/llm-api";
+import * as edits from "@/lib/edits-api";
+
+vi.mock("@/lib/edits-api", async () => ({
+  ...(await vi.importActual<typeof edits>("@/lib/edits-api")),
+  editSummaryText: vi.fn()
+}));
 
 vi.mock("@/lib/llm-api", async () => ({
   ...(await vi.importActual<typeof api>("@/lib/llm-api")),
@@ -75,4 +81,30 @@ test("the meeting's own prompt starts from the Settings one and can be cleared",
   fireEvent.click(screen.getByRole("button", { name: "Use the Settings prompt" }));
   expect(await screen.findByText("This meeting uses the Settings prompt again.")).toBeInTheDocument();
   expect(api.setMeetingPrompt).toHaveBeenLastCalledWith("m-1", null);
+});
+
+test("the summary can be edited, and written by hand without one", async () => {
+  vi.mocked(edits.editSummaryText).mockResolvedValue({ ...written, text: "## Overview\nBudget approved on Monday.", edited: true });
+  const { unmount } = render(
+    <MeetingSummaryPanel meetingId="m-1" summary={written} meetingPrompt={null} connections={connections} defaultTemplate="T" />
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit summary" }));
+  const field = screen.getByLabelText("Summary (Markdown)");
+  expect(field).toHaveValue("## Overview\nBudget approved.");
+  fireEvent.change(field, { target: { value: "## Overview\nBudget approved on Monday." } });
+  fireEvent.click(screen.getByRole("button", { name: "Save summary" }));
+
+  expect(await screen.findByText("Summary saved.")).toBeInTheDocument();
+  expect(edits.editSummaryText).toHaveBeenCalledWith("m-1", "## Overview\nBudget approved on Monday.");
+  expect(screen.getByText(/Budget approved on Monday\./)).toBeInTheDocument();
+  expect(screen.getByText(/, edited/)).toBeInTheDocument();
+  unmount();
+
+  vi.mocked(edits.editSummaryText).mockResolvedValue({ ...written, text: "Mine.", connection_label: "", model: "", edited: true });
+  render(<MeetingSummaryPanel meetingId="m-1" summary={null} meetingPrompt={null} connections={[]} defaultTemplate="T" />);
+  fireEvent.click(screen.getByRole("button", { name: "Write a summary" }));
+  fireEvent.change(screen.getByLabelText("Summary (Markdown)"), { target: { value: "Mine." } });
+  fireEvent.click(screen.getByRole("button", { name: "Save summary" }));
+  expect(await screen.findByText("Written by you.")).toBeInTheDocument();
 });

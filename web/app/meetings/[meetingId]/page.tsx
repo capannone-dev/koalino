@@ -1,14 +1,16 @@
 // Renders one meeting's renamable title, when it was created and the languages it was transcribed
 // in, the devices it was recorded on with a Split action (#88), its project (Issue #85), its AI
-// summary (#95), transcript, and metadata-only attachment list from Axum.
+// summary (#95), notes and editable transcript (#96), and metadata-only attachment list from Axum.
 
 import { MeetingTitleHeader } from "@/components/meeting-title-header";
 import { MeetingProjectPicker } from "@/components/meeting-project-picker";
 import { MeetingRecordedOn } from "@/components/meeting-recorded-on";
+import { MeetingNotes } from "@/components/meeting-notes";
 import { MeetingSummaryPanel } from "@/components/meeting-summary-panel";
 import { MeetingTranscript } from "@/components/meeting-transcript";
 import { getMeeting, getMeetings } from "@/lib/api";
 import { describeTranscriptionLanguages, formatMeetingCreatedAt } from "@/lib/meeting-metadata";
+import { getMeetingNotes } from "@/lib/edits-api";
 import { getLlmSettings, getMeetingSummary } from "@/lib/llm-api";
 import { getProjects, type ProjectSummary } from "@/lib/projects-api";
 
@@ -16,11 +18,12 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
   const { meetingId } = await params;
   const meeting = await getMeeting(meetingId);
   // The project picker is extra: an older daemon without projects still shows the meeting.
-  const [projects, summaries, llmSettings, summaryState] = await Promise.all([
+  const [projects, summaries, llmSettings, summaryState, notes] = await Promise.all([
     getProjects().catch((): ProjectSummary[] | null => null),
     getMeetings().catch(() => []),
     getLlmSettings().catch(() => null),
-    getMeetingSummary(meetingId).catch(() => ({ summary: null, meeting_prompt: null }))
+    getMeetingSummary(meetingId).catch(() => ({ summary: null, meeting_prompt: null })),
+    getMeetingNotes(meetingId).catch(() => null)
   ]);
   const languages = describeTranscriptionLanguages(meeting.transcription_languages);
   const projectId = summaries.find((summary) => summary.meeting_id === meetingId)?.project_id ?? null;
@@ -43,8 +46,9 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
         connections={llmSettings?.connections ?? null}
         defaultTemplate={llmSettings?.template ?? ""}
       />
+      <MeetingNotes meetingId={meeting.meeting_id} notes={notes} />
       <h2>Transcript</h2>
-      <MeetingTranscript segments={meeting.segments} transcript={meeting.transcript} />
+      <MeetingTranscript meetingId={meeting.meeting_id} segments={meeting.segments} transcript={meeting.transcript} />
       <h2>Attachments</h2>
       <ul>
         {meeting.attachments.map((attachment) => (

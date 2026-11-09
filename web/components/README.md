@@ -28,6 +28,12 @@ write-only and only shown as "API key saved"), adds, edits, tests and removes th
 default, edits the summary prompt template and turns automatic summaries on or off (#101), all
 through `lib/llm-api.ts`. `meeting-summary-panel.tsx` shows a meeting's stored summary, writes one
 with a chosen connection and edits the meeting's own prompt.
+`meeting-notes.tsx` (#96) shows a meeting's Markdown notes as written and edits them in a text
+field (`lib/edits-api.ts`, `PUT /api/meetings/{id}/notes`). `meeting-summary-panel.tsx` also edits
+the summary's text, or takes one written by hand ("Written by you."). `meeting-transcript.tsx`,
+given the meeting's ID, corrects one segment at a time with a pencil button, keeping its speaker
+and timing; emptying a segment removes it, and the status line says the meeting is no longer
+re-transcribed.
 `retention-settings.tsx` chooses how many days speech waits to be combined with another device's
 recording (#93) through `PUT /api/settings/retention`; a refused choice goes back to the saved one.
 

@@ -1,9 +1,15 @@
 // Verifies the meeting page's transcript shows each segment's speaker, and marks guessed
 // speakers, overlapping speech and unclear words (#90, #91).
 
-import { render, screen } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { MeetingTranscript } from "@/components/meeting-transcript";
+import * as edits from "@/lib/edits-api";
+
+vi.mock("@/lib/edits-api", async () => ({
+  ...(await vi.importActual<typeof edits>("@/lib/edits-api")),
+  editSegment: vi.fn()
+}));
 
 const doubtful = {
   start_time_ms: 61_000,
@@ -42,4 +48,44 @@ test("without segments the flat transcript or a message is shown", () => {
   expect(screen.getByText("Imported text.")).toBeInTheDocument();
   rerender(<MeetingTranscript transcript={null} />);
   expect(screen.getByText("No transcript is available.")).toBeInTheDocument();
+});
+
+describe("editing (#96)", () => {
+  beforeEach(() => vi.mocked(edits.editSegment).mockReset());
+
+  test("a segment is corrected in place and keeps its speaker", async () => {
+    vi.mocked(edits.editSegment).mockResolvedValue({ start_time_ms: 61_000, end_time_ms: 65_000, text: "we ship on Monday" });
+    render(<MeetingTranscript meetingId="m-1" transcript={null} segments={[doubtful]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit the text at 1:01" }));
+    const field = screen.getByLabelText("Text at 1:01");
+    expect(field).toHaveValue("we ship on Friday");
+    fireEvent.change(field, { target: { value: "we ship on Monday" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent(/won't be re-transcribed/);
+    expect(screen.getByText("we ship on Monday", { selector: "p" })).toBeInTheDocument();
+    expect(edits.editSegment).toHaveBeenCalledWith("m-1", 61_000, 65_000, "we ship on Monday");
+    expect(screen.getByText("Unknown speaker (?) · 1:01")).toBeInTheDocument();
+  });
+
+  test("an emptied segment disappears, and a failure keeps the text", async () => {
+    vi.mocked(edits.editSegment).mockRejectedValueOnce(new edits.EditApiError("segment_not_found", 404));
+    render(<MeetingTranscript meetingId="m-1" transcript={null} segments={[doubtful]} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit the text at 1:01" }));
+    fireEvent.change(screen.getByLabelText("Text at 1:01"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/changed\. Reload the page/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Text at 1:01")).toBeInTheDocument();
+
+    vi.mocked(edits.editSegment).mockResolvedValueOnce(null);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.queryByText("Unknown speaker (?) · 1:01")).not.toBeInTheDocument());
+  });
+
+  test("without a meeting ID the transcript is read-only", () => {
+    render(<MeetingTranscript transcript={null} segments={[doubtful]} />);
+    expect(screen.queryByRole("button", { name: /Edit the text/ })).not.toBeInTheDocument();
+  });
 });
