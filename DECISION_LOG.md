@@ -2532,4 +2532,53 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   - The microphone maps to a `browser-owner` participant named after the Teams profile, not yet
     to the owner's own gallery identity.
   - Not yet verified live in a browser: the host disk filled up during this work and stopped the
-    test VMs.
+    test VMs. (Verified on 2026-11-10 in Firefox ESR; see the next #102 entry.)
+
+## 2026-11-10 — #102 What the first live test in Firefox changed
+
+- **Context:** the extension was tested live in Firefox ESR 153 on Debian 13, on a work account,
+  in a call with a second account sharing a slide deck. It recorded, but several parts failed:
+  - nothing ran until site access was granted by hand;
+  - the diarizer refused the bridge's PCM;
+  - the Teams menus were not found;
+  - the owner was named "Your profile";
+  - reading the share froze the Teams tab (3 GB, killed);
+  - slides with the same layout were not told apart.
+- **Decisions:**
+  - **Site access:** Firefox does not grant a hand-loaded MV3 extension its `host_permissions`.
+    On install, the background opens the popup in a tab when access is missing. The popup asks for
+    it with **Allow on Teams** (`permissions.request` needs a click).
+  - **WAV for the diarizer:** external chunks are wrapped in a RIFF/WAVE header
+    (`domain::pcm_wav`, `ExternalMediaChunk::wav_bytes`) before diarization and VAD. The port
+    reads WAV like the app's own recordings, and adapting it was a smaller change.
+  - **Automation:**
+    - Controls are found by their stable IDs first (`LanguageSpeechMenuControl-id`,
+      `closed-captions-button`, `RecordingMenuControl-id`, `call-transcript-button`).
+    - A shortcut after a label ("Alt+Shift+C") is ignored.
+    - An open More menu is reused, not toggled shut.
+    - Steps run one at a time and close the menu after themselves.
+  - **Owner:** the name comes from the avatar's "Profile picture of …" label. The participant ID
+    is `browser-owner:<name>`. The app keeps the first name it saw for an ID, so a fixed ID kept
+    "Your profile" for good and would have merged two owners of one browser.
+  - **Slides in the page world:** the page hook draws the share and posts only a 64×36
+    signature; on request it posts the cropped slide as base64 JPEG. Doing this in the content
+    script was impossible in Firefox:
+    - reading a page video's pixels there goes through per-byte wrappers, which froze the tab;
+    - awaiting the page's promises from an `OffscreenCanvas` is denied ("Permission denied to
+      access property constructor").
+  - **Slide changes:** a slide counts as new when at least 8 of 64×36 cells change brightness by
+    more than 12. Measured on the live frames: slides 1 and 3 of the deck differ in 47 such cells,
+    the same slide in 0, and the pointer covers at most 4. The earlier mean over a 32×18 grid
+    (0.82 against a threshold of 2.5) missed text-only changes.
+  - **Progress in the popup:** audio chunks, slides and captions sent, and the last problem. A
+    failure was otherwise invisible.
+- **Verified live (deb-gui, Firefox ESR, work account):**
+  - consent and the recording indicator;
+  - microphone speech transcribed and credited to the owner by name, with no diarizer errors;
+  - captions turned on and Teams transcription started automatically;
+  - three slides kept for three slides, each cropped exactly to the slide;
+  - the meeting ends when the page leaves the call.
+- **Not yet verified:**
+  - the Teams transcript fetched from the recap after the meeting;
+  - Chrome and Edge (Windows);
+  - remote participants' audio (the second account was not speaking).
