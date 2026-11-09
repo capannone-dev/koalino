@@ -2436,3 +2436,49 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   it leaves the screen, so a long pass can pause until the app is opened again. Running it fully
   in the background would need a foreground service or WorkManager (a new library), which is the
   owner's call.
+
+## 2026-11-09 — #103 Online-meeting tracks may carry several voices; keeping voices is opt-in
+
+- **Problem.** The bridge credited each participant's whole stream to that participant, on the
+  assumption that one track is one person. In a hybrid meeting, a meeting room (or a shared
+  laptop) joins as one participant with several people behind its microphone, so everything said
+  in the room went to the room's name. `TeamsProcessor` also stored an embedding per chunk without
+  any check. It is not wired into the bridge, but a room's blended voice in the gallery would spoil
+  later matching. Meanwhile the live path kept no voice at all, so a remote participant was not
+  recognised when the same person later sat in the room.
+- **Decision:** each chunk of a participant's track is diarized. The policy lives in
+  `domain/participant_track_voices.rs` and the session part in
+  `pipeline/meeting_session/participant_tracks.rs`.
+  - *One voice*: one voice holds at least 90% of the chunk's speech, or the others stay under
+    2 s (noise, cross-talk). Turns are the same voice above cosine 0.40, the unknown-speaker
+    clustering cut-off, so a track splits exactly where the app would see two people.
+  - While a track carries one voice, the chunk goes to the participant, as before. The same
+    happens without a diarization engine or when diarization fails, so the common case never
+    gets worse.
+  - A chunk with several voices, or a single voice clearly unlike the track's voice once that is
+    known (5 s; people in a room taking turns), switches the track for good. From then on every
+    voice is matched against the gallery like local audio: known people get their names, others
+    join unknown-speaker clusters with review clips, which the owner names in the usual review.
+    The switch is permanent, because a room that is quiet for a while is still a room.
+  - **Voice gallery.** After 30 s of clean speech of the one voice (overlap excluded), the
+    voice's mean embedding is offered once per meeting to `IdentityMapper::keep_participant_voice`,
+    unless the gallery matches it (strongly or weakly) to someone else. A track with several
+    voices is never offered. The bridge's `TeamsIdentityMapper` keeps it only when the owner turned
+    on *Keep meeting participants' voices*.
+  - **The setting** is off by default: voice prints are biometric, and the other participants did
+    not install the app. It lives in the transcription settings file as `keep_meeting_voices` and
+    is read at every offer, so switching it needs no restart. It is exposed as
+    `GET`/`PUT /api/settings/meeting-voices`, the web Settings switch and CLI
+    `meeting-voices [on|off]`. No Flutter switch yet: the bridge runs only in the daemon. The
+    switch comes with the browser extension (#102), which may feed the apps. The consent notice
+    (`docs/meeting-consent-notice.md`) already mentions voice prints.
+- **Limits.**
+  - Chunks credited before the second voice appeared stay credited to the participant. They are
+    at most a few chunks, since a room is usually busy from the start.
+  - A room's voices are labelled by the gallery or as unknown speakers, not as
+    "<room> · Speaker A". Clusters already group them per meeting, and the review names them.
+  - The thresholds come from the existing clustering cut-off, not from a measurement on
+    room recordings. There is no multi-person track in the local datasets; AMI's mixed headset
+    channel could serve as one if needed.
+  - `TeamsProcessor` still stores an embedding per chunk. It is used only by its tests, and its
+    doc says it must not be wired in.
