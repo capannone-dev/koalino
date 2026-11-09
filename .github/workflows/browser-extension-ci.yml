@@ -1,0 +1,37 @@
+# Verifies the browser extension (type check, unit tests, both browser builds) on every relevant change.
+
+name: Browser extension CI
+
+on:
+  push:
+    branches: [main]
+    paths: ["browser-extension/**", ".github/workflows/browser-extension-ci.yml"]
+  pull_request:
+    paths: ["browser-extension/**", ".github/workflows/browser-extension-ci.yml"]
+
+concurrency:
+  group: browser-extension-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-browser-extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          # package-lock.json is gitignored, so the cache is keyed on package.json (exact versions).
+          cache-dependency-path: browser-extension/package.json
+      - name: Install dependencies
+        run: npm install
+      - name: Type check
+        run: npm run lint
+      - name: Unit tests
+        run: npm run test -- --reporter=verbose
+      - name: Build for Firefox and Chromium
+        run: npm run build

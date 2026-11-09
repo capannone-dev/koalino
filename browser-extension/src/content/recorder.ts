@@ -1,0 +1,196 @@
+/**
+ * One recording of a Teams meeting in the content script (Issue #102): it announces the meeting
+ * to Note Taker, cuts the page hook's audio into chunks, follows captions and the transcript
+ * panel, keeps screen-share slides, and at the end sends the captions and live transcript as
+ * documents followed by the meeting end.
+ *
+ * All browser I/O is injected (`RecorderPorts`), so the class runs in tests. Times sent to the
+ * core are milliseconds from the recording start. Nothing it handles is logged.
+ */
+import { CaptionCollector, TranscriptPanelCollector } from "../lib/captions";
+import { HostMessage, HostParticipant, AudioTrack } from "../lib/messages";
+import { PcmChunker, base64FromBytes, bytesFromSamples, isSilent, TARGET_SAMPLE_RATE } from "../lib/pcm";
+import { RgbaImage, SlideChangeDetector, findSlideBox, signatureOf } from "../lib/slides";
+import { readCaptions, readTranscriptPanel, isTeamsTranscriptRunning } from "../lib/teamsDom";
+
+/** A gap this large between the audio received and the clock restarts a track's timing. */
+const TIMING_GAP_MS = 3_000;
+/** The owner's microphone track, as Teams participant. */
+export const OWNER_PARTICIPANT_ID = "browser-owner";
+
+/** What the recorder needs from the browser. */
+export interface RecorderPorts {
+  /** Sends a message to Note Taker. */
+  send(message: HostMessage): void;
+  /** The current time (epoch ms). */
+  now(): number;
+  /** The page to read captions and the transcript panel from. */
+  root: ParentNode;
+  /** Encodes a cropped slide as JPEG bytes (null when it cannot). */
+  encodeSlide?(image: RgbaImage, box: { left: number; top: number; right: number; bottom: number } | null): Promise<Uint8Array | null>;
+}
+
+/** The meeting being recorded. */
+export interface RecorderMeeting {
+  meetingId: string;
+  title: string;
+  ownerName: string;
+}
+
+/** One track's chunking state. */
+interface TrackTiming {
+  chunker: PcmChunker;
+  /** Meeting time of the chunker's first sample. */
+  startMs: number;
+  /** Samples received so far. */
+  samples: number;
+}
+
+/** Follows one meeting from start to end. */
+export class MeetingRecorder {
+  readonly startMs: number;
+  private readonly captions = new CaptionCollector();
+  private readonly transcriptPanel = new TranscriptPanelCollector();
+  private readonly slides = new SlideChangeDetector();
+  private readonly tracks = new Map<AudioTrack, TrackTiming>();
+  private teamsTranscriptSeen = false;
+  private stopped = false;
+  private sentChunks = 0;
+  private sentSlides = 0;
+
+  /** Starts the recording and announces the meeting. Side effects: Sends `meeting`. */
+  constructor(
+    private readonly meeting: RecorderMeeting,
+    private readonly ports: RecorderPorts,
+  ) {
+    this.startMs = ports.now();
+    ports.send({
+      type: "meeting",
+      meetingId: meeting.meetingId,
+      title: meeting.title,
+      startTimeMs: this.startMs,
+      participants: [this.owner()],
+    });
+  }
+
+  /** The owner as the microphone track's participant. */
+  private owner(): HostParticipant {
+    return { id: OWNER_PARTICIPANT_ID, name: this.meeting.ownerName };
+  }
+
+  /** Milliseconds since the recording started. */
+  private elapsedMs(): number {
+    return Math.max(0, this.ports.now() - this.startMs);
+  }
+
+  /**
+   * Takes about a second of 16 kHz audio from the page hook.
+   *
+   * Inputs: The track and its samples. Side effects: May send audio chunks (silent ones are
+   * skipped); restarts the track's timing after a gap.
+   */
+  addAudio(track: AudioTrack, samples: Int16Array): void {
+    if (this.stopped) return;
+    const nowMs = this.elapsedMs();
+    let timing = this.tracks.get(track);
+    const receivedMs = timing ? timing.startMs + (timing.samples / TARGET_SAMPLE_RATE) * 1000 : 0;
+    const arrivedStartMs = Math.max(0, nowMs - (samples.length / TARGET_SAMPLE_RATE) * 1000);
+    if (timing && Math.abs(arrivedStartMs - receivedMs) > TIMING_GAP_MS) {
+      timing.chunker.flush();
+      timing = undefined;
+    }
+    if (!timing) {
+      const startMs = Math.round(arrivedStartMs);
+      timing = {
+        startMs,
+        samples: 0,
+        chunker: new PcmChunker(startMs, (chunk) => {
+          if (isSilent(chunk.samples)) return;
+          this.sentChunks += 1;
+          this.ports.send({
+            type: "audio",
+            track,
+            ...(track === "microphone" ? { participant: this.owner() } : {}),
+            timestampMs: chunk.timestampMs,
+            pcm: base64FromBytes(bytesFromSamples(chunk.samples)),
+          });
+        }),
+      };
+      this.tracks.set(track, timing);
+    }
+    timing.samples += samples.length;
+    timing.chunker.push(samples);
+  }
+
+  /**
+   * Reads captions and the transcript panel (call about once a second).
+   * Side effects: Updates the collectors.
+   */
+  observePage(options: { captions: boolean }): void {
+    if (this.stopped) return;
+    const nowMs = this.elapsedMs();
+    if (options.captions) this.captions.observe(readCaptions(this.ports.root), nowMs);
+    if (isTeamsTranscriptRunning(this.ports.root)) this.teamsTranscriptSeen = true;
+    this.transcriptPanel.observe(readTranscriptPanel(this.ports.root), nowMs);
+  }
+
+  /**
+   * Offers a frame of the screen share (call about once a second while one is shown).
+   *
+   * Inputs: The frame. Side effects: Sends it as a slide, cropped to the slide, once it changed
+   * and settled.
+   */
+  async offerShareFrame(frame: RgbaImage): Promise<void> {
+    if (this.stopped || !this.ports.encodeSlide) return;
+    if (!this.slides.offer(signatureOf(frame))) return;
+    const timestampMs = this.elapsedMs();
+    const jpeg = await this.ports.encodeSlide(frame, findSlideBox(frame));
+    if (!jpeg || this.stopped) return;
+    this.sentSlides += 1;
+    this.ports.send({ type: "slide", timestampMs, image: base64FromBytes(jpeg) });
+  }
+
+  /** A new share started: the next settled frame is kept even if it looks like the last. */
+  resetSlides(): void {
+    this.slides.reset();
+  }
+
+  /** Whether Teams transcription was seen during the recording. */
+  sawTeamsTranscript(): boolean {
+    return this.teamsTranscriptSeen;
+  }
+
+  /** Counts for the popup. */
+  counts(): { audioChunks: number; slides: number; captions: number } {
+    return { audioChunks: this.sentChunks, slides: this.sentSlides, captions: this.captions.cues().length };
+  }
+
+  /**
+   * Ends the recording: flushes audio, sends the captions and live transcript, then the end.
+   * Side effects: Sends messages; later calls do nothing.
+   */
+  stop(): void {
+    if (this.stopped) return;
+    for (const timing of this.tracks.values()) timing.chunker.flush();
+    this.stopped = true;
+    if (!this.captions.isEmpty()) {
+      this.ports.send({
+        type: "document",
+        kind: "teams_captions",
+        mediaType: "text/vtt",
+        text: this.captions.toVtt(),
+        timestampMs: 0,
+      });
+    }
+    if (!this.transcriptPanel.isEmpty()) {
+      this.ports.send({
+        type: "document",
+        kind: "teams_live_transcript",
+        mediaType: "text/vtt",
+        text: this.transcriptPanel.toVtt(),
+        timestampMs: 0,
+      });
+    }
+    this.ports.send({ type: "ended", meetingId: this.meeting.meetingId });
+  }
+}

@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- The extension's popup: connection status, current recordings and settings (Issue #102). -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Note Taker</title>
+    <style>
+      body { font: 13px/1.4 system-ui, sans-serif; margin: 0; padding: 12px; width: 300px; color: #111827; }
+      h1 { font-size: 15px; margin: 0 0 8px; }
+      .status { padding: 8px; border-radius: 6px; background: #f3f4f6; margin-bottom: 10px; }
+      .ok { color: #047857; } .warn { color: #b45309; } .bad { color: #b91c1c; }
+      label { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
+      .hint { color: #6b7280; font-size: 12px; }
+      button { font: inherit; margin-top: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Note Taker</h1>
+    <div class="status">
+      <div id="host"></div>
+      <div id="recordings"></div>
+      <button id="check" type="button">Check connection</button>
+    </div>
+    <label><input type="checkbox" data-setting="alwaysRecordTeams" /> <span>Always record Teams meetings<br /><span class="hint">Otherwise you are asked when a call starts.</span></span></label>
+    <label><input type="checkbox" data-setting="captureCaptions" /> <span>Use Teams live captions<br /><span class="hint">Names who spoke when; turned on in the call for you only.</span></span></label>
+    <label><input type="checkbox" data-setting="captureSlides" /> <span>Keep shared slides</span></label>
+    <label><input type="checkbox" data-setting="fetchTeamsTranscripts" /> <span>Fetch the Teams transcript after the meeting<br /><span class="hint">Whoever started it, when your account can see it.</span></span></label>
+    <label><input type="checkbox" data-setting="startTeamsTranscription" /> <span>Start Teams transcription when I record<br /><span class="hint">Everyone sees it, and Microsoft stores the transcript.</span></span></label>
+    <script src="popup.js"></script>
+  </body>
+</html>

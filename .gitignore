@@ -15,3 +15,8 @@
 
 # Packaged programs and models from tools/cross/package-linux-server.sh.
 /dist/
+
+# Browser extension dependencies and build output.
+/browser-extension/node_modules/
+/browser-extension/dist/
+/browser-extension/package-lock.json

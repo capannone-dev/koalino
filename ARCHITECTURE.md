@@ -134,6 +134,24 @@ loaded once and reused across recordings. Stop is graceful: it waits for in-flig
 The external meeting session runs on the same pipeline worker as local recordings but
 independently of them, so a microphone recording and a Teams meeting can run at the same time.
 
+## Browser extension (Issue #102)
+
+```text
+ Teams page (Firefox / Chrome / Edge)
+   hook.js (page world): getUserMedia → owner's mic · <audio> → mixed remote audio · fetch → transcript copy
+     │ postMessage (16 kHz PCM ~1 s, transcript file)
+   content.js: consent → MeetingRecorder (10 s chunks, captions, transcript panel, slides cropped
+     │ to the slide) · recap card → Teams transcript (after the meeting)
+     │ runtime port
+   background.js ──connectNative("com.note_taker.browser_bridge")──▶ browser-host (Rust)
+                                                                     │ JSON → TeamsBridgeMessage
+   ws://127.0.0.1:8765 (secret from the keychain)                    ▼
+ Teams bridge (above): MeetingMetadata · AudioChunk{track PARTICIPANT = owner's mic,
+   MIXED_REMOTE = everyone else, voices matched against the gallery} · VideoFrame(slide) ·
+   MeetingDocument(teams_captions | teams_live_transcript | teams_transcript → sealed attachment)
+   · MeetingEnded → end_external_meeting (after-meeting pass)
+```
+
 ## Teams bot (Issue #34)
 
 ```text

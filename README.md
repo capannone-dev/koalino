@@ -23,6 +23,7 @@ without touching domain logic.
 | [`ui/`](ui/README.md) | Desktop (Linux/Windows) and Android app, which calls the core through its C ABI | Flutter |
 | [`web/`](web/README.md) | Dashboard for the headless daemon (meetings, voice gallery, telemetry) | Next.js |
 | [`teams-bot/`](teams-bot/README.md) | Microsoft Teams media bot that streams meeting audio and slides to the daemon | C# / .NET |
+| [`browser-extension/`](browser-extension/README.md) | Firefox/Chrome/Edge extension that records Teams meetings joined in the browser (audio, captions, slides, the Teams transcript) and sends them to the daemon through the `browser-host` native messaging host | TypeScript |
 | [`server/`](server/README.md) | Headless Linux deployment notes (systemd, background recording) | — |
 
 ## Building
@@ -53,7 +54,8 @@ Run with `NOTE_TAKER_WHISPER_MODEL` set to a GGML model, such as whisper.cpp's m
 see [`tools/cross/README.md`](tools/cross/README.md).
 
 For the web dashboard: `cd web && npm install && npm run dev`. For the Teams bot, see
-[`teams-bot/README.md`](teams-bot/README.md).
+[`teams-bot/README.md`](teams-bot/README.md). For the browser extension and its native host
+(`cargo build --bin browser-host`), see [`browser-extension/README.md`](browser-extension/README.md).
 
 ## Running
 
