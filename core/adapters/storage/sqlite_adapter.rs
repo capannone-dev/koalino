@@ -1074,6 +1074,44 @@ impl NoteRepository for SqliteNoteRepository {
         Ok(())
     }
 
+    /// Changes a meeting's document inside one write transaction (#95).
+    ///
+    /// Inputs: Match `NoteRepository::edit_crdt_document`. Outputs: Success, or the change's or
+    /// SQLite's error. Side effects: Rewrites the sealed document and its index when it changed.
+    fn edit_crdt_document(
+        &self,
+        meeting_id: &MeetingId,
+        edit: &crate::ports::storage::DocumentEdit<'_>,
+    ) -> Result<(), StorageError> {
+        let transaction = self
+            .connection
+            .write_transaction()
+            .map_err(|error| sqlite_error("unable to begin document edit", error))?;
+        let document = read_document(&transaction, self.embedding_cipher.as_ref(), meeting_id)?;
+        let updated = edit(&document)?;
+        if updated != document {
+            write_document(
+                &transaction,
+                self.embedding_cipher.as_ref(),
+                meeting_id,
+                &updated,
+            )?;
+            if let Some(document_codec) = self.document_codec.as_deref() {
+                apply_projection(
+                    &transaction,
+                    self.embedding_cipher.as_ref(),
+                    meeting_id,
+                    &document_codec.project(meeting_id, &updated)?,
+                )?;
+            }
+        }
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to commit document edit", error))?;
+        self.log_operation("edit_crdt_document", meeting_id);
+        Ok(())
+    }
+
     /// Loads opaque Automerge bytes for an existing meeting row.
     ///
     /// Inputs: `meeting_id` identifies a meeting record.

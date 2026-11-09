@@ -79,6 +79,10 @@ pub mod meeting_rename;
 mod meeting_rename_tests;
 /// Asks a language model for a meeting's summary, condensing long transcripts in parts (#95).
 pub mod meeting_summary;
+/// Keeps a meeting's summary and its own prompt in the meeting document (#95).
+pub mod meeting_summary_document;
+#[cfg(test)]
+mod meeting_summary_document_tests;
 #[cfg(test)]
 mod meeting_summary_tests;
 #[cfg(test)]

@@ -229,6 +229,26 @@ pub trait NoteRepository {
         crdt_document: &[u8],
     ) -> Result<(), StorageError>;
 
+    /// Changes a meeting's document in one step, so no other write lands between the read and
+    /// the write (#95).
+    ///
+    /// Inputs: The meeting and the change, which receives the current document and returns the
+    /// new one. Outputs: Success, or the change's or storage's error. Side effects: Writes the
+    /// document when it changed, which syncs to paired devices. This default suits repositories
+    /// with a single writer; the SQLite adapter runs it in a write transaction.
+    fn edit_crdt_document(
+        &self,
+        meeting_id: &MeetingId,
+        edit: &DocumentEdit<'_>,
+    ) -> Result<(), StorageError> {
+        let document = self.load_crdt_document(meeting_id)?;
+        let updated = edit(&document)?;
+        if updated != document {
+            self.save_crdt_document(meeting_id, &updated)?;
+        }
+        Ok(())
+    }
+
     /// Loads the serialized CRDT document for an existing meeting.
     ///
     /// Inputs: `meeting_id` identifies a previously created meeting.
@@ -479,6 +499,9 @@ pub struct MeetingRecording {
     pub combined_with: Vec<MeetingId>,
 }
 
+/// A change to a meeting document: the current bytes in, the new bytes out (#95).
+pub type DocumentEdit<'edit> = dyn Fn(&[u8]) -> Result<Vec<u8>, StorageError> + 'edit;
+
 /// Meetings whose documents changed since a revision (Issue #43).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocumentChanges {
@@ -607,6 +630,14 @@ where
 
     fn load_crdt_document(&self, meeting_id: &MeetingId) -> Result<Vec<u8>, StorageError> {
         (*self).load_crdt_document(meeting_id)
+    }
+
+    fn edit_crdt_document(
+        &self,
+        meeting_id: &MeetingId,
+        edit: &DocumentEdit<'_>,
+    ) -> Result<(), StorageError> {
+        (**self).edit_crdt_document(meeting_id, edit)
     }
 
     fn save_unassigned_clip(&self, clip: UnassignedVoiceClip) -> Result<(), StorageError> {

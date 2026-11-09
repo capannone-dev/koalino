@@ -505,3 +505,12 @@ the database's key-check value. Since Issue #40 the random key lives in the plat
 through the `KeychainStore` port, with automatic migration from, and fallback to, the local key
 file. Storage adapters receive the cipher through the port and never
 handle keys. The scheme and the key-storage tradeoff are documented in `crypto/README.md`.
+
+`meeting_summary.rs` (#95) asks a language model for a meeting's summary. The rendered template is
+the instructions; the owner's notes and the speaker-attributed transcript (`[hh:mm:ss] Name: text`)
+go in the user message, with photos attached. A transcript longer than the connection's context
+(sized at 3 characters per token) is split into parts, the model takes notes on each, and the
+summary is written from those notes, so nothing is cut. A server that cannot read images is asked
+once more without them. `meeting_summary_document.rs` keeps the summary (`summary` map) and the
+meeting's own prompt (`summary_prompt`) in the meeting document, so both sync and are sealed at
+rest; writes go through `NoteRepository::edit_crdt_document`, one SQLite transaction.

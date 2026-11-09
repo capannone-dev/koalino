@@ -332,3 +332,43 @@ fn a_write_waits_for_another_connection_s_write_instead_of_failing() {
 
     assert_eq!(failures, 0, "concurrent writes failed instead of waiting");
 }
+
+/// An edit made in one step keeps the document's other contents and its index, and a failed
+/// change writes nothing (#95).
+#[test]
+fn an_edit_in_one_step_keeps_the_rest_and_a_failed_one_writes_nothing() {
+    use crate::{
+        application::meeting_summary_document::{read_summary_prompt, with_summary_prompt},
+        domain::errors::StorageError,
+    };
+    let laptop = device_repository(&scratch_database("edit.sqlite3"), "device-laptop");
+    record_meeting(&laptop);
+
+    laptop
+        .edit_crdt_document(&meeting(), &|document| {
+            with_summary_prompt(document, Some("Only decisions."))
+        })
+        .unwrap_or_else(|error| panic!("edit must succeed: {error}"));
+    let failed = laptop.edit_crdt_document(&meeting(), &|_| {
+        Err(StorageError::Rejected {
+            reason: "no".to_owned(),
+        })
+    });
+
+    assert!(failed.is_err());
+    let document = laptop
+        .load_crdt_document(&meeting())
+        .unwrap_or_else(|error| panic!("document must load: {error}"));
+    assert_eq!(
+        read_summary_prompt(&document).ok().flatten().as_deref(),
+        Some("Only decisions.")
+    );
+    assert_eq!(
+        laptop
+            .load_transcript_segments(&meeting())
+            .map(|segments| segments.len())
+            .ok(),
+        Some(2),
+        "the index still holds the segments"
+    );
+}
