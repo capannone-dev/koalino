@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// The only accepted audio sample rate.
-pub const REQUIRED_SAMPLE_RATE_HZ: u32 = 16_000;
+pub const REQUIRED_SAMPLE_RATE_HZ: u32 = crate::domain::models::EXTERNAL_AUDIO_SAMPLE_RATE_HZ;
 /// Longest accepted audio chunk; the bot should send 1–30 s chunks.
 pub const MAXIMUM_AUDIO_CHUNK_MS: u64 = 30_000;
 /// Bytes of 16 kHz mono 16-bit PCM per millisecond.

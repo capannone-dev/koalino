@@ -1963,6 +1963,9 @@ pub enum ExternalTrackKind {
     MixedRemote,
 }
 
+/// The sample rate of the 16-bit mono PCM every online-meeting bridge delivers.
+pub const EXTERNAL_AUDIO_SAMPLE_RATE_HZ: u32 = 16_000;
+
 /// Carries an isolated external-speaker audio buffer with guaranteed participant metadata.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExternalMediaChunk {
@@ -2021,6 +2024,15 @@ impl ExternalMediaChunk {
     /// Side effects: None.
     pub fn audio_bytes(&self) -> &[u8] {
         &self.audio_bytes
+    }
+
+    /// The chunk as a WAV file, for the speaker-separation port. Bridges deliver 16 kHz mono
+    /// 16-bit little-endian PCM (`EXTERNAL_AUDIO_SAMPLE_RATE_HZ`).
+    ///
+    /// Inputs: None. Outputs: The samples behind a WAV header; never log them.
+    /// Side effects: None.
+    pub fn wav_bytes(&self) -> Vec<u8> {
+        crate::domain::pcm_wav::wav_from_pcm16_le(&self.audio_bytes, EXTERNAL_AUDIO_SAMPLE_RATE_HZ)
     }
 
     /// Returns the bridge timestamp for deterministic ordering and recording metadata.

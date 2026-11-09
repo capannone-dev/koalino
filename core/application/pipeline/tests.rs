@@ -129,6 +129,8 @@ struct MockDiarizationEngine {
     call_count: Arc<AtomicUsize>,
     /// Chunk-relative overlap reported with every successful result (#90).
     overlap: Vec<crate::domain::transcript_confidence::OverlapSpan>,
+    /// The audio each call received, in call order.
+    received_audio: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
 impl MockDiarizationEngine {
@@ -141,6 +143,7 @@ impl MockDiarizationEngine {
             scripted_results: Mutex::new(scripted_results.into_iter().rev().collect()),
             call_count,
             overlap: Vec::new(),
+            received_audio: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -157,8 +160,11 @@ impl MockDiarizationEngine {
 #[async_trait::async_trait]
 impl DiarizationEngine for MockDiarizationEngine {
     /// Records the call and pops the next scripted result.
-    async fn diarize(&self, _audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
+    async fn diarize(&self, audio_bytes: &[u8]) -> Result<Vec<SpeakerSegment>, DiarizationError> {
         self.call_count.fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut received_audio) = self.received_audio.lock() {
+            received_audio.push(audio_bytes.to_vec());
+        }
         self.scripted_results
             .lock()
             .map_err(|_| DiarizationError::Unavailable)?
@@ -337,6 +343,8 @@ struct SessionFixture {
     known_identity_id: Uuid,
     weak_candidate_id: Uuid,
     diarization_call_count: Arc<AtomicUsize>,
+    /// The audio the diarizer received, in call order.
+    diarized_audio: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
 /// Builds a session with scripted transcription and diarization outputs.
@@ -347,13 +355,13 @@ fn session_fixture(
     let known_identity_id = Uuid::new_v4();
     let weak_candidate_id = Uuid::new_v4();
     let diarization_call_count = Arc::new(AtomicUsize::new(0));
+    let diarizer =
+        MockDiarizationEngine::scripted(diarization_results, Arc::clone(&diarization_call_count));
+    let diarized_audio = Arc::clone(&diarizer.received_audio);
     let session = MeetingSession::start(
         MeetingId::new(MEETING_ID),
         transcription_engine,
-        Some(MockDiarizationEngine::scripted(
-            diarization_results,
-            Arc::clone(&diarization_call_count),
-        )),
+        Some(diarizer),
         MockVoiceIdentityMatcher {
             known_identity_id,
             weak_candidate_id,
@@ -366,6 +374,7 @@ fn session_fixture(
         known_identity_id,
         weak_candidate_id,
         diarization_call_count,
+        diarized_audio,
     }
 }
 

@@ -20,6 +20,10 @@ mod network_addresses_tests;
 pub mod participant_track_voices;
 #[cfg(test)]
 mod participant_track_voices_tests;
+/// Wraps bridge PCM in a WAV header for the speaker-separation port (#102).
+pub mod pcm_wav;
+#[cfg(test)]
+mod pcm_wav_tests;
 pub mod peer_trust;
 #[cfg(test)]
 mod peer_trust_tests;

@@ -67,10 +67,9 @@ where
             return whole_chunk(participant);
         };
         let diarization_started_at = Instant::now();
-        let diarized = match diarization_engine
-            .diarize_with_overlap(media_chunk.audio_bytes())
-            .await
-        {
+        // The bridge delivers raw PCM; the diarizer, like the review clips below, reads WAV.
+        let wav_bytes = media_chunk.wav_bytes();
+        let diarized = match diarization_engine.diarize_with_overlap(&wav_bytes).await {
             Ok(diarized) => diarized,
             Err(error) => {
                 tracing::warn!(
@@ -129,7 +128,7 @@ where
                     audio_recording.clone(),
                     chunk_bounds.start_offset_ms(),
                     chunk_bounds.end_offset_ms(),
-                    media_chunk.audio_bytes().to_vec(),
+                    wav_bytes,
                 ) else {
                     return whole_chunk(SpeakerAttribution::Unknown {
                         clip_id: None,

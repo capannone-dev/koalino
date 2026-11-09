@@ -272,3 +272,40 @@ async fn a_mixed_remote_track_has_its_voices_matched_from_the_first_chunk() {
         "a mixed track is never kept"
     );
 }
+
+#[tokio::test]
+async fn an_external_track_reaches_the_diarizer_as_wav() {
+    // Bridges deliver 16 kHz mono 16-bit PCM; the diarizer reads WAV (#102 live test).
+    let mut fixture = session_fixture(
+        MockTranscriptionEngine::returning(&["hello"]),
+        vec![Ok(vec![SpeakerSegment::new(
+            0,
+            1_000,
+            UNKNOWN_VOICE.to_vec(),
+        )])],
+    );
+    let mapper = OfferRecordingMapper::new();
+    let (media_chunk, recording) = track_chunk(0);
+    let pcm = media_chunk.audio_bytes().to_vec();
+
+    fixture
+        .session
+        .process_external_chunk(&mapper, &media_chunk, &recording, 1_000)
+        .await
+        .unwrap_or_else(|error| panic!("chunk should process: {error}"));
+
+    let received = fixture
+        .diarized_audio
+        .lock()
+        .unwrap_or_else(|error| panic!("diarizer audio lock: {error}"))
+        .clone();
+    assert_eq!(received.len(), 1);
+    let wav = &received[0];
+    assert_eq!(&wav[..4], b"RIFF");
+    assert_eq!(&wav[8..12], b"WAVE");
+    assert_eq!(
+        u32::from_le_bytes([wav[24], wav[25], wav[26], wav[27]]),
+        16_000
+    );
+    assert_eq!(&wav[44..], pcm.as_slice(), "the samples are unchanged");
+}

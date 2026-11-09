@@ -53,6 +53,11 @@ no words of any language, so it does not pull language detection towards English
 transcript) so `without_echo` can drop it. `TranscriptionContext::prompt` (`models.rs`) puts the
 previous chunk's text first and the glossary last, because Whisper keeps the end of a long prompt.
 
+`pcm_wav.rs` (#102) wraps mono 16-bit PCM in a 44-byte RIFF/WAVE header (`wav_from_pcm16_le`).
+Online-meeting bridges deliver raw PCM, but the diarization port reads WAV like the app's own
+recordings; `ExternalMediaChunk::wav_bytes` (`models.rs`, 16 kHz) uses it. `pcm_wav_tests.rs`
+specifies the header.
+
 `participant_track_voices.rs` (#103) judges an online-meeting participant's audio track.
 `TrackVoicePolicy::classify_chunk` groups a chunk's diarized turns by voice (cosine above 0.40, the
 unknown-speaker clustering cut-off). It answers `OneVoice` when one voice holds 90% of the speech
