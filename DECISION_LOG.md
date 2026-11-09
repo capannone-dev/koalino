@@ -2211,3 +2211,40 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
     other apps and the planned notes folder (#98) can mirror them. Sealing them is tracked in #99.
 - **Cost:** sealing a value adds 32 bytes (header, nonce, tag) and one AES-GCM pass per save, negligible next
   to the Automerge encoding.
+
+## 2026-11-09 — #95 Meeting summaries with the owner's language model connections
+
+- **Problem:** the owner wants a summary per meeting from a model they choose: OpenAI, Anthropic,
+  Mistral, or a server on their own network. They also want a prompt template with placeholders,
+  a prompt per meeting, and meeting photos sent along.
+- **Protocols:** two adapters, both on blocking `reqwest`, called off the UI thread and outside
+  the runtime lock.
+  - OpenAI-compatible Chat Completions covers OpenAI, Mistral and local servers (Ollama,
+    llama.cpp, LM Studio, vLLM).
+  - Anthropic speaks its own Messages API, because the compatibility layer drops images and
+    refusals.
+  - No SDKs: the Rust core already has `reqwest`, and the stack rule forbids new frameworks.
+- **Addresses:** HTTPS always. Plain HTTP is allowed only for loopback, RFC 1918 and ULA
+  addresses, and the UI warns when it is used. Redirects are not followed, and an error body is
+  never read or logged, so a key or meeting text can't leak through one.
+- **Keys:** write-only, one keychain entry per connection (`note-taker-llm-<id>`). Android, which
+  has no keychain, uses a file sealed under the host key. The CLI reads a key only from
+  `NOTE_TAKER_LLM_API_KEY`, so it stays out of the shell history.
+- **Settings:** connections, the default connection, the template and `auto_summarize` live in
+  `<db>.llm-settings.json`, one file per device. They don't sync, since keys and LAN addresses
+  are per device.
+- **Where summaries live:** a summary is stored in the meeting's CRDT document (root key
+  `summary`, with the connection, model, time and the prompt actually used), as is the meeting's
+  own prompt (`summary_prompt`). So both sync to paired devices and are sealed at rest (#92).
+- **Long meetings:** the budget is about 3 characters per token of the connection's context. A
+  transcript that doesn't fit is condensed in parts, then the parts are combined, for up to
+  three rounds; past that the meeting is refused with `too_long`.
+- **Images:** photos and slides are sent only when the server accepts them. On a 400, 415 or 422
+  the request is retried once without images. Downscaling pictures needs the `image` crate as a
+  direct dependency, which still waits for the owner's approval; until then, pictures over 3.75 MB
+  are skipped and counted in the result.
+- **Tests:**
+  - Every adapter test runs against a local axum mock.
+  - End to end, the CLI transcribed the public-domain `jfk.wav` and summarized it through a
+    local mock server. The request carried only the sample's transcript and no auth header.
+  - No meeting content was sent to a cloud provider.
