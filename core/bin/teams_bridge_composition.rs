@@ -22,7 +22,7 @@
 //! | --- | --- | --- |
 //! | `NOTE_TAKER_TEAMS_BRIDGE_ENABLED` | boolean | `false` |
 //! | `NOTE_TAKER_TEAMS_BRIDGE_PORT` | 1–65535 (always bound on 127.0.0.1) | `8765` |
-//! | `NOTE_TAKER_TEAMS_BRIDGE_SECRET` | shared secret the bot sends first (never logged) | unset |
+//! | `NOTE_TAKER_TEAMS_BRIDGE_SECRET` | shared secret the bot sends first (never logged) | the keychain's `teams-bridge-secret`, else unset |
 //! | `NOTE_TAKER_TEAMS_BRIDGE_BUFFER_SECONDS` | 1–300 | `10` |
 //! | `NOTE_TAKER_TEAMS_BRIDGE_SLIDE_DIR` | directory for slide images | `slides` next to the database |
 
@@ -40,6 +40,7 @@ use uuid::Uuid;
 use crate::{
     adapters::{
         audio::chunk_audio_store::ChunkAudioStore,
+        keychain::bridge_secret::{bridge_secret_keychain, load_bridge_secret},
         network::teams_bridge::{
             bridge_buffer::BridgeBuffer,
             message_decoder::{BridgeAudio, BridgeEvent, BridgeMeeting},
@@ -60,7 +61,10 @@ use crate::{
     },
     domain::models::{AudioRecording, DeviceId, MeetingId, MeetingTitle, RecordingId},
     pipeline_composition::parse_flag,
-    ports::{crypto::EmbeddingCipher, external_bridge::AttachmentWorkflow},
+    ports::{
+        crypto::{EmbeddingCipher, KeychainStore},
+        external_bridge::AttachmentWorkflow,
+    },
     recording_controller::RecordingController,
     storage_composition::open_note_repository,
     transcription_settings::{keeps_meeting_voices, settings_file_for},
@@ -105,7 +109,35 @@ impl TeamsBridgeConfig {
     /// Outputs: The configuration, or an error naming an invalid variable.
     /// Side effects: Reads environment variables; never logs their values.
     pub fn from_environment() -> Result<Self> {
-        Self::from_lookup(|name| std::env::var(name).ok())
+        let config = Self::from_lookup(|name| std::env::var(name).ok())?;
+        if !config.enabled || config.shared_secret.is_some() {
+            return Ok(config);
+        }
+        Ok(config.with_keychain_secret(&bridge_secret_keychain()))
+    }
+
+    /// Uses the keychain's bridge secret (created by `browser-host install`, #102) when no
+    /// secret came from the environment.
+    ///
+    /// Inputs: The keychain entry.
+    /// Outputs: The configuration; unchanged when a secret is already set, none is stored, or
+    /// the keychain cannot be read (logged without the secret; the bridge then accepts any
+    /// local client, as without a secret).
+    /// Side effects: Queries the credential store.
+    pub fn with_keychain_secret(mut self, keychain: &dyn KeychainStore) -> Self {
+        if self.shared_secret.is_some() {
+            return self;
+        }
+        match load_bridge_secret(keychain) {
+            Ok(Some(secret)) => {
+                self.shared_secret = Some(BridgeSecret::new(secret.as_str().to_owned()));
+            }
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(error = %error, "Teams bridge secret could not be read from the keychain");
+            }
+        }
+        self
     }
 
     /// Reads the configuration through `lookup`, so tests never touch the environment.

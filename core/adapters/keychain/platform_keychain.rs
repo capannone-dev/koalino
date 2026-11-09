@@ -59,9 +59,18 @@ impl PlatformKeychain {
     /// Outputs: The adapter.
     /// Side effects: As for `new`.
     pub(crate) fn for_service(service: &str) -> Self {
+        Self::for_account(service, KEYCHAIN_ACCOUNT, SECRET_SERVICE_LABEL)
+    }
+
+    /// Opens another entry, such as the Teams bridge secret (#102).
+    ///
+    /// Inputs: The service and account names, and the label the Linux Secret Service shows.
+    /// Outputs: The adapter.
+    /// Side effects: As for `new`.
+    pub fn for_account(service: &str, account: &str, label: &str) -> Self {
         Self {
-            entry: open_platform_entry(service, KEYCHAIN_ACCOUNT),
-            location: platform_location(service, KEYCHAIN_ACCOUNT),
+            entry: open_platform_entry(service, account, label),
+            location: platform_location(service, account),
         }
     }
 
@@ -188,11 +197,11 @@ fn describe_without_secrets(error: &KeyringError) -> String {
 
 /// Initializes the platform store and builds the entry with platform-specific modifiers.
 ///
-/// Inputs: The service and account names.
+/// Inputs: The service and account names, and the Secret Service label.
 /// Outputs: The entry, or the keyring error (`NoDefaultStore`-like failures when no store
 /// exists).
 /// Side effects: Initializes the process-wide default credential store once.
-fn open_platform_entry(service: &str, account: &str) -> Result<Entry, KeyringError> {
+fn open_platform_entry(service: &str, account: &str, label: &str) -> Result<Entry, KeyringError> {
     if let Err(initialization_error) = keyring::Entry::store_status() {
         // The status is a shared static and not `Clone`; keep its message as a platform failure,
         // which classifies as unavailable.
@@ -210,7 +219,7 @@ fn open_platform_entry(service: &str, account: &str) -> Result<Entry, KeyringErr
         unix,
         not(any(target_os = "macos", target_os = "ios", target_os = "android"))
     ))]
-    modifiers.insert("label", SECRET_SERVICE_LABEL);
+    modifiers.insert("label", label);
     Entry::new_with_modifiers(service, account, &modifiers)
 }
 

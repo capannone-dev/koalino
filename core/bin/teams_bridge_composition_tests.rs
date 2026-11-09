@@ -118,6 +118,51 @@ fn configuration_rejects_invalid_values() {
     }
 }
 
+/// A keychain holding a fixed bridge secret.
+struct FixedSecretKeychain(&'static str);
+
+impl crate::ports::crypto::KeychainStore for FixedSecretKeychain {
+    /// Returns the secret's bytes.
+    fn load_key(
+        &self,
+    ) -> Result<Option<zeroize::Zeroizing<Vec<u8>>>, crate::domain::errors::CryptoError> {
+        Ok(Some(zeroize::Zeroizing::new(self.0.as_bytes().to_vec())))
+    }
+
+    /// Refuses writes.
+    fn store_key(&self, _key_bytes: &[u8]) -> Result<(), crate::domain::errors::CryptoError> {
+        Err(crate::domain::errors::CryptoError::Keychain {
+            reason: "read-only".to_owned(),
+        })
+    }
+
+    /// Names the entry.
+    fn location(&self) -> &str {
+        "fixed"
+    }
+}
+
+/// Verifies the keychain's secret (#102) is used only when the environment sets none.
+#[test]
+fn the_keychain_secret_applies_only_without_an_environment_secret() {
+    let without_secret = TeamsBridgeConfig::from_lookup(lookup_of(&[]))
+        .unwrap_or_else(|error| panic!("config should parse: {error}"))
+        .with_keychain_secret(&FixedSecretKeychain("from-keychain"));
+    assert!(without_secret.requires_authentication());
+
+    let with_secret = TeamsBridgeConfig::from_lookup(lookup_of(&[(
+        "NOTE_TAKER_TEAMS_BRIDGE_SECRET",
+        "from-environment",
+    )]))
+    .unwrap_or_else(|error| panic!("config should parse: {error}"))
+    .with_keychain_secret(&FixedSecretKeychain("from-keychain"));
+    assert!(with_secret.requires_authentication());
+    assert!(
+        !format!("{with_secret:?}").contains("from-"),
+        "never printed"
+    );
+}
+
 /// Transcribes by reading the chunk's audio from the shared store, as real engines do.
 struct StoreReadingEngine {
     chunk_audio_store: Arc<ChunkAudioStore>,
