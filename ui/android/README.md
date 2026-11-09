@@ -53,6 +53,17 @@ lock-screen (public) version omits the meeting title. A tap opens the app. Verif
 recording from the background while another app played audio, pause and resume from the
 notification, and a stop that finished transcription and ended the service.
 
+## Charging and the after-meeting pass (#87)
+
+A phone runs the after-meeting transcript pass only while charging, and the core cannot read the
+battery. `ChargingReporter.kt` registers for the sticky `ACTION_BATTERY_CHANGED` broadcast while
+`MainActivity` exists and passes the state to `NativeCore.setCharging` on a background thread: on
+every change, and on every battery report while charging. The core remembers a report made before
+it has opened the database. Charging with speech left from an earlier run starts the pass without
+a new recording; that loads the Whisper model, which is why the call never runs on the main
+thread. The pass runs while the app's process runs: Android may freeze a cached app soon after it
+leaves the screen, so a pass pauses then and continues when the app is opened again.
+
 ## Microphone
 
 The Rust core records the microphone itself (`cpal` on AAudio, Issue #45), so the app declares

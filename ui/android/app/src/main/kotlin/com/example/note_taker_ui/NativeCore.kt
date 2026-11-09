@@ -1,6 +1,6 @@
 // JNI bindings to the Rust core (`core/bin/ffi_android.rs`) for calls that must not pass
-// through Dart: handing over the database key, and the recording notification's actions, which
-// run while the app may be in the background (Issue #47).
+// through Dart: handing over the database key, the recording notification's actions, which
+// run while the app may be in the background (Issue #47), and the charging state (#87).
 package com.example.note_taker_ui
 
 /** The Rust core's JNI methods; loading it reuses the library instance Dart already opened. */
@@ -34,4 +34,13 @@ object NativeCore {
      */
     @JvmStatic
     external fun stopRecording(): Int
+
+    /**
+     * Reports whether the phone is charging; the after-meeting pass runs only then (#87).
+     * Outputs: the core's status (0).
+     * Side effects: May load the Whisper model to start a waiting pass; never call it on the main
+     * thread.
+     */
+    @JvmStatic
+    external fun setCharging(charging: Boolean): Int
 }

@@ -8,6 +8,7 @@
 // back to Dart. Exported logs are shared through the share sheet on `note_taker/share`
 // (`SharedFiles`, Issue #46). Files and e-mails shared to the app from others are copied by
 // `IncomingShares` and offered to Dart on `note_taker/incoming_shares` (Issue #85).
+// `ChargingReporter` tells the core when the phone charges, so the after-meeting pass can run (#87).
 package com.example.note_taker_ui
 
 import android.content.Context
@@ -31,6 +32,9 @@ class MainActivity : FlutterActivity() {
 
     /** Copies what other apps share to the app; created with the activity. */
     private val incomingShares by lazy { IncomingShares(applicationContext) }
+
+    /** Reports charging to the core while the activity exists; created with it. */
+    private val chargingReporter by lazy { ChargingReporter(applicationContext) }
 
     /** Runs Keystore work off the main thread. */
     private val keyVaultExecutor = Executors.newSingleThreadExecutor()
@@ -131,15 +135,22 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * Copies a share that started the app. A restored activity skips it: its intent was
-     * imported before the process was killed.
+     * Starts reporting charging, and copies a share that started the app. A restored activity
+     * skips the share: its intent was imported before the process was killed.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        chargingReporter.start()
         if (savedInstanceState == null && incomingShares.receive(intent)) {
             // Cleared so a later recreation of the activity does not import it again.
             setIntent(Intent(Intent.ACTION_MAIN))
         }
+    }
+
+    /** Stops reporting charging when the activity goes away. */
+    override fun onDestroy() {
+        chargingReporter.stop()
+        super.onDestroy()
     }
 
     /** Copies a share that reached the running app (the activity is `singleTop`). */
