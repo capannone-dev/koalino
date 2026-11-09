@@ -40,6 +40,10 @@ result names its meeting or project and where the match is (`1:01 · Anna`, `Sum
 `In plan.md`), marks the matched words, and links to the passage (`#t-<start ms>` in the
 transcript), `#summary`, `#notes`, or the file (`#file-<id>` on the project page). The page
 outlines the `:target` it lands on.
+
+`notes-folder-settings.tsx` (#98) is Settings' notes folder on the server's computer: the folder,
+a switch that turns it on (writing it at once) or off, Sync now, the last round, and the warning
+that the folder is a decrypted copy.
 `retention-settings.tsx` chooses how many days speech waits to be combined with another device's
 recording (#93) through `PUT /api/settings/retention`; a refused choice goes back to the saved one.
 
