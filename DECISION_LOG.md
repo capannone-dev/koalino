@@ -2414,3 +2414,25 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **Not covered:** clear copies exist while a file is open in the app; the notes folder is clear by
   design; exports are clear by design. Verify on the owner's devices before closing the issue in
   their eyes: the first start seals the existing library.
+
+## 2026-11-09 — #87 The phone reports charging to the after-meeting pass
+
+- **Problem found on the S23.** A phone's pass control (`RefinementControl::new(true)`) waits for
+  charging, but nothing ever reported it, so a phone never ran the pass alone or combined
+  recordings. Folding, sending to a paired device and deleting still ran. Separately, the app
+  starts the pass worker only with the meeting pipeline, on the first recording of a session, so
+  speech left from an earlier session waited for the next recording.
+- **Decision:** the platform reports charging through `note_taker_set_charging` (JNI
+  `NativeCore.setCharging`); `ChargingReporter.kt` follows the sticky `ACTION_BATTERY_CHANGED`
+  broadcast while `MainActivity` exists. Android SDK APIs only, no new library.
+  - The state is kept in a static and copied into the runtime when it opens, because Kotlin
+    reports before Dart has handed over the database key; the call never creates the runtime.
+  - A pipeline built later starts with the last report.
+  - Charging while the retained-speech folder holds speech builds the pipeline, which starts the
+    worker without a new recording. Kotlin repeats the report on every battery change while
+    charging, so this happens soon after the database opens. The build loads the model, so the
+    call runs on a background thread.
+- **Limit:** the pass runs while the app's process runs. Android may freeze a cached app soon after
+  it leaves the screen, so a long pass can pause until the app is opened again. Running it fully
+  in the background would need a foreground service or WorkManager (a new library), which is the
+  owner's call.
