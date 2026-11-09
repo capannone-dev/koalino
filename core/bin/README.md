@@ -303,6 +303,15 @@ with the named or default connection; the caller passes a `prepare` and a `store
 repository is not held while the model works. `PlatformLlmKeyring` (in `llm_settings.rs`) keeps
 the keys; tests use an in-memory one.
 
+`auto_summaries.rs` (#101) summarizes finished meetings with the default connection while
+`auto_summarize` is on, in rounds on its own thread: at start, every five minutes, and when a
+recording stops (in the app). A meeting is due when it was recorded on this device within the
+last 7 days, is not folded into another, is not being recorded, its speech is not waiting for
+the after-meeting pass, and it has no summary; it is left for a manual summary after 3 failures.
+`AutoSummaryHost` is how a process lends it its repositories: `ffi_llm.rs` for the app (started
+when the runtime opens) and `server/llm_routes.rs::start_auto_summaries` for the daemon. The CLI
+has none: `summary <meeting>` writes one by hand.
+
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.
 

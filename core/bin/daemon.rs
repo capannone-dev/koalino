@@ -132,6 +132,10 @@ async fn main() -> Result<()> {
         application_state =
             application_state.with_p2p_control(Arc::clone(p2p_task) as Arc<dyn P2pControl>);
     }
+    // Summarizes finished meetings with the default AI connection when the owner allows it
+    // (#101); rounds run every few minutes on their own thread.
+    let _auto_summaries =
+        note_taker_core::server::llm_routes::start_auto_summaries(&application_state);
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!(address = %bind_address, "headless Axum server started");
     axum::serve(listener, build_router(application_state))

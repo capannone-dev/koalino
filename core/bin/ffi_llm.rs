@@ -7,6 +7,9 @@
 //! is read and the summary stored. Every function returns caller-freed JSON
 //! (`note_taker_free_string`): `{"ok":true,...}` or `{"ok":false,"error_code","error"}`. Keys
 //! are write-only and never returned or logged.
+//!
+//! `start_auto_summaries` runs the app's automatic summaries (#101) once the runtime opens, and
+//! a stopped recording wakes them.
 
 use std::{
     ffi::{CString, c_char},
@@ -17,16 +20,27 @@ use std::{
 use serde_json::{Value, json};
 
 use crate::{
-    application::{meeting_summary::SummaryError, meeting_summary_document::read_summary_prompt},
-    domain::models::MeetingId,
-    ffi::{ffi_string, provided_encryption_key, with_runtime_repositories},
+    adapters::audio::retained_audio_store::RetainedSpeechIndex,
+    application::{
+        combined_meetings::HeldSpeech, meeting_summary::SummaryError,
+        meeting_summary_document::read_summary_prompt,
+    },
+    auto_summaries::{AutoSummarizer, AutoSummaryHost, AutoSummaryWake},
+    domain::{
+        llm::MeetingSummary,
+        models::{DeviceId, MeetingId},
+    },
+    ffi::{
+        ffi_string, provided_encryption_key, runtime_recording_meeting, with_runtime_repositories,
+    },
     ffi_settings::app_setting,
     llm_commands::{LlmServices, run_llm_command, summarize_with, summary_json},
     llm_settings::{PlatformLlmKeyring, llm_settings_file_for},
     meeting_summaries::{
-        MeetingPromptError, load_summary, prepare_summary, set_meeting_prompt, store_summary,
+        MeetingPromptError, PreparedSummary, load_summary, prepare_summary, set_meeting_prompt,
+        store_summary,
     },
-    ports::storage::NoteRepository,
+    ports::storage::{MeetingRecording, NoteRepository},
     transcription_settings::TranscriptionPaths,
 };
 
@@ -38,10 +52,7 @@ static SERVICES: OnceLock<Arc<LlmServices>> = OnceLock::new();
 fn services() -> Arc<LlmServices> {
     Arc::clone(SERVICES.get_or_init(|| {
         let paths = TranscriptionPaths::from_lookup(&app_setting);
-        let database = PathBuf::from(
-            app_setting("NOTE_TAKER_DATABASE_PATH")
-                .unwrap_or_else(|| String::from("note_taker.sqlite3")),
-        );
+        let database = database_path();
         let key_directory = paths
             .sealed_key_file
             .parent()
@@ -211,6 +222,96 @@ pub unsafe extern "C" fn note_taker_set_meeting_summary_prompt(
         }
     });
     into_c(answer.unwrap_or_else(runtime_unavailable))
+}
+
+/// Wakes the automatic summaries once they run.
+static AUTO_SUMMARY_WAKE: OnceLock<Arc<AutoSummaryWake>> = OnceLock::new();
+
+/// The database path the app configured.
+fn database_path() -> PathBuf {
+    PathBuf::from(
+        app_setting("NOTE_TAKER_DATABASE_PATH")
+            .unwrap_or_else(|| String::from("note_taker.sqlite3")),
+    )
+}
+
+/// Reads and writes meetings for the app's automatic summaries (#101), taking the runtime lock
+/// only for one read or write at a time.
+struct FfiAutoSummaryHost {
+    retained_speech: RetainedSpeechIndex,
+}
+
+/// Words an unavailable runtime for a summary step.
+fn runtime_gone() -> SummaryError {
+    SummaryError::Storage(String::from("the native runtime is unavailable"))
+}
+
+impl AutoSummaryHost for FfiAutoSummaryHost {
+    fn recordings(&self) -> Result<Vec<MeetingRecording>, String> {
+        with_runtime_repositories(|repository, _| repository.meeting_recordings())
+            .ok_or_else(|| String::from("the native runtime is unavailable"))?
+            .map_err(|error| error.to_string())
+    }
+
+    fn has_summary(&self, meeting_id: &MeetingId) -> Result<bool, String> {
+        with_runtime_repositories(|repository, _| load_summary(repository, meeting_id))
+            .ok_or_else(|| String::from("the native runtime is unavailable"))?
+            .map(|summary| summary.is_some())
+            .map_err(|error| error.to_string())
+    }
+
+    fn is_recording(&self, meeting_id: &MeetingId) -> bool {
+        runtime_recording_meeting().as_ref() == Some(meeting_id)
+    }
+
+    fn held_speech(&self, meeting_id: &MeetingId) -> Option<HeldSpeech> {
+        self.retained_speech
+            .held_speech(meeting_id, std::time::SystemTime::now())
+    }
+
+    fn prepare(
+        &self,
+        meeting_id: &MeetingId,
+        glossary: &[String],
+        device_name: &str,
+    ) -> Result<PreparedSummary, SummaryError> {
+        with_runtime_repositories(|repository, voices| {
+            prepare_summary(repository, voices, meeting_id, glossary, device_name)
+        })
+        .unwrap_or_else(|| Err(runtime_gone()))
+    }
+
+    fn store(&self, meeting_id: &MeetingId, summary: &MeetingSummary) -> Result<(), SummaryError> {
+        with_runtime_repositories(|repository, _| store_summary(repository, meeting_id, summary))
+            .unwrap_or_else(|| Err(runtime_gone()))
+    }
+}
+
+/// Starts the app's automatic summaries, once per process (#101).
+///
+/// Inputs: This device's ID, which marks the meetings recorded here. Side effects: Spawns a
+/// thread that summarizes due meetings with the default connection while the owner keeps
+/// automatic summaries on; its first round waits for the runtime lock.
+pub(crate) fn start_auto_summaries(device_id: DeviceId) {
+    if AUTO_SUMMARY_WAKE.get().is_some() {
+        return;
+    }
+    let wake = Arc::clone(AUTO_SUMMARY_WAKE.get_or_init(Arc::default));
+    let host = FfiAutoSummaryHost {
+        retained_speech: RetainedSpeechIndex::new(
+            crate::refinement_worker::retained_audio_directory(&database_path()),
+        ),
+    };
+    if let Err(error) = AutoSummarizer::new(services(), device_id).spawn(Box::new(host), wake) {
+        tracing::warn!(error = %error, "automatic summaries could not start");
+    }
+}
+
+/// Asks the automatic summaries to look for due meetings now, if they run.
+pub(crate) fn wake_auto_summaries() {
+    if let Some(wake) = AUTO_SUMMARY_WAKE.get() {
+        wake.wake();
+    }
 }
 
 #[cfg(test)]

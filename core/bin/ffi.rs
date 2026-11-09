@@ -420,7 +420,10 @@ impl FfiRuntime {
     fn new() -> Result<Self, c_int> {
         // First, so failures while opening the stores reach the log file (Issue #46).
         crate::ffi_logging::start_app_logging();
-        Self::from_settings(&app_setting)
+        let runtime = Self::from_settings(&app_setting)?;
+        // Its thread waits for this runtime's lock, which the caller releases after this call.
+        crate::ffi_llm::start_auto_summaries(runtime.note_repository.device_id().clone());
+        Ok(runtime)
     }
 
     /// Opens the runtime from `setting`, which resolves `NOTE_TAKER_*` names.
@@ -2386,6 +2389,17 @@ fn with_runtime_json(
     }
 }
 
+/// Returns the meeting being recorded, if any, for automatic summaries (#101).
+///
+/// Outputs: The meeting ID, or `None` when nothing is recorded or the runtime is unavailable.
+/// Side effects: Takes the runtime lock briefly.
+pub(crate) fn runtime_recording_meeting() -> Option<MeetingId> {
+    with_runtime_json(|runtime| Ok(runtime.active_meeting_id().unwrap_or_default()))
+        .ok()
+        .filter(|meeting_id| !meeting_id.is_empty())
+        .map(MeetingId::new)
+}
+
 /// Lends the runtime's meeting repository and voice database to another FFI module (#95).
 ///
 /// Inputs: The work, run while the runtime lock is held, so it must be short.
@@ -2432,7 +2446,10 @@ pub extern "C" fn note_taker_pause_recording() -> c_int {
 /// Side effects: Acquires the process runtime mutex and stops its portable recorder.
 #[unsafe(no_mangle)]
 pub extern "C" fn note_taker_stop_recording() -> c_int {
-    with_runtime(FfiRuntime::stop_recording)
+    let status = with_runtime(FfiRuntime::stop_recording);
+    // The finished meeting may be due for an automatic summary (#101).
+    crate::ffi_llm::wake_auto_summaries();
+    status
 }
 
 /// Chooses the language for the next recording, or for the rest of the current one.

@@ -200,6 +200,35 @@ impl ServerAppState {
         self
     }
 
+    /// Reports whether the meeting is being recorded now, as the deletion hooks see it; false
+    /// without hooks.
+    pub(super) fn is_recording(&self, meeting_id: &MeetingId) -> bool {
+        self.deletion_hooks
+            .as_ref()
+            .is_some_and(|hooks| hooks.is_recording(meeting_id))
+    }
+
+    /// This device and the speech it holds for the after-meeting pass (#101).
+    ///
+    /// Outputs: This device's ID and the meeting's held speech; `None` without
+    /// `with_recording_device`. Side effects: Reads the retained speech folder's metadata.
+    pub(super) fn held_speech(
+        &self,
+        meeting_id: &MeetingId,
+    ) -> Option<(
+        DeviceId,
+        Option<crate::application::combined_meetings::HeldSpeech>,
+    )> {
+        self.recording_device.as_deref().map(|state| {
+            (
+                state.this_device.clone(),
+                state
+                    .retained_speech
+                    .held_speech(meeting_id, std::time::SystemTime::now()),
+            )
+        })
+    }
+
     /// The attached settings file, if any.
     pub(super) fn settings_file(&self) -> Option<std::path::PathBuf> {
         self.settings_file.as_deref().cloned()

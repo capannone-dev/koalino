@@ -502,7 +502,10 @@ where `kind` is `open_ai_compatible` (OpenAI, Mistral, Ollama, llama.cpp, LM Stu
 - `POST /api/settings/llm/connections/{id}/test` sends a fixed one-line request (no meeting
   content) and returns `{"reply"}`.
 - `PUT /api/settings/llm` with any of `{"default_connection","template","auto_summarize"}` changes
-  only the fields named; `"template":null` goes back to the built-in template. Templates may use
+  only the fields named; `"template":null` goes back to the built-in template. While
+  `auto_summarize` is true (the default) and a default connection exists, the daemon and the app
+  summarize each meeting recorded on their device in the last 7 days once its transcript is
+  final and it has no summary (#101). Templates may use
   `{{title}}`, `{{date}}`, `{{time}}`, `{{duration}}`, `{{device}}`, `{{project}}`,
   `{{speakers}}`, `{{glossary}}` and `{{language}}`.
 - `GET /api/meetings/{id}/summary` returns `{"summary": {"text","connection_label","model",

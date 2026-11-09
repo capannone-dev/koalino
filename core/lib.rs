@@ -7,6 +7,12 @@
 pub mod adapters;
 /// Contains use-case orchestration that only depends on domain types and ports.
 pub mod application;
+/// Summarizes finished meetings automatically with the default AI connection (#101).
+#[path = "bin/auto_summaries.rs"]
+pub mod auto_summaries;
+#[cfg(test)]
+#[path = "bin/auto_summaries_tests.rs"]
+mod auto_summaries_tests;
 /// Exposes the dependency-injected command-line driving adapter.
 pub mod cli;
 /// Opens the encrypted SQLite stores for the CLI, daemon, and FFI composition roots.

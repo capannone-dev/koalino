@@ -2248,3 +2248,29 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   - End to end, the CLI transcribed the public-domain `jfk.wav` and summarized it through a
     local mock server. The request carried only the sample's transcript and no auth header.
   - No meeting content was sent to a cloud provider.
+
+## 2026-11-09 — #101 Finished meetings are summarized automatically
+
+- **Problem:** the owner wants every meeting summarized without asking, with an opt-out in
+  Settings, while keeping the manual Summarize.
+- **When:** a background round (at start, every five minutes, and when the app stops a recording)
+  summarizes a meeting once its transcript is final. It must not be being recorded, and its
+  speech must not be waiting for the after-meeting pass (#87, #88). A summary written before
+  that pass would describe a transcript about to be replaced. A meeting folded into another is
+  left to the meeting it joined.
+- **Which device:** only the device that recorded the meeting. Paired devices would otherwise
+  each send the meeting to a server and pay for it. The summary reaches them in the synced
+  meeting document.
+- **Never replaced:** a meeting with any summary is skipped, whether written by hand, by another
+  device, or edited by the owner (#96). Writing a new one is a manual action.
+- **Limits:**
+  - Only meetings started in the last 7 days. Turning the setting on must not send the whole
+    history to a server.
+  - After 3 failures in a process (no transcript, server down, too long), the meeting waits for
+    a manual summary. That way a broken connection doesn't retry forever.
+  - Nothing is sent while the setting is off or there is no default connection.
+- **On by default:** the summary of a recorded meeting is what the owner asked for. Nothing
+  happens until they add a connection, which is itself the opt-in to sending meetings to that
+  server.
+- **Verified:** with a local mock server, the daemon summarized a newly recorded public-domain
+  sample at start, with one request.

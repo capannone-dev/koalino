@@ -18,6 +18,10 @@
 //! there is nothing to summarize, 422 when the meeting is too long, 502 when the model failed,
 //! 500 for storage and keychain failures, and 503 when the process has no AI settings. Model calls
 //! run on a blocking thread, and the repository is not held while the model works.
+//!
+//! `start_auto_summaries` runs the daemon's automatic summaries (#101) over the same state.
+
+use std::sync::Arc;
 
 use axum::{
     Json, Router,
@@ -30,9 +34,13 @@ use serde_json::{Value, json};
 
 use super::api::ServerAppState;
 use crate::{
-    domain::models::MeetingId,
+    application::{combined_meetings::HeldSpeech, meeting_summary::SummaryError},
+    auto_summaries::{AutoSummarizer, AutoSummaryHost, AutoSummaryWake},
+    domain::{llm::MeetingSummary, models::MeetingId},
     llm_commands::{LlmServices, run_llm_command, summarize_with, summary_json},
+    meeting_summaries::PreparedSummary,
     meeting_summaries::{load_summary, prepare_summary, set_meeting_prompt, store_summary},
+    ports::storage::MeetingRecording,
 };
 
 /// Registers the routes; `build_router` merges them before its layers.
@@ -365,5 +373,86 @@ async fn replace_meeting_prompt(
             failure("invalid_template", &error.to_string())
         }
         Err(error) => failure("storage_failed", &error.to_string()),
+    }
+}
+
+/// Reads and writes meetings for the daemon's automatic summaries (#101), taking each lock only
+/// for one read or write.
+struct ServerAutoSummaryHost {
+    state: ServerAppState,
+}
+
+impl AutoSummaryHost for ServerAutoSummaryHost {
+    fn recordings(&self) -> Result<Vec<MeetingRecording>, String> {
+        let repositories = self.state.repositories();
+        let repositories = repositories.blocking_lock();
+        repositories
+            .meeting_recordings()
+            .map_err(|error| error.to_string())
+    }
+
+    fn has_summary(&self, meeting_id: &MeetingId) -> Result<bool, String> {
+        let repositories = self.state.repositories();
+        let repositories = repositories.blocking_lock();
+        load_summary(&**repositories, meeting_id)
+            .map(|summary| summary.is_some())
+            .map_err(|error| error.to_string())
+    }
+
+    fn is_recording(&self, meeting_id: &MeetingId) -> bool {
+        self.state.is_recording(meeting_id)
+    }
+
+    fn held_speech(&self, meeting_id: &MeetingId) -> Option<HeldSpeech> {
+        self.state
+            .held_speech(meeting_id)
+            .and_then(|(_, held)| held)
+    }
+
+    fn prepare(
+        &self,
+        meeting_id: &MeetingId,
+        glossary: &[String],
+        device_name: &str,
+    ) -> Result<PreparedSummary, SummaryError> {
+        let repositories = self.state.repositories();
+        let repositories = repositories.blocking_lock();
+        let voices = self.state.voice_database();
+        let voices = voices.blocking_lock();
+        prepare_summary(
+            &**repositories,
+            &**voices,
+            meeting_id,
+            glossary,
+            device_name,
+        )
+    }
+
+    fn store(&self, meeting_id: &MeetingId, summary: &MeetingSummary) -> Result<(), SummaryError> {
+        let repositories = self.state.repositories();
+        let repositories = repositories.blocking_lock();
+        store_summary(&**repositories, meeting_id, summary)
+    }
+}
+
+/// Starts the daemon's automatic summaries (#101) on their own thread.
+///
+/// Inputs: The state, with AI services and this device attached. Outputs: The wake-up to signal
+/// when a recording ends, or `None` when the state has no AI services or device, or the thread
+/// could not start. Side effects: Spawns a thread that summarizes due meetings with the default
+/// connection while the owner keeps automatic summaries on.
+pub fn start_auto_summaries(state: &ServerAppState) -> Option<Arc<AutoSummaryWake>> {
+    let services = state.llm()?;
+    let (device_id, _) = state.held_speech(&MeetingId::new(""))?;
+    let wake = Arc::new(AutoSummaryWake::default());
+    let host = ServerAutoSummaryHost {
+        state: state.clone(),
+    };
+    match AutoSummarizer::new(services, device_id).spawn(Box::new(host), Arc::clone(&wake)) {
+        Ok(_) => Some(wake),
+        Err(error) => {
+            tracing::warn!(error = %error, "automatic summaries could not start");
+            None
+        }
     }
 }
