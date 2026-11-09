@@ -136,6 +136,13 @@ pub enum CliCommand {
         #[arg(long)]
         project: Option<String>,
     },
+    /// Shows, turns on or off, or syncs now the notes folder: plain files mirroring projects
+    /// and meetings, editable with any editor (#98). The folder is a decrypted copy, so it is off
+    /// until turned on.
+    NotesFolder {
+        #[command(subcommand)]
+        action: Option<NotesFolderAction>,
+    },
     /// Displays aggregate privacy-safe telemetry.
     Telemetry,
     /// Changes a running daemon's log level without restarting it (applied within seconds).
@@ -635,6 +642,10 @@ pub trait CliService {
     fn llm_command(&mut self, _request: &serde_json::Value) -> Result<serde_json::Value, String> {
         Err(String::from("AI connections are not available here"))
     }
+    /// Runs a notes folder command (see `notes_folder_commands.rs`) and returns its answer.
+    fn notes_folder(&mut self, _request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        Err(String::from("the notes folder is not available here"))
+    }
     /// Runs a search (see `search_commands.rs`) and returns its JSON answer (#100).
     fn search(
         &self,
@@ -777,9 +788,64 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
             };
             format_search(&cli_service.search(&request)?)
         }
+        CliCommand::NotesFolder { action } => {
+            let request = match action.unwrap_or(NotesFolderAction::Status) {
+                NotesFolderAction::Status => serde_json::json!({"command": "get"}),
+                NotesFolderAction::On { path } => {
+                    serde_json::json!({"command": "set", "enabled": true, "path": path})
+                }
+                NotesFolderAction::Off => serde_json::json!({"command": "set", "enabled": false}),
+                NotesFolderAction::Sync => serde_json::json!({"command": "sync_now"}),
+            };
+            format_notes_folder(&cli_service.notes_folder(&request)?)
+        }
         CliCommand::Telemetry => cli_service.telemetry(),
         CliCommand::LogLevel { directive } => cli_service.request_log_level(&directive),
     }
+}
+
+/// What `notes-folder` does.
+#[derive(Clone, Debug, Subcommand, PartialEq, Eq)]
+pub enum NotesFolderAction {
+    /// Shows whether the folder is on, where, and how the last round went (the default).
+    Status,
+    /// Turns the folder on and writes it now; without a path, `~/NoteTaker` or the saved one.
+    On {
+        /// The folder, absolute.
+        path: Option<PathBuf>,
+    },
+    /// Turns the folder off; the files already written stay.
+    Off,
+    /// Reads edits back and writes the folder now.
+    Sync,
+}
+
+/// Words a notes folder answer for the terminal.
+///
+/// Outputs: A line or two, or the refusal's message. Side effects: None.
+fn format_notes_folder(answer: &serde_json::Value) -> Result<String, String> {
+    if answer["ok"] != true {
+        return Err(answer["error"]
+            .as_str()
+            .unwrap_or("the notes folder failed")
+            .to_owned());
+    }
+    let path = answer["path"].as_str().unwrap_or("not chosen");
+    let mut text = if answer["enabled"] == true {
+        format!("Notes folder: on, in {path}")
+    } else {
+        String::from("Notes folder: off")
+    };
+    if let Some(at) = answer["last_round_at"].as_str() {
+        match answer["last_error"].as_str() {
+            Some(code) => text.push_str(&format!("\nLast round at {at} failed: {code}")),
+            None => text.push_str(&format!(
+                "\nLast round at {at}: {} files written, {} edits and files taken in",
+                answer["written"], answer["imported"]
+            )),
+        }
+    }
+    Ok(text)
 }
 
 /// Words a search answer for the terminal: one line per hit, `[meeting ID] title · where:
@@ -1217,6 +1283,8 @@ pub struct CoreCliService<RecordingPort, RepositoryPort, VectorDatabasePort> {
     llm: Option<std::sync::Arc<crate::llm_commands::LlmServices>>,
     /// Project files, so `search` reads their text (#100); `None` finds files by name only.
     project_files: Option<crate::project_commands::ProjectFiles>,
+    /// The notes folder beside the database (#98); `None` disables `notes-folder`.
+    notes_folder: Option<crate::notes_folder_commands::NotesFolderKeeper>,
     /// This device and the folder of the speech it holds, for `meetings view`'s combining line
     /// (#88); `None` says nothing is held here.
     recording_device: Option<(
@@ -1253,6 +1321,7 @@ where
             settings_file: None,
             llm: None,
             project_files: None,
+            notes_folder: None,
             recording_device: None,
         }
     }
@@ -1338,6 +1407,21 @@ where
                 )
         };
         Ok(describe_combining(&status, &name))
+    }
+
+    /// Enables `notes-folder` with its settings beside the database (#98).
+    ///
+    /// Inputs: The database path and the home folder, for the suggested `~/NoteTaker`.
+    /// Outputs: The service. Side effects: None.
+    pub fn with_notes_folder(
+        mut self,
+        database_path: &std::path::Path,
+        home: Option<PathBuf>,
+    ) -> Self {
+        self.notes_folder = Some(
+            crate::notes_folder_commands::NotesFolderKeeper::for_database(database_path, home),
+        );
+        self
     }
 
     /// Lets `search` read project files' text in `attachment_directory` (#100).
@@ -1499,6 +1583,25 @@ where
             &sources,
             request,
         ))
+    }
+    fn notes_folder(&mut self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
+        let (Some(keeper), Some(files)) = (&self.notes_folder, &self.project_files) else {
+            return Err(String::from("the notes folder is not available here"));
+        };
+        let names =
+            crate::search_commands::speaker_names(self.voice_identity_manager.vector_database())
+                .map_err(|error| error.to_string())?;
+        let repository = &self.repository;
+        Ok(keeper.command(&request.to_string(), &mut |root, state| {
+            crate::notes_folder::run_round(
+                repository,
+                files,
+                &names,
+                root,
+                state,
+                chrono::Utc::now(),
+            )
+        }))
     }
     fn meeting_summary(&self, meeting_id: &str) -> Result<Option<String>, String> {
         crate::meeting_summaries::load_summary(&self.repository, &MeetingId::new(meeting_id))

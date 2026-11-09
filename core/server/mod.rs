@@ -23,6 +23,10 @@ mod llm_routes_tests;
 pub mod log_routes;
 #[cfg(test)]
 mod log_routes_tests;
+/// Serves the notes folder's Settings and runs the daemon's rounds (#98).
+pub mod notes_folder_routes;
+#[cfg(test)]
+mod notes_folder_routes_tests;
 /// Serves the `/api/p2p/*` pairing and device routes (Issue #43).
 pub mod p2p_routes;
 #[cfg(test)]

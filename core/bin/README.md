@@ -321,6 +321,21 @@ hit as JSON, and stable error codes. `HostSearchSources` gives `application/sear
 people's names and project files' text (`ProjectFiles::searchable_text`: text and Markdown files,
 e-mails).
 
+`notes_folder.rs` (#98) keeps the opt-in notes folder: a tree of plain files mirroring projects
+(`<Project>/`, with their files) and meetings (`<Project or No project>/<YYYY-MM-DD HH-MM Title>/`
+with `notes.md`, `summary.md`, a read-only `transcript.md` and `attachments/`). `run_round` reads
+edits back (notes and summaries into the meeting document; an edited project file replaces its
+resource), imports files dropped into project folders and meetings' `attachments/`, then writes the
+tree: deleted or renamed files come back, renamed meetings move their folder, and a file found where
+the app writes one is kept as `<name> (on disk)`. `FolderState` (`<db>.notes-folder-state.json`)
+remembers what was written, so edits made while the app was closed are recognised.
+`notes_folder_commands.rs` is the Settings side shared by the hosts: `NotesFolderKeeper` keeps
+`<db>.notes-folder.json`, runs rounds every 30 seconds on a thread of its own (`spawn`), and answers
+`get`, `set` and `sync_now`. The app reaches it through `ffi_notes_folder.rs`
+(`note_taker_notes_folder`, rounds through `ffi::run_notes_folder_round`), the daemon through
+`server/notes_folder_routes.rs`, and the CLI through `notes-folder`. Rounds announce the meetings
+they changed to paired devices (not from the CLI, which runs no P2P task).
+
 `ffi_language.rs` keeps the apps' default transcription language in `<db>.transcription-language`
 (Issue #62). `ffi.rs` applies it when a recording starts, unless one was chosen for that recording.
 

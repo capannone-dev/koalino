@@ -127,6 +127,12 @@ async fn main() -> Result<()> {
         .with_project_files(project_files)
         .with_llm_services(Arc::new(
             note_taker_core::llm_commands::LlmServices::for_database(&database_path),
+        ))
+        .with_notes_folder(Arc::new(
+            note_taker_core::notes_folder_commands::NotesFolderKeeper::for_database(
+                &database_path,
+                env::var_os("HOME").map(PathBuf::from),
+            ),
         ));
     if let Some(p2p_task) = &p2p_task {
         application_state =
@@ -136,6 +142,9 @@ async fn main() -> Result<()> {
     // (#101); rounds run every few minutes on their own thread.
     let _auto_summaries =
         note_taker_core::server::llm_routes::start_auto_summaries(&application_state);
+    // Keeps the opt-in notes folder (#98) every 30 seconds on its own thread; off by default.
+    let _notes_folder =
+        note_taker_core::server::notes_folder_routes::start_notes_folder(&application_state);
     let listener = tokio::net::TcpListener::bind(&bind_address).await?;
     tracing::info!(address = %bind_address, "headless Axum server started");
     axum::serve(listener, build_router(application_state))

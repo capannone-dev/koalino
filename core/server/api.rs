@@ -91,6 +91,8 @@ pub struct ServerAppState {
     settings_file: Option<Arc<std::path::PathBuf>>,
     /// Language model connections and summaries (#95); `None` makes their routes answer 503.
     llm: Option<Arc<crate::llm_commands::LlmServices>>,
+    /// The notes folder (#98); `None` makes its routes answer 503.
+    notes_folder: Option<Arc<crate::notes_folder_commands::NotesFolderKeeper>>,
 }
 
 /// This device as the meetings name it, and the speech it holds for the after-meeting pass.
@@ -126,6 +128,7 @@ impl ServerAppState {
             recording_device: None,
             settings_file: None,
             llm: None,
+            notes_folder: None,
         }
     }
 
@@ -274,6 +277,24 @@ impl ServerAppState {
         self
     }
 
+    /// Attaches the notes folder keeper, which the notes folder routes and rounds use.
+    ///
+    /// Side effects: None; without it those routes answer 503.
+    pub fn with_notes_folder(
+        mut self,
+        keeper: Arc<crate::notes_folder_commands::NotesFolderKeeper>,
+    ) -> Self {
+        self.notes_folder = Some(keeper);
+        self
+    }
+
+    /// The attached notes folder keeper, if any.
+    pub(super) fn notes_folder(
+        &self,
+    ) -> Option<Arc<crate::notes_folder_commands::NotesFolderKeeper>> {
+        self.notes_folder.clone()
+    }
+
     /// The attached language model services, if any.
     pub(super) fn llm(&self) -> Option<Arc<crate::llm_commands::LlmServices>> {
         self.llm.clone()
@@ -378,6 +399,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .merge(super::llm_routes::routes())
         .merge(super::edit_routes::routes())
         .merge(super::search_routes::routes())
+        .merge(super::notes_folder_routes::routes())
         // Innermost of the three layers, so CORS still answers preflights for allowed origins
         // and refusals are traced.
         .layer(middleware::from_fn(reject_cross_site_requests))

@@ -423,6 +423,7 @@ impl FfiRuntime {
         let runtime = Self::from_settings(&app_setting)?;
         // Its thread waits for this runtime's lock, which the caller releases after this call.
         crate::ffi_llm::start_auto_summaries(runtime.note_repository.device_id().clone());
+        crate::ffi_notes_folder::start_notes_folder();
         Ok(runtime)
     }
 
@@ -2470,6 +2471,46 @@ pub(crate) fn with_runtime_repositories<Output>(
         Ok(String::new())
     });
     output
+}
+
+/// Runs one notes folder round (#98) against the runtime's store, then tells paired devices
+/// about the meetings it changed.
+///
+/// Inputs: The folder and the round state. Outputs: What the round did, or why it failed (a
+/// runtime that can't be opened is a storage failure). Side effects: Those of
+/// `notes_folder::run_round`, holding the runtime lock for the round.
+pub(crate) fn run_notes_folder_round(
+    root: &std::path::Path,
+    state: &mut crate::notes_folder::FolderState,
+) -> Result<crate::notes_folder::RoundReport, crate::notes_folder::NotesFolderError> {
+    let mut output = None;
+    let _ = with_runtime_json(|runtime| {
+        let speaker_names =
+            crate::search_commands::speaker_names(runtime.voice_identity_manager.vector_database());
+        output = Some(speaker_names.map_err(Into::into).and_then(|speaker_names| {
+            let project_files = ProjectFiles::new(
+                runtime.attachment_directory.clone(),
+                runtime.note_repository.device_id().clone(),
+            );
+            crate::notes_folder::run_round(
+                &runtime.note_repository,
+                &project_files,
+                &speaker_names,
+                root,
+                state,
+                chrono::Utc::now(),
+            )
+        }));
+        if let (Some(Ok(report)), Some(p2p)) = (&output, &runtime.p2p) {
+            for meeting_id in &report.changed_meetings {
+                P2pControl::notify_local_change(p2p.as_ref(), meeting_id);
+            }
+        }
+        Ok(String::new())
+    });
+    output.unwrap_or(Err(crate::notes_folder::NotesFolderError::Storage(
+        crate::domain::errors::StorageError::Unavailable,
+    )))
 }
 
 /// Starts the Rust-owned recording session for a Flutter caller.

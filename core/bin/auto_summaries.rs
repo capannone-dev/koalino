@@ -217,7 +217,7 @@ impl AutoSummaryWake {
     }
 
     /// Waits for a wake-up or `timeout`, whichever is first.
-    fn wait(&self, timeout: Duration) {
+    pub(crate) fn wait(&self, timeout: Duration) {
         let guard = self.pending.lock().unwrap_or_else(PoisonError::into_inner);
         let (mut guard, _) = self
             .signal

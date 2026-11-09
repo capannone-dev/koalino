@@ -53,6 +53,9 @@ pub mod ffi_llm;
 /// The app's log level and log export over the C ABI (Issue #46).
 #[path = "bin/ffi_logging.rs"]
 pub mod ffi_logging;
+/// The notes folder's Settings and rounds over the C ABI (#98).
+#[path = "bin/ffi_notes_folder.rs"]
+pub mod ffi_notes_folder;
 /// Turns the Flutter Devices screen's JSON requests into P2P commands.
 #[path = "bin/ffi_p2p.rs"]
 pub mod ffi_p2p;
@@ -79,6 +82,18 @@ pub mod meeting_summaries;
 #[cfg(test)]
 #[path = "bin/meeting_summaries_tests.rs"]
 mod meeting_summaries_tests;
+/// Keeps the opt-in notes folder: plain files mirroring projects and meetings (#98).
+#[path = "bin/notes_folder.rs"]
+pub mod notes_folder;
+/// Runs the notes folder for the app and the daemon: settings commands and rounds (#98).
+#[path = "bin/notes_folder_commands.rs"]
+pub mod notes_folder_commands;
+#[cfg(test)]
+#[path = "bin/notes_folder_commands_tests.rs"]
+mod notes_folder_commands_tests;
+#[cfg(test)]
+#[path = "bin/notes_folder_tests.rs"]
+mod notes_folder_tests;
 #[path = "bin/p2p_composition.rs"]
 pub mod p2p_composition;
 #[path = "bin/p2p_network_routes.rs"]

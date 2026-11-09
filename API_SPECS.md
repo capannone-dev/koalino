@@ -241,6 +241,13 @@ and meeting summaries" below). Keys are write-only.
   The request is `{"query","scope"?,"project_id"?}`, and the answer is as for
   `GET /api/search` below. Extra error code: `runtime_unavailable`.
 
+### Notes folder C ABI (#98)
+
+- `char *note_taker_notes_folder(const char *request_json)` runs one command and returns
+  caller-freed JSON: `{"command":"get"}`, `{"command":"set","enabled","path"?}` (turning it on
+  writes the folder at once) or `{"command":"sync_now"}`. The answer is the status of
+  `GET /api/settings/notes-folder` below. Extra error code: `runtime_unavailable`.
+
 ### Projects C ABI (Issue #85)
 
 - `char *note_taker_project_command(const char *request_json)` runs one Projects command and
@@ -574,6 +581,23 @@ Errors are `{"ok":false,"error_code","error"}`: `400` `invalid_request`, `invali
 - Failures: `400` `invalid_request`, `empty`, `too_short` (under 2 characters) or `too_long`
   (over 200); `404` `project_not_found`; `500` `storage_failed`. Search reads sealed text in
   memory only; the query is never logged.
+
+### Notes folder (#98)
+
+- `GET /api/settings/notes-folder` answers the status: `{"ok":true,"enabled","path",
+  "suggested_path","last_round_at","last_error","written","imported"}`. `path` is null until a
+  folder is chosen; `suggested_path` is `~/NoteTaker` on the daemon's machine; `last_error` is the
+  last round's error code, or null.
+- `PUT /api/settings/notes-folder` `{"enabled", "path"?}` saves the setting. Without `path` the
+  saved or suggested folder is used. Turning it on writes the folder at once.
+- `POST /api/settings/notes-folder/sync` reads edits back and writes the folder now.
+- The tree: `<Project>/` holds the project's files; meetings are in
+  `<Project or "No project">/<YYYY-MM-DD HH-MM Title>/` (UTC) with `notes.md`, `summary.md` (when
+  there is one), a read-only `transcript.md` and `attachments/`. Edits to notes, summaries and
+  project files, and new files in a project folder or a meeting's `attachments/`, are taken in at
+  the next round (every 30 seconds).
+- Failures: `400` `invalid_request` or `invalid_folder` (not absolute, a filesystem root or the
+  home folder itself); `500` `folder_failed` or `storage_failed`; `503` `unavailable`.
 
 ### Telemetry
 

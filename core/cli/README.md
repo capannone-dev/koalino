@@ -49,6 +49,7 @@ note-taker glossary [show | set <term>... | add <term>... | remove <term>... | c
 note-taker keep-speech [days]
 note-taker summary <meeting-id> [--connection <id>] [--show]
 note-taker search <word>... [--projects | --project <id>]
+note-taker notes-folder [status | on [<path>] | off | sync]
 note-taker ai [list | add --label L --kind openai|anthropic --url U --model M [--context N] | remove <id> | default <id> | test <id> | auto on|off]
 note-taker [--log-level <level>] <command> ...
 ```
@@ -193,3 +194,8 @@ off.
 transcript passage, `summary`, `notes`, `title`, or a project file). It searches every meeting by
 default, every project with `--projects`, or one with `--project <id>`. Case and accents are
 ignored, and every word must be in the same passage.
+
+`notes-folder [status | on [<path>] | off | sync]` (#98) shows or changes the notes folder: plain
+files mirroring projects and meetings (see `bin/README.md`). `on` writes it at once, in `<path>`,
+the saved folder or `~/NoteTaker`; `sync` reads edits back and writes it now. The daemon keeps it
+up to date every 30 seconds while it runs.

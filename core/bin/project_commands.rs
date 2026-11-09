@@ -123,6 +123,21 @@ impl ProjectFiles {
             .import_project_note(repository, project_id, title, text)
     }
 
+    /// Attaches a file to a meeting (the notes folder's `attachments/`, #98); see
+    /// `AttachmentFileStore::import_file`.
+    ///
+    /// Outputs: The stored attachment, or a storage rejection (an unreadable or refused file).
+    /// Side effects: Copies the file into the attachment folder and writes one row.
+    pub fn attach_to_meeting<RepositoryPort: ProjectCommandRepository + ?Sized>(
+        &self,
+        repository: &RepositoryPort,
+        meeting_id: &MeetingId,
+        source_path: &Path,
+    ) -> Result<Attachment, StorageError> {
+        self.file_store
+            .import_file(repository, meeting_id, source_path, None)
+    }
+
     /// Reads a resource's text for search (#100): a text or Markdown file (its first 2 MiB), or
     /// an e-mail's subject, senders and body. Other files have no text here.
     ///

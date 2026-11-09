@@ -93,6 +93,7 @@ fn main() -> Result<()> {
                 &database_path,
             ))
             .with_deletion_hooks(Box::new(LocalMeetingFiles::for_database(&database_path)))
+            .with_notes_folder(&database_path, std::env::var_os("HOME").map(PathBuf::from))
             .with_llm_services(std::sync::Arc::new(
                 note_taker_core::llm_commands::LlmServices::for_database(&database_path),
             ))

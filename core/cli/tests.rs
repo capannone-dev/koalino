@@ -1816,3 +1816,56 @@ fn search_lists_where_the_words_were_said() {
         .unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(projects, "No results.", "the meeting is in no project");
 }
+
+/// Verifies `notes-folder` is off by default, writes the folder when turned on, and refuses a
+/// relative folder (#98).
+#[test]
+fn notes_folder_turns_on_and_writes_the_folder() {
+    let folder = std::env::temp_dir().join(format!("cli-notes-folder-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
+    let repository = SqliteNoteRepository::open_in_memory(
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .and_then(|repository| {
+        repository.with_document_codec(std::sync::Arc::new(
+            crate::application::meeting_document::AutomergeMeetingDocumentCodec,
+        ))
+    })
+    .unwrap_or_else(|error| panic!("in-memory SQLite must initialize: {error}"));
+    crate::application::meeting_crdt::MeetingCrdtService::new(&repository)
+        .create_meeting(&crate::domain::models::MeetingId::new("m-1"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let mut cli_service = CoreCliService::new(
+        NoRecordingControl,
+        repository,
+        InMemoryVoiceVectorDB::new(),
+        ExportWriter::new(default_exporters(), std::env::temp_dir()),
+    )
+    .with_project_files(
+        folder.join("attachments"),
+        crate::domain::models::DeviceId::new("device"),
+    )
+    .with_notes_folder(&folder.join("db.sqlite3"), None);
+    let run = |cli_service: &mut _, arguments: &[&str]| {
+        let parsed = Cli::try_parse_from(arguments).unwrap_or_else(|error| panic!("{error}"));
+        super::dispatch(parsed.command, cli_service)
+    };
+
+    let status =
+        run(&mut cli_service, &["cli", "notes-folder"]).unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(status, "Notes folder: off");
+    assert!(run(&mut cli_service, &["cli", "notes-folder", "on", "relative"]).is_err());
+    let root = folder.join("Notes");
+    let root_text = root.to_string_lossy().into_owned();
+    let on = run(&mut cli_service, &["cli", "notes-folder", "on", &root_text])
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(
+        on.starts_with(&format!("Notes folder: on, in {root_text}\nLast round at ")),
+        "{on}"
+    );
+    assert!(root.join("No project").is_dir());
+    let off = run(&mut cli_service, &["cli", "notes-folder", "off"])
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(off.starts_with("Notes folder: off"), "{off}");
+    drop(std::fs::remove_dir_all(folder));
+}
