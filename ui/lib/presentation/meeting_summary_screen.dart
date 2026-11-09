@@ -9,6 +9,7 @@ import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
+import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
 
 /// Finds the "Summarize with" selector in tests.
 const Key summaryConnectionSelectorKey = ValueKey<String>('summary-connection');
@@ -311,6 +312,15 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
     widget.controller.loadMeeting(widget.meetingId);
   }
 
+  /// Opens the Markdown editor on `text` and saves the result as the summary (#96).
+  Future<void> _editText(String text) => showMarkdownEditor(
+        context,
+        title: 'Summary',
+        initialText: text,
+        onSave: (String edited) =>
+            widget.controller.editSummary(widget.meetingId, edited),
+      );
+
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
@@ -410,15 +420,40 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                     Text(message, style: theme.textTheme.bodyMedium),
                   ],
                   const Divider(height: 32),
-                  if (summary == null)
-                    Text(state == null ? 'Loading…' : 'No summary yet.')
-                  else ...<Widget>[
-                    Text(
-                      'Written by ${summary.model} (${summary.connectionLabel}) on '
-                      '${formatMeetingCreatedAt(summary.createdAt)}'
-                      '${summary.edited ? ' · edited' : ''}',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  if (summary == null) ...<Widget>[
+                    Text(state == null ? 'Loading…' : 'No summary yet.'),
+                    if (state != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Write a summary'),
+                          onPressed: () => _editText(''),
+                        ),
+                      ),
+                  ] else ...<Widget>[
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: Text(
+                            summary.connectionLabel.isEmpty &&
+                                    summary.model.isEmpty
+                                ? 'Written by you on '
+                                    '${formatMeetingCreatedAt(summary.createdAt)}'
+                                : 'Written by ${summary.model} (${summary.connectionLabel}) on '
+                                    '${formatMeetingCreatedAt(summary.createdAt)}'
+                                    '${summary.edited ? ' · edited' : ''}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant),
+                          ),
+                        ),
+                        TextButton.icon(
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Edit summary'),
+                          onPressed:
+                              writing ? null : () => _editText(summary.text),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     SelectionArea(

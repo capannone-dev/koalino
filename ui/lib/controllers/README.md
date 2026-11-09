@@ -76,6 +76,11 @@ transcribed; the core stores and applies it.
 the meeting lists and the summary page. It lives as long as the app, so a summary keeps being
 written when its page is left; it ignores a second request for a meeting already being summarized
 and never lets a slower read replace a summary or prompt written meanwhile.
+`editSummary` saves the owner's own text through `MeetingEditBridge` (#96).
+
+`meeting_edit_controller.dart` (#96) holds each meeting's notes as last read or saved, and saves
+transcript corrections; `MeetingListController.replaceSegment` then shows the corrected (or
+removed) passage in the open meeting without reloading it.
 
 `transcription_language_controller.dart` holds the default language and the language of the next or
 current recording, and returns to the default when a recording ends (Issue #62).

@@ -5,7 +5,9 @@ import 'dart:io';
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
 import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
@@ -46,6 +48,7 @@ final class MeetingDetailScreen extends StatefulWidget {
     this.exportController,
     this.projectsController,
     this.summariesController,
+    this.editController,
     super.key,
   });
 
@@ -61,6 +64,9 @@ final class MeetingDetailScreen extends StatefulWidget {
 
   /// Adds the Summary button when given (#95).
   final SummariesController? summariesController;
+
+  /// Shows the notes and lets the owner correct the transcript when given (#96).
+  final MeetingEditController? editController;
 
   @override
   State<MeetingDetailScreen> createState() => _MeetingDetailScreenState();
@@ -134,7 +140,8 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
             ),
         ],
       ),
-      body: MeetingDetailView(controller: widget.controller),
+      body: MeetingDetailView(
+          controller: widget.controller, editController: widget.editController),
     );
   }
 }
@@ -309,10 +316,13 @@ final class NameSpeakersButton extends StatelessWidget {
 
 /// Renders the controller's selected meeting; shared by the phone route and the desktop pane.
 final class MeetingDetailView extends StatelessWidget {
-  /// Creates a view observing `controller`'s selection.
-  const MeetingDetailView({required this.controller, super.key});
+  /// Creates a view observing `controller`'s selection; `editController` adds the notes and
+  /// transcript corrections (#96).
+  const MeetingDetailView(
+      {required this.controller, this.editController, super.key});
 
   final MeetingListController controller;
+  final MeetingEditController? editController;
 
   /// Builds a loading indicator, an error, a selection prompt, or the meeting content.
   ///
@@ -331,8 +341,10 @@ final class MeetingDetailView extends StatelessWidget {
           return Center(child: Text(errorMessage));
         }
         return switch (controller.selectedMeeting) {
-          final MeetingDetail meeting =>
-            _MeetingContent(controller: controller, meeting: meeting),
+          final MeetingDetail meeting => _MeetingContent(
+              controller: controller,
+              meeting: meeting,
+              editController: editController),
           null => const Center(
               child: Text('Select a meeting to see its transcript.')),
         };
@@ -343,10 +355,12 @@ final class MeetingDetailView extends StatelessWidget {
 
 /// Lays out the title header (with its rename action), metadata, and transcript of a meeting.
 final class _MeetingContent extends StatelessWidget {
-  const _MeetingContent({required this.controller, required this.meeting});
+  const _MeetingContent(
+      {required this.controller, required this.meeting, this.editController});
 
   final MeetingListController controller;
   final MeetingDetail meeting;
+  final MeetingEditController? editController;
 
   @override
   Widget build(BuildContext context) {
@@ -466,7 +480,19 @@ final class _MeetingContent extends StatelessWidget {
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
             const Divider(height: 32),
+            if (editController
+                case final MeetingEditController edits) ...<Widget>[
+              MeetingNotesSection(
+                  controller: edits, meetingId: summary.meetingId),
+              const Divider(height: 32),
+            ],
             Text('Transcript', style: theme.textTheme.titleMedium),
+            if (editController != null && meeting.segments.isNotEmpty)
+              Text(
+                'Long-press or right-click a passage to correct it.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
             const SizedBox(height: 12),
             ..._transcriptChildren(theme),
           ],
@@ -485,7 +511,16 @@ final class _MeetingContent extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 16),
               child: switch (entry) {
                 SegmentEntry(:final MeetingTranscriptSegment segment) =>
-                  _segmentBlock(theme, segment),
+                  switch (editController) {
+                    final MeetingEditController edits => EditableSegment(
+                        controller: edits,
+                        meetings: controller,
+                        meetingId: meeting.summary.meetingId,
+                        segment: segment,
+                        child: _segmentBlock(theme, segment),
+                      ),
+                    null => _segmentBlock(theme, segment),
+                  },
                 AttachmentEntry(:final MeetingAttachment attachment) =>
                   MeetingAttachmentView(attachment: attachment),
               },

@@ -12,7 +12,8 @@ final class FakeLlmCore {
   /// Answers that arrive only when the test completes them, keyed like `answers`; used once.
   final Map<String, Completer<String>> pending = <String, Completer<String>>{};
 
-  /// Queues an answer (a JSON-able map) for `key`: the function, or `command:<name>`.
+  /// Queues an answer (a JSON-able map) for `key`: the function, `command:<name>` for an AI
+  /// command, or `edit:<name>` for a meeting edit (#96).
   void answer(String key, Object? json) =>
       answers.putIfAbsent(key, () => <Object?>[]).add(json);
 
@@ -22,6 +23,9 @@ final class FakeLlmCore {
     if (function == 'note_taker_llm_command') {
       key =
           'command:${(jsonDecode(arguments.single!) as Map<String, Object?>)['command']}';
+    } else if (function == 'note_taker_meeting_edit') {
+      key =
+          'edit:${(jsonDecode(arguments.single!) as Map<String, Object?>)['command']}';
     }
     if (pending.remove(key) case final Completer<String> later) {
       return later.future;

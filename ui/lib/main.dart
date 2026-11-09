@@ -9,6 +9,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
@@ -274,6 +275,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
             _VoiceGalleryDestination(meetingId: meetingId),
         projectsController: _projectsController,
         summariesController: _summariesController,
+        editController: _meetingEditController,
       );
     }
     return MeetingListScreen(
@@ -285,6 +287,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
           _VoiceGalleryDestination(meetingId: meetingId),
       projectsController: _projectsController,
       summariesController: _summariesController,
+      editController: _meetingEditController,
     );
   }
 }
@@ -293,6 +296,9 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
 /// summary keeps being written when its page is left, so this lives as long as the app.
 final SummariesController _summariesController =
     SummariesController(bridge: const LlmBridge());
+
+/// The owner's meeting notes and transcript corrections (#96), shared by every meeting view.
+final MeetingEditController _meetingEditController = MeetingEditController();
 
 /// Projects state (Issue #85), shared by the Projects tab, meeting pages and files shared from
 /// other apps; it holds no resources, so it lives as long as the app.

@@ -1,5 +1,6 @@
 // Verifies the meeting summary page and menu (#95): writing a summary with a chosen connection,
-// its progress and report, a failure, and the meeting's own prompt.
+// its progress and report, a failure, the meeting's own prompt, and a summary written by hand
+// (#96).
 
 import 'dart:async';
 
@@ -8,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/infrastructure/meeting_edit_bridge.dart';
+import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
 import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
 
 import 'fake_llm_core.dart';
@@ -18,7 +21,9 @@ void main() {
 
   setUp(() {
     core = FakeLlmCore();
-    controller = SummariesController(bridge: LlmBridge(call: core.call));
+    controller = SummariesController(
+        bridge: LlmBridge(call: core.call),
+        editBridge: MeetingEditBridge(call: core.call));
   });
 
   Widget page() => MaterialApp(
@@ -56,6 +61,37 @@ void main() {
         find.textContaining('Written by llama3.1:8b (Office)'), findsOneWidget);
     expect(find.text('Summarize again'), findsOneWidget);
     expect(core.calls.last.$2, <String?>['m-1', 'c-1']);
+  });
+
+  testWidgets('a summary written by hand is saved and shown as yours',
+      (WidgetTester tester) async {
+    core.answer('command:settings', settings());
+    core.answer('note_taker_get_meeting_summary',
+        <String, Object?>{'ok': true, 'summary': null, 'meeting_prompt': null});
+    core.answer('edit:edit_summary', <String, Object?>{
+      'ok': true,
+      'summary': <String, Object?>{
+        ...summary,
+        'text': 'Decisions: none.',
+        'connection_label': '',
+        'model': '',
+        'edited': true,
+      },
+    });
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Write a summary'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(markdownEditorFieldKey), 'Decisions: none.');
+    await tester.tap(find.byTooltip('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Summary saved.'), findsOneWidget);
+    expect(find.text('Decisions: none.'), findsOneWidget);
+    expect(find.textContaining('Written by you'), findsOneWidget);
+    expect(find.text('Edit summary'), findsOneWidget);
   });
 
   testWidgets('a failure keeps the page and explains it',

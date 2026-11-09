@@ -4,13 +4,20 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/infrastructure/meeting_edit_bridge.dart';
 
 /// AI settings and each meeting's summary, as last read from the core.
 final class SummariesController extends ChangeNotifier {
-  /// Creates the controller. Side effects: None until a method is called.
-  SummariesController({required LlmBridge bridge}) : _bridge = bridge;
+  /// Creates the controller; `editBridge` saves the owner's own summary text (#96).
+  /// Side effects: None until a method is called.
+  SummariesController({
+    required LlmBridge bridge,
+    MeetingEditBridge editBridge = const MeetingEditBridge(),
+  })  : _bridge = bridge,
+        _editBridge = editBridge;
 
   final LlmBridge _bridge;
+  final MeetingEditBridge _editBridge;
   LlmSettings? _settings;
   String? _message;
   bool _isBusy = false;
@@ -189,6 +196,27 @@ final class SummariesController extends ChangeNotifier {
     }
     _notify();
     return saved;
+  }
+
+  /// Replaces the summary's text with the owner's, or writes one by hand when there is none (#96).
+  ///
+  /// Outputs: `null` once saved, or why not. Side effects: Writes the meeting document; the
+  /// summary is marked edited, so automatic summaries never replace it.
+  Future<String?> editSummary(String meetingId, String text) async {
+    try {
+      final StoredSummary saved =
+          await _editBridge.editSummary(meetingId, text);
+      _bump(meetingId);
+      _meetings[meetingId] = MeetingSummaryState(
+        summary: saved,
+        meetingPrompt: _meetings[meetingId]?.meetingPrompt,
+      );
+      _meetingMessages[meetingId] = 'Summary saved.';
+      _notify();
+      return null;
+    } on MeetingEditException catch (error) {
+      return error.message;
+    }
   }
 
   /// Runs one settings change, keeping its confirmation or failure in `message`.

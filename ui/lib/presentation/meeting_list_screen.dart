@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
+import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
@@ -39,6 +40,7 @@ final class MeetingListScreen extends StatefulWidget {
     this.exportController,
     this.projectsController,
     this.summariesController,
+    this.editController,
     super.key,
   });
 
@@ -53,6 +55,9 @@ final class MeetingListScreen extends StatefulWidget {
 
   /// Adds a summary button and menu to each meeting, and to the open one, when given (#95).
   final SummariesController? summariesController;
+
+  /// Shows the open meeting's notes and lets the owner correct its transcript when given (#96).
+  final MeetingEditController? editController;
 
   @override
   State<MeetingListScreen> createState() => _MeetingListScreenState();
@@ -82,6 +87,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         exportController: widget.exportController,
         projectsController: widget.projectsController,
         summariesController: widget.summariesController,
+        editController: widget.editController,
       ),
     ));
   }
@@ -202,8 +208,9 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                     SizedBox(width: _listPaneWidth, child: meetingList),
                     const VerticalDivider(width: 1),
                     Expanded(
-                        child:
-                            MeetingDetailView(controller: widget.controller)),
+                        child: MeetingDetailView(
+                            controller: widget.controller,
+                            editController: widget.editController)),
                   ],
                 )
               : meetingList,

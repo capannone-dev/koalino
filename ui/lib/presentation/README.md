@@ -113,6 +113,13 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   project's meetings, and an open meeting's app bar) opens it and spins while a summary is
   written; `showMeetingSummaryMenu` (row long press or right-click) offers Summarize with ▸ each
   connection, the meeting's prompt, and a return to the Settings prompt.
+  The page also offers Edit summary, or Write a summary when there is none (#96); a summary
+  written by hand reads "Written by you".
+- `meeting_edit_widgets.dart` (#96) holds the owner's editing tools: `MarkdownEditorScreen`
+  (opened by `showMarkdownEditor`, with Edit / Preview and a Save action), `MeetingNotesSection`
+  (the Notes section of an open meeting, read again each time a meeting is shown), and
+  `EditableSegment`, which opens a dialog to correct a transcript passage on a long press, a
+  right-click or the screen reader's "Edit text" action; leaving the text empty removes it.
 - `ai_settings_screen.dart` (#95) is Settings → AI connections: add (from a preset), edit, test,
   remove and choose the default connection; the summary prompt template with its placeholders;
   and automatic summaries (#101). Keys are typed in a hidden field and never shown again.

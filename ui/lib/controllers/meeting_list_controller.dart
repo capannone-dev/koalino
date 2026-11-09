@@ -124,8 +124,46 @@ final class MeetingListController extends ChangeNotifier {
         summary: _retitled(selectedMeeting.summary, trimmedTitle),
         transcript: selectedMeeting.transcript,
         segments: selectedMeeting.segments,
+        attachments: selectedMeeting.attachments,
       );
     }
+    notifyListeners();
+  }
+
+  /// Shows the owner's correction of one segment in the open meeting without reloading it (#96).
+  ///
+  /// Inputs: The meeting, the segment as shown (found by its start and end), and its new text as
+  /// the core stored it, or null when the edit removed the segment.
+  /// Outputs: None. Side effects: Replaces the open detail and notifies listeners; does nothing
+  /// when another meeting is open. The corrected segment keeps its speaker and marks, except the
+  /// unclear-word marks, which described the old words.
+  void replaceSegment(
+      String meetingId, MeetingTranscriptSegment original, String? newText) {
+    final MeetingDetail? open = _selectedMeeting;
+    if (open == null || open.summary.meetingId != meetingId) {
+      return;
+    }
+    final List<MeetingTranscriptSegment> segments = <MeetingTranscriptSegment>[
+      for (final MeetingTranscriptSegment segment in open.segments)
+        if (segment.startTimeMs != original.startTimeMs ||
+            segment.endTimeMs != original.endTimeMs)
+          segment
+        else if (newText != null)
+          MeetingTranscriptSegment(
+            startTimeMs: segment.startTimeMs,
+            endTimeMs: segment.endTimeMs,
+            speaker: segment.speaker,
+            text: newText,
+            overlappingSpeech: segment.overlappingSpeech,
+            uncertainSpeaker: segment.uncertainSpeaker,
+          ),
+    ];
+    _selectedMeeting = MeetingDetail(
+      summary: open.summary,
+      transcript: open.transcript,
+      segments: segments,
+      attachments: open.attachments,
+    );
     notifyListeners();
   }
 

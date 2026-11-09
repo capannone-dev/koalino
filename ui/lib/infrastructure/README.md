@@ -124,6 +124,11 @@ and `note_taker_set_meeting_summary_prompt` on a background isolate (`callRustLl
 summary waits on the model for minutes; tests pass a fake call. API keys are sent once and never
 read back.
 
+`meeting_edit_bridge.dart` (#96) is `MeetingEditBridge`: the meeting's notes, the summary's text
+and single transcript segments, through `note_taker_meeting_edit` (one JSON request per call, on
+a background isolate through `callRustLlm`). `MeetingEditException` words the core's `error_code`
+(`empty`, `too_long`, `segment_not_found`, ...). Note text is never logged.
+
 `incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Note Taker:
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and
 `IncomingShareBridge` (`arrivals`, `takePending`, `release`). `AndroidIncomingShareBridge` talks
