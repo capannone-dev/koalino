@@ -3,8 +3,9 @@
 //! The reader must never block on transcription, so it pushes decoded events here and returns to
 //! the socket immediately. Audio is bounded by duration (`NOTE_TAKER_TEAMS_BRIDGE_BUFFER_SECONDS`,
 //! summed across participants) and slides by count; on overflow the oldest entries of that kind
-//! are dropped and a rate-limited warning is logged. Meeting starts are never dropped, and events
-//! keep their arrival order so audio always follows the metadata it belongs to.
+//! are dropped and a rate-limited warning is logged. Meeting starts, meeting ends and documents
+//! are never dropped, and events keep their arrival order so audio always follows the metadata
+//! it belongs to.
 
 use std::{
     collections::VecDeque,
@@ -90,7 +91,10 @@ impl BridgeBuffer {
         match &event {
             BridgeEvent::Audio(audio) => state.buffered_audio_ms += audio.duration_ms(),
             BridgeEvent::Slide(_) => state.buffered_slides += 1,
-            BridgeEvent::MeetingStarted(_) | BridgeEvent::IgnoredVideo => {}
+            BridgeEvent::MeetingStarted(_)
+            | BridgeEvent::IgnoredVideo
+            | BridgeEvent::Document(_)
+            | BridgeEvent::MeetingEnded(_) => {}
         }
         state.queued_events.push_back(event);
         let outcome = PushOutcome {
@@ -120,7 +124,10 @@ impl BridgeBuffer {
                         state.buffered_audio_ms -= audio.duration_ms();
                     }
                     BridgeEvent::Slide(_) => state.buffered_slides -= 1,
-                    BridgeEvent::MeetingStarted(_) | BridgeEvent::IgnoredVideo => {}
+                    BridgeEvent::MeetingStarted(_)
+                    | BridgeEvent::IgnoredVideo
+                    | BridgeEvent::Document(_)
+                    | BridgeEvent::MeetingEnded(_) => {}
                 }
                 return Some(event);
             }

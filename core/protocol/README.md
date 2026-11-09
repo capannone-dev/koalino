@@ -1,6 +1,7 @@
 # Wire protocols (`core/protocol`)
 
-Schemas for processes that talk to the Rust core from outside, starting with the Teams bot.
+Schemas for processes that talk to the Rust core from outside: the Teams bot, and the browser
+extension through its native messaging host (`browser-extension/`, Issue #102).
 The `.proto` files are the source of truth. `generated/` holds the Rust code rust-protobuf
 3.7.2 produces from them; it is checked in, and the `generated_code_tests` test fails if it is
 stale. To regenerate after editing a schema, run
@@ -40,8 +41,10 @@ send the auth frame; the server answers `{"auth":"ok"}`.
 | Message | Fields | Rules |
 | --- | --- | --- |
 | `MeetingMetadata` | `meeting_id`, `meeting_title`, `participants[]`, `start_time_ms` | Must come before any media. `meeting_id` must not be empty. `start_time_ms` is Unix epoch milliseconds. The title is stored by the bot only and never logged. |
-| `AudioChunk` | `participant`, `audio_data`, `timestamp_ms`, `sample_rate` | One participant's isolated audio: 16-bit little-endian mono PCM. `sample_rate` must be `16000`. Contains whole samples only (non-empty, even byte count). Length 1–30 s; chunks over 30 s are rejected. `timestamp_ms` is relative to `start_time_ms`. |
+| `AudioChunk` | `participant`, `audio_data`, `timestamp_ms`, `sample_rate`, `track` | One track's audio. `track` is `PARTICIPANT` (default: one participant's isolated audio, or the owner's own microphone in the browser) or `MIXED_REMOTE` (every remote participant mixed, as a browser receives a call: its voices are matched against the gallery from the first chunk, and `participant` is never credited or mapped). Format: 16-bit little-endian mono PCM. `sample_rate` must be `16000`. Contains whole samples only (non-empty, even byte count). Length 1–30 s; chunks over 30 s are rejected. `timestamp_ms` is relative to `start_time_ms`. |
 | `VideoFrame` | `image_data`, `timestamp_ms`, `source` | `source` is `screen_share` (PNG or JPEG, stored as a slide attachment) or `camera` (accepted, not stored). |
+| `MeetingDocument` | `kind`, `media_type`, `content`, `timestamp_ms`, `meeting_id` | A text document stored as a sealed attachment of the meeting. `kind` is `teams_transcript` (published by Teams after the meeting), `teams_live_transcript` (the transcript panel read during the meeting) or `teams_captions` (live captions). `media_type` is `text/vtt` or `text/plain`. `content` is non-empty UTF-8 of at most 4 MiB. An empty `meeting_id` means the active meeting; a Teams meeting ID names an earlier meeting directly, so a transcript published after the meeting does not reopen it. |
+| `MeetingEnded` | `meeting_id` | The active meeting is over: the core closes it and its after-meeting pass runs. Must name the active meeting. |
 | `ExternalParticipant` | `external_id`, `display_name`, `email` | `external_id` is the stable Teams user ID, used as the identity-mapping key. An empty `display_name` falls back to the ID. An empty `email` means none. |
 
 ### Error handling and reconnection

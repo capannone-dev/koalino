@@ -1,4 +1,5 @@
-// Wire protocol between the C# Teams bot and the local Rust app (Issue #33).
+// Wire protocol between the local Rust app and the processes that bring it online meetings: the C#
+// Teams bot (Issue #33) and the browser extension's native messaging host (Issue #102).
 //
 // Transport: one WebSocket connection to ws://127.0.0.1:<port> (default 8765). When a shared
 // secret is configured, the first frame is the text frame {"auth":"<secret>"}; every other frame
@@ -14,13 +15,40 @@ message ExternalParticipant {
   string email = 3;  // Optional; empty when unknown. Never logged.
 }
 
-// One participant's isolated (unmixed) audio. The bot SHOULD send 1-30 s per chunk; chunks
-// longer than 30 s are rejected.
+// What an audio track carries (Issue #102). The bot only sends PARTICIPANT tracks.
+enum TrackKind {
+  // One participant's isolated audio (the bot), or the owner's own microphone (the browser).
+  PARTICIPANT = 0;
+  // Every remote participant mixed into one track, as a browser receives a call. Its voices are
+  // told apart and matched against the voice gallery; it is never credited to `participant`.
+  MIXED_REMOTE = 1;
+}
+
+// One track's audio. Senders SHOULD send 1-30 s per chunk; chunks longer than 30 s are rejected.
 message AudioChunk {
   ExternalParticipant participant = 1;
   bytes audio_data = 2;  // PCM 16kHz mono, signed 16-bit little-endian
   uint64 timestamp_ms = 3;  // Chunk start, relative to MeetingMetadata.start_time_ms
   uint32 sample_rate = 4;  // Must be 16000
+  TrackKind track = 5;  // PARTICIPANT when absent
+}
+
+// A text document produced by the meeting service, stored as an attachment of the meeting
+// (Issue #102): the Teams transcript downloaded after the meeting, the live transcript panel, or
+// the live captions.
+message MeetingDocument {
+  string kind = 1;  // "teams_transcript", "teams_live_transcript" or "teams_captions"
+  string media_type = 2;  // "text/vtt" or "text/plain"
+  bytes content = 3;  // UTF-8 text, at most 4 MiB
+  uint64 timestamp_ms = 4;  // Where it belongs in the meeting (normally 0)
+  // The Teams meeting ID it belongs to; empty means the active meeting. Set it for a transcript
+  // published after the meeting ended, so the finished meeting is not reopened.
+  string meeting_id = 5;
+}
+
+// The meeting is over: the receiver closes it, so the after-meeting pass can run.
+message MeetingEnded {
+  string meeting_id = 1;  // Must match the active MeetingMetadata.meeting_id
 }
 
 // A video frame; only "screen_share" frames become slide captures.
@@ -44,5 +72,7 @@ message TeamsBridgeMessage {
     AudioChunk audio = 1;
     VideoFrame video = 2;
     MeetingMetadata metadata = 3;
+    MeetingDocument document = 4;
+    MeetingEnded ended = 5;
   }
 }

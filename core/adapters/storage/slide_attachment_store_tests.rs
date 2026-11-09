@@ -12,7 +12,10 @@ use crate::{
         sqlite_adapter::SqliteNoteRepository,
     },
     application::{crypto::voice_encryptor::ephemeral_cipher, meeting_crdt::MeetingCrdtService},
-    domain::models::{DeviceId, MeetingId, SlideCapture},
+    domain::models::{
+        DeviceId, ExternalMeetingDocument, MeetingDocumentKind, MeetingDocumentMediaType,
+        MeetingId, SlideCapture,
+    },
     ports::{
         external_bridge::AttachmentWorkflow, screen_share::MeetingSlideSink,
         storage::AttachmentRepository,
@@ -207,4 +210,66 @@ fn meeting_ids_that_are_not_plain_folder_names_are_rejected() {
         assert!(outcome.is_err(), "{unsafe_id:?} should be rejected");
     }
     assert!(!slide_directory.0.exists(), "no folder may be created");
+}
+
+/// Verifies a Teams transcript is stored sealed as a WebVTT attachment of its meeting (#102).
+#[test]
+fn meeting_document_is_saved_and_linked_to_the_meeting() {
+    let slide_directory = TemporaryDirectory::new();
+    let meeting_uuid = Uuid::new_v4();
+    let store = slide_store(&slide_directory, repository_with_meeting(meeting_uuid));
+    let text = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Ada>Hello</v>\n";
+    store
+        .handle_meeting_document(ExternalMeetingDocument::new(
+            meeting_uuid,
+            MeetingDocumentKind::TeamsTranscript,
+            MeetingDocumentMediaType::WebVtt,
+            text.to_owned(),
+            0,
+        ))
+        .unwrap_or_else(|error| panic!("document should be stored: {error}"));
+
+    let attachments = store
+        .attachment_repository()
+        .get_attachments_for_meeting(&MeetingId::new(meeting_uuid.to_string()))
+        .unwrap_or_else(|error| panic!("attachments should load: {error}"));
+    assert_eq!(attachments.len(), 1);
+    assert_eq!(attachments[0].mime_type(), "text/vtt");
+    let saved_path = Path::new(attachments[0].file_path());
+    let file_name = saved_path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    assert!(file_name.starts_with("teams-transcript-"), "{file_name}");
+    assert!(file_name.ends_with(".vtt"), "{file_name}");
+    assert!(
+        is_sealed(saved_path).unwrap_or(false),
+        "documents are sealed"
+    );
+    let saved_bytes = store
+        .attachment_repository()
+        .sealed_files()
+        .read_all(saved_path)
+        .unwrap_or_else(|error| panic!("document should be readable: {error}"));
+    assert_eq!(saved_bytes.as_slice(), text.as_bytes());
+}
+
+/// Verifies a document for an unknown meeting is rejected without leaving a file.
+#[test]
+fn document_for_an_unknown_meeting_is_rejected_without_leaving_a_file() {
+    let slide_directory = TemporaryDirectory::new();
+    let store = slide_store(&slide_directory, repository_with_meeting(Uuid::new_v4()));
+    let unknown_meeting = Uuid::new_v4();
+    let outcome = store.handle_meeting_document(ExternalMeetingDocument::new(
+        unknown_meeting,
+        MeetingDocumentKind::TeamsCaptions,
+        MeetingDocumentMediaType::PlainText,
+        "captions".to_owned(),
+        0,
+    ));
+    assert!(outcome.is_err());
+    let leftover = std::fs::read_dir(slide_directory.0.join(unknown_meeting.to_string()))
+        .map(|entries| entries.count())
+        .unwrap_or(0);
+    assert_eq!(leftover, 0);
 }

@@ -36,7 +36,8 @@ use crate::{
         storage::{AttachmentRepository, NoteRepository},
     },
     protocol::teams_bridge::{
-        AudioChunk, ExternalParticipant, MeetingMetadata, TeamsBridgeMessage, VideoFrame,
+        AudioChunk, ExternalParticipant, MeetingDocument, MeetingEnded, MeetingMetadata,
+        TeamsBridgeMessage, VideoFrame,
     },
 };
 
@@ -202,8 +203,8 @@ fn participant(external_id: &str, display_name: &str) -> ExternalParticipant {
     participant
 }
 
-/// Verifies five bot audio chunks become five Known segments, the slide is attached, and no
-/// raw audio is left behind.
+/// Verifies five bot audio chunks become five Known segments, the slide and a captions document
+/// are attached, the meeting end closes the meeting, and no raw audio is left behind.
 #[tokio::test]
 async fn five_audio_chunks_are_processed_by_the_meeting_session() {
     let installation = TemporaryInstallation::new();
@@ -297,6 +298,19 @@ async fn five_audio_chunks_are_processed_by_the_meeting_session() {
     let mut video_message = TeamsBridgeMessage::new();
     video_message.set_video(video);
     send_frame(&mut bot, frame(&video_message)).await;
+    // The browser extension's captions and meeting end (#102).
+    let mut document = MeetingDocument::new();
+    document.kind = "teams_captions".to_owned();
+    document.media_type = "text/vtt".to_owned();
+    document.content = b"WEBVTT\n".to_vec();
+    let mut document_message = TeamsBridgeMessage::new();
+    document_message.set_document(document);
+    send_frame(&mut bot, frame(&document_message)).await;
+    let mut ended = MeetingEnded::new();
+    ended.meeting_id = "19:integration@thread.v2".to_owned();
+    let mut ended_message = TeamsBridgeMessage::new();
+    ended_message.set_ended(ended);
+    send_frame(&mut bot, frame(&ended_message)).await;
 
     let meeting_id = MeetingId::new(local_meeting_uuid("19:integration@thread.v2").to_string());
     let mut stored_segments = Vec::new();
@@ -333,6 +347,8 @@ async fn five_audio_chunks_are_processed_by_the_meeting_session() {
     assert_ne!(identities[0], identities[1]);
     assert_eq!(statistics.processed_audio_chunks, 5);
     assert_eq!(statistics.stored_slides, 1);
+    assert_eq!(statistics.stored_documents, 1);
+    assert_eq!(statistics.meetings_ended, 1);
     assert!(
         chunk_audio_store.is_empty(),
         "raw audio must not outlive transcription"
@@ -341,7 +357,12 @@ async fn five_audio_chunks_are_processed_by_the_meeting_session() {
         .note_repository()
         .get_attachments_for_meeting(&meeting_id)
         .unwrap_or_else(|error| panic!("attachments should load: {error}"));
-    assert_eq!(attachments.len(), 1);
+    assert_eq!(attachments.len(), 2, "the slide and the captions");
+    assert!(
+        attachments
+            .iter()
+            .any(|attachment| attachment.mime_type() == "text/vtt")
+    );
     let stored_title = installation
         .note_repository()
         .load_meeting_metadata(&meeting_id)

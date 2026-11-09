@@ -1,9 +1,10 @@
 //! Decodes one Teams bridge WebSocket frame (a serialized `TeamsBridgeMessage`) into domain values.
 //!
 //! This is the only place that touches the generated Protobuf types; everything downstream sees
-//! `ExternalMediaChunk`, `SlideCapture`, and `BridgeMeeting`. Validation follows the protocol in
+//! `ExternalMediaChunk`, `SlideCapture`, `ExternalMeetingDocument`, and `BridgeMeeting`. Validation follows the protocol in
 //! `core/protocol/README.md`: audio is 16 kHz mono 16-bit PCM of at most 30 s, media requires a
-//! preceding `MeetingMetadata`, and only screen-share frames become slides. Error reasons never
+//! preceding `MeetingMetadata`, only screen-share frames become slides, documents are UTF-8 text
+//! of a known kind of at most 4 MiB, and a meeting end must name the active meeting. Error reasons never
 //! contain media bytes, e-mail addresses, or secrets.
 
 use protobuf::Message;
@@ -12,9 +13,12 @@ use uuid::Uuid;
 use crate::{
     domain::{
         errors::ExternalBridgeError,
-        models::{ExternalMediaChunk, ExternalParticipant, MeetingId, SlideCapture},
+        models::{
+            ExternalMediaChunk, ExternalMeetingDocument, ExternalParticipant, ExternalTrackKind,
+            MeetingDocumentKind, MeetingDocumentMediaType, MeetingId, SlideCapture,
+        },
     },
-    protocol::teams_bridge::{self, TeamsBridgeMessage, teams_bridge_message::Payload},
+    protocol::teams_bridge::{self, TeamsBridgeMessage, TrackKind, teams_bridge_message::Payload},
 };
 
 /// The only accepted audio sample rate.
@@ -23,6 +27,8 @@ pub const REQUIRED_SAMPLE_RATE_HZ: u32 = 16_000;
 pub const MAXIMUM_AUDIO_CHUNK_MS: u64 = 30_000;
 /// Bytes of 16 kHz mono 16-bit PCM per millisecond.
 pub const AUDIO_BYTES_PER_MS: u64 = 32;
+/// Largest accepted meeting document (a long meeting's transcript is well under 1 MiB).
+pub const MAXIMUM_DOCUMENT_BYTES: usize = 4 * 1024 * 1024;
 /// Namespace for deriving local meeting UUIDs from Teams meeting IDs (UUIDv5).
 const TEAMS_MEETING_NAMESPACE: Uuid = Uuid::from_u128(0x6e6f_7465_7461_6b65_7274_6561_6d73_0001);
 /// The video source that carries slides.
@@ -118,6 +124,10 @@ pub enum BridgeEvent {
     Slide(SlideCapture),
     /// A camera frame, which is not stored.
     IgnoredVideo,
+    /// A text document of the active meeting (Issue #102).
+    Document(ExternalMeetingDocument),
+    /// The active meeting is over (its local UUID).
+    MeetingEnded(Uuid),
 }
 
 /// Derives the stable local meeting UUID of a Teams meeting.
@@ -148,6 +158,20 @@ pub fn decode_frame(
         }
         Some(Payload::Video(video)) => {
             decode_video(video, require_meeting(active_meeting, "video")?)
+        }
+        Some(Payload::Document(document)) => {
+            let meeting_uuid = match document.meeting_id.trim() {
+                "" => require_meeting(active_meeting, "document")?,
+                teams_meeting_id => local_meeting_uuid(teams_meeting_id),
+            };
+            decode_document(document, meeting_uuid)
+        }
+        Some(Payload::Ended(ended)) => {
+            let active_meeting = require_meeting(active_meeting, "meeting end")?;
+            if local_meeting_uuid(ended.meeting_id.trim()) != active_meeting {
+                return Err(invalid("meeting end names a meeting that is not active"));
+            }
+            Ok(BridgeEvent::MeetingEnded(active_meeting))
         }
         None => Err(invalid("frame carries no payload")),
     }
@@ -212,6 +236,11 @@ fn decode_audio(
     if audio.audio_data.len() as u64 > MAXIMUM_AUDIO_CHUNK_MS * AUDIO_BYTES_PER_MS {
         return Err(invalid("audio chunks must not exceed 30 s"));
     }
+    let track_kind = match audio.track.enum_value() {
+        Ok(TrackKind::PARTICIPANT) => ExternalTrackKind::Participant,
+        Ok(TrackKind::MIXED_REMOTE) => ExternalTrackKind::MixedRemote,
+        Err(_) => return Err(invalid("audio has an unknown track kind")),
+    };
     let participant = audio
         .participant
         .into_option()
@@ -221,9 +250,43 @@ fn decode_audio(
             decode_participant(participant)?,
             audio.audio_data,
             audio.timestamp_ms,
-        ),
+        )
+        .with_track_kind(track_kind),
         meeting_uuid,
     }))
+}
+
+/// Converts and validates a meeting document.
+fn decode_document(
+    document: teams_bridge::MeetingDocument,
+    meeting_uuid: Uuid,
+) -> Result<BridgeEvent, ExternalBridgeError> {
+    let kind = match document.kind.as_str() {
+        "teams_transcript" => MeetingDocumentKind::TeamsTranscript,
+        "teams_live_transcript" => MeetingDocumentKind::TeamsLiveTranscript,
+        "teams_captions" => MeetingDocumentKind::TeamsCaptions,
+        _ => return Err(invalid("document kind is not supported")),
+    };
+    let media_type = match document.media_type.as_str() {
+        "text/vtt" => MeetingDocumentMediaType::WebVtt,
+        "text/plain" => MeetingDocumentMediaType::PlainText,
+        _ => return Err(invalid("document must be text/vtt or text/plain")),
+    };
+    if document.content.is_empty() {
+        return Err(invalid("document is empty"));
+    }
+    if document.content.len() > MAXIMUM_DOCUMENT_BYTES {
+        return Err(invalid("document exceeds 4 MiB"));
+    }
+    let text =
+        String::from_utf8(document.content).map_err(|_| invalid("document is not UTF-8 text"))?;
+    Ok(BridgeEvent::Document(ExternalMeetingDocument::new(
+        meeting_uuid,
+        kind,
+        media_type,
+        text,
+        document.timestamp_ms,
+    )))
 }
 
 /// Converts a video frame; only screen shares become slides.

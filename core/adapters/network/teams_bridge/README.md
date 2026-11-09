@@ -1,15 +1,18 @@
 # Teams bridge adapter (`core/adapters/network/teams_bridge`)
 
-Receives a Teams bot's isolated per-participant audio, screen-share frames, and meeting metadata
+Receives a Teams bot's isolated per-participant audio (or, from the browser extension's native
+messaging host, the owner's microphone and the mixed remote audio), screen-share frames, meeting
+documents (Teams transcript, captions), meeting ends, and meeting metadata
 over a localhost WebSocket using the Protobuf protocol in `core/protocol/README.md`, and hands
-them over as domain values (`ExternalMediaChunk`, `SlideCapture`, `BridgeMeeting`). The bot is
+them over as domain values (`ExternalMediaChunk`, `SlideCapture`, `ExternalMeetingDocument`,
+`BridgeMeeting`). The bot is
 a separate process: Teams SDKs and media never enter the core. The composition root that
 connects this adapter to the pipeline is `core/bin/teams_bridge_composition.rs`.
 
 | File | Purpose |
 | --- | --- |
 | `message_decoder.rs` | The only user of the generated Protobuf types. Validates frames (16 kHz PCM, 1–30 s, metadata before media, screen share vs. camera) and derives the local meeting UUID (v5 of the Teams meeting ID). |
-| `bridge_buffer.rs` | Bounded queue between the reader and the pump. Holds `BUFFER_SECONDS` of audio and 16 slides, drops the oldest when full with a rate-limited warning, and never blocks the producer. |
+| `bridge_buffer.rs` | Bounded queue between the reader and the pump. Holds `BUFFER_SECONDS` of audio and 16 slides, drops the oldest when full with a rate-limited warning, and never blocks the producer. Meeting starts, ends and documents are never dropped. |
 | `teams_websocket_server.rs` | `tokio-tungstenite` server on 127.0.0.1. Refuses `Origin` headers, handles the optional shared-secret handshake (1008 on failure), keeps one active bot, and logs connects, disconnects, and reconnects. |
 | `log_capture.rs` | Test-only capture of `tracing` output. |
 | `*_tests.rs` | TDD specs. The server tests drive a mock `tokio-tungstenite` bot sending Protobuf frames; the decoder tests use golden `protoc` fixtures. |

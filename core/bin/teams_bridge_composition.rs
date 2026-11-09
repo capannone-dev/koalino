@@ -1,4 +1,5 @@
-//! Composes the Teams bot bridge for the daemon: configuration, the localhost WebSocket server,
+//! Composes the Teams bridge for the daemon (the Teams bot, or the browser extension through its
+//! native messaging host, #102): configuration, the localhost WebSocket server,
 //! the drop-oldest buffer, and the meeting pump that feeds `MeetingSession`.
 //!
 //! ```text
@@ -7,6 +8,8 @@
 //!            MeetingStarted ─▶ RecordingManager::begin_external_meeting    ▼
 //!            Audio ─▶ ChunkAudioStore + RecordingManager::process_external_chunk (waits)
 //!            Slide ─▶ AttachmentWorkflow (SlideAttachmentStore)
+//!            Document ─▶ AttachmentWorkflow::handle_meeting_document (transcript, captions)
+//!            MeetingEnded ─▶ RecordingManager::end_external_meeting (after-meeting pass)
 //! ```
 //!
 //! The pump runs on its own OS thread and waits for each chunk's result, so transcription speed
@@ -215,6 +218,12 @@ pub struct TeamsBridgeStatistics {
     pub stored_slides: usize,
     /// Slides that could not be stored.
     pub failed_slides: usize,
+    /// Meeting documents (transcripts, captions) attached to their meeting.
+    pub stored_documents: usize,
+    /// Meeting documents that could not be stored.
+    pub failed_documents: usize,
+    /// Meetings the sender reported as over.
+    pub meetings_ended: usize,
 }
 
 /// A running bridge: server, buffer, and pump thread.
@@ -436,6 +445,9 @@ where
             failed_audio_chunks = self.statistics.failed_audio_chunks,
             stored_slides = self.statistics.stored_slides,
             failed_slides = self.statistics.failed_slides,
+            stored_documents = self.statistics.stored_documents,
+            failed_documents = self.statistics.failed_documents,
+            meetings_ended = self.statistics.meetings_ended,
             "Teams bridge pump stopped"
         );
         self.statistics
@@ -460,6 +472,36 @@ where
                 }
             }
             BridgeEvent::IgnoredVideo => {}
+            BridgeEvent::Document(document) => {
+                match self.ports.slide_workflow.handle_meeting_document(document) {
+                    Ok(()) => self.statistics.stored_documents += 1,
+                    Err(error) => {
+                        self.statistics.failed_documents += 1;
+                        tracing::warn!(error = %error, "Meeting document could not be stored");
+                    }
+                }
+            }
+            BridgeEvent::MeetingEnded(meeting_uuid) => self.end_meeting(meeting_uuid),
+        }
+    }
+
+    /// Closes the external session when the active meeting ended, so its after-meeting pass runs.
+    ///
+    /// Side effects: Ends the worker's external meeting; logs IDs only.
+    fn end_meeting(&mut self, meeting_uuid: Uuid) {
+        let is_active = self
+            .active_meeting_id
+            .as_ref()
+            .is_some_and(|meeting_id| meeting_id.as_str() == meeting_uuid.to_string());
+        if !is_active {
+            return;
+        }
+        self.active_meeting_id = None;
+        match self.ports.recording_manager.end_external_meeting() {
+            Ok(_summary) => self.statistics.meetings_ended += 1,
+            Err(error) => {
+                tracing::warn!(error = %error, "Online meeting could not be ended cleanly")
+            }
         }
     }
 

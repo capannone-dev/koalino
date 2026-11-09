@@ -194,6 +194,8 @@ pub struct AudioChunk {
     pub timestamp_ms: u64,
     // @@protoc_insertion_point(field:note_taker.teams_bridge.v1.AudioChunk.sample_rate)
     pub sample_rate: u32,
+    // @@protoc_insertion_point(field:note_taker.teams_bridge.v1.AudioChunk.track)
+    pub track: ::protobuf::EnumOrUnknown<TrackKind>,
     // special fields
     // @@protoc_insertion_point(special_field:note_taker.teams_bridge.v1.AudioChunk.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
@@ -211,7 +213,7 @@ impl AudioChunk {
     }
 
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(4);
+        let mut fields = ::std::vec::Vec::with_capacity(5);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ExternalParticipant>(
             "participant",
@@ -232,6 +234,11 @@ impl AudioChunk {
             "sample_rate",
             |m: &AudioChunk| { &m.sample_rate },
             |m: &mut AudioChunk| { &mut m.sample_rate },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "track",
+            |m: &AudioChunk| { &m.track },
+            |m: &mut AudioChunk| { &mut m.track },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<AudioChunk>(
             "AudioChunk",
@@ -263,6 +270,9 @@ impl ::protobuf::Message for AudioChunk {
                 32 => {
                     self.sample_rate = is.read_uint32()?;
                 },
+                40 => {
+                    self.track = is.read_enum_or_unknown()?;
+                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -288,6 +298,9 @@ impl ::protobuf::Message for AudioChunk {
         if self.sample_rate != 0 {
             my_size += ::protobuf::rt::uint32_size(4, self.sample_rate);
         }
+        if self.track != ::protobuf::EnumOrUnknown::new(TrackKind::PARTICIPANT) {
+            my_size += ::protobuf::rt::int32_size(5, self.track.value());
+        }
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -305,6 +318,9 @@ impl ::protobuf::Message for AudioChunk {
         }
         if self.sample_rate != 0 {
             os.write_uint32(4, self.sample_rate)?;
+        }
+        if self.track != ::protobuf::EnumOrUnknown::new(TrackKind::PARTICIPANT) {
+            os.write_enum(5, ::protobuf::EnumOrUnknown::value(&self.track))?;
         }
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -327,6 +343,7 @@ impl ::protobuf::Message for AudioChunk {
         self.audio_data.clear();
         self.timestamp_ms = 0;
         self.sample_rate = 0;
+        self.track = ::protobuf::EnumOrUnknown::new(TrackKind::PARTICIPANT);
         self.special_fields.clear();
     }
 
@@ -336,6 +353,7 @@ impl ::protobuf::Message for AudioChunk {
             audio_data: ::std::vec::Vec::new(),
             timestamp_ms: 0,
             sample_rate: 0,
+            track: ::protobuf::EnumOrUnknown::from_i32(0),
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -356,6 +374,322 @@ impl ::std::fmt::Display for AudioChunk {
 }
 
 impl ::protobuf::reflect::ProtobufValue for AudioChunk {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
+// @@protoc_insertion_point(message:note_taker.teams_bridge.v1.MeetingDocument)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct MeetingDocument {
+    // message fields
+    // @@protoc_insertion_point(field:note_taker.teams_bridge.v1.MeetingDocument.kind)
+    pub kind: ::std::string::String,
+    // @@protoc_insertion_point(field:note_taker.teams_bridge.v1.MeetingDocument.media_type)
+    pub media_type: ::std::string::String,
+    // @@protoc_insertion_point(field:note_taker.teams_bridge.v1.MeetingDocument.content)
+    pub content: ::std::vec::Vec<u8>,
+    // @@protoc_insertion_point(field:note_taker.teams_bridge.v1.MeetingDocument.timestamp_ms)
+    pub timestamp_ms: u64,
+    // @@protoc_insertion_point(field:note_taker.teams_bridge.v1.MeetingDocument.meeting_id)
+    pub meeting_id: ::std::string::String,
+    // special fields
+    // @@protoc_insertion_point(special_field:note_taker.teams_bridge.v1.MeetingDocument.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a MeetingDocument {
+    fn default() -> &'a MeetingDocument {
+        <MeetingDocument as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl MeetingDocument {
+    pub fn new() -> MeetingDocument {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(5);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "kind",
+            |m: &MeetingDocument| { &m.kind },
+            |m: &mut MeetingDocument| { &mut m.kind },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "media_type",
+            |m: &MeetingDocument| { &m.media_type },
+            |m: &mut MeetingDocument| { &mut m.media_type },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "content",
+            |m: &MeetingDocument| { &m.content },
+            |m: &mut MeetingDocument| { &mut m.content },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "timestamp_ms",
+            |m: &MeetingDocument| { &m.timestamp_ms },
+            |m: &mut MeetingDocument| { &mut m.timestamp_ms },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "meeting_id",
+            |m: &MeetingDocument| { &m.meeting_id },
+            |m: &mut MeetingDocument| { &mut m.meeting_id },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<MeetingDocument>(
+            "MeetingDocument",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for MeetingDocument {
+    const NAME: &'static str = "MeetingDocument";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    self.kind = is.read_string()?;
+                },
+                18 => {
+                    self.media_type = is.read_string()?;
+                },
+                26 => {
+                    self.content = is.read_bytes()?;
+                },
+                32 => {
+                    self.timestamp_ms = is.read_uint64()?;
+                },
+                42 => {
+                    self.meeting_id = is.read_string()?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if !self.kind.is_empty() {
+            my_size += ::protobuf::rt::string_size(1, &self.kind);
+        }
+        if !self.media_type.is_empty() {
+            my_size += ::protobuf::rt::string_size(2, &self.media_type);
+        }
+        if !self.content.is_empty() {
+            my_size += ::protobuf::rt::bytes_size(3, &self.content);
+        }
+        if self.timestamp_ms != 0 {
+            my_size += ::protobuf::rt::uint64_size(4, self.timestamp_ms);
+        }
+        if !self.meeting_id.is_empty() {
+            my_size += ::protobuf::rt::string_size(5, &self.meeting_id);
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if !self.kind.is_empty() {
+            os.write_string(1, &self.kind)?;
+        }
+        if !self.media_type.is_empty() {
+            os.write_string(2, &self.media_type)?;
+        }
+        if !self.content.is_empty() {
+            os.write_bytes(3, &self.content)?;
+        }
+        if self.timestamp_ms != 0 {
+            os.write_uint64(4, self.timestamp_ms)?;
+        }
+        if !self.meeting_id.is_empty() {
+            os.write_string(5, &self.meeting_id)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> MeetingDocument {
+        MeetingDocument::new()
+    }
+
+    fn clear(&mut self) {
+        self.kind.clear();
+        self.media_type.clear();
+        self.content.clear();
+        self.timestamp_ms = 0;
+        self.meeting_id.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static MeetingDocument {
+        static instance: MeetingDocument = MeetingDocument {
+            kind: ::std::string::String::new(),
+            media_type: ::std::string::String::new(),
+            content: ::std::vec::Vec::new(),
+            timestamp_ms: 0,
+            meeting_id: ::std::string::String::new(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for MeetingDocument {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("MeetingDocument").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for MeetingDocument {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for MeetingDocument {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
+// @@protoc_insertion_point(message:note_taker.teams_bridge.v1.MeetingEnded)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct MeetingEnded {
+    // message fields
+    // @@protoc_insertion_point(field:note_taker.teams_bridge.v1.MeetingEnded.meeting_id)
+    pub meeting_id: ::std::string::String,
+    // special fields
+    // @@protoc_insertion_point(special_field:note_taker.teams_bridge.v1.MeetingEnded.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a MeetingEnded {
+    fn default() -> &'a MeetingEnded {
+        <MeetingEnded as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl MeetingEnded {
+    pub fn new() -> MeetingEnded {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(1);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "meeting_id",
+            |m: &MeetingEnded| { &m.meeting_id },
+            |m: &mut MeetingEnded| { &mut m.meeting_id },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<MeetingEnded>(
+            "MeetingEnded",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for MeetingEnded {
+    const NAME: &'static str = "MeetingEnded";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    self.meeting_id = is.read_string()?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if !self.meeting_id.is_empty() {
+            my_size += ::protobuf::rt::string_size(1, &self.meeting_id);
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if !self.meeting_id.is_empty() {
+            os.write_string(1, &self.meeting_id)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> MeetingEnded {
+        MeetingEnded::new()
+    }
+
+    fn clear(&mut self) {
+        self.meeting_id.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static MeetingEnded {
+        static instance: MeetingEnded = MeetingEnded {
+            meeting_id: ::std::string::String::new(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for MeetingEnded {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("MeetingEnded").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for MeetingEnded {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for MeetingEnded {
     type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
 }
 
@@ -862,8 +1196,106 @@ impl TeamsBridgeMessage {
         }
     }
 
+    // .note_taker.teams_bridge.v1.MeetingDocument document = 4;
+
+    pub fn document(&self) -> &MeetingDocument {
+        match self.payload {
+            ::std::option::Option::Some(teams_bridge_message::Payload::Document(ref v)) => v,
+            _ => <MeetingDocument as ::protobuf::Message>::default_instance(),
+        }
+    }
+
+    pub fn clear_document(&mut self) {
+        self.payload = ::std::option::Option::None;
+    }
+
+    pub fn has_document(&self) -> bool {
+        match self.payload {
+            ::std::option::Option::Some(teams_bridge_message::Payload::Document(..)) => true,
+            _ => false,
+        }
+    }
+
+    // Param is passed by value, moved
+    pub fn set_document(&mut self, v: MeetingDocument) {
+        self.payload = ::std::option::Option::Some(teams_bridge_message::Payload::Document(v))
+    }
+
+    // Mutable pointer to the field.
+    pub fn mut_document(&mut self) -> &mut MeetingDocument {
+        if let ::std::option::Option::Some(teams_bridge_message::Payload::Document(_)) = self.payload {
+        } else {
+            self.payload = ::std::option::Option::Some(teams_bridge_message::Payload::Document(MeetingDocument::new()));
+        }
+        match self.payload {
+            ::std::option::Option::Some(teams_bridge_message::Payload::Document(ref mut v)) => v,
+            _ => panic!(),
+        }
+    }
+
+    // Take field
+    pub fn take_document(&mut self) -> MeetingDocument {
+        if self.has_document() {
+            match self.payload.take() {
+                ::std::option::Option::Some(teams_bridge_message::Payload::Document(v)) => v,
+                _ => panic!(),
+            }
+        } else {
+            MeetingDocument::new()
+        }
+    }
+
+    // .note_taker.teams_bridge.v1.MeetingEnded ended = 5;
+
+    pub fn ended(&self) -> &MeetingEnded {
+        match self.payload {
+            ::std::option::Option::Some(teams_bridge_message::Payload::Ended(ref v)) => v,
+            _ => <MeetingEnded as ::protobuf::Message>::default_instance(),
+        }
+    }
+
+    pub fn clear_ended(&mut self) {
+        self.payload = ::std::option::Option::None;
+    }
+
+    pub fn has_ended(&self) -> bool {
+        match self.payload {
+            ::std::option::Option::Some(teams_bridge_message::Payload::Ended(..)) => true,
+            _ => false,
+        }
+    }
+
+    // Param is passed by value, moved
+    pub fn set_ended(&mut self, v: MeetingEnded) {
+        self.payload = ::std::option::Option::Some(teams_bridge_message::Payload::Ended(v))
+    }
+
+    // Mutable pointer to the field.
+    pub fn mut_ended(&mut self) -> &mut MeetingEnded {
+        if let ::std::option::Option::Some(teams_bridge_message::Payload::Ended(_)) = self.payload {
+        } else {
+            self.payload = ::std::option::Option::Some(teams_bridge_message::Payload::Ended(MeetingEnded::new()));
+        }
+        match self.payload {
+            ::std::option::Option::Some(teams_bridge_message::Payload::Ended(ref mut v)) => v,
+            _ => panic!(),
+        }
+    }
+
+    // Take field
+    pub fn take_ended(&mut self) -> MeetingEnded {
+        if self.has_ended() {
+            match self.payload.take() {
+                ::std::option::Option::Some(teams_bridge_message::Payload::Ended(v)) => v,
+                _ => panic!(),
+            }
+        } else {
+            MeetingEnded::new()
+        }
+    }
+
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(3);
+        let mut fields = ::std::vec::Vec::with_capacity(5);
         let mut oneofs = ::std::vec::Vec::with_capacity(1);
         fields.push(::protobuf::reflect::rt::v2::make_oneof_message_has_get_mut_set_accessor::<_, AudioChunk>(
             "audio",
@@ -885,6 +1317,20 @@ impl TeamsBridgeMessage {
             TeamsBridgeMessage::metadata,
             TeamsBridgeMessage::mut_metadata,
             TeamsBridgeMessage::set_metadata,
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_oneof_message_has_get_mut_set_accessor::<_, MeetingDocument>(
+            "document",
+            TeamsBridgeMessage::has_document,
+            TeamsBridgeMessage::document,
+            TeamsBridgeMessage::mut_document,
+            TeamsBridgeMessage::set_document,
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_oneof_message_has_get_mut_set_accessor::<_, MeetingEnded>(
+            "ended",
+            TeamsBridgeMessage::has_ended,
+            TeamsBridgeMessage::ended,
+            TeamsBridgeMessage::mut_ended,
+            TeamsBridgeMessage::set_ended,
         ));
         oneofs.push(teams_bridge_message::Payload::generated_oneof_descriptor_data());
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<TeamsBridgeMessage>(
@@ -914,6 +1360,12 @@ impl ::protobuf::Message for TeamsBridgeMessage {
                 26 => {
                     self.payload = ::std::option::Option::Some(teams_bridge_message::Payload::Metadata(is.read_message()?));
                 },
+                34 => {
+                    self.payload = ::std::option::Option::Some(teams_bridge_message::Payload::Document(is.read_message()?));
+                },
+                42 => {
+                    self.payload = ::std::option::Option::Some(teams_bridge_message::Payload::Ended(is.read_message()?));
+                },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
                 },
@@ -940,6 +1392,14 @@ impl ::protobuf::Message for TeamsBridgeMessage {
                     let len = v.compute_size();
                     my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
                 },
+                &teams_bridge_message::Payload::Document(ref v) => {
+                    let len = v.compute_size();
+                    my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+                },
+                &teams_bridge_message::Payload::Ended(ref v) => {
+                    let len = v.compute_size();
+                    my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+                },
             };
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
@@ -958,6 +1418,12 @@ impl ::protobuf::Message for TeamsBridgeMessage {
                 },
                 &teams_bridge_message::Payload::Metadata(ref v) => {
                     ::protobuf::rt::write_message_field_with_cached_size(3, v, os)?;
+                },
+                &teams_bridge_message::Payload::Document(ref v) => {
+                    ::protobuf::rt::write_message_field_with_cached_size(4, v, os)?;
+                },
+                &teams_bridge_message::Payload::Ended(ref v) => {
+                    ::protobuf::rt::write_message_field_with_cached_size(5, v, os)?;
                 },
             };
         }
@@ -978,6 +1444,8 @@ impl ::protobuf::Message for TeamsBridgeMessage {
     }
 
     fn clear(&mut self) {
+        self.payload = ::std::option::Option::None;
+        self.payload = ::std::option::Option::None;
         self.payload = ::std::option::Option::None;
         self.payload = ::std::option::Option::None;
         self.payload = ::std::option::Option::None;
@@ -1023,6 +1491,10 @@ pub mod teams_bridge_message {
         Video(super::VideoFrame),
         // @@protoc_insertion_point(oneof_field:note_taker.teams_bridge.v1.TeamsBridgeMessage.metadata)
         Metadata(super::MeetingMetadata),
+        // @@protoc_insertion_point(oneof_field:note_taker.teams_bridge.v1.TeamsBridgeMessage.document)
+        Document(super::MeetingDocument),
+        // @@protoc_insertion_point(oneof_field:note_taker.teams_bridge.v1.TeamsBridgeMessage.ended)
+        Ended(super::MeetingEnded),
     }
 
     impl ::protobuf::Oneof for Payload {
@@ -1042,27 +1514,99 @@ pub mod teams_bridge_message {
     }
 }
 
+#[derive(Clone,Copy,PartialEq,Eq,Debug,Hash)]
+// @@protoc_insertion_point(enum:note_taker.teams_bridge.v1.TrackKind)
+pub enum TrackKind {
+    // @@protoc_insertion_point(enum_value:note_taker.teams_bridge.v1.TrackKind.PARTICIPANT)
+    PARTICIPANT = 0,
+    // @@protoc_insertion_point(enum_value:note_taker.teams_bridge.v1.TrackKind.MIXED_REMOTE)
+    MIXED_REMOTE = 1,
+}
+
+impl ::protobuf::Enum for TrackKind {
+    const NAME: &'static str = "TrackKind";
+
+    fn value(&self) -> i32 {
+        *self as i32
+    }
+
+    fn from_i32(value: i32) -> ::std::option::Option<TrackKind> {
+        match value {
+            0 => ::std::option::Option::Some(TrackKind::PARTICIPANT),
+            1 => ::std::option::Option::Some(TrackKind::MIXED_REMOTE),
+            _ => ::std::option::Option::None
+        }
+    }
+
+    fn from_str(str: &str) -> ::std::option::Option<TrackKind> {
+        match str {
+            "PARTICIPANT" => ::std::option::Option::Some(TrackKind::PARTICIPANT),
+            "MIXED_REMOTE" => ::std::option::Option::Some(TrackKind::MIXED_REMOTE),
+            _ => ::std::option::Option::None
+        }
+    }
+
+    const VALUES: &'static [TrackKind] = &[
+        TrackKind::PARTICIPANT,
+        TrackKind::MIXED_REMOTE,
+    ];
+}
+
+impl ::protobuf::EnumFull for TrackKind {
+    fn enum_descriptor() -> ::protobuf::reflect::EnumDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::EnumDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().enum_by_package_relative_name("TrackKind").unwrap()).clone()
+    }
+
+    fn descriptor(&self) -> ::protobuf::reflect::EnumValueDescriptor {
+        let index = *self as usize;
+        Self::enum_descriptor().value_by_index(index)
+    }
+}
+
+impl ::std::default::Default for TrackKind {
+    fn default() -> Self {
+        TrackKind::PARTICIPANT
+    }
+}
+
+impl TrackKind {
+    fn generated_enum_descriptor_data() -> ::protobuf::reflect::GeneratedEnumDescriptorData {
+        ::protobuf::reflect::GeneratedEnumDescriptorData::new::<TrackKind>("TrackKind")
+    }
+}
+
 static file_descriptor_proto_data: &'static [u8] = b"\
     \n\x12teams_bridge.proto\x12\x1anote_taker.teams_bridge.v1\"o\n\x13Exter\
     nalParticipant\x12\x1f\n\x0bexternal_id\x18\x01\x20\x01(\tR\nexternalId\
     \x12!\n\x0cdisplay_name\x18\x02\x20\x01(\tR\x0bdisplayName\x12\x14\n\x05\
-    email\x18\x03\x20\x01(\tR\x05email\"\xc2\x01\n\nAudioChunk\x12Q\n\x0bpar\
+    email\x18\x03\x20\x01(\tR\x05email\"\xff\x01\n\nAudioChunk\x12Q\n\x0bpar\
     ticipant\x18\x01\x20\x01(\x0b2/.note_taker.teams_bridge.v1.ExternalParti\
     cipantR\x0bparticipant\x12\x1d\n\naudio_data\x18\x02\x20\x01(\x0cR\taudi\
     oData\x12!\n\x0ctimestamp_ms\x18\x03\x20\x01(\x04R\x0btimestampMs\x12\
-    \x1f\n\x0bsample_rate\x18\x04\x20\x01(\rR\nsampleRate\"f\n\nVideoFrame\
-    \x12\x1d\n\nimage_data\x18\x01\x20\x01(\x0cR\timageData\x12!\n\x0ctimest\
-    amp_ms\x18\x02\x20\x01(\x04R\x0btimestampMs\x12\x16\n\x06source\x18\x03\
-    \x20\x01(\tR\x06source\"\xce\x01\n\x0fMeetingMetadata\x12\x1d\n\nmeeting\
-    _id\x18\x01\x20\x01(\tR\tmeetingId\x12#\n\rmeeting_title\x18\x02\x20\x01\
-    (\tR\x0cmeetingTitle\x12\"\n\rstart_time_ms\x18\x03\x20\x01(\x04R\x0bsta\
-    rtTimeMs\x12S\n\x0cparticipants\x18\x04\x20\x03(\x0b2/.note_taker.teams_\
-    bridge.v1.ExternalParticipantR\x0cparticipants\"\xea\x01\n\x12TeamsBridg\
-    eMessage\x12>\n\x05audio\x18\x01\x20\x01(\x0b2&.note_taker.teams_bridge.\
-    v1.AudioChunkH\0R\x05audio\x12>\n\x05video\x18\x02\x20\x01(\x0b2&.note_t\
-    aker.teams_bridge.v1.VideoFrameH\0R\x05video\x12I\n\x08metadata\x18\x03\
-    \x20\x01(\x0b2+.note_taker.teams_bridge.v1.MeetingMetadataH\0R\x08metada\
-    taB\t\n\x07payloadb\x06proto3\
+    \x1f\n\x0bsample_rate\x18\x04\x20\x01(\rR\nsampleRate\x12;\n\x05track\
+    \x18\x05\x20\x01(\x0e2%.note_taker.teams_bridge.v1.TrackKindR\x05track\"\
+    \xa0\x01\n\x0fMeetingDocument\x12\x12\n\x04kind\x18\x01\x20\x01(\tR\x04k\
+    ind\x12\x1d\n\nmedia_type\x18\x02\x20\x01(\tR\tmediaType\x12\x18\n\x07co\
+    ntent\x18\x03\x20\x01(\x0cR\x07content\x12!\n\x0ctimestamp_ms\x18\x04\
+    \x20\x01(\x04R\x0btimestampMs\x12\x1d\n\nmeeting_id\x18\x05\x20\x01(\tR\
+    \tmeetingId\"-\n\x0cMeetingEnded\x12\x1d\n\nmeeting_id\x18\x01\x20\x01(\
+    \tR\tmeetingId\"f\n\nVideoFrame\x12\x1d\n\nimage_data\x18\x01\x20\x01(\
+    \x0cR\timageData\x12!\n\x0ctimestamp_ms\x18\x02\x20\x01(\x04R\x0btimesta\
+    mpMs\x12\x16\n\x06source\x18\x03\x20\x01(\tR\x06source\"\xce\x01\n\x0fMe\
+    etingMetadata\x12\x1d\n\nmeeting_id\x18\x01\x20\x01(\tR\tmeetingId\x12#\
+    \n\rmeeting_title\x18\x02\x20\x01(\tR\x0cmeetingTitle\x12\"\n\rstart_tim\
+    e_ms\x18\x03\x20\x01(\x04R\x0bstartTimeMs\x12S\n\x0cparticipants\x18\x04\
+    \x20\x03(\x0b2/.note_taker.teams_bridge.v1.ExternalParticipantR\x0cparti\
+    cipants\"\xf7\x02\n\x12TeamsBridgeMessage\x12>\n\x05audio\x18\x01\x20\
+    \x01(\x0b2&.note_taker.teams_bridge.v1.AudioChunkH\0R\x05audio\x12>\n\
+    \x05video\x18\x02\x20\x01(\x0b2&.note_taker.teams_bridge.v1.VideoFrameH\
+    \0R\x05video\x12I\n\x08metadata\x18\x03\x20\x01(\x0b2+.note_taker.teams_\
+    bridge.v1.MeetingMetadataH\0R\x08metadata\x12I\n\x08document\x18\x04\x20\
+    \x01(\x0b2+.note_taker.teams_bridge.v1.MeetingDocumentH\0R\x08document\
+    \x12@\n\x05ended\x18\x05\x20\x01(\x0b2(.note_taker.teams_bridge.v1.Meeti\
+    ngEndedH\0R\x05endedB\t\n\x07payload*.\n\tTrackKind\x12\x0f\n\x0bPARTICI\
+    PANT\x10\0\x12\x10\n\x0cMIXED_REMOTE\x10\x01b\x06proto3\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file
@@ -1080,13 +1624,16 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
     file_descriptor.get(|| {
         let generated_file_descriptor = generated_file_descriptor_lazy.get(|| {
             let mut deps = ::std::vec::Vec::with_capacity(0);
-            let mut messages = ::std::vec::Vec::with_capacity(5);
+            let mut messages = ::std::vec::Vec::with_capacity(7);
             messages.push(ExternalParticipant::generated_message_descriptor_data());
             messages.push(AudioChunk::generated_message_descriptor_data());
+            messages.push(MeetingDocument::generated_message_descriptor_data());
+            messages.push(MeetingEnded::generated_message_descriptor_data());
             messages.push(VideoFrame::generated_message_descriptor_data());
             messages.push(MeetingMetadata::generated_message_descriptor_data());
             messages.push(TeamsBridgeMessage::generated_message_descriptor_data());
-            let mut enums = ::std::vec::Vec::with_capacity(0);
+            let mut enums = ::std::vec::Vec::with_capacity(1);
+            enums.push(TrackKind::generated_enum_descriptor_data());
             ::protobuf::reflect::GeneratedFileDescriptor::new_generated(
                 file_descriptor_proto(),
                 deps,

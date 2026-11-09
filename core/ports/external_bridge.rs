@@ -5,7 +5,8 @@ use std::sync::mpsc::Receiver;
 use crate::domain::{
     errors::{ExternalBridgeError, StorageError},
     models::{
-        ExternalMediaChunk, ExternalParticipant, SlideCapture, SpeakerIdentity, VoiceEmbedding,
+        ExternalMediaChunk, ExternalMeetingDocument, ExternalParticipant, SlideCapture,
+        SpeakerIdentity, VoiceEmbedding,
     },
 };
 
@@ -150,7 +151,7 @@ pub trait VoiceEmbeddingExtractor {
     ) -> Result<Vec<f32>, ExternalBridgeError>;
 }
 
-/// Receives external slide captures for the attachment workflow.
+/// Receives external slide captures and meeting documents for the attachment workflow.
 pub trait AttachmentWorkflow {
     /// Routes a capture into the configured attachment manager implementation.
     ///
@@ -158,4 +159,19 @@ pub trait AttachmentWorkflow {
     /// Outputs: Success or a portable persistence/workflow failure.
     /// Side effects: May retain a user-authorized slide attachment; must not log image bytes.
     fn handle_slide_capture(&self, slide_capture: SlideCapture) -> Result<(), StorageError>;
+
+    /// Stores a text document of an external meeting, such as the Teams transcript (#102).
+    ///
+    /// Inputs: The document; its meeting must already exist.
+    /// Outputs: Success, or a rejection (the default: this workflow keeps no documents).
+    /// Side effects: May write a private file and an attachment row; must not log the text.
+    fn handle_meeting_document(
+        &self,
+        document: ExternalMeetingDocument,
+    ) -> Result<(), StorageError> {
+        let _ = document;
+        Err(StorageError::Rejected {
+            reason: String::from("this attachment workflow does not keep meeting documents"),
+        })
+    }
 }

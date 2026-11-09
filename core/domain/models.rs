@@ -1951,12 +1951,25 @@ impl ExternalParticipant {
     }
 }
 
+/// What an external audio track carries (Issue #102).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ExternalTrackKind {
+    /// One participant's own audio: a bot's isolated track, or the owner's microphone in the
+    /// browser.
+    #[default]
+    Participant,
+    /// Every remote participant mixed into one track, as a browser receives a call. Its voices
+    /// are told apart and matched against the gallery; it is never credited to one participant.
+    MixedRemote,
+}
+
 /// Carries an isolated external-speaker audio buffer with guaranteed participant metadata.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExternalMediaChunk {
     external_participant: ExternalParticipant,
     audio_bytes: Vec<u8>,
     timestamp_ms: u64,
+    track_kind: ExternalTrackKind,
 }
 
 impl ExternalMediaChunk {
@@ -1975,7 +1988,21 @@ impl ExternalMediaChunk {
             external_participant,
             audio_bytes,
             timestamp_ms,
+            track_kind: ExternalTrackKind::Participant,
         }
+    }
+
+    /// Marks what the track carries (a participant's track when never called).
+    ///
+    /// Inputs: The track kind. Outputs: The chunk. Side effects: None.
+    pub fn with_track_kind(mut self, track_kind: ExternalTrackKind) -> Self {
+        self.track_kind = track_kind;
+        self
+    }
+
+    /// Returns what the track carries. Side effects: None.
+    pub fn track_kind(&self) -> ExternalTrackKind {
+        self.track_kind
     }
 
     /// Borrows the guaranteed participant metadata associated with this isolated audio stream.
@@ -2001,6 +2028,113 @@ impl ExternalMediaChunk {
     /// Inputs: None.
     /// Outputs: Milliseconds relative to the bridge meeting stream.
     /// Side effects: None.
+    pub fn timestamp_ms(&self) -> u64 {
+        self.timestamp_ms
+    }
+}
+
+/// Which text an online-meeting service produced for a meeting (Issue #102).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MeetingDocumentKind {
+    /// The transcript Teams publishes after the meeting.
+    TeamsTranscript,
+    /// The Teams transcript panel, as read during the meeting.
+    TeamsLiveTranscript,
+    /// The Teams live captions, as read during the meeting.
+    TeamsCaptions,
+}
+
+impl MeetingDocumentKind {
+    /// A short file-name stem for the stored document. Side effects: None.
+    pub fn file_stem(self) -> &'static str {
+        match self {
+            Self::TeamsTranscript => "teams-transcript",
+            Self::TeamsLiveTranscript => "teams-live-transcript",
+            Self::TeamsCaptions => "teams-captions",
+        }
+    }
+}
+
+/// The text format of a meeting document.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MeetingDocumentMediaType {
+    /// WebVTT (`text/vtt`).
+    WebVtt,
+    /// Plain UTF-8 text (`text/plain`).
+    PlainText,
+}
+
+impl MeetingDocumentMediaType {
+    /// The MIME type. Side effects: None.
+    pub fn mime_type(self) -> &'static str {
+        match self {
+            Self::WebVtt => "text/vtt",
+            Self::PlainText => "text/plain",
+        }
+    }
+
+    /// The file extension, without the dot. Side effects: None.
+    pub fn extension(self) -> &'static str {
+        match self {
+            Self::WebVtt => "vtt",
+            Self::PlainText => "txt",
+        }
+    }
+}
+
+/// A text document an online-meeting service produced, to be stored with its meeting.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExternalMeetingDocument {
+    meeting_id: Uuid,
+    kind: MeetingDocumentKind,
+    media_type: MeetingDocumentMediaType,
+    text: String,
+    timestamp_ms: u64,
+}
+
+impl ExternalMeetingDocument {
+    /// Creates a document of an external meeting.
+    ///
+    /// Inputs: The meeting UUID, the kind, the format, the text (sensitive: never logged) and
+    /// the meeting time it belongs at.
+    /// Outputs: The document. Side effects: None.
+    pub fn new(
+        meeting_id: Uuid,
+        kind: MeetingDocumentKind,
+        media_type: MeetingDocumentMediaType,
+        text: String,
+        timestamp_ms: u64,
+    ) -> Self {
+        Self {
+            meeting_id,
+            kind,
+            media_type,
+            text,
+            timestamp_ms,
+        }
+    }
+
+    /// The meeting UUID. Side effects: None.
+    pub fn meeting_id(&self) -> Uuid {
+        self.meeting_id
+    }
+
+    /// What the document is. Side effects: None.
+    pub fn kind(&self) -> MeetingDocumentKind {
+        self.kind
+    }
+
+    /// Its format. Side effects: None.
+    pub fn media_type(&self) -> MeetingDocumentMediaType {
+        self.media_type
+    }
+
+    /// Its text, which must never be logged. Side effects: None.
+    pub fn text(&self) -> &str {
+        &self.text
+    }
+
+    /// The meeting time it belongs at. Side effects: None.
     pub fn timestamp_ms(&self) -> u64 {
         self.timestamp_ms
     }

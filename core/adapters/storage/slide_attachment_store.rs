@@ -5,7 +5,9 @@
 //! `<slide_directory>/<meeting ID>/slide-<timestamp ms>-<attachment UUID>.<png|jpg>` (directory
 //! 0700, file 0600 on Unix, sealed with the database key since #99) and recorded through the
 //! `AttachmentRepository` as an attachment of
-//! the meeting, so it appears next to manually added attachments. Meeting IDs that are not plain
+//! the meeting, so it appears next to manually added attachments. Text documents of an online
+//! meeting (the Teams transcript, live transcript or captions, #102) are stored the same way as
+//! `<meeting ID>/<kind>-<timestamp ms>-<attachment UUID>.<vtt|txt>`. Meeting IDs that are not plain
 //! folder names are rejected, so no file lands outside the slide directory. Only PNG and JPEG images,
 //! recognized by their signature, are accepted. If the attachment row cannot be saved (for
 //! example, the meeting does not exist), the file is deleted again. Image bytes are never logged.
@@ -22,7 +24,7 @@ use crate::{
     },
     domain::{
         errors::StorageError,
-        models::{Attachment, DeviceId, MeetingId, SlideCapture},
+        models::{Attachment, DeviceId, ExternalMeetingDocument, MeetingId, SlideCapture},
     },
     ports::{
         external_bridge::AttachmentWorkflow, screen_share::MeetingSlideSink,
@@ -93,6 +95,40 @@ where
             slide_capture.timestamp_ms(),
         )
     }
+
+    /// Saves a meeting document as a private text file and links it to its meeting (#102).
+    ///
+    /// Inputs: A document whose meeting must already exist in the repository.
+    /// Outputs: Success, or a rejection for a file-system failure or an attachment row that
+    /// cannot be saved.
+    /// Side effects: Creates directories and one file; writes one attachment row; removes the
+    /// file again when the row cannot be saved; logs IDs only, never the text.
+    fn handle_meeting_document(
+        &self,
+        document: ExternalMeetingDocument,
+    ) -> Result<(), StorageError> {
+        let media_type = document.media_type();
+        self.store_file(
+            &MeetingId::new(document.meeting_id().to_string()),
+            document.text().as_bytes(),
+            document.timestamp_ms(),
+            StoredFileKind {
+                file_stem: document.kind().file_stem(),
+                mime_type: media_type.mime_type(),
+                extension: media_type.extension(),
+            },
+        )
+    }
+}
+
+/// How one stored file is named and typed.
+struct StoredFileKind {
+    /// The file name's first part, such as `slide`.
+    file_stem: &'static str,
+    /// The attachment's MIME type.
+    mime_type: &'static str,
+    /// The file extension, without the dot.
+    extension: &'static str,
 }
 
 impl<RepositoryPort> MeetingSlideSink for SlideAttachmentStore<RepositoryPort>
@@ -134,20 +170,51 @@ where
         image_bytes: &[u8],
         timestamp_ms: u64,
     ) -> Result<(), StorageError> {
+        let (mime_type, extension) = detect_image_format(image_bytes)?;
+        self.store_file(
+            meeting_id,
+            image_bytes,
+            timestamp_ms,
+            StoredFileKind {
+                file_stem: "slide",
+                mime_type,
+                extension,
+            },
+        )
+    }
+
+    /// Writes one sealed file under `<slide_directory>/<meeting ID>/` and links it to the meeting.
+    ///
+    /// Inputs: The meeting, the file bytes (never logged), its meeting time, and its naming.
+    /// Outputs: Success, or a rejection for an unsafe meeting ID, a file-system failure, or an
+    /// attachment row that cannot be saved.
+    /// Side effects: Creates directories and one file; writes one attachment row; removes the
+    /// file again when the row cannot be saved; logs IDs only.
+    fn store_file(
+        &self,
+        meeting_id: &MeetingId,
+        file_bytes: &[u8],
+        timestamp_ms: u64,
+        file_kind: StoredFileKind,
+    ) -> Result<(), StorageError> {
         if !is_plain_folder_name(meeting_id.as_str()) {
             return Err(StorageError::Rejected {
                 reason: String::from("meeting ID is not a valid slide folder name"),
             });
         }
-        let (mime_type, extension) = detect_image_format(image_bytes)?;
+        let StoredFileKind {
+            file_stem,
+            mime_type,
+            extension,
+        } = file_kind;
         let attachment_id = Uuid::new_v4();
         let meeting_directory = self.slide_directory.join(meeting_id.as_str());
         create_private_directory(&meeting_directory)?;
         let slide_path = meeting_directory.join(format!(
-            "slide-{timestamp_ms:010}-{attachment_id}.{extension}"
+            "{file_stem}-{timestamp_ms:010}-{attachment_id}.{extension}"
         ));
         self.sealed_files
-            .write_new(&slide_path, &mut &image_bytes[..])?;
+            .write_new(&slide_path, &mut &file_bytes[..])?;
 
         let attachment = Attachment::new(
             attachment_id,
@@ -168,7 +235,8 @@ where
             meeting_id = %meeting_id.as_str(),
             %attachment_id,
             timestamp_ms,
-            "Slide capture attached to meeting"
+            file_stem,
+            "Meeting file attached to meeting"
         );
         Ok(())
     }
