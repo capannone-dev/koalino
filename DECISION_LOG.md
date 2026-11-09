@@ -2274,3 +2274,23 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   server.
 - **Verified:** with a local mock server, the daemon summarized a newly recorded public-domain
   sample at start, with one request.
+
+## 2026-11-09 — #96 The owner edits notes, summaries and transcripts
+
+- **Where edits live:** in the meeting document, like everything else the owner writes. They
+  sync to paired devices and are sealed at rest (#92). Notes are the document's `note_text`, in
+  Markdown.
+- **Summaries:** an edited summary keeps its connection and model and is marked `edited`. A
+  summary written by hand has no connection or model and shows as "Written by you". Automatic
+  summaries never replace either (#101).
+- **Transcripts, one passage at a time:** a passage keeps its speaker, timing and overlap mark.
+  Its unclear-word marks are dropped, since they described the old words. Empty text removes
+  the passage. Free editing of the whole transcript was rejected: it would lose the speakers and
+  times that the timeline, photos placement and exports rely on.
+- **Edited transcripts are final:** the first correction sets the document's
+  `transcript_edited` flag. The after-meeting pass and combining then leave the transcript alone
+  and delete the retained speech, so a re-transcription can't undo the owner's corrections.
+- **Surfaces:** core (`meeting_edits.rs`), REST (`/notes`, `/segments`, PUT `/summary`), FFI
+  (`note_taker_meeting_edit`), web and app. The app edits a passage by long press, right-click
+  or a screen-reader action, and Markdown in a full-page editor with a preview.
+- **Limits:** 200,000 characters for notes and summaries, 20,000 for a passage.
