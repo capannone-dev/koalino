@@ -2482,3 +2482,54 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
     channel could serve as one if needed.
   - `TeamsProcessor` still stores an embedding per chunk. It is used only by its tests, and its
     doc says it must not be wired in.
+
+## 2026-11-09 — #102 A browser extension records Teams meetings joined in the browser
+
+- **Context:** the owner mostly joins Teams from the browser, on a work account
+  (`teams.cloud.microsoft`) and a personal one (`teams.live.com`), and hosting the media bot
+  (#34) on a Windows server is heavy. The #102 probes showed what a browser page gives:
+  - one `<audio>` element plays every remote participant mixed into one track, and the microphone
+    is the track Teams opens with `getUserMedia`;
+  - live captions carry the speaker's name (and, on work accounts, Teams ID) and grow word by word;
+  - while Teams transcription runs, its panel shows the transcript;
+  - a screen share is a `<video>` the page can draw;
+  - after the meeting Teams posts a recap card with the transcript (`.vtt`), but only to the
+    organizer's organisation;
+  - Debian's Firefox ESR turns off OpenH264, so it shows no screen share.
+- **Decision:** an MV3 extension (`browser-extension/`, TypeScript, esbuild, Vitest) for Firefox
+  128+ and Chrome/Edge 111+ talks to the daemon's existing Teams bridge through a native messaging
+  host. The bridge refuses WebSocket handshakes with an `Origin` header, so pages cannot reach it.
+  - **Protocol** (additive, the bot is unaffected):
+    - `AudioChunk.track` is `PARTICIPANT` (the owner's microphone) or `MIXED_REMOTE` (everyone
+      else).
+    - `MeetingDocument` carries the captions, live transcript or Teams transcript (UTF-8, at most
+      4 MiB, `text/vtt` or `text/plain`). It is stored sealed as a meeting attachment. It may name
+      its meeting, so a transcript published after the meeting does not reopen it.
+    - `MeetingEnded` runs the after-meeting pass.
+  - **Mixed track:** it maps no identity, and its voices are matched against the gallery from the
+    first chunk (#103's several-voices path). It is never credited to one person and never kept
+    for the gallery.
+  - **Host:** `browser-host` (Rust), registered by `browser-host install` for Firefox, Chrome,
+    Chromium and Edge. It allows only the extension's IDs. It queues up to 4 min of audio while
+    the daemon is down. The bridge secret lives in the keychain (`teams-bridge-secret`), because a
+    browser-started host does not get the daemon's environment. The daemon reads it when its
+    environment sets none.
+  - **Consent:** the owner is asked when a call starts ("Always for Teams" stops asking), and an
+    indicator with Stop stays visible. Starting Teams transcription is a separate opt-in, off by
+    default: everyone sees it, and Microsoft stores the transcript.
+  - **Teams transcript:** the extension never calls Microsoft's APIs and never uses the page's
+    tokens. It opens the recap and copies the transcript the page itself loads, using Download →
+    `.vtt` only if needed (which also leaves a copy in Downloads). The recap is matched to the
+    recorded meeting by title and time. The extension keeps those for two weeks, nothing else.
+  - **Slides:** a share frame is kept once it changed and held still, and is cropped to the slide:
+    the largest rectangle with per-channel colour edges on four sides, a 1.2–2.0 aspect ratio and
+    an even surrounding band. On the real test frame this gives exactly the slide.
+- **Limits:**
+  - The Teams controls are found by `data-tid`, ARIA label or English text. Another UI language,
+    or a Teams update, can stop captions, transcription start or recap fetching (each gives up
+    quietly) until the selectors are updated.
+  - Caption times are when the caption appeared, about a second after the words.
+  - The microphone maps to a `browser-owner` participant named after the Teams profile, not yet
+    to the owner's own gallery identity.
+  - Not yet verified live in a browser: the host disk filled up during this work and stopped the
+    test VMs.
