@@ -258,6 +258,10 @@ pub fn ask(
         .min(connection.context_tokens() / 4)
         .max(256);
     let mut images = material.images;
+    if !engine.reads_images() {
+        // Claude Code runs without tools and cannot read images (#105).
+        images.clear();
+    }
     let image_tokens = images.len() * IMAGE_TOKENS;
     let mut room_tokens = context_tokens
         .saturating_sub(answer_tokens as usize + FRAMING_TOKENS)

@@ -245,6 +245,38 @@ fn a_server_that_cannot_read_images_is_asked_again_without_them() {
     assert_eq!((outcome.images_sent, outcome.images_skipped), (0, 1));
 }
 
+/// Answers like Claude Code run without tools (#105): it cannot read images.
+struct TextOnlyEngine(ScriptedEngine);
+
+impl LlmEngine for TextOnlyEngine {
+    fn complete(&self, request: &LlmRequest) -> Result<LlmCompletion, LlmError> {
+        self.0.complete(request)
+    }
+
+    fn reads_images(&self) -> bool {
+        false
+    }
+}
+
+#[test]
+fn an_engine_that_cannot_read_images_gets_none_and_they_are_counted_as_left_out() {
+    let engine = TextOnlyEngine(ScriptedEngine::new(vec![answer("Done")]));
+
+    let outcome = summarize_meeting(
+        &engine,
+        &connection(32_768),
+        &PromptTemplate::default_summary(),
+        material(vec![line("Anna", 0, "Text.")]),
+        now(),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    let seen = engine.0.seen();
+    assert_eq!(seen.len(), 1, "no retry is needed");
+    assert!(seen[0].images.is_empty());
+    assert_eq!((outcome.images_sent, outcome.images_skipped), (0, 1));
+}
+
 #[test]
 fn nothing_said_or_written_is_not_sent_and_failures_are_reported() {
     let engine = ScriptedEngine::new(vec![]);

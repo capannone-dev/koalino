@@ -185,3 +185,73 @@ fn a_connection_id_is_safe_for_a_keychain_entry_and_a_file_name() {
     );
     assert!(fresh.is_ok(), "a generated ID passes");
 }
+
+#[test]
+fn a_local_cli_connection_needs_no_address_and_may_leave_the_model_to_the_tool() {
+    for kind in [LlmKind::ClaudeCode, LlmKind::Codex] {
+        assert!(kind.is_local_cli());
+        let connection =
+            LlmConnection::new("Pro plan", kind, "https://ignored.example", "", 200_000)
+                .unwrap_or_else(|error| panic!("{kind:?}: {error}"));
+        assert_eq!(connection.base_url(), "", "no address is kept");
+        assert_eq!(connection.model(), "", "the tool's own default model");
+        assert!(!connection.is_plain_http());
+        let revalidated = connection
+            .clone()
+            .revalidated()
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(revalidated, connection);
+    }
+    assert!(!LlmKind::Anthropic.is_local_cli());
+    assert!(!LlmKind::OpenAiCompatible.is_local_cli());
+    let named = LlmConnection::new(
+        "Sonnet",
+        LlmKind::ClaudeCode,
+        "",
+        "claude-sonnet-5-5",
+        200_000,
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(named.model(), "claude-sonnet-5-5");
+}
+
+#[test]
+fn a_local_cli_model_name_cannot_pass_for_a_command_line_option() {
+    for model in [
+        "--dangerously-skip-permissions",
+        "-c",
+        "gpt 5",
+        "a;b",
+        "$(x)",
+    ] {
+        assert_eq!(
+            LlmConnection::new("A", LlmKind::Codex, "", model, 200_000).err(),
+            Some(LlmConnectionError::MissingModel),
+            "{model}"
+        );
+    }
+    for model in [
+        "gpt-5.5",
+        "claude-opus-5-5",
+        "opus",
+        "claude-sonnet-5-5[1m]",
+        "o4:mini",
+    ] {
+        assert!(
+            LlmConnection::new("A", LlmKind::ClaudeCode, "", model, 200_000).is_ok(),
+            "{model}"
+        );
+    }
+}
+
+#[test]
+fn local_cli_kinds_are_named_in_snake_case() {
+    assert_eq!(
+        serde_json::to_value(LlmKind::ClaudeCode).ok(),
+        Some(serde_json::json!("claude_code"))
+    );
+    assert_eq!(
+        serde_json::to_value(LlmKind::Codex).ok(),
+        Some(serde_json::json!("codex"))
+    );
+}

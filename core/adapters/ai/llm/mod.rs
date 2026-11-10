@@ -6,11 +6,15 @@
 pub mod anthropic_messages;
 /// Standard base64, for images sent inline.
 pub mod base64;
+/// Claude Code and Codex run as signed-in command-line tools (#105).
+pub mod cli_agent;
 /// OpenAI-compatible Chat Completions.
 pub mod openai_compatible;
 /// The blocking HTTP client both adapters post through.
 pub mod transport;
 
+#[cfg(test)]
+mod cli_agent_tests;
 #[cfg(test)]
 mod llm_adapters_tests;
 
@@ -28,13 +32,17 @@ use crate::{
 
 /// Builds the engine for a connection, posting through reqwest.
 ///
-/// Inputs: The connection and its API key, if any. Outputs: The engine; `MissingKey` for an
-/// Anthropic connection without a key, `Unreachable` when no HTTP client can be built.
+/// Inputs: The connection and its API key, if any (Claude Code and Codex use none). Outputs: The
+/// engine; `MissingKey` for an Anthropic connection without a key, `Unreachable` when no HTTP
+/// client can be built.
 /// Side effects: None until the engine is used.
 pub fn engine_for(
     connection: &LlmConnection,
     api_key: Option<Zeroizing<String>>,
 ) -> Result<Box<dyn LlmEngine>, LlmError> {
+    if connection.kind().is_local_cli() {
+        return Ok(Box::new(cli_agent::CliAgentEngine::installed(connection)));
+    }
     let transport = Arc::new(transport::ReqwestLlmTransport::new()?);
     Ok(match connection.kind() {
         LlmKind::OpenAiCompatible => Box::new(openai_compatible::OpenAiCompatibleEngine::new(
@@ -45,6 +53,9 @@ pub fn engine_for(
             api_key.ok_or(LlmError::MissingKey)?,
             transport,
         )),
+        LlmKind::ClaudeCode | LlmKind::Codex => {
+            Box::new(cli_agent::CliAgentEngine::installed(connection))
+        }
     })
 }
 
@@ -89,7 +100,15 @@ pub(crate) fn provider_reason(body: &str) -> Option<String> {
         (None, Some(only), None) | (None, None, Some(only)) => only.to_owned(),
         (None, None, None) => return None,
     };
-    let one_line = joined
+    one_short_line(&joined)
+}
+
+/// Collapses text to one line for people to read.
+///
+/// Inputs: Any text. Outputs: The words joined by single spaces (control characters dropped),
+/// cut to 300 characters with `…`; `None` when nothing is left. Side effects: None.
+pub(crate) fn one_short_line(text: &str) -> Option<String> {
+    let one_line = text
         .split(|character: char| character.is_whitespace() || character.is_control())
         .filter(|word| !word.is_empty())
         .collect::<Vec<_>>()

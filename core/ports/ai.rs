@@ -214,4 +214,12 @@ pub trait LlmEngine: Send + Sync {
         &self,
         request: &crate::domain::llm::LlmRequest,
     ) -> Result<crate::domain::llm::LlmCompletion, crate::domain::errors::LlmError>;
+
+    /// Whether requests may carry images. Claude Code runs without tools, so it can't read them
+    /// (#105); callers then leave the images out and count them as skipped.
+    ///
+    /// Outputs: `true` unless the engine says otherwise. Side effects: None.
+    fn reads_images(&self) -> bool {
+        true
+    }
 }

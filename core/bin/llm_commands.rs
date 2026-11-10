@@ -8,12 +8,12 @@
 //! | `command` | Fields | Answer |
 //! | --- | --- | --- |
 //! | `settings` | | `connections`, `default_connection`, `template`, `default_template`, `custom_template`, `auto_summarize`, `placeholders` |
-//! | `save_connection` | `id`? (absent creates), `label`, `kind`, `base_url`, `model`, `context_tokens`, `api_key`?, `clear_key`? | `connection` |
+//! | `save_connection` | `id`? (absent creates), `label`, `kind`, `base_url` (not for `claude_code`/`codex`), `model` (optional for those), `context_tokens`, `api_key`? (ignored for those), `clear_key`? | `connection` |
 //! | `delete_connection` | `id` | `deleted: true` (its key goes too) |
 //! | `update` | `default_connection`?, `template`? (null resets), `auto_summarize`? | the settings |
 //! | `test_connection` | `id` | `reply`: the model's answer to a fixed one-line request, which holds no meeting content |
 //!
-//! A connection is shown as `{id,label,kind,base_url,model,context_tokens,plain_http,has_key,
+//! A connection is shown as `{id,label,kind,base_url,model,context_tokens,plain_http,has_key,tool_installed,
 //! is_default}`; keys are write-only and never in an answer or a log. Meeting summaries go
 //! through `summarize_with`, which lets the caller hold its repository only while reading and
 //! writing, not while the model works.
@@ -21,7 +21,9 @@
 //! Error codes: `invalid_request`, `invalid_connection`, `invalid_template`,
 //! `connection_not_found`, `no_connection`, `missing_key`, `keychain_failed`, `save_failed`,
 //! `nothing_to_summarize`, `too_long`, `llm_unreachable`, `llm_unauthorized`, `llm_rate_limited`,
-//! `llm_rejected`, `llm_failed`, `llm_refused`, `llm_invalid_response` and `storage_failed`.
+//! `llm_rejected`, `llm_failed`, `llm_refused`, `llm_invalid_response`, `llm_tool_missing`,
+//! `llm_tool_failed` and `storage_failed`. `llm_tool_failed` also carries `error_detail`, what
+//! Claude Code or Codex said (#105).
 
 use std::{
     path::PathBuf,
@@ -37,7 +39,7 @@ use super::{
     transcription_settings::{load_settings, saved_glossary},
 };
 use crate::{
-    adapters::ai::llm::engine_for,
+    adapters::ai::llm::{cli_agent::find_tool, engine_for},
     application::meeting_summary::SummaryError,
     domain::{
         errors::LlmError,
@@ -210,6 +212,7 @@ impl From<LlmError> for CommandError {
             LlmError::Rejected {
                 provider_reason, ..
             } => provider_reason.clone(),
+            LlmError::ToolFailed { reason } => reason.clone(),
             _ => None,
         };
         let code = match error {
@@ -221,6 +224,8 @@ impl From<LlmError> for CommandError {
             LlmError::Refused => "llm_refused",
             LlmError::InvalidResponse => "llm_invalid_response",
             LlmError::MissingKey => "missing_key",
+            LlmError::ToolMissing { .. } => "llm_tool_missing",
+            LlmError::ToolFailed { .. } => "llm_tool_failed",
         };
         Self {
             detail,
@@ -313,6 +318,9 @@ fn connection_json(
         "context_tokens": connection.context_tokens(),
         "plain_http": connection.is_plain_http(),
         "has_key": has_key,
+        // For Claude Code and Codex: whether the tool is installed here (#105).
+        "tool_installed": connection.kind().is_local_cli()
+            && find_tool(connection.kind()).is_some(),
         "is_default": default_id == Some(connection.id()),
     })
 }
@@ -326,7 +334,7 @@ fn save_connection(services: &LlmServices, request: &Value) -> Result<Value, Com
         .ok_or_else(|| {
             CommandError::new(
                 "invalid_request",
-                "`kind` is open_ai_compatible or anthropic",
+                "`kind` is open_ai_compatible, anthropic, claude_code or codex",
             )
         })?;
     let context_tokens = request
@@ -334,11 +342,20 @@ fn save_connection(services: &LlmServices, request: &Value) -> Result<Value, Com
         .and_then(Value::as_u64)
         .and_then(|tokens| u32::try_from(tokens).ok())
         .unwrap_or(0);
-    let (label, base_url, model) = (
-        text(request, "label")?,
-        text(request, "base_url")?,
-        text(request, "model")?,
-    );
+    // Claude Code and Codex (#105) have no address, and may leave the model to the tool.
+    let (label, base_url, model) = if kind.is_local_cli() {
+        (
+            text(request, "label")?,
+            "",
+            request.get("model").and_then(Value::as_str).unwrap_or(""),
+        )
+    } else {
+        (
+            text(request, "label")?,
+            text(request, "base_url")?,
+            text(request, "model")?,
+        )
+    };
     let checked = match request.get("id").and_then(Value::as_str) {
         Some(id) => LlmConnection::with_id(id, label, kind, base_url, model, context_tokens),
         None => LlmConnection::new(label, kind, base_url, model, context_tokens),
@@ -348,7 +365,7 @@ fn save_connection(services: &LlmServices, request: &Value) -> Result<Value, Com
         .get("api_key")
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|key| !key.is_empty());
+        .filter(|key| !key.is_empty() && !kind.is_local_cli());
     if let Some(key) = api_key
         && crate::transcription_settings::validated_key(key).is_none()
     {

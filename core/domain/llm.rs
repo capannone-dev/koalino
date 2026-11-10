@@ -44,6 +44,21 @@ pub enum LlmKind {
     OpenAiCompatible,
     /// Messages at `<base_url>/v1/messages`.
     Anthropic,
+    /// The Claude Code CLI installed and signed in on this computer (#105), run headlessly so a
+    /// Claude subscription answers instead of API credit. No address and no key.
+    ClaudeCode,
+    /// The Codex CLI installed and signed in on this computer (#105), run headlessly so a
+    /// ChatGPT subscription answers. No address and no key.
+    Codex,
+}
+
+impl LlmKind {
+    /// Whether this kind runs a command-line tool on this computer instead of calling a server.
+    ///
+    /// Outputs: `true` for Claude Code and Codex. Side effects: None.
+    pub fn is_local_cli(self) -> bool {
+        matches!(self, Self::ClaudeCode | Self::Codex)
+    }
 }
 
 /// Why an endpoint was refused.
@@ -172,7 +187,7 @@ pub enum LlmConnectionError {
     /// The label is empty or too long.
     #[error("give the connection a name of at most 200 characters")]
     MissingLabel,
-    /// The model is empty or too long.
+    /// The model is empty or too long, or, for Claude Code and Codex, not a plain model name.
     #[error("name the model, for example gpt-4o-mini or llama3.1:8b")]
     MissingModel,
     /// The context size is out of range.
@@ -197,7 +212,8 @@ pub struct LlmConnection {
 impl LlmConnection {
     /// Checks and creates a connection with a new ID.
     ///
-    /// Inputs: The label, protocol, endpoint, model and context size in tokens.
+    /// Inputs: The label, protocol, endpoint, model and context size in tokens. For Claude Code
+    /// and Codex the endpoint is ignored and the model may be empty (the tool's default).
     /// Outputs: The connection, or the first problem found. Side effects: Draws a random ID.
     pub fn new(
         label: &str,
@@ -238,21 +254,37 @@ impl LlmConnection {
             return Err(LlmConnectionError::MissingLabel);
         }
         let model = model.trim();
-        if model.is_empty()
-            || model.chars().count() > MAX_FIELD_CHARACTERS
-            || model.chars().any(char::is_control)
-        {
+        let model_ok = if kind.is_local_cli() {
+            // Empty leaves the choice to the tool. A name goes on the tool's command line, so it
+            // may not start with `-` or hold anything but a plain model name.
+            model.is_empty()
+                || (model.chars().count() <= MAX_FIELD_CHARACTERS
+                    && !model.starts_with('-')
+                    && model.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || "-._:/[]".contains(character)
+                    }))
+        } else {
+            !model.is_empty()
+                && model.chars().count() <= MAX_FIELD_CHARACTERS
+                && !model.chars().any(char::is_control)
+        };
+        if !model_ok {
             return Err(LlmConnectionError::MissingModel);
         }
         if !(MIN_CONTEXT_TOKENS..=MAX_CONTEXT_TOKENS).contains(&context_tokens) {
             return Err(LlmConnectionError::ContextSize);
         }
-        let endpoint = check_endpoint(base_url)?;
+        // A local tool has no address; whatever was sent is dropped.
+        let base_url = if kind.is_local_cli() {
+            String::new()
+        } else {
+            check_endpoint(base_url)?.as_str().to_owned()
+        };
         Ok(Self {
             id: id.to_owned(),
             label: label.to_owned(),
             kind,
-            base_url: endpoint.as_str().to_owned(),
+            base_url,
             model: model.to_owned(),
             context_tokens,
         })

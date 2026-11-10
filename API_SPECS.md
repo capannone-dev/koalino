@@ -554,9 +554,13 @@ daemon without a settings file `503` `unavailable`. The apps use
 
 `GET /api/settings/llm` returns `{"ok":true,"connections":[...],"default_connection","template",
 "default_template","custom_template","auto_summarize","placeholders"}`. Each connection is
-`{"id","label","kind","base_url","model","context_tokens","plain_http","has_key","is_default"}`,
-where `kind` is `open_ai_compatible` (OpenAI, Mistral, Ollama, llama.cpp, LM Studio, vLLM) or
-`anthropic`. Keys are write-only: no answer ever carries one.
+`{"id","label","kind","base_url","model","context_tokens","plain_http","has_key","is_default",
+"tool_installed"}`, where `kind` is `open_ai_compatible` (OpenAI, Mistral, Ollama, llama.cpp,
+LM Studio, vLLM), `anthropic`, or (#105) `claude_code` or `codex`. The last two run the Claude
+Code or Codex CLI installed and signed in on the computer running the core, so a Claude or ChatGPT
+plan answers instead of API credit: they have no `base_url` and no key, their `model` may be
+empty (the tool's default), and `tool_installed` says whether the tool was found. Keys are
+write-only: no answer ever carries one.
 
 - `POST /api/settings/llm/connections` creates a connection from `{"label","kind","base_url",
   "model","context_tokens","api_key"?}`; `PUT /api/settings/llm/connections/{id}` edits one (an
@@ -585,7 +589,8 @@ Errors are `{"ok":false,"error_code","error"}`: `400` `invalid_request`, `invali
 `invalid_template`; `404` `connection_not_found`, `meeting_not_found`; `409` `no_connection`,
 `missing_key`, `nothing_to_summarize`; `422` `too_long`; `502` `llm_unreachable`,
 `llm_unauthorized`, `llm_rate_limited`, `llm_rejected`, `llm_failed`, `llm_refused`,
-`llm_invalid_response`; `500` `keychain_failed`, `save_failed`, `storage_failed`; `503`
+`llm_invalid_response`, `llm_tool_missing`, `llm_tool_failed` (with `error_detail`, what Claude
+Code or Codex said); `500` `keychain_failed`, `save_failed`, `storage_failed`; `503`
 `unavailable`. An `llm_rejected` error also carries `error_detail` when the AI server gave a
 reason, for example `invalid_request_error: Your credit balance is too low…` (one line, at most
 300 characters; shown to the owner, never logged) (#104). The chat routes do the same.

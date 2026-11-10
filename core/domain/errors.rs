@@ -325,6 +325,20 @@ pub enum LlmError {
     /// The connection needs an API key and has none.
     #[error("this connection needs an API key")]
     MissingKey,
+    /// The command-line tool a connection runs (#105) is not installed on this computer.
+    #[error("{tool} is not installed on this computer")]
+    ToolMissing {
+        /// The tool's name, such as `Claude Code`.
+        tool: &'static str,
+    },
+    /// The command-line tool ran but gave no answer, for example when it is signed out or over
+    /// its plan's limit (#105).
+    #[error("the AI tool on this computer could not answer")]
+    ToolFailed {
+        /// What the tool said, one line of at most 300 characters; shown to the owner, never
+        /// logged.
+        reason: Option<String>,
+    },
     /// The request cannot be sent as built.
     #[error("the request to the language model is invalid: {reason}")]
     InvalidRequest {

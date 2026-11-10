@@ -299,3 +299,77 @@ fn a_rejected_summary_tells_the_owner_the_servers_reason_apart_from_the_error_te
             .contains("credit")
     );
 }
+
+#[test]
+fn a_claude_code_connection_needs_no_address_or_key_and_says_whether_the_tool_is_installed() {
+    let (services, _) = services("claude-code");
+    let saved = run(
+        &services,
+        json!({"command": "save_connection", "label": "Claude Pro", "kind": "claude_code",
+               "context_tokens": 200000, "api_key": "sk-ignored"}),
+    );
+    let connection = &saved["connection"];
+    assert_eq!(connection["kind"], "claude_code", "{saved}");
+    assert_eq!(connection["base_url"], "");
+    assert_eq!(connection["model"], "");
+    assert_eq!(connection["has_key"], false, "a key is never stored for it");
+    assert!(connection["tool_installed"].is_boolean());
+}
+
+/// Fails the way Claude Code does when it is signed out.
+struct SignedOutTool;
+
+impl LlmEngine for SignedOutTool {
+    fn complete(&self, _request: &LlmRequest) -> Result<LlmCompletion, LlmError> {
+        Err(LlmError::ToolFailed {
+            reason: Some("Not logged in · Please run /login".to_owned()),
+        })
+    }
+}
+
+#[test]
+fn a_tool_failure_has_its_own_code_and_what_the_tool_said() {
+    let (services, _) = services("tool-failed");
+    let services = services.with_engine_factory(Arc::new(|_connection: &LlmConnection, _key| {
+        Ok(Box::new(SignedOutTool) as Box<dyn LlmEngine>)
+    }));
+    let saved = run(
+        &services,
+        json!({"command": "save_connection", "label": "Claude Pro", "kind": "claude_code",
+               "context_tokens": 200000}),
+    );
+    let id = saved["connection"]["id"].clone();
+
+    let answer = run(&services, json!({"command": "test_connection", "id": id}));
+
+    assert_eq!(answer["error_code"], "llm_tool_failed", "{answer}");
+    assert_eq!(answer["error_detail"], "Not logged in · Please run /login");
+}
+
+/// Saves Claude Code and Codex connections and tests them through the real tools on this
+/// computer, as the app's Test button does. Ignored: it needs both tools signed in and uses
+/// their plans. Run it by hand with `cargo test --lib real_tool_connections -- --ignored`.
+#[test]
+#[ignore = "runs the installed Claude Code and Codex"]
+fn real_tool_connections_answer_the_test_request() {
+    let folder = std::env::temp_dir().join(format!("llm-real-tools-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
+    let services = LlmServices::new(
+        folder.join("db.sqlite3.llm-settings.json"),
+        Arc::new(MemoryLlmKeyring::default()),
+        "Laptop",
+    );
+    for kind in ["claude_code", "codex"] {
+        let saved = run(
+            &services,
+            json!({"command": "save_connection", "label": kind, "kind": kind,
+                   "context_tokens": 200000}),
+        );
+        assert_eq!(saved["connection"]["tool_installed"], true, "{saved}");
+        let id = saved["connection"]["id"].clone();
+        let answer = run(&services, json!({"command": "test_connection", "id": id}));
+        println!("{kind}: {answer}");
+        assert_eq!(answer["ok"], true, "{kind}: {answer}");
+    }
+    let _ = std::fs::remove_dir_all(folder);
+}

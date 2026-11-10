@@ -162,7 +162,12 @@ pub fn summarize_meeting(
                 String::from("Transcript, with each speaker and the time from the start:\n")
             };
             let user = format!("{notes_section}{heading}{body}");
-            let room_for_images = budget.images_that_fit(fixed + body.len(), material.images.len());
+            // An engine that cannot read images (Claude Code without tools, #105) gets none.
+            let room_for_images = if engine.reads_images() {
+                budget.images_that_fit(fixed + body.len(), material.images.len())
+            } else {
+                0
+            };
             let mut images = material.images;
             let mut images_skipped = images.len().saturating_sub(room_for_images);
             images.truncate(room_for_images);
