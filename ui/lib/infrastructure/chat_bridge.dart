@@ -76,12 +76,20 @@ final class ChatEntry {
 /// A refused or failed chat command, with the core's stable code.
 final class ChatException implements Exception {
   /// Creates the exception.
-  const ChatException(this.code);
+  const ChatException(this.code, {this.detail});
 
   final String code;
 
-  /// A sentence for people; the core's own text is not shown.
-  String get message => switch (code) {
+  /// The AI server's own reason for a rejection (`error_detail`). Shown, never logged.
+  final String? detail;
+
+  /// A sentence for people; the core's own text is not shown. A rejection with the server's
+  /// reason shows that reason.
+  String get message => detail != null && code == 'llm_rejected'
+      ? 'The AI server rejected the request.\nThe server said: $detail'
+      : _sentence;
+
+  String get _sentence => switch (code) {
         'empty' => 'Type a question.',
         'too_long' => 'The question is too long.',
         'no_connection' =>
@@ -157,7 +165,7 @@ final class ChatBridge {
       return decodeLlmAnswer(
           await _call('note_taker_chat', <String?>[jsonEncode(request)]));
     } on LlmException catch (error) {
-      throw ChatException(error.code);
+      throw ChatException(error.code, detail: error.detail);
     }
   }
 }

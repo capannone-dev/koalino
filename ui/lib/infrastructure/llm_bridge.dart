@@ -274,13 +274,22 @@ final class SummaryResult {
 /// A refused or failed AI call, with the core's stable error code.
 final class LlmException implements Exception {
   /// Creates the exception.
-  const LlmException(this.code);
+  const LlmException(this.code, {this.detail});
 
   /// Such as `too_long`, `llm_unreachable` or `runtime_unavailable`.
   final String code;
 
-  /// A sentence for people; the core's own text is not shown, since it can hold details.
-  String get message => switch (code) {
+  /// The AI server's own reason for a rejection (`error_detail`), such as a low credit
+  /// balance. Shown to the owner, never logged.
+  final String? detail;
+
+  /// A sentence for people; the core's own text is not shown, since it can hold details. A
+  /// rejection with the server's reason shows that reason instead of a guess.
+  String get message => detail != null && code == 'llm_rejected'
+      ? 'The AI server rejected the request.\nThe server said: $detail'
+      : _sentence;
+
+  String get _sentence => switch (code) {
         'invalid_connection' =>
           'Check the address and model. Plain http:// works only on this device or the local network.',
         'invalid_template' =>
@@ -330,7 +339,9 @@ Map<String, Object?> decodeLlmAnswer(String answer) {
     throw const LlmException('invalid_answer');
   }
   if (decoded['ok'] != true) {
-    throw LlmException(decoded['error_code'] as String? ?? 'unknown');
+    final Object? detail = decoded['error_detail'];
+    throw LlmException(decoded['error_code'] as String? ?? 'unknown',
+        detail: detail is String && detail.isNotEmpty ? detail : null);
   }
   return decoded;
 }

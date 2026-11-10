@@ -183,6 +183,20 @@ void main() {
     expect(core.calls.last.$2, <String?>['m-1', null]);
   });
 
+  test("a rejected summary shows the AI server's own reason", () async {
+    core.answer('note_taker_summarize_meeting', <String, Object?>{
+      'ok': false,
+      'error_code': 'llm_rejected',
+      'error_detail': 'invalid_request_error: Your credit balance is too low',
+    });
+    await controller.summarize('m-1');
+
+    expect(
+        controller.meetingMessage('m-1'),
+        'The AI server rejected the request.\n'
+        'The server said: invalid_request_error: Your credit balance is too low');
+  });
+
   test("a meeting's own prompt is saved and cleared", () async {
     core.answer('note_taker_set_meeting_summary_prompt',
         <String, Object?>{'ok': true, 'meeting_prompt': 'Only decisions.'});

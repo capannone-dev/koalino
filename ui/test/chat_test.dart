@@ -94,6 +94,23 @@ void main() {
     expect(find.text('Anything?'), findsOneWidget, reason: 'kept in the field');
   });
 
+  testWidgets("a rejected question shows the AI server's own reason",
+      (WidgetTester tester) async {
+    await show(tester);
+    answers.add(<String, Object?>{
+      'ok': false,
+      'error_code': 'llm_rejected',
+      'error_detail': 'model_not_found: no such model',
+    });
+    await tester.enterText(find.byKey(chatQuestionFieldKey), 'Anything?');
+    await tester.tap(find.byTooltip('Ask'));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.textContaining('The server said: model_not_found: no such model'),
+        findsOneWidget);
+  });
+
   testWidgets('the chat is deleted after asking', (WidgetTester tester) async {
     await show(tester);
     await tester.tap(find.byTooltip('Delete this chat'));

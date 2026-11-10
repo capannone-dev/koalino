@@ -23,7 +23,9 @@ export type ChatMessage = {
 export class ChatApiError extends Error {
   constructor(
     readonly code: string,
-    readonly status: number | null
+    readonly status: number | null,
+    /** The AI server's own reason for a rejection (`error_detail`); shown, never logged. */
+    readonly detail: string | null = null
   ) {
     super(`Chat request failed (${status ?? "network"}): ${code}`);
     this.name = "ChatApiError";
@@ -51,6 +53,9 @@ const messages: Record<string, string> = {
 
 /** Words a failure for people. */
 export function chatErrorMessage(error: unknown): string {
+  if (error instanceof ChatApiError && error.code === "llm_rejected" && error.detail) {
+    return `The AI server rejected the request. The server said: ${error.detail}`;
+  }
   const code = error instanceof ChatApiError ? error.code : "server";
   return messages[code] ?? (code.startsWith("llm_") ? "The AI server could not answer. Try again." : "Something went wrong. Try again.");
 }
@@ -72,9 +77,10 @@ async function request<Answer>(path: string, init: RequestInit): Promise<Answer>
   } catch {
     throw new ChatApiError("network", null);
   }
-  const body = (await response.json().catch(() => ({}))) as { error_code?: unknown };
+  const body = (await response.json().catch(() => ({}))) as { error_code?: unknown; error_detail?: unknown };
   if (!response.ok) {
-    throw new ChatApiError(typeof body.error_code === "string" ? body.error_code : "server", response.status);
+    const detail = typeof body.error_detail === "string" && body.error_detail !== "" ? body.error_detail : null;
+    throw new ChatApiError(typeof body.error_code === "string" ? body.error_code : "server", response.status, detail);
   }
   return body as Answer;
 }

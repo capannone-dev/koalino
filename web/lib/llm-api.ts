@@ -67,7 +67,9 @@ export type SummaryResult = {
 export class LlmApiError extends Error {
   constructor(
     readonly code: string,
-    readonly status: number | null
+    readonly status: number | null,
+    /** The AI server's own reason for a rejection (`error_detail`); shown, never logged. */
+    readonly detail: string | null = null
   ) {
     super(`AI request failed (${status ?? "network"}): ${code}`);
     this.name = "LlmApiError";
@@ -105,6 +107,9 @@ const messages: Record<string, string> = {
  * Inputs: any thrown value. Outputs: a sentence. Side effects: none.
  */
 export function llmErrorMessage(error: unknown): string {
+  if (error instanceof LlmApiError && error.code === "llm_rejected" && error.detail) {
+    return `The AI server rejected the request. The server said: ${error.detail}`;
+  }
   if (error instanceof LlmApiError) return messages[error.code] ?? "Something went wrong on the server. Try again.";
   return "Something went wrong. Try again.";
 }
@@ -117,9 +122,10 @@ async function request<Answer>(path: string, init: RequestInit = {}): Promise<An
   } catch {
     throw new LlmApiError("network", null);
   }
-  const body = (await response.json().catch(() => ({}))) as { error_code?: unknown };
+  const body = (await response.json().catch(() => ({}))) as { error_code?: unknown; error_detail?: unknown };
   if (!response.ok) {
-    throw new LlmApiError(typeof body.error_code === "string" ? body.error_code : "server", response.status);
+    const detail = typeof body.error_detail === "string" && body.error_detail !== "" ? body.error_detail : null;
+    throw new LlmApiError(typeof body.error_code === "string" ? body.error_code : "server", response.status, detail);
   }
   return body as Answer;
 }
