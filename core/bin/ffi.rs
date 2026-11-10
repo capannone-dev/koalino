@@ -2215,6 +2215,7 @@ fn with_saved_transcription(config: PipelineConfig, paths: &TranscriptionPaths) 
             None
         }
     };
+    let saved = crate::ffi_transcription::effective_settings(&saved, paths);
     apply_saved_settings(config, &saved, paths, saved_key)
 }
 

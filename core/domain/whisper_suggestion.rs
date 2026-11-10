@@ -53,6 +53,47 @@ pub struct WhisperSuggestion {
     pub reason: &'static str,
 }
 
+/// What "Automatic" runs on this device (#106).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AutomaticModel<'a> {
+    /// The catalog file name to load.
+    pub file_name: &'a str,
+    /// True when efficient mode is part of the choice.
+    pub efficient: bool,
+    /// The suggested model, while it waits to be downloaded and another runs instead.
+    pub waiting_for_download: Option<&'a str>,
+}
+
+/// Resolves "Automatic" to a model on this device.
+///
+/// Inputs: The device's suggestion; whether a catalog file is on the device; and the shipped
+/// model's file name, if any.
+/// Outputs: The suggested model when it is on the device. Otherwise the shipped model, naming the
+/// suggestion as waiting, since nothing downloads without the owner's say (#68). `None` when
+/// neither is on the device. Efficient mode follows the suggestion either way, because it speeds
+/// up any model on that GPU.
+/// Side effects: None.
+pub fn automatic_model<'a>(
+    suggestion: WhisperSuggestion,
+    is_on_device: impl Fn(&str) -> bool,
+    shipped_file_name: Option<&'a str>,
+) -> Option<AutomaticModel<'a>> {
+    if is_on_device(suggestion.file_name) {
+        return Some(AutomaticModel {
+            file_name: suggestion.file_name,
+            efficient: suggestion.efficient,
+            waiting_for_download: None,
+        });
+    }
+    shipped_file_name
+        .filter(|shipped| is_on_device(shipped))
+        .map(|shipped| AutomaticModel {
+            file_name: shipped,
+            efficient: suggestion.efficient,
+            waiting_for_download: Some(suggestion.file_name),
+        })
+}
+
 /// Suggests a model.
 ///
 /// Inputs: The device's profile; unknown values count against larger models.

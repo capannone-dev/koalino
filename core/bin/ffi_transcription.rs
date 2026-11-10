@@ -28,7 +28,10 @@ use crate::{
     domain::{
         errors::CryptoError,
         whisper_catalog::{WHISPER_MODELS, WhisperModelEntry, find_whisper_model},
-        whisper_suggestion::{DeviceGpu, DeviceProfile, suggest_whisper_model},
+        whisper_suggestion::{
+            AutomaticModel, DeviceGpu, DeviceProfile, WhisperSuggestion, automatic_model,
+            suggest_whisper_model,
+        },
     },
     ffi::provided_encryption_key,
     ffi_settings::app_setting,
@@ -36,6 +39,7 @@ use crate::{
     transcription_settings::{
         OpenAiKeyStore, SavedProvider, SavedTranscriptionSettings, TranscriptionPaths,
         load_settings, save_settings, saved_keep_for, test_openai_key, validated_key,
+        with_automatic_model,
     },
 };
 use crate::{
@@ -184,6 +188,42 @@ fn device_profile(efficient_gpu_available: bool) -> DeviceProfile {
     }
 }
 
+/// Resolves "Automatic" (#106) on this device.
+///
+/// Inputs: The paths, to see which models are here.
+/// Outputs: The device's suggestion and what Automatic runs, `None` when no model is here.
+/// Side effects: Reads system files; may start whisper.cpp's backends to find a GPU.
+fn automatic_on_this_device(
+    paths: &TranscriptionPaths,
+) -> (WhisperSuggestion, Option<AutomaticModel<'_>>) {
+    let suggestion = suggest_whisper_model(&device_profile(efficient_gpu_status().0.is_some()));
+    let automatic = automatic_model(
+        suggestion,
+        |file_name| paths.locate_model(file_name).is_some(),
+        paths.shipped_file_name(),
+    );
+    (suggestion, automatic)
+}
+
+/// The saved choices with "Automatic" applied, as the next recording uses them.
+///
+/// Inputs: The saved choices and the paths. Outputs: The choices; a hand-picked model that is
+/// no longer on the device counts as Automatic. Under OpenAI they are unchanged.
+/// Side effects: See `automatic_on_this_device`, only when Automatic applies.
+pub(crate) fn effective_settings(
+    saved: &SavedTranscriptionSettings,
+    paths: &TranscriptionPaths,
+) -> SavedTranscriptionSettings {
+    let mut saved = saved.clone();
+    saved.whisper_model = saved
+        .whisper_model
+        .filter(|file_name| paths.locate_model(file_name).is_some());
+    if saved.provider == Some(SavedProvider::Openai) || saved.whisper_model.is_some() {
+        return saved;
+    }
+    with_automatic_model(&saved, automatic_on_this_device(paths).1)
+}
+
 /// Builds the whole Settings view. Side effects: Reads files and the key store.
 fn settings_json() -> String {
     let paths = paths();
@@ -194,11 +234,11 @@ fn settings_json() -> String {
         Err(CryptoError::KeychainUnavailable { .. }) => (false, false),
         Err(_) => (false, true),
     };
+    // A hand-picked model on this device; `None` is Automatic (#106).
     let selected = saved
         .whisper_model
         .clone()
-        .filter(|file| paths.locate_model(file).is_some())
-        .or_else(|| paths.shipped_file_name().map(str::to_owned));
+        .filter(|file| paths.locate_model(file).is_some());
     let download = download_slot()
         .0
         .lock()
@@ -207,6 +247,11 @@ fn settings_json() -> String {
     let disk_probe = paths.models_directory.parent().map(PathBuf::from);
     let (efficient_gpu_name, gpu_in_use) = efficient_gpu_status();
     let suggestion = suggest_whisper_model(&device_profile(efficient_gpu_name.is_some()));
+    let automatic = automatic_model(
+        suggestion,
+        |file_name| paths.locate_model(file_name).is_some(),
+        paths.shipped_file_name(),
+    );
     json!({
         "provider": match saved.provider {
             Some(SavedProvider::Openai) => "openai",
@@ -230,6 +275,12 @@ fn settings_json() -> String {
             "days": keep_speech_days(saved_keep_for(&saved)),
             "min_days": MIN_KEEP_SPEECH_DAYS,
             "max_days": MAX_KEEP_SPEECH_DAYS,
+        },
+        "automatic": {
+            "enabled": selected.is_none(),
+            "file_name": automatic.map(|choice| choice.file_name),
+            "efficient": automatic.is_some_and(|choice| choice.efficient),
+            "waiting_for_download": automatic.and_then(|choice| choice.waiting_for_download),
         },
         "after_meeting_pass": transcript_pass_enabled(&saved),
         "efficient": {
@@ -299,9 +350,8 @@ pub(crate) fn proposal_settings() -> Option<(String, Vec<String>)> {
     if saved.provider == Some(SavedProvider::Openai) {
         return None;
     }
-    let current = saved
+    let current = effective_settings(&saved, &paths)
         .whisper_model
-        .filter(|file| paths.locate_model(file).is_some())
         .or_else(|| paths.shipped_file_name().map(str::to_owned))?;
     Some((current, saved.dismissed_proposals))
 }
@@ -372,6 +422,15 @@ pub extern "C" fn note_taker_set_keep_speech_days(days: c_int) -> c_int {
             STATUS_FAILED
         }
     }
+}
+
+/// Chooses "Automatic" (#106): the next recording uses the model suggested for this device.
+///
+/// Outputs: 0, or 2 when the choice can't be stored. Side effects: Forgets the hand-picked model;
+/// downloaded models stay on the device.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_use_automatic_model() -> c_int {
+    update_settings(|saved| saved.whisper_model = None)
 }
 
 /// Turns the after-meeting pass (#87) on or off from the next recording.

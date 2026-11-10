@@ -283,3 +283,32 @@ fn the_after_meeting_pass_switch_is_saved_and_defaults_to_on() {
         &paths.settings_file
     )));
 }
+
+#[test]
+fn automatic_fills_in_the_model_and_efficient_mode_only_when_none_was_chosen() {
+    use super::transcription_settings::with_automatic_model;
+    use crate::domain::whisper_suggestion::AutomaticModel;
+    let automatic = AutomaticModel {
+        file_name: "ggml-small.bin",
+        efficient: true,
+        waiting_for_download: None,
+    };
+
+    let chosen = with_automatic_model(&SavedTranscriptionSettings::default(), Some(automatic));
+    assert_eq!(chosen.whisper_model.as_deref(), Some("ggml-small.bin"));
+    assert!(chosen.efficient_gpu);
+
+    let manual = SavedTranscriptionSettings {
+        whisper_model: Some("ggml-base.bin".to_owned()),
+        ..SavedTranscriptionSettings::default()
+    };
+    let kept = with_automatic_model(&manual, Some(automatic));
+    assert_eq!(kept.whisper_model.as_deref(), Some("ggml-base.bin"));
+    assert!(
+        !kept.efficient_gpu,
+        "a hand-picked model keeps its own efficient switch"
+    );
+
+    let nothing = with_automatic_model(&SavedTranscriptionSettings::default(), None);
+    assert_eq!(nothing.whisper_model, None);
+}

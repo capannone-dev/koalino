@@ -25,7 +25,7 @@ use crate::{
     },
     domain::{
         errors::CryptoError, transcription_glossary::TranscriptionGlossary,
-        whisper_catalog::find_whisper_model,
+        whisper_catalog::find_whisper_model, whisper_suggestion::AutomaticModel,
     },
     pipeline_composition::{PipelineConfig, TranscriptionProvider, WHISPER_MODEL_VARIABLE},
     ports::crypto::KeychainStore,
@@ -327,6 +327,26 @@ pub fn save_keep_meeting_voices(settings_file: &Path, keep: bool) -> io::Result<
     let mut saved = load_settings(settings_file);
     saved.keep_meeting_voices = keep;
     save_settings(settings_file, &saved)
+}
+
+/// Applies "Automatic" (#106): with no model chosen by hand, the automatic model and its
+/// efficient mode stand in for the saved ones.
+///
+/// Inputs: The saved choices and what Automatic resolved to on this device, if anything.
+/// Outputs: The choices to run with; unchanged when a model was chosen by hand or Automatic found
+/// nothing. Side effects: None; nothing is saved, so Automatic follows the device each time.
+pub fn with_automatic_model(
+    saved: &SavedTranscriptionSettings,
+    automatic: Option<AutomaticModel<'_>>,
+) -> SavedTranscriptionSettings {
+    let mut effective = saved.clone();
+    if saved.whisper_model.is_none()
+        && let Some(automatic) = automatic
+    {
+        effective.whisper_model = Some(automatic.file_name.to_owned());
+        effective.efficient_gpu = automatic.efficient;
+    }
+    effective
 }
 
 /// Layers the saved choices over a configuration.

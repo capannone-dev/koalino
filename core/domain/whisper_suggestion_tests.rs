@@ -111,3 +111,51 @@ fn every_suggestion_is_in_the_catalog_and_has_a_reason() {
         assert!(!suggestion.reason.is_empty());
     }
 }
+
+mod automatic {
+    use super::super::whisper_suggestion::{WhisperSuggestion, automatic_model};
+
+    const SMALL_EFFICIENT: WhisperSuggestion = WhisperSuggestion {
+        file_name: "ggml-small.bin",
+        efficient: true,
+        reason: "test",
+    };
+
+    /// Automatic uses the suggested model, with its efficient mode, once it is on the device.
+    #[test]
+    fn uses_the_suggestion_when_it_is_on_the_device() {
+        let choice = automatic_model(
+            SMALL_EFFICIENT,
+            |file| file == "ggml-small.bin",
+            Some("ggml-base.bin"),
+        )
+        .unwrap_or_else(|| panic!("a model is on the device"));
+        assert_eq!(choice.file_name, "ggml-small.bin");
+        assert!(choice.efficient);
+        assert_eq!(choice.waiting_for_download, None);
+    }
+
+    /// Nothing downloads by itself: until the owner downloads it, the shipped model runs.
+    #[test]
+    fn uses_the_shipped_model_until_the_suggestion_is_downloaded() {
+        let choice = automatic_model(
+            SMALL_EFFICIENT,
+            |file| file == "ggml-base.bin",
+            Some("ggml-base.bin"),
+        )
+        .unwrap_or_else(|| panic!("the shipped model is on the device"));
+        assert_eq!(choice.file_name, "ggml-base.bin");
+        assert!(
+            choice.efficient,
+            "efficient mode speeds up any model on that GPU"
+        );
+        assert_eq!(choice.waiting_for_download, Some("ggml-small.bin"));
+    }
+
+    /// Without the suggestion or a shipped model there is nothing to run.
+    #[test]
+    fn is_none_without_any_model() {
+        assert!(automatic_model(SMALL_EFFICIENT, |_| false, Some("ggml-base.bin")).is_none());
+        assert!(automatic_model(SMALL_EFFICIENT, |_| false, None).is_none());
+    }
+}
