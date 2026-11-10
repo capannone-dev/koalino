@@ -26,11 +26,8 @@ use crate::{domain::errors::CryptoError, ports::crypto::KeychainStore};
 pub const KEYCHAIN_SERVICE: &str = "note-taker";
 /// Account (user) name of the keychain entry on every platform.
 pub const KEYCHAIN_ACCOUNT: &str = "encryption-key";
-/// Label shown for the item in Secret Service user interfaces (Seahorse, KWallet).
-#[cfg(all(
-    unix,
-    not(any(target_os = "macos", target_os = "ios", target_os = "android"))
-))]
+/// Label shown for the item in Secret Service user interfaces (Seahorse, KWallet). Passed on
+/// every platform; only the Linux Secret Service uses it.
 const SECRET_SERVICE_LABEL: &str = "Note Taker voice embedding encryption key";
 
 /// The keychain entry for the voice-embedding key.
@@ -220,6 +217,12 @@ fn open_platform_entry(service: &str, account: &str, label: &str) -> Result<Entr
         not(any(target_os = "macos", target_os = "ios", target_os = "android"))
     ))]
     modifiers.insert("label", label);
+    // Other stores have no label.
+    #[cfg(not(all(
+        unix,
+        not(any(target_os = "macos", target_os = "ios", target_os = "android"))
+    )))]
+    let _ = label;
     Entry::new_with_modifiers(service, account, &modifiers)
 }
 
