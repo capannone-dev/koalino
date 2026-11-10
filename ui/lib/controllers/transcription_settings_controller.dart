@@ -92,6 +92,13 @@ final class TranscriptionSettingsController extends ChangeNotifier {
       _run(() => _bridge.setEfficientGpu(enabled: enabled),
           success: 'Saved. The next recording uses this.');
 
+  /// Turns the after-meeting pass on or off.
+  ///
+  /// Inputs: The new state. Side effects: Stores the choice and reloads.
+  Future<void> setAfterMeetingPass({required bool enabled}) =>
+      _run(() => _bridge.setAfterMeetingPass(enabled: enabled),
+          success: 'Saved. The next recording uses this.');
+
   /// Saves the glossary from text holding one term per line.
   ///
   /// Inputs: The text; lines are trimmed and blank ones dropped.

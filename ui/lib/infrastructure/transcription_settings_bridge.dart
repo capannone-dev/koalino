@@ -189,6 +189,7 @@ final class TranscriptionSettings {
     this.efficient = const EfficientModeStatus(),
     this.glossary = const <String>[],
     this.keepSpeech = const SpeechRetention(),
+    this.afterMeetingPass = true,
   });
 
   /// Reads the view from the core's JSON.
@@ -215,6 +216,7 @@ final class TranscriptionSettings {
           ? const SpeechRetention()
           : SpeechRetention.fromJson(
               json['keep_speech']! as Map<String, Object?>),
+      afterMeetingPass: json['after_meeting_pass'] as bool? ?? true,
       openAiModel: json['openai_model']! as String,
       keySaved: json['key_saved']! as bool,
       environmentKey: json['environment_key']! as bool,
@@ -251,6 +253,10 @@ final class TranscriptionSettings {
 
   /// How long a recording's speech waits to be combined with another device's (#93).
   final SpeechRetention keepSpeech;
+
+  /// Whether each meeting is transcribed again after Stop, with longer context (#87). On by
+  /// default; a phone runs it only while charging.
+  final bool afterMeetingPass;
 
   final String provider;
   final String openAiModel;
@@ -316,6 +322,10 @@ abstract interface class TranscriptionSettingsBridge {
 
   /// Turns efficient mode on or off for the next recording.
   Future<int> setEfficientGpu({required bool enabled});
+
+  /// Turns the after-meeting pass (#87) on or off from the next recording.
+  /// Outputs: A core status. Side effects: Stores the choice.
+  Future<int> setAfterMeetingPass({required bool enabled});
 
   /// Lets the GPU be tried again after a crash stopped it.
   Future<int> retryGpu();
@@ -394,6 +404,14 @@ final class RustTranscriptionSettingsBridge
     return Isolate.run(() => _openCoreLibrary()
         .lookupFunction<Int32 Function(Int32), int Function(int)>(
             'note_taker_set_efficient_gpu')(value));
+  }
+
+  @override
+  Future<int> setAfterMeetingPass({required bool enabled}) {
+    final int value = enabled ? 1 : 0;
+    return Isolate.run(() => _openCoreLibrary()
+        .lookupFunction<Int32 Function(Int32), int Function(int)>(
+            'note_taker_set_after_meeting_pass')(value));
   }
 
   @override

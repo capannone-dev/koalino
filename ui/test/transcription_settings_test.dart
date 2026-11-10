@@ -88,6 +88,7 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
         efficient: efficient,
         glossary: glossary,
         keepSpeech: SpeechRetention(days: keepSpeechDays),
+        afterMeetingPass: afterMeetingPass,
       );
 
   @override
@@ -158,6 +159,16 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
 
   /// How many days speech waits to be combined, as the core holds it.
   int keepSpeechDays = 21;
+
+  /// Whether meetings are re-transcribed after Stop, as the core holds it.
+  bool afterMeetingPass = true;
+
+  @override
+  Future<int> setAfterMeetingPass({required bool enabled}) async {
+    calls.add('pass $enabled');
+    afterMeetingPass = enabled;
+    return transcriptionStatusOk;
+  }
 
   @override
   Future<int> setKeepSpeechDays(int days) async {
@@ -468,6 +479,44 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.text('7 days'), findsOneWidget,
         reason: 'the menu shows the saved window');
+  });
+
+  testWidgets('the after-meeting pass is on by default and can be turned off',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge();
+    await _pump(tester, bridge);
+    await tester.scrollUntilVisible(find.byKey(afterMeetingPassKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(find.byKey(afterMeetingPassKey)).value,
+        isTrue);
+
+    await tester.tap(find.byKey(afterMeetingPassKey));
+    await tester.pumpAndSettle();
+
+    expect(bridge.calls, contains('pass false'));
+    await tester.scrollUntilVisible(find.byKey(afterMeetingPassKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(tester.widget<SwitchListTile>(find.byKey(afterMeetingPassKey)).value,
+        isFalse,
+        reason: 'the switch shows the saved choice');
+  });
+
+  test('settings from an older core keep the after-meeting pass on', () {
+    expect(
+        const TranscriptionSettings(
+          provider: 'local',
+          openAiModel: 'whisper-1',
+          keySaved: false,
+          environmentKey: false,
+          keychainAvailable: true,
+          selectedModel: null,
+          availableDiskBytes: null,
+          usingLocalFallback: false,
+          models: <WhisperModelInfo>[],
+          download: WhisperDownload(state: 'idle'),
+        ).afterMeetingPass,
+        isTrue);
   });
 
   test('the retention window is read from the core with its bounds', () {

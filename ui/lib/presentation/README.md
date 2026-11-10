@@ -76,7 +76,8 @@ hidden and shown to `AppLockController`.
 key field (#67). Its Glossary section takes one name or term per line; the message under Save says
 it applies from the next recording, and refused text stays in the field to correct. Below it,
 "Keep speech for combining" is a menu of days (1 to 60, plus any window set from the CLI or the
-web) that `note_taker_set_keep_speech_days` saves (#93).
+web) that `note_taker_set_keep_speech_days` saves (#93). Above it, the "Improve the transcript after
+the meeting" switch (on by default) is saved by `note_taker_set_after_meeting_pass` (#87).
 
 `settings_screen.dart` (`SettingsScreen`) is on every platform (Issue #46). Its diagnostics hold
 a Telemetry entry, which pushes the telemetry dashboard as a page (Issue #53; it used to be a

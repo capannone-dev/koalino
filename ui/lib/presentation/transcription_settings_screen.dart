@@ -30,6 +30,9 @@ const Key glossaryFieldKey = ValueKey<String>('glossary-field');
 /// Finds the speech retention window's menu (#93).
 const Key keepSpeechKey = ValueKey<String>('keep-speech');
 
+/// Finds the after-meeting pass switch (#87).
+const Key afterMeetingPassKey = ValueKey<String>('after-meeting-pass');
+
 /// Finds the button that saves the glossary.
 const Key glossarySaveKey = ValueKey<String>('glossary-save');
 
@@ -168,11 +171,28 @@ final class _TranscriptionSettingsScreenState
                     controller: widget.controller,
                     saved: settings.glossary),
                 const Divider(),
+                _afterMeetingPassTile(settings.afterMeetingPass),
                 _keepSpeechTile(settings.keepSpeech),
               ],
             );
           },
         ),
+      );
+
+  /// The after-meeting pass (#87): transcribe the meeting again after Stop, with longer context.
+  /// The speech is kept encrypted until then and deleted afterwards.
+  Widget _afterMeetingPassTile(bool enabled) => SwitchListTile(
+        key: afterMeetingPassKey,
+        secondary: const Icon(Icons.auto_fix_high_outlined),
+        title: const Text('Improve the transcript after the meeting'),
+        subtitle: const Text('Transcribes each meeting again with more '
+            'context once it ends; a phone waits until it is charging. The '
+            'speech is kept encrypted until then, then deleted.'),
+        value: enabled,
+        onChanged: widget.controller.isBusy
+            ? null
+            : (bool value) =>
+                widget.controller.setAfterMeetingPass(enabled: value),
       );
 
   /// The speech retention window: how long a recording's speech waits for another device's
