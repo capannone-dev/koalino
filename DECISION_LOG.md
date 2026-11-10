@@ -2698,3 +2698,20 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **Costs and limits:** these runs count against the plans' usage limits. Codex adds its own
   agent prompt (about 14k tokens even for a one-line request).
 
+
+## 2026-11-10 — #87 The after-meeting pass is on for phones, with a Settings switch
+
+- **Why:** the two meetings recorded on the S23 today kept no speech and were never transcribed
+  again. The pass was still off by default on Android ("until a charging job exists"), and the
+  charging job (a848227) had landed without turning it on. Nothing in the app could turn it on.
+- **Decision:** on by default on every platform. A phone keeps the meeting's speech, encrypted,
+  and runs the pass while charging, then deletes it, as the owner decided on 2026-11-06.
+- **Switch (plan step 4, on/off part):** Settings → Transcription → "Improve the transcript after
+  the meeting", saved as `transcript_pass` in the transcription settings file through
+  `note_taker_set_after_meeting_pass`. It applies from the next recording; speech already kept is
+  still processed and deleted. The pass model is not in Settings yet (`transcript_pass_model` or
+  `NOTE_TAKER_TRANSCRIPT_PASS_MODEL` set it), and the web UI doesn't show the switch, since the
+  daemon already had the pass on.
+- **Cost on a phone:** speech is kept as Opus until the pass, and longer when it waits to be
+  combined with another device's recording ("Keep speech for combining"). The pass itself is a
+  second transcription of the meeting, so it runs only on the charger.
