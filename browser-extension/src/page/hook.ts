@@ -9,6 +9,8 @@
  *   participant mixed) are tapped with an `AudioContext`; playback is unaffected.
  * - Teams transcript: responses of the page's own transcript requests (`/transcripts/…`) are
  *   copied; the extension never makes such requests itself and never uses the page's tokens.
+ *   In the recap's SharePoint frame (opened by Teams) the hook does only this, for the WebVTT the
+ *   frame's Download → "Download as .vtt" fetches; on any other SharePoint page it does nothing.
  *
  * - Screen share: on `analyse-share` the shared screen's video is drawn on a canvas here and only
  *   its small signature is posted; on `encode-slide` that frame is cropped to the slide and posted
@@ -21,8 +23,12 @@
  */
 import { resampleTo16k } from "../lib/pcm";
 import { findSlideBox, signatureOf } from "../lib/slides";
+import { embeddedInTeams } from "../lib/siteAccess";
 import { findShareVideo } from "../lib/teamsDom";
 import { AudioTrack, CONTENT_SOURCE, HOOK_SOURCE, HookCommand, HookMessage } from "../lib/messages";
+
+/** Whether this page is Teams itself (the manifest's Teams sites), not a SharePoint frame. */
+const onTeams = /^teams\.(microsoft\.com|cloud\.microsoft|live\.com)$/.test(window.location.hostname);
 
 /** Samples per audio callback (about 85 ms at 48 kHz). */
 const PROCESSOR_FRAMES = 4096;
@@ -238,7 +244,7 @@ function encodeSlide(): void {
 }
 
 window.addEventListener("message", (event: MessageEvent<HookCommand>) => {
-  if (event.source !== window || event.data?.source !== CONTENT_SOURCE) return;
+  if (!onTeams || event.source !== window || event.data?.source !== CONTENT_SOURCE) return;
   if (event.data.command === "start-audio") startAudio();
   if (event.data.command === "stop-audio") stopAudio();
   try {
@@ -250,5 +256,10 @@ window.addEventListener("message", (event: MessageEvent<HookCommand>) => {
   }
 });
 
-hookGetUserMedia();
-hookFetch();
+if (onTeams) {
+  hookGetUserMedia();
+  hookFetch();
+} else if (embeddedInTeams(window.top === window, document.referrer)) {
+  // A recap frame: only its transcript download is copied.
+  hookFetch();
+}

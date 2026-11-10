@@ -1,6 +1,7 @@
 /**
  * The popup (Issue #102): shows whether the Note Taker helper (native host) and app are
- * reachable, which meetings are being recorded, and the settings as checkboxes. When the extension
+ * reachable, which meetings are being recorded, what happened to the last Teams transcript fetch,
+ * and the settings as checkboxes. When the extension
  * may not run on the Teams sites, it says so first and offers to allow it.
  */
 import type { PopupState } from "../background/background";
@@ -29,6 +30,11 @@ function render(state: PopupState): void {
   }
   recordings.textContent =
     state.recordings.length > 0 ? `Recording ${state.recordings.join("\n")}` : "Not recording.";
+  const transcripts = document.getElementById("transcripts");
+  if (transcripts) {
+    transcripts.textContent = state.recapStatuses.join("\n");
+    transcripts.hidden = state.recapStatuses.length === 0;
+  }
 }
 
 /** Asks the background for its state. */

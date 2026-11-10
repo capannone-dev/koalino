@@ -18,12 +18,13 @@
   <body>
     <h1>Note Taker</h1>
     <div id="access" class="status bad" hidden>
-      <div id="access-text">Note Taker may not run on Teams yet, so it cannot record your meetings.</div>
+      <div id="access-text">Note Taker may not run on Teams (or on the SharePoint page Teams shows transcripts from) yet, so it cannot record your meetings or fetch their transcripts.</div>
       <button id="allow" type="button">Allow on Teams</button>
     </div>
     <div class="status">
       <div id="host"></div>
       <div id="recordings"></div>
+      <div id="transcripts" hidden></div>
       <button id="check" type="button">Check connection</button>
     </div>
     <label><input type="checkbox" data-setting="alwaysRecordTeams" /> <span>Always record Teams meetings<br /><span class="hint">Otherwise you are asked when a call starts.</span></span></label>

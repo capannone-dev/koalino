@@ -9,6 +9,7 @@
  * not find its control gives up quietly (closing the menu it opened) and reports `false`; nothing
  * here changes the meeting otherwise. Page text is never logged.
  */
+import { withoutDoubledLabel } from "../lib/teamsDom";
 
 /** How long a step waits for the next control. */
 const STEP_TIMEOUT_MS = 4_000;
@@ -34,12 +35,13 @@ export async function waitFor<T>(find: () => T | null, timeoutMs = STEP_TIMEOUT_
 /** A keyboard shortcut Teams shows after a menu item's label, such as "Alt+Shift+C". */
 const TRAILING_SHORTCUT = /\s*(ctrl|alt|shift|cmd|option|⌘|⌥)\s*\+.*$/i;
 
-/** The visible label of a control: its ARIA label or its text, without a trailing shortcut. */
+/**
+ * The visible label of a control: its ARIA label or its text, read once (Fluent tabs double it),
+ * without a trailing shortcut.
+ */
 function labelOf(element: Element): string {
-  return (element.getAttribute("aria-label") ?? element.textContent ?? "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(TRAILING_SHORTCUT, "");
+  const label = (element.getAttribute("aria-label") ?? element.textContent ?? "").replace(/\s+/g, " ").trim();
+  return withoutDoubledLabel(label).replace(TRAILING_SHORTCUT, "");
 }
 
 /**
@@ -183,28 +185,52 @@ export function startTeamsTranscription(root: ParentNode): Promise<boolean> {
   });
 }
 
+/** How often the recap frame is asked to download the transcript before giving up. */
+const RECAP_DOWNLOAD_ATTEMPTS = 3;
+
+/** How fetching a recap transcript ended: sent, or the step that failed. */
+export type RecapFetchOutcome = "sent" | "no-transcript-tab" | "nothing-arrived";
+
 /**
- * Opens a meeting's recap and asks Teams for its transcript.
+ * Opens a meeting's recap transcript and has the recap frame download it.
  *
- * Inputs: The card's "View recap" button, the document, and a wait for the transcript file the
- * page hook copies (true once one arrived).
- * Outputs: Whether a transcript arrived. First the recap's Transcript tab is opened (Teams may
- * load the file to show it); if no file arrives, Download → "Download as .vtt" is used, which
- * also saves a copy in the browser's downloads.
- * Side effects: Navigates within Teams; may download a file.
+ * Teams shows the transcript in a SharePoint frame whose own copy is encrypted for its player.
+ * Only Download → "Download as .vtt" there yields WebVTT, which the page hook in that frame copies
+ * (the browser also keeps the file in its downloads).
+ *
+ * Inputs: The Teams document; a recap card's "View recap" button, or `null` when the chat already
+ * shows the recap; `requestFrameDownload`, which asks the recap frame to run `downloadRecapVtt`;
+ * and a wait for the copied transcript (true once one arrived).
+ * `tabTimeoutMs` is how long to wait for the Transcript tab.
+ * Outputs: `sent` once a transcript arrived, otherwise the step that failed.
+ * Side effects: Navigates within Teams; downloads a file.
  */
 export async function fetchRecapTranscript(
-  viewRecapButton: HTMLElement,
   root: ParentNode,
+  viewRecapButton: HTMLElement | null,
+  requestFrameDownload: () => void,
   transcriptArrived: (timeoutMs: number) => Promise<boolean>,
-): Promise<boolean> {
-  press(viewRecapButton);
-  if (!(await pressWhenShown(root, { label: /^transcript$/i }, 8_000))) return false;
-  if (await transcriptArrived(6_000)) return true;
-  if (!(await pressWhenShown(root, { label: /^download$/i }))) return false;
-  if (!(await pressWhenShown(root, { label: /download as \.?vtt/i }))) {
-    closeMenus(root);
-    return false;
+  tabTimeoutMs = 20_000,
+): Promise<RecapFetchOutcome> {
+  if (viewRecapButton) press(viewRecapButton);
+  if (!(await pressWhenShown(root, { label: /^transcript$/i }, tabTimeoutMs))) return "no-transcript-tab";
+  // The frame may still be loading: ask again until a transcript arrives.
+  for (let attempt = 0; attempt < RECAP_DOWNLOAD_ATTEMPTS; attempt += 1) {
+    requestFrameDownload();
+    if (await transcriptArrived(8_000)) return "sent";
   }
-  return transcriptArrived(10_000);
+  return "nothing-arrived";
+}
+
+/**
+ * In the recap's SharePoint frame: presses Download, then "Download as .vtt".
+ *
+ * Inputs: The frame's document and how long to wait for each control.
+ * Outputs: Whether both were pressed. Side effects: The page downloads the transcript.
+ */
+export async function downloadRecapVtt(root: ParentNode, timeoutMs = 10_000): Promise<boolean> {
+  if (!(await pressWhenShown(root, { label: /^download$/i }, timeoutMs))) return false;
+  if (await pressWhenShown(root, { label: /download as \.?vtt/i })) return true;
+  closeMenus(root);
+  return false;
 }

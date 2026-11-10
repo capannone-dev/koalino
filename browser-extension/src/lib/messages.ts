@@ -4,6 +4,8 @@
  * - page hook (page's own JavaScript world) ⇄ content script: `window.postMessage`, tagged with
  *   `HOOK_SOURCE` or `CONTENT_SOURCE` so other page messages are ignored;
  * - content script ⇄ background: a `chrome.runtime` port named `PORT_NAME` per Teams tab;
+ * - recap frame script ⇄ background: a port named `RECAP_FRAME_PORT_NAME` per SharePoint frame a
+ *   Teams page opened; the background relays between it and its tab's content script;
  * - background ⇄ native host: `HostMessage`, the JSON schema of
  *   `core/adapters/network/browser_host/extension_message.rs`.
  */
@@ -14,6 +16,8 @@ export const HOOK_SOURCE = "note-taker-hook";
 export const CONTENT_SOURCE = "note-taker-content";
 /** The content script's port to the background. */
 export const PORT_NAME = "note-taker-tab";
+/** The recap frame script's port to the background. */
+export const RECAP_FRAME_PORT_NAME = "note-taker-recap-frame";
 /** The native messaging host's name. */
 export const HOST_NAME = "com.note_taker.browser_bridge";
 
@@ -86,7 +90,11 @@ export interface RecordingProgress {
 export type TabMessage =
   | { kind: "host"; message: HostMessage }
   | { kind: "recording"; recording: boolean; title: string }
-  | { kind: "progress"; progress: RecordingProgress };
+  | { kind: "progress"; progress: RecordingProgress }
+  /** Asks the tab's recap frames to download the recap transcript (`downloadRecapVtt`). */
+  | { kind: "recap-download" }
+  /** What happened to the last Teams transcript fetch, for the popup (titles and times only). */
+  | { kind: "recap-status"; status: string };
 
 /** "1 slide" or "2 slides". */
 function count(amount: number, noun: string): string {
@@ -107,4 +115,13 @@ export function describeProgress(progress: RecordingProgress): string {
 }
 
 /** From the background to a content script. */
-export type BackgroundMessage = { kind: "connection"; state: ConnectionState };
+export type BackgroundMessage =
+  | { kind: "connection"; state: ConnectionState }
+  /** A WebVTT transcript the page hook copied in one of the tab's recap frames. */
+  | { kind: "recap-transcript"; text: string };
+
+/** From a recap frame script to the background: a WebVTT transcript the frame's hook copied. */
+export type RecapFrameMessage = { kind: "recap-transcript"; text: string };
+
+/** From the background to a recap frame script. */
+export type RecapFrameCommand = { kind: "recap-download" };

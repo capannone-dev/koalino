@@ -8,13 +8,14 @@
  * - keeps screen-share slides, cropped to the slide.
  *
  * When the call ends it sends the captions and live transcript and ends the meeting. Outside
- * calls, when Teams posts a recap with a transcript for a meeting it recorded, it fetches the
- * transcript through the recap and sends it to the same Note Taker meeting.
+ * calls, when Teams shows a recap with a transcript for a meeting it recorded (the recap a meeting
+ * chat opens on, or a recap card), it opens the Transcript tab and has the recap's SharePoint
+ * frame download the WebVTT (see `src/recap/`), then sends it to the same Note Taker meeting.
  *
  * Everything goes to the background over a port, and from there to the native host. Nothing of
  * the meeting is logged.
  */
-import { fetchRecapTranscript, startTeamsTranscription, turnOnCaptions } from "./automation";
+import { RecapFetchOutcome, fetchRecapTranscript, startTeamsTranscription, turnOnCaptions } from "./automation";
 import { askConsent, hideOverlay, showRecording } from "./banner";
 import { MeetingRecorder } from "./recorder";
 import {
@@ -28,11 +29,19 @@ import {
   PORT_NAME,
   TabMessage,
 } from "../lib/messages";
-import { RecordedMeeting, matchRecapToMeeting, newMeetingId, pendingTranscriptMeetings } from "../lib/meetings";
+import {
+  RecapAttempts,
+  RecordedMeeting,
+  matchRecapToMeeting,
+  newMeetingId,
+  pendingTranscriptMeetings,
+  recapRetryDue,
+} from "../lib/meetings";
 import { ExtensionSettings, DEFAULT_SETTINGS } from "../lib/settings";
 import { loadMeetings, loadSettings, saveMeeting, saveSettings, settingsChanged } from "../lib/storage";
 import {
   findRecapCards,
+  findRecapView,
   isInCall,
   isTeamsTranscriptRunning,
   meetingTitleFromDocumentTitle,
@@ -59,8 +68,18 @@ let transcriptionAttempted = false;
 let shareShown = false;
 let lastRecapCheck = 0;
 let recapFetch: { meeting: RecordedMeeting; arrived: () => void } | null = null;
-const recapAttempted = new Set<string>();
+/** The tries at each meeting's recap transcript (by meeting ID) since this page loaded. */
+const recapAttempts = new Map<string, RecapAttempts>();
+/** The last Teams transcript fetch status sent to the popup. */
+let recapStatus = "";
+/** Meetings whose Teams transcript this page already sent (by meeting ID). */
+const transcriptsSent = new Set<string>();
 let overlayStatus = "";
+
+/** The last step that failed while recording, as "<step>: <error name>". */
+let lastProblem: string | null = null;
+/** The progress line last sent to the background, to send only changes. */
+let lastProgress = "";
 
 let port = connectPort();
 
@@ -72,10 +91,17 @@ function connectPort(): chrome.runtime.Port {
       connection = message.state;
       refreshOverlay();
     }
+    if (message.kind === "recap-transcript") void onTranscriptFile(message.text);
   });
   opened.onDisconnect.addListener(() => {
     port = connectPort();
   });
+  // Firefox stops an idle background and loses what it knew: tell it again.
+  if (state === "recording" && record) {
+    opened.postMessage({ kind: "recording", recording: true, title: record.title } satisfies TabMessage);
+    lastProgress = "";
+  }
+  if (recapStatus) opened.postMessage({ kind: "recap-status", status: recapStatus } satisfies TabMessage);
   return opened;
 }
 
@@ -201,11 +227,6 @@ async function whileRecording(): Promise<void> {
   reportProgress();
 }
 
-/** The last step that failed while recording, as "<step>: <error name>". */
-let lastProblem: string | null = null;
-/** The progress line last sent to the background, to send only changes. */
-let lastProgress = "";
-
 /** Tells the background what was sent so far, when it changed. */
 function reportProgress(): void {
   if (!recorder || !record) return;
@@ -235,19 +256,82 @@ function transcriptArrival(meeting: RecordedMeeting): (timeoutMs: number) => Pro
     });
 }
 
-/** Looks for recap cards of recorded meetings and fetches their transcripts. */
+/** Asks the tab's recap frames, through the background, to download the recap transcript. */
+function requestRecapDownload(): void {
+  toBackground({ kind: "recap-download" });
+}
+
+/**
+ * The recaps on screen with a transcript: the recap a meeting chat opens on, and recap cards in
+ * the chat (each with its "View recap" button).
+ */
+function recapsOnScreen(): { title: string; startMs: number | null; endMs: number | null; open: HTMLElement | null }[] {
+  const view = findRecapView(document);
+  const cards = findRecapCards(document)
+    .filter((card) => card.hasTranscript)
+    .map((card) => ({ title: card.title, startMs: card.startMs, endMs: card.endMs, open: card.viewRecapButton }));
+  return view ? [{ title: view.title, startMs: view.startMs, endMs: view.endMs, open: null }, ...cards] : cards;
+}
+
+/** Tells the popup what happened to the Teams transcript fetch, when it changed. */
+function reportRecapStatus(status: string): void {
+  if (status === recapStatus) return;
+  recapStatus = status;
+  toBackground({ kind: "recap-status", status });
+}
+
+/** A recap's session time as "16:10–16:21", or "" when not shown. */
+function sessionTime(recap: { startMs: number | null; endMs: number | null }): string {
+  const time = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
+  if (recap.startMs === null) return "";
+  return recap.endMs === null ? time(recap.startMs) : `${time(recap.startMs)}–${time(recap.endMs)}`;
+}
+
+/** What a failed fetch step means, for the popup. */
+const RECAP_FAILURES: Record<Exclude<RecapFetchOutcome, "sent">, string> = {
+  "no-transcript-tab": "the recap has no Transcript tab",
+  "nothing-arrived": "the transcript could not be downloaded",
+};
+
+/** Looks for recaps of recorded meetings and fetches their transcripts. */
 async function checkRecaps(): Promise<void> {
   if (!settings.fetchTeamsTranscripts || recapFetch || Date.now() - lastRecapCheck < RECAP_CHECK_MS) return;
   lastRecapCheck = Date.now();
-  const cards = findRecapCards(document).filter((card) => card.hasTranscript);
-  if (cards.length === 0) return;
-  const pending = pendingTranscriptMeetings(await loadMeetings());
-  for (const card of cards) {
-    const meeting = matchRecapToMeeting(card, pending);
-    if (!meeting || recapAttempted.has(meeting.meetingId)) continue;
-    recapAttempted.add(meeting.meetingId);
-    await fetchRecapTranscript(card.viewRecapButton, document, transcriptArrival(meeting));
-    return;
+  try {
+    const recaps = recapsOnScreen();
+    if (recaps.length === 0) return;
+    const meetings = await loadMeetings();
+    const pending = pendingTranscriptMeetings(meetings);
+    for (const recap of recaps) {
+      const meeting = matchRecapToMeeting(recap, pending);
+      if (!meeting) {
+        const sent = matchRecapToMeeting(
+          recap,
+          meetings.filter((recorded) => recorded.transcriptFetched),
+        );
+        reportRecapStatus(
+          sent
+            ? `Teams transcript of ${sent.title || "Teams meeting"} already sent to Note Taker.`
+            : `Teams transcript on screen (${sessionTime(recap) || "no time shown"}): no recorded meeting matches.`,
+        );
+        continue;
+      }
+      const attempts = recapAttempts.get(meeting.meetingId);
+      if (!recapRetryDue(attempts, Date.now())) continue;
+      recapAttempts.set(meeting.meetingId, { count: (attempts?.count ?? 0) + 1, lastMs: Date.now() });
+      const title = meeting.title || "Teams meeting";
+      reportRecapStatus(`Fetching the Teams transcript of ${title}…`);
+      const outcome = await fetchRecapTranscript(document, recap.open, requestRecapDownload, transcriptArrival(meeting));
+      const triesLeft = recapRetryDue({ count: (attempts?.count ?? 0) + 1, lastMs: 0 }, Date.now());
+      reportRecapStatus(
+        outcome === "sent"
+          ? `Teams transcript of ${title} sent to Note Taker.`
+          : `Teams transcript of ${title}: ${RECAP_FAILURES[outcome]}${triesLeft ? "; trying again in a minute" : ""}.`,
+      );
+      return;
+    }
+  } catch (error) {
+    reportRecapStatus(`Teams transcript: ${error instanceof Error ? error.name : "error"}.`);
   }
 }
 
@@ -256,12 +340,15 @@ async function onTranscriptFile(text: string): Promise<void> {
   if (!text.trimStart().startsWith("WEBVTT")) return;
   let meeting = recapFetch?.meeting ?? null;
   if (!meeting) {
-    // The owner opened or downloaded the transcript themselves: use the recap card on screen.
-    const cards = findRecapCards(document).filter((card) => card.hasTranscript);
+    // The owner downloaded the transcript themselves: use the one recap on screen.
+    const recaps = recapsOnScreen();
     const pending = pendingTranscriptMeetings(await loadMeetings());
-    meeting = cards.length === 1 && cards[0] ? matchRecapToMeeting(cards[0], pending) : null;
+    meeting = recaps.length === 1 && recaps[0] ? matchRecapToMeeting(recaps[0], pending) : null;
   }
-  if (!meeting) return;
+  // The recap player can fetch the file twice for one download: send each meeting's once. The
+  // check and the mark happen together, before any wait, so a second copy cannot slip through.
+  if (!meeting || transcriptsSent.has(meeting.meetingId)) return;
+  transcriptsSent.add(meeting.meetingId);
   toHost({
     type: "document",
     kind: "teams_transcript",

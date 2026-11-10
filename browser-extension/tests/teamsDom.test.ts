@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   findRecapCards,
+  findRecapView,
   isInCall,
   isTeamsTranscriptRunning,
   meetingTitleFromDocumentTitle,
@@ -105,6 +106,36 @@ describe("recap cards", () => {
     expect(card?.hasTranscript).toBe(true);
     expect(card?.startMs).toBe(new Date(2026, 10, 9, 16, 10).getTime());
     expect(card?.endMs).toBe(new Date(2026, 10, 9, 16, 21).getTime());
+  });
+
+  it("reads the recap a meeting chat opens on, with its session times and Transcript tab", () => {
+    document.body.innerHTML = `
+      <h2 data-tid="chat-title"><span>Weekly sync</span></h2>
+      <button role="combobox" aria-label="Select the meeting by time">Monday, November 9, 2026 4:10 PM -  4:21 PM</button>
+      <div role="tablist">
+        <button role="tab" data-tid="AINotes">AI summary</button>
+        <button role="tab" data-tid="Transcript">Transcript</button>
+      </div>`;
+    const view = findRecapView(document);
+    expect(view?.title).toBe("Weekly sync");
+    expect(view?.startMs).toBe(new Date(2026, 10, 9, 16, 10).getTime());
+    expect(view?.endMs).toBe(new Date(2026, 10, 9, 16, 21).getTime());
+    expect(view?.transcriptTab.dataset.tid).toBe("Transcript");
+  });
+
+  it("finds an unselected Transcript tab by its doubled Fluent label", () => {
+    document.body.innerHTML = `
+      <h2 data-tid="chat-title"><span>Weekly sync</span></h2>
+      <button role="tab" aria-selected="false"><span>Transcript</span><span>Transcript</span></button>`;
+    expect(findRecapView(document)?.title).toBe("Weekly sync");
+  });
+
+  it("finds no recap view in a chat without a transcript", () => {
+    document.body.innerHTML = `
+      <h2 data-tid="chat-title"><span>Weekly sync</span></h2>
+      <button role="combobox" aria-label="Select the meeting by time">Monday, November 9, 2026 4:10 PM - 4:21 PM</button>
+      <button role="tab" data-tid="AINotes">AI summary</button>`;
+    expect(findRecapView(document)).toBeNull();
   });
 
   it("parses recap time ranges, including midnight and noon", () => {

@@ -89,3 +89,27 @@ export function newMeetingId(startMs: number): string {
   const hex = [...random].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   return `browser-teams-${startMs}-${hex}`;
 }
+
+/** The tries at fetching one meeting's recap transcript in this tab. */
+export interface RecapAttempts {
+  count: number;
+  /** When the last try started (epoch ms). */
+  lastMs: number;
+}
+
+/** Most tries at fetching one meeting's recap transcript per page load. */
+const RECAP_MAX_ATTEMPTS = 3;
+/** The pause after a failed try (the recap frame may still have been loading). */
+const RECAP_RETRY_MS = 60_000;
+
+/**
+ * Whether to try fetching a meeting's recap transcript now.
+ *
+ * Inputs: The earlier tries (none yet: `undefined`) and the time now.
+ * Outputs: `true` for a first try, or a retry a minute after the last, up to three tries.
+ * Side effects: None.
+ */
+export function recapRetryDue(attempts: RecapAttempts | undefined, nowMs: number): boolean {
+  if (!attempts) return true;
+  return attempts.count < RECAP_MAX_ATTEMPTS && nowMs - attempts.lastMs >= RECAP_RETRY_MS;
+}

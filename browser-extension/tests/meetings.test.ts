@@ -9,6 +9,7 @@ import {
   newMeetingId,
   pendingTranscriptMeetings,
   pruneMeetings,
+  recapRetryDue,
 } from "../src/lib/meetings";
 
 const HOUR = 3_600_000;
@@ -81,5 +82,14 @@ describe("settings", async () => {
       ...DEFAULT_SETTINGS,
       alwaysRecordTeams: true,
     });
+  });
+});
+
+describe("recapRetryDue", () => {
+  it("tries a recap at once, then again a minute after a failure, at most three times", () => {
+    expect(recapRetryDue(undefined, 0)).toBe(true);
+    expect(recapRetryDue({ count: 1, lastMs: 0 }, 30_000)).toBe(false);
+    expect(recapRetryDue({ count: 1, lastMs: 0 }, 60_000)).toBe(true);
+    expect(recapRetryDue({ count: 3, lastMs: 0 }, 10 * 60_000)).toBe(false);
   });
 });

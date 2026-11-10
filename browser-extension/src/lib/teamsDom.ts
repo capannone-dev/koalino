@@ -70,6 +70,19 @@ function textOf(element: Element | null | undefined): string {
   return (element?.textContent ?? "").replace(/\s+/g, " ").trim();
 }
 
+/**
+ * A control's label read once. Teams' Fluent tabs hold their label twice when unselected (the
+ * visible text and a hidden bold copy that reserves its width), so "TranscriptTranscript" is
+ * "Transcript".
+ *
+ * Inputs: The label text. Outputs: Its first half when both halves are equal, else the text.
+ * Side effects: None.
+ */
+export function withoutDoubledLabel(label: string): string {
+  const half = label.length / 2;
+  return Number.isInteger(half) && half > 0 && label.slice(0, half) === label.slice(half) ? label.slice(0, half) : label;
+}
+
 /** Leaf elements (no element children) with text, in document order. */
 function textLeaves(container: Element): Element[] {
   return [...container.querySelectorAll("*")].filter(
@@ -128,6 +141,43 @@ export function readTranscriptPanel(root: ParentNode): TranscriptPanelItem[] {
 }
 
 /** A recap card Teams posted in a meeting chat. */
+/** The recap a meeting chat opens on after a meeting (2026 Teams), when it has a transcript. */
+export interface RecapView {
+  /** The chat's title, which is the meeting's. */
+  title: string;
+  /** The selected session's start and end (local time), when shown. */
+  startMs: number | null;
+  endMs: number | null;
+  /** The Transcript tab; the transcript itself is in a SharePoint frame below it. */
+  transcriptTab: HTMLElement;
+}
+
+/**
+ * Finds the recap view: the session picker ("Select the meeting by time") and a Transcript tab.
+ *
+ * Inputs: The document. Outputs: The view, or `null` when the chat shows none or no transcript.
+ * Side effects: None.
+ */
+export function findRecapView(root: ParentNode): RecapView | null {
+  const transcriptTab =
+    root.querySelector<HTMLElement>('[role="tab"][data-tid="Transcript"]') ??
+    [...root.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) =>
+      /^transcript$/i.test(withoutDoubledLabel(textOf(tab))),
+    ) ??
+    null;
+  if (!transcriptTab) return null;
+  const picker = [...root.querySelectorAll('[role="combobox"]')].find((element) =>
+    /select the meeting by time/i.test(element.getAttribute("aria-label") ?? ""),
+  );
+  const times = parseRecapTimeRange(textOf(picker));
+  const titleElement = root.querySelector('[data-tid="chat-title"]');
+  const title =
+    (titleElement ? textLeaves(titleElement) : [])
+      .map(textOf)
+      .find((leaf) => !/^(external|guest)$/i.test(leaf)) ?? "";
+  return { title, startMs: times?.startMs ?? null, endMs: times?.endMs ?? null, transcriptTab };
+}
+
 export interface RecapCard {
   /** The card element. */
   element: Element;

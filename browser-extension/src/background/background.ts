@@ -8,6 +8,10 @@
  * Chrome the background is a service worker that open ports keep alive; in Firefox it is an event
  * page. Message contents are never logged.
  *
+ * It also relays between a tab and its recap frames (the SharePoint frame Teams shows a recap
+ * transcript in): the tab asks them to download the transcript, and they pass back the WebVTT
+ * their page hook copied.
+ *
  * After it is installed without access to the Teams sites (Firefox, when loaded by hand), it opens
  * its settings page in a tab, where the owner can allow it.
  */
@@ -18,6 +22,9 @@ import {
   HostMessage,
   HostReply,
   PORT_NAME,
+  RECAP_FRAME_PORT_NAME,
+  RecapFrameCommand,
+  RecapFrameMessage,
   TabMessage,
   describeProgress,
 } from "../lib/messages";
@@ -30,6 +37,8 @@ type PopupRequest = { kind: "get-state" } | { kind: "check-host" };
 export interface PopupState {
   connection: ConnectionState;
   recordings: string[];
+  /** Each tab's last Teams transcript fetch status. */
+  recapStatuses: string[];
   rejected: number;
 }
 
@@ -39,6 +48,8 @@ let rejected = 0;
 const tabs = new Set<chrome.runtime.Port>();
 /** What each recording tab shows in the popup: its title, then its progress line. */
 const recordings = new Map<chrome.runtime.Port, string>();
+/** Each tab's last Teams transcript fetch status, for the popup. */
+const recapStatuses = new Map<chrome.runtime.Port, string>();
 
 /** Tells every tab the connection state. */
 function broadcast(): void {
@@ -93,7 +104,47 @@ function sendToHost(message: HostMessage): void {
   }
 }
 
+/** The recap frames of each tab (by tab ID): SharePoint frames a Teams page opened. */
+const recapFrames = new Map<number, Set<chrome.runtime.Port>>();
+
+/** Relays a recap frame script's messages to its tab's content script. */
+function connectRecapFrame(port: chrome.runtime.Port): void {
+  const tabId = port.sender?.tab?.id;
+  if (tabId === undefined) return;
+  const frames = recapFrames.get(tabId) ?? new Set<chrome.runtime.Port>();
+  frames.add(port);
+  recapFrames.set(tabId, frames);
+  port.onMessage.addListener((message: RecapFrameMessage) => {
+    if (message.kind !== "recap-transcript" || typeof message.text !== "string") return;
+    for (const tab of tabs) {
+      if (tab.sender?.tab?.id === tabId && (tab.sender.frameId ?? 0) === 0) {
+        tab.postMessage({ kind: "recap-transcript", text: message.text } satisfies BackgroundMessage);
+      }
+    }
+  });
+  port.onDisconnect.addListener(() => {
+    frames.delete(port);
+    if (frames.size === 0) recapFrames.delete(tabId);
+  });
+}
+
+/** Asks the recap frames of a tab to download the recap transcript. */
+function requestRecapDownload(tabId: number | undefined): void {
+  if (tabId === undefined) return;
+  for (const frame of recapFrames.get(tabId) ?? []) {
+    try {
+      frame.postMessage({ kind: "recap-download" } satisfies RecapFrameCommand);
+    } catch {
+      // The frame went away; its disconnect removes it.
+    }
+  }
+}
+
 chrome.runtime.onConnect.addListener((port) => {
+  if (port.name === RECAP_FRAME_PORT_NAME) {
+    connectRecapFrame(port);
+    return;
+  }
   if (port.name !== PORT_NAME) return;
   tabs.add(port);
   port.postMessage({ kind: "connection", state: connection } satisfies BackgroundMessage);
@@ -104,16 +155,24 @@ chrome.runtime.onConnect.addListener((port) => {
       else recordings.delete(port);
     }
     if (message.kind === "progress" && recordings.has(port)) recordings.set(port, describeProgress(message.progress));
+    if (message.kind === "recap-download") requestRecapDownload(port.sender?.tab?.id);
+    if (message.kind === "recap-status") recapStatuses.set(port, message.status);
   });
   port.onDisconnect.addListener(() => {
     tabs.delete(port);
     recordings.delete(port);
+    recapStatuses.delete(port);
   });
 });
 
 chrome.runtime.onMessage.addListener((request: PopupRequest, _sender, respond) => {
   if (request.kind === "check-host") ensureHost();
-  const state: PopupState = { connection, recordings: [...recordings.values()], rejected };
+  const state: PopupState = {
+    connection,
+    recordings: [...recordings.values()],
+    recapStatuses: [...recapStatuses.values()],
+    rejected,
+  };
   respond(state);
   return false;
 });

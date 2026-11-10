@@ -19,7 +19,7 @@ Teams, Not now). While recording, an indicator with a Stop button stays on the p
 | Live captions | turned on for you (only you see them) and read as they grow | a `teams-captions` WebVTT attachment with names and times |
 | Teams transcript panel | read while Teams transcription runs | a `teams-live-transcript` attachment |
 | Shared slides | a frame of the screen share once it changes and holds still, cropped to the slide | slide attachments at their point in the meeting |
-| The Teams transcript | fetched from the recap Teams posts in the meeting chat, whoever started transcription | a `teams-transcript` WebVTT attachment of the same meeting |
+| The Teams transcript | fetched from the recap in the meeting chat, whoever started transcription: the extension opens the Transcript tab and uses the recap's Download → .vtt (which also leaves a copy in Downloads) | a `teams-transcript` WebVTT attachment of the same meeting |
 
 Optional, off by default: **Start Teams transcription when I record** (More → Record and
 transcribe → Start transcription). Everyone in the meeting sees it, and Microsoft stores the
@@ -37,7 +37,11 @@ Limits found in the #102 probes:
 ```text
 Teams page ── hook.js (page world: getUserMedia, <audio>, fetch) ─postMessage─▶ content.js
 content.js ─runtime port─▶ background.js ─connectNative─▶ browser-host ─WebSocket 127.0.0.1─▶ daemon (Teams bridge)
+recap frame (SharePoint, opened by Teams): hook.js (copies the .vtt download) ─▶ recap-frame.js ─port─▶ background.js ─▶ content.js
 ```
+
+After the meeting, the recap's transcript is in a SharePoint frame, so the extension also asks
+for access to `*.sharepoint.com`. It acts there only in frames a Teams page opened.
 
 Browsers cannot open the bridge's WebSocket themselves (it refuses an `Origin` header), so the
 native messaging host `browser-host` (`core/bin/browser_host.rs`,
@@ -50,8 +54,9 @@ native messaging host `browser-host` (`core/bin/browser_host.rs`,
 | --- | --- |
 | `src/page/` | `hook.ts`, the page-world script (audio taps, transcript copy, share frames for slides). |
 | `src/content/` | The content script: call detection, consent, recording, Teams automation, overlay. |
+| `src/recap/` | The recap frame script: downloads the Teams transcript inside the recap's SharePoint frame. |
 | `src/background/` | The background: the native host connection and the popup's state. |
-| `src/popup/` | The popup: connection status and settings. |
+| `src/popup/` | The popup: connection status, recording progress, the Teams transcript fetch's status, and settings. |
 | `src/lib/` | Browser-independent logic: PCM, WebVTT, captions, slides, Teams DOM readers, meeting records, settings, messages. |
 | `static/` | `popup.html` and icons. |
 | `tests/` | Vitest specs (jsdom). |
@@ -97,6 +102,7 @@ node build.mjs        # dist/firefox and dist/chromium
 Nothing is recorded until you agree, and the indicator stays visible while recording. Data goes
 only to the local Note Taker app over the loopback interface. The extension never calls
 Microsoft's APIs and never uses the page's tokens: it copies only the transcript file the Teams
-page itself loads. It keeps in browser storage only its settings and, for two weeks, the title
+page itself loads (after the meeting, by pressing the recap's own Download → .vtt). On SharePoint it
+acts only in the recap frame Teams opens. It keeps in browser storage only its settings and, for two weeks, the title
 and times of the meetings it recorded, so it can match their Teams transcripts. Nothing of a
 meeting is logged.

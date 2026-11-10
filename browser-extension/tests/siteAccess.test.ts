@@ -4,7 +4,7 @@
  * withhold them. Without that access the content scripts never run on Teams.
  */
 import { describe, expect, it } from "vitest";
-import { PermissionsApi, hasTeamsAccess, requestTeamsAccess, teamsOrigins } from "../src/lib/siteAccess";
+import { PermissionsApi, embeddedInTeams, hasTeamsAccess, requestTeamsAccess, teamsOrigins } from "../src/lib/siteAccess";
 
 const MANIFEST = {
   host_permissions: ["https://teams.microsoft.com/*", "https://teams.cloud.microsoft/*", "https://teams.live.com/*"],
@@ -55,5 +55,21 @@ describe("requestTeamsAccess", () => {
 
   it("reports a refusal", async () => {
     expect(await requestTeamsAccess(fakePermissions([], false), MANIFEST)).toBe(false);
+  });
+});
+
+describe("embeddedInTeams", () => {
+  // Teams shows a meeting's recap transcript in a SharePoint frame; the extension acts in such a
+  // frame only, never on SharePoint pages opened on their own or embedded elsewhere.
+  it("is true for a frame opened by a Teams page", () => {
+    expect(embeddedInTeams(false, "https://teams.cloud.microsoft/")).toBe(true);
+    expect(embeddedInTeams(false, "https://teams.microsoft.com/v2/")).toBe(true);
+  });
+
+  it("is false for a top-level page or another embedder", () => {
+    expect(embeddedInTeams(true, "https://teams.cloud.microsoft/")).toBe(false);
+    expect(embeddedInTeams(false, "https://www.office.com/")).toBe(false);
+    expect(embeddedInTeams(false, "https://teams.cloud.microsoft.evil.example/")).toBe(false);
+    expect(embeddedInTeams(false, "")).toBe(false);
   });
 });

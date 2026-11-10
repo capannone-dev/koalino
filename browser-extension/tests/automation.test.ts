@@ -4,7 +4,13 @@
  * click, and items carry stable IDs and, for some, a keyboard shortcut after their label.
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { findControl, startTeamsTranscription, turnOnCaptions } from "../src/content/automation";
+import {
+  downloadRecapVtt,
+  fetchRecapTranscript,
+  findControl,
+  startTeamsTranscription,
+  turnOnCaptions,
+} from "../src/content/automation";
 
 /** Builds a menu item that runs `onPress` when clicked. */
 function item(id: string, role: string, html: string, onPress: () => void): HTMLElement {
@@ -75,6 +81,14 @@ function moreMenuOpen(): boolean {
 }
 
 describe("findControl", () => {
+  // An unselected Fluent tab holds its label twice: the visible text and a hidden bold copy that
+  // reserves its width, so its text reads "TranscriptTranscript".
+  it("reads a Fluent tab's doubled label once", () => {
+    document.body.innerHTML =
+      '<button role="tab" aria-selected="false"><span>Transcript</span><span aria-hidden="true">Transcript</span></button>';
+    expect(findControl(document, /^transcript$/i)).not.toBeNull();
+  });
+
   it("ignores a keyboard shortcut shown after the label", () => {
     document.body.innerHTML =
       '<div role="menuitemcheckbox"><span>Show live captions</span><span>Alt+Shift+C</span></div>';
@@ -104,5 +118,67 @@ describe("Teams call automation", () => {
     expect(moreMenuOpen()).toBe(true);
     expect(await startTeamsTranscription(document)).toBe(true);
     expect(document.querySelector('[data-tid="call-transcript-indicator"]')).not.toBeNull();
+  });
+});
+
+describe("recap transcript", () => {
+  /** The recap frame's Download button, whose menu offers the formats. */
+  function buildRecapFrame(): string[] {
+    const downloads: string[] = [];
+    document.body.innerHTML = '<button aria-haspopup="menu">Download</button>';
+    document.querySelector("button")?.addEventListener("click", () =>
+      showSubmenu([
+        item("docx", "menuitem", "Download as .docx", () => downloads.push("docx")),
+        item("vtt", "menuitem", "Download as .vtt", () => downloads.push("vtt")),
+      ]),
+    );
+    return downloads;
+  }
+
+  it("downloads the WebVTT file from the recap frame", async () => {
+    const downloads = buildRecapFrame();
+    expect(await downloadRecapVtt(document)).toBe(true);
+    expect(downloads).toEqual(["vtt"]);
+  });
+
+  it("reports a recap frame without a Download button", async () => {
+    document.body.innerHTML = "<div>Loading</div>";
+    expect(await downloadRecapVtt(document, 300)).toBe(false);
+  });
+
+  it("opens the Transcript tab and asks the recap frame to download", async () => {
+    document.body.innerHTML =
+      '<button role="tab" aria-selected="false" data-tid="Transcript"><span>Transcript</span><span>Transcript</span></button>';
+    let tabOpened = false;
+    document.querySelector("button")?.addEventListener("click", () => {
+      tabOpened = true;
+    });
+    let requested = 0;
+    const arrivals = [false, true];
+    const fetched = await fetchRecapTranscript(
+      document,
+      null,
+      () => {
+        requested += 1;
+      },
+      async () => arrivals.shift() ?? false,
+    );
+    expect(fetched).toBe("sent");
+    expect(tabOpened).toBe(true);
+    expect(requested).toBe(2);
+  });
+
+  it("gives up when no transcript arrives", async () => {
+    document.body.innerHTML = '<button role="tab" data-tid="Transcript">Transcript</button>';
+    let requested = 0;
+    const fetched = await fetchRecapTranscript(document, null, () => (requested += 1), async () => false);
+    expect(fetched).toBe("nothing-arrived");
+    expect(requested).toBe(3);
+  });
+
+  it("reports a recap without a Transcript tab", async () => {
+    document.body.innerHTML = "<div>AI summary</div>";
+    const fetched = await fetchRecapTranscript(document, null, () => undefined, async () => true, 300);
+    expect(fetched).toBe("no-transcript-tab");
   });
 });

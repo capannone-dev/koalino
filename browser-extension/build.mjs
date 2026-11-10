@@ -16,6 +16,12 @@ const TEAMS_SITES = [
 ];
 
 /**
+ * SharePoint, where Teams shows a meeting recap's transcript in a frame (Stream's player). The
+ * scripts there act only in frames a Teams page opened (`embeddedInTeams`).
+ */
+const RECAP_FRAME_SITES = ["https://*.sharepoint.com/*"];
+
+/**
  * The public key that fixes the Chromium extension ID (dgmaacilnokmfecfdcajdjadeboemnpd), which
  * the native host's manifest allows. Only the public half: the private key is not needed to load
  * the extension unpacked.
@@ -32,12 +38,14 @@ const baseManifest = {
   version: "0.1.0",
   description: "Records Teams meetings in the browser and sends them to the Note Taker app on this computer.",
   permissions: ["nativeMessaging", "storage"],
-  host_permissions: TEAMS_SITES,
+  host_permissions: [...TEAMS_SITES, ...RECAP_FRAME_SITES],
   icons: { 48: "icon-48.png", 128: "icon-128.png" },
   action: { default_popup: "popup.html", default_icon: { 48: "icon-48.png" } },
   content_scripts: [
     { matches: TEAMS_SITES, js: ["hook.js"], run_at: "document_start", world: "MAIN" },
     { matches: TEAMS_SITES, js: ["content.js"], run_at: "document_idle" },
+    { matches: RECAP_FRAME_SITES, js: ["hook.js"], run_at: "document_start", world: "MAIN", all_frames: true },
+    { matches: RECAP_FRAME_SITES, js: ["recap-frame.js"], run_at: "document_idle", all_frames: true },
   ],
 };
 
@@ -66,6 +74,7 @@ for (const [browser, manifest] of Object.entries(manifests)) {
       content: "src/content/content.ts",
       hook: "src/page/hook.ts",
       popup: "src/popup/popup.ts",
+      "recap-frame": "src/recap/recapFrame.ts",
     },
     bundle: true,
     format: "iife",
