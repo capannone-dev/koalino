@@ -263,3 +263,23 @@ fn keeping_meeting_voices_is_off_until_chosen() {
     save_keep_meeting_voices(&paths.settings_file, false).unwrap_or_else(|error| panic!("{error}"));
     assert!(!keeps_meeting_voices(&paths.settings_file));
 }
+
+#[test]
+fn the_after_meeting_pass_switch_is_saved_and_defaults_to_on() {
+    use super::transcription_settings::{save_transcript_pass, transcript_pass_enabled};
+    let paths = paths("transcript-pass");
+    assert!(transcript_pass_enabled(&load_settings(
+        &paths.settings_file
+    )));
+
+    save_transcript_pass(&paths.settings_file, false).unwrap_or_else(|error| panic!("{error}"));
+    let saved = load_settings(&paths.settings_file);
+    assert_eq!(saved.transcript_pass, Some(false));
+    assert!(!transcript_pass_enabled(&saved));
+    assert!(!apply_saved_settings(config(&paths), &saved, &paths, None).transcript_pass());
+
+    save_transcript_pass(&paths.settings_file, true).unwrap_or_else(|error| panic!("{error}"));
+    assert!(transcript_pass_enabled(&load_settings(
+        &paths.settings_file
+    )));
+}

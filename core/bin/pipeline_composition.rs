@@ -242,12 +242,12 @@ impl PipelineConfig {
             cloud_fallback: false,
             efficient_gpu: false,
             gpu_attempt_marker: None,
-            // Off on phones until they run it from a charging job (#87 step 2); otherwise speech
-            // would be kept there with nothing to process and delete it.
+            // On everywhere: phones run it from the charging job (#87 step 2), which processes
+            // and deletes the kept speech. Settings can turn it off.
             transcript_pass: parse_flag(
                 TRANSCRIPT_PASS_VARIABLE,
                 read(TRANSCRIPT_PASS_VARIABLE),
-                !cfg!(target_os = "android"),
+                true,
             )?,
             transcript_pass_model_path: read(TRANSCRIPT_PASS_MODEL_VARIABLE).map(PathBuf::from),
         })

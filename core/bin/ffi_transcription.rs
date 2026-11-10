@@ -41,7 +41,10 @@ use crate::{
 use crate::{
     application::combined_meetings::{MAX_KEEP_SPEECH_DAYS, MIN_KEEP_SPEECH_DAYS, keep_for_days},
     domain::transcription_glossary::TranscriptionGlossary,
-    transcription_settings::{keep_speech_days, save_glossary, save_keep_speech_days},
+    transcription_settings::{
+        keep_speech_days, save_glossary, save_keep_speech_days, save_transcript_pass,
+        transcript_pass_enabled,
+    },
 };
 
 const STATUS_OK: c_int = 0;
@@ -228,6 +231,7 @@ fn settings_json() -> String {
             "min_days": MIN_KEEP_SPEECH_DAYS,
             "max_days": MAX_KEEP_SPEECH_DAYS,
         },
+        "after_meeting_pass": transcript_pass_enabled(&saved),
         "efficient": {
             "gpu_name": efficient_gpu_name,
             "enabled": saved.efficient_gpu,
@@ -365,6 +369,25 @@ pub extern "C" fn note_taker_set_keep_speech_days(days: c_int) -> c_int {
         Ok(()) => STATUS_OK,
         Err(error) => {
             tracing::warn!(error = %error, "unable to store the speech retention window");
+            STATUS_FAILED
+        }
+    }
+}
+
+/// Turns the after-meeting pass (#87) on or off from the next recording.
+///
+/// Inputs: Non-zero to turn it on. Outputs: 0, or 2 when the choice can't be stored.
+/// Side effects: Stores the choice and rebuilds the pipeline before the next recording. Speech
+/// already kept is still processed and deleted.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_set_after_meeting_pass(enabled: c_int) -> c_int {
+    match save_transcript_pass(&paths().settings_file, enabled != 0) {
+        Ok(()) => {
+            PIPELINE_STALE.store(true, Ordering::Relaxed);
+            STATUS_OK
+        }
+        Err(error) => {
+            tracing::warn!(error = %error, "unable to store the after-meeting pass choice");
             STATUS_FAILED
         }
     }

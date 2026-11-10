@@ -392,6 +392,9 @@ and meeting summaries" below). Keys are write-only.
   `1` when turning it on without a supported GPU. `int32_t note_taker_retry_gpu(void)` lets the GPU be tried again after a crash
   stopped it, and returns `0` or `2`. `note_taker_transcription_settings` adds `suggestion` (`file_name`, `efficient`, `reason`)
   and `efficient` (`gpu_name`, `enabled`, `gpu_blocked`, `gpu_in_use`).
+- `int32_t note_taker_set_after_meeting_pass(int32_t enabled)` turns the after-meeting pass (#87) on or off from the next
+  recording, and returns `0` or `2` when the choice can't be stored. `note_taker_transcription_settings` reads it back as
+  `after_meeting_pass` (a boolean, `true` unless turned off). A phone runs the pass only while charging.
 - `char *note_taker_whisper_proposal(void)` returns a model proposed from this device's speed as
   JSON (`file_name`, `reason`, `measured`), the text `null` with nothing to propose, or a null pointer
   when the runtime is unavailable; free it with `note_taker_free_string`.

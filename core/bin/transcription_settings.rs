@@ -290,6 +290,26 @@ pub fn save_keep_speech_days(settings_file: &Path, days: u16) -> io::Result<()> 
     save_settings(settings_file, &saved)
 }
 
+/// Whether meetings are re-transcribed after Stop (#87), as Settings shows it.
+///
+/// Inputs: The saved choices. Outputs: The saved switch; `true` when unset, the default on every
+/// platform. `NOTE_TAKER_TRANSCRIPT_PASS` can still turn it off when nothing is saved.
+/// Side effects: None.
+pub fn transcript_pass_enabled(saved: &SavedTranscriptionSettings) -> bool {
+    saved.transcript_pass.unwrap_or(true)
+}
+
+/// Saves whether meetings are re-transcribed after Stop, keeping every other saved choice.
+///
+/// Inputs: The settings file and the choice. Outputs: `Ok(())` or the write error.
+/// Side effects: Rewrites the file atomically. It applies from the next recording; speech already
+/// kept is still processed and deleted by the pass worker.
+pub fn save_transcript_pass(settings_file: &Path, enabled: bool) -> io::Result<()> {
+    let mut saved = load_settings(settings_file);
+    saved.transcript_pass = Some(enabled);
+    save_settings(settings_file, &saved)
+}
+
 /// Whether online-meeting participants' voices may be kept in the gallery (#103).
 ///
 /// Inputs: The settings file. Outputs: The saved choice; `false` when unset or unreadable.

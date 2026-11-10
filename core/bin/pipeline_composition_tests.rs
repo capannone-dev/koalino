@@ -369,3 +369,11 @@ fn advertised_models_follow_the_configured_engines() {
         vec![openai]
     );
 }
+
+/// Phones run the after-meeting pass from the charging job (#87 step 2), so it is on by default on
+/// every platform; Settings or `NOTE_TAKER_TRANSCRIPT_PASS=false` turn it off.
+#[test]
+fn the_after_meeting_pass_is_on_by_default_everywhere() {
+    assert!(valid_config(&[]).transcript_pass());
+    assert!(!valid_config(&[("NOTE_TAKER_TRANSCRIPT_PASS", "false")]).transcript_pass());
+}
