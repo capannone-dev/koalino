@@ -43,7 +43,22 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
   String provider = 'local';
   bool keySaved = false;
   bool keychain = true;
-  String selected = 'ggml-base.bin';
+
+  /// The hand-picked model; `null` is Automatic.
+  String? selected = 'ggml-base.bin';
+
+  /// What Automatic runs, and the suggested model it waits for, if any.
+  String? automaticFile = 'ggml-base.bin';
+  String? automaticWaiting;
+  bool automaticEfficient = false;
+
+  @override
+  Future<int> useAutomaticModel() async {
+    calls.add('automatic');
+    selected = null;
+    return transcriptionStatusOk;
+  }
+
   WhisperProposal? proposal;
   WhisperDownload downloadState = const WhisperDownload();
   final List<String> calls = <String>[];
@@ -89,6 +104,11 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
         glossary: glossary,
         keepSpeech: SpeechRetention(days: keepSpeechDays),
         afterMeetingPass: afterMeetingPass,
+        automatic: AutomaticModelStatus(
+            enabled: selected == null,
+            fileName: automaticFile,
+            efficient: automaticEfficient,
+            waitingForDownload: automaticWaiting),
       );
 
   @override
@@ -334,6 +354,8 @@ void main() {
           gpuName: 'Adreno (TM) 740', enabled: true, gpuBlocked: true);
     await _pump(tester, bridge);
     expect(find.textContaining('stopped the app'), findsOneWidget);
+    await tester.ensureVisible(find.text('Try the graphics chip again'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Try the graphics chip again'));
     await tester.pumpAndSettle();
     expect(bridge.calls, contains('retry'));
@@ -388,6 +410,8 @@ void main() {
     final _FakeBridge bridge = _FakeBridge();
     await _pump(tester, bridge);
     expect(find.byTooltip('Download small'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('Download small'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Download small'));
     await tester.pump();
     await tester.pump();
@@ -397,6 +421,8 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(bridge.calls, contains('cancel'));
+    await tester.scrollUntilVisible(find.text('Download cancelled.'), -200,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Download cancelled.'), findsOneWidget);
   });
 
@@ -479,6 +505,74 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     expect(find.text('7 days'), findsOneWidget,
         reason: 'the menu shows the saved window');
+  });
+
+  testWidgets('Automatic names the model it runs and is chosen with a tap',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..automaticFile = 'ggml-small.bin'
+      ..automaticEfficient = true
+      ..efficient = const EfficientModeStatus(gpuName: 'Adreno (TM) 740')
+      ..suggestion = const WhisperSuggestion(
+          fileName: 'ggml-small.bin',
+          efficient: true,
+          reason: 'Fewer mistakes.');
+    await _pump(tester, bridge);
+    expect(find.byKey(efficientModeKey), findsOneWidget,
+        reason: 'a hand-picked model keeps its own switch');
+
+    await tester.tap(find.byKey(automaticModelKey));
+    await tester.pumpAndSettle();
+
+    expect(bridge.calls, contains('automatic'));
+    expect(find.text('Automatic: small, efficient mode'), findsOneWidget);
+    expect(find.text('Fewer mistakes.'), findsOneWidget);
+    expect(find.byKey(efficientModeKey), findsNothing,
+        reason: 'Automatic decides efficient mode');
+    expect(find.byKey(useSuggestionKey), findsNothing,
+        reason: 'Automatic already follows the suggestion');
+    expect(
+        find.descendant(
+            of: find.byKey(automaticModelKey),
+            matching: find.byIcon(Icons.radio_button_checked)),
+        findsOneWidget);
+  });
+
+  testWidgets(
+      'Automatic waiting for a download uses the shipped model and asks',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..selected = null
+      ..automaticWaiting = 'ggml-small.bin'
+      ..suggestion = const WhisperSuggestion(
+          fileName: 'ggml-small.bin',
+          efficient: false,
+          reason: 'Fewer mistakes.');
+    final TranscriptionSettingsController controller =
+        await _pump(tester, bridge);
+
+    expect(find.text('Automatic: base'), findsOneWidget);
+    expect(find.textContaining('until small is downloaded'), findsOneWidget);
+    expect(bridge.calls, isEmpty, reason: 'nothing downloads by itself');
+
+    await tester.tap(find.byKey(automaticDownloadKey));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, <String>['download ggml-small.bin'],
+        reason: 'the download leaves Automatic on');
+    bridge.downloadState = const WhisperDownload(state: 'cancelled');
+    await controller.load();
+  });
+
+  test('settings from a core without Automatic show the hand-picked model', () {
+    expect(const AutomaticModelStatus().enabled, isFalse);
+    expect(
+        AutomaticModelStatus.fromJson(<String, Object?>{
+          'enabled': true,
+          'file_name': 'ggml-small.bin',
+          'efficient': true,
+          'waiting_for_download': null,
+        }).fileName,
+        'ggml-small.bin');
   });
 
   testWidgets('the after-meeting pass is on by default and can be turned off',

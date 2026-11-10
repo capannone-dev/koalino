@@ -30,6 +30,12 @@ const Key glossaryFieldKey = ValueKey<String>('glossary-field');
 /// Finds the speech retention window's menu (#93).
 const Key keepSpeechKey = ValueKey<String>('keep-speech');
 
+/// Finds the "Automatic" model row (#106).
+const Key automaticModelKey = ValueKey<String>('automatic-model');
+
+/// Finds the button downloading the model Automatic waits for.
+const Key automaticDownloadKey = ValueKey<String>('automatic-download');
+
 /// Finds the after-meeting pass switch (#87).
 const Key afterMeetingPassKey = ValueKey<String>('after-meeting-pass');
 
@@ -332,10 +338,11 @@ final class _TranscriptionSettingsScreenState
             'memory. Downloads come from Hugging Face. This choice applies '
             'only to this device.'),
       ),
+      ..._automaticTiles(settings),
       // A proposal rests on this device's own speed, so it replaces the device-based estimate.
       if (settings.proposal != null)
         ..._proposalTiles(settings)
-      else
+      else if (!settings.automatic.enabled)
         ..._suggestionTiles(settings),
       ..._efficientTiles(settings),
     ];
@@ -352,6 +359,68 @@ final class _TranscriptionSettingsScreenState
       tiles.add(_modelTile(settings, model));
     }
     return tiles;
+  }
+
+  /// The "Automatic" row (#106): the model it runs here and why, and a Download button while the
+  /// suggested model isn't on the device. Tapping it chooses Automatic.
+  List<Widget> _automaticTiles(TranscriptionSettings settings) {
+    final TranscriptionSettingsController controller = widget.controller;
+    final AutomaticModelStatus automatic = settings.automatic;
+    String nameOf(String? fileName) =>
+        settings.models
+            .where((WhisperModelInfo row) => row.fileName == fileName)
+            .firstOrNull
+            ?.name ??
+        fileName ??
+        'none';
+    final WhisperModelInfo? waiting = settings.models
+        .where((WhisperModelInfo row) =>
+            row.fileName == automatic.waitingForDownload)
+        .firstOrNull;
+    final String title = automatic.enabled
+        ? 'Automatic: ${nameOf(automatic.fileName)}'
+            '${automatic.efficient ? ', efficient mode' : ''}'
+        : 'Automatic';
+    final String reason = settings.suggestion?.reason ?? '';
+    final String subtitle = waiting != null
+        ? 'Uses ${nameOf(automatic.fileName)} until ${waiting.name} is '
+            'downloaded, the best fit for this device. $reason'
+        : automatic.enabled
+            ? reason
+            : 'Picks the best model for this device: '
+                '${nameOf(automatic.fileName)}'
+                '${automatic.efficient ? ', efficient mode' : ''}.';
+    final WhisperDownload download = settings.download;
+    final bool downloadingWaiting = waiting != null &&
+        download.state == 'downloading' &&
+        download.fileName == waiting.fileName;
+    return <Widget>[
+      ListTile(
+        key: automaticModelKey,
+        leading: Icon(automatic.enabled
+            ? Icons.radio_button_checked
+            : Icons.radio_button_unchecked),
+        title: Text(title),
+        subtitle: downloadingWaiting
+            ? LinearProgressIndicator(
+                value: download.totalBytes == 0
+                    ? null
+                    : download.receivedBytes / download.totalBytes)
+            : Text(subtitle.trim()),
+        onTap: automatic.enabled || controller.isBusy
+            ? null
+            : controller.useAutomaticModel,
+        trailing: waiting == null || downloadingWaiting
+            ? null
+            : FilledButton.tonal(
+                key: automaticDownloadKey,
+                onPressed: controller.isBusy || controller.isDownloading
+                    ? null
+                    : () => _download(waiting),
+                child: Text('Download ${formatModelSize(waiting.sizeBytes)}'),
+              ),
+      ),
+    ];
   }
 
   /// A model proposed from this device's measurements, with buttons to accept or dismiss it.
@@ -437,7 +506,9 @@ final class _TranscriptionSettingsScreenState
     final TranscriptionSettingsController controller = widget.controller;
     final EfficientModeStatus efficient = settings.efficient;
     return <Widget>[
-      if (efficient.gpuName case final String gpuName)
+      // Automatic decides efficient mode itself; a hand-picked model has the switch.
+      if (efficient.gpuName case final String gpuName
+          when !settings.automatic.enabled)
         SwitchListTile(
           key: efficientModeKey,
           secondary: const Icon(Icons.bolt_outlined),
@@ -479,6 +550,9 @@ final class _TranscriptionSettingsScreenState
     final List<String> notes = <String>[
       formatModelSize(model.sizeBytes),
       if (model.onDevice) 'on this device',
+      if (settings.automatic.enabled &&
+          settings.automatic.fileName == model.fileName)
+        'used by Automatic',
       if (model.englishOnly) 'English only',
       if (model.tooLargeForMemory) 'may be too large for this device',
       if (wrongLanguage) 'doesn\'t match your language',

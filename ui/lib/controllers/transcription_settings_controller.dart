@@ -92,6 +92,12 @@ final class TranscriptionSettingsController extends ChangeNotifier {
       _run(() => _bridge.setEfficientGpu(enabled: enabled),
           success: 'Saved. The next recording uses this.');
 
+  /// Chooses "Automatic", the model suggested for this device.
+  ///
+  /// Side effects: Forgets the hand-picked model and reloads.
+  Future<void> useAutomaticModel() => _run(_bridge.useAutomaticModel,
+      success: 'Saved. The next recording uses the automatic choice.');
+
   /// Turns the after-meeting pass on or off.
   ///
   /// Inputs: The new state. Side effects: Stores the choice and reloads.

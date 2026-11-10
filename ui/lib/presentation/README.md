@@ -73,7 +73,9 @@ readers), so an active recording and every screen keep their state. It forwards 
 hidden and shown to `AppLockController`.
 
 `transcription_settings_screen.dart` lists the Whisper models by size, and holds the OpenAI choice and write-only
-key field (#67). Its Glossary section takes one name or term per line; the message under Save says
+key field (#67). The first row, "Automatic" (the default, #106), names the model it runs here and why,
+with a Download button while the suggested model isn't on the device; picking a model by hand leaves it, and
+the efficient mode switch shows only then. Its Glossary section takes one name or term per line; the message under Save says
 it applies from the next recording, and refused text stays in the field to correct. Below it,
 "Keep speech for combining" is a menu of days (1 to 60, plus any window set from the CLI or the
 web) that `note_taker_set_keep_speech_days` saves (#93). Above it, the "Improve the transcript after

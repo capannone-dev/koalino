@@ -117,6 +117,38 @@ final class WhisperSuggestion {
 }
 
 /// Efficient mode's state on this device.
+final class AutomaticModelStatus {
+  /// Creates the state; by default a model was chosen by hand, as with a core from before #106.
+  const AutomaticModelStatus({
+    this.enabled = false,
+    this.fileName,
+    this.efficient = false,
+    this.waitingForDownload,
+  });
+
+  /// Reads the state from the core's JSON.
+  factory AutomaticModelStatus.fromJson(Map<String, Object?> json) =>
+      AutomaticModelStatus(
+        enabled: json['enabled']! as bool,
+        fileName: json['file_name'] as String?,
+        efficient: json['efficient'] as bool? ?? false,
+        waitingForDownload: json['waiting_for_download'] as String?,
+      );
+
+  /// Whether Automatic is chosen, rather than a model picked by hand.
+  final bool enabled;
+
+  /// The model Automatic runs on this device, or `null` when none is here.
+  final String? fileName;
+
+  /// Whether Automatic runs it in efficient mode.
+  final bool efficient;
+
+  /// The model suggested for this device while it waits to be downloaded, if any.
+  final String? waitingForDownload;
+}
+
+/// Efficient mode's state on this device.
 final class EfficientModeStatus {
   /// Creates the state; by default the device has no GPU for it.
   const EfficientModeStatus({
@@ -190,6 +222,7 @@ final class TranscriptionSettings {
     this.glossary = const <String>[],
     this.keepSpeech = const SpeechRetention(),
     this.afterMeetingPass = true,
+    this.automatic = const AutomaticModelStatus(),
   });
 
   /// Reads the view from the core's JSON.
@@ -217,6 +250,10 @@ final class TranscriptionSettings {
           : SpeechRetention.fromJson(
               json['keep_speech']! as Map<String, Object?>),
       afterMeetingPass: json['after_meeting_pass'] as bool? ?? true,
+      automatic: json['automatic'] == null
+          ? const AutomaticModelStatus()
+          : AutomaticModelStatus.fromJson(
+              json['automatic']! as Map<String, Object?>),
       openAiModel: json['openai_model']! as String,
       keySaved: json['key_saved']! as bool,
       environmentKey: json['environment_key']! as bool,
@@ -257,6 +294,9 @@ final class TranscriptionSettings {
   /// Whether each meeting is transcribed again after Stop, with longer context (#87). On by
   /// default; a phone runs it only while charging.
   final bool afterMeetingPass;
+
+  /// The "Automatic" model choice (#106); `selectedModel` is `null` while it is on.
+  final AutomaticModelStatus automatic;
 
   final String provider;
   final String openAiModel;
@@ -326,6 +366,10 @@ abstract interface class TranscriptionSettingsBridge {
   /// Turns the after-meeting pass (#87) on or off from the next recording.
   /// Outputs: A core status. Side effects: Stores the choice.
   Future<int> setAfterMeetingPass({required bool enabled});
+
+  /// Chooses "Automatic" (#106): the model suggested for this device.
+  /// Outputs: A core status. Side effects: Forgets the hand-picked model.
+  Future<int> useAutomaticModel();
 
   /// Lets the GPU be tried again after a crash stopped it.
   Future<int> retryGpu();
@@ -405,6 +449,11 @@ final class RustTranscriptionSettingsBridge
         .lookupFunction<Int32 Function(Int32), int Function(int)>(
             'note_taker_set_efficient_gpu')(value));
   }
+
+  @override
+  Future<int> useAutomaticModel() => Isolate.run(() => _openCoreLibrary()
+      .lookupFunction<Int32 Function(), int Function()>(
+          'note_taker_use_automatic_model')());
 
   @override
   Future<int> setAfterMeetingPass({required bool enabled}) {
