@@ -16,9 +16,18 @@ enum LlmKind {
   openAiCompatible('open_ai_compatible', 'OpenAI-compatible'),
 
   /// Anthropic's Messages API.
-  anthropic('anthropic', 'Anthropic');
+  anthropic('anthropic', 'Anthropic'),
+
+  /// Claude Code installed and signed in on this computer, so a Claude plan answers (#105).
+  claudeCode('claude_code', 'Claude Code'),
+
+  /// Codex installed and signed in on this computer, so a ChatGPT plan answers (#105).
+  codex('codex', 'Codex');
 
   const LlmKind(this.wire, this.label);
+
+  /// Whether it runs a tool on this computer: no address and no key, desktop only.
+  bool get isLocalCli => this == claudeCode || this == codex;
 
   /// The name in the core's JSON.
   final String wire;
@@ -46,6 +55,7 @@ final class LlmConnection {
     required this.plainHttp,
     required this.hasKey,
     required this.isDefault,
+    this.toolInstalled = false,
   });
 
   /// Reads one connection from the core's JSON.
@@ -61,6 +71,7 @@ final class LlmConnection {
         plainHttp: json['plain_http'] as bool? ?? false,
         hasKey: json['has_key'] as bool? ?? false,
         isDefault: json['is_default'] as bool? ?? false,
+        toolInstalled: json['tool_installed'] as bool? ?? false,
       );
 
   /// Stable identifier chosen by the core.
@@ -89,6 +100,9 @@ final class LlmConnection {
 
   /// Whether summaries use it unless another is chosen.
   final bool isDefault;
+
+  /// For Claude Code and Codex: whether the tool was found on this computer.
+  final bool toolInstalled;
 }
 
 /// What saving a connection sends. A null `apiKey` keeps the saved key.
@@ -134,6 +148,16 @@ final class LlmPreset {
   final bool needsKey;
 }
 
+/// Whether this device can run Claude Code or Codex: desktops only.
+bool get canRunLocalCli =>
+    Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+
+/// The presets this device offers; Claude Code and Codex only on desktops.
+List<LlmPreset> get availableLlmPresets => <LlmPreset>[
+      for (final LlmPreset preset in llmPresets)
+        if (!preset.kind.isLocalCli || canRunLocalCli) preset,
+    ];
+
 /// The presets offered when adding a connection, matching the web's.
 const List<LlmPreset> llmPresets = <LlmPreset>[
   LlmPreset('OpenAI', LlmKind.openAiCompatible, 'https://api.openai.com/v1',
@@ -144,6 +168,10 @@ const List<LlmPreset> llmPresets = <LlmPreset>[
       'mistral-large-latest', 128000),
   LlmPreset('Local server (Ollama)', LlmKind.openAiCompatible,
       'http://192.168.1.10:11434/v1', 'llama3.1:8b', 8192,
+      needsKey: false),
+  LlmPreset('Claude Code (Claude plan)', LlmKind.claudeCode, '', '', 200000,
+      needsKey: false),
+  LlmPreset('Codex (ChatGPT plan)', LlmKind.codex, '', '', 200000,
       needsKey: false),
 ];
 
@@ -285,9 +313,13 @@ final class LlmException implements Exception {
 
   /// A sentence for people; the core's own text is not shown, since it can hold details. A
   /// rejection with the server's reason shows that reason instead of a guess.
-  String get message => detail != null && code == 'llm_rejected'
-      ? 'The AI server rejected the request.\nThe server said: $detail'
-      : _sentence;
+  String get message => switch ((code, detail)) {
+        ('llm_rejected', final String detail) =>
+          'The AI server rejected the request.\nThe server said: $detail',
+        ('llm_tool_failed', final String detail) =>
+          'Claude Code or Codex could not answer.\nIt said: $detail',
+        _ => _sentence,
+      };
 
   String get _sentence => switch (code) {
         'invalid_connection' =>
@@ -311,6 +343,10 @@ final class LlmException implements Exception {
         'llm_failed' => 'The AI server failed. Try again.',
         'llm_refused' => 'The model declined to answer.',
         'llm_invalid_response' => "The AI server's answer could not be read.",
+        'llm_tool_missing' =>
+          'Claude Code or Codex is not installed on this computer, or the app cannot find it.',
+        'llm_tool_failed' =>
+          'Claude Code or Codex could not answer. Check that it is signed in.',
         'keychain_failed' =>
           'The API key could not be stored in the system keychain.',
         'save_failed' => 'The settings could not be saved.',

@@ -85,9 +85,13 @@ final class ChatException implements Exception {
 
   /// A sentence for people; the core's own text is not shown. A rejection with the server's
   /// reason shows that reason.
-  String get message => detail != null && code == 'llm_rejected'
-      ? 'The AI server rejected the request.\nThe server said: $detail'
-      : _sentence;
+  String get message => switch ((code, detail)) {
+        ('llm_rejected', final String detail) =>
+          'The AI server rejected the request.\nThe server said: $detail',
+        ('llm_tool_failed', final String detail) =>
+          'Claude Code or Codex could not answer.\nIt said: $detail',
+        _ => _sentence,
+      };
 
   String get _sentence => switch (code) {
         'empty' => 'Type a question.',
@@ -108,6 +112,8 @@ final class ChatException implements Exception {
         'llm_unauthorized' => 'The AI server refused the API key.',
         'llm_rate_limited' => 'The AI server is busy. Try again later.',
         'llm_refused' => 'The model declined to answer.',
+        'llm_tool_missing' =>
+          'Claude Code or Codex is not installed on this computer, or the app cannot find it.',
         'storage_failed' => 'The notes could not be read.',
         'runtime_unavailable' => 'The app is still starting. Try again.',
         _ when code.startsWith('llm_') =>

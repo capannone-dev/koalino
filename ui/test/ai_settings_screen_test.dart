@@ -105,4 +105,63 @@ void main() {
     expect(core.lastCommand('update')['template'], 'Decisions of {{title}}.');
     expect(find.text('Prompt saved.'), findsOneWidget);
   });
+
+  testWidgets(
+      'adds Claude Code from its preset without an address or a key (#105)',
+      (WidgetTester tester) async {
+    core.answer('command:settings', settings());
+    core.answer('command:save_connection', <String, Object?>{
+      'ok': true,
+      'connection': connection('c-2', 'Claude Code')
+    });
+    core.answer('command:settings', settings());
+    await show(tester);
+
+    await tester.tap(find.text('Add connection'));
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.widgetWithText(ActionChip, 'Claude Code (Claude plan)'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(TextField, 'Address'), findsNothing);
+    expect(find.widgetWithText(TextField, 'API key'), findsNothing);
+    await tester.tap(find.text('Save connection'));
+    await tester.pumpAndSettle();
+
+    final Map<String, Object?> request = core.lastCommand('save_connection');
+    expect(request['kind'], 'claude_code');
+    expect(request['model'], '');
+    expect(request.containsKey('api_key'), isFalse);
+  });
+
+  testWidgets('says whether Claude Code or Codex is installed here',
+      (WidgetTester tester) async {
+    core.answer(
+        'command:settings',
+        settings(connections: <Object?>[
+          <String, Object?>{
+            ...connection('c-1', 'Claude Pro', isDefault: true),
+            'kind': 'claude_code',
+            'base_url': '',
+            'model': '',
+            'plain_http': false,
+            'tool_installed': true,
+          },
+          <String, Object?>{
+            ...connection('c-2', 'ChatGPT'),
+            'kind': 'codex',
+            'base_url': '',
+            'model': 'gpt-5.5',
+            'plain_http': false,
+            'tool_installed': false,
+          },
+        ]));
+    await show(tester);
+
+    expect(find.textContaining('Claude Code · default model'), findsOneWidget);
+    expect(find.textContaining('Installed'), findsOneWidget);
+    expect(find.textContaining('Codex · gpt-5.5'), findsOneWidget);
+    expect(find.textContaining('Not found on this computer'), findsOneWidget);
+    expect(find.textContaining('API key'), findsNothing);
+  });
 }

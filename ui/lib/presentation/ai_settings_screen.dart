@@ -129,7 +129,8 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                     leading: Icon(Icons.cloud_off_outlined),
                     title: Text('No connections yet'),
                     subtitle: Text(
-                        'Add OpenAI, Anthropic, Mistral, or a server on your network.'),
+                        'Add OpenAI, Anthropic, Mistral, a server on your network, or '
+                        'Claude Code or Codex on this computer.'),
                   ),
                 for (final LlmConnection connection in settings.connections)
                   _ConnectionTile(
@@ -227,17 +228,24 @@ final class _ConnectionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final bool tool = connection.kind.isLocalCli;
     final List<String> notes = <String>[
-      '${connection.kind.label} · ${connection.model}',
+      '${connection.kind.label} · ${connection.model.isEmpty ? 'default model' : connection.model}',
       if (connection.isDefault) 'Default',
-      connection.hasKey ? 'API key saved' : 'No API key',
+      if (tool)
+        connection.toolInstalled ? 'Installed' : 'Not found on this computer'
+      else
+        connection.hasKey ? 'API key saved' : 'No API key',
       if (connection.plainHttp) 'Unencrypted http, local network only',
     ];
+    final String where = tool
+        ? 'Runs with your plan\'s sign-in on this computer'
+        : connection.baseUrl;
     return ListTile(
       leading:
           Icon(connection.isDefault ? Icons.star : Icons.auto_awesome_outlined),
       title: Text(connection.label),
-      subtitle: Text('${notes.join(' · ')}\n${connection.baseUrl}'),
+      subtitle: Text('${notes.join(' · ')}\n$where'),
       isThreeLine: true,
       trailing: PopupMenuButton<_ConnectionAction>(
         tooltip: 'Actions for ${connection.label}',
@@ -327,7 +335,12 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
   /// Checks the fields and pops the input.
   void _save() {
     final int? contextTokens = int.tryParse(_context.text.trim());
-    if (_label.text.trim().isEmpty ||
+    if (_kind.isLocalCli) {
+      if (_label.text.trim().isEmpty) {
+        setState(() => _error = 'Enter a name.');
+        return;
+      }
+    } else if (_label.text.trim().isEmpty ||
         _baseUrl.text.trim().isEmpty ||
         _model.text.trim().isEmpty) {
       setState(() => _error = 'Enter a name, an address and a model.');
@@ -341,11 +354,12 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
     Navigator.of(context).pop(LlmConnectionInput(
       label: _label.text.trim(),
       kind: _kind,
-      baseUrl: _baseUrl.text.trim(),
+      // Claude Code and Codex have no address and never get a key (#105).
+      baseUrl: _kind.isLocalCli ? '' : _baseUrl.text.trim(),
       model: _model.text.trim(),
       contextTokens: contextTokens,
-      apiKey: _key.text,
-      clearKey: _clearKey,
+      apiKey: _kind.isLocalCli ? null : _key.text,
+      clearKey: !_kind.isLocalCli && _clearKey,
     ));
   }
 
@@ -367,7 +381,7 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
                   spacing: 8,
                   runSpacing: 4,
                   children: <Widget>[
-                    for (final LlmPreset preset in llmPresets)
+                    for (final LlmPreset preset in availableLlmPresets)
                       ActionChip(
                         label: Text(preset.name),
                         onPressed: () => _applyPreset(preset),
@@ -387,24 +401,39 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
                 decoration: const InputDecoration(labelText: 'Protocol'),
                 items: <DropdownMenuItem<LlmKind>>[
                   for (final LlmKind kind in LlmKind.values)
-                    DropdownMenuItem<LlmKind>(
-                        value: kind, child: Text(kind.label)),
+                    if (!kind.isLocalCli || canRunLocalCli || kind == _kind)
+                      DropdownMenuItem<LlmKind>(
+                          value: kind, child: Text(kind.label)),
                 ],
                 onChanged: (LlmKind? kind) =>
                     setState(() => _kind = kind ?? _kind),
               ),
-              TextField(
-                controller: _baseUrl,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                  labelText: 'Address',
-                  helperText:
-                      'https:// always; http:// only on this device or the local network.',
+              if (_kind.isLocalCli)
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Text(
+                      'Runs the tool installed and signed in on this computer, so your '
+                      'Claude or ChatGPT plan writes the summaries instead of API credit. '
+                      'The meeting goes to Anthropic or OpenAI under that account.'),
                 ),
-              ),
+              if (!_kind.isLocalCli)
+                TextField(
+                  controller: _baseUrl,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'Address',
+                    helperText:
+                        'https:// always; http:// only on this device or the local network.',
+                  ),
+                ),
               TextField(
                 controller: _model,
-                decoration: const InputDecoration(labelText: 'Model'),
+                decoration: InputDecoration(
+                  labelText: 'Model',
+                  helperText: _kind.isLocalCli
+                      ? 'Leave empty for the tool\'s own default.'
+                      : null,
+                ),
               ),
               TextField(
                 controller: _context,
@@ -412,19 +441,20 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
                 decoration:
                     const InputDecoration(labelText: 'Context (tokens)'),
               ),
-              TextField(
-                controller: _key,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                decoration: InputDecoration(
-                  labelText: 'API key',
-                  helperText: existing?.hasKey ?? false
-                      ? 'A key is saved. Leave empty to keep it.'
-                      : 'Leave empty for a local server without keys.',
+              if (!_kind.isLocalCli)
+                TextField(
+                  controller: _key,
+                  obscureText: true,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    labelText: 'API key',
+                    helperText: existing?.hasKey ?? false
+                        ? 'A key is saved. Leave empty to keep it.'
+                        : 'Leave empty for a local server without keys.',
+                  ),
                 ),
-              ),
-              if (existing?.hasKey ?? false)
+              if (!_kind.isLocalCli && (existing?.hasKey ?? false))
                 CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   value: _clearKey,
