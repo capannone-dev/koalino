@@ -2226,7 +2226,8 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   - No SDKs: the Rust core already has `reqwest`, and the stack rule forbids new frameworks.
 - **Addresses:** HTTPS always. Plain HTTP is allowed only for loopback, RFC 1918 and ULA
   addresses, and the UI warns when it is used. Redirects are not followed, and an error body is
-  never read or logged, so a key or meeting text can't leak through one.
+  never read or logged, so a key or meeting text can't leak through one. (Changed by #104 on
+  2026-11-10: a rejection's short reason is now read and shown, never logged.)
 - **Keys:** write-only, one keychain entry per connection (`note-taker-llm-<id>`). Android, which
   has no keychain, uses a file sealed under the host key. The CLI reads a key only from
   `NOTE_TAKER_LLM_API_KEY`, so it stays out of the shell history.
@@ -2637,3 +2638,25 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
     a recurring meeting are not browsed.
   - A recording's end time is lost when the Teams page is reloaded during the call. Matching then
     uses its start, with the 30-minute slack.
+
+## 2026-11-10 — #104 Show the AI server's reason when it rejects a request
+
+- **Context:** on the S23, **Summarize** with an Anthropic connection (`claude-opus-5-5`,
+  `https://api.anthropic.com`, key saved) answered only "The AI server rejected the request.
+  Check the model name." The model name was right, and the request matched Anthropic's current
+  API. The cause was in the error reply's body, which the transport threw away so that no
+  meeting text could leak through it. The owner could not tell what to fix: credit, a key
+  without access to the model, a parameter.
+- **Decision:** for a 4xx rejection (other than 401, 403 and 429), keep the server's own reason:
+  - `error.type: error.message` (Anthropic and OpenAI), or `error` when it is text (Ollama);
+  - collapsed to one line and cut to 300 characters; the rest of the body is dropped;
+  - carried in `LlmError::Rejected.provider_reason`, outside the error's text, so logs (which
+    use the text) never hold it;
+  - returned as `error_detail` by the app's FFI and the web API, and shown under the message as
+    "The server said: …".
+
+  A local server could echo some meeting text in its reason. That text goes only to the owner's
+  own screen, which already shows the meeting.
+- **Also fixed:** Android, Windows and macOS builds failed since the Teams bridge secret moved to
+  the keychain (`56b6972`): `SECRET_SERVICE_LABEL` existed only on Linux.
+
