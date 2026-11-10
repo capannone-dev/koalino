@@ -56,6 +56,9 @@ export function chatErrorMessage(error: unknown): string {
   if (error instanceof ChatApiError && error.code === "llm_rejected" && error.detail) {
     return `The AI server rejected the request. The server said: ${error.detail}`;
   }
+  if (error instanceof ChatApiError && error.code === "llm_tool_failed" && error.detail) {
+    return `Claude Code or Codex could not answer. It said: ${error.detail}`;
+  }
   const code = error instanceof ChatApiError ? error.code : "server";
   return messages[code] ?? (code.startsWith("llm_") ? "The AI server could not answer. Try again." : "Something went wrong. Try again.");
 }

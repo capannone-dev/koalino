@@ -102,3 +102,32 @@ test("without the server the settings say so", () => {
   render(<AiSettings initial={null} />);
   expect(screen.getByText(/Can't read the AI settings/)).toBeInTheDocument();
 });
+
+test("Claude Code and Codex show whether the tool is installed, with no address or key (#105)", () => {
+  const claude: api.LlmConnection = { ...office, id: "c-2", label: "Claude Pro", kind: "claude_code", base_url: "", model: "", plain_http: false, tool_installed: true, is_default: false };
+  const codex: api.LlmConnection = { ...office, id: "c-3", label: "ChatGPT", kind: "codex", base_url: "", model: "gpt-5.5", plain_http: false, tool_installed: false, is_default: false };
+  render(<AiSettings initial={{ ...settings, connections: [claude, codex] }} />);
+
+  expect(screen.getByText(/Claude Code · default model/)).toBeInTheDocument();
+  expect(screen.getByText(/Installed on the server's computer/)).toBeInTheDocument();
+  expect(screen.getByText(/Codex · gpt-5.5/)).toBeInTheDocument();
+  expect(screen.getByText(/Not found on the server's computer/)).toBeInTheDocument();
+  expect(screen.queryByText(/API key/)).not.toBeInTheDocument();
+});
+
+test("a Claude Code connection is saved without an address or a key (#105)", async () => {
+  vi.mocked(api.saveLlmConnection).mockResolvedValue({ ...office, id: "c-2", label: "Claude Pro", kind: "claude_code", base_url: "", model: "" });
+  vi.mocked(api.getLlmSettings).mockResolvedValue(settings);
+  render(<AiSettings initial={settings} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
+  fireEvent.change(screen.getByLabelText("Start from"), { target: { value: "Claude Code (Claude plan)" } });
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Claude Pro" } });
+  expect(screen.queryByLabelText("Address")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
+  await screen.findByText("Saved Claude Pro.");
+
+  const [body] = vi.mocked(api.saveLlmConnection).mock.calls[0];
+  expect(body).toEqual({ label: "Claude Pro", kind: "claude_code", base_url: "", model: "", context_tokens: 200000 });
+});

@@ -17,6 +17,7 @@ import {
   type LlmConnection,
   type LlmConnectionInput,
   type LlmKind,
+  isLocalCli,
   type LlmSettings
 } from "@/lib/llm-api";
 
@@ -101,7 +102,9 @@ export function AiSettings({ initial }: AiSettingsProps) {
       api_key: draft.api_key
     };
     const id = draft.id;
-    if (!body.api_key) delete body.api_key;
+    // Claude Code and Codex have no address and never get a key (#105).
+    if (isLocalCli(body.kind)) body.base_url = "";
+    if (!body.api_key || isLocalCli(body.kind)) delete body.api_key;
     void run(async () => {
       const saved = await saveLlmConnection(body, id);
       // The first connection becomes the default, so the whole list is read again.
@@ -130,13 +133,26 @@ export function AiSettings({ initial }: AiSettingsProps) {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold">{connection.label}</span>
               {connection.is_default ? <span className="text-sm text-success">Default</span> : null}
-              <span className="text-sm text-muted">{connection.model}</span>
+              <span className="text-sm text-muted">
+                {isLocalCli(connection.kind)
+                  ? `${connection.kind === "codex" ? "Codex" : "Claude Code"} · ${connection.model || "default model"}`
+                  : connection.model}
+              </span>
             </div>
-            <p className="text-sm break-all text-muted">{connection.base_url}</p>
-            {connection.plain_http ? (
-              <p className="text-sm text-warning">Unencrypted http: use it only on a network you trust.</p>
-            ) : null}
-            <p className="text-sm text-muted">{connection.has_key ? "API key saved" : "No API key"}</p>
+            {isLocalCli(connection.kind) ? (
+              <p className="text-sm text-muted">
+                {connection.tool_installed ? "Installed on the server's computer" : "Not found on the server's computer"}; runs with
+                that computer&apos;s signed-in plan.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm break-all text-muted">{connection.base_url}</p>
+                {connection.plain_http ? (
+                  <p className="text-sm text-warning">Unencrypted http: use it only on a network you trust.</p>
+                ) : null}
+                <p className="text-sm text-muted">{connection.has_key ? "API key saved" : "No API key"}</p>
+              </>
+            )}
             <div className="mt-2 flex flex-wrap gap-2">
               {connection.is_default ? null : (
                 <button
@@ -325,19 +341,35 @@ function ConnectionForm({
         <select id={ids.kind} className={fieldClass} value={draft.kind} onChange={(event) => onChange({ ...draft, kind: event.target.value as LlmKind })}>
           <option value="open_ai_compatible">OpenAI-compatible (OpenAI, Mistral, Ollama, LM Studio…)</option>
           <option value="anthropic">Anthropic</option>
+          <option value="claude_code">Claude Code on the server&apos;s computer (Claude plan)</option>
+          <option value="codex">Codex on the server&apos;s computer (ChatGPT plan)</option>
         </select>
       </div>
-      <div>
-        <label htmlFor={ids.url} className="block text-sm font-semibold">
-          Address
-        </label>
-        <input id={ids.url} className={fieldClass} required value={draft.base_url} onChange={(event) => onChange({ ...draft, base_url: event.target.value })} />
-      </div>
+      {isLocalCli(draft.kind) ? (
+        <p className="text-sm text-muted">
+          Runs the tool installed and signed in on the computer running Note Taker, so that plan writes the summaries instead
+          of API credit. The meeting goes to Anthropic or OpenAI under that account.
+        </p>
+      ) : (
+        <div>
+          <label htmlFor={ids.url} className="block text-sm font-semibold">
+            Address
+          </label>
+          <input id={ids.url} className={fieldClass} required value={draft.base_url} onChange={(event) => onChange({ ...draft, base_url: event.target.value })} />
+        </div>
+      )}
       <div>
         <label htmlFor={ids.model} className="block text-sm font-semibold">
           Model
         </label>
-        <input id={ids.model} className={fieldClass} required value={draft.model} onChange={(event) => onChange({ ...draft, model: event.target.value })} />
+        <input
+          id={ids.model}
+          className={fieldClass}
+          required={!isLocalCli(draft.kind)}
+          placeholder={isLocalCli(draft.kind) ? "Empty: the tool's own default" : undefined}
+          value={draft.model}
+          onChange={(event) => onChange({ ...draft, model: event.target.value })}
+        />
       </div>
       <div>
         <label htmlFor={ids.context} className="block text-sm font-semibold">
@@ -354,20 +386,22 @@ function ConnectionForm({
           onChange={(event) => onChange({ ...draft, context_tokens: Number(event.target.value) })}
         />
       </div>
-      <div>
-        <label htmlFor={ids.key} className="block text-sm font-semibold">
-          API key
-        </label>
-        <input
-          id={ids.key}
-          type="password"
-          autoComplete="off"
-          className={fieldClass}
-          placeholder={draft.has_key ? "Saved; type a new one to replace it" : "Not needed for most local servers"}
-          value={draft.api_key ?? ""}
-          onChange={(event) => onChange({ ...draft, api_key: event.target.value })}
-        />
-      </div>
+      {isLocalCli(draft.kind) ? null : (
+        <div>
+          <label htmlFor={ids.key} className="block text-sm font-semibold">
+            API key
+          </label>
+          <input
+            id={ids.key}
+            type="password"
+            autoComplete="off"
+            className={fieldClass}
+            placeholder={draft.has_key ? "Saved; type a new one to replace it" : "Not needed for most local servers"}
+            value={draft.api_key ?? ""}
+            onChange={(event) => onChange({ ...draft, api_key: event.target.value })}
+          />
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={buttonClass} disabled={busy}>
           Save connection

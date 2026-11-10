@@ -3,8 +3,13 @@
 
 import { apiBaseUrl } from "@/lib/api";
 
-/** The protocol a connection speaks. */
-export type LlmKind = "open_ai_compatible" | "anthropic";
+/** The protocol a connection speaks; `claude_code` and `codex` run the signed-in tool on the server's computer (#105). */
+export type LlmKind = "open_ai_compatible" | "anthropic" | "claude_code" | "codex";
+
+/** Whether a kind runs a tool instead of calling a server: no address and no key. */
+export function isLocalCli(kind: LlmKind): boolean {
+  return kind === "claude_code" || kind === "codex";
+}
 
 /** A saved connection; `has_key` only says whether a key is saved. */
 export type LlmConnection = {
@@ -17,6 +22,8 @@ export type LlmConnection = {
   plain_http: boolean;
   has_key: boolean;
   is_default: boolean;
+  /** For Claude Code and Codex: whether the tool was found on the server's computer. */
+  tool_installed?: boolean;
 };
 
 /** The AI settings. */
@@ -96,6 +103,8 @@ const messages: Record<string, string> = {
   llm_failed: "The AI server failed. Try again.",
   llm_refused: "The model declined to answer.",
   llm_invalid_response: "The AI server's answer could not be read.",
+  llm_tool_missing: "Claude Code or Codex is not installed on the server's computer, or it cannot be found.",
+  llm_tool_failed: "Claude Code or Codex could not answer. Check that it is signed in.",
   keychain_failed: "The API key could not be stored in the system keychain.",
   save_failed: "The settings could not be saved.",
   storage_failed: "The meeting could not be read or saved."
@@ -109,6 +118,9 @@ const messages: Record<string, string> = {
 export function llmErrorMessage(error: unknown): string {
   if (error instanceof LlmApiError && error.code === "llm_rejected" && error.detail) {
     return `The AI server rejected the request. The server said: ${error.detail}`;
+  }
+  if (error instanceof LlmApiError && error.code === "llm_tool_failed" && error.detail) {
+    return `Claude Code or Codex could not answer. It said: ${error.detail}`;
   }
   if (error instanceof LlmApiError) return messages[error.code] ?? "Something went wrong on the server. Try again.";
   return "Something went wrong. Try again.";
@@ -200,5 +212,7 @@ export const connectionPresets: { name: string; input: Omit<LlmConnectionInput, 
   { name: "OpenAI", input: { kind: "open_ai_compatible", base_url: "https://api.openai.com/v1", model: "gpt-5-mini", context_tokens: 128000 } },
   { name: "Anthropic", input: { kind: "anthropic", base_url: "https://api.anthropic.com", model: "claude-opus-5-5", context_tokens: 200000 } },
   { name: "Mistral", input: { kind: "open_ai_compatible", base_url: "https://api.mistral.ai/v1", model: "mistral-large-latest", context_tokens: 128000 } },
-  { name: "Local server (Ollama)", input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:11434/v1", model: "llama3.1:8b", context_tokens: 8192 } }
+  { name: "Local server (Ollama)", input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:11434/v1", model: "llama3.1:8b", context_tokens: 8192 } },
+  { name: "Claude Code (Claude plan)", input: { kind: "claude_code", base_url: "", model: "", context_tokens: 200000 } },
+  { name: "Codex (ChatGPT plan)", input: { kind: "codex", base_url: "", model: "", context_tokens: 200000 } }
 ];
