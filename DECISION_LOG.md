@@ -2660,3 +2660,41 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **Also fixed:** Android, Windows and macOS builds failed since the Teams bridge secret moved to
   the keychain (`56b6972`): `SECRET_SERVICE_LABEL` existed only on Linux.
 
+## 2026-11-10 — #105 Summaries through Claude Code and Codex on the desktop
+
+- **Context:** the owner pays for Claude Pro and has Codex signed in with ChatGPT, but has no
+  Anthropic API credit (#104). A subscription can't be used through an API key, and borrowing a
+  claude.ai session would break Anthropic's terms. Claude Code and Codex, though, are the
+  vendors' own tools, covered by those plans, and both run headlessly.
+- **Decision:** two connection kinds, `claude_code` and `codex`, that run the installed tool
+  once per request. Everything that uses connections works unchanged: manual and automatic
+  summaries (#101), chat (#97) and the connection test.
+  - **No address, no key.** Any key sent is ignored. `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`,
+    `OPENAI_API_KEY` and `CODEX_API_KEY` are removed from the tool's environment, so the
+    subscription login answers and API credit is never billed by surprise.
+  - **The model is optional;** empty uses the tool's default. A name must be a plain model name
+    (letters, digits, `-._:/[]`, not starting with `-`), since it goes on the command line.
+  - **The tool can only write an answer.** Claude Code runs with `--tools ""`, so a transcript
+    that reads like instructions can't make it run commands or read files. Codex runs in its
+    `read-only` sandbox; it can still read files, which the input could ask for, but it can't
+    change anything. The answer only reaches the owner's own app.
+  - **Nothing left behind.** No session is saved (`--no-session-persistence`, `--ephemeral`).
+    The run happens in a new 0700 temporary folder that is removed afterwards. The prompt goes
+    on standard input, not the command line, where other processes could read it.
+  - **Images:** Codex takes them (`--image=`). Claude Code without tools can't, so they are left
+    out and counted as such (`LlmEngine::reads_images`).
+  - **Finding the tool:** `PATH`, then the usual install folders (`~/.local/bin`,
+    `~/.claude/local`, npm's folders, `/usr/local/bin`, `/opt/homebrew/bin`), since an app started
+    from the desktop has a shorter `PATH` than a terminal. Settings shows "Installed" or "Not
+    found on this computer".
+  - **Desktop only:** the app offers these presets on Linux, macOS and Windows, not on Android.
+    The web UI offers them too, since the daemon runs on a computer that may have the tools.
+  - **Failures** (signed out, plan limit) come back as `llm_tool_failed`, with one short line of
+    what the tool said; a missing tool is `llm_tool_missing`.
+- **Verified:** on the owner's host, an ignored test ran both real tools through the engine on
+  a made-up meeting: Claude Code answered in 2 s on the Pro login, Codex in 6 s on the ChatGPT
+  login. No folder was left in the temp directory. Unit tests cover the command lines,
+  environment, answers, failures, missing tools and the image rule.
+- **Costs and limits:** these runs count against the plans' usage limits. Codex adds its own
+  agent prompt (about 14k tokens even for a one-line request).
+
