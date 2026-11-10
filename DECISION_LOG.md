@@ -2579,6 +2579,61 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   - three slides kept for three slides, each cropped exactly to the slide;
   - the meeting ends when the page leaves the call.
 - **Not yet verified:**
-  - the Teams transcript fetched from the recap after the meeting;
+  - the Teams transcript fetched from the recap after the meeting (done the same day; see the
+    next entry);
   - Chrome and Edge (Windows);
   - remote participants' audio (the second account was not speaking).
+
+## 2026-11-10 — #102 The Teams transcript comes from the recap's SharePoint frame
+
+- **Context:** after the live-test meeting ended, no transcript was fetched. Teams (work account,
+  November 2026) no longer posts a recap card with "View recap" in the meeting chat. The chat now
+  opens on a recap view:
+  - a session picker ("Select the meeting by time");
+  - **AI summary / Transcript** tabs;
+  - the transcript in a frame served from the organisation's SharePoint (Stream's player).
+
+  The extension ran only on Teams sites, so it never saw that frame. In that frame:
+  - the player loads the transcript from `…/cdnmedia/transcripts?…&kid=…`, which is binary
+    (encrypted for the player), so copying that response cannot work;
+  - only **Download → Download as .vtt** fetches plain WebVTT
+    (`…/media/transcripts/<id>/streamContent`).
+
+  Also, an unselected Fluent tab holds its label twice ("TranscriptTranscript"), so the Transcript
+  tab was never found.
+- **Decisions:**
+  - **SharePoint access:** the manifest adds `https://*.sharepoint.com/*`. A tenant's SharePoint
+    host is not known in advance. The hook and a new recap frame script run there in all frames,
+    but act only in a sub-frame whose referrer is a Teams site (`embeddedInTeams`). On other
+    SharePoint pages they do nothing. The owner grants it with the existing **Allow on Teams**
+    button.
+  - **Download through the player:** the Teams tab detects the recap view and matches it to a
+    recording by title and session time, as for cards. It then opens the Transcript tab and asks
+    the background to have the tab's recap frames press Download → .vtt. The frame's hook copies
+    the WebVTT, and the background relays it back to the tab, which sends it to Note Taker. This
+    leaves a copy in the browser's Downloads (already accepted for cards). The extension still
+    makes no request of its own and uses no page token.
+  - **Once per meeting:** the player can deliver the file twice for one download. The tab marks a
+    meeting as sent before any wait, so the second copy is dropped. The live test had stored two
+    attachments before this.
+  - **Retries:** a failed fetch is tried again a minute later, three times per page load. Before,
+    one early failure (the recap still loading) stopped it for good.
+  - **Status in the popup:** sent, already sent, no matching recording (with the session time),
+    or the step that failed. The tab resends it, and its recording state, when Firefox restarts
+    an idle background. The recap frame reopens its port then too, or download requests stop
+    reaching it.
+  - **Doubled labels:** controls are matched on their label read once (`withoutDoubledLabel`).
+- **Verified live (deb-gui, Firefox ESR, work account):**
+  - SharePoint access granted through the popup;
+  - the recap view detected with its 16:10–16:21 session;
+  - Download pressed in the frame, one `.vtt` downloaded, and one `teams-transcript` attachment
+    stored in Note Taker;
+  - the popup then said "already sent".
+
+  A test record covering 16:10–16:21 was used. The recap of the later test call (17:33–18:18)
+  had not appeared in the picker an hour later. The test record was removed afterwards.
+- **Limits:**
+  - Only the session selected in the picker is considered. Teams opens on one; older sessions of
+    a recurring meeting are not browsed.
+  - A recording's end time is lost when the Teams page is reloaded during the call. Matching then
+    uses its start, with the 30-minute slack.
