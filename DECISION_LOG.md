@@ -2715,3 +2715,21 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **Cost on a phone:** speech is kept as Opus until the pass, and longer when it waits to be
   combined with another device's recording ("Keep speech for combining"). The pass itself is a
   second transcription of the meeting, so it runs only on the charger.
+
+## 2026-11-10 — #106 "Automatic" is the default Whisper model choice
+
+- **Why:** the owner wants the app to pick the right model by itself on any phone, while still
+  allowing a model chosen by hand.
+- **Rule:** Automatic uses the device suggestion (`suggest_whisper_model`: memory, GPU, top core
+  speed), including efficient mode when it says so. It is worked out again each time a pipeline
+  is built, so it follows the device rather than a saved answer.
+- **No surprise downloads:** if the suggested model isn't on the device, Automatic runs the
+  shipped model and Settings offers the download. Nothing downloads without the owner's say
+  (#68); a phone may be on mobile data, and `small` is about 490 MB.
+- **Stored as no choice:** `whisper_model` unset means Automatic. Existing installs that never
+  picked a model become Automatic. A hand-picked model that was removed counts as Automatic.
+  `selected_model` in the settings JSON no longer falls back to the shipped model.
+- **Efficient mode:** Automatic decides it, so its switch shows only for a hand-picked model.
+  The GPU crash guard still applies.
+- **Telemetry proposals (#68)** are unchanged. They are based on the current model, Automatic's
+  included, and accepting one picks that model by hand.
