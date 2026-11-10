@@ -137,7 +137,7 @@ impl LlmEngine for AnthropicMessagesEngine {
 /// `InvalidResponse` when there is no text. Thinking blocks are skipped. Side effects: None.
 fn read_answer(response: &LlmHttpResponse) -> Result<LlmCompletion, LlmError> {
     if !(200..300).contains(&response.status) {
-        return Err(status_error(response.status));
+        return Err(status_error(response.status, &response.body));
     }
     let reply: Value =
         serde_json::from_str(&response.body).map_err(|_| LlmError::InvalidResponse)?;

@@ -241,3 +241,61 @@ fn a_summary_uses_the_default_connection_and_is_stored() {
         vec![None]
     );
 }
+
+/// Rejects every request the way Anthropic does when the account has no credit left.
+struct RejectingEngine;
+
+impl LlmEngine for RejectingEngine {
+    fn complete(&self, _request: &LlmRequest) -> Result<LlmCompletion, LlmError> {
+        Err(LlmError::Rejected {
+            status: 400,
+            provider_reason: Some(
+                "invalid_request_error: Your credit balance is too low".to_owned(),
+            ),
+        })
+    }
+}
+
+#[test]
+fn a_rejected_summary_tells_the_owner_the_servers_reason_apart_from_the_error_text() {
+    let (services, _) = services("rejected");
+    let services = services.with_engine_factory(Arc::new(|_connection: &LlmConnection, _key| {
+        Ok(Box::new(RejectingEngine) as Box<dyn LlmEngine>)
+    }));
+    run(
+        &services,
+        json!({"command": "save_connection", "label": "LAN", "kind": "open_ai_compatible",
+               "base_url": "http://127.0.0.1:8080/v1", "model": "llama", "context_tokens": 8192}),
+    );
+
+    let answer = summarize_with(
+        &services,
+        None,
+        |_, _| {
+            Ok(PreparedSummary {
+                material: SummaryMaterial {
+                    lines: vec![SpokenLine {
+                        speaker: "Anna".to_owned(),
+                        start_ms: 0,
+                        text: "We approve it.".to_owned(),
+                    }],
+                    ..SummaryMaterial::default()
+                },
+                meeting_prompt: None,
+            })
+        },
+        |_| Ok(()),
+    );
+
+    assert_eq!(answer["error_code"], "llm_rejected", "{answer}");
+    assert_eq!(
+        answer["error_detail"],
+        "invalid_request_error: Your credit balance is too low"
+    );
+    assert!(
+        !answer["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("credit")
+    );
+}

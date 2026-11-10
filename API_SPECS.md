@@ -586,7 +586,9 @@ Errors are `{"ok":false,"error_code","error"}`: `400` `invalid_request`, `invali
 `missing_key`, `nothing_to_summarize`; `422` `too_long`; `502` `llm_unreachable`,
 `llm_unauthorized`, `llm_rate_limited`, `llm_rejected`, `llm_failed`, `llm_refused`,
 `llm_invalid_response`; `500` `keychain_failed`, `save_failed`, `storage_failed`; `503`
-`unavailable`.
+`unavailable`. An `llm_rejected` error also carries `error_detail` when the AI server gave a
+reason, for example `invalid_request_error: Your credit balance is too low…` (one line, at most
+300 characters; shown to the owner, never logged) (#104). The chat routes do the same.
 
 ### Meeting edits (#96)
 

@@ -287,8 +287,9 @@ pub enum ScreenShareError {
     Storage(#[from] StorageError),
 }
 
-/// Why a language model gave no answer. Provider error bodies are never kept, since they can
-/// echo meeting content.
+/// Why a language model gave no answer. A provider's error body is never kept whole, since it
+/// can echo meeting content; only the short reason of a rejection is, and only outside the
+/// error's text, so logs (which use the text) never hold it.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum LlmError {
     /// The server could not be reached or did not answer in time.
@@ -305,6 +306,9 @@ pub enum LlmError {
     Rejected {
         /// The HTTP status.
         status: u16,
+        /// The server's own reason, such as `invalid_request_error: Your credit balance is too
+        /// low`: one line of at most 300 characters, shown to the owner and never logged.
+        provider_reason: Option<String>,
     },
     /// The server failed.
     #[error("the language model failed (HTTP {status})")]

@@ -12,6 +12,7 @@ use super::{
     base64::encode_base64,
     engine_for,
     openai_compatible::OpenAiCompatibleEngine,
+    provider_reason,
     transport::{LlmHttpResponse, LlmHttpTransport, ReqwestLlmTransport},
 };
 use crate::{
@@ -302,13 +303,19 @@ fn an_anthropic_refusal_or_length_stop_is_reported() {
 }
 
 #[test]
-fn http_errors_map_to_portable_errors_without_their_body() {
+fn http_errors_map_to_portable_errors_keeping_the_reason_out_of_their_text() {
     let cases = [
         (401, LlmError::Unauthorized),
         (403, LlmError::Unauthorized),
         (429, LlmError::RateLimited),
         (529, LlmError::RateLimited),
-        (404, LlmError::Rejected { status: 404 }),
+        (
+            404,
+            LlmError::Rejected {
+                status: 404,
+                provider_reason: Some("secret meeting text".to_owned()),
+            },
+        ),
         (500, LlmError::ServerFailed { status: 500 }),
     ];
     for (status, expected) in cases {
@@ -343,6 +350,60 @@ fn http_errors_map_to_portable_errors_without_their_body() {
         engine.complete(&request_with_image()),
         Err(LlmError::InvalidResponse)
     );
+}
+
+#[test]
+fn an_anthropic_rejection_keeps_the_servers_reason_for_the_owner() {
+    let transport = RecordingTransport::answering(
+        400,
+        json!({"type": "error", "error": {
+            "type": "invalid_request_error",
+            "message": "Your credit balance is too low to access the Anthropic API."
+        }}),
+    );
+    let engine = AnthropicMessagesEngine::new(
+        &connection(
+            LlmKind::Anthropic,
+            "https://api.anthropic.com",
+            "claude-opus-5-5",
+        ),
+        Zeroizing::new("k".to_owned()),
+        Arc::new(transport),
+    );
+
+    let error = engine.complete(&request_with_image());
+
+    let expected = LlmError::Rejected {
+        status: 400,
+        provider_reason: Some(
+            "invalid_request_error: Your credit balance is too low to access the Anthropic API."
+                .to_owned(),
+        ),
+    };
+    assert_eq!(error, Err(expected.clone()));
+    assert!(
+        !format!("{expected}").contains("credit"),
+        "logs use the text, which leaves the reason out"
+    );
+}
+
+#[test]
+fn a_provider_reason_is_one_short_line_or_nothing() {
+    assert_eq!(provider_reason("<html>Bad gateway</html>"), None);
+    assert_eq!(provider_reason(r#"{"error": {}}"#), None);
+    assert_eq!(
+        provider_reason(r#"{"error": "model 'x' not found"}"#).as_deref(),
+        Some("model 'x' not found")
+    );
+    assert_eq!(
+        provider_reason(r#"{"error": {"type": "bad", "message": "line one\n\tline\u0007 two"}}"#)
+            .as_deref(),
+        Some("bad: line one line two")
+    );
+    let long = format!(r#"{{"error": {{"message": "{}"}}}}"#, "é".repeat(500));
+    let reason = provider_reason(&long).unwrap_or_default();
+    assert_eq!(reason.chars().count(), 300);
+    assert!(reason.ends_with('…'));
 }
 
 #[test]
@@ -425,4 +486,48 @@ fn the_reqwest_transport_round_trips_with_a_local_server() {
     let (authorization, body) = received.unwrap_or_else(|| panic!("the server saw the request"));
     assert_eq!(authorization.as_deref(), Some("Bearer lan-key"));
     assert_eq!(body["model"], "llama");
+}
+
+#[test]
+fn the_reqwest_transport_reads_an_error_reply_for_its_reason() {
+    let runtime = tokio::runtime::Runtime::new().unwrap_or_else(|error| panic!("runtime: {error}"));
+    let address = runtime.block_on(async move {
+        let router = axum::Router::new().route(
+            "/v1/messages",
+            axum::routing::post(|| async {
+                (
+                    axum::http::StatusCode::BAD_REQUEST,
+                    axum::Json(json!({"type": "error", "error": {
+                        "type": "invalid_request_error", "message": "max_tokens: too large"
+                    }})),
+                )
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap_or_else(|error| panic!("bind: {error}"));
+        let address = listener
+            .local_addr()
+            .unwrap_or_else(|error| panic!("address: {error}"));
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+        address
+    });
+    let local = connection(LlmKind::Anthropic, &format!("http://{address}"), "claude");
+    let transport = ReqwestLlmTransport::new().unwrap_or_else(|error| panic!("client: {error}"));
+    let engine =
+        AnthropicMessagesEngine::new(&local, Zeroizing::new("k".to_owned()), Arc::new(transport));
+
+    let answer = std::thread::spawn(move || engine.complete(&request_with_image()))
+        .join()
+        .unwrap_or_else(|_| panic!("worker panicked"));
+
+    assert_eq!(
+        answer.map(|answer| answer.text),
+        Err(LlmError::Rejected {
+            status: 400,
+            provider_reason: Some("invalid_request_error: max_tokens: too large".to_owned()),
+        })
+    );
 }

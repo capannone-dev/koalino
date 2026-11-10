@@ -2,7 +2,8 @@
 //!
 //! The app sends one JSON object tagged by `command` through `note_taker_llm_command`; the web
 //! routes in `server/llm_routes.rs` call the same functions. Every answer is `{"ok":true,...}`
-//! or `{"ok":false,"error_code","error"}`.
+//! or `{"ok":false,"error_code","error"}`; an `llm_rejected` failure adds `error_detail`, the AI
+//! server's own reason (#104), for the owner to read. It is never logged.
 //!
 //! | `command` | Fields | Answer |
 //! | --- | --- | --- |
@@ -174,6 +175,9 @@ pub struct CommandError {
     pub code: &'static str,
     /// A message for people, free of meeting content and keys.
     pub message: String,
+    /// The AI server's own reason for a rejection, shown to the owner as `error_detail` and never
+    /// logged: one short line that could, from a local server, echo meeting content.
+    pub detail: Option<String>,
 }
 
 impl CommandError {
@@ -181,6 +185,7 @@ impl CommandError {
         Self {
             code,
             message: message.into(),
+            detail: None,
         }
     }
 
@@ -188,14 +193,25 @@ impl CommandError {
         Self::new("save_failed", "the settings could not be saved")
     }
 
-    /// Words the failure as `{"ok":false,"error_code","error"}`. Side effects: None.
+    /// Words the failure as `{"ok":false,"error_code","error"}`, plus `error_detail` when the AI
+    /// server gave a reason. Side effects: None.
     pub fn to_json(&self) -> Value {
-        json!({"ok": false, "error_code": self.code, "error": self.message})
+        let mut answer = json!({"ok": false, "error_code": self.code, "error": self.message});
+        if let Some(detail) = &self.detail {
+            answer["error_detail"] = json!(detail);
+        }
+        answer
     }
 }
 
 impl From<LlmError> for CommandError {
     fn from(error: LlmError) -> Self {
+        let detail = match &error {
+            LlmError::Rejected {
+                provider_reason, ..
+            } => provider_reason.clone(),
+            _ => None,
+        };
         let code = match error {
             LlmError::Unreachable => "llm_unreachable",
             LlmError::Unauthorized => "llm_unauthorized",
@@ -206,7 +222,10 @@ impl From<LlmError> for CommandError {
             LlmError::InvalidResponse => "llm_invalid_response",
             LlmError::MissingKey => "missing_key",
         };
-        Self::new(code, error.to_string())
+        Self {
+            detail,
+            ..Self::new(code, error.to_string())
+        }
     }
 }
 

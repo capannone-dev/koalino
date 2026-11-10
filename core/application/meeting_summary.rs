@@ -178,6 +178,7 @@ pub fn summarize_meeting(
             let completion = match engine.complete(&request) {
                 Err(LlmError::Rejected {
                     status: 400 | 415 | 422,
+                    ..
                 }) if !request.images.is_empty() => {
                     images_skipped += request.images.len();
                     request.images.clear();

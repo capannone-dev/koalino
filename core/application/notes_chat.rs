@@ -319,6 +319,7 @@ pub fn ask(
     let completion = match engine.complete(&request) {
         Err(LlmError::Rejected {
             status: 400 | 415 | 422,
+            ..
         }) if !request.images.is_empty() => {
             request.images.clear();
             engine.complete(&request)?

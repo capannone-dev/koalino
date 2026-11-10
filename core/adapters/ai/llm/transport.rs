@@ -9,6 +9,8 @@ use crate::domain::errors::LlmError;
 
 /// How long one answer may take; local models on modest hardware can be slow.
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(600);
+/// The largest error reply read for its reason; providers' error replies are far smaller.
+const MAX_ERROR_BODY_BYTES: usize = 64 * 1024;
 /// How long reaching the server may take.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 
@@ -17,7 +19,8 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 pub struct LlmHttpResponse {
     /// The HTTP status.
     pub status: u16,
-    /// The body; read only on success, since an error body can echo meeting content.
+    /// The body. An error reply's body is read only for its reason (see `provider_reason`) and
+    /// is never logged, since it can echo meeting content.
     pub body: String,
 }
 
@@ -69,10 +72,13 @@ impl LlmHttpTransport for ReqwestLlmTransport {
         let response = request.send().map_err(|_| LlmError::Unreachable)?;
         let status = response.status().as_u16();
         if !response.status().is_success() {
-            return Ok(LlmHttpResponse {
-                status,
-                body: String::new(),
-            });
+            // An unreadable or oversized error body only loses the reason, not the status.
+            let body = response
+                .text()
+                .ok()
+                .filter(|body| body.len() <= MAX_ERROR_BODY_BYTES)
+                .unwrap_or_default();
+            return Ok(LlmHttpResponse { status, body });
         }
         let body = response.text().map_err(|_| LlmError::Unreachable)?;
         Ok(LlmHttpResponse { status, body })

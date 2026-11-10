@@ -209,7 +209,10 @@ fn what_did_not_fit_is_named_to_the_model_and_in_the_reply() {
 #[test]
 fn images_are_dropped_when_the_server_cannot_read_them() {
     let engine = ScriptedEngine::new(vec![
-        Err(LlmError::Rejected { status: 400 }),
+        Err(LlmError::Rejected {
+            status: 400,
+            provider_reason: None,
+        }),
         answer("A whiteboard."),
     ]);
     let image = LlmImage::new("image/png", vec![1, 2, 3]).unwrap_or_else(|| panic!("an image"));

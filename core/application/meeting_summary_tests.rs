@@ -223,7 +223,10 @@ fn a_transcript_too_long_for_the_context_is_condensed_in_parts_never_cut() {
 #[test]
 fn a_server_that_cannot_read_images_is_asked_again_without_them() {
     let engine = ScriptedEngine::new(vec![
-        Err(LlmError::Rejected { status: 400 }),
+        Err(LlmError::Rejected {
+            status: 400,
+            provider_reason: None,
+        }),
         answer("Done"),
     ]);
 
