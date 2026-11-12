@@ -148,6 +148,12 @@ pub mod search_commands;
 mod search_commands_tests;
 /// Exposes the headless Axum API composition without leaking HTTP details into application services.
 pub mod server;
+/// Times a public clip with Automatic's Whisper model on this device (#109).
+#[path = "bin/speed_check.rs"]
+pub mod speed_check;
+#[cfg(test)]
+#[path = "bin/speed_check_tests.rs"]
+mod speed_check_tests;
 #[path = "bin/storage_composition.rs"]
 pub mod storage_composition;
 /// Composes the Teams bot bridge (WebSocket server, buffer, and meeting pump) for the daemon.

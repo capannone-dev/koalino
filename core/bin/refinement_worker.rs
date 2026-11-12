@@ -244,6 +244,8 @@ pub struct RefinementWorker {
     /// compared this far back to find one meeting recorded on two devices, so recordings that
     /// meet late still fold.
     keep_for: KeepForSource,
+    /// Times Automatic's model on a public clip after a round (#109); `None` never does.
+    speed_check: Option<crate::speed_check::SpeedCheck>,
 }
 
 impl RefinementWorker {
@@ -265,6 +267,7 @@ impl RefinementWorker {
             now: Box::new(SystemTime::now),
             glossary_source: None,
             keep_for: Arc::new(|| KEEP_FOR_COMBINING),
+            speed_check: None,
         }
     }
 
@@ -286,6 +289,7 @@ impl RefinementWorker {
             now: Box::new(SystemTime::now),
             glossary_source: None,
             keep_for: Arc::new(|| KEEP_FOR_COMBINING),
+            speed_check: None,
         }
     }
 
@@ -309,6 +313,16 @@ impl RefinementWorker {
         self
     }
 
+    /// Runs `speed_check` after each round while the device may run passes (#109): no recording,
+    /// and on a phone only while charging. It stops between runs when that changes.
+    ///
+    /// Inputs: The check. Outputs: The worker. Side effects: None.
+    #[must_use]
+    pub fn with_speed_check(mut self, speed_check: crate::speed_check::SpeedCheck) -> Self {
+        self.speed_check = Some(speed_check);
+        self
+    }
+
     /// Replaces the clock, so tests can let time pass.
     pub fn with_clock(mut self, now: Box<dyn Fn() -> SystemTime + Send>) -> Self {
         self.now = now;
@@ -326,10 +340,25 @@ impl RefinementWorker {
                 while !self.control.shutting_down.load(Ordering::SeqCst) {
                     let round = self.control.requested_rounds.load(Ordering::SeqCst);
                     self.run_pending();
+                    self.run_speed_check();
                     self.control.finish_round(round);
                     self.control.wait(IDLE_CHECK);
                 }
             })
+    }
+
+    /// Times Automatic's model when it needs it and the device is free (#109).
+    ///
+    /// Outputs: How many models were timed. Side effects: See `SpeedCheck::run`.
+    pub fn run_speed_check(&self) -> usize {
+        let Some(speed_check) = &self.speed_check else {
+            return 0;
+        };
+        let control = &self.control;
+        if !control.may_run() {
+            return 0;
+        }
+        speed_check.run(&|| control.may_run())
     }
 
     /// Runs one round: folds recordings, then carries out each retained meeting's plan.

@@ -948,6 +948,7 @@ pub fn start_transcript_pass(
     let control = Arc::new(RefinementControl::new(cfg!(target_os = "android")));
     let repository_path = database_path.to_path_buf();
     let repository_device = device_id.clone();
+    let check_cipher = Arc::clone(&embedding_cipher);
     let repository_opener = move || -> RepositoryFactory {
         let repository_path = repository_path.clone();
         let repository_device = repository_device.clone();
@@ -976,6 +977,7 @@ pub fn start_transcript_pass(
             .with_glossary_source(crate::transcription_settings::glossary_source(
                 settings_file_for(database_path),
             ))
+            .with_speed_check(speed_check(database_path, &device_id, &check_cipher))
         }
         None => RefinementWorker::without_pass(
             Arc::clone(&store),
@@ -1010,6 +1012,38 @@ pub fn start_transcript_pass(
             None
         }
     }
+}
+
+/// Builds the speed check (#109) the worker runs after its rounds.
+///
+/// Inputs: The database, this device and the database key's cipher.
+/// Outputs: The check, which reads Automatic's model from the settings each time.
+/// Side effects: None until it runs.
+fn speed_check(
+    database_path: &Path,
+    device_id: &DeviceId,
+    embedding_cipher: &Arc<dyn EmbeddingCipher>,
+) -> crate::speed_check::SpeedCheck {
+    let target_database = database_path.to_path_buf();
+    let metrics_database = database_path.to_path_buf();
+    let metrics_device = device_id.clone();
+    let metrics_cipher = Arc::clone(embedding_cipher);
+    crate::speed_check::SpeedCheck::new(
+        Box::new(move || crate::ffi_transcription::speed_check_target(&target_database)),
+        Box::new(|model_path, efficient_gpu, audio_source| {
+            transcript_pass_engine(model_path, efficient_gpu, audio_source)
+        }),
+        Box::new(move || {
+            Ok(Box::new(open_note_repository(
+                &metrics_database,
+                metrics_device.clone(),
+                Arc::clone(&metrics_cipher),
+            )?)
+                as Box<dyn crate::ports::telemetry::MetricsRepository>)
+        }),
+        crate::speed_check::record_file_for(database_path),
+        device_id.clone(),
+    )
 }
 
 /// Loads the after-meeting pass's model with the live engine's GPU policy.

@@ -5,6 +5,7 @@
 //! rebuilds the pipeline when a recording starts after a change.
 
 use std::{
+    collections::BTreeMap,
     ffi::{CStr, CString, c_char, c_int},
     path::PathBuf,
     sync::{
@@ -28,6 +29,7 @@ use crate::{
     domain::{
         errors::CryptoError,
         whisper_catalog::{WHISPER_MODELS, WhisperModelEntry, find_whisper_model},
+        whisper_speed_check::{next_model_to_check, speed_check_message},
         whisper_suggestion::{
             AutomaticModel, DeviceGpu, DeviceProfile, WhisperSuggestion, automatic_model,
             suggest_whisper_model,
@@ -36,6 +38,7 @@ use crate::{
     ffi::provided_encryption_key,
     ffi_settings::app_setting,
     pipeline_composition::{OPENAI_API_KEY_VARIABLE, efficient_gpu_status, local_gpu_megabytes},
+    speed_check::{CheckTarget, load_record},
     transcription_settings::{
         OpenAiKeyStore, SavedProvider, SavedTranscriptionSettings, TranscriptionPaths,
         load_settings, save_settings, saved_keep_for, test_openai_key, validated_key,
@@ -205,6 +208,90 @@ fn automatic_on_this_device(
     (suggestion, automatic)
 }
 
+/// The models on the device, by file name: the catalog's and the shipped one.
+fn models_on_device(paths: &TranscriptionPaths) -> BTreeMap<String, PathBuf> {
+    let mut models: BTreeMap<String, PathBuf> = WHISPER_MODELS
+        .iter()
+        .filter_map(|model| {
+            paths
+                .locate_model(model.file_name())
+                .map(|path| (model.file_name().to_owned(), path))
+        })
+        .collect();
+    if let Some(shipped) = paths.shipped_file_name()
+        && let Some(path) = paths.locate_model(shipped)
+    {
+        models.entry(shipped.to_owned()).or_insert(path);
+    }
+    models
+}
+
+/// Describes the hardware and the models on it, so a change of either checks again (#109).
+fn hardware_key(efficient_gpu_available: bool, models: &BTreeMap<String, PathBuf>) -> String {
+    let names: Vec<&str> = models.keys().map(String::as_str).collect();
+    format!(
+        "{:?}; {}",
+        device_profile(efficient_gpu_available),
+        names.join(", ")
+    )
+}
+
+/// What the speed check (#109) times: Automatic's model on this device.
+///
+/// Inputs: The paths. Outputs: The target, or `None` under OpenAI, with a hand-picked model on
+/// the device, or with no model. Side effects: Reads files; may start whisper.cpp's backends to
+/// find a GPU.
+fn speed_check_target_in(paths: &TranscriptionPaths) -> Option<CheckTarget> {
+    let saved = load_settings(&paths.settings_file);
+    let hand_picked = saved
+        .whisper_model
+        .as_deref()
+        .is_some_and(|file_name| paths.locate_model(file_name).is_some());
+    if saved.provider == Some(SavedProvider::Openai) || hand_picked {
+        return None;
+    }
+    let automatic = automatic_on_this_device(paths).1?;
+    let models = models_on_device(paths);
+    Some(CheckTarget {
+        automatic_file: automatic.file_name.to_owned(),
+        efficient: automatic.efficient,
+        hardware_key: hardware_key(efficient_gpu_status().0.is_some(), &models),
+        models,
+    })
+}
+
+/// The speed check's target for the after-meeting worker of `database_path`.
+///
+/// Side effects: As `speed_check_target_in`.
+pub fn speed_check_target(database_path: &std::path::Path) -> Option<CheckTarget> {
+    let database = database_path.display().to_string();
+    let paths = TranscriptionPaths::from_lookup(&|name| match name {
+        "NOTE_TAKER_DATABASE_PATH" => Some(database.clone()),
+        _ => app_setting(name),
+    });
+    speed_check_target_in(&paths)
+}
+
+/// Words the speed check's result for Automatic's model, for Settings.
+///
+/// Outputs: The sentence, or `None` before the model was timed on this hardware.
+/// Side effects: Reads the record.
+fn speed_check_message_in(
+    paths: &TranscriptionPaths,
+    automatic_file: &str,
+    efficient_gpu_available: bool,
+) -> Option<String> {
+    let record = load_record(&paths.speed_check_file);
+    let models = models_on_device(paths);
+    let key = hardware_key(efficient_gpu_available, &models);
+    // Automatic's own result is in the record when there is one, so only on-device matters here.
+    let checking_next = next_model_to_check(automatic_file, &record, &key, &|_| false, &|file| {
+        models.contains_key(file)
+    })
+    .is_some();
+    speed_check_message(&record, &key, automatic_file, checking_next)
+}
+
 /// The saved choices with "Automatic" applied, as the next recording uses them.
 ///
 /// Inputs: The saved choices and the paths. Outputs: The choices; a hand-picked model that is
@@ -277,6 +364,11 @@ fn settings_json() -> String {
             "max_days": MAX_KEEP_SPEECH_DAYS,
         },
         "automatic": {
+            "speed_check": automatic.and_then(|choice| speed_check_message_in(
+                &paths,
+                choice.file_name,
+                efficient_gpu_name.is_some(),
+            )),
             "enabled": selected.is_none(),
             "file_name": automatic.map(|choice| choice.file_name),
             "efficient": automatic.is_some_and(|choice| choice.efficient),
@@ -675,3 +767,7 @@ pub unsafe extern "C" fn note_taker_remove_whisper_model(file_name: *const c_cha
         }
     })
 }
+
+#[cfg(test)]
+#[path = "ffi_transcription_tests.rs"]
+mod tests;

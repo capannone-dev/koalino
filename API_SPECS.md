@@ -408,7 +408,9 @@ and meeting summaries" below). Keys are write-only.
   `note_taker_set_whisper_model` leaves it. `selected_model` is then `null` (it no longer falls back to the shipped model), and
   `automatic` reports `enabled`, `file_name` (the model the next recording loads: the suggestion when it is on the device,
   else the shipped model), `efficient` and `waiting_for_download` (the suggested model while it isn't on the device). Nothing
-  downloads by itself.
+  downloads by itself. `automatic.speed_check` (#109) is a sentence for Settings once that model was timed on a public clip
+  on this hardware ("Checked on this device: 0.3× real time, so it keeps up with recordings.", or, when it is too slow,
+  which smaller model keeps up), else `null`.
 - `int32_t note_taker_set_after_meeting_pass(int32_t enabled)` turns the after-meeting pass (#87) on or off from the next
   recording, and returns `0` or `2` when the choice can't be stored. `note_taker_transcription_settings` reads it back as
   `after_meeting_pass` (a boolean, `true` unless turned off). A phone runs the pass only while charging.

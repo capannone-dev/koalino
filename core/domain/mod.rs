@@ -53,6 +53,10 @@ mod whisper_catalog_tests;
 pub mod whisper_proposal;
 #[cfg(test)]
 mod whisper_proposal_tests;
+/// Times a short clip on this device to confirm Automatic's model (#109).
+pub mod whisper_speed_check;
+#[cfg(test)]
+mod whisper_speed_check_tests;
 /// Suggests a Whisper model for a device from what it can run.
 pub mod whisper_suggestion;
 #[cfg(test)]

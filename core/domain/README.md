@@ -30,6 +30,9 @@ domain values based on portable UTC meeting windows.
 `whisper_proposal_tests.rs` specifies it with fixed telemetry.
 `whisper_suggestion.rs` suggests a model for a device from its memory, GPU and core speed (#68), and
 `automatic_model` resolves the "Automatic" choice to a model on the device (#106).
+`whisper_speed_check.rs` decides which model the on-device speed check times next and words its
+result for Settings (#109): Automatic's model until recordings measure it, then smaller models while
+it falls behind, kept per hardware and set of models; `whisper_speed_check_tests.rs` specifies it.
 
 `transcription_language.rs` defines the language a recording is transcribed in (Issue #62): AUTO or a
 code whisper.cpp knows.

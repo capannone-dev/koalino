@@ -698,3 +698,59 @@ fn without_a_p2p_link_the_pass_does_not_wait_for_another_device() {
     assert_eq!(worker(&control).run_pending(), 1);
     assert_eq!(setup.texts(), vec!["nuovo testo"]);
 }
+
+#[test]
+fn the_speed_check_runs_only_when_a_pass_could() {
+    let setup = Setup::new();
+    let control = Arc::new(RefinementControl::new(true));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let check_calls = Arc::new(AtomicUsize::new(0));
+    let engine_calls = Arc::clone(&check_calls);
+    let database = setup.database.clone();
+    let cipher = Arc::clone(&setup.cipher);
+    let speed_check = crate::speed_check::SpeedCheck::new(
+        Box::new(|| {
+            Some(crate::speed_check::CheckTarget {
+                automatic_file: "ggml-base.bin".to_owned(),
+                efficient: false,
+                hardware_key: "test".to_owned(),
+                models: std::collections::BTreeMap::from([(
+                    "ggml-base.bin".to_owned(),
+                    PathBuf::from("/m/ggml-base.bin"),
+                )]),
+            })
+        }),
+        Box::new(move |_model, _efficient, _audio| {
+            Ok(Box::new(Engine {
+                fails: false,
+                calls: Arc::clone(&engine_calls),
+            }) as Box<dyn TranscriptionEngine>)
+        }),
+        Box::new(move || {
+            Ok(Box::new(open_note_repository(
+                &database,
+                DeviceId::new("device-a"),
+                Arc::clone(&cipher),
+            )?)
+                as Box<dyn crate::ports::telemetry::MetricsRepository>)
+        }),
+        setup.folder.join("speed-check.json"),
+        DeviceId::new("device-a"),
+    );
+    let worker = setup
+        .worker(&control, false, &calls)
+        .with_speed_check(speed_check);
+
+    assert_eq!(worker.run_speed_check(), 0, "a phone that is not charging");
+    control.set_charging(true);
+    control.set_recording(true);
+    assert_eq!(worker.run_speed_check(), 0, "while recording");
+    assert_eq!(check_calls.load(Ordering::SeqCst), 0);
+    control.set_recording(false);
+    assert_eq!(worker.run_speed_check(), 1);
+    assert_eq!(
+        check_calls.load(Ordering::SeqCst),
+        crate::domain::whisper_speed_check::CHECK_RUNS
+    );
+    assert_eq!(worker.run_speed_check(), 0, "timed once");
+}

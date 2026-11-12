@@ -59,7 +59,7 @@ pub fn slice_pcm16_wav(wav_bytes: &[u8], start_ms: u64, end_ms: u64) -> Option<V
 ///
 /// Inputs: WAV bytes. Outputs: `(rate, data bytes)`, or `None` for any other audio or a truncated
 /// file. Side effects: None.
-fn pcm16_mono_samples(wav_bytes: &[u8]) -> Option<(u32, &[u8])> {
+pub(crate) fn pcm16_mono_samples(wav_bytes: &[u8]) -> Option<(u32, &[u8])> {
     if wav_bytes.get(..4)? != b"RIFF" || wav_bytes.get(8..12)? != b"WAVE" {
         return None;
     }

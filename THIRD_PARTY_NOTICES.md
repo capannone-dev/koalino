@@ -12,6 +12,12 @@ Koalino is free software under the GNU General Public License, version 3 or (at 
 | pyannote segmentation-3.0 (`segmentation.onnx`) | pyannote | MIT |
 | SpeechBrain ECAPA-TDNN spkrec-ecapa-voxceleb (`embedding.onnx`) | SpeechBrain | Apache-2.0 |
 
+## Data
+
+| Data | From | License |
+| --- | --- | --- |
+| `core/assets/speed_check_clip.wav` (15 s of VoxPopuli Italian test speech) | VoxPopuli (Meta AI); source: European Parliament | CC0-1.0 |
+
 ## Rust crates
 
 Every crate in `Cargo.lock`, for all platforms and features.

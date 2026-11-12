@@ -34,6 +34,16 @@ MODELS = [
 ]
 
 
+# Data compiled into the core (`core/assets`).
+DATA = [
+    (
+        "`core/assets/speed_check_clip.wav` (15 s of VoxPopuli Italian test speech)",
+        "VoxPopuli (Meta AI); source: European Parliament",
+        "CC0-1.0",
+    ),
+]
+
+
 def rust_crates() -> list[tuple[str, str, str]]:
     """Returns (name, version, license) for every crate in the workspace's lock file but ours.
 
@@ -101,6 +111,10 @@ def notices() -> str:
         "## AI models",
         "",
         table(MODELS, ("Model", "From", "License")),
+        "",
+        "## Data",
+        "",
+        table(DATA, ("Data", "From", "License")),
         "",
         "## Rust crates",
         "",

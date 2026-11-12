@@ -47,6 +47,13 @@ documented nonzero status codes distinguishable from lifecycle states.
   every chunk and wipes raw audio that no engine consumed.
   `with_screen_share(monitor, interval)` (Issue #49) gives every recording a
   `ScreenShareWatcher`.
+- `speed_check.rs` (#109) times the clip in `core/assets` with Automatic's model, `CHECK_RUNS`
+  times, saving each run to telemetry so the #68 rule counts the model as measured, and a smaller
+  model when it falls behind. Results go to `<database>.speed-check.json`. The worker runs it after
+  its rounds when a pass could run (no recording; a phone charging) and it stops between runs
+  when that changes. `ffi_transcription::speed_check_target` reads what to time, and Settings
+  shows the result as `automatic.speed_check`. `speed_check_tests.rs` and
+  `ffi_transcription_tests.rs` specify them.
 - `refinement_worker.rs` (#87, #88) runs the after-meeting work on its `transcript-pass` thread:
   each round folds recordings of one meeting made here and on a paired device, then carries out
   each retained meeting's plan (send, combine, pass alone, delete). Folding, sending and deleting

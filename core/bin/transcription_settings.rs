@@ -96,6 +96,8 @@ pub struct TranscriptionPaths {
     pub shipped_model: Option<PathBuf>,
     /// Exists while a GPU attempt is unfinished; finding it at the start means a crash (#76).
     pub gpu_attempt_marker: PathBuf,
+    /// The results of timing the clip on this device (#109), written by the after-meeting worker.
+    pub speed_check_file: PathBuf,
 }
 
 impl TranscriptionPaths {
@@ -121,6 +123,7 @@ impl TranscriptionPaths {
             sealed_key_file: key_directory.join("openai_key.sealed"),
             shipped_model: setting(WHISPER_MODEL_VARIABLE).map(PathBuf::from),
             gpu_attempt_marker: PathBuf::from(gpu_attempt_marker),
+            speed_check_file: crate::speed_check::record_file_for(&database_path),
         }
     }
 

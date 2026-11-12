@@ -12,8 +12,8 @@ const MIN_MEASURED_AUDIO_MS: u64 = 120_000;
 /// Only a model's newest chunks count, so a change of device conditions or mode shows up soon.
 const NEWEST_CHUNKS_PER_MODEL: usize = 30;
 /// Above this multiple of audio length, a model is falling behind. Below 1, because voice windows
-/// and the rest of the recording need time too.
-const FALLING_BEHIND_FACTOR: f32 = 0.9;
+/// and the rest of the recording need time too. The speed check (#109) uses it as well.
+pub const FALLING_BEHIND_FACTOR: f32 = 0.9;
 /// A proposed model must be expected to stay under this, to leave a real margin.
 const COMFORTABLE_FACTOR: f32 = 0.6;
 
@@ -95,6 +95,26 @@ fn ladder_position(file_name: &str) -> Option<usize> {
             || stem.starts_with(&format!("{rung_stem}-"))
             || stem.starts_with(&format!("{rung_stem}."))
     })
+}
+
+/// The ladder's models with their cost relative to `base`, least accurate first.
+pub(crate) fn ladder_files() -> impl DoubleEndedIterator<Item = (&'static str, f32)> {
+    MODEL_LADDER.iter().copied()
+}
+
+/// A model's cost relative to `base`, or `None` for one not on the ladder.
+///
+/// Inputs: A catalog file name (`ggml-small-q5_1.bin` counts as `small`). Side effects: None.
+pub fn model_cost(file_name: &str) -> Option<f32> {
+    ladder_position(file_name).map(|position| MODEL_LADDER[position].1)
+}
+
+/// Whether recordings measured a model enough for the rule here to count it.
+///
+/// Inputs: The measurements and a catalog file name. Side effects: None.
+pub fn is_measured(measurements: &[TranscriptionMeasurement], file_name: &str) -> bool {
+    let stem = file_name.strip_suffix(".bin").unwrap_or(file_name);
+    measured_speed(measurements, stem).is_some()
 }
 
 /// Proposes a model from this device's measurements.
