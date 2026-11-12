@@ -381,7 +381,13 @@ final class _TranscriptionSettingsScreenState
         ? 'Automatic: ${nameOf(automatic.fileName)}'
             '${automatic.efficient ? ', efficient mode' : ''}'
         : 'Automatic';
-    final String reason = settings.suggestion?.reason ?? '';
+    // The suggestion's reason, then how its model ran on this device once timed (#109).
+    final String reason = <String>[
+      if (settings.suggestion?.reason case final String reason
+          when reason.isNotEmpty)
+        reason,
+      if (automatic.speedCheck case final String speedCheck) speedCheck,
+    ].join(' ');
     final String subtitle = waiting != null
         ? 'Uses ${nameOf(automatic.fileName)} until ${waiting.name} is '
             'downloaded, the best fit for this device. $reason'

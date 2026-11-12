@@ -124,6 +124,7 @@ final class AutomaticModelStatus {
     this.fileName,
     this.efficient = false,
     this.waitingForDownload,
+    this.speedCheck,
   });
 
   /// Reads the state from the core's JSON.
@@ -133,6 +134,7 @@ final class AutomaticModelStatus {
         fileName: json['file_name'] as String?,
         efficient: json['efficient'] as bool? ?? false,
         waitingForDownload: json['waiting_for_download'] as String?,
+        speedCheck: json['speed_check'] as String?,
       );
 
   /// Whether Automatic is chosen, rather than a model picked by hand.
@@ -146,6 +148,10 @@ final class AutomaticModelStatus {
 
   /// The model suggested for this device while it waits to be downloaded, if any.
   final String? waitingForDownload;
+
+  /// How Automatic's model ran on a clip timed on this device (#109), worded by the core, or
+  /// `null` before it was timed.
+  final String? speedCheck;
 }
 
 /// Efficient mode's state on this device.

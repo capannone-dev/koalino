@@ -2815,3 +2815,24 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   and a live test with Claude or ChatGPT. That test would send a meeting to the cloud, so it
   awaits the owner. Package visibility and both apps' acceptance of SEND and SEND_MULTIPLE of
   `*/*` were checked on the S23.
+
+## 2026-11-12 — #109 The device times a public clip to confirm Automatic's model
+
+- **What runs:** when Automatic is on and no recording has measured its model on this device, the
+  after-meeting worker transcribes a 15 s clip eight times with that model, in efficient mode when
+  Automatic chose it. Eight runs give the 120 s and five chunks the #68 rule needs.
+- **Telemetry:** each run is saved as an ordinary transcription row. So the #68 proposal ("falling
+  behind: try a smaller model") works from the first day instead of after two minutes of
+  recordings. When the model falls behind (above 0.9× real time), the next smaller model on the
+  device is timed too, until one keeps up. Nothing downloads, and Automatic itself does not change:
+  the owner sees the proposal, as with any measurement.
+- **When:** only while a pass could run: no recording, and on a phone only while charging. It stops
+  between runs as soon as that changes, keeping no partial result. It needs the after-meeting pass
+  to be on, because it runs on that worker. Results are kept in `<database>.speed-check.json` with
+  a key of the device profile and the models on the device, so new hardware or a new model checks
+  again.
+- **Clip:** 15 s of Italian from the VoxPopuli test set (CC0, European Parliament), compiled into
+  the core (480 KB). It is never played. Short chunks match live recording, whose VAD chunks are at
+  most 15 s.
+- **Settings:** the Automatic row adds "Checked on this device: 0.3× real time, so it keeps up with
+  recordings." If the model is too slow, it adds which smaller model keeps up, or that none does.

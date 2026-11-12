@@ -52,6 +52,9 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
   String? automaticWaiting;
   bool automaticEfficient = false;
 
+  /// The speed check's sentence (#109), if Automatic's model was timed here.
+  String? automaticSpeedCheck;
+
   @override
   Future<int> useAutomaticModel() async {
     calls.add('automatic');
@@ -108,7 +111,8 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
             enabled: selected == null,
             fileName: automaticFile,
             efficient: automaticEfficient,
-            waitingForDownload: automaticWaiting),
+            waitingForDownload: automaticWaiting,
+            speedCheck: automaticSpeedCheck),
       );
 
   @override
@@ -536,6 +540,28 @@ void main() {
             of: find.byKey(automaticModelKey),
             matching: find.byIcon(Icons.radio_button_checked)),
         findsOneWidget);
+  });
+
+  testWidgets('Automatic shows how its model ran on this device (#109)',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..selected = null
+      ..automaticSpeedCheck =
+          'Checked on this device: 0.3× real time, so it keeps up with recordings.'
+      ..suggestion = const WhisperSuggestion(
+          fileName: 'ggml-base.bin', efficient: false, reason: 'Fits.');
+    await _pump(tester, bridge);
+
+    expect(
+        find.text('Fits. Checked on this device: 0.3× real time, so it keeps '
+            'up with recordings.'),
+        findsOneWidget);
+    expect(
+        AutomaticModelStatus.fromJson(<String, Object?>{
+          'enabled': true,
+          'speed_check': 'Checked on this device: 0.3× real time.',
+        }).speedCheck,
+        'Checked on this device: 0.3× real time.');
   });
 
   testWidgets(
