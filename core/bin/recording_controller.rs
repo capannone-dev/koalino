@@ -797,6 +797,9 @@ fn samples_to_ms(sample_count: u64) -> u64 {
 /// after-meeting pass when one is configured (#87). A queued chunk's PCM is stored under
 /// a fresh recording ID (read and deleted by the engine) and a WAV copy is sent with it for
 /// diarization and review clips; a skipped chunk's audio is dropped.
+// Each argument is a distinct piece of the capture the chunk is placed in; a struct would only
+// rename them.
+#[allow(clippy::too_many_arguments)]
 fn submit_chunk(
     capture: &mut ActiveCapture,
     track: SegmentSource,
