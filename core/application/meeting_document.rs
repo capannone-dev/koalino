@@ -25,6 +25,9 @@
 //! `overlapping_speech: bool`, `uncertain_speaker: bool`, and `uncertain_words: str`, the
 //! comma-separated positions of the uncertain words in its text.
 //!
+//! A segment heard on the computer's sound rather than the microphone (#108) holds
+//! `source: "computer_sound"`; the field is absent for the microphone.
+//!
 //! `cluster_resolutions` (Issue #50) maps an unknown-speaker cluster ID to the identity ID it was
 //! named as, both hyphenated UUID strings. One register per cluster, so two devices naming the
 //! same cluster at once converge on Automerge's winner. A segment whose `unknown_cluster_id` is
@@ -42,7 +45,7 @@ use uuid::Uuid;
 use crate::{
     domain::{
         errors::StorageError,
-        models::{DeviceId, MeetingId, TranscriptSegment},
+        models::{DeviceId, MeetingId, SegmentSource, TranscriptSegment},
         projects::ProjectId,
         transcript_confidence::{OverlapSpan, SegmentConfidence, merge_overlap_spans},
         transcription_language::TranscriptionLanguage,
@@ -592,6 +595,11 @@ fn write_segment(
             "uncertain_words",
             uncertain_words.map(|positions| ScalarValue::Str(positions.into())),
         ),
+        (
+            "source",
+            (segment.source() == SegmentSource::ComputerSound)
+                .then(|| ScalarValue::Str(COMPUTER_SOUND_SOURCE.into())),
+        ),
     ] {
         put_or_clear(automerge_document, &segment_object, field, value)?;
     }
@@ -621,6 +629,9 @@ fn write_segment(
     }
     Ok(())
 }
+
+/// The `source` of a segment heard on the computer's sound (#108).
+const COMPUTER_SOUND_SOURCE: &str = "computer_sound";
 
 /// Puts `value` at `field`, or removes the field for `None`.
 fn put_or_clear(
@@ -798,7 +809,13 @@ fn read_segment(
             text,
         )
         .with_unknown_cluster_id(unknown_cluster_id)
-        .with_confidence(read_confidence(automerge_document, segment_object)),
+        .with_confidence(read_confidence(automerge_document, segment_object))
+        .with_source(
+            match read_string(automerge_document, segment_object, "source").as_deref() {
+                Some(COMPUTER_SOUND_SOURCE) => SegmentSource::ComputerSound,
+                _ => SegmentSource::Microphone,
+            },
+        ),
     )
 }
 

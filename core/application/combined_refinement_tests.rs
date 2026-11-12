@@ -3,10 +3,10 @@
 use uuid::Uuid;
 
 use super::{
-    combined_refinement::{SourceWords, combine_sources, refine_offset},
+    combined_refinement::{SourceWords, combine_sources, computer_sound_on_first, refine_offset},
     transcript_refinement::MeetingWord,
 };
-use crate::domain::models::{MeetingId, TranscriptSegment};
+use crate::domain::models::{MeetingId, SegmentSource, TranscriptSegment};
 
 fn meeting() -> MeetingId {
     MeetingId::new("meeting-laptop")
@@ -181,5 +181,50 @@ fn the_offset_is_refined_from_the_words_both_devices_heard() {
         refine_offset(&laptop, &words("tutt'altra conversazione qui", 0), 3_000),
         3_000,
         "nothing shared keeps the fold's offset"
+    );
+}
+
+/// The computer's sound each recording heard is kept, on the first recording's timeline, and the
+/// microphone's live text is left to the pass (#108).
+#[test]
+fn the_computer_sound_of_every_recording_is_kept_on_the_first_timeline() {
+    let heard = |meeting: &str, start_ms: u64, text: &str| {
+        TranscriptSegment::new(
+            MeetingId::new(meeting),
+            start_ms,
+            start_ms + 1_000,
+            None,
+            text,
+        )
+        .with_source(SegmentSource::ComputerSound)
+    };
+    let laptop = vec![
+        segment(0, 1_000, Uuid::from_u128(1)),
+        heard("meeting-laptop", 2_000, "their words"),
+    ];
+    let phone = vec![heard("meeting-phone", 500, "more of theirs")];
+
+    let kept = computer_sound_on_first(&meeting(), &[(&laptop, 0), (&phone, 2_000)]);
+
+    let placed: Vec<(u64, &str, &str)> = kept
+        .iter()
+        .map(|segment| {
+            (
+                segment.start_time_ms(),
+                segment.text(),
+                segment.meeting_id().as_str(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        placed,
+        vec![
+            (2_000, "their words", "meeting-laptop"),
+            (2_500, "more of theirs", "meeting-laptop"),
+        ]
+    );
+    assert!(
+        kept.iter()
+            .all(|segment| segment.source() == SegmentSource::ComputerSound)
     );
 }

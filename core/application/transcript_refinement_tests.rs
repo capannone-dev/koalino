@@ -360,6 +360,41 @@ mod whole_meeting {
         );
     }
 
+    /// Verifies the computer's sound, which the pass does not re-transcribe, stays (#108).
+    #[test]
+    fn the_computer_sound_inside_the_retained_audio_stays() {
+        use crate::domain::models::SegmentSource;
+        let (repository, meeting) = repository_with(&[(0, 900, "live one")]);
+        let mut segments = repository
+            .load_transcript_segments(&meeting)
+            .unwrap_or_else(|error| panic!("{error}"));
+        segments.push(
+            TranscriptSegment::new(meeting.clone(), 200, 800, None, "their words")
+                .with_source(SegmentSource::ComputerSound),
+        );
+        repository
+            .save_transcript_segments(&meeting, &segments)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let engine = ScriptedEngine {
+            answers: vec![vec![("Buongiorno", 100, 600)], vec![]],
+            ..ScriptedEngine::default()
+        };
+
+        run(&engine, &repository, &meeting, None).unwrap_or_else(|error| panic!("{error}"));
+
+        let refined = repository
+            .load_transcript_segments(&meeting)
+            .unwrap_or_else(|error| panic!("{error}"));
+        let heard: Vec<&str> = refined
+            .iter()
+            .filter(|segment| segment.source() == SegmentSource::ComputerSound)
+            .map(TranscriptSegment::text)
+            .collect();
+        assert_eq!(heard, vec!["their words"]);
+        assert!(refined.iter().any(|segment| segment.text() == "Buongiorno"));
+        assert!(!refined.iter().any(|segment| segment.text() == "live one"));
+    }
+
     /// Verifies the pass marks uncertain words, the overlap kept with the meeting, and words far
     /// from any speaker (#90, #91).
     #[test]

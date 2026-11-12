@@ -13,7 +13,7 @@ use crate::{
     domain::{
         errors::{StorageError, TranscriptionError},
         models::{
-            AudioRecording, DeviceId, MeetingId, RecordingId, TranscriptSegment,
+            AudioRecording, DeviceId, MeetingId, RecordingId, SegmentSource, TranscriptSegment,
             TranscriptionContext,
         },
         transcript_confidence::{
@@ -380,7 +380,8 @@ pub enum RefinementError {
 /// the acquiring node); and `cancelled`, polled before each window.
 /// Outputs: The outcome, or why nothing changed. Each window is prompted with the previous one's
 /// text, as live transcription is. Segments whose middle lies outside every retained chunk (for
-/// example recorded before retention was on) are kept as they are.
+/// example recorded before retention was on) are kept as they are, and so are the segments heard
+/// on the computer's sound (#108), whose audio is not retained.
 /// Side effects: Runs inference and rewrites the meeting's segments, which also updates the
 /// meeting's synced document. Nothing is written until every window is done.
 pub fn refine_meeting<Engine, Repository>(
@@ -420,8 +421,9 @@ where
             .iter()
             .any(|span| span.start_ms <= middle && middle <= span.end_ms)
     };
-    let (speakers, kept): (Vec<TranscriptSegment>, Vec<TranscriptSegment>) =
-        standing.into_iter().partition(|segment| covered(segment));
+    let (speakers, kept): (Vec<TranscriptSegment>, Vec<TranscriptSegment>) = standing
+        .into_iter()
+        .partition(|segment| segment.source() == SegmentSource::Microphone && covered(segment));
     let refined = mark_overlapping_segments(
         reattribute_words(meeting_id, &words, &speakers),
         &overlap_of(repository, meeting_id),

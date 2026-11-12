@@ -50,8 +50,9 @@ use crate::{
         errors::StorageError,
         models::{
             AggregatedStats, Attachment, ClusterDigest, ClusterShare, ClusterShareImport, DeviceId,
-            MeetingId, MeetingMetadata, MeetingTitle, TaskMetrics, TaskType, Transcript,
-            TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster,
+            MeetingId, MeetingMetadata, MeetingTitle, SegmentSource, TaskMetrics, TaskType,
+            Transcript, TranscriptSegment, UnassignedVoiceClip, UnknownSpeakerChunk,
+            UnknownSpeakerCluster,
         },
         projects::ProjectId,
         transcript_confidence::{OverlapSpan, SegmentConfidence},
@@ -230,6 +231,7 @@ impl SqliteNoteRepository {
                     segment_text TEXT NOT NULL,
                     unknown_cluster_id TEXT,
                     confidence TEXT,
+                    source TEXT,
                     FOREIGN KEY(meeting_id) REFERENCES meetings(meeting_id)
                 );
                 CREATE INDEX IF NOT EXISTS transcript_segments_meeting_index
@@ -242,6 +244,7 @@ impl SqliteNoteRepository {
         add_document_revision_column(&sqlite_connection)?;
         add_attachment_meeting_time_column(&sqlite_connection)?;
         add_segment_confidence_column(&sqlite_connection)?;
+        add_segment_source_column(&sqlite_connection)?;
         attachment_sync::add_attachment_content_columns(&sqlite_connection)?;
         unknown_speaker_clusters::initialize_cluster_schema(&sqlite_connection)?;
         deletions::initialize_deletion_schema(&sqlite_connection)?;
@@ -798,7 +801,7 @@ impl NoteRepository for SqliteNoteRepository {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id, confidence FROM transcript_segments WHERE meeting_id = ?1 ORDER BY start_time_ms, rowid",
+                "SELECT start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id, confidence, source FROM transcript_segments WHERE meeting_id = ?1 ORDER BY start_time_ms, rowid",
             )
             .map_err(|error| sqlite_error("unable to prepare transcript segment query", error))?;
         let segment_rows = statement
@@ -810,6 +813,7 @@ impl NoteRepository for SqliteNoteRepository {
                     row.get::<_, SqliteValue>(3)?,
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<String>>(6)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to load transcript segments", error))?;
@@ -822,6 +826,7 @@ impl NoteRepository for SqliteNoteRepository {
                     segment_text,
                     unknown_cluster_id,
                     confidence,
+                    source,
                 ) = row
                     .map_err(|error| sqlite_error("unable to decode transcript segment", error))?;
                 let parsed_unknown_cluster_id = unknown_cluster_id
@@ -855,7 +860,8 @@ impl NoteRepository for SqliteNoteRepository {
                     )?,
                 )
                 .with_unknown_cluster_id(parsed_unknown_cluster_id)
-                .with_confidence(confidence_from_column(confidence.as_deref())))
+                .with_confidence(confidence_from_column(confidence.as_deref()))
+                .with_source(source_from_column(source.as_deref())))
             })
             .collect::<Result<Vec<_>, StorageError>>()?;
         self.log_operation("load_transcript_segments", meeting_id);
@@ -1768,7 +1774,7 @@ fn write_segment_rows(
     for segment in segments {
         connection
             .execute(
-                "INSERT INTO transcript_segments (meeting_id, start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id, confidence) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO transcript_segments (meeting_id, start_time_ms, end_time_ms, speaker_identity_id, segment_text, unknown_cluster_id, confidence, source) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     meeting_id.as_str(),
                     sqlite_milliseconds(segment.start_time_ms())?,
@@ -1782,6 +1788,7 @@ fn write_segment_rows(
                     )?,
                     segment.unknown_cluster_id().map(|cluster_id| cluster_id.to_string()),
                     confidence_column(segment.confidence()),
+                    source_column(segment.source()),
                 ],
             )
             .map_err(|error| sqlite_error("unable to save transcript segment", error))?;
@@ -2053,6 +2060,39 @@ fn add_segment_confidence_column(sqlite_connection: &Connection) -> Result<(), S
     Ok(())
 }
 
+/// Adds the nullable `transcript_segments.source` column (#108) to older databases.
+///
+/// Outputs: Success (also when the column exists) or a storage error.
+/// Side effects: May run one `ALTER TABLE`; existing segments read as the microphone's.
+fn add_segment_source_column(sqlite_connection: &Connection) -> Result<(), StorageError> {
+    let column_count: i64 = sqlite_connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('transcript_segments') WHERE name = 'source'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| sqlite_error("unable to inspect transcript segments schema", error))?;
+    if column_count == 0 {
+        sqlite_connection
+            .execute("ALTER TABLE transcript_segments ADD COLUMN source TEXT", [])
+            .map_err(|error| sqlite_error("unable to add the segment source column", error))?;
+    }
+    Ok(())
+}
+
+/// Encodes a segment's track for the index: `NULL` for the microphone, else `computer_sound`.
+fn source_column(source: SegmentSource) -> Option<&'static str> {
+    (source == SegmentSource::ComputerSound).then_some("computer_sound")
+}
+
+/// Decodes `source_column`; anything else reads as the microphone.
+fn source_from_column(column: Option<&str>) -> SegmentSource {
+    match column {
+        Some("computer_sound") => SegmentSource::ComputerSound,
+        _ => SegmentSource::Microphone,
+    }
+}
+
 /// Encodes a segment's confidence marks for the index: `NULL` when plain, else
 /// `{"o":bool,"s":bool,"w":[positions]}`.
 fn confidence_column(confidence: &SegmentConfidence) -> Option<String> {
@@ -2317,6 +2357,32 @@ mod tests {
         assert_eq!(
             repository.load_transcript_segments(&meeting_id).ok(),
             Some(vec![marked, plain])
+        );
+    }
+
+    /// Verifies a computer-sound segment keeps its source in the index (#108).
+    #[test]
+    fn segment_source_is_saved_and_loaded() {
+        use crate::domain::models::SegmentSource;
+        let repository = SqliteNoteRepository::open_in_memory(
+            crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+        )
+        .unwrap_or_else(|error| panic!("in-memory SQLite should initialize: {error}"));
+        let meeting_id = MeetingId::new("meeting-source");
+        repository
+            .create_meeting(&meeting_id, &[1_u8])
+            .unwrap_or_else(|error| panic!("meeting creation should succeed: {error}"));
+        let heard = TranscriptSegment::new(meeting_id.clone(), 0, 1_000, None, "a b c")
+            .with_source(SegmentSource::ComputerSound);
+        let spoken = TranscriptSegment::new(meeting_id.clone(), 1_000, 2_000, None, "d");
+
+        repository
+            .save_transcript_segments(&meeting_id, &[heard.clone(), spoken.clone()])
+            .unwrap_or_else(|error| panic!("segment save should succeed: {error}"));
+
+        assert_eq!(
+            repository.load_transcript_segments(&meeting_id).ok(),
+            Some(vec![heard, spoken])
         );
     }
 

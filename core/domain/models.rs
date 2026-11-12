@@ -2814,6 +2814,19 @@ pub struct TranscriptSegment {
     unknown_cluster_id: Option<Uuid>,
     /// How doubtful the interval is: overlap, an uncertain speaker, uncertain words (#90, #91).
     confidence: crate::domain::transcript_confidence::SegmentConfidence,
+    /// Which recorded track the words were heard on (#108).
+    source: SegmentSource,
+}
+
+/// The recorded track a transcript segment was heard on (#108).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
+pub enum SegmentSource {
+    /// The microphone (or a Teams/browser track): the default, and every segment before #108.
+    #[default]
+    Microphone,
+    /// The computer's own sound, recorded beside the microphone: the other side of a call. The
+    /// after-meeting pass, which re-transcribes the retained microphone speech, keeps it.
+    ComputerSound,
 }
 
 impl TranscriptSegment {
@@ -2838,7 +2851,22 @@ impl TranscriptSegment {
             text: text.into(),
             unknown_cluster_id: None,
             confidence: Default::default(),
+            source: SegmentSource::Microphone,
         }
+    }
+
+    /// Records which track the words were heard on (#108).
+    ///
+    /// Inputs: The source. Outputs: The same segment carrying it. Side effects: None.
+    #[must_use]
+    pub fn with_source(mut self, source: SegmentSource) -> Self {
+        self.source = source;
+        self
+    }
+
+    /// Returns which track the words were heard on (#108).
+    pub fn source(&self) -> SegmentSource {
+        self.source
     }
 
     /// Replaces the text after the owner corrects it (#96), keeping speaker, timing and the

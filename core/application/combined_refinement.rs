@@ -29,7 +29,7 @@ use crate::{
         },
     },
     domain::{
-        models::{DeviceId, MeetingId, RecordingId, TranscriptSegment},
+        models::{DeviceId, MeetingId, RecordingId, SegmentSource, TranscriptSegment},
         transcript_confidence::{mark_overlapping_segments, merge_overlap_spans},
     },
     ports::{ai::TranscriptionEngine, storage::NoteRepository},
@@ -205,6 +205,42 @@ pub fn refine_offset(root: &[MeetingWord], member: &[MeetingWord], fold_offset_m
     .map_or(fold_offset_ms, |same| same.offset_ms())
 }
 
+/// Gathers the segments every recording heard on the computer's sound (#108), which the pass does
+/// not re-transcribe.
+///
+/// Inputs: The first recording's meeting; each recording's segments with its offset on the first
+/// recording's timeline. Outputs: Those segments moved onto that timeline and into that meeting,
+/// in time order; an unknown-speaker link of another meeting is dropped, as its clusters stay
+/// there. Side effects: None.
+pub(crate) fn computer_sound_on_first(
+    root_meeting_id: &MeetingId,
+    recordings: &[(&[TranscriptSegment], i64)],
+) -> Vec<TranscriptSegment> {
+    let mut heard: Vec<TranscriptSegment> = recordings
+        .iter()
+        .flat_map(|(segments, offset_ms)| {
+            segments
+                .iter()
+                .filter(|segment| segment.source() == SegmentSource::ComputerSound)
+                .map(move |segment| {
+                    let same_meeting = segment.meeting_id() == root_meeting_id;
+                    TranscriptSegment::new(
+                        root_meeting_id.clone(),
+                        segment.start_time_ms().saturating_add_signed(*offset_ms),
+                        segment.end_time_ms().saturating_add_signed(*offset_ms),
+                        segment.speaker_identity_id(),
+                        segment.text(),
+                    )
+                    .with_unknown_cluster_id(segment.unknown_cluster_id().filter(|_| same_meeting))
+                    .with_confidence(segment.confidence().clone())
+                    .with_source(SegmentSource::ComputerSound)
+                })
+        })
+        .collect();
+    heard.sort_by_key(TranscriptSegment::start_time_ms);
+    heard
+}
+
 /// One recording handed to `refine_combined_meeting`.
 pub struct CombinedRecording<'chunks> {
     /// The recording's meeting.
@@ -220,7 +256,8 @@ pub struct CombinedRecording<'chunks> {
 /// Inputs: The first recording and the others; the engine; `provide_audio`; the repository;
 /// this device; and `cancelled`, polled before each window.
 /// Outputs: The outcome, or why nothing changed. Segments of the first recording whose middle
-/// lies outside every recording's speech are kept as they are.
+/// lies outside every recording's speech are kept as they are, and so is every recording's
+/// computer sound (#108), moved onto the first recording's timeline.
 /// Side effects: Runs inference and rewrites the first recording's segments (and its synced
 /// document). The other recordings' meetings are left as they are, folded and hidden.
 pub fn refine_combined_meeting<Engine, Repository>(
@@ -239,6 +276,7 @@ where
     let mut window_count = 0;
     let mut transcribed: Vec<(Vec<MeetingWord>, Vec<TranscriptSegment>, i64)> = Vec::new();
     let mut root_words: Option<Vec<MeetingWord>> = None;
+    let mut computer_sound: Vec<(Vec<TranscriptSegment>, i64)> = Vec::new();
     for recording in std::iter::once(root).chain(members) {
         let (words, windows) = transcribe_chunks(
             &root.meeting_id,
@@ -257,7 +295,11 @@ where
         if root_words.is_none() {
             root_words = Some(words.clone());
         }
-        let speakers = repository.load_transcript_segments(&recording.meeting_id)?;
+        let (heard, speakers): (Vec<TranscriptSegment>, Vec<TranscriptSegment>) = repository
+            .load_transcript_segments(&recording.meeting_id)?
+            .into_iter()
+            .partition(|segment| segment.source() == SegmentSource::ComputerSound);
+        computer_sound.push((heard, offset_ms));
         transcribed.push((words, speakers, offset_ms));
     }
     if cancelled() {
@@ -294,12 +336,17 @@ where
         });
     };
     let member_sources: Vec<SourceWords<'_>> = sources.collect();
-    let kept: Vec<TranscriptSegment> = root_source
+    let mut kept: Vec<TranscriptSegment> = root_source
         .speakers
         .iter()
         .filter(|segment| !covered(segment))
         .cloned()
         .collect();
+    let borrowed: Vec<(&[TranscriptSegment], i64)> = computer_sound
+        .iter()
+        .map(|(segments, offset_ms)| (segments.as_slice(), *offset_ms))
+        .collect();
+    kept.extend(computer_sound_on_first(&root.meeting_id, &borrowed));
     // Overlap any recording heard, on the first recording's timeline (#90).
     let mut overlap = Vec::new();
     for (recording, (_, _, offset_ms)) in std::iter::once(root).chain(members).zip(&transcribed) {

@@ -534,6 +534,23 @@ fn segment_confidence_round_trips_and_clears() {
     assert_eq!(project(&cleared).segments.unwrap_or_default(), vec![plain]);
 }
 
+/// Verifies a segment heard on the computer's sound keeps that source, and loses it again (#108).
+#[test]
+fn a_computer_sound_segment_keeps_its_source() {
+    use crate::domain::models::SegmentSource;
+    let heard =
+        segment(0, 1_000, None, "can you hear me").with_source(SegmentSource::ComputerSound);
+    let document = with_segments(&empty_document(), std::slice::from_ref(&heard));
+    assert_eq!(
+        project(&document).segments.unwrap_or_default(),
+        vec![heard.clone()]
+    );
+
+    let spoken = heard.with_source(SegmentSource::Microphone);
+    let cleared = with_segments(&document, std::slice::from_ref(&spoken));
+    assert_eq!(project(&cleared).segments.unwrap_or_default(), vec![spoken]);
+}
+
 /// Verifies overlap spans are kept with the meeting, merged, and joined across devices (#90).
 #[test]
 fn overlap_spans_are_kept_merged_and_joined_across_devices() {
