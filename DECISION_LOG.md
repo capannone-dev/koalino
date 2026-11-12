@@ -2733,3 +2733,16 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   The GPU crash guard still applies.
 - **Telemetry proposals (#68)** are unchanged. They are based on the current model, Automatic's
   included, and accepting one picks that model by hand.
+
+## 2026-11-12 — #110 Chat answers cite their sources as links
+
+- **Why:** an answer couldn't be checked against the meeting it came from. Yogurt links each
+  answer to its source; the owner asked for the same.
+- **How:** the material sent to the model is numbered (`## [1] Meeting "…"`), and the model is
+  asked to cite right after each statement, as `[n]` or `[n, hh:mm:ss]` for a moment in a
+  transcript. The answer's text is kept as written; `parse_citations` reads the citations into
+  sources (meeting or file, and the moment), each place once, in order of first mention.
+- **Robust to the model:** numbers outside the material, Markdown links (`[text](url)`),
+  checkboxes and other bracketed text are ignored, so a model that cites badly loses links, not
+  the answer. A list (`[1, 2]`) cites both.
+- **Stored** with the answer, sealed like the rest of the message; answers stored before have none.
