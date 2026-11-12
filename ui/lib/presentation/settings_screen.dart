@@ -1,13 +1,14 @@
 // The Settings destination, on every platform (Issue #46). Android adds the App lock switch; every
 // platform has Diagnostics: the Telemetry page (Issue #53), the log level and exporting the logs
 // (saved through a dialog on desktops, shared through the share sheet on Android). With device sync
-// on, it also chooses where recordings are transcribed (Issue #59).
+// on, it also chooses where recordings are transcribed (Issue #59). About Koalino closes the list (#115).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/network_settings_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/presentation/about_tile.dart';
 import 'package:note_taker_ui/presentation/ai_settings_screen.dart';
 import 'package:note_taker_ui/controllers/log_settings_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
@@ -315,6 +316,7 @@ final class SettingsScreen extends StatelessWidget {
           }
         },
       ),
+      const AboutKoalinoTile(),
     ];
   }
 
@@ -325,7 +327,7 @@ final class SettingsScreen extends StatelessWidget {
         AppLockStatus(deviceSecure: false) =>
           'Set a screen lock in Android settings to use App lock.',
         _ => 'Ask for your fingerprint, face, or screen lock when you return '
-            'to Note Taker after ${lockAfterBackground.inSeconds} seconds '
+            'to Koalino after ${lockAfterBackground.inSeconds} seconds '
             'away. Recording and sync keep running while it is locked.',
       };
 }

@@ -1,8 +1,8 @@
-<!-- Provides the project entry point: what Note Taker is, how to build and run it, and how to configure it. -->
+<!-- Provides the project entry point: what Koalino is, how to build and run it, and how to configure it. -->
 
-# Note Taker
+# Koalino
 
-Note Taker is a decentralized, offline-first meeting-notes application. It records meetings,
+Koalino is a decentralized, offline-first meeting-notes application. It records meetings,
 transcribes them with Whisper (on-device with whisper.cpp, or with the OpenAI API by opt-in),
 groups transcript segments into known and unknown voices, and keeps notes in a CRDT-backed SQLite
 store. Voice embeddings, transcripts and meeting documents are encrypted at rest. The Rust core uses hexagonal architecture
@@ -117,6 +117,17 @@ repository.
 | `NOTE_TAKER_TEAMS_BRIDGE_SLIDE_DIR` | `slides` beside the database | Where Teams slide screenshots are stored |
 | `NEXT_PUBLIC_API_BASE_URL` | `http://127.0.0.1:8080` | Web dashboard: daemon API |
 | `NEXT_PUBLIC_WS_URL` | derived from the API URL | Web dashboard: live-transcript WebSocket |
+
+## License
+
+Koalino is free software, licensed under the GNU General Public License, version 3 or (at your
+option) any later version (`GPL-3.0-or-later`); see [LICENSE](LICENSE). The components it builds
+on, and their licenses, are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), which
+`tools/licenses/third_party_notices.py` generates.
+
+Until the first release, only the visible name is Koalino. The package and application IDs
+(`com.example.note_taker_ui`), binary and crate names, `NOTE_TAKER_*` variables, data folders and
+keychain entries keep their `note_taker` names, so existing installs keep their data.
 
 ## Project documents
 

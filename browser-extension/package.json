@@ -1,8 +1,9 @@
 {
   "name": "note-taker-browser-extension",
   "version": "0.1.0",
+  "license": "GPL-3.0-or-later",
   "private": true,
-  "description": "Note Taker browser extension: records online meetings in the browser and sends them to the local Note Taker app",
+  "description": "Koalino browser extension: records online meetings in the browser and sends them to the local Koalino app",
   "scripts": {
     "build": "node build.mjs",
     "test": "vitest run",

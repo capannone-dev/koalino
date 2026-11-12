@@ -67,7 +67,7 @@ problem and offers Retry and Quit, instead of the app. There is no key-file fall
 (`DECISION_LOG.md`).
 
 `app_lock_gate.dart` (`AppLockGate`, Android) wraps the navigator through `MaterialApp.builder`,
-so pushed screens and dialogs are covered too. While locked it shows "Note Taker is locked" with
+so pushed screens and dialogs are covered too. While locked it shows "Koalino is locked" with
 Unlock; the app's widgets stay mounted but hidden (not painted, tapped, or read by screen
 readers), so an active recording and every screen keep their state. It forwards the app being
 hidden and shown to `AppLockController`.
@@ -87,7 +87,9 @@ destination), the Log level selector (Error to Trace, Info by default; the core 
 restarts) and Export logs (Share logs on Android), which saves or shares the last seven days of
 logs. On Android it also holds the App lock switch, which explains why it is unavailable without
 a screen lock or before Android 10. `HomeShell` shows Settings as the last destination when given
-a builder, which the app always gives.
+a builder, which the app always gives. Its last row, About Koalino (`about_tile.dart`, #115), opens
+the About dialog: the version, the GPL-3.0-or-later notice, and View licenses for the Flutter
+packages.
 
 The meeting detail's app bar has Name speakers (`NameSpeakersButton`), which opens the voice
 gallery (`voice_gallery_screen.dart`) for that meeting and reloads the meeting on return so the
