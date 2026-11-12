@@ -51,7 +51,9 @@ documented nonzero status codes distinguishable from lifecycle states.
   times, saving each run to telemetry so the #68 rule counts the model as measured, and a smaller
   model when it falls behind. Results go to `<database>.speed-check.json`. The worker runs it after
   its rounds when a pass could run (no recording; a phone charging) and it stops between runs
-  when that changes. `ffi_transcription::speed_check_target` reads what to time, and Settings
+  when that changes. When a check is due (`speed_check::is_due`), the runtime builds the
+  pipeline, and with it the worker, at launch on a desktop and on charging on a phone.
+  `ffi_transcription::speed_check_target` reads what to time, and Settings
   shows the result as `automatic.speed_check`. `speed_check_tests.rs` and
   `ffi_transcription_tests.rs` specify them.
 - `refinement_worker.rs` (#87, #88) runs the after-meeting work on its `transcript-pass` thread:

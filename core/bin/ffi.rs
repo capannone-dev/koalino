@@ -231,6 +231,9 @@ fn test_recording_controller(
     ))
 }
 
+/// Says whether the speed check (#109) has a model to time, from this device's telemetry.
+type SpeedCheckDue = Box<dyn Fn(&dyn crate::ports::telemetry::MetricsRepository) -> bool + Send>;
+
 /// Builds the recording controller (pipeline worker plus capture driver) on first use.
 type RecordingControllerBuilder = Box<dyn Fn() -> anyhow::Result<RecordingController> + Send>;
 
@@ -257,6 +260,9 @@ struct FfiRuntime {
     /// The last charging state the platform reported; a phone's after-meeting pass runs only
     /// while charging (#87).
     charging: bool,
+    /// Says whether the speed check (#109) has a model to time, from this device's telemetry, so
+    /// charging starts the worker for it; `None` never does (tests over in-memory SQLite).
+    speed_check_due: Option<SpeedCheckDue>,
     /// Where recordings capture audio from; `None` when the host pushes PCM itself
     /// (`note_taker_push_audio_pcm`) or the build has no `microphone` feature (Issue #45).
     microphone_source: Option<Arc<dyn MicrophoneSource>>,
@@ -520,8 +526,25 @@ impl FfiRuntime {
         runtime.retained_speech = Some(RetainedSpeechIndex::new(
             crate::refinement_worker::retained_audio_directory(&database_path),
         ));
+        let check_database = database_path.clone();
+        let check_device = runtime.note_repository.device_id().as_str().to_owned();
+        runtime = runtime.with_speed_check_due(Box::new(move |metrics| {
+            crate::speed_check::is_due(&check_database, metrics, &check_device)
+        }));
         // The platform may report charging before the runtime exists.
         runtime.charging = REPORTED_CHARGING.load(std::sync::atomic::Ordering::SeqCst);
+        // A phone's report before the runtime existed only stored the state, and a desktop,
+        // whose passes need no charging, never reports. Report once this runtime is in place,
+        // so waiting speech or a due speed check (#109) starts now rather than at the next
+        // battery broadcast or recording; on its own thread, since it may load a model.
+        if runtime.charging || !cfg!(target_os = "android") {
+            let replay = std::thread::Builder::new()
+                .name("charging-replay".to_owned())
+                .spawn(|| note_taker_set_charging(1));
+            if let Err(error) = replay {
+                tracing::warn!(error = %error, "the charging state could not be replayed");
+            }
+        }
         runtime.attachment_directory = setting("NOTE_TAKER_ATTACHMENT_DIR")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("attachments"));
@@ -568,6 +591,7 @@ impl FfiRuntime {
             p2p: None,
             retained_speech: None,
             charging: false,
+            speed_check_due: None,
             microphone_source: None,
             live_microphone: None,
             microphone_ticker_running: false,
@@ -679,6 +703,14 @@ impl FfiRuntime {
         recording_controller_builder: RecordingControllerBuilder,
     ) -> Self {
         self.recording_controller_builder = recording_controller_builder;
+        self
+    }
+
+    /// Starts the worker on charging when `speed_check_due` says a model needs timing (#109).
+    ///
+    /// Inputs: The probe. Outputs: The runtime using it. Side effects: None.
+    fn with_speed_check_due(mut self, speed_check_due: SpeedCheckDue) -> Self {
+        self.speed_check_due = Some(speed_check_due);
         self
     }
 
@@ -1344,7 +1376,8 @@ impl FfiRuntime {
     /// Inputs: Whether the device is charging.
     /// Outputs: None.
     /// Side effects: Remembers the state for a pipeline built later. When charging while speech
-    /// from an earlier run waits and no pipeline exists yet, builds it so the pass starts; that
+    /// from an earlier run waits, or a speed check is due (#109), and no pipeline exists yet,
+    /// builds it so the worker starts; that
     /// loads the model, so call this off the main thread. A failed build is logged and retried
     /// at the next report.
     fn report_charging(&mut self, charging: bool) {
@@ -1353,7 +1386,14 @@ impl FfiRuntime {
             .retained_speech
             .as_ref()
             .is_some_and(RetainedSpeechIndex::holds_any);
-        if self.recording_controller.is_none() && !(charging && speech_waits) {
+        let work_waits = || {
+            speech_waits
+                || self
+                    .speed_check_due
+                    .as_ref()
+                    .is_some_and(|due| due(&self.note_repository))
+        };
+        if self.recording_controller.is_none() && !(charging && work_waits()) {
             return;
         }
         if let Ok(controller) = self.recording_controller()
@@ -2679,8 +2719,10 @@ static REPORTED_CHARGING: std::sync::atomic::AtomicBool = std::sync::atomic::Ato
 /// Inputs: Nonzero while charging.
 /// Outputs: `FFI_SUCCESS`, or `FFI_RUNTIME_UNAVAILABLE` when the runtime lock is poisoned.
 /// Side effects: Remembers the state. It never creates the runtime: before the app has opened the
-/// database the state waits for it. With a runtime, charging while speech from an earlier run
-/// waits builds the meeting pipeline, which loads the model; call it off the main thread.
+/// database the state waits for it, and the new runtime reports it again (a desktop reports
+/// charging then, as its passes need none). With a runtime, charging while speech from an earlier
+/// run waits, or a speed check is due (#109), builds the meeting pipeline, which loads the model;
+/// call it off the main thread.
 #[unsafe(no_mangle)]
 pub extern "C" fn note_taker_set_charging(charging: c_int) -> c_int {
     let charging = charging != 0;

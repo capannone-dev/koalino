@@ -125,3 +125,26 @@ fn charging_with_speech_waiting_starts_the_pass() {
     assert!(control.is_charging());
     let _ = std::fs::remove_dir_all(&folder);
 }
+
+#[test]
+fn charging_with_a_speed_check_due_starts_the_worker() {
+    let folder = speech_folder();
+    let control = Arc::new(RefinementControl::new(true));
+    let builds = Arc::new(AtomicUsize::new(0));
+    let mut idle =
+        phone_runtime(&control, &folder, &builds).with_speed_check_due(Box::new(|_metrics| false));
+    idle.report_charging(true);
+    assert_eq!(builds.load(Ordering::SeqCst), 0, "nothing to time");
+
+    let mut due =
+        phone_runtime(&control, &folder, &builds).with_speed_check_due(Box::new(|_metrics| true));
+    due.report_charging(false);
+    assert_eq!(builds.load(Ordering::SeqCst), 0, "not charging");
+    due.report_charging(true);
+    assert_eq!(
+        builds.load(Ordering::SeqCst),
+        1,
+        "charging: the worker starts and times the clip (#109)"
+    );
+    let _ = std::fs::remove_dir_all(&folder);
+}

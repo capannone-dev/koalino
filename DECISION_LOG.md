@@ -2828,7 +2828,10 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   the owner sees the proposal, as with any measurement.
 - **When:** only while a pass could run: no recording, and on a phone only while charging. It stops
   between runs as soon as that changes, keeping no partial result. It needs the after-meeting pass
-  to be on, because it runs on that worker. Results are kept in `<database>.speed-check.json` with
+  to be on, because it runs on that worker. When a check is due, the worker starts at launch on a
+  desktop, and on a phone once it charges. A charging report that came before the core opened is
+  now repeated once it opens; before, it waited for the next battery broadcast, which also delayed
+  leftover speech's pass. Results are kept in `<database>.speed-check.json` with
   a key of the device profile and the models on the device, so new hardware or a new model checks
   again.
 - **Clip:** 15 s of Italian from the VoxPopuli test set (CC0, European Parliament), compiled into

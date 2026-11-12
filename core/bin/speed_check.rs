@@ -96,6 +96,48 @@ pub fn clip_samples() -> Vec<i16> {
         .unwrap_or_default()
 }
 
+/// Whether a model needs timing on this device, so charging should start the worker for it.
+///
+/// Inputs: The database, its telemetry, and this device's ID.
+/// Outputs: true when Automatic's model, or a smaller one after it fell behind, is due.
+/// Side effects: Reads the settings, the record and telemetry; may start whisper.cpp's backends
+/// to find a GPU.
+pub fn is_due(database_path: &Path, metrics: &dyn MetricsRepository, device_id: &str) -> bool {
+    let Some(target) = crate::ffi_transcription::speed_check_target(database_path) else {
+        return false;
+    };
+    let measurements = transcription_measurements(metrics, device_id);
+    next_model_to_check(
+        &target.automatic_file,
+        &load_record(&record_file_for(database_path)),
+        &target.hardware_key,
+        &|file| is_measured(&measurements, file),
+        &|file| target.models.contains_key(file),
+    )
+    .is_some()
+}
+
+/// A device's transcription measurements, for the #68 rule.
+///
+/// Side effects: Reads telemetry; a failure reads as none.
+fn transcription_measurements(
+    metrics: &dyn MetricsRepository,
+    device_id: &str,
+) -> Vec<TranscriptionMeasurement> {
+    metrics
+        .get_metrics_for_device(device_id)
+        .unwrap_or_default()
+        .iter()
+        .filter(|metric| metric.task_type() == TaskType::Transcription)
+        .map(|metric| TranscriptionMeasurement {
+            model_label: metric.model_name().to_owned(),
+            audio_ms: metric.audio_duration_ms().unwrap_or(0),
+            processing_ms: metric.duration_ms(),
+            power_mwh: metric.estimated_power_mwh(),
+        })
+        .collect()
+}
+
 /// Runs the check for the after-meeting worker.
 pub struct SpeedCheck {
     target: TargetSource,
@@ -154,7 +196,7 @@ impl SpeedCheck {
                 return 0;
             }
         };
-        let measurements = self.measurements(metrics.as_ref());
+        let measurements = transcription_measurements(metrics.as_ref(), self.device_id.as_str());
         let mut checked = 0;
         // Each model is timed at most once, so the ladder bounds the rounds.
         for _ in 0..target.models.len() {
@@ -185,22 +227,6 @@ impl SpeedCheck {
             checked += 1;
         }
         checked
-    }
-
-    /// This device's transcription measurements, for the #68 rule.
-    fn measurements(&self, metrics: &dyn MetricsRepository) -> Vec<TranscriptionMeasurement> {
-        metrics
-            .get_metrics_for_device(self.device_id.as_str())
-            .unwrap_or_default()
-            .iter()
-            .filter(|metric| metric.task_type() == TaskType::Transcription)
-            .map(|metric| TranscriptionMeasurement {
-                model_label: metric.model_name().to_owned(),
-                audio_ms: metric.audio_duration_ms().unwrap_or(0),
-                processing_ms: metric.duration_ms(),
-                power_mwh: metric.estimated_power_mwh(),
-            })
-            .collect()
     }
 
     /// Transcribes the clip `CHECK_RUNS` times with one model.
