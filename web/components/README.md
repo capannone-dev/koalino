@@ -43,7 +43,8 @@ outlines the `:target` it lands on.
 
 `chat-panel.tsx` (#97) is a chat with notes through `lib/chat-api.ts`: on a meeting's page, a
 project's page and the Chat page (`app/chat`, every meeting, summary and project). Each answer
-says what the model was given, what was left out and which connection answered.
+says what the model was given, what was left out and which connection answered, and links the
+places it cites (#110): a meeting at the cited moment, or a file on its project's page.
 
 `notes-folder-settings.tsx` (#98) is Settings' notes folder on the server's computer: the folder,
 a switch that turns it on (writing it at once) or off, Sync now, the last round, and the warning
@@ -73,7 +74,8 @@ Projects (Issue #85), over `lib/projects-api.ts`:
   "Syncing…".
 - `meeting-transcript.tsx` renders the meeting page's transcript: one block per segment with the
   speaker and start, `Name (?)` for a guessed speaker, an "Overlapping speech" label, and unclear
-  words in italics (#90, #91); an imported meeting shows its flat text.
+  words in italics (#90, #91); an imported meeting shows its flat text. A `#at-<ms>` link (a
+  chat source, #110) scrolls to the passage that moment falls in.
 - `meeting-recorded-on.tsx` says "Recorded on Laptop + Pixel" on the page of a meeting the app
   combined from several devices' recordings (#88), and its Split button lists the other recordings
   on their own again after an inline confirmation. The list rows carry the same line.

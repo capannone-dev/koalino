@@ -6,6 +6,49 @@ import { apiBaseUrl } from "@/lib/api";
 /** What a chat is about. */
 export type ChatTopic = { scope: "meeting" | "project"; id: string } | { scope: "all" };
 
+/** A place an answer cites (#110): a meeting, at a moment when given, or a project file. */
+export type ChatSource = {
+  /** The number the answer cites it by, as in `[1]`. */
+  number: number;
+  /** Such as `Meeting "Review"` or `File plan.md`. */
+  label: string;
+  /** Milliseconds from the meeting's start; null for the whole meeting or a file. */
+  at_ms: number | null;
+  meeting_id?: string;
+  project_id?: string;
+  resource_id?: string;
+};
+
+/** Formats a meeting moment as `m:ss`, or `h:mm:ss` past an hour. */
+function formatMoment(milliseconds: number): string {
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}` : `${minutes}:${seconds}`;
+}
+
+/** A source as shown, such as `[1] Meeting "Review" · 1:05`. */
+export function sourceLabel(source: ChatSource): string {
+  const name = `[${source.number}] ${source.label}`;
+  return source.at_ms === null || source.at_ms === undefined ? name : `${name} · ${formatMoment(source.at_ms)}`;
+}
+
+/**
+ * Where a source opens: the meeting page at the cited moment (`#at-<ms>`, which the transcript
+ * scrolls to), or the file on its project's page. Null for a file outside any project.
+ */
+export function sourceHref(source: ChatSource): string | null {
+  if (source.meeting_id) {
+    const page = `/meetings/${encodeURIComponent(source.meeting_id)}`;
+    return source.at_ms === null || source.at_ms === undefined ? page : `${page}#at-${source.at_ms}`;
+  }
+  if (source.project_id && source.resource_id) {
+    return `/projects/${encodeURIComponent(source.project_id)}#file-${source.resource_id}`;
+  }
+  return null;
+}
+
 /** One message, as the daemon keeps it. */
 export type ChatMessage = {
   role: "user" | "assistant";
@@ -17,6 +60,8 @@ export type ChatMessage = {
   omitted: string[];
   /** For an answer: the connection's label. */
   connection: string | null;
+  /** For an answer: the places it cites, in order of first mention (#110). */
+  sources?: ChatSource[];
 };
 
 /** A failed request: the daemon's error code (or `network`) and the HTTP status. */

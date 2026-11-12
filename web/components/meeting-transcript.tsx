@@ -2,11 +2,12 @@
 // marking a guessed speaker with "(?)", overlapping speech with a label, and unclear words in
 // italics (#90, #91). Imported meetings without segments show their flat text. With a meeting ID,
 // each segment's text can be corrected in place (#96), keeping its speaker and timing; the
-// meeting is then no longer re-transcribed.
+// meeting is then no longer re-transcribed. A link to a moment (`#at-<ms>`, from a chat answer's
+// source, #110) scrolls to the passage that moment falls in.
 
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { TranscriptSegment } from "@/lib/api";
 import { editErrorMessage, editSegment } from "@/lib/edits-api";
 
@@ -75,6 +76,19 @@ export function MeetingTranscript({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const fieldPrefix = useId();
+
+  // Scrolls to the passage a cited moment falls in: the last one starting at or before it.
+  useEffect(() => {
+    const cited = /^#at-(\d+)$/.exec(window.location.hash);
+    if (!cited) return;
+    const moment = Number(cited[1]);
+    const passage = current.filter((segment) => segment.start_time_ms <= moment).at(-1) ?? current[0];
+    if (passage) {
+      document.getElementById(`t-${passage.start_time_ms}`)?.scrollIntoView({ block: "start" });
+    }
+    // Only when the page opens; later edits must not scroll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /** Saves the correction of `segment`. */
   async function save(segment: TranscriptSegment, text: string) {

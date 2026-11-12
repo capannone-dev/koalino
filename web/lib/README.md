@@ -43,7 +43,8 @@ connections and summaries.
 anchor a hit opens, and `hitPlaceLabel` says where in its meeting or project it is.
 
 `chat-api.ts` (#97) is `getChat`, `askChat` and `clearChat` over `/api/chat`, with
-`ChatApiError` and `chatErrorMessage` (never the server's text).
+`ChatApiError` and `chatErrorMessage` (never the server's text). `sourceHref` and `sourceLabel`
+turn a cited `ChatSource` (#110) into its link and its text.
 
 `meeting-voices-api.ts` (#103) is `getMeetingVoices` and `setMeetingVoices(keep)` over
 `/api/settings/meeting-voices`, with `MeetingVoicesError` (`unavailable`, `server`, `network`).

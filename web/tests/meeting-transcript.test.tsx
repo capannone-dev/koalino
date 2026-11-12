@@ -89,3 +89,28 @@ describe("editing (#96)", () => {
     expect(screen.queryByRole("button", { name: /Edit the text/ })).not.toBeInTheDocument();
   });
 });
+
+test("a cited moment (#at-<ms>) scrolls to the passage it falls in (#110)", () => {
+  const scrolled: string[] = [];
+  const original = Element.prototype.scrollIntoView;
+  Element.prototype.scrollIntoView = function (this: Element) {
+    scrolled.push(this.id);
+  };
+  window.location.hash = "#at-63000";
+  try {
+    render(
+      <MeetingTranscript
+        transcript={null}
+        segments={[
+          { ...doubtful, start_time_ms: 0, end_time_ms: 61_000, text: "Hello." },
+          doubtful,
+          { ...doubtful, start_time_ms: 65_000, end_time_ms: 70_000, text: "Bye." }
+        ]}
+      />
+    );
+    expect(scrolled).toEqual(["t-61000"]);
+  } finally {
+    Element.prototype.scrollIntoView = original;
+    window.location.hash = "";
+  }
+});

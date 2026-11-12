@@ -1,11 +1,22 @@
 // A chat with notes (#97): on a meeting's page (that meeting), a project's page (that project)
 // and the Chat page (every meeting, summary and project). Answers come from the default AI
 // connection and say what the model was given; the chat is kept by the server and can be deleted.
+// The places an answer cites are listed under it as links (#110).
 
 "use client";
 
+import Link from "next/link";
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { askChat, chatErrorMessage, clearChat, getChat, type ChatMessage, type ChatTopic } from "@/lib/chat-api";
+import {
+  askChat,
+  chatErrorMessage,
+  clearChat,
+  getChat,
+  sourceHref,
+  sourceLabel,
+  type ChatMessage,
+  type ChatTopic
+} from "@/lib/chat-api";
 
 const buttonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong px-4 hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus disabled:text-faint";
@@ -112,6 +123,24 @@ export function ChatPanel({ topic, heading }: ChatPanelProps) {
             >
               <p className="sr-only">{message.role === "user" ? "You asked:" : "Answer:"}</p>
               <div className="whitespace-pre-wrap break-words">{message.text}</div>
+              {message.role === "assistant" && message.sources && message.sources.length > 0 ? (
+                <ul className="mt-2 flex flex-wrap gap-2" aria-label="Sources">
+                  {message.sources.map((source) => {
+                    const href = sourceHref(source);
+                    return (
+                      <li key={source.number} className="rounded-full border border-line px-3 py-1 text-sm">
+                        {href ? (
+                          <Link href={href} className="text-accent-text underline-offset-2 hover:underline">
+                            {sourceLabel(source)}
+                          </Link>
+                        ) : (
+                          sourceLabel(source)
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
               {message.role === "assistant" && message.included.length > 0 ? (
                 <p className="mt-2 text-sm text-muted">Given: {message.included.join("; ")}</p>
               ) : null}

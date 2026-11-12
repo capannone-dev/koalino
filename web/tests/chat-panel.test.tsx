@@ -72,3 +72,21 @@ test("the chat is deleted after confirming", async () => {
   expect(screen.queryByText("Who came?")).not.toBeInTheDocument();
   expect(api.clearChat).toHaveBeenCalledWith({ scope: "project", id: "p-1" });
 });
+
+test("an answer links the meetings and files it cites (#110)", async () => {
+  vi.mocked(api.getChat).mockResolvedValue([
+    {
+      ...message("assistant", "Bo sends the budget [1, 00:01:05] as planned [2]."),
+      sources: [
+        { number: 1, label: 'Meeting "Review"', at_ms: 65_000, meeting_id: "m-1" },
+        { number: 2, label: "File plan.md", at_ms: null, project_id: "p-1", resource_id: "a-1" },
+        { number: 3, label: "File loose.txt", at_ms: null, resource_id: "a-2" }
+      ]
+    }
+  ]);
+  render(<ChatPanel topic={{ scope: "all" }} heading="Chat with all your notes" />);
+
+  expect(await screen.findByRole("link", { name: '[1] Meeting "Review" · 1:05' })).toHaveAttribute("href", "/meetings/m-1#at-65000");
+  expect(screen.getByRole("link", { name: "[2] File plan.md" })).toHaveAttribute("href", "/projects/p-1#file-a-1");
+  expect(screen.getByText("[3] File loose.txt")).not.toHaveAttribute("href");
+});
