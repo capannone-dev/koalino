@@ -274,6 +274,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
   final MeetingExportController _exportController = MeetingExportController(
     exportBridge: const RustExportBridge(),
     exportSaver: const FilePickerExportSaver(),
+    exportSharer: Platform.isAndroid ? const AndroidExportSharer() : null,
   );
   final MeetingAttachmentsController _attachmentsController =
       MeetingAttachmentsController(

@@ -27,9 +27,15 @@ typedef ExportRequest = ({
 /// Writes a small file where the core would, or fails with `failure`.
 final class FakeExportBridge implements ExportBridge {
   /// Creates a bridge writing into `defaultDirectory` when no output path is given.
-  FakeExportBridge({required this.defaultDirectory, this.failure});
+  FakeExportBridge(
+      {required this.defaultDirectory,
+      this.failure,
+      this.attachmentNames = const <String>[]});
 
   final Directory defaultDirectory;
+
+  /// Attachments a Markdown export copies into `<stem>_attachments/` beside the file.
+  final List<String> attachmentNames;
 
   /// When set, every export fails with it.
   final MeetingExportResult? failure;
@@ -56,6 +62,15 @@ final class FakeExportBridge implements ExportBridge {
     final String path = outputPath ??
         '${defaultDirectory.path}/$meetingId.${format.fileExtension}';
     File(path).writeAsStringSync('exported $meetingId');
+    if (format == MeetingExportFormat.markdown &&
+        includeAttachments &&
+        attachmentNames.isNotEmpty) {
+      final String stem = path.substring(0, path.length - '.md'.length);
+      final Directory folder = Directory('${stem}_attachments')..createSync();
+      for (final String name in attachmentNames) {
+        File('${folder.path}/$name').writeAsStringSync(name);
+      }
+    }
     return MeetingExportSuccess(filePath: path, sizeBytes: 12);
   }
 }
@@ -100,6 +115,38 @@ final class FakeExportSaver implements ExportSaver {
       savedBytes = bytes;
     }
     return bytesSaved;
+  }
+}
+
+/// Records what would go to the share sheet.
+final class FakeExportSharer implements ExportSharer {
+  /// Creates a sharer whose folder is `directory`.
+  FakeExportSharer(this.directory, {this.fails = false});
+
+  final Directory directory;
+
+  /// Whether the share sheet cannot open.
+  final bool fails;
+
+  /// The names of the shared files, and the text, per share.
+  final List<(List<String>, String)> shares = <(List<String>, String)>[];
+
+  @override
+  Future<String> shareDirectory() async => directory.path;
+
+  @override
+  Future<void> shareFiles(List<String> paths, String text) async {
+    if (fails) {
+      throw const FileSystemException('no share sheet');
+    }
+    for (final String path in paths) {
+      expect(File(path).parent.path, directory.path,
+          reason: 'only files directly in the share folder can be served');
+    }
+    shares.add((
+      <String>[for (final String path in paths) path.split('/').last],
+      text
+    ));
   }
 }
 
@@ -260,6 +307,116 @@ void main() {
         meetingId: 'm1', title: 'Weekly sync', format: MeetingExportFormat.pdf);
 
     expect(message, 'This meeting no longer exists');
+  });
+
+  group('share', () {
+    late Directory shareFolder;
+    setUp(() => shareFolder = Directory('${root.path}/shared/handoff'));
+
+    test('Markdown is shared with its attachments, flattened', () async {
+      shareFolder.createSync(recursive: true);
+      File('${shareFolder.path}/old.md').writeAsStringSync('earlier share');
+      final FakeExportBridge bridge = FakeExportBridge(
+          defaultDirectory: root,
+          attachmentNames: <String>['board.jpg', 'Weekly sync.md']);
+      final FakeExportSharer sharer = FakeExportSharer(shareFolder);
+      final MeetingExportController controller = MeetingExportController(
+          exportBridge: bridge,
+          exportSaver: FakeExportSaver(savesBytes: true),
+          exportSharer: sharer);
+      expect(controller.canShare, isTrue);
+
+      final String? message = await controller.shareMeeting(
+          meetingId: 'm1',
+          title: 'Weekly sync',
+          format: MeetingExportFormat.markdown);
+
+      expect(message, isNull);
+      expect(bridge.requests.single.outputPath,
+          '${shareFolder.path}/Weekly sync.md');
+      expect(bridge.requests.single.includeAttachments, isTrue);
+      expect(sharer.shares.single.$1, <String>[
+        'Weekly sync.md',
+        'Weekly sync (2).md',
+        'board.jpg',
+      ]);
+      expect(sharer.shares.single.$2, 'Weekly sync');
+      expect(File('${shareFolder.path}/old.md').existsSync(), isFalse,
+          reason: 'an earlier share is cleared first');
+      expect(
+          Directory('${shareFolder.path}/Weekly sync_attachments').existsSync(),
+          isFalse);
+    });
+
+    test('a failed export or share sheet is worded', () async {
+      final MeetingExportController failing = MeetingExportController(
+          exportBridge: FakeExportBridge(
+              defaultDirectory: root,
+              failure:
+                  const MeetingExportFailure(errorCode: 'meeting_not_found')),
+          exportSaver: FakeExportSaver(savesBytes: true),
+          exportSharer: FakeExportSharer(shareFolder));
+      expect(
+          await failing.shareMeeting(
+              meetingId: 'm1', title: 'A', format: MeetingExportFormat.pdf),
+          'This meeting no longer exists');
+
+      final MeetingExportController noSheet = MeetingExportController(
+          exportBridge: FakeExportBridge(defaultDirectory: root),
+          exportSaver: FakeExportSaver(savesBytes: true),
+          exportSharer: FakeExportSharer(shareFolder, fails: true));
+      expect(
+          await noSheet.shareMeeting(
+              meetingId: 'm1', title: 'A', format: MeetingExportFormat.pdf),
+          'Unable to share the export');
+    });
+
+    test('without a sharer there is nothing to share with', () {
+      expect(
+          MeetingExportController(
+                  exportBridge: FakeExportBridge(defaultDirectory: root),
+                  exportSaver: FakeExportSaver(savesBytes: false))
+              .canShare,
+          isFalse);
+    });
+
+    testWidgets('the Export menu offers Share entries when it can share',
+        (WidgetTester tester) async {
+      final FakeExportBridge bridge = FakeExportBridge(defaultDirectory: root);
+      final FakeExportSharer sharer = FakeExportSharer(shareFolder);
+      final MeetingExportController exportController = MeetingExportController(
+          exportBridge: bridge,
+          exportSaver: FakeExportSaver(savesBytes: true),
+          exportSharer: sharer);
+      final MeetingListController meetingController = MeetingListController(
+          meetingBridge: FakeMeetingBridge(details: <String, MeetingDetail>{
+        'meeting-titled': titledMeetingDetail
+      }));
+      await tester.pumpWidget(MaterialApp(
+        home: MeetingDetailScreen(
+          controller: meetingController,
+          meetingId: 'meeting-titled',
+          exportController: exportController,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Export'));
+      await tester.pumpAndSettle();
+      expect(find.text('Share as Markdown'), findsOneWidget);
+      await tester.tap(find.text('Share as PDF'));
+      await tester.pump(const Duration(seconds: 1));
+      // The share does real file I/O: give it real time, then frames, until it is done.
+      for (int round = 0; round < 50 && exportController.isExporting; round++) {
+        await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)));
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+
+      expect(bridge.requests.single.format, MeetingExportFormat.pdf);
+      expect(sharer.shares.single.$1, hasLength(1));
+    });
   });
 
   testWidgets('the meeting offers Export with a format choice',

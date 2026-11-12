@@ -278,8 +278,9 @@ final class ExportMeetingButton extends StatelessWidget {
   /// Inputs: The meeting controller (for the displayed title), the export controller, and the
   /// meeting.
   /// Outputs: A menu button, disabled while an export runs.
-  /// Side effects: Runs the export, which may show a save dialog, then shows a snack bar
-  /// (nothing when the owner cancels the dialog).
+  /// Side effects: Runs the export, which may show a save dialog, or shares it (where the
+  /// export controller can share: "Share as …" entries), then shows a snack bar (nothing when
+  /// the owner cancels the dialog or the share sheet opened).
   const ExportMeetingButton({
     required this.meetingController,
     required this.exportController,
@@ -296,31 +297,44 @@ final class ExportMeetingButton extends StatelessWidget {
     return ListenableBuilder(
       listenable: exportController,
       builder: (BuildContext context, Widget? child) =>
-          PopupMenuButton<MeetingExportFormat>(
+          PopupMenuButton<(MeetingExportFormat, bool)>(
         tooltip: 'Export',
         enabled: !exportController.isExporting,
         icon: exportController.isExporting
             ? const SizedBox.square(
                 dimension: 20, child: CircularProgressIndicator(strokeWidth: 2))
             : const Icon(Icons.file_download_outlined),
-        onSelected: (MeetingExportFormat format) => _export(context, format),
+        onSelected: ((MeetingExportFormat, bool) choice) =>
+            _export(context, choice.$1, share: choice.$2),
         itemBuilder: (BuildContext context) =>
-            <PopupMenuEntry<MeetingExportFormat>>[
+            <PopupMenuEntry<(MeetingExportFormat, bool)>>[
           for (final MeetingExportFormat format in MeetingExportFormat.values)
-            PopupMenuItem<MeetingExportFormat>(
-                value: format, child: Text(format.label)),
+            PopupMenuItem<(MeetingExportFormat, bool)>(
+                value: (format, false), child: Text(format.label)),
+          if (exportController
+              .canShare) ...<PopupMenuEntry<(MeetingExportFormat, bool)>>[
+            const PopupMenuDivider(),
+            for (final MeetingExportFormat format in MeetingExportFormat.values)
+              PopupMenuItem<(MeetingExportFormat, bool)>(
+                  value: (format, true),
+                  child: Text('Share as ${format.label}')),
+          ],
         ],
       ),
     );
   }
 
-  /// Runs the export and reports its result.
-  Future<void> _export(BuildContext context, MeetingExportFormat format) async {
+  /// Runs the export, or shares it when `share`, and reports its result.
+  Future<void> _export(BuildContext context, MeetingExportFormat format,
+      {required bool share}) async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     final String title =
         meetingController.selectedMeeting?.summary.title ?? 'meeting';
-    final String? message = await exportController.exportMeeting(
-        meetingId: meetingId, title: title, format: format);
+    final String? message = share
+        ? await exportController.shareMeeting(
+            meetingId: meetingId, title: title, format: format)
+        : await exportController.exportMeeting(
+            meetingId: meetingId, title: title, format: format);
     if (message != null) {
       messenger.showSnackBar(SnackBar(content: Text(message)));
     }

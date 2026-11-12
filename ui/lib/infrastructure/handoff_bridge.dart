@@ -233,17 +233,16 @@ final class AndroidHandoffPlatform implements HandoffPlatform {
       Clipboard.setData(ClipboardData(text: text));
 }
 
-/// Deletes the files an earlier hand-off left in `directory`, as at start-up.
+/// Deletes what an earlier hand-off or shared export left in `directory`, as at start-up.
 ///
-/// Side effects: Deletes plain copies of meeting content; a failure is ignored.
+/// Side effects: Deletes plain copies of meeting content, files and folders; a failure is
+/// ignored.
 Future<void> clearHandoffFolder(String directory) async {
   try {
     final Directory folder = Directory(directory);
     if (await folder.exists()) {
       await for (final FileSystemEntity entry in folder.list()) {
-        if (entry is File) {
-          await entry.delete();
-        }
+        await entry.delete(recursive: true);
       }
     }
   } on FileSystemException {

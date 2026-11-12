@@ -1,15 +1,16 @@
 // Exports a meeting through the Rust core (`note_taker_export_meeting`, Issue #48) and saves the
 // result where the owner chooses. On desktops the save dialog only picks a path and the core
 // writes there; on Android and iOS the dialog (the system document picker) takes the bytes.
+// On Android an export can also go straight to another app through the share sheet (#114).
 
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
-import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// The formats the core exports.
@@ -184,6 +185,36 @@ final class FilePickerExportSaver implements ExportSaver {
           fileName: suggestedFileName,
           bytes: bytes) !=
       null;
+}
+
+/// Shares exported files with another app.
+abstract interface class ExportSharer {
+  /// The folder exports to share are written into; only files directly inside it can be shared.
+  Future<String> shareDirectory();
+
+  /// Opens the share sheet with `paths` (in that folder) and `text`.
+  ///
+  /// Side effects: The app the owner picks gets read access to those files. Throws when the
+  /// sheet cannot open.
+  Future<void> shareFiles(List<String> paths, String text);
+}
+
+/// Android's share sheet, through `note_taker/share` (`SharedFiles.kt`).
+final class AndroidExportSharer implements ExportSharer {
+  /// Creates the sharer.
+  const AndroidExportSharer();
+
+  static const MethodChannel _channel = MethodChannel('note_taker/share');
+
+  /// The hand-off folder under `cache/shared`, which Android's `SharedFileProvider` serves.
+  @override
+  Future<String> shareDirectory() async =>
+      '${(await getTemporaryDirectory()).path}/shared/handoff';
+
+  @override
+  Future<void> shareFiles(List<String> paths, String text) =>
+      _channel.invokeMethod<void>(
+          'shareFiles', <String, Object?>{'paths': paths, 'text': text});
 }
 
 /// The Downloads folder's path, or `null` (the dialog's own default) when the platform has none.

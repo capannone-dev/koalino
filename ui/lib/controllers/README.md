@@ -26,7 +26,12 @@ reports `Attached N files`, plus how many could not be attached.
 first (cancelling exports nothing; with no dialog available, such as Linux without zenity, the
 core writes to its default export folder) and reports "Exported to <path>". On phones the core writes a
 private file, the picker saves its bytes, and the private file is deleted whatever happens;
-Markdown leaves attachments out there, because the picker saves a single file.
+Markdown leaves attachments out there, because the picker saves a single file. On Android,
+`shareMeeting` (the Export menu's "Share as …" entries, #114) shares instead: the share folder
+`cache/shared/handoff` is emptied, the core writes the export there with its attachments, a
+Markdown export's `<stem>_attachments/` files are moved up beside it (clashing names become
+`name (2).ext`; the Markdown's relative links then no longer resolve, but every file travels),
+and the share sheet opens with the files and the title.
 `suggestedExportFileName` turns the title into a safe file name with the format's extension.
 
 `LogSettingsController` holds Settings' diagnostics (Issue #46): it loads the core's level,
