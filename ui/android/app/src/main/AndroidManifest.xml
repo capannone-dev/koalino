@@ -87,5 +87,9 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Hand a meeting to the owner's own AI app (#114): lets SharedFiles.kt see whether the
+             Claude or ChatGPT app is installed. -->
+        <package android:name="com.anthropic.claude"/>
+        <package android:name="com.openai.chatgpt"/>
     </queries>
 </manifest>

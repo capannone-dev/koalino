@@ -2,6 +2,7 @@
 // lists and the summary page. The core does the work; this keeps the latest answers, tracks the
 // summaries being written, and words failures for people.
 
+import 'package:note_taker_ui/controllers/handoff_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_edit_bridge.dart';
@@ -13,11 +14,15 @@ final class SummariesController extends ChangeNotifier {
   SummariesController({
     required LlmBridge bridge,
     MeetingEditBridge editBridge = const MeetingEditBridge(),
+    this.handoff,
   })  : _bridge = bridge,
         _editBridge = editBridge;
 
   final LlmBridge _bridge;
   final MeetingEditBridge _editBridge;
+
+  /// Hands a meeting to the owner's own AI app (#114); null where that is not offered (desktops).
+  final HandoffController? handoff;
   LlmSettings? _settings;
   String? _message;
   bool _isBusy = false;

@@ -32,6 +32,7 @@ import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
 import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_configuration.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
+import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
 import 'package:note_taker_ui/infrastructure/host_key.dart';
 import 'package:note_taker_ui/infrastructure/incoming_share_bridge.dart';
 import 'package:note_taker_ui/infrastructure/language_bridge.dart';
@@ -41,6 +42,7 @@ import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/infrastructure/photo_camera.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
+import 'package:note_taker_ui/controllers/handoff_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_export_controller.dart';
 import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
@@ -51,6 +53,7 @@ import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart'
 import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
 import 'package:note_taker_ui/presentation/app_lock_gate.dart';
 import 'package:note_taker_ui/presentation/app_theme.dart';
+import 'package:note_taker_ui/presentation/handoff_widgets.dart';
 import 'package:note_taker_ui/presentation/core_startup_gate.dart';
 import 'package:note_taker_ui/presentation/devices_screen.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
@@ -121,6 +124,14 @@ Future<void> main() async {
     incomingShareBridge: platformIncomingShareBridge(),
   ));
   unawaited(appLockController?.initialize());
+  if (_handoffController case final HandoffController handoff) {
+    handoff.attach();
+    unawaited(handoff.loadApps());
+    // Plain copies of an earlier hand-off's meeting are not kept across runs (#114).
+    unawaited(const AndroidHandoffPlatform()
+        .handoffDirectory()
+        .then(clearHandoffFolder));
+  }
   // Starts after the first frame, so the waiting message shows during a keychain prompt.
   unawaited(coreStartupController.start());
 }
@@ -200,13 +211,17 @@ final class NoteTakerApp extends StatelessWidget {
       ),
     );
     final IncomingShareBridge? shareBridge = incomingShareBridge;
+    final HandoffController? handoff = _handoffController;
+    final Widget withHandoff = handoff == null
+        ? homeShell
+        : HandoffReturnListener(controller: handoff, child: homeShell);
     // Inside the startup gate, so a share waits until the core can store it.
     final Widget shell = shareBridge == null
-        ? homeShell
+        ? withHandoff
         : IncomingShareListener(
             shareBridge: shareBridge,
             projectsController: _projectsController,
-            child: homeShell,
+            child: withHandoff,
           );
     final CoreStartupController? startup = coreStartupController;
     final AppLockController? appLock = appLockController;
@@ -310,7 +325,18 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
 /// AI connections and meeting summaries (#95), shared by Settings and every meeting list; a
 /// summary keeps being written when its page is left, so this lives as long as the app.
 final SummariesController _summariesController =
-    SummariesController(bridge: const LlmBridge());
+    SummariesController(bridge: const LlmBridge(), handoff: _handoffController);
+
+/// Hands meetings to the owner's own Claude or ChatGPT app and keeps a summary's answer (#114);
+/// Android only. It lives as long as the app, since the answer comes back after a switch of apps.
+final HandoffController? _handoffController = Platform.isAndroid
+    ? HandoffController(
+        core: const RustHandoffCore(),
+        platform: const AndroidHandoffPlatform(),
+        onSummaryChanged: (String meetingId) =>
+            unawaited(_summariesController.loadMeeting(meetingId)),
+      )
+    : null;
 
 /// The owner's meeting notes and transcript corrections (#96), shared by every meeting view.
 final MeetingEditController _meetingEditController = MeetingEditController();

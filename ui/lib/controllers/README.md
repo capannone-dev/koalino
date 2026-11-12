@@ -76,7 +76,17 @@ transcribed; the core stores and applies it.
 the meeting lists and the summary page. It lives as long as the app, so a summary keeps being
 written when its page is left; it ignores a second request for a meeting already being summarized
 and never lets a slower read replace a summary or prompt written meanwhile.
-`editSummary` saves the owner's own text through `MeetingEditBridge` (#96).
+`editSummary` saves the owner's own text through `MeetingEditBridge` (#96). On Android it also
+carries the `HandoffController`, so every summary view can offer the owner's own AI app.
+
+`handoff_controller.dart` (#114) hands a meeting to the owner's own Claude or ChatGPT app.
+
+- **The hand-off:** the core writes the meeting and its files, the prompt also goes on the
+  clipboard, and the app opens.
+- **The answer:** a summary hand-off waits up to an hour. When Koalino comes back, new
+  clipboard text of at least 80 characters is kept as that meeting's summary. A `HandoffKept`
+  event offers Undo, and `HandoffHint` says to copy the answer first.
+- **Chat:** a chat leaves nothing pending.
 
 `meeting_edit_controller.dart` (#96) holds each meeting's notes as last read or saved, and saves
 transcript corrections; `MeetingListController.replaceSegment` then shows the corrected (or

@@ -1,0 +1,230 @@
+// Specifies handing a meeting to the owner's own AI app (#114): the share carries the prompt and
+// files, a summary's answer copied in that app is kept when Koalino comes back, with Undo, and a
+// chat leaves nothing pending.
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:note_taker_ui/controllers/handoff_controller.dart';
+import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
+import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/presentation/handoff_widgets.dart';
+
+/// Records what the controller asks of the core and the phone.
+final class FakeHandoffPorts implements HandoffCore, HandoffPlatform {
+  final List<String> calls = <String>[];
+  String? clipboard;
+  List<AiApp> apps = <AiApp>[AiApp.claude];
+  Map<String, Object?>? previousSummary;
+  String? failure;
+
+  @override
+  Future<PreparedHandoff> prepare(
+      String meetingId, HandoffPurpose purpose, String directory) async {
+    if (failure case final String code) {
+      throw LlmException(code);
+    }
+    calls.add('prepare $meetingId ${purpose.name} $directory');
+    return PreparedHandoff(
+      message: purpose == HandoffPurpose.summary ? 'Summarize it.' : 'Read it.',
+      prompt: purpose == HandoffPurpose.summary ? 'Summarize it.' : '',
+      files: const <HandoffFile>[
+        HandoffFile(
+            path: '/cache/shared/handoff/Review.md', mimeType: 'text/markdown'),
+      ],
+      skipped: 0,
+    );
+  }
+
+  @override
+  Future<KeptAnswer> keepAnswer(String meetingId,
+      {required String text,
+      required String source,
+      required String prompt}) async {
+    calls.add('keep $meetingId $source "$prompt" ${text.length}');
+    return KeptAnswer(
+      summary: StoredSummary(
+        text: text,
+        connectionLabel: source,
+        model: '',
+        createdAt: DateTime.utc(2026, 11, 12),
+        edited: true,
+        truncated: false,
+      ),
+      previous: previousSummary,
+    );
+  }
+
+  @override
+  Future<void> restore(
+          String meetingId, Map<String, Object?>? previous) async =>
+      calls.add('restore $meetingId ${previous?['text']}');
+
+  @override
+  Future<String> handoffDirectory() async => '/cache/shared/handoff';
+
+  @override
+  Future<List<AiApp>> installedApps() async => apps;
+
+  @override
+  Future<void> share(PreparedHandoff handoff, AiApp? app) async =>
+      calls.add('share ${app?.name ?? 'sheet'} ${handoff.files.length}');
+
+  @override
+  Future<String?> readClipboard() async => clipboard;
+
+  @override
+  Future<void> writeClipboard(String text) async => clipboard = text;
+}
+
+void main() {
+  late FakeHandoffPorts ports;
+  late DateTime clock;
+  late List<String> refreshed;
+  late HandoffController controller;
+
+  setUp(() {
+    ports = FakeHandoffPorts();
+    clock = DateTime.utc(2026, 11, 12, 20);
+    refreshed = <String>[];
+    controller = HandoffController(
+      core: ports,
+      platform: ports,
+      now: () => clock,
+      onSummaryChanged: refreshed.add,
+    );
+  });
+
+  final String answer = ('Decisions: ship on Friday. ' * 5).trim();
+
+  test('a summary hand-off shares the files and keeps the copied answer',
+      () async {
+    final List<HandoffEvent> events = <HandoffEvent>[];
+    controller.events.listen(events.add);
+
+    expect(
+        await controller.handOff('m-1', 'Review', HandoffPurpose.summary,
+            app: AiApp.claude),
+        isNull);
+    expect(ports.calls, <String>[
+      'prepare m-1 summary /cache/shared/handoff',
+      'share claude 1',
+    ]);
+    expect(ports.clipboard, 'Summarize it.',
+        reason: 'the prompt is also on the clipboard');
+
+    // Back without copying anything: nothing is kept, and the owner is told how.
+    await controller.checkClipboard();
+    await pumpEventQueue();
+    expect(
+        ports.calls.where((String call) => call.startsWith('keep')), isEmpty);
+    expect(events.single, isA<HandoffHint>());
+
+    ports.clipboard = answer;
+    await controller.checkClipboard();
+    await pumpEventQueue();
+    expect(ports.calls.last,
+        'keep m-1 Claude app "Summarize it." ${answer.length}');
+    expect(refreshed, <String>['m-1']);
+    final HandoffKept kept = events.last as HandoffKept;
+    expect(kept.title, 'Review');
+    expect(kept.appName, 'Claude');
+    expect(controller.pending, isNull);
+
+    // Coming back again does not keep it twice.
+    await controller.checkClipboard();
+    expect(ports.calls.where((String call) => call.startsWith('keep')),
+        hasLength(1));
+  });
+
+  test('Undo puts back the summary the answer replaced', () async {
+    ports.previousSummary = <String, Object?>{'text': 'Earlier'};
+    final List<HandoffEvent> events = <HandoffEvent>[];
+    controller.events.listen(events.add);
+    await controller.handOff('m-1', 'Review', HandoffPurpose.summary);
+    ports.clipboard = answer;
+    await controller.checkClipboard();
+    await pumpEventQueue();
+
+    expect(await controller.undo(events.last as HandoffKept), isNull);
+    expect(ports.calls.last, 'restore m-1 Earlier');
+    expect(refreshed, <String>['m-1', 'm-1']);
+  });
+
+  test('a chat hand-off leaves nothing to keep', () async {
+    await controller.handOff('m-1', 'Review', HandoffPurpose.chat,
+        app: AiApp.claude);
+    expect(ports.calls.last, 'share claude 1');
+    expect(controller.pending, isNull);
+    ports.clipboard = answer;
+    await controller.checkClipboard();
+    expect(
+        ports.calls.where((String call) => call.startsWith('keep')), isEmpty);
+  });
+
+  test('a short copy or one long after the hand-off is not kept', () async {
+    await controller.handOff('m-1', 'Review', HandoffPurpose.summary);
+    ports.clipboard = 'ok';
+    await controller.checkClipboard();
+    expect(
+        ports.calls.where((String call) => call.startsWith('keep')), isEmpty);
+    expect(controller.pending, isNotNull);
+
+    clock = clock.add(const Duration(hours: 2));
+    ports.clipboard = answer;
+    await controller.checkClipboard();
+    expect(
+        ports.calls.where((String call) => call.startsWith('keep')), isEmpty);
+    expect(controller.pending, isNull, reason: 'an old hand-off is forgotten');
+  });
+
+  test('a meeting with nothing to hand off is worded', () async {
+    ports.failure = 'nothing_to_summarize';
+    expect(await controller.handOff('m-1', 'Review', HandoffPurpose.summary),
+        'This meeting has no transcript or notes yet.');
+    expect(controller.pending, isNull);
+  });
+
+  test('only installed apps are offered', () async {
+    ports.apps = <AiApp>[AiApp.chatgpt];
+    await controller.loadApps();
+    expect(controller.apps, <AiApp>[AiApp.chatgpt]);
+  });
+
+  testWidgets(
+      'the sheet offers the installed app, and a kept answer can be undone',
+      (WidgetTester tester) async {
+    ports.apps = <AiApp>[AiApp.chatgpt];
+    await controller.loadApps();
+    await tester.pumpWidget(MaterialApp(
+      home: HandoffReturnListener(
+        controller: controller,
+        child: Scaffold(
+          body: Builder(
+            builder: (BuildContext context) => TextButton(
+              onPressed: () => showHandoffSheet(context,
+                  controller: controller, meetingId: 'm-1', title: 'Review'),
+              child: const Text('Own app'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Own app'));
+    await tester.pumpAndSettle();
+    expect(find.text('Summarize in ChatGPT'), findsOneWidget);
+    expect(find.text('Summarize in Claude'), findsNothing);
+
+    await tester.tap(find.text('Summarize in ChatGPT'));
+    await tester.pumpAndSettle();
+    expect(ports.calls.last, 'share chatgpt 1');
+
+    ports.clipboard = answer;
+    await tester.runAsync(controller.checkClipboard);
+    await tester.pumpAndSettle();
+    expect(
+        find.text('Summary from ChatGPT saved to "Review".'), findsOneWidget);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(ports.calls.last, 'restore m-1 null');
+  });
+}

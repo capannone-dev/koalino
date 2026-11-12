@@ -141,6 +141,12 @@ match is: `placeLabel` such as `1:01 · Anna`, and the snippet's `SnippetPart`s)
 `ChatTopic` (a meeting, a project or everything), `ChatEntry` with its cited `ChatSource`s
 (#110) and `ChatException`.
 
+`handoff_bridge.dart` (#114) holds the two halves of handing a meeting to the owner's own AI app.
+`RustHandoffCore` calls `note_taker_handoff_meeting` and the `keep_answer` / `restore_summary`
+edits. `AndroidHandoffPlatform` covers the folder (`cache/shared/handoff`), the installed apps,
+`shareFiles` and the clipboard. `clearHandoffFolder` deletes an earlier hand-off's copies at
+start-up.
+
 `clear_copy_bridge.dart` (#99) gives the viewers clear copies of sealed attachments:
 `clearCopyResolver` (replaceable in tests) defaults to `rememberedClearCopy`, which calls
 `note_taker_clear_copy` on a background isolate and reuses a copy for 20 minutes (the core keeps

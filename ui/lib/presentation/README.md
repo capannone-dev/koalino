@@ -151,6 +151,10 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   `MoveToProjectButton`, which meeting pages show to move a meeting into a project or out.
   `chooseProjectForMeeting` is its chooser, ending in "New project…", which names, creates and
   moves in one step; the meeting list's row menu offers it as "Add to project…" (#94).
+- `handoff_widgets.dart` (#114, Android) holds `showHandoffSheet`: Summarize or Chat in the
+  installed Claude or ChatGPT app, or in another app through the share sheet. The summary menu
+  and the summary page offer it as "Use your own AI app". It also holds `HandoffReturnListener`,
+  which shows "Summary from Claude saved", with Undo, and the hint to copy the answer.
 - `share_to_project.dart` (`IncomingShareListener`, Android) shows "Add the shared file to a
   project" when another app shares files or an e-mail: New project, or one of the projects. It
   sits inside the start-up gate, so a share that launched the app waits for the core. The

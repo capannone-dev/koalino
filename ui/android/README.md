@@ -145,6 +145,19 @@ link) is refused. It is our own small provider instead of androidx's `FileProvid
 library was added. Verified on the S23: the sheet showed the file's name (read through the
 grant), and `adb shell content query` was refused.
 
+For handing a meeting to the owner's own AI app (#114), `SharedFiles.kt` has two more calls:
+
+- `shareFiles(paths, text, packageName?)` sends the message and the files of
+  `cache/shared/handoff` together (`ACTION_SEND`, or `ACTION_SEND_MULTIPLE` for several files,
+  with read grants). It goes to the Claude or ChatGPT app when one is named and installed, else
+  through the share sheet.
+- `installedApps` lists which of those two apps are installed. The manifest's `<queries>` makes
+  them visible.
+
+The provider also serves `handoff/<name>` and types files by extension, Markdown as plain text.
+Both apps accept `SEND` and `SEND_MULTIPLE` of any type (checked on the S23 with
+`cmd package query-activities`).
+
 ## Sharing to a project (Issue #85)
 
 The activity accepts `SEND` and `SEND_MULTIPLE` for e-mails (`message/rfc822`), PDFs, pictures

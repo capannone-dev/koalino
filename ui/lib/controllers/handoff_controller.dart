@@ -1,0 +1,244 @@
+// Hands meetings to the owner's own AI app and brings a summary back (#114).
+//
+// A summary hand-off stays pending for an hour. Android gives no app another app's reply, so
+// when Koalino comes back to the foreground it reads the clipboard: new text of a summary's length
+// is kept as that meeting's summary, and an event offers Undo. The prompt is put on the clipboard
+// when sharing, so an app that drops the shared text can still be given it, and so the clipboard
+// still holding it means nothing was copied. A chat hand-off leaves nothing pending.
+
+import 'dart:async';
+
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
+import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
+import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+
+/// Least length of copied text taken for a summary, so a stray word is not kept.
+const int minAnswerCharacters = 80;
+
+/// How long a summary hand-off waits for its answer.
+const Duration answerWindow = Duration(hours: 1);
+
+/// A summary hand-off waiting for its answer.
+final class PendingAnswer {
+  /// Creates the pending hand-off.
+  const PendingAnswer({
+    required this.meetingId,
+    required this.title,
+    required this.app,
+    required this.prompt,
+    required this.sharedText,
+    required this.startedAt,
+  });
+
+  final String meetingId;
+  final String title;
+
+  /// The app it went to, or null for one picked in the share sheet.
+  final AiApp? app;
+
+  /// The filled-in instructions, kept with the answer.
+  final String prompt;
+
+  /// What the clipboard held after sharing; the same text means nothing was copied.
+  final String sharedText;
+  final DateTime startedAt;
+}
+
+/// Something to tell the owner after coming back.
+sealed class HandoffEvent {
+  const HandoffEvent();
+}
+
+/// An answer was kept as a meeting's summary; `undo` puts the earlier one back.
+final class HandoffKept extends HandoffEvent {
+  /// Creates the event.
+  const HandoffKept(
+      {required this.meetingId,
+      required this.title,
+      required this.appName,
+      required this.previous});
+
+  final String meetingId;
+  final String title;
+
+  /// Such as `Claude`, or `the other app`.
+  final String appName;
+
+  /// The summary it replaced, as the core gave it, or null.
+  final Map<String, Object?>? previous;
+}
+
+/// Came back without copying the answer: how to keep it.
+final class HandoffHint extends HandoffEvent {
+  /// Creates the event.
+  const HandoffHint({required this.appName});
+
+  final String appName;
+}
+
+/// Keeping or undoing an answer failed.
+final class HandoffFailed extends HandoffEvent {
+  /// Creates the event.
+  const HandoffFailed(this.message);
+
+  final String message;
+}
+
+/// Hands meetings over and keeps answers.
+final class HandoffController extends ChangeNotifier
+    with WidgetsBindingObserver {
+  /// Creates the controller.
+  ///
+  /// Inputs: The core and phone ports; `now` for the clock (tests); `onSummaryChanged`, told the
+  /// meeting whose summary changed so its views reload it.
+  HandoffController({
+    required HandoffCore core,
+    required HandoffPlatform platform,
+    DateTime Function()? now,
+    void Function(String meetingId)? onSummaryChanged,
+  })  : _core = core,
+        _platform = platform,
+        _now = now ?? DateTime.now,
+        _onSummaryChanged = onSummaryChanged;
+
+  final HandoffCore _core;
+  final HandoffPlatform _platform;
+  final DateTime Function() _now;
+  final void Function(String meetingId)? _onSummaryChanged;
+  final StreamController<HandoffEvent> _events =
+      StreamController<HandoffEvent>.broadcast();
+  bool _hinted = false;
+  bool _checking = false;
+
+  /// The AI apps installed, for direct hand-offs; others go through the share sheet.
+  List<AiApp> apps = <AiApp>[];
+
+  /// The summary hand-off waiting for its answer, if any.
+  PendingAnswer? pending;
+
+  /// What to tell the owner.
+  Stream<HandoffEvent> get events => _events.stream;
+
+  /// Starts watching for the app coming back to the foreground.
+  void attach() => WidgetsBinding.instance.addObserver(this);
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(checkClipboard());
+    }
+  }
+
+  /// Finds which AI apps are installed. Side effects: Asks the platform; notifies listeners.
+  Future<void> loadApps() async {
+    try {
+      apps = await _platform.installedApps();
+    } on PlatformException {
+      apps = <AiApp>[];
+    }
+    notifyListeners();
+  }
+
+  /// Hands a meeting to `app`, or to one picked in the share sheet.
+  ///
+  /// Outputs: null once shared, or a message why not. Side effects: The core writes the meeting
+  /// and its files to the hand-off folder; the prompt goes on the clipboard; the other app opens
+  /// with them. A summary hand-off becomes `pending`, replacing an earlier one.
+  Future<String?> handOff(
+      String meetingId, String title, HandoffPurpose purpose,
+      {AiApp? app}) async {
+    try {
+      final PreparedHandoff handoff = await _core.prepare(
+          meetingId, purpose, await _platform.handoffDirectory());
+      await _platform.writeClipboard(handoff.message);
+      await _platform.share(handoff, app);
+      pending = purpose == HandoffPurpose.summary
+          ? PendingAnswer(
+              meetingId: meetingId,
+              title: title,
+              app: app,
+              prompt: handoff.prompt,
+              sharedText: handoff.message,
+              startedAt: _now(),
+            )
+          : null;
+      _hinted = false;
+      notifyListeners();
+      return null;
+    } on LlmException catch (error) {
+      return error.message;
+    } on PlatformException {
+      return 'The other app could not be opened.';
+    }
+  }
+
+  /// Keeps a copied answer as the pending meeting's summary, if there is one.
+  ///
+  /// Side effects: Reads the clipboard; may write the meeting's summary (which syncs) and add an
+  /// event. A hand-off older than `answerWindow` is dropped.
+  Future<void> checkClipboard() async {
+    final PendingAnswer? waiting = pending;
+    if (waiting == null || _checking) {
+      return;
+    }
+    if (_now().difference(waiting.startedAt) > answerWindow) {
+      pending = null;
+      notifyListeners();
+      return;
+    }
+    _checking = true;
+    try {
+      final String text = (await _platform.readClipboard())?.trim() ?? '';
+      final String appName = waiting.app?.displayName ?? 'the other app';
+      if (text == waiting.sharedText.trim() || text.isEmpty) {
+        if (!_hinted) {
+          _hinted = true;
+          _events.add(HandoffHint(appName: appName));
+        }
+        return;
+      }
+      if (text.length < minAnswerCharacters) {
+        return;
+      }
+      pending = null;
+      notifyListeners();
+      final KeptAnswer kept = await _core.keepAnswer(waiting.meetingId,
+          text: text,
+          source: '${waiting.app?.displayName ?? 'Another'} app',
+          prompt: waiting.prompt);
+      _onSummaryChanged?.call(waiting.meetingId);
+      _events.add(HandoffKept(
+          meetingId: waiting.meetingId,
+          title: waiting.title,
+          appName: appName,
+          previous: kept.previous));
+    } on LlmException catch (error) {
+      _events.add(HandoffFailed(error.message));
+    } on PlatformException {
+      // The clipboard could not be read; the hand-off stays pending.
+    } finally {
+      _checking = false;
+    }
+  }
+
+  /// Puts back the summary that `kept` replaced.
+  ///
+  /// Outputs: null once undone, or why not. Side effects: Writes the meeting's summary.
+  Future<String?> undo(HandoffKept kept) async {
+    try {
+      await _core.restore(kept.meetingId, kept.previous);
+      _onSummaryChanged?.call(kept.meetingId);
+      return null;
+    } on LlmException catch (error) {
+      return error.message;
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_events.close());
+    super.dispose();
+  }
+}

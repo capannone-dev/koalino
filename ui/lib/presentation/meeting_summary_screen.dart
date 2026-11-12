@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/controllers/handoff_controller.dart';
+import 'package:note_taker_ui/presentation/handoff_widgets.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
 import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
 
@@ -96,6 +98,11 @@ final class _ResetPrompt extends _SummaryMenuChoice {
   const _ResetPrompt();
 }
 
+/// Hands the meeting to the owner's own AI app (#114).
+final class _UseOwnApp extends _SummaryMenuChoice {
+  const _UseOwnApp();
+}
+
 /// Shows the summary menu of one meeting and runs the choice.
 ///
 /// Inputs: A context, the controller and the meeting. Outputs: Completes when the menu and any
@@ -134,6 +141,16 @@ Future<void> showMeetingSummaryMenu(
               subtitle: Text(connection.isDefault
                   ? '${connection.model} · default'
                   : connection.model),
+            ),
+          ),
+        if (controller.handoff != null)
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(context).pop(const _UseOwnApp()),
+            child: const ListTile(
+              leading: Icon(Icons.open_in_new),
+              title: Text('Use your own AI app…'),
+              subtitle:
+                  Text('Claude, ChatGPT or another app, with your account'),
             ),
           ),
         const Divider(),
@@ -184,6 +201,13 @@ Future<void> showMeetingSummaryMenu(
           controller: controller, meetingId: meeting.meetingId);
     case _ResetPrompt():
       await controller.setMeetingPrompt(meeting.meetingId, null);
+    case _UseOwnApp():
+      if (controller.handoff case final HandoffController handoff) {
+        await showHandoffSheet(context,
+            controller: handoff,
+            meetingId: meeting.meetingId,
+            title: meeting.title);
+      }
   }
 }
 
@@ -404,6 +428,16 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                           label: const Text('Use the Settings prompt'),
                           onPressed: () => controller.setMeetingPrompt(
                               widget.meetingId, null),
+                        ),
+                      if (controller.handoff
+                          case final HandoffController handoff)
+                        TextButton.icon(
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('Use your own AI app'),
+                          onPressed: () => showHandoffSheet(context,
+                              controller: handoff,
+                              meetingId: widget.meetingId,
+                              title: widget.title),
                         ),
                     ],
                   ),
