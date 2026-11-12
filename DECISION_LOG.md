@@ -2746,3 +2746,22 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   checkboxes and other bracketed text are ignored, so a model that cites badly loses links, not
   the answer. A list (`[1, 2]`) cites both.
 - **Stored** with the answer, sealed like the rest of the message; answers stored before have none.
+
+## 2026-11-12 — #116 A voice's review clip holds only that voice
+
+- **Why:** the owner couldn't name new voices: their clips held two people, so all of them had to
+  be deleted. A clip was the whole 3–15 s chunk the voice was first heard in, and a chunk often
+  holds several people. Also, the live pass can merge two people into one voice. The final pass
+  then splits them, but the clip stayed with whichever speaker kept the cluster.
+- **When a voice is first heard:** its clip keeps only its diarized span of the chunk
+  (`slice_pcm16_wav`), timed from 0.
+- **After the meeting:** the final pass cuts the clip again, to the longest unbroken stretch of the
+  speaker it gave that cluster. Each voice window counts for its middle half, where its speaker is
+  surest. Another speaker's window, or more than 0.5 s of silence, breaks a stretch. Under 1 s of
+  that speaker in the clip deletes it. No clip is better than one of somebody else, and the voice
+  can still be named from its transcript lines.
+- **Older clips:** clips saved before this change still hold a whole chunk but record the voice's
+  span. Playback (FFI and `GET /api/clusters/{id}/review-clip`) plays only that span.
+- **Not changed:** speakers the final pass creates without a live cluster still have no clip. The
+  final pass keeps no audio in memory. A clip for them could come from the after-meeting pass's
+  retained audio; that is left for later.
