@@ -521,6 +521,12 @@ which keep their speaker, timing and overlap mark and lose their uncertain-word 
 edit sets the document's `transcript_edited` flag; `refinement_worker.rs` reads it and no longer
 re-transcribes that meeting.
 
+`meeting_handoff.rs` (#114) hands a meeting to the owner's own AI app (Claude, ChatGPT), whose
+login Koalino never holds. `prepare_handoff` builds the message (the summary prompt, or an
+introduction for a chat) and the meeting as a Markdown file. `store_external_summary` keeps the
+answer as the summary, marked `edited` and labelled with its app, and returns the summary it
+replaced; `restore_summary` puts that one back (Undo).
+
 `search.rs` (#100) finds the owner's words. Text is sealed at rest (#92), so it reads each
 meeting (title, summary, notes, transcript) and each project file's text through the repository
 and matches in memory, keeping nothing. Matching ignores case and accents (`fold`) and needs

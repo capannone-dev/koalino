@@ -225,6 +225,14 @@ and meeting summaries" below). Keys are write-only.
   `meeting_prompt` (or null).
 - `char *note_taker_set_meeting_summary_prompt(const char *meeting_id, const char *prompt)` sets
   the meeting's own template, or clears it when `prompt` is null or blank.
+- `char *note_taker_handoff_meeting(const char *request_json)` (#114) prepares a meeting for the
+  owner's own AI app. The request is `{"meeting_id","purpose":"summary"|"chat","directory"}`, where
+  `directory` is a folder the app owns for hand-offs. The core empties it, then writes the meeting
+  as Markdown and plain copies of its attachments (at most 20, 50 MiB each, 100 MiB in all).
+  The answer is `message` (the summary prompt, or an introduction for a chat), `prompt` (the
+  filled-in instructions; empty for a chat), `files` (`path`, `mime_type`; the Markdown first) and
+  `skipped`. Errors: `invalid_request`, `nothing_to_summarize`, `storage_failed`. No AI connection
+  is used; the app shares the files and empties the folder again.
 
 ### Meeting edits C ABI (#96)
 
@@ -232,8 +240,12 @@ and meeting summaries" below). Keys are write-only.
   returns caller-freed JSON: `notes` (`meeting_id`) → `notes`; `set_notes` (`meeting_id`, `text`)
   → `notes`; `edit_summary` (`meeting_id`, `text`) → `summary`, marked `edited`; `edit_segment`
   (`meeting_id`, `start_time_ms`, `end_time_ms`, `text`) → `segment`, or null when blank text
-  removed it. Error codes: `invalid_request`, `meeting_not_found`, `segment_not_found`, `empty`,
-  `too_long`, `storage_failed`, `runtime_unavailable`.
+  removed it; `keep_answer` (`meeting_id`, `text`, `source` such as `Claude app`, optional `prompt`)
+  → `summary` and `previous` (the summary it replaced, or null), keeping an answer from the
+  owner's own AI app as the summary, marked `edited` (#114); `restore_summary` (`meeting_id`,
+  `summary` as `previous` gave it, or null to remove it) undoes that. Error codes:
+  `invalid_request`, `meeting_not_found`, `segment_not_found`, `empty`, `too_long`,
+  `storage_failed`, `runtime_unavailable`.
 
 ### Search C ABI (#100)
 

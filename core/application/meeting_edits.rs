@@ -62,7 +62,7 @@ impl From<StorageError> for EditError {
 }
 
 /// Refuses text over `limit` characters.
-fn check_length(text: &str, limit: usize) -> Result<(), EditError> {
+pub(crate) fn check_length(text: &str, limit: usize) -> Result<(), EditError> {
     if text.chars().count() > limit {
         return Err(EditError::TooLong { limit });
     }
@@ -70,7 +70,7 @@ fn check_length(text: &str, limit: usize) -> Result<(), EditError> {
 }
 
 /// Fails with `MeetingNotFound` unless the meeting exists.
-fn require_meeting<Repository>(
+pub(crate) fn require_meeting<Repository>(
     repository: &Repository,
     meeting_id: &MeetingId,
 ) -> Result<(), EditError>

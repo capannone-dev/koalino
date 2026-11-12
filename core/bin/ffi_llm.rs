@@ -8,6 +8,9 @@
 //! (`note_taker_free_string`): `{"ok":true,...}` or `{"ok":false,"error_code","error"}`. Keys
 //! are write-only and never returned or logged.
 //!
+//! `note_taker_handoff_meeting` writes a meeting's hand-off to the owner's own AI app (#114):
+//! the message and the files the share sheet carries.
+//!
 //! `start_auto_summaries` runs the app's automatic summaries (#101) once the runtime opens, and
 //! a stopped recording wakes them.
 
@@ -22,8 +25,8 @@ use serde_json::{Value, json};
 use crate::{
     adapters::audio::retained_audio_store::RetainedSpeechIndex,
     application::{
-        combined_meetings::HeldSpeech, meeting_summary::SummaryError,
-        meeting_summary_document::read_summary_prompt,
+        combined_meetings::HeldSpeech, meeting_handoff::HandoffPurpose,
+        meeting_summary::SummaryError, meeting_summary_document::read_summary_prompt,
     },
     auto_summaries::{AutoSummarizer, AutoSummaryHost, AutoSummaryWake},
     domain::{
@@ -34,11 +37,11 @@ use crate::{
         ffi_string, provided_encryption_key, runtime_recording_meeting, with_runtime_repositories,
     },
     ffi_settings::app_setting,
-    llm_commands::{LlmServices, run_llm_command, summarize_with, summary_json},
+    llm_commands::{LlmServices, handoff_with, run_llm_command, summarize_with, summary_json},
     llm_settings::{PlatformLlmKeyring, llm_settings_file_for},
     meeting_summaries::{
         MeetingPromptError, PreparedSummary, load_summary, prepare_summary, set_meeting_prompt,
-        store_summary,
+        store_summary, write_handoff,
     },
     ports::storage::{MeetingRecording, NoteRepository},
     transcription_settings::TranscriptionPaths,
@@ -156,6 +159,68 @@ pub unsafe extern "C" fn note_taker_summarize_meeting(
             .unwrap_or_else(|| Err(unavailable()))
         },
     );
+    into_c(answer.to_string())
+}
+
+/// Writes a meeting's hand-off to the owner's own AI app (#114).
+///
+/// Inputs: A JSON object: `meeting_id`, `purpose` (`summary` or `chat`) and `directory`, a
+/// folder the app owns for hand-offs (it is emptied first). Outputs: Caller-freed
+/// `{"ok":true,"message","prompt","files":[{"path","mime_type"}],"skipped"}` or an error
+/// (`invalid_request`, `nothing_to_summarize`, `storage_failed`, `runtime_unavailable`).
+/// Side effects: Writes the meeting as Markdown and plain copies of its attachments into the
+/// folder; the app shares them and empties the folder again. Nothing is sent anywhere.
+///
+/// # Safety
+/// `request_json` must be null or a valid NUL-terminated string that stays alive for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_handoff_meeting(request_json: *const c_char) -> *mut c_char {
+    let Some(request) = (unsafe { ffi_string(request_json) })
+        .and_then(|text| serde_json::from_str::<Value>(text).ok())
+    else {
+        return into_c(failure(
+            "invalid_request",
+            "the request must be a JSON object",
+        ));
+    };
+    let text = |field: &str| request.get(field).and_then(Value::as_str);
+    let purpose = match text("purpose") {
+        Some("summary") => HandoffPurpose::Summary,
+        Some("chat") => HandoffPurpose::Chat,
+        _ => {
+            return into_c(failure(
+                "invalid_request",
+                "`purpose` must be summary or chat",
+            ));
+        }
+    };
+    let (Some(meeting_id), Some(directory)) = (text("meeting_id"), text("directory")) else {
+        return into_c(failure(
+            "invalid_request",
+            "`meeting_id` and `directory` are required",
+        ));
+    };
+    let meeting_id = MeetingId::new(meeting_id);
+    let directory = PathBuf::from(directory);
+    let answer = handoff_with(&services(), |glossary, device_name, template| {
+        with_runtime_repositories(|repository, voices| {
+            write_handoff(
+                repository,
+                voices,
+                &meeting_id,
+                glossary,
+                device_name,
+                template,
+                purpose,
+                &directory,
+            )
+        })
+        .unwrap_or_else(|| {
+            Err(SummaryError::Storage(String::from(
+                "the native runtime is unavailable",
+            )))
+        })
+    });
     into_c(answer.to_string())
 }
 
@@ -320,7 +385,7 @@ mod tests {
 
     use std::ffi::{CStr, CString};
 
-    use super::{note_taker_llm_command, note_taker_summarize_meeting};
+    use super::{note_taker_handoff_meeting, note_taker_llm_command, note_taker_summarize_meeting};
 
     fn answer(pointer: *mut std::ffi::c_char) -> serde_json::Value {
         assert!(!pointer.is_null());
@@ -341,5 +406,20 @@ mod tests {
         let refused =
             answer(unsafe { note_taker_summarize_meeting(std::ptr::null(), std::ptr::null()) });
         assert_eq!(refused["error_code"], "invalid_request");
+    }
+
+    #[test]
+    fn a_hand_off_needs_a_purpose_a_meeting_and_a_folder() {
+        let refused = answer(unsafe { note_taker_handoff_meeting(std::ptr::null()) });
+        assert_eq!(refused["error_code"], "invalid_request");
+        for request in [
+            r#"{"meeting_id":"m","directory":"/tmp/x","purpose":"poem"}"#,
+            r#"{"purpose":"chat","directory":"/tmp/x"}"#,
+            r#"{"purpose":"summary","meeting_id":"m"}"#,
+        ] {
+            let request = CString::new(request).unwrap_or_default();
+            let refused = answer(unsafe { note_taker_handoff_meeting(request.as_ptr()) });
+            assert_eq!(refused["error_code"], "invalid_request", "{request:?}");
+        }
     }
 }

@@ -466,6 +466,36 @@ pub fn summary_json(summary: &MeetingSummary) -> Value {
     })
 }
 
+/// Writes a meeting's hand-off to the owner's own AI app (#114).
+///
+/// Inputs: The services and a `write` step given the glossary, this device's name and the
+/// owner's default template; the caller holds its repository only inside it. Outputs:
+/// `{"ok":true,"message","prompt","files":[{"path","mime_type"}],"skipped"}` or the error.
+/// Side effects: Those of `write`; no AI connection is used.
+pub fn handoff_with(
+    services: &LlmServices,
+    write: impl FnOnce(
+        &[String],
+        &str,
+        &crate::domain::llm::PromptTemplate,
+    ) -> Result<crate::meeting_summaries::WrittenHandoff, SummaryError>,
+) -> Value {
+    let template = services.settings().template();
+    match write(&services.glossary(), &services.device_name, &template) {
+        Ok(written) => json!({
+            "ok": true,
+            "message": written.message,
+            "prompt": written.prompt,
+            "files": written.files.iter().map(|file| json!({
+                "path": file.path.to_string_lossy(),
+                "mime_type": file.mime_type,
+            })).collect::<Vec<_>>(),
+            "skipped": written.skipped,
+        }),
+        Err(error) => CommandError::from(error).to_json(),
+    }
+}
+
 /// Writes a meeting's summary with a connection, the default when none is named.
 ///
 /// Inputs: The services, the connection ID, a `prepare` step given the glossary and this

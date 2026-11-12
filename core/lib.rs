@@ -52,6 +52,9 @@ pub mod ffi_chat;
 /// The owner's edits to a meeting over the C ABI (#96).
 #[path = "bin/ffi_edits.rs"]
 pub mod ffi_edits;
+#[cfg(test)]
+#[path = "bin/ffi_edits_tests.rs"]
+mod ffi_edits_tests;
 /// Keeps the owner's default transcription language.
 #[path = "bin/ffi_language.rs"]
 pub mod ffi_language;

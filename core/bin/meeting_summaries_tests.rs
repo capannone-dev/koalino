@@ -167,3 +167,53 @@ fn the_meetings_own_prompt_wins_and_a_summary_is_kept_in_its_document() {
     );
     drop(std::fs::remove_dir_all(folder));
 }
+
+#[test]
+fn a_hand_off_writes_the_meeting_and_its_files_into_a_fresh_folder() {
+    use crate::application::meeting_handoff::HandoffPurpose;
+    let repository = repository();
+    let folder = record(&repository);
+    let handoff_folder = folder.join("handoff");
+    std::fs::create_dir_all(&handoff_folder).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(handoff_folder.join("earlier.md"), "old").unwrap_or_else(|e| panic!("{e}"));
+
+    let written = super::meeting_summaries::write_handoff(
+        &repository,
+        &InMemoryVoiceVectorDB::new(),
+        &meeting(),
+        &[],
+        "Laptop",
+        &PromptTemplate::default_summary(),
+        HandoffPurpose::Summary,
+        &handoff_folder,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    assert!(written.message.contains("Budget review.md"));
+    assert!(!written.prompt.is_empty());
+    let names: Vec<String> = written
+        .files
+        .iter()
+        .map(|file| {
+            file.path
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        })
+        .collect();
+    assert_eq!(names, vec!["Budget review.md", "board.png", "deck.pdf"]);
+    assert_eq!(written.files[0].mime_type, "text/markdown");
+    assert_eq!(written.files[1].mime_type, "image/png");
+    let document =
+        std::fs::read_to_string(&written.files[0].path).unwrap_or_else(|e| panic!("{e}"));
+    assert!(document.contains("We approve it."));
+    assert_eq!(
+        std::fs::read(&written.files[2].path).unwrap_or_default(),
+        b"%PDF"
+    );
+    assert!(
+        !handoff_folder.join("earlier.md").exists(),
+        "an earlier hand-off's copies are removed"
+    );
+    drop(std::fs::remove_dir_all(folder));
+}

@@ -75,6 +75,10 @@ mod meeting_document_tests;
 pub mod meeting_edits;
 #[cfg(test)]
 mod meeting_edits_tests;
+/// Hands a meeting to the owner's own AI app (Claude, ChatGPT) and keeps the answer (#114).
+pub mod meeting_handoff;
+#[cfg(test)]
+mod meeting_handoff_tests;
 /// Coordinates recording transcription and transcript persistence.
 pub mod meeting_recorder;
 /// Renames a meeting after validating the new title, for the CLI, HTTP, and FFI adapters.

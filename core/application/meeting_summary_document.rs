@@ -53,6 +53,24 @@ pub fn with_summary(document: &[u8], summary: &MeetingSummary) -> Result<Vec<u8>
     Ok(automerge_document.save())
 }
 
+/// Removes the summary, as when the owner undoes the first one an app gave (#114).
+///
+/// Inputs: The serialized document. Outputs: The updated document (unchanged without a
+/// summary), or a storage error. Side effects: None.
+pub fn without_summary(document: &[u8]) -> Result<Vec<u8>, StorageError> {
+    let mut automerge_document = load(document)?;
+    if automerge_document
+        .get(ROOT, SUMMARY_KEY)
+        .map_err(|error| crdt_error("unable to read the summary", error))?
+        .is_some()
+    {
+        automerge_document
+            .delete(ROOT, SUMMARY_KEY)
+            .map_err(|error| crdt_error("unable to remove the summary", error))?;
+    }
+    Ok(automerge_document.save())
+}
+
 /// Reads the summary.
 ///
 /// Inputs: The serialized document. Outputs: The summary; `None` when there is none or it is

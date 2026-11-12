@@ -10,6 +10,11 @@
 //! | `set_notes` | `meeting_id`, `text` | `notes` |
 //! | `edit_summary` | `meeting_id`, `text` | `summary`, marked `edited` |
 //! | `edit_segment` | `meeting_id`, `start_time_ms`, `end_time_ms`, `text` | `segment` or null when blank text removed it |
+//! | `keep_answer` | `meeting_id`, `text`, `source`, optional `prompt` | `summary`, `previous` (null when none) |
+//! | `restore_summary` | `meeting_id`, `summary` (as `previous` gave it, or null) | nothing |
+//!
+//! `keep_answer` keeps an answer from the owner's own AI app as the summary (#114), and
+//! `restore_summary` undoes it.
 //!
 //! Error codes: `invalid_request`, `meeting_not_found`, `segment_not_found`, `empty`,
 //! `too_long`, `storage_failed` and `runtime_unavailable`. Note text is never logged.
@@ -19,8 +24,11 @@ use std::ffi::{CString, c_char};
 use serde_json::{Value, json};
 
 use crate::{
-    application::meeting_edits::{EditError, edit_segment, edit_summary, load_notes, set_notes},
-    domain::models::MeetingId,
+    application::{
+        meeting_edits::{EditError, edit_segment, edit_summary, load_notes, set_notes},
+        meeting_handoff::{restore_summary, store_external_summary},
+    },
+    domain::{llm::MeetingSummary, models::MeetingId},
     ffi::{ffi_string, with_runtime_repositories},
     llm_commands::summary_json,
     ports::storage::NoteRepository,
@@ -57,6 +65,35 @@ where
             edit_summary(repository, &meeting_id, summary, chrono::Utc::now())
                 .map(|summary| json!({"summary": summary_json(&summary)}))
         }
+        Some("keep_answer") => {
+            let (Some(answer), Some(source)) = (text("text"), text("source")) else {
+                return failure("invalid_request", "`text` and `source` are required");
+            };
+            store_external_summary(
+                repository,
+                &meeting_id,
+                answer,
+                source,
+                text("prompt").unwrap_or_default(),
+                chrono::Utc::now(),
+            )
+            .map(|kept| {
+                json!({
+                    "summary": summary_json(&kept.summary),
+                    "previous": kept.previous.as_ref().map(summary_json),
+                })
+            })
+        }
+        Some("restore_summary") => {
+            let previous = match request.get("summary") {
+                None | Some(Value::Null) => None,
+                Some(value) => match summary_from_json(value) {
+                    Some(summary) => Some(summary),
+                    None => return failure("invalid_request", "`summary` is malformed"),
+                },
+            };
+            restore_summary(repository, &meeting_id, previous.as_ref()).map(|()| json!({}))
+        }
         Some("edit_segment") => {
             let time = |field: &str| request.get(field).and_then(Value::as_u64);
             let (Some(start), Some(end), Some(segment_text)) =
@@ -85,6 +122,23 @@ where
         Ok(_) => failure("storage_failed", "unexpected answer"),
         Err(error) => edit_failure(&error),
     }
+}
+
+/// Reads a summary as `summary_json` writes it, or `None` when a field is missing or wrong.
+fn summary_from_json(value: &Value) -> Option<MeetingSummary> {
+    let text = |field: &str| value.get(field).and_then(Value::as_str).map(str::to_owned);
+    let flag = |field: &str| value.get(field).and_then(Value::as_bool);
+    Some(MeetingSummary {
+        text: text("text")?,
+        connection_label: text("connection_label")?,
+        model: text("model")?,
+        created_at: chrono::DateTime::parse_from_rfc3339(&text("created_at")?)
+            .ok()?
+            .with_timezone(&chrono::Utc),
+        prompt: text("prompt")?,
+        edited: flag("edited")?,
+        truncated: flag("truncated")?,
+    })
 }
 
 /// Maps an edit failure to its code.

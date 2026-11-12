@@ -14,6 +14,7 @@ use crate::{
     application::{
         export_manager::{ExportManager, ExportWriter},
         meeting_crdt::MeetingCrdtService,
+        meeting_handoff::{HandoffPurpose, prepare_handoff},
         meeting_summary::{
             SpokenLine, SummaryError, SummaryMaterial, SummaryOutcome, summarize_meeting,
         },
@@ -146,6 +147,158 @@ where
         },
         meeting_prompt,
     })
+}
+
+/// Most files a hand-off attaches besides the meeting itself (#114).
+const MAX_HANDOFF_FILES: usize = 20;
+/// Largest single attached file, in bytes.
+const MAX_HANDOFF_FILE_BYTES: u64 = 50 * 1024 * 1024;
+/// Most bytes of attached files in one hand-off.
+const MAX_HANDOFF_TOTAL_BYTES: u64 = 100 * 1024 * 1024;
+
+/// One file of a hand-off.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HandoffFile {
+    /// Where it was written.
+    pub path: std::path::PathBuf,
+    /// Its MIME type, for the share.
+    pub mime_type: String,
+}
+
+/// A hand-off written to disk, ready for the platform's share sheet.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WrittenHandoff {
+    /// The text the share carries.
+    pub message: String,
+    /// For a summary, the instructions as filled in; empty for a chat.
+    pub prompt: String,
+    /// The meeting's Markdown file first, then its photos and files, oldest first.
+    pub files: Vec<HandoffFile>,
+    /// Files left out: unreadable, or over the size or count limits.
+    pub skipped: usize,
+}
+
+/// Writes a meeting's hand-off to the owner's own AI app (#114) into `directory`.
+///
+/// Inputs: The repositories, the meeting, the glossary and device name (for the prompt), the
+/// owner's default template (the meeting's own wins), the purpose, and a folder the hand-off
+/// owns. Outputs: The message and the files, or why there is nothing to hand off.
+/// Side effects: Empties `directory` of an earlier hand-off's files, then writes the meeting as
+/// Markdown and plain copies of its attachments (unsealed, #99). They are personal data in
+/// clear: the caller shares them at once and empties the folder again soon.
+#[allow(clippy::too_many_arguments)]
+pub fn write_handoff<Repository, Voices>(
+    repository: &Repository,
+    voices: &Voices,
+    meeting_id: &MeetingId,
+    glossary: &[String],
+    device_name: &str,
+    default_template: &PromptTemplate,
+    purpose: HandoffPurpose,
+    directory: &Path,
+) -> Result<WrittenHandoff, SummaryError>
+where
+    Repository: NoteRepository + AttachmentRepository + ProjectRepository + ?Sized,
+    Voices: VoiceVectorDB + ?Sized,
+{
+    let storage = |error: &dyn std::fmt::Display| SummaryError::Storage(error.to_string());
+    let prepared = prepare_summary(repository, voices, meeting_id, glossary, device_name)?;
+    let template = summary_template_for(&prepared, default_template);
+    let handoff = prepare_handoff(&template, &prepared.material, purpose)?;
+    empty_folder(directory).map_err(|error| storage(&error))?;
+
+    let document_path = directory.join(&handoff.file_name);
+    std::fs::write(&document_path, handoff.document.as_bytes()).map_err(|error| storage(&error))?;
+    let mut files = vec![HandoffFile {
+        path: document_path,
+        mime_type: String::from("text/markdown"),
+    }];
+    let writer = ExportWriter::new(Vec::new(), std::env::temp_dir());
+    let document = ExportManager::new(repository, repository, voices, &writer)
+        .extract_meeting(
+            meeting_id,
+            &ExportOptions::new(ExportFormat::Markdown, true, true, None),
+        )
+        .map_err(|error| storage(&error))?;
+    let mut attachments: Vec<_> = document.attachments().iter().collect();
+    attachments.sort_by_key(|attachment| attachment.original_timestamp());
+    let mut used_names = vec![handoff.file_name.clone()];
+    let (mut skipped, mut total_bytes) = (0, 0_u64);
+    for attachment in attachments {
+        if files.len() > MAX_HANDOFF_FILES {
+            skipped += 1;
+            continue;
+        }
+        let Some(contents) = repository
+            .read_attachment_file(Path::new(attachment.file_path()), MAX_HANDOFF_FILE_BYTES)
+            .filter(|contents| total_bytes + contents.len() as u64 <= MAX_HANDOFF_TOTAL_BYTES)
+        else {
+            skipped += 1;
+            continue;
+        };
+        let name = unique_name(&handoff_file_stem(attachment.display_name()), &used_names);
+        let path = directory.join(&name);
+        std::fs::write(&path, contents.as_slice()).map_err(|error| storage(&error))?;
+        total_bytes += contents.len() as u64;
+        used_names.push(name);
+        files.push(HandoffFile {
+            path,
+            mime_type: attachment.mime_type().to_owned(),
+        });
+    }
+    Ok(WrittenHandoff {
+        message: handoff.message,
+        prompt: handoff.prompt,
+        files,
+        skipped,
+    })
+}
+
+/// Creates `directory` if needed and deletes the files in it (not folders).
+///
+/// Side effects: Deletes files. Outputs: Success or the I/O error.
+pub fn empty_folder(directory: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(directory)?;
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        if entry.file_type()?.is_file() {
+            std::fs::remove_file(entry.path())?;
+        }
+    }
+    Ok(())
+}
+
+/// Keeps a file name's last path component, without characters other apps refuse.
+fn handoff_file_stem(name: &str) -> String {
+    let last = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    let cleaned: String = last
+        .chars()
+        .map(|character| match character {
+            ':' | '*' | '?' | '"' | '<' | '>' | '|' => '-',
+            character if character.is_control() => '-',
+            character => character,
+        })
+        .collect();
+    let cleaned = cleaned.trim().trim_start_matches('.');
+    if cleaned.is_empty() {
+        String::from("attachment")
+    } else {
+        cleaned.to_owned()
+    }
+}
+
+/// Returns `name`, or `2 name`, `3 name`… when it is taken.
+fn unique_name(name: &str, used: &[String]) -> String {
+    (1..)
+        .map(|number| {
+            if number == 1 {
+                name.to_owned()
+            } else {
+                format!("{number} {name}")
+            }
+        })
+        .find(|candidate| !used.contains(candidate))
+        .unwrap_or_else(|| name.to_owned())
 }
 
 /// Reads (and unseals, #99) an image file the model can take, skipping one too large or
