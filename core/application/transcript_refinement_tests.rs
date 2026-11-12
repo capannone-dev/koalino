@@ -395,6 +395,73 @@ mod whole_meeting {
         assert!(!refined.iter().any(|segment| segment.text() == "live one"));
     }
 
+    /// Verifies the pass drops the microphone's copy of the computer's sound once echo was heard
+    /// in the meeting, and keeps it otherwise (#108).
+    #[test]
+    fn the_new_text_loses_its_echoes_when_the_meeting_heard_echo() {
+        use crate::domain::models::SegmentSource;
+        for echo_heard in [false, true] {
+            let repository = SqliteNoteRepository::open_in_memory(
+                crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+            )
+            .and_then(|repository| {
+                repository.with_document_codec(std::sync::Arc::new(
+                    crate::application::meeting_document::AutomergeMeetingDocumentCodec,
+                ))
+            })
+            .unwrap_or_else(|error| panic!("{error}"));
+            let meeting = MeetingId::new("meeting-echo");
+            repository
+                .create_meeting(&meeting, &automerge::AutoCommit::new().save())
+                .unwrap_or_else(|error| panic!("{error}"));
+            repository
+                .save_transcript_segments(
+                    &meeting,
+                    &[TranscriptSegment::new(
+                        meeting.clone(),
+                        0,
+                        2_000,
+                        None,
+                        "buongiorno a tutti quanti voi",
+                    )
+                    .with_source(SegmentSource::ComputerSound)],
+                )
+                .unwrap_or_else(|error| panic!("{error}"));
+            if echo_heard {
+                repository
+                    .record_echo_heard(&meeting)
+                    .unwrap_or_else(|error| panic!("{error}"));
+            }
+            let engine = ScriptedEngine {
+                answers: vec![
+                    vec![
+                        ("Buongiorno", 100, 400),
+                        ("a", 400, 500),
+                        ("tutti", 500, 700),
+                        ("quanti", 700, 800),
+                        ("voi.", 800, 950),
+                    ],
+                    vec![],
+                ],
+                ..ScriptedEngine::default()
+            };
+
+            run(&engine, &repository, &meeting, None).unwrap_or_else(|error| panic!("{error}"));
+
+            let microphone = repository
+                .load_transcript_segments(&meeting)
+                .unwrap_or_else(|error| panic!("{error}"))
+                .into_iter()
+                .filter(|segment| segment.source() == SegmentSource::Microphone)
+                .count();
+            assert_eq!(
+                microphone,
+                usize::from(!echo_heard),
+                "echo heard: {echo_heard}"
+            );
+        }
+    }
+
     /// Verifies the pass marks uncertain words, the overlap kept with the meeting, and words far
     /// from any speaker (#90, #91).
     #[test]

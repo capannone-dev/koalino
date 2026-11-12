@@ -198,6 +198,21 @@ pub trait MeetingDocumentCodec: Send + Sync {
         Ok(Vec::new())
     }
 
+    /// Records that the other side's voice was heard in the microphone (#108).
+    ///
+    /// Inputs: The serialized document. Outputs: The updated document bytes, or a storage error.
+    /// The flag is only ever set, so devices merging it agree. Side effects: None.
+    fn with_echo_heard(&self, document: &[u8]) -> Result<Vec<u8>, StorageError> {
+        Ok(document.to_vec())
+    }
+
+    /// Reads whether the other side's voice was heard in the microphone (#108).
+    ///
+    /// Inputs: The serialized document. Outputs: The flag, or a storage error. Side effects: None.
+    fn echo_heard(&self, _document: &[u8]) -> Result<bool, StorageError> {
+        Ok(false)
+    }
+
     /// Reads the index-relevant fields of a document.
     ///
     /// Inputs: The meeting the document belongs to and its bytes, which may come from a peer.

@@ -55,6 +55,10 @@ mod device_manifest_exchange_tests;
 pub mod diarization_processor;
 #[cfg(test)]
 mod diarization_processor_tests;
+/// Drops the microphone's copies of the computer's sound from a timeline (#108).
+pub mod echo_removal;
+#[cfg(test)]
+mod echo_removal_tests;
 /// Orchestrates repository extraction, attachment staging, and dispatch to meeting exporters.
 pub mod export_manager;
 #[cfg(test)]

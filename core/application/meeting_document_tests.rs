@@ -589,3 +589,29 @@ fn overlap_spans_are_kept_merged_and_joined_across_devices() {
         Vec::new()
     );
 }
+
+/// Verifies the echo flag is set once and read back (#108).
+#[test]
+fn the_echo_flag_is_set_and_read() {
+    let codec = AutomergeMeetingDocumentCodec;
+    assert!(
+        !codec
+            .echo_heard(&empty_document())
+            .unwrap_or_else(|error| panic!("{error}"))
+    );
+    let heard = codec
+        .with_echo_heard(&empty_document())
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(
+        codec
+            .echo_heard(&heard)
+            .unwrap_or_else(|error| panic!("{error}"))
+    );
+    assert_eq!(
+        codec
+            .with_echo_heard(&heard)
+            .unwrap_or_else(|error| panic!("{error}")),
+        heard,
+        "setting it again changes nothing"
+    );
+}

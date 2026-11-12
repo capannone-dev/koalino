@@ -1422,6 +1422,52 @@ impl NoteRepository for SqliteNoteRepository {
         document_codec.overlap_spans(&document)
     }
 
+    /// Sets the meeting document's echo flag (#108).
+    ///
+    /// Inputs: Match `NoteRepository::record_echo_heard`. Outputs: Success, or a storage error.
+    /// Side effects: Rewrites the meeting's sealed document when the flag was unset.
+    fn record_echo_heard(&self, meeting_id: &MeetingId) -> Result<(), StorageError> {
+        let Some(document_codec) = self.document_codec.as_deref() else {
+            return Ok(());
+        };
+        let transaction = self
+            .connection
+            .write_transaction()
+            .map_err(|error| sqlite_error("unable to begin recording echo", error))?;
+        let document = read_document(&transaction, self.embedding_cipher.as_ref(), meeting_id)?;
+        let updated_document = document_codec.with_echo_heard(&document)?;
+        if updated_document != document {
+            write_document(
+                &transaction,
+                self.embedding_cipher.as_ref(),
+                meeting_id,
+                &updated_document,
+            )?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to finish recording echo", error))
+    }
+
+    /// Reads the meeting document's echo flag (#108).
+    ///
+    /// Inputs: Match `NoteRepository::load_echo_heard`. Outputs: The flag, or a storage error.
+    /// Side effects: Reads storage.
+    fn load_echo_heard(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        let Some(document_codec) = self.document_codec.as_deref() else {
+            return Ok(false);
+        };
+        let transaction = self
+            .connection
+            .write_transaction()
+            .map_err(|error| sqlite_error("unable to begin reading echo", error))?;
+        let document = read_document(&transaction, self.embedding_cipher.as_ref(), meeting_id)?;
+        transaction
+            .commit()
+            .map_err(|error| sqlite_error("unable to finish reading echo", error))?;
+        document_codec.echo_heard(&document)
+    }
+
     /// Deletes a meeting and everything it holds, leaving a deletion record.
     ///
     /// Inputs: Match `NoteRepository::delete_meeting`.

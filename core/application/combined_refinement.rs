@@ -22,6 +22,7 @@ use std::collections::HashMap;
 
 use crate::{
     application::{
+        echo_removal::without_echoes,
         same_meeting::{RecordingText, comparison_key, recognise_same_meeting},
         transcript_refinement::{
             ChunkSpan, MeetingWord, RefinementChunk, RefinementError, RefinementOutcome, Speaker,
@@ -364,6 +365,14 @@ where
     let mut timeline = kept;
     timeline.extend(combined);
     timeline.sort_by_key(TranscriptSegment::start_time_ms);
+    // Any recording that heard echo flags the meeting; the audio is gone, so it stands for
+    // every window (#108).
+    let mut echo_heard = false;
+    for recording in std::iter::once(root).chain(members) {
+        echo_heard |= repository.load_echo_heard(&recording.meeting_id)?;
+    }
+    let (timeline, dropped) = without_echoes(timeline, echo_heard, &|_| true);
+    let segment_count = segment_count.saturating_sub(dropped);
     repository.save_transcript_segments(&root.meeting_id, &timeline)?;
     Ok(RefinementOutcome {
         window_count,

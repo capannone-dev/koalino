@@ -69,6 +69,24 @@ pub trait NoteRepository {
         Ok(Vec::new())
     }
 
+    /// Records that the other side's voice was heard in the meeting's microphone (#108), so a
+    /// later pass drops its echoes too.
+    ///
+    /// Inputs: The meeting. Outputs: Success, or a storage error. Repositories without meeting
+    /// documents ignore it.
+    /// Side effects: Writes the meeting's CRDT document, which syncs to paired devices.
+    fn record_echo_heard(&self, _meeting_id: &MeetingId) -> Result<(), StorageError> {
+        Ok(())
+    }
+
+    /// Reads whether the other side's voice was heard in the meeting's microphone (#108).
+    ///
+    /// Inputs: The meeting. Outputs: The flag (false without meeting documents), or a storage
+    /// error. Side effects: Reads storage.
+    fn load_echo_heard(&self, _meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        Ok(false)
+    }
+
     /// Lists every meeting with what decides whether two of them are one meeting recorded on two
     /// devices (#88).
     ///
@@ -589,6 +607,14 @@ where
         meeting_id: &MeetingId,
     ) -> Result<Vec<crate::domain::transcript_confidence::OverlapSpan>, StorageError> {
         (**self).load_overlap_spans(meeting_id)
+    }
+
+    fn record_echo_heard(&self, meeting_id: &MeetingId) -> Result<(), StorageError> {
+        (**self).record_echo_heard(meeting_id)
+    }
+
+    fn load_echo_heard(&self, meeting_id: &MeetingId) -> Result<bool, StorageError> {
+        (**self).load_echo_heard(meeting_id)
     }
 
     fn apply_deletion_records(

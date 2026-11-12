@@ -19,6 +19,7 @@
 //! | `kept_apart_from` | map from the ID of a meeting the owner split from this one to `true` (#88) |
 //! | `recorded_on_phone` | bool, written once: whether a phone recorded the meeting (#88) |
 //! | `combined_with` | map from the ID of another recording whose speech the transcript was built from to `true` (#88) |
+//! | `echo_heard` | bool, only ever set: the other side's voice from the speakers was heard in the microphone (#108) |
 //! | `overlap_spans` | map from `<start_ms:012>` to the end in ms of a stretch where two or more voices spoke at once (#90); only ever added to |
 //!
 //! A segment map may also hold its confidence marks (#90, #91), each only when set:
@@ -78,6 +79,8 @@ const COMBINED_INTO_KEY: &str = "combined_into";
 const KEPT_APART_KEY: &str = "kept_apart_from";
 /// Root key of whether a phone recorded the meeting (#88), written once by the recording device.
 const RECORDED_ON_PHONE_KEY: &str = "recorded_on_phone";
+/// Root key of the echo flag (#108).
+const ECHO_HEARD_KEY: &str = "echo_heard";
 /// Root key of the recordings combined into this meeting's transcript (#88): a map, so two
 /// devices' records merge.
 const COMBINED_WITH_KEY: &str = "combined_with";
@@ -396,6 +399,31 @@ impl MeetingDocumentCodec for AutomergeMeetingDocumentCodec {
             }
         }
         Ok(automerge_document.save())
+    }
+
+    /// Sets the echo flag; a document that has it is returned unchanged.
+    ///
+    /// Side effects: None.
+    fn with_echo_heard(&self, document: &[u8]) -> Result<Vec<u8>, StorageError> {
+        if self.echo_heard(document)? {
+            return Ok(document.to_vec());
+        }
+        let mut automerge_document = load(document)?;
+        automerge_document
+            .put(ROOT, ECHO_HEARD_KEY, ScalarValue::Boolean(true))
+            .map_err(|error| crdt_error("unable to record the echo flag", error))?;
+        Ok(automerge_document.save())
+    }
+
+    /// Reads the echo flag; anything but `true` reads as unset.
+    ///
+    /// Side effects: None.
+    fn echo_heard(&self, document: &[u8]) -> Result<bool, StorageError> {
+        let automerge_document = load(document)?;
+        Ok(matches!(
+            read_scalar(&automerge_document, &ROOT, ECHO_HEARD_KEY),
+            Some(ScalarValue::Boolean(true))
+        ))
     }
 
     /// Reads the overlap spans, skipping malformed entries, merged into disjoint spans.

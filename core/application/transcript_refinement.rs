@@ -10,6 +10,7 @@
 use uuid::Uuid;
 
 use crate::{
+    application::echo_removal::without_echoes,
     domain::{
         errors::{StorageError, TranscriptionError},
         models::{
@@ -382,6 +383,8 @@ pub enum RefinementError {
 /// text, as live transcription is. Segments whose middle lies outside every retained chunk (for
 /// example recorded before retention was on) are kept as they are, and so are the segments heard
 /// on the computer's sound (#108), whose audio is not retained.
+/// Once echo was heard in the meeting, the new microphone text that only repeats the computer's
+/// sound is dropped (#108).
 /// Side effects: Runs inference and rewrites the meeting's segments, which also updates the
 /// meeting's synced document. Nothing is written until every window is done.
 pub fn refine_meeting<Engine, Repository>(
@@ -432,6 +435,10 @@ where
     let mut timeline = kept;
     timeline.extend(refined);
     timeline.sort_by_key(TranscriptSegment::start_time_ms);
+    // The audio is gone, so the meeting's flag stands for every window (#108).
+    let (timeline, dropped) =
+        without_echoes(timeline, repository.load_echo_heard(meeting_id)?, &|_| true);
+    let segment_count = segment_count.saturating_sub(dropped);
     repository.save_transcript_segments(meeting_id, &timeline)?;
     Ok(RefinementOutcome {
         window_count,
