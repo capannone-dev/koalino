@@ -1,5 +1,5 @@
 /**
- * Specifies how captured browser audio becomes the 16 kHz PCM chunks the Note Taker core takes.
+ * Specifies how captured browser audio becomes the 16 kHz PCM chunks the Koalino core takes.
  */
 import { describe, expect, it } from "vitest";
 import {

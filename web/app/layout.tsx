@@ -6,8 +6,8 @@ import { PrimaryNav } from "@/components/primary-nav";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "Note Taker Server",
-  description: "Local dashboard for the Note Taker headless daemon"
+  title: "Koalino Server",
+  description: "Local dashboard for the Koalino headless daemon"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -15,7 +15,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en">
       <body>
         <header className="mx-auto flex max-w-7xl items-center justify-between p-4">
-          <Link href="/">Note Taker</Link>
+          <Link href="/">Koalino</Link>
           <PrimaryNav />
         </header>
         <main className="mx-auto max-w-7xl p-4">{children}</main>

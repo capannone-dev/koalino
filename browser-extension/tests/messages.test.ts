@@ -1,6 +1,6 @@
 /**
  * Specifies the one-line summary the popup shows for a recording in progress: what was sent to
- * Note Taker so far, and the last problem (an error name, never page content).
+ * Koalino so far, and the last problem (an error name, never page content).
  */
 import { describe, expect, it } from "vitest";
 import { describeProgress } from "../src/lib/messages";

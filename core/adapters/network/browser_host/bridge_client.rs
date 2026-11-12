@@ -234,7 +234,7 @@ pub async fn run_bridge_client(
         tracing::warn!(
             dropped_audio_frames = queue.dropped_audio_frames(),
             undelivered_frames = queue.len(),
-            "Some meeting data did not reach Note Taker"
+            "Some meeting data did not reach Koalino"
         );
     }
 }

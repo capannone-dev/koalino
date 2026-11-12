@@ -84,7 +84,7 @@ mod tests;
 const DEFAULT_LISTEN_ADDRESS: &str = "/ip4/0.0.0.0/tcp/0";
 
 /// Device name used when neither `NOTE_TAKER_DEVICE_NAME` nor a usable host name is available.
-const FALLBACK_DEVICE_NAME: &str = "Note Taker device";
+const FALLBACK_DEVICE_NAME: &str = "Koalino device";
 
 /// How many chunks may wait to be sent; the pipeline handles one at a time.
 const REMOTE_TRANSCRIPTION_QUEUE_CAPACITY: usize = 4;

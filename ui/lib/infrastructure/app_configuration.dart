@@ -62,7 +62,7 @@ String defaultDeviceName() {
     return 'Android device';
   }
   final String hostName = Platform.localHostname.trim();
-  return hostName.isEmpty ? 'Note Taker device' : hostName;
+  return hostName.isEmpty ? 'Koalino device' : hostName;
 }
 
 /// Returns the app's data directory, `<application support>/note_taker`.

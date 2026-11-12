@@ -1,4 +1,4 @@
-//! The Note Taker browser extension's native messaging host (Issue #102).
+//! The Koalino browser extension's native messaging host (Issue #102).
 //!
 //! Browsers start this program when the extension connects, passing their own arguments (Chrome
 //! the extension origin, Firefox the manifest path and add-on ID), which are ignored. It reads
@@ -47,7 +47,7 @@ fn main() -> ExitCode {
         Some("install") => install(),
         Some("--help" | "-h") => {
             println!(
-                "Usage: browser-host install   register the Note Taker extension's host with the browsers\n\
+                "Usage: browser-host install   register the Koalino extension's host with the browsers\n\
                  Browsers start browser-host themselves; it then reads native messages on stdin."
             );
             ExitCode::SUCCESS
@@ -106,14 +106,14 @@ fn run_host() -> ExitCode {
     tracing::info!(
         port,
         authenticates = secret.is_some(),
-        "Note Taker browser host started"
+        "Koalino browser host started"
     );
     runtime.block_on(run_host_session(
         std::io::stdin(),
         std::io::stdout(),
         BridgeClientConfig::new(port, secret),
     ));
-    tracing::info!("Note Taker browser host stopped");
+    tracing::info!("Koalino browser host stopped");
     ExitCode::SUCCESS
 }
 

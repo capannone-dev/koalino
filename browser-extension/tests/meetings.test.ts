@@ -1,5 +1,5 @@
 /**
- * Specifies the extension's record of meetings it sent to Note Taker, used to match the Teams
+ * Specifies the extension's record of meetings it sent to Koalino, used to match the Teams
  * transcript published afterwards to the right meeting.
  */
 import { describe, expect, it } from "vitest";

@@ -32,17 +32,17 @@ final class CoreStartupGate extends StatelessWidget {
           CoreStartupState.keychainUnavailable => _StartupFailure(
               title: 'Unable to open the keychain',
               explanation:
-                  'Note Taker keeps the key that encrypts your voice profiles and device '
-                  'identity in the system keychain. Unlock the keychain, or allow Note Taker to '
+                  'Koalino keeps the key that encrypts your voice profiles and device '
+                  'identity in the system keychain. Unlock the keychain, or allow Koalino to '
                   'use it, then try again. If this device has no keychain service, install or '
-                  'start one and restart Note Taker.',
+                  'start one and restart Koalino.',
               onRetry: controller.start,
               onQuit: onQuit,
             ),
           CoreStartupState.failed => _StartupFailure(
               title: 'Unable to open your notes',
               explanation:
-                  'Note Taker could not open its database. Check that there is free space '
+                  'Koalino could not open its database. Check that there is free space '
                   'and try again.',
               onRetry: controller.start,
               onQuit: onQuit,

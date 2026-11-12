@@ -70,13 +70,13 @@ export type HostReply =
 export interface ConnectionState {
   /** Whether the native host runs (`missing` when the browser could not start it). */
   host: "connected" | "missing" | "unknown";
-  /** Whether the host reaches the Note Taker app. */
+  /** Whether the host reaches the Koalino app. */
   bridge: "connected" | "unavailable" | "unknown";
   /** The browser's reason when the host could not start. */
   hostError?: string;
 }
 
-/** What a tab has sent to Note Taker for the meeting it records, for the popup. */
+/** What a tab has sent to Koalino for the meeting it records, for the popup. */
 export interface RecordingProgress {
   title: string;
   audioChunks: number;

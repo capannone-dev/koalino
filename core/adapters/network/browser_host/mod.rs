@@ -1,5 +1,5 @@
 //! The browser extension's native messaging host (Issue #102): the process a browser starts for
-//! the Note Taker extension, which turns the extension's JSON messages into Teams bridge frames
+//! the Koalino extension, which turns the extension's JSON messages into Teams bridge frames
 //! and sends them to the local core over the loopback WebSocket. See `README.md`.
 
 /// Connects to the local Teams bridge, authenticates, queues and reconnects.

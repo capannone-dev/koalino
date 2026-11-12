@@ -15,7 +15,7 @@ export interface ExtensionSettings {
   captureSlides: boolean;
   /** Turn on and keep Teams live captions (speaker names and timing). */
   captureCaptions: boolean;
-  /** Send the Teams transcript to Note Taker when Teams publishes it. */
+  /** Send the Teams transcript to Koalino when Teams publishes it. */
   fetchTeamsTranscripts: boolean;
 }
 

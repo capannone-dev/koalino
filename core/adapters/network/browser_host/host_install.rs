@@ -1,4 +1,4 @@
-//! Registers the native messaging host with the browsers, so the Note Taker extension (and only
+//! Registers the native messaging host with the browsers, so the Koalino extension (and only
 //! it) can start the host.
 //!
 //! Each browser reads a JSON manifest naming the host, its executable and the extensions allowed
@@ -19,7 +19,7 @@ pub const FIREFOX_EXTENSION_ID: &str = "browser-bridge@note-taker.local";
 /// The Chromium extension ID, fixed by the public `key` in the extension manifest.
 pub const CHROMIUM_EXTENSION_ID: &str = "dgmaacilnokmfecfdcajdjadeboemnpd";
 /// What the browsers show for the host.
-const HOST_DESCRIPTION: &str = "Note Taker: sends online meetings to the local Note Taker app";
+const HOST_DESCRIPTION: &str = "Koalino: sends online meetings to the local Koalino app";
 
 /// A browser the host can be registered with.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -1,15 +1,15 @@
 /**
- * The extension's record of the meetings it sent to Note Taker (kept in `chrome.storage.local`).
+ * The extension's record of the meetings it sent to Koalino (kept in `chrome.storage.local`).
  *
  * Teams publishes its transcript in the meeting chat after the meeting, as a recap card showing
  * the meeting title and times. The record lets the content script match that card to the meeting
- * it recorded and send the transcript to the same Note Taker meeting. Records hold the title and
+ * it recorded and send the transcript to the same Koalino meeting. Records hold the title and
  * times only, and are forgotten after `KEEP_MS`.
  */
 
 /** A meeting the extension recorded. */
 export interface RecordedMeeting {
-  /** The ID sent to Note Taker as the Teams meeting ID. */
+  /** The ID sent to Koalino as the Teams meeting ID. */
   meetingId: string;
   /** The title the tab showed ("" when none). */
   title: string;
@@ -18,7 +18,7 @@ export interface RecordedMeeting {
   endMs: number | null;
   /** Whether Teams transcription was seen running during the meeting. */
   teamsTranscriptSeen: boolean;
-  /** Whether the Teams transcript was already sent to Note Taker. */
+  /** Whether the Teams transcript was already sent to Koalino. */
   transcriptFetched: boolean;
 }
 

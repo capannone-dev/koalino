@@ -1,4 +1,4 @@
-// Files and e-mails other apps share to Note Taker (Issue #85). On Android `IncomingShares.kt`
+// Files and e-mails other apps share to Koalino (Issue #85). On Android `IncomingShares.kt`
 // copies each share into its own cache folder and announces it on `note_taker/incoming_shares`;
 // this bridge takes the pending share and releases its folder once Rust has copied the files
 // into a project. Desktops have no share sheet, so they get a bridge that never has a share.

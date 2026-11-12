@@ -4,15 +4,15 @@
   "version": "1.0.0",
   "id": "{{AZURE_AD_CLIENT_ID}}",
   "developer": {
-    "name": "Note Taker",
+    "name": "Koalino",
     "websiteUrl": "https://{{SERVICE_FQDN}}",
     "privacyUrl": "https://{{SERVICE_FQDN}}/privacy",
     "termsOfUseUrl": "https://{{SERVICE_FQDN}}/terms"
   },
-  "name": { "short": "Note Taker", "full": "Note Taker meeting notes bot" },
+  "name": { "short": "Koalino", "full": "Koalino meeting notes bot" },
   "description": {
     "short": "Takes speaker-attributed notes of your meeting.",
-    "full": "Joins the meeting, shows the recording notice, and streams audio and shared slides to your own Note Taker app for local transcription."
+    "full": "Joins the meeting, shows the recording notice, and streams audio and shared slides to your own Koalino app for local transcription."
   },
   "icons": { "color": "color.png", "outline": "outline.png" },
   "accentColor": "#3F51B5",

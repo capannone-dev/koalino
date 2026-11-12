@@ -1,6 +1,6 @@
 /**
  * One recording of a Teams meeting in the content script (Issue #102): it announces the meeting
- * to Note Taker, cuts the page hook's audio into chunks, follows captions and the transcript
+ * to Koalino, cuts the page hook's audio into chunks, follows captions and the transcript
  * panel, keeps screen-share slides, and at the end sends the captions and live transcript as
  * documents followed by the meeting end.
  *
@@ -36,7 +36,7 @@ export function ownerParticipantId(ownerName: string): string {
 
 /** What the recorder needs from the browser. */
 export interface RecorderPorts {
-  /** Sends a message to Note Taker. */
+  /** Sends a message to Koalino. */
   send(message: HostMessage): void;
   /** The current time (epoch ms). */
   now(): number;

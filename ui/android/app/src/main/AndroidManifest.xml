@@ -20,7 +20,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
-        android:label="Note Taker"
+        android:label="Koalino"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <!-- Efficient mode (#75): apps can only open the vendor's OpenCL library if they declare

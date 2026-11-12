@@ -151,7 +151,7 @@ resources names the sealed file, which only the core can read.
 `syncNow()` over `note_taker_notes_folder` (on a background isolate through `callRustLlm`, since a
 round writes the whole folder), with `NotesFolderStatus` and `NotesFolderException`.
 
-`incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Note Taker:
+`incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Koalino:
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and
 `IncomingShareBridge` (`arrivals`, `takePending`, `release`). `AndroidIncomingShareBridge` talks
 to `IncomingShares.kt` on `note_taker/incoming_shares`; desktops get `NoIncomingShareBridge`.

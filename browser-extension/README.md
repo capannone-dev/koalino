@@ -1,18 +1,18 @@
-<!-- Explains the Note Taker browser extension: what it records, how it reaches the app, and how to build, install and test it. -->
+<!-- Explains the Koalino browser extension: what it records, how it reaches the app, and how to build, install and test it. -->
 
-# Note Taker browser extension (`browser-extension/`)
+# Koalino browser extension (`browser-extension/`)
 
 Records Microsoft Teams meetings joined in the browser (Firefox, Chrome, Edge, Chromium) and
-sends them to the Note Taker app on the same computer (Issue #102). It works for work or school
+sends them to the Koalino app on the same computer (Issue #102). It works for work or school
 accounts (`teams.cloud.microsoft`, `teams.microsoft.com`) and for personal accounts
 (`teams.live.com`, `teams.microsoft.com/light-meetings`).
 
 ## What it does
 
-When a call starts it asks **Record this meeting with Note Taker?** (Record, Always for
+When a call starts it asks **Record this meeting with Koalino?** (Record, Always for
 Teams, Not now). While recording, an indicator with a Stop button stays on the page. It sends:
 
-| What | How | Becomes in Note Taker |
+| What | How | Becomes in Koalino |
 | --- | --- | --- |
 | Your microphone | the audio track Teams opened, tapped in the page | your segments of the transcript |
 | Everyone else | the one mixed track Teams plays, tapped in the page | segments whose voices are matched against your voice gallery (`MIXED_REMOTE`) |
@@ -100,7 +100,7 @@ node build.mjs        # dist/firefox and dist/chromium
 ## Privacy
 
 Nothing is recorded until you agree, and the indicator stays visible while recording. Data goes
-only to the local Note Taker app over the loopback interface. The extension never calls
+only to the local Koalino app over the loopback interface. The extension never calls
 Microsoft's APIs and never uses the page's tokens: it copies only the transcript file the Teams
 page itself loads (after the meeting, by pressing the recap's own Download → .vtt). On SharePoint it
 acts only in the recap frame Teams opens. It keeps in browser storage only its settings and, for two weeks, the title

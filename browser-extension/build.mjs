@@ -34,9 +34,9 @@ const FIREFOX_ADDON_ID = "browser-bridge@note-taker.local";
 /** The manifest parts both browsers share. */
 const baseManifest = {
   manifest_version: 3,
-  name: "Note Taker for Teams",
+  name: "Koalino for Teams",
   version: "0.1.0",
-  description: "Records Teams meetings in the browser and sends them to the Note Taker app on this computer.",
+  description: "Records Teams meetings in the browser and sends them to the Koalino app on this computer.",
   permissions: ["nativeMessaging", "storage"],
   host_permissions: [...TEAMS_SITES, ...RECAP_FRAME_SITES],
   icons: { 48: "icon-48.png", 128: "icon-128.png" },

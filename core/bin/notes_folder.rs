@@ -1019,7 +1019,7 @@ where
     Repository: ProjectCommandRepository + ?Sized,
 {
     let mut text = format!(
-        "# {title}\n\n{}\n\nThis file is rewritten by Note Taker; correct the transcript in the app.\n",
+        "# {title}\n\n{}\n\nThis file is rewritten by Koalino; correct the transcript in the app.\n",
         created_at.format("%Y-%m-%d %H:%M UTC")
     );
     let mut segments = repository.load_transcript_segments(meeting_id)?;

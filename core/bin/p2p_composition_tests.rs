@@ -110,7 +110,7 @@ fn invalid_explicit_values_fail_and_a_bad_host_name_falls_back() {
 
     let fallback = enabled_config(&[("HOSTNAME", "\u{1b}[31m")]);
 
-    assert_eq!(fallback.device_name.as_str(), "Note Taker device");
+    assert_eq!(fallback.device_name.as_str(), "Koalino device");
 }
 
 /// The task starts on loopback, reports its address and name, answers commands, and stops.

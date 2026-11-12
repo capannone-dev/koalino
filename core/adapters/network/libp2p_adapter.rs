@@ -39,7 +39,7 @@ const MAX_RELAYED_CIRCUIT_BYTES: u64 = 1024 * 1024 * 1024;
 struct SyncPayloadProtocol;
 
 impl AsRef<str> for SyncPayloadProtocol {
-    /// Returns the protocol name negotiated by connected Note Taker peers.
+    /// Returns the protocol name negotiated by connected Koalino peers.
     ///
     /// Inputs: None.
     /// Outputs: The stable, versioned protocol identifier.

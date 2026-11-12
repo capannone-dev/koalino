@@ -1,6 +1,6 @@
 <!-- Explains the Next.js dashboard and its integration with the local Axum daemon. -->
 
-# Note Taker Linux Server dashboard
+# Koalino Linux Server dashboard
 
 This Next.js App Router application is the local web dashboard for the Rust headless daemon. It
 consumes only documented Axum JSON/WebSocket boundaries; it never reads SQLite or local media files

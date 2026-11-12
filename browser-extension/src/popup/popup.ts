@@ -1,5 +1,5 @@
 /**
- * The popup (Issue #102): shows whether the Note Taker helper (native host) and app are
+ * The popup (Issue #102): shows whether the Koalino helper (native host) and app are
  * reachable, which meetings are being recorded, what happened to the last Teams transcript fetch,
  * and the settings as checkboxes. When the extension
  * may not run on the Teams sites, it says so first and offers to allow it.
@@ -17,13 +17,13 @@ function render(state: PopupState): void {
   const { connection } = state;
   if (connection.host === "missing") {
     host.className = "bad";
-    host.textContent = "Helper not installed: run “browser-host install” from Note Taker.";
+    host.textContent = "Helper not installed: run “browser-host install” from Koalino.";
   } else if (connection.bridge === "connected") {
     host.className = "ok";
-    host.textContent = "Connected to the Note Taker app.";
+    host.textContent = "Connected to the Koalino app.";
   } else if (connection.bridge === "unavailable") {
     host.className = "warn";
-    host.textContent = "Note Taker app not running (or its meeting bridge is off); recordings wait.";
+    host.textContent = "Koalino app not running (or its meeting bridge is off); recordings wait.";
   } else {
     host.className = "";
     host.textContent = "Not checked yet.";
@@ -71,7 +71,7 @@ async function renderAccess(refused = false): Promise<void> {
     text.textContent = "Allowed. Reload any Teams tab that was already open.";
     document.getElementById("allow")?.setAttribute("hidden", "");
   } else if (refused) {
-    text.textContent = "Not allowed: Note Taker cannot record Teams until you allow it.";
+    text.textContent = "Not allowed: Koalino cannot record Teams until you allow it.";
   }
 }
 

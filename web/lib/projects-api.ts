@@ -123,7 +123,7 @@ export function projectErrorMessage(error: unknown): string {
     case "unavailable":
       return "This server doesn't store project files.";
     case "network":
-      return "The Note Taker server can't be reached.";
+      return "The Koalino server can't be reached.";
     default:
       return "Something went wrong. Try again.";
   }

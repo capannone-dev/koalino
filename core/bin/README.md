@@ -112,7 +112,7 @@ HTTP runtime.
 - **Configuration:** `P2pConfig::from_lookup` reads three variables:
   - `NOTE_TAKER_P2P_ENABLED` (default `true`);
   - `NOTE_TAKER_P2P_LISTEN` (default `/ip4/0.0.0.0/tcp/0`);
-  - `NOTE_TAKER_DEVICE_NAME` (default: the host name, else "Note Taker device");
+  - `NOTE_TAKER_DEVICE_NAME` (default: the host name, else "Koalino device");
   - `NOTE_TAKER_P2P_PEERS` (comma-separated `…/p2p/<peer id>` addresses for devices that mDNS
     cannot find; an invalid entry stops start-up).
 - **Start-up:** `spawn_p2p_task` opens the task's own connections: a document-backed note

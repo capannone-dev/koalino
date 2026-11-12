@@ -67,7 +67,7 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('Note Taker is locked'), findsNothing);
+      expect(find.text('Koalino is locked'), findsNothing);
       expect(find.text('Taps: 0'), findsOneWidget);
     });
 
@@ -81,7 +81,7 @@ void main() {
       await controller.initialize();
       await tester.pumpAndSettle();
 
-      expect(find.text('Note Taker is locked'), findsOneWidget);
+      expect(find.text('Koalino is locked'), findsOneWidget);
       expect(find.text('Taps: 0'), findsNothing);
 
       await tester.tap(find.text('Unlock'));
@@ -108,7 +108,7 @@ void main() {
       now = now.add(lockAfterBackground);
       controller.appShown();
       await tester.pumpAndSettle();
-      expect(find.text('Note Taker is locked'), findsOneWidget);
+      expect(find.text('Koalino is locked'), findsOneWidget);
 
       await tester.tap(find.text('Unlock'));
       await tester.pumpAndSettle();
@@ -143,7 +143,7 @@ void main() {
       controller.appShown();
       await tester.pumpAndSettle();
 
-      expect(find.text('Note Taker is locked'), findsOneWidget);
+      expect(find.text('Koalino is locked'), findsOneWidget);
       expect(find.text('Speakers'), findsNothing);
     });
 
@@ -175,7 +175,7 @@ void main() {
       }
       await tester.pumpAndSettle();
 
-      expect(find.text('Note Taker is locked'), findsOneWidget);
+      expect(find.text('Koalino is locked'), findsOneWidget);
     });
   });
 

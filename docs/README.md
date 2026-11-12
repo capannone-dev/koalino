@@ -2,7 +2,7 @@
 
 # docs
 
-Texts meant for people using Note Taker rather than for developers. Design records stay in
+Texts meant for people using Koalino rather than for developers. Design records stay in
 `DECISION_LOG.md`, and API contracts in `API_SPECS.md`.
 
 | File | Purpose |

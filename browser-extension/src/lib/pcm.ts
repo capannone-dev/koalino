@@ -1,5 +1,5 @@
 /**
- * Turns captured browser audio into what the Note Taker core takes: 16 kHz mono signed 16-bit
+ * Turns captured browser audio into what the Koalino core takes: 16 kHz mono signed 16-bit
  * PCM, cut into chunks of `CHUNK_MS` stamped with their time from the meeting start.
  *
  * Pure functions with no browser APIs, so they run in the page hook and in tests alike. Audio is

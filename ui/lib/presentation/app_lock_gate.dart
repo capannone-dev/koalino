@@ -107,8 +107,7 @@ final class _LockScreen extends StatelessWidget {
                 Icon(Icons.lock_outline,
                     size: 56, color: theme.colorScheme.primary),
                 const SizedBox(height: 16),
-                Text('Note Taker is locked',
-                    style: theme.textTheme.headlineSmall),
+                Text('Koalino is locked', style: theme.textTheme.headlineSmall),
                 const SizedBox(height: 8),
                 const Text(
                   'Unlock with your fingerprint, face, or screen lock.',

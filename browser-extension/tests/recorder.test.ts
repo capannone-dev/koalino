@@ -1,5 +1,5 @@
 /**
- * Specifies one recording in the content script: what it sends to Note Taker and when.
+ * Specifies one recording in the content script: what it sends to Koalino and when.
  */
 import { beforeEach, describe, expect, it } from "vitest";
 import { MeetingRecorder, RecorderPorts, ownerParticipantId } from "../src/content/recorder";

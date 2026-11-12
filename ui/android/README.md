@@ -148,7 +148,7 @@ grant), and `adb shell content query` was refused.
 ## Sharing to a project (Issue #85)
 
 The activity accepts `SEND` and `SEND_MULTIPLE` for e-mails (`message/rfc822`), PDFs, pictures
-and text (Markdown included), so mail apps, file managers and galleries offer Note Taker in their
+and text (Markdown included), so mail apps, file managers and galleries offer Koalino in their
 share sheet. `IncomingShares.kt` copies each share at once, on a background thread, into its own
 folder under `cache/incoming` (a shared URI is readable only while the share lasts):
 

@@ -211,7 +211,7 @@ final class NoteTakerApp extends StatelessWidget {
     final CoreStartupController? startup = coreStartupController;
     final AppLockController? appLock = appLockController;
     return MaterialApp(
-      title: 'Note Taker',
+      title: 'Koalino',
       theme: noteTakerTheme(Brightness.light),
       darkTheme: noteTakerTheme(Brightness.dark),
       // Follows the system's light or dark setting, including changes while the app runs.

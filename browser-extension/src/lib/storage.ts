@@ -1,6 +1,6 @@
 /**
  * Reads and writes the extension's state in `chrome.storage.local`: the settings, and the record
- * of meetings sent to Note Taker (titles and times only, kept two weeks).
+ * of meetings sent to Koalino (titles and times only, kept two weeks).
  */
 import { RecordedMeeting, pruneMeetings } from "./meetings";
 import { ExtensionSettings, normalizeSettings } from "./settings";

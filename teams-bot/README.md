@@ -1,9 +1,9 @@
 <!-- Explains the C# Teams bot: what it does, how to register, configure, build, run, deploy, and troubleshoot it. -->
 
-# Note Taker Teams bot
+# Koalino Teams bot
 
 A C#/.NET 8 bot that joins Microsoft Teams meetings, captures each participant's audio and
-the shared screen, and streams them to the Rust Note Taker app. The Rust app then transcribes
+the shared screen, and streams them to the Rust Koalino app. The Rust app then transcribes
 locally, with speaker attribution. The bot implements Issue #34; the Rust side of the protocol
 is Issue #33.
 
@@ -38,7 +38,7 @@ What the bot sends:
                                          │ ws://127.0.0.1:8765  (same host, or SSH tunnel)
                                          │ {"auth":"<secret>"} → {"auth":"ok"}, then binary frames
                                          ▼
- Rust Note Taker daemon: TeamsWebSocketServer → transcription → speaker-attributed notes + slides
+ Rust Koalino daemon: TeamsWebSocketServer → transcription → speaker-attributed notes + slides
 ```
 
 The Rust server binds `127.0.0.1` only. Run the bot on the same machine, or carry the
@@ -70,7 +70,7 @@ non-loopback host.
 ## 3. Azure AD app registration
 
 1. Open **Azure portal → Microsoft Entra ID → App registrations → New registration**.
-   - Name: `Note Taker Bot`. Supported account types: **single tenant**.
+   - Name: `Koalino Bot`. Supported account types: **single tenant**.
    - No redirect URI. Create it.
    - Copy the **Application (client) ID** into `AzureAd:ClientId` and the **Directory
      (tenant) ID** into `AzureAd:TenantId`.

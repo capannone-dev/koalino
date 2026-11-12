@@ -1,4 +1,4 @@
-// Receives files, e-mails and text that other apps share to Note Taker (Issue #85). Android hands
+// Receives files, e-mails and text that other apps share to Koalino (Issue #85). Android hands
 // them over as content URIs that are readable only while the share lasts, so each share is copied
 // at once into its own folder under `cache/incoming`, and Dart is told on `note_taker/incoming_shares`.
 // Dart asks which project they belong to, has Rust copy them into it, then releases the folder.

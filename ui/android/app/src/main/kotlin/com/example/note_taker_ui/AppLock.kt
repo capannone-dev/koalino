@@ -85,7 +85,7 @@ class AppLock(private val activity: Activity) : MethodChannel.MethodCallHandler 
             return
         }
         val builder = BiometricPrompt.Builder(activity)
-            .setTitle("Unlock Note Taker")
+            .setTitle("Unlock Koalino")
             .setSubtitle("Use your fingerprint, face, or screen lock")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             builder.setAllowedAuthenticators(

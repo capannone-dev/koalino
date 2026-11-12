@@ -10,7 +10,7 @@
  * When the call ends it sends the captions and live transcript and ends the meeting. Outside
  * calls, when Teams shows a recap with a transcript for a meeting it recorded (the recap a meeting
  * chat opens on, or a recap card), it opens the Transcript tab and has the recap's SharePoint
- * frame download the WebVTT (see `src/recap/`), then sends it to the same Note Taker meeting.
+ * frame download the WebVTT (see `src/recap/`), then sends it to the same Koalino meeting.
  *
  * Everything goes to the background over a port, and from there to the native host. Nothing of
  * the meeting is logged.
@@ -115,7 +115,7 @@ function toBackground(message: TabMessage): void {
   }
 }
 
-/** Sends a message on to Note Taker. */
+/** Sends a message on to Koalino. */
 function toHost(message: HostMessage): void {
   toBackground({ kind: "host", message });
 }
@@ -127,9 +127,9 @@ function toHook(command: HookCommand["command"]): void {
 
 /** The recording overlay's status line. */
 function statusLine(): string {
-  if (connection.host === "missing") return "Note Taker helper not installed";
-  if (connection.bridge === "unavailable") return "Note Taker app not running; data is queued";
-  if (connection.bridge === "connected") return "sending to Note Taker";
+  if (connection.host === "missing") return "Koalino helper not installed";
+  if (connection.bridge === "unavailable") return "Koalino app not running; data is queued";
+  if (connection.bridge === "connected") return "sending to Koalino";
   return "";
 }
 
@@ -311,7 +311,7 @@ async function checkRecaps(): Promise<void> {
         );
         reportRecapStatus(
           sent
-            ? `Teams transcript of ${sent.title || "Teams meeting"} already sent to Note Taker.`
+            ? `Teams transcript of ${sent.title || "Teams meeting"} already sent to Koalino.`
             : `Teams transcript on screen (${sessionTime(recap) || "no time shown"}): no recorded meeting matches.`,
         );
         continue;
@@ -325,7 +325,7 @@ async function checkRecaps(): Promise<void> {
       const triesLeft = recapRetryDue({ count: (attempts?.count ?? 0) + 1, lastMs: 0 }, Date.now());
       reportRecapStatus(
         outcome === "sent"
-          ? `Teams transcript of ${title} sent to Note Taker.`
+          ? `Teams transcript of ${title} sent to Koalino.`
           : `Teams transcript of ${title}: ${RECAP_FAILURES[outcome]}${triesLeft ? "; trying again in a minute" : ""}.`,
       );
       return;

@@ -1,6 +1,6 @@
 /**
  * The extension's small overlay on the Teams page (Issue #102): the consent question when a call
- * starts ("Record this meeting with Note Taker?") and, while recording, a visible indicator with
+ * starts ("Record this meeting with Koalino?") and, while recording, a visible indicator with
  * a Stop button. It lives in a closed shadow root so Teams' styles and scripts do not reach it.
  */
 
@@ -58,7 +58,7 @@ function button(label: string, onClick: () => void, primary = false): HTMLButton
 export function askConsent(onAnswer: (answer: ConsentAnswer) => void): void {
   const container = panel();
   const text = document.createElement("span");
-  text.textContent = "Record this meeting with Note Taker?";
+  text.textContent = "Record this meeting with Koalino?";
   const answer = (value: ConsentAnswer) => () => {
     hideOverlay();
     onAnswer(value);
@@ -74,7 +74,7 @@ export function askConsent(onAnswer: (answer: ConsentAnswer) => void): void {
 /**
  * Shows that recording is on.
  *
- * Inputs: A short status (for example whether Note Taker is reachable) and the Stop handler.
+ * Inputs: A short status (for example whether Koalino is reachable) and the Stop handler.
  * Side effects: Shows the overlay.
  */
 export function showRecording(status: string, onStop: () => void): void {
@@ -82,7 +82,7 @@ export function showRecording(status: string, onStop: () => void): void {
   const dot = document.createElement("span");
   dot.className = "dot";
   const text = document.createElement("span");
-  text.textContent = "Note Taker is recording";
+  text.textContent = "Koalino is recording";
   const detail = document.createElement("span");
   detail.className = "detail";
   detail.textContent = status;

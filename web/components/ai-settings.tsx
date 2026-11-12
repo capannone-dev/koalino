@@ -347,7 +347,7 @@ function ConnectionForm({
       </div>
       {isLocalCli(draft.kind) ? (
         <p className="text-sm text-muted">
-          Runs the tool installed and signed in on the computer running Note Taker, so that plan writes the summaries instead
+          Runs the tool installed and signed in on the computer running Koalino, so that plan writes the summaries instead
           of API credit. The meeting goes to Anthropic or OpenAI under that account.
         </p>
       ) : (

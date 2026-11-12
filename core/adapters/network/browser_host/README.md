@@ -2,7 +2,7 @@
 
 # Browser extension host (`core/adapters/network/browser_host`)
 
-The Note Taker browser extension (`browser-extension/`, Issue #102) captures an online meeting in
+The Koalino browser extension (`browser-extension/`, Issue #102) captures an online meeting in
 the browser. Browsers cannot open the Teams bridge's WebSocket themselves: the bridge refuses
 every handshake with an `Origin` header, which browsers always send. So the extension talks to a
 **native messaging host**, the `browser-host` program (`core/bin/browser_host.rs`). The browser
@@ -27,7 +27,7 @@ extension (background) ──connectNative("com.note_taker.browser_bridge")─�
 
 ## Security
 
-- Only the Note Taker extension may start the host: the manifests allow only the Firefox add-on
+- Only the Koalino extension may start the host: the manifests allow only the Firefox add-on
   `browser-bridge@note-taker.local` and the Chromium origin
   `chrome-extension://dgmaacilnokmfecfdcajdjadeboemnpd/`. That ID is fixed by the public `key`
   in the extension's Chromium manifest.

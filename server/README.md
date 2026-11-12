@@ -14,7 +14,7 @@ the application layer.
 2. Create a `systemd` service that starts the headless daemon after sound-device availability and
    restarts it only on unexpected failure. Set a deliberate stop timeout so an explicit Stop FFI
    call can complete before service termination.
-3. Use `systemd-inhibit --what=sleep:idle --why="Note Taker recording"` (or an equivalent
+3. Use `systemd-inhibit --what=sleep:idle --why="Koalino recording"` (or an equivalent
    logind D-Bus inhibitor managed by the service supervisor) only while the FFI state is Recording.
    Release the inhibitor on Paused, Interrupted, Stopped, Error, or daemon shutdown.
 4. Expose a local, access-controlled control surface that calls only

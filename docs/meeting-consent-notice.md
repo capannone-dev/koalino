@@ -1,8 +1,8 @@
-<!-- Ready-to-paste notice for an online meeting's chat, telling participants that Note Taker records and transcribes the meeting on the owner's own devices. Copy one language block, fill in the brackets, and paste it. -->
+<!-- Ready-to-paste notice for an online meeting's chat, telling participants that Koalino records and transcribes the meeting on the owner's own devices. Copy one language block, fill in the brackets, and paste it. -->
 
 # Meeting notice to paste in the chat
 
-Note Taker records on your own devices and the meeting platform shows no banner for it, so tell
+Koalino records on your own devices and the meeting platform shows no banner for it, so tell
 the participants yourself. Paste one block into the meeting chat at the start, and again when
 someone joins late. Replace the text in brackets, or delete that line.
 

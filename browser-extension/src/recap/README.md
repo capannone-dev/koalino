@@ -18,6 +18,6 @@ page opened on its own. In such a frame:
   also keeps the file in its downloads;
 - it passes each WebVTT file the page hook copied in this frame to the background. The background
   hands it to the Teams tab's content script, which decides which recorded meeting it belongs to
-  and sends it to Note Taker once.
+  and sends it to Koalino once.
 
 Nothing of the transcript is logged or kept here.
