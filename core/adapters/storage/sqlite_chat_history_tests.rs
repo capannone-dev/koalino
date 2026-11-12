@@ -47,6 +47,14 @@ fn messages_come_back_in_order_sealed_on_disk() {
         included: vec![String::from("Budget review")],
         omitted: vec![String::from("Old meeting")],
         connection_label: Some(String::from("Office")),
+        sources: vec![crate::domain::chat::ChatSource {
+            number: 1,
+            label: String::from("Budget review"),
+            target: Some(crate::domain::chat::ChatTarget::Meeting {
+                meeting_id: String::from("m-1"),
+            }),
+            at_ms: Some(61_000),
+        }],
     };
     store
         .append_chat_messages(

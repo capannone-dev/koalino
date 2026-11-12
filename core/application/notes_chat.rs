@@ -12,7 +12,10 @@
 use crate::{
     application::search::fold,
     domain::{
-        chat::{ChatMessage, ChatRole, MAX_CHAT_QUESTION_CHARS},
+        chat::{
+            ChatMessage, ChatRole, ChatSource, ChatTarget, CitedMaterial, MAX_CHAT_QUESTION_CHARS,
+            parse_citations,
+        },
         errors::LlmError,
         llm::{LlmConnection, LlmImage, LlmRequest, LlmRole, LlmTurn},
     },
@@ -37,6 +40,8 @@ pub struct ContextItem {
     pub full: String,
     /// A shorter version (a meeting's summary and notes), used when the whole does not fit.
     pub short: Option<String>,
+    /// What a citation of it opens (#110); `None` when there is nothing to open.
+    pub target: Option<ChatTarget>,
 }
 
 /// How much of an item the model was given.
@@ -75,6 +80,8 @@ pub struct ChatReply {
     pub truncated: bool,
     /// Images the model was sent.
     pub images_sent: usize,
+    /// The places the answer cites, in order of first mention (#110).
+    pub sources: Vec<ChatSource>,
 }
 
 /// Why there is no answer.
@@ -284,10 +291,21 @@ pub fn ask(
     let mut included = Vec::new();
     let mut omitted = Vec::new();
     let mut sections = String::new();
+    // What each number in the material is, `[1]` first.
+    let mut numbered: Vec<CitedMaterial> = Vec::new();
     for (item, inclusion) in material.items.iter().zip(&inclusions) {
         match text_for(item, *inclusion, material_chars.saturating_sub(64)) {
             Some(text) if !text.trim().is_empty() => {
-                sections.push_str(&format!("\n\n## {}\n\n{}", item.label, text.trim()));
+                numbered.push(CitedMaterial {
+                    label: item.label.clone(),
+                    target: item.target.clone(),
+                });
+                sections.push_str(&format!(
+                    "\n\n## [{}] {}\n\n{}",
+                    numbered.len(),
+                    item.label,
+                    text.trim()
+                ));
                 included.push(included_label(item, *inclusion));
             }
             Some(_) => {}
@@ -297,9 +315,10 @@ pub fn ask(
     let mut system = format!(
         "You answer the owner's questions about {}, using only the material below from their \
          note-taking app: transcripts ([hh:mm:ss] Speaker: text), summaries, notes and files. \
-         When the material does not hold the answer, say so. Say which meeting (and the time \
-         in its transcript) or file an answer comes from. Answer in the language of the \
-         question, in Markdown.",
+         When the material does not hold the answer, say so. Each piece of material has a \
+         number; cite where each statement comes from right after it, as [n], or as \
+         [n, hh:mm:ss] for a moment in a transcript. Answer in the language of the question, \
+         in Markdown.",
         material.description
     );
     if !omitted.is_empty() {
@@ -330,7 +349,9 @@ pub fn ask(
         }
         other => other?,
     };
+    let sources = parse_citations(&completion.text, &numbered);
     Ok(ChatReply {
+        sources,
         text: completion.text,
         included,
         omitted,

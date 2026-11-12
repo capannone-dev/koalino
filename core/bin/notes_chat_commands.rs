@@ -34,7 +34,7 @@ use crate::{
         notes_chat::{ChatError, ChatMaterial, ContextItem, ask, relevance},
     },
     domain::{
-        chat::{ChatMessage, ChatRole, ChatScope},
+        chat::{ChatMessage, ChatRole, ChatScope, ChatSource, ChatTarget},
         errors::StorageError,
         llm::LlmImage,
         models::{ExportFormat, ExportOptions, MeetingId},
@@ -126,7 +126,32 @@ pub fn message_json(message: &ChatMessage) -> Value {
         "included": message.included,
         "omitted": message.omitted,
         "connection": message.connection_label,
+        "sources": message.sources.iter().map(source_json).collect::<Vec<_>>(),
     })
+}
+
+/// One cited place: `{"number","label","at_ms","meeting_id"}` for a meeting, or
+/// `{"number","label","at_ms","project_id","resource_id"}` for a file (#110).
+fn source_json(source: &ChatSource) -> Value {
+    let mut value = json!({
+        "number": source.number,
+        "label": source.label,
+        "at_ms": source.at_ms,
+    });
+    match &source.target {
+        Some(ChatTarget::Meeting { meeting_id }) => {
+            value["meeting_id"] = json!(meeting_id);
+        }
+        Some(ChatTarget::File {
+            project_id,
+            resource_id,
+        }) => {
+            value["project_id"] = json!(project_id);
+            value["resource_id"] = json!(resource_id);
+        }
+        None => {}
+    }
+    value
 }
 
 /// A chat's messages as the `history` answer.
@@ -136,6 +161,8 @@ pub fn history_json(messages: &[ChatMessage]) -> Value {
 
 /// One meeting read for a chat.
 struct MeetingText {
+    /// The meeting's ID, which a citation opens (#110).
+    meeting_id: String,
     title: String,
     started_at: DateTime<Utc>,
     lines: Vec<SpokenLine>,
@@ -190,6 +217,9 @@ impl MeetingText {
             label: self.label(),
             full,
             short,
+            target: Some(ChatTarget::Meeting {
+                meeting_id: self.meeting_id.clone(),
+            }),
         }
     }
 }
@@ -212,6 +242,7 @@ where
         )
         .map_err(|error| storage(&error))?;
     Ok(MeetingText {
+        meeting_id: meeting_id.as_str().to_owned(),
         title: document.title().to_owned(),
         started_at: document.started_at(),
         lines: document
@@ -255,6 +286,12 @@ fn file_item(
         label: format!("File {}", resource.shown_file_name()),
         full: text,
         short: None,
+        target: Some(ChatTarget::File {
+            project_id: resource
+                .project_id()
+                .map(|project_id| project_id.to_string()),
+            resource_id: resource.attachment_id().to_string(),
+        }),
     })
 }
 
@@ -470,6 +507,7 @@ where
         label: String::from("List of all meetings and projects"),
         full: index,
         short: None,
+        target: None,
     }];
     items.extend(ranked.into_iter().map(|(_, _, item)| item));
     Ok(ChatMaterial {
@@ -522,6 +560,7 @@ pub fn ask_with(
                 included: reply.included,
                 omitted: reply.omitted,
                 connection_label: Some(connection.label().to_owned()),
+                sources: reply.sources,
             },
         ];
         store(&messages)?;

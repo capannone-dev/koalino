@@ -77,6 +77,7 @@ fn item(label: &str, full_chars: usize, short_chars: Option<usize>) -> ContextIt
         label: label.to_owned(),
         full: "f".repeat(full_chars),
         short: short_chars.map(|chars| "s".repeat(chars)),
+        target: None,
     }
 }
 
@@ -151,6 +152,7 @@ fn the_question_follows_the_recent_turns_and_the_material_is_in_the_instructions
             label: String::from("Meeting \"Review\""),
             full: String::from("[00:01:01] Anna: We ship on Friday."),
             short: None,
+            target: None,
         }],
         images: Vec::new(),
     };
@@ -266,4 +268,53 @@ fn bad_questions_and_empty_material_are_refused_before_sending() {
         Err(ChatError::NothingToChatAbout)
     ));
     assert!(engine.seen().is_empty());
+}
+
+#[test]
+fn material_is_numbered_and_the_answer_cites_it_as_sources() {
+    use crate::domain::chat::ChatTarget;
+    let engine = ScriptedEngine::new(vec![answer(
+        "We ship on Friday [2, 00:01:01]; the plan agrees [1]. Not [3].",
+    )]);
+    let meeting = ChatTarget::Meeting {
+        meeting_id: String::from("m-1"),
+    };
+    let material = ChatMaterial {
+        description: String::from("the project \"Launch\""),
+        items: vec![
+            ContextItem {
+                label: String::from("File plan.md"),
+                full: String::from("Ship on Friday."),
+                short: None,
+                target: None,
+            },
+            ContextItem {
+                label: String::from("Meeting \"Review\""),
+                full: String::from("[00:01:01] Anna: We ship on Friday."),
+                short: None,
+                target: Some(meeting.clone()),
+            },
+        ],
+        images: Vec::new(),
+    };
+
+    let reply = ask(&engine, &connection(8_000), material, &[], "When?")
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let system = &engine.seen()[0].system;
+    assert!(system.contains("## [1] File plan.md"), "{system}");
+    assert!(system.contains("## [2] Meeting \"Review\""), "{system}");
+    assert!(
+        system.contains("[n, hh:mm:ss]"),
+        "the model is told how to cite"
+    );
+    let cited: Vec<(u16, Option<u64>, Option<ChatTarget>)> = reply
+        .sources
+        .iter()
+        .map(|source| (source.number, source.at_ms, source.target.clone()))
+        .collect();
+    assert_eq!(
+        cited,
+        vec![(2, Some(61_000), Some(meeting)), (1, None, None)]
+    );
 }

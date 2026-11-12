@@ -81,7 +81,8 @@ With Whisper small on NOTSOFAR, 42% of the words under 0.4 were wrong, against 3
 
 `chat.rs` (#97) defines chats with notes: `ChatScope` (one meeting, one project, or everything;
 stored under `meeting:<id>`, `project:<id>` or `all`), `ChatMessage` (with what an answer
-included and left out, and its connection) and the limits (4 000-character questions, 200 kept
+included and left out, its connection, and the `ChatSource`s it cites, read from `[n]` and
+`[n, hh:mm:ss]` by `parse_citations`, #110) and the limits (4 000-character questions, 200 kept
 messages per chat).
 
 `llm.rs` (#95) describes a connection to a language model and the summary prompt. `LlmConnection`

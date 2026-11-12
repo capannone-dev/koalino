@@ -643,8 +643,12 @@ reason, for example `invalid_request_error: Your credit balance is too low…` (
 
 - `GET /api/chat?scope=meeting|project|all&id=` answers `{"ok":true,"messages":[...]}`, oldest
   first. A message is `{"role":"user"|"assistant","text","created_at","included","omitted",
-  "connection"}`; `included` and `omitted` say what the model was given and what was left out
-  for length.
+  "connection","sources"}`; `included` and `omitted` say what the model was given and what was left out
+  for length. `sources` (#110) lists the places an answer cites, in order of first mention:
+  `{"number","label","at_ms","meeting_id"}` for a meeting (with `at_ms` when it cites a moment
+  in the transcript) or `{"number","label","at_ms","project_id","resource_id"}` for a file. The
+  model is given the material numbered (`## [1] Meeting "…"`) and asked to cite `[n]` or
+  `[n, hh:mm:ss]`; numbers outside the material and Markdown links are ignored.
 - `POST /api/chat` `{"scope","id"?,"question","connection_id"?}` asks the connection (the
   default one without `connection_id`) and answers `{"ok":true,"question","answer",
   "truncated","images_sent"}`; both messages are kept.

@@ -92,6 +92,8 @@ pub struct ChatMessage {
     pub omitted: Vec<String>,
     /// For an answer: the connection's label.
     pub connection_label: Option<String>,
+    /// For an answer: the places it cites (#110).
+    pub sources: Vec<ChatSource>,
 }
 
 impl ChatMessage {
@@ -104,6 +106,133 @@ impl ChatMessage {
             included: Vec::new(),
             omitted: Vec::new(),
             connection_label: None,
+            sources: Vec::new(),
         }
     }
+}
+
+/// What a piece of chat material is, so a citation can open it (#110).
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ChatTarget {
+    /// A meeting, by ID.
+    Meeting {
+        /// The meeting's ID.
+        meeting_id: String,
+    },
+    /// A project file, by its resource ID.
+    File {
+        /// The project holding it, when it is in one.
+        project_id: Option<String>,
+        /// The file's resource ID.
+        resource_id: String,
+    },
+}
+
+/// One numbered piece of material as the model saw it: `[1]` is the first.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CitedMaterial {
+    /// Its label, such as `Meeting "Budget review", 2026-11-09 10:00 UTC`.
+    pub label: String,
+    /// What it opens; `None` for material with nothing to open, such as the list of meetings.
+    pub target: Option<ChatTarget>,
+}
+
+/// A place an answer cites (#110).
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ChatSource {
+    /// The material's number in the answer, from 1.
+    pub number: u16,
+    /// The material's label.
+    pub label: String,
+    /// What it opens.
+    pub target: Option<ChatTarget>,
+    /// The moment in a transcript, when the citation gives one.
+    pub at_ms: Option<u64>,
+}
+
+/// The longest text read as one citation, between `[` and `]`.
+const MAX_CITATION_CHARS: usize = 40;
+
+/// Reads `h:mm:ss`, `hh:mm:ss` or `mm:ss` as milliseconds.
+fn parse_time(text: &str) -> Option<u64> {
+    let parts: Vec<&str> = text.split(':').collect();
+    if !(2..=3).contains(&parts.len())
+        || parts.iter().any(|part| {
+            part.is_empty() || part.len() > 2 || !part.bytes().all(|b| b.is_ascii_digit())
+        })
+    {
+        return None;
+    }
+    let numbers: Vec<u64> = parts.iter().filter_map(|part| part.parse().ok()).collect();
+    let (hours, minutes, seconds) = match numbers.as_slice() {
+        [minutes, seconds] => (0, *minutes, *seconds),
+        [hours, minutes, seconds] => (*hours, *minutes, *seconds),
+        _ => return None,
+    };
+    (minutes < 60 && seconds < 60).then_some(((hours * 60 + minutes) * 60 + seconds) * 1_000)
+}
+
+/// Reads the inside of one bracket: numbers, each optionally followed by a time.
+///
+/// Outputs: `(number, time)` pairs, or `None` when anything else is inside.
+fn parse_bracket(inside: &str) -> Option<Vec<(u16, Option<u64>)>> {
+    let mut cited: Vec<(u16, Option<u64>)> = Vec::new();
+    for part in inside.split(',').map(str::trim) {
+        if let Ok(number) = part.parse::<u16>() {
+            cited.push((number, None));
+        } else if let (Some(at_ms), Some(last)) = (parse_time(part), cited.last_mut()) {
+            last.1 = Some(at_ms);
+        } else {
+            return None;
+        }
+    }
+    (!cited.is_empty()).then_some(cited)
+}
+
+/// Finds the citations in an answer: `[1]`, `[1, 2]`, `[1, 00:12:34]` or `[2, 12:34]`.
+///
+/// Inputs: The answer and the numbered material, `[1]` first. Outputs: The places cited, in
+/// order of first mention, each `(number, time)` once. Numbers outside the material, Markdown
+/// links (`[text](url)`) and other bracketed text are ignored. Side effects: None.
+pub fn parse_citations(answer: &str, material: &[CitedMaterial]) -> Vec<ChatSource> {
+    let mut sources: Vec<ChatSource> = Vec::new();
+    let mut rest = answer;
+    while let Some(open) = rest.find('[') {
+        let after = &rest[open + 1..];
+        let Some(close) = after
+            .find(['[', ']'])
+            .filter(|&at| after[at..].starts_with(']'))
+        else {
+            rest = after;
+            continue;
+        };
+        let inside = &after[..close];
+        let following = &after[close + 1..];
+        rest = following;
+        if inside.chars().count() > MAX_CITATION_CHARS || following.starts_with('(') {
+            continue;
+        }
+        for (number, at_ms) in parse_bracket(inside).unwrap_or_default() {
+            let Some(item) = usize::from(number)
+                .checked_sub(1)
+                .and_then(|index| material.get(index))
+            else {
+                continue;
+            };
+            if sources
+                .iter()
+                .any(|source| source.number == number && source.at_ms == at_ms)
+            {
+                continue;
+            }
+            sources.push(ChatSource {
+                number,
+                label: item.label.clone(),
+                target: item.target.clone(),
+                at_ms,
+            });
+        }
+    }
+    sources
 }

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use super::{SqliteNoteRepository, WriteTransaction, sqlite_error};
 use crate::{
     domain::{
-        chat::{ChatMessage, ChatRole, ChatScope, MAX_CHAT_MESSAGES},
+        chat::{ChatMessage, ChatRole, ChatScope, ChatSource, MAX_CHAT_MESSAGES},
         errors::StorageError,
     },
     ports::chat::ChatHistoryRepository,
@@ -47,6 +47,9 @@ struct SealedBody {
     omitted: Vec<String>,
     #[serde(default)]
     connection_label: Option<String>,
+    /// The places an answer cites (#110); absent in messages stored before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    sources: Vec<ChatSource>,
 }
 
 /// The context binding a message to its chat and position.
@@ -99,6 +102,7 @@ impl ChatHistoryRepository for SqliteNoteRepository {
                 included: body.included,
                 omitted: body.omitted,
                 connection_label: body.connection_label,
+                sources: body.sources,
             });
         }
         Ok(messages)
@@ -128,6 +132,7 @@ impl ChatHistoryRepository for SqliteNoteRepository {
                 included: message.included.clone(),
                 omitted: message.omitted.clone(),
                 connection_label: message.connection_label.clone(),
+                sources: message.sources.clone(),
             })
             .map_err(|_| StorageError::Rejected {
                 reason: String::from("a chat message could not be encoded"),

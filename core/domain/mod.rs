@@ -2,6 +2,8 @@
 
 /// What a chat with notes is about, and its messages (#97).
 pub mod chat;
+#[cfg(test)]
+mod chat_tests;
 /// Describes an imported e-mail and its attachments (Issue #85).
 pub mod email;
 /// Defines failures that may cross a hexagonal boundary.
