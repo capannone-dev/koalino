@@ -97,3 +97,12 @@ hosts. It refuses credentials in the URL. `PromptTemplate` holds the owner's sum
 8000 characters). Placeholders are `{{title}}`, `{{date}}`, `{{time}}`, `{{duration}}`, `{{device}}`,
 `{{project}}`, `{{speakers}}`, `{{glossary}}` and `{{language}}`; an unknown or unclosed one is
 refused when saved. The transcript itself always goes in the user message, never in the template.
+
+`echo_lines.rs` and `echo_detect.rs` (#108, ported from Yogurt, MIT; see `THIRD_PARTY_NOTICES.md`)
+handle the computer's sound recorded as a second track. Without headphones the microphone also
+hears the other side from the speakers. `EchoDetector` compares the two tracks' 10 ms loudness
+envelopes over 2 s windows at lags of 0 to 300 ms. It counts echo as heard only when a steady share
+of the windows where both sides carry sound follow each other at one lag (`present`), and it
+remembers which windows did (`correlated_at`). `echo_positions` then picks the microphone lines
+whose words copy the computer sound's lines near the same time, in an echoing window. Short replies
+(English and Italian) are never dropped. Nothing is dropped unless echo was heard.

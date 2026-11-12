@@ -4,6 +4,14 @@
 pub mod chat;
 #[cfg(test)]
 mod chat_tests;
+/// Hears whether the other side's voice reaches the microphone (#108).
+pub mod echo_detect;
+#[cfg(test)]
+mod echo_detect_tests;
+/// Finds microphone lines that only repeat the computer's sound (#108).
+pub mod echo_lines;
+#[cfg(test)]
+mod echo_lines_tests;
 /// Describes an imported e-mail and its attachments (Issue #85).
 pub mod email;
 /// Defines failures that may cross a hexagonal boundary.
