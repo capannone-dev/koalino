@@ -1140,7 +1140,7 @@ async fn get_cluster_review_clip(
                 (axum::http::header::CONTENT_TYPE, "audio/wav"),
                 (axum::http::header::CACHE_CONTROL, "no-store"),
             ],
-            clip.audio_bytes().to_vec(),
+            clip.voice_audio().into_owned(),
         )
             .into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),

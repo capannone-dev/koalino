@@ -273,6 +273,15 @@ pub trait NoteRepository {
         meeting_id: &MeetingId,
     ) -> Result<Vec<UnassignedVoiceClip>, StorageError>;
 
+    /// Deletes one review clip, as when the final pass finds it holds another person (#116).
+    ///
+    /// Inputs: `clip_id`; an unknown one is not an error.
+    /// Outputs: Success or a portable storage error.
+    /// Side effects: Deletes temporary sensitive audio and its derived embedding.
+    fn delete_unassigned_clip(&self, _clip_id: Uuid) -> Result<(), StorageError> {
+        Err(StorageError::Unavailable)
+    }
+
     /// Retrieves recorded meeting windows containing an attachment capture timestamp.
     ///
     /// Inputs: `timestamp` is a UTC attachment capture time obtained through `MetadataExtractor`.
@@ -674,6 +683,10 @@ where
         meeting_id: &MeetingId,
     ) -> Result<Vec<UnassignedVoiceClip>, StorageError> {
         (*self).get_unassigned_clips(meeting_id)
+    }
+
+    fn delete_unassigned_clip(&self, clip_id: Uuid) -> Result<(), StorageError> {
+        (*self).delete_unassigned_clip(clip_id)
     }
 
     fn get_meetings_overlapping(

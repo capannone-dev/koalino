@@ -10,7 +10,7 @@
 //! cluster assignment) `VoiceVectorDB` ports. It never logs transcript text, audio, or embeddings.
 
 use crate::domain::transcription_language::TranscriptionLanguage;
-use std::{collections::HashMap, rc::Rc, time::Instant};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, time::Instant};
 
 /// Credits participant tracks by the voices they carry (#103).
 mod participant_tracks;
@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 use crate::domain::{
     participant_track_voices::{ParticipantTrackVoices, TrackVoicePolicy},
+    pcm_wav::slice_pcm16_wav,
     transcript_confidence::{
         OverlapSpan, SegmentConfidence, is_uncertain_probability, merge_overlap_spans,
         overlaps_segment,
@@ -151,6 +152,57 @@ fn text_pieces_of(
             uncertain: is_uncertain_probability(word.probability_permille()),
         })
         .collect()
+}
+
+/// Least audio, in milliseconds, a review clip keeps after the final pass cuts it (#116).
+const MIN_REVIEW_CLIP_MS: u64 = 1_000;
+
+/// Longest silence, in milliseconds, inside one speaker's run of windows.
+const MAX_RUN_GAP_MS: u64 = 500;
+
+/// Finds one speaker's longest unbroken stretch inside a time range (#116).
+///
+/// Inputs: The windows (meeting time) and their speakers; the speaker; the range in meeting
+/// milliseconds. Each window counts for its middle half. Another speaker's window, or a gap over
+/// `MAX_RUN_GAP_MS`, breaks a run.
+/// Outputs: The stretch, cut to the range, or `None` when the speaker has no window there.
+/// Side effects: None.
+fn speaker_run_within(
+    voice_windows: &[VoiceWindow],
+    labels: &[usize],
+    speaker: usize,
+    range_start_ms: u64,
+    range_end_ms: u64,
+) -> Option<(u64, u64)> {
+    let mut cells: Vec<(u64, u64, bool)> = voice_windows
+        .iter()
+        .zip(labels)
+        .filter_map(|(window, label)| {
+            let quarter_ms = window.end_ms.saturating_sub(window.start_ms) / 4;
+            let start_ms = (window.start_ms + quarter_ms).max(range_start_ms);
+            let end_ms = (window.end_ms - quarter_ms).min(range_end_ms);
+            (start_ms < end_ms).then_some((start_ms, end_ms, *label == speaker))
+        })
+        .collect();
+    cells.sort_unstable_by_key(|(start_ms, _, _)| *start_ms);
+    let mut longest: Option<(u64, u64)> = None;
+    let mut current: Option<(u64, u64)> = None;
+    for (start_ms, end_ms, is_speaker) in cells {
+        current = match current {
+            _ if !is_speaker => None,
+            Some((run_start, run_end)) if start_ms <= run_end + MAX_RUN_GAP_MS => {
+                Some((run_start, run_end.max(end_ms)))
+            }
+            _ => Some((start_ms, end_ms)),
+        };
+        if let Some((run_start, run_end)) = current
+            && longest
+                .is_none_or(|(best_start, best_end)| run_end - run_start > best_end - best_start)
+        {
+            longest = Some((run_start, run_end));
+        }
+    }
+    longest
 }
 
 /// Counts, per speaker, how many of their windows fall in each live cluster's segments.
@@ -308,6 +360,9 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     participant_tracks: HashMap<String, ParticipantTrackVoices>,
     /// The thresholds that judge a participant's track.
     track_voice_policy: TrackVoicePolicy,
+    /// For each review clip this recording saved, by cluster: where in the meeting its audio
+    /// begins, so the final pass can cut it down to the speaker it settles on (#116).
+    review_clip_starts: RefCell<Vec<(Uuid, u64)>>,
 }
 
 impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
@@ -359,6 +414,7 @@ where
             overlap_spans: Vec::new(),
             participant_tracks: HashMap::new(),
             track_voice_policy: TrackVoicePolicy::default(),
+            review_clip_starts: RefCell::new(Vec::new()),
         })
     }
 
@@ -664,7 +720,9 @@ where
             claimed_clusters.push(cluster_id);
             attributions[speaker].cluster_id = Some(cluster_id);
             self.save_final_cluster(cluster_id, voice)?;
+            self.cut_review_clip_to_speaker(cluster_id, speaker, &voice_windows, &labels);
         }
+        self.review_clip_starts.borrow_mut().clear();
 
         let final_segments =
             self.final_segments(&voice_windows, &labels, &text_pieces, &attributions);
@@ -811,6 +869,83 @@ where
         self.note_repository
             .replace_unknown_speaker_cluster_members(&cluster, &[chunk])?;
         Ok(())
+    }
+
+    /// Cuts a cluster's review clip down to the longest run of the speaker the final pass gave it
+    /// (#116).
+    ///
+    /// The live pass can merge two people into one voice, so the clip that founded the cluster may
+    /// hold someone else too. Inside the clip, each voice window counts for its middle half, where
+    /// its speaker is surest; the clip keeps the speaker's longest unbroken stretch of those.
+    ///
+    /// Inputs: The cluster, its final speaker, and this recording's windows and their speakers.
+    /// Outputs: None. A clip this recording did not save, or one in another format, is left alone.
+    /// Side effects: Rewrites the clip with the shorter audio, or deletes it when the speaker has
+    /// less than `MIN_REVIEW_CLIP_MS` of it: no clip is better than one of another person. A
+    /// storage failure is logged and leaves the clip as it was.
+    fn cut_review_clip_to_speaker(
+        &self,
+        cluster_id: Uuid,
+        speaker: usize,
+        voice_windows: &[VoiceWindow],
+        labels: &[usize],
+    ) {
+        let Some(clip_start_ms) = self
+            .review_clip_starts
+            .borrow()
+            .iter()
+            .find(|(known, _)| *known == cluster_id)
+            .map(|(_, start_ms)| *start_ms)
+        else {
+            return;
+        };
+        let clip = match self.note_repository.get_unassigned_clips(&self.meeting_id) {
+            Ok(clips) => clips
+                .into_iter()
+                .find(|clip| clip.cluster_id() == Some(cluster_id)),
+            Err(error) => {
+                tracing::warn!(meeting_id = %self.meeting_id.as_str(), error = %error, "Review clips could not be read; the clip stays whole");
+                return;
+            }
+        };
+        let Some(clip) = clip.filter(|clip| clip.start_time_ms() == 0) else {
+            return;
+        };
+        let clip_end_ms = clip_start_ms + clip.end_time_ms();
+        let run = speaker_run_within(voice_windows, labels, speaker, clip_start_ms, clip_end_ms)
+            .filter(|(start_ms, end_ms)| end_ms - start_ms >= MIN_REVIEW_CLIP_MS);
+        if run == Some((clip_start_ms, clip_end_ms)) {
+            return;
+        }
+        let cut_clip = run.and_then(|(start_ms, end_ms)| {
+            let audio = slice_pcm16_wav(
+                clip.audio_bytes(),
+                start_ms - clip_start_ms,
+                end_ms - clip_start_ms,
+            )?;
+            Some(
+                UnassignedVoiceClip::with_review_context(
+                    clip.clip_id(),
+                    self.meeting_id.clone(),
+                    0,
+                    end_ms - start_ms,
+                    audio,
+                    clip.derived_embedding().to_vec(),
+                    clip.weak_match_candidate().cloned(),
+                )
+                .with_cluster_id(Some(cluster_id)),
+            )
+        });
+        let outcome = self
+            .note_repository
+            .delete_unassigned_clip(clip.clip_id())
+            .and_then(|()| match cut_clip {
+                Some(cut_clip) => self.note_repository.save_unassigned_clip(cut_clip),
+                None => Ok(()),
+            });
+        if let Err(error) = outcome {
+            tracing::warn!(meeting_id = %self.meeting_id.as_str(), error = %error, "A review clip could not be cut to its speaker");
+        }
     }
 
     /// Builds this recording's final segments: within a chunk, each run of one speaker's text.
@@ -1192,11 +1327,15 @@ where
 
     /// Saves a temporary review clip so the user can identify the speaker later.
     ///
-    /// Inputs: The clip ID to use, the source chunk, the diarized segment (times stay relative to
-    /// the clip audio, as in `DiarizationProcessor`), an optional weak candidate, and the cluster
-    /// the clip represents (if any).
+    /// The clip holds only the voice's own span of the chunk (#116): a whole chunk often holds
+    /// several people, and the owner names a voice by listening to its clip.
+    ///
+    /// Inputs: The clip ID to use, the source chunk, the diarized segment (chunk-relative times),
+    /// an optional weak candidate, and the cluster the clip represents (if any).
     /// Outputs: The clip ID, or `None` when storage rejected it (the segment is still persisted).
-    /// Side effects: Persists raw chunk audio and the derived embedding through `NoteRepository`.
+    /// Side effects: Persists the span's raw audio and the derived embedding through
+    /// `NoteRepository`; audio that is not a mono 16-bit WAV is kept whole, timed by the segment.
+    /// Remembers where a clustered clip begins in the meeting, for the final pass.
     fn preserve_review_clip(
         &self,
         clip_id: Uuid,
@@ -1205,18 +1344,45 @@ where
         weak_match_candidate: Option<WeakVoiceMatchCandidate>,
         cluster_id: Option<Uuid>,
     ) -> Option<Uuid> {
+        let span_audio = slice_pcm16_wav(
+            vad_chunk.audio_bytes(),
+            speaker_segment.start_time_ms(),
+            speaker_segment.end_time_ms(),
+        );
+        let (start_time_ms, end_time_ms, audio_bytes, clip_start_in_chunk_ms) = match span_audio {
+            Some(audio) => (
+                0,
+                speaker_segment
+                    .end_time_ms()
+                    .saturating_sub(speaker_segment.start_time_ms()),
+                audio,
+                speaker_segment.start_time_ms(),
+            ),
+            None => (
+                speaker_segment.start_time_ms(),
+                speaker_segment.end_time_ms(),
+                vad_chunk.audio_bytes().to_vec(),
+                0,
+            ),
+        };
         let review_clip = UnassignedVoiceClip::with_review_context(
             clip_id,
             self.meeting_id.clone(),
-            speaker_segment.start_time_ms(),
-            speaker_segment.end_time_ms(),
-            vad_chunk.audio_bytes().to_vec(),
+            start_time_ms,
+            end_time_ms,
+            audio_bytes,
             speaker_segment.embedding().to_vec(),
             weak_match_candidate,
         )
         .with_cluster_id(cluster_id);
         match self.note_repository.save_unassigned_clip(review_clip) {
             Ok(()) => {
+                if let Some(cluster_id) = cluster_id {
+                    self.review_clip_starts.borrow_mut().push((
+                        cluster_id,
+                        vad_chunk.chunk_bounds().start_offset_ms() + clip_start_in_chunk_ms,
+                    ));
+                }
                 tracing::warn!(meeting_id = %self.meeting_id.as_str(), clip_id = %clip_id, "Unassigned voice clip preserved for manual review");
                 Some(clip_id)
             }

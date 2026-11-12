@@ -1172,6 +1172,21 @@ impl NoteRepository for SqliteNoteRepository {
         Ok(())
     }
 
+    /// Deletes one temporary manual-review clip (#116).
+    ///
+    /// Inputs: `clip_id`; an unknown one changes nothing.
+    /// Outputs: Success or a SQLite storage error.
+    /// Side effects: Deletes sealed review audio and its sealed embedding.
+    fn delete_unassigned_clip(&self, clip_id: uuid::Uuid) -> Result<(), StorageError> {
+        self.connection
+            .execute(
+                "DELETE FROM unassigned_voice_clips WHERE clip_id = ?1",
+                params![clip_id.to_string()],
+            )
+            .map_err(|error| sqlite_error("unable to delete an unassigned voice clip", error))?;
+        Ok(())
+    }
+
     /// Loads all temporary manual-review clips belonging to an existing meeting.
     ///
     /// Inputs: `meeting_id` identifies a meeting record.

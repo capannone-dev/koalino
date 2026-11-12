@@ -792,7 +792,7 @@ impl FfiRuntime {
             let clip_path = self
                 .review_clip_directory
                 .join(format!("{}.wav", clip.clip_id()));
-            fs::write(&clip_path, clip.audio_bytes()).map_err(|_| FFI_OPERATION_REJECTED)?;
+            fs::write(&clip_path, clip.voice_audio()).map_err(|_| FFI_OPERATION_REJECTED)?;
             let absolute_path =
                 review_clip_absolute_path(&clip_path).map_err(|_| FFI_OPERATION_REJECTED)?;
             let weak_match_json = match clip.weak_match_candidate() {
@@ -1088,7 +1088,7 @@ impl FfiRuntime {
         let clip_path = self
             .review_clip_directory
             .join(format!("{}.wav", clip.clip_id()));
-        fs::write(&clip_path, clip.audio_bytes())?;
+        fs::write(&clip_path, clip.voice_audio())?;
         review_clip_absolute_path(&clip_path)
     }
 

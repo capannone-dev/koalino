@@ -51,6 +51,10 @@ use crate::{
 #[path = "external_track_tests.rs"]
 mod external_track_tests;
 
+/// A voice's review clip holds only that voice (#116).
+#[path = "review_clip_tests.rs"]
+mod review_clip_tests;
+
 const MEETING_ID: &str = "meeting-pipeline";
 
 /// Returns scripted transcripts in call order, or a scripted failure for every call.

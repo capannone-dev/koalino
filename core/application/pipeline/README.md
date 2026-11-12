@@ -13,6 +13,7 @@ is imported.
 | --- | --- |
 | `meeting_session/` | Parts of `MeetingSession` in their own files: `participant_tracks.rs` credits an online-meeting participant's track by the voices it carries (#103). |
 | `external_track_tests.rs` | Participant tracks (#103): one voice goes to the participant, a room's voices are matched one by one, people taking turns in a room are told apart, and a voice is offered once after 30 s unless it sounds like someone else. |
+| `review_clip_tests.rs` | Review clips (#116): a new voice's clip holds only its span of the chunk, and after the meeting a clip keeps only the speaker the final pass settled on. |
 | `meeting_session.rs` | `MeetingSession`: per-recording orchestration of local VAD chunks and external bridge chunks. Each chunk's overlap spans (from `diarize_with_overlap`) are kept in meeting time and recorded with the meeting. Live and final segments carry their confidence marks: overlap, a guessed speaker (a weak match, or no voice nearby), and unclear words (#90, #91). |
 | `alignment.rs` | Pure timestamp alignment and transcript text distribution against VAD chunk boundaries; each aligned region lists its unclear words. |
 | `pipeline_factory.rs` | `PipelineFactory`: the composition root that owns the pipeline ports once and opens one session per recording. Its `GlossarySource` is read when each session opens, so a saved glossary applies from the next recording without rebuilding anything; the session prompts every chunk with it and drops its echo. |
@@ -132,6 +133,9 @@ Weak and unmatched voices are clustered per meeting by cosine similarity (thresh
 `../README.md`). `SpeakerAttribution::{PendingReview, Unknown}` carry the `cluster_id`, which is
 persisted as `TranscriptSegment::unknown_cluster_id`. Only the chunk that founds a cluster saves a
 review clip, so the Voice Gallery shows one clip per unknown person rather than one per chunk.
+The clip holds only the voice's span of that chunk. When the meeting ends, the final pass cuts it
+again to the longest stretch of the speaker it gave the cluster. With less than a second of that
+speaker, the clip is deleted rather than kept with someone else's voice (#116).
 `MeetingSession::assign_identity_to_cluster` enrolls the cluster's embeddings, relinks its
 segments, resolves the cluster, and reloads the session's in-memory timeline. Assign through the
 session while it is live; otherwise its next chunk would rewrite the stale timeline.

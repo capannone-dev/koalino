@@ -2442,6 +2442,26 @@ impl UnassignedVoiceClip {
         &self.audio_bytes
     }
 
+    /// Returns the audio to play when the owner reviews this voice: only its span (#116).
+    ///
+    /// Clips saved before #116 hold a whole chunk, often with several people, and mark the voice
+    /// with `start_time_ms`..`end_time_ms`; newer clips already hold just that span.
+    ///
+    /// Inputs: None.
+    /// Outputs: A WAV of the span, or the stored audio unchanged when it is not a mono 16-bit WAV
+    /// or the span holds no sample.
+    /// Side effects: None; callers must not log the returned bytes.
+    pub fn voice_audio(&self) -> std::borrow::Cow<'_, [u8]> {
+        match crate::domain::pcm_wav::slice_pcm16_wav(
+            &self.audio_bytes,
+            self.start_time_ms,
+            self.end_time_ms,
+        ) {
+            Some(span_audio) => std::borrow::Cow::Owned(span_audio),
+            None => std::borrow::Cow::Borrowed(&self.audio_bytes),
+        }
+    }
+
     /// Borrows the derived biometric embedding retained solely for user-confirmed assignment.
     ///
     /// Inputs: None.
