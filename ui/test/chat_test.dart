@@ -122,4 +122,50 @@ void main() {
     expect(requests.last['command'], 'clear');
     expect(find.text('Who came?'), findsNothing);
   });
+
+  testWidgets('a cited source opens its meeting at the moment (#110)',
+      (WidgetTester tester) async {
+    answers = <Map<String, Object?>>[
+      <String, Object?>{
+        'ok': true,
+        'messages': <Object?>[
+          <String, Object?>{
+            ...message('assistant', 'Bo will send the budget [1, 00:01:05].'),
+            'sources': <Object?>[
+              <String, Object?>{
+                'number': 1,
+                'label': 'Meeting "Review"',
+                'at_ms': 65000,
+                'meeting_id': 'm-1',
+              },
+              <String, Object?>{
+                'number': 2,
+                'label': 'File plan.md',
+                'at_ms': null,
+                'project_id': 'p-1',
+                'resource_id': 'a-1',
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    final List<(String, int?)> opened = <(String, int?)>[];
+    await tester.pumpWidget(MaterialApp(
+      home: ChatScreen(
+        bridge: ChatBridge(call: call),
+        topic: const ChatTopic.meeting('m-1'),
+        title: 'Chat: Review',
+        openMeeting: (BuildContext context, String meetingId, int? atMs) =>
+            opened.add((meetingId, atMs)),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('[1] Meeting "Review" · 1:05'), findsOneWidget);
+    expect(find.text('[2] File plan.md'), findsOneWidget);
+    await tester.tap(find.text('[1] Meeting "Review" · 1:05'));
+    await tester.pumpAndSettle();
+    expect(opened, <(String, int?)>[('m-1', 65000)]);
+  });
 }

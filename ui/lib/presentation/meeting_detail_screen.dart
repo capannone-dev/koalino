@@ -99,6 +99,27 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
     }
   }
 
+  /// Opens a meeting a chat answer cites, at the cited moment (#110), as a new page over the
+  /// chat with this page's tools.
+  void _openCitedMeeting(BuildContext context, String meetingId, int? atMs) {
+    widget.controller.selectMeeting(meetingId);
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (BuildContext context) => MeetingDetailScreen(
+        controller: widget.controller,
+        meetingId: meetingId,
+        focusStartMs: atMs,
+        attachmentsController: widget.attachmentsController,
+        photoScreenBuilder: widget.photoScreenBuilder,
+        speakersScreenBuilder: widget.speakersScreenBuilder,
+        exportController: widget.exportController,
+        projectsController: widget.projectsController,
+        summariesController: widget.summariesController,
+        editController: widget.editController,
+        chatBridge: widget.chatBridge,
+      ),
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -113,7 +134,9 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                   bridge: bridge,
                   topic: ChatTopic.meeting(widget.meetingId),
                   title:
-                      'Chat: ${widget.controller.selectedMeeting?.summary.title ?? 'meeting'}'),
+                      'Chat: ${widget.controller.selectedMeeting?.summary.title ?? 'meeting'}',
+                  openMeeting: _openCitedMeeting,
+                  projectsController: widget.projectsController),
             ),
           if (widget.summariesController
               case final SummariesController summaries)

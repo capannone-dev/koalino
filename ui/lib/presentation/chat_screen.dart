@@ -1,22 +1,41 @@
 // The chat page (#97): ask the default AI connection about one meeting, one project, or every
 // meeting, summary and project. Each answer says what the model was given and what was left out.
-// The chat is kept on this device; it can be deleted from the menu.
+// The chat is kept on this device; it can be deleted from the menu. The places an answer cites
+// are listed under it, and open the meeting at that moment or the file (#110).
 
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
+import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
+import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
+
+/// Opens a meeting's page at `atMs` (null for the top).
+typedef ChatMeetingOpener = void Function(
+    BuildContext context, String meetingId, int? atMs);
 
 /// Finds the question field in tests.
 const Key chatQuestionFieldKey = ValueKey<String>('chat-question');
 
 /// Opens the chat page.
+///
+/// Inputs: The bridge, the topic and the page title; optionally how to open a cited meeting and
+/// the projects controller that finds a cited file. A source without its opener is shown but
+/// can't be opened. Side effects: Pushes a page.
 void openChat(BuildContext context,
     {required ChatBridge bridge,
     required ChatTopic topic,
-    required String title}) {
+    required String title,
+    ChatMeetingOpener? openMeeting,
+    ProjectsController? projectsController}) {
   Navigator.of(context).push(MaterialPageRoute<void>(
-    builder: (BuildContext context) =>
-        ChatScreen(bridge: bridge, topic: topic, title: title),
+    builder: (BuildContext context) => ChatScreen(
+        bridge: bridge,
+        topic: topic,
+        title: title,
+        openMeeting: openMeeting,
+        projectsController: projectsController),
   ));
 }
 
@@ -27,6 +46,8 @@ final class ChatScreen extends StatefulWidget {
       {required this.bridge,
       required this.topic,
       required this.title,
+      this.openMeeting,
+      this.projectsController,
       super.key});
 
   final ChatBridge bridge;
@@ -34,6 +55,12 @@ final class ChatScreen extends StatefulWidget {
 
   /// Such as `Chat: Budget review`.
   final String title;
+
+  /// Opens a cited meeting; without it, meeting sources can't be opened.
+  final ChatMeetingOpener? openMeeting;
+
+  /// Finds a cited file; without it, file sources can't be opened.
+  final ProjectsController? projectsController;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -154,6 +181,51 @@ final class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Opens a cited place: the meeting at its moment, or the file in its viewer.
+  ///
+  /// Side effects: May open the file's project in the controller, and pushes a page. A file that
+  /// is gone shows a message.
+  Future<void> _openSource(ChatSource source) async {
+    if (source.meetingId case final String meetingId) {
+      widget.openMeeting?.call(context, meetingId, source.atMs);
+      return;
+    }
+    final ProjectsController? projects = widget.projectsController;
+    final String? projectId = source.projectId;
+    final String? resourceId = source.resourceId;
+    if (projects == null || projectId == null || resourceId == null) {
+      return;
+    }
+    final NavigatorState navigator = Navigator.of(context);
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    if (projects.openProjectId != projectId || projects.openDetail == null) {
+      await projects.openProject(projectId);
+    }
+    final ProjectResource? resource = projects.openDetail?.resources
+        .where(
+            (ProjectResource resource) => resource.attachmentId == resourceId)
+        .firstOrNull;
+    if (!navigator.mounted) {
+      return;
+    }
+    if (resource == null) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('That file is no longer in the project.')));
+      return;
+    }
+    await navigator.push(MaterialPageRoute<void>(
+      builder: (BuildContext context) => ResourceViewerScreen(
+          controller: projects, projectId: projectId, resource: resource),
+    ));
+  }
+
+  /// Whether a source can be opened from this page.
+  bool _canOpen(ChatSource source) => source.meetingId != null
+      ? widget.openMeeting != null
+      : widget.projectsController != null &&
+          source.projectId != null &&
+          source.resourceId != null;
+
   void _toEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
@@ -166,7 +238,11 @@ final class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final List<Widget> bubbles = <Widget>[
-      for (final ChatEntry message in _messages) _Bubble(message: message),
+      for (final ChatEntry message in _messages)
+        _Bubble(
+            message: message,
+            onOpenSource: (ChatSource source) =>
+                _canOpen(source) ? () => _openSource(source) : null),
       if (_pending case final String question)
         _Bubble(
             message: ChatEntry(
@@ -252,9 +328,18 @@ final class _ChatScreenState extends State<ChatScreen> {
 
 /// One message: the owner's on the right, the model's on the left with what it was given.
 final class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message});
+  const _Bubble({required this.message, this.onOpenSource});
 
   final ChatEntry message;
+
+  /// What tapping a source does; null (or a null result) shows it without a link.
+  final VoidCallback? Function(ChatSource source)? onOpenSource;
+
+  /// Such as `[1] Meeting "Review" · 1:05`.
+  static String sourceLabel(ChatSource source) => <String>[
+        '[${source.number}] ${source.label}',
+        if (source.atMs case final int atMs) formatMeetingDuration(atMs),
+      ].join(' · ');
 
   @override
   Widget build(BuildContext context) {
@@ -279,6 +364,27 @@ final class _Bubble extends StatelessWidget {
                   SelectableText(message.text)
                 else
                   MarkdownView(markdownText: message.text, embedded: true),
+                if (!mine && message.sources.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: <Widget>[
+                      for (final ChatSource source in message.sources)
+                        switch (onOpenSource?.call(source)) {
+                          final VoidCallback open => ActionChip(
+                              avatar: Icon(source.meetingId != null
+                                  ? Icons.event_note_outlined
+                                  : Icons.description_outlined),
+                              label: Text(sourceLabel(source)),
+                              tooltip: 'Open',
+                              onPressed: open,
+                            ),
+                          null => Chip(label: Text(sourceLabel(source))),
+                        },
+                    ],
+                  ),
+                ],
                 if (!mine && message.included.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 8),
                   Text('Given: ${message.included.join('; ')}', style: small),

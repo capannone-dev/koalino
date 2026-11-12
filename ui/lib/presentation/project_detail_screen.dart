@@ -199,7 +199,18 @@ final class ProjectDetailScreen extends StatelessWidget {
                   onPressed: () => openChat(context,
                       bridge: bridge,
                       topic: ChatTopic.project(projectId),
-                      title: 'Chat: ${project.name}'),
+                      title: 'Chat: ${project.name}',
+                      openMeeting: switch (meetingMomentBuilder) {
+                        final MeetingMomentBuilder builder =>
+                          (BuildContext context, String meetingId, int? atMs) =>
+                              Navigator.of(context)
+                                  .push(MaterialPageRoute<void>(
+                                builder: (BuildContext context) =>
+                                    builder(context, meetingId, atMs),
+                              )),
+                        null => null,
+                      },
+                      projectsController: controller),
                 ),
               IconButton(
                 key: const ValueKey<String>('add-project-files'),

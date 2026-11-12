@@ -109,6 +109,12 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
     ));
   }
 
+  /// Opens a meeting a chat answer cites, at the cited moment (#110).
+  void _openCitedMeeting(BuildContext context, String meetingId, int? atMs) {
+    widget.controller.selectMeeting(meetingId);
+    _pushMeeting(context, meetingId, focusStartMs: atMs);
+  }
+
   /// Pushes a meeting's page, scrolled to `focusStartMs` when given.
   void _pushMeeting(BuildContext context, String meetingId,
       {int? focusStartMs}) {
@@ -159,7 +165,9 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                   onPressed: () => openChat(context,
                       bridge: bridge,
                       topic: const ChatTopic.everything(),
-                      title: 'Chat with all notes'),
+                      title: 'Chat with all notes',
+                      openMeeting: _openCitedMeeting,
+                      projectsController: widget.projectsController),
                 ),
               if (isTwoPane)
                 if (widget.chatBridge case final ChatBridge bridge)
@@ -174,7 +182,9 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                               bridge: bridge,
                               topic:
                                   ChatTopic.meeting(meeting.summary.meetingId),
-                              title: 'Chat: ${meeting.summary.title}'),
+                              title: 'Chat: ${meeting.summary.title}',
+                              openMeeting: _openCitedMeeting,
+                              projectsController: widget.projectsController),
                         ),
                       _ => const SizedBox.shrink(),
                     },

@@ -138,7 +138,8 @@ match is: `placeLabel` such as `1:01 · Anna`, and the snippet's `SnippetPart`s)
 
 `chat_bridge.dart` (#97) is `ChatBridge.history(topic)`, `ask(topic, question)` and
 `clear(topic)` over `note_taker_chat` (on a background isolate through `callRustLlm`), with
-`ChatTopic` (a meeting, a project or everything), `ChatEntry` and `ChatException`.
+`ChatTopic` (a meeting, a project or everything), `ChatEntry` with its cited `ChatSource`s
+(#110) and `ChatException`.
 
 `clear_copy_bridge.dart` (#99) gives the viewers clear copies of sealed attachments:
 `clearCopyResolver` (replaceable in tests) defaults to `rememberedClearCopy`, which calls

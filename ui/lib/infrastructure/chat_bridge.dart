@@ -31,6 +31,46 @@ final class ChatTopic {
       <String, Object?>{'scope': scope, if (id != null) 'id': id};
 }
 
+/// A place an answer cites (#110): a meeting, at a moment when the answer gave one, or a
+/// project file.
+final class ChatSource {
+  /// Creates the source.
+  const ChatSource({
+    required this.number,
+    required this.label,
+    this.atMs,
+    this.meetingId,
+    this.projectId,
+    this.resourceId,
+  });
+
+  /// Reads the core's JSON.
+  factory ChatSource.fromJson(Map<String, Object?> json) => ChatSource(
+        number: (json['number'] as num?)?.toInt() ?? 0,
+        label: json['label'] as String? ?? '',
+        atMs: (json['at_ms'] as num?)?.toInt(),
+        meetingId: json['meeting_id'] as String?,
+        projectId: json['project_id'] as String?,
+        resourceId: json['resource_id'] as String?,
+      );
+
+  /// The number the answer cites it by, as in `[1]`.
+  final int number;
+
+  /// Such as `Meeting "Review"` or `File plan.md`.
+  final String label;
+
+  /// Where in the meeting, in milliseconds from its start; null for the whole meeting or a file.
+  final int? atMs;
+
+  /// The meeting, for a meeting source.
+  final String? meetingId;
+
+  /// The project and file, for a file source; a file outside any project has no project.
+  final String? projectId;
+  final String? resourceId;
+}
+
 /// One message of a chat.
 final class ChatEntry {
   /// Creates the message.
@@ -41,6 +81,7 @@ final class ChatEntry {
     this.included = const <String>[],
     this.omitted = const <String>[],
     this.connection,
+    this.sources = const <ChatSource>[],
   });
 
   /// Reads the core's JSON.
@@ -57,6 +98,12 @@ final class ChatEntry {
       included: strings(json['included']),
       omitted: strings(json['omitted']),
       connection: json['connection'] as String?,
+      sources: <ChatSource>[
+        for (final Object? source
+            in json['sources'] as List<Object?>? ?? <Object?>[])
+          if (source case final Map<String, Object?> source)
+            ChatSource.fromJson(source),
+      ],
     );
   }
 
@@ -71,6 +118,9 @@ final class ChatEntry {
 
   /// For an answer: the connection's label.
   final String? connection;
+
+  /// For an answer: the places it cites, in order of first mention (#110).
+  final List<ChatSource> sources;
 }
 
 /// A refused or failed chat command, with the core's stable code.

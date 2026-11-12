@@ -134,8 +134,9 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   photos (inline and full screen) and project pictures, Markdown, text and PDFs use it.
 - `chat_screen.dart` (#97) is the chat page (`openChat`): the kept messages, a question field,
   and under each answer what the model was given, what was left out and which connection
-  answered. It opens from the Meetings screen (every note), a meeting (its app bar, or the
-  two-pane app bar for the selected meeting) and a project's page.
+  answered. The places an answer cites are chips under it (#110): a meeting opens at the cited
+  moment, a file in its viewer. It opens from the Meetings screen (every note), a meeting (its
+  app bar, or the two-pane app bar for the selected meeting) and a project's page.
 - `notes_folder_screen.dart` (#98) is Settings → Notes folder on desktops: the folder (typed or
   chosen with the system dialog), the switch, Sync now, the last round, and the warning that the
   folder is a decrypted copy.
