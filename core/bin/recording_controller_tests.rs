@@ -23,8 +23,8 @@ use crate::{
     domain::{
         errors::{ScreenShareError, StorageError, TranscriptionError},
         models::{
-            AudioRecording, AudioState, DeviceId, MeetingId, MeetingTitle, Transcript,
-            TranscriptSegment, TranscriptionContext,
+            AudioRecording, AudioState, DeviceId, MeetingId, MeetingTitle, SegmentSource,
+            Transcript, TranscriptSegment, TranscriptionContext,
         },
         transcription_language::TranscriptionLanguage,
     },
@@ -630,4 +630,112 @@ fn the_language_applies_from_the_next_chunk_and_ends_with_the_recording() {
         .collect();
     assert_eq!(texts, ["chunk of 15000 ms in it", "chunk of 1000 ms in en"]);
     assert_eq!(controller.language(), None);
+}
+
+/// Each segment's span and track.
+fn spans_by_track(segments: &[TranscriptSegment]) -> Vec<(u64, u64, SegmentSource)> {
+    let mut spans: Vec<(u64, u64, SegmentSource)> = segments
+        .iter()
+        .map(|segment| {
+            (
+                segment.start_time_ms(),
+                segment.end_time_ms(),
+                segment.source(),
+            )
+        })
+        .collect();
+    spans.sort_by_key(|(start, end, source)| (*start, *end, *source == SegmentSource::Microphone));
+    spans
+}
+
+/// Verifies the computer's sound is cut, placed on the same meeting time, and marked (#108).
+/// Both tracks arrive interleaved, as the capture drains them together.
+#[test]
+fn the_computer_sound_is_a_second_track_on_the_same_meeting_time() {
+    let (mut controller, chunk_audio_store) = controller_with(true, |_| {});
+    let meeting_id = controller
+        .start(Some(MeetingId::new("meeting-two-tracks")))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let mut submitted = 0;
+    for _ in 0..16 {
+        controller
+            .push_pcm(pcm_seconds(1))
+            .unwrap_or_else(|error| panic!("{error}"));
+        submitted += controller
+            .push_computer_sound_pcm(pcm_seconds(1))
+            .unwrap_or_else(|error| panic!("{error}"));
+    }
+    assert_eq!(submitted, 1);
+    controller.stop().unwrap_or_else(|error| panic!("{error}"));
+
+    assert!(chunk_audio_store.is_empty());
+    assert_eq!(
+        spans_by_track(&stored_segments(&controller, &meeting_id)),
+        vec![
+            (0, 15_000, SegmentSource::ComputerSound),
+            (0, 15_000, SegmentSource::Microphone),
+            (15_000, 16_000, SegmentSource::ComputerSound),
+            (15_000, 16_000, SegmentSource::Microphone),
+        ]
+    );
+}
+
+/// Verifies computer sound that starts late, or pauses while nothing plays, is placed by the
+/// microphone's clock rather than by its own sample count (#108).
+#[test]
+fn the_computer_sound_follows_the_microphone_s_clock() {
+    let (mut controller, _chunk_audio_store) = controller_with(true, |_| {});
+    let meeting_id = controller
+        .start(Some(MeetingId::new("meeting-late-sound")))
+        .unwrap_or_else(|error| panic!("{error}"));
+    // The loopback stream opens after ten seconds: its first second ends at the microphone's time.
+    controller
+        .push_pcm(pcm_seconds(10))
+        .unwrap_or_else(|error| panic!("{error}"));
+    controller
+        .push_computer_sound_pcm(pcm_seconds(1))
+        .unwrap_or_else(|error| panic!("{error}"));
+    // Then nothing plays for four seconds, and it sends nothing meanwhile.
+    controller
+        .push_pcm(pcm_seconds(5))
+        .unwrap_or_else(|error| panic!("{error}"));
+    controller
+        .push_computer_sound_pcm(pcm_seconds(1))
+        .unwrap_or_else(|error| panic!("{error}"));
+    controller.stop().unwrap_or_else(|error| panic!("{error}"));
+
+    let computer_sound: Vec<(u64, u64, SegmentSource)> =
+        spans_by_track(&stored_segments(&controller, &meeting_id))
+            .into_iter()
+            .filter(|(_, _, source)| *source == SegmentSource::ComputerSound)
+            .collect();
+    assert_eq!(
+        computer_sound,
+        vec![
+            (9_000, 10_000, SegmentSource::ComputerSound),
+            (14_000, 15_000, SegmentSource::ComputerSound)
+        ]
+    );
+}
+
+/// Verifies computer sound is refused without a recording and discarded while paused (#108).
+#[test]
+fn the_computer_sound_needs_a_running_recording() {
+    let (mut controller, _chunk_audio_store) = controller_with(true, |_| {});
+    assert!(matches!(
+        controller.push_computer_sound_pcm(pcm_seconds(1)),
+        Err(RecordingControlError::NotRecording)
+    ));
+    let meeting_id = controller
+        .start(Some(MeetingId::new("meeting-paused-sound")))
+        .unwrap_or_else(|error| panic!("{error}"));
+    controller.pause().unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(
+        controller
+            .push_computer_sound_pcm(pcm_seconds(16))
+            .unwrap_or_else(|error| panic!("{error}")),
+        0
+    );
+    controller.stop().unwrap_or_else(|error| panic!("{error}"));
+    assert!(stored_segments(&controller, &meeting_id).is_empty());
 }

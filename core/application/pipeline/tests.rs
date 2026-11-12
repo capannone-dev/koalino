@@ -55,6 +55,10 @@ mod external_track_tests;
 #[path = "review_clip_tests.rs"]
 mod review_clip_tests;
 
+/// The computer's sound as a second track, and its echoes in the microphone (#108).
+#[path = "computer_sound_tests.rs"]
+mod computer_sound_tests;
+
 const MEETING_ID: &str = "meeting-pipeline";
 
 /// Returns scripted transcripts in call order, or a scripted failure for every call.

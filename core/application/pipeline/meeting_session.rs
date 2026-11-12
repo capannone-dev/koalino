@@ -17,9 +17,11 @@ mod participant_tracks;
 
 use uuid::Uuid;
 
+use crate::application::echo_removal::without_echoes;
 use crate::domain::{
+    echo_detect::{EchoDetector, EchoTrack},
     participant_track_voices::{ParticipantTrackVoices, TrackVoicePolicy},
-    pcm_wav::slice_pcm16_wav,
+    pcm_wav::{pcm16_mono_samples, slice_pcm16_wav},
     transcript_confidence::{
         OverlapSpan, SegmentConfidence, is_uncertain_probability, merge_overlap_spans,
         overlaps_segment,
@@ -30,9 +32,10 @@ use crate::{
     domain::{
         errors::{StorageError, TranscriptionError},
         models::{
-            AudioRecording, ExternalMediaChunk, ExternalTrackKind, MeetingId, SpeakerIdentity,
-            Transcript, TranscriptSegment, TranscriptionContext, UnassignedVoiceClip,
-            UnknownSpeakerChunk, UnknownSpeakerCluster, VoiceMatchResult, WeakVoiceMatchCandidate,
+            AudioRecording, ExternalMediaChunk, ExternalTrackKind, MeetingId, SegmentSource,
+            SpeakerIdentity, Transcript, TranscriptSegment, TranscriptionContext,
+            UnassignedVoiceClip, UnknownSpeakerChunk, UnknownSpeakerCluster, VoiceMatchResult,
+            WeakVoiceMatchCandidate,
         },
     },
     ports::{
@@ -245,6 +248,8 @@ pub struct VadAudioChunk {
     chunk_bounds: ChunkBounds,
     audio_bytes: Vec<u8>,
     language: Option<TranscriptionLanguage>,
+    /// The track the audio was captured on (#108); the microphone unless set.
+    track: SegmentSource,
 }
 
 impl VadAudioChunk {
@@ -266,7 +271,23 @@ impl VadAudioChunk {
             chunk_bounds: ChunkBounds::new(start_offset_ms, end_offset_ms)?,
             audio_bytes,
             language: None,
+            track: SegmentSource::Microphone,
         })
+    }
+
+    /// Marks the track the audio was captured on (#108).
+    ///
+    /// Inputs: `SegmentSource::ComputerSound` for the computer's own sound.
+    /// Outputs: The chunk. Side effects: None.
+    #[must_use]
+    pub fn with_track(mut self, track: SegmentSource) -> Self {
+        self.track = track;
+        self
+    }
+
+    /// Returns the track the audio was captured on.
+    pub fn track(&self) -> SegmentSource {
+        self.track
     }
 
     /// Stamps the language this chunk is transcribed in, chosen when it was cut, so a later change
@@ -363,6 +384,10 @@ pub struct MeetingSession<TranscriptionPort, DiarizationPort, MatcherPort, Repos
     /// For each review clip this recording saved, by cluster: where in the meeting its audio
     /// begins, so the final pass can cut it down to the speaker it settles on (#116).
     review_clip_starts: RefCell<Vec<(Uuid, u64)>>,
+    /// Compares the microphone with the computer's sound, to hear echo (#108).
+    echo_detector: EchoDetector,
+    /// Whether this recording already stored that echo was heard.
+    echo_recorded: bool,
 }
 
 impl<TranscriptionPort, DiarizationPort, MatcherPort, RepositoryPort>
@@ -415,6 +440,8 @@ where
             participant_tracks: HashMap::new(),
             track_voice_policy: TrackVoicePolicy::default(),
             review_clip_starts: RefCell::new(Vec::new()),
+            echo_detector: EchoDetector::new(),
+            echo_recorded: false,
         })
     }
 
@@ -510,6 +537,10 @@ where
     /// Outputs: The newly persisted segments in time order (empty for a blank transcript), or an
     /// error when the meeting mismatches, transcription fails, or the timeline cannot be saved.
     /// Diarization and voice-matching failures degrade to `Unattributed`/`Unknown` instead.
+    /// A chunk of the computer's sound (#108) is transcribed and attributed the same way, and its
+    /// segments are marked as the computer's; the final speaker pass and overlap marks are the
+    /// microphone's alone. Both tracks feed the echo detector; once it hears the microphone
+    /// following the speakers, the microphone's copies of the computer's lines are dropped.
     /// Side effects: Runs transcription (synchronously) and diarization, queries voice identities,
     /// saves review clips for weak/unknown voices, rewrites the meeting's segments in storage,
     /// saves a telemetry row per completed AI task when a recorder is set, and emits structured
@@ -521,6 +552,8 @@ where
         self.ensure_session_meeting(vad_chunk.audio_recording().meeting_id())?;
         let processing_started_at = Instant::now();
         let chunk_bounds = vad_chunk.chunk_bounds();
+        let track = vad_chunk.track();
+        self.listen_for_echo(vad_chunk);
         // No previous text as a prompt: Whisper then repeated or completed the previous chunk's
         // last words (Issue #51). The chosen language keeps chunks consistent instead.
         // The glossary prompts each chunk alone, and its echo is dropped below.
@@ -550,7 +583,9 @@ where
         );
 
         let (speaker_regions, chunk_overlap) = self.diarize_and_attribute(vad_chunk).await;
-        self.record_overlap(chunk_bounds, chunk_overlap);
+        if track == SegmentSource::Microphone {
+            self.record_overlap(chunk_bounds, chunk_overlap);
+        }
         for cluster_id in speaker_regions
             .iter()
             .filter_map(|region| region.attribution().unknown_cluster_id())
@@ -560,12 +595,19 @@ where
             }
         }
         let aligned_regions = align_transcript(chunk_bounds, speaker_regions, &transcript);
-        let chunk_index = self.chunk_count;
-        self.chunk_count += 1;
-        let chunk_pieces = text_pieces_of(chunk_index, chunk_bounds, &transcript, &aligned_regions);
-        let attributed_segments = self.persist_aligned_regions(aligned_regions)?;
-        self.text_pieces.extend(chunk_pieces);
-        self.collect_voice_windows(vad_chunk, chunk_index).await;
+        let attributed_segments = if track == SegmentSource::Microphone {
+            let chunk_index = self.chunk_count;
+            self.chunk_count += 1;
+            let chunk_pieces =
+                text_pieces_of(chunk_index, chunk_bounds, &transcript, &aligned_regions);
+            let attributed_segments = self.persist_aligned_regions(aligned_regions, track)?;
+            self.text_pieces.extend(chunk_pieces);
+            self.collect_voice_windows(vad_chunk, chunk_index).await;
+            attributed_segments
+        } else {
+            self.persist_aligned_regions(aligned_regions, track)?
+        };
+        self.drop_live_echoes();
         tracing::info!(
             meeting_id = %self.meeting_id.as_str(),
             chunk_start_ms = chunk_bounds.start_offset_ms(),
@@ -575,6 +617,78 @@ where
             "Local audio chunk processed into transcript segments"
         );
         Ok(attributed_segments)
+    }
+
+    /// Feeds a chunk's audio to the echo detector (#108).
+    ///
+    /// Inputs: The chunk; audio that is not 16 kHz mono PCM16 WAV is skipped.
+    /// Outputs: None. Side effects: Keeps the chunk's loudness envelope in memory, not its audio.
+    fn listen_for_echo(&mut self, vad_chunk: &VadAudioChunk) {
+        let Some((sample_rate_hz, pcm)) = pcm16_mono_samples(vad_chunk.audio_bytes()) else {
+            return;
+        };
+        if sample_rate_hz != 16_000 {
+            return;
+        }
+        let samples: Vec<i16> = pcm
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|sample| i16::from_le_bytes(*sample))
+            .collect();
+        let track = match vad_chunk.track() {
+            SegmentSource::Microphone => EchoTrack::Microphone,
+            SegmentSource::ComputerSound => EchoTrack::ComputerSound,
+        };
+        self.echo_detector
+            .push(track, vad_chunk.chunk_bounds().start_offset_ms(), &samples);
+    }
+
+    /// Drops the microphone's copies of the computer's sound once echo was heard (#108).
+    ///
+    /// Inputs: None; uses the timeline and the echo detector.
+    /// Outputs: None; a storage failure is logged and leaves the copies for the next chunk.
+    /// Side effects: The first time, stores that echo was heard with the meeting; rewrites the
+    /// meeting's segments when a copy goes.
+    fn drop_live_echoes(&mut self) {
+        if !self.echo_detector.present() {
+            return;
+        }
+        if !self.echo_recorded {
+            match self.note_repository.record_echo_heard(&self.meeting_id) {
+                Ok(()) => self.echo_recorded = true,
+                Err(error) => tracing::warn!(
+                    meeting_id = %self.meeting_id.as_str(),
+                    error = %error,
+                    "Could not store that echo was heard; later passes will keep the copies"
+                ),
+            }
+        }
+        let detector = &self.echo_detector;
+        let (timeline, dropped) = without_echoes(self.persisted_segments.clone(), true, &|ms| {
+            detector.correlated_at(ms)
+        });
+        if dropped == 0 {
+            return;
+        }
+        match self
+            .note_repository
+            .save_transcript_segments(&self.meeting_id, &timeline)
+        {
+            Ok(()) => {
+                tracing::info!(
+                    meeting_id = %self.meeting_id.as_str(),
+                    dropped_segment_count = dropped,
+                    "Dropped the microphone's echoes of the computer's sound"
+                );
+                self.persisted_segments = timeline;
+            }
+            Err(error) => tracing::warn!(
+                meeting_id = %self.meeting_id.as_str(),
+                error = %error,
+                "Could not drop the microphone's echoes"
+            ),
+        }
     }
 
     /// Keeps a chunk's overlapping speech in meeting time and records it with the meeting (#90).
@@ -694,12 +808,13 @@ where
             &SpeakerPassConfig::default(),
         );
         let voices = speaker_voices(&embeddings, &labels);
-        let live_segments: Vec<TranscriptSegment> = self
-            .persisted_segments
-            .iter()
-            .filter(|segment| !self.earlier_segments.contains(segment))
-            .cloned()
-            .collect();
+        // The computer's sound keeps its live speakers; the pass redoes the microphone's.
+        let (computer_sound, live_segments): (Vec<TranscriptSegment>, Vec<TranscriptSegment>) =
+            self.persisted_segments
+                .iter()
+                .filter(|segment| !self.earlier_segments.contains(segment))
+                .cloned()
+                .partition(|segment| segment.source() == SegmentSource::ComputerSound);
         let live_overlap =
             live_overlap_per_speaker(&voice_windows, &labels, voices.len(), &live_segments);
 
@@ -707,6 +822,11 @@ where
         let mut claimed_clusters: Vec<Uuid> = attributions
             .iter()
             .filter_map(|attribution| attribution.cluster_id)
+            .chain(
+                computer_sound
+                    .iter()
+                    .filter_map(TranscriptSegment::unknown_cluster_id),
+            )
             .collect();
         for (speaker, voice) in voices.iter().enumerate() {
             if attributions[speaker].identity_id.is_some() {
@@ -726,10 +846,18 @@ where
 
         let final_segments =
             self.final_segments(&voice_windows, &labels, &text_pieces, &attributions);
-        let final_count = final_segments.len();
         let mut timeline = self.earlier_segments.clone();
         timeline.extend(final_segments);
+        timeline.extend(computer_sound);
         timeline.sort_by_key(TranscriptSegment::start_time_ms);
+        let detector = &self.echo_detector;
+        let (timeline, _) = without_echoes(timeline, detector.present(), &|ms| {
+            detector.correlated_at(ms)
+        });
+        let final_count = timeline
+            .iter()
+            .filter(|segment| !self.earlier_segments.contains(segment))
+            .count();
         self.note_repository
             .save_transcript_segments(&self.meeting_id, &timeline)?;
         self.persisted_segments = timeline;
@@ -1107,7 +1235,8 @@ where
             }
         }
         let aligned_regions = align_transcript(chunk_bounds, speaker_regions, &transcript);
-        let attributed_segments = self.persist_aligned_regions(aligned_regions)?;
+        let attributed_segments =
+            self.persist_aligned_regions(aligned_regions, SegmentSource::Microphone)?;
         tracing::info!(
             meeting_id = %self.meeting_id.as_str(),
             external_id = %external_participant.external_id(),
@@ -1395,13 +1524,14 @@ where
 
     /// Converts aligned regions to segments and persists the updated meeting timeline.
     ///
-    /// Inputs: Meeting-timed regions produced by alignment.
+    /// Inputs: Meeting-timed regions produced by alignment, and the track they were heard on.
     /// Outputs: The new attributed segments, or a storage error (the in-memory timeline is left
     /// unchanged on failure so a retry stays consistent).
     /// Side effects: Rewrites the meeting's segment rows through `NoteRepository` when non-empty.
     fn persist_aligned_regions(
         &mut self,
         aligned_regions: Vec<AlignedRegion>,
+        source: SegmentSource,
     ) -> Result<Vec<AttributedSegment>, MeetingSessionError> {
         let attributed_segments: Vec<AttributedSegment> = aligned_regions
             .into_iter()
@@ -1425,7 +1555,8 @@ where
                         SpeakerAttribution::PendingReview { .. }
                     ),
                     uncertain_words: aligned_region.uncertain_words().to_vec(),
-                }),
+                })
+                .with_source(source),
                 attribution: aligned_region.attribution().clone(),
             })
             .collect();

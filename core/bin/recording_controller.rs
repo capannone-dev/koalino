@@ -7,6 +7,12 @@
 //! wipes any raw audio no engine consumed. The FFI and CLI share this driver, so both entry points
 //! run the same flow. Audio and transcripts are never logged.
 //!
+//! The computer's own sound (#108) can be pushed beside the microphone with
+//! `push_computer_sound_pcm`. It has its own chunker, is placed by the microphone's clock (a
+//! stream that opens late or sends nothing while nothing plays jumps ahead to it), and its chunks
+//! are marked so the pipeline keeps them apart; it is not kept for the after-meeting pass, which
+//! leaves its segments as they are.
+//!
 //! With `with_screen_share`, each recording also runs a `ScreenShareWatcher` thread that attaches
 //! new slides of a running screen share to the recorded meeting at the current meeting time
 //! (Issue #49), only while audio is being captured.
@@ -37,7 +43,7 @@ use crate::{
         errors::{AudioError, StorageError},
         models::{
             AudioChunk, AudioConfig, AudioRecording, AudioState, DeviceId, MeetingId, MeetingTitle,
-            RecordingId,
+            RecordingId, SegmentSource,
         },
     },
     ports::audio::AudioCapture,
@@ -100,7 +106,23 @@ struct ActiveCapture {
     recording_clock: Arc<RecordingClock>,
     /// Samples the shared screen during this recording; `None` without screen capture.
     screen_share_watcher: Option<ScreenShareWatcher>,
+    /// The computer's sound (#108), from its first samples; `None` until then.
+    computer_sound: Option<ComputerSoundTrack>,
 }
+
+/// The computer's sound recorded beside the microphone (#108).
+struct ComputerSoundTrack {
+    chunker: VadChunker,
+    /// Where its next chunk starts on this recording's timeline, in samples.
+    timeline_sample_count: u64,
+    /// Where its last received sample ends on that timeline, buffered samples included.
+    received_end_sample: u64,
+}
+
+/// The computer's sound behind the microphone by more than this (0.2 s) jumps to it. Both tracks
+/// are drained every 100 ms, so their batches differ by less; a larger lag would push the echo
+/// detector's 0–300 ms search off the leak.
+const COMPUTER_SOUND_GAP_SAMPLES: u64 = 3_200;
 
 impl ActiveCapture {
     /// Publishes the current meeting time and capture state to the screen-share watcher.
@@ -343,10 +365,7 @@ impl RecordingController {
             meeting_id.unwrap_or_else(|| MeetingId::new(format!("meeting-{}", Uuid::new_v4())));
         let mut local_recorder = LocalRecorder::new(capture_config())?;
         let audio_receiver = local_recorder.subscribe_audio()?;
-        let chunker = match &self.chunking_mode {
-            ChunkingMode::Vad(vad_config) => VadChunker::new(vad_config.clone())?,
-            ChunkingMode::TimeBased => VadChunker::time_based(VadConfig::english()),
-        };
+        let chunker = new_chunker(&self.chunking_mode)?;
         if let Err(error) = self.recording_manager.begin_recording(meeting_id.clone()) {
             self.end_transcript_pass_hold();
             return Err(error.into());
@@ -379,6 +398,7 @@ impl RecordingController {
             captured_sample_count: 0,
             recording_clock,
             screen_share_watcher,
+            computer_sound: None,
         });
         Ok(meeting_id)
     }
@@ -407,6 +427,7 @@ impl RecordingController {
         for finalized_chunk in capture.chunker.drain_ready_chunks() {
             if submit_chunk(
                 capture,
+                SegmentSource::Microphone,
                 finalized_chunk,
                 &self.chunk_audio_store,
                 &self.recording_manager,
@@ -414,6 +435,96 @@ impl RecordingController {
                 // Field by field: `capture` borrows `self.active_capture`.
                 self.language.or(self.default_language),
                 self.transcript_pass.as_ref(),
+            )? {
+                submitted_count += 1;
+            }
+        }
+        Ok(submitted_count)
+    }
+
+    /// Feeds the computer's own sound, as 16 kHz mono PCM, into the recording (#108).
+    ///
+    /// Inputs: Raw samples from the system-sound capture; they are never logged.
+    /// Outputs: How many chunks were queued for the pipeline, or `NotRecording`. Audio received
+    /// while paused or interrupted is discarded.
+    /// Side effects: Buffers audio. The samples are placed to end at the microphone's captured
+    /// time: the first ones, however late the stream opened, and any after the track fell behind
+    /// (nothing played, so nothing was sent), which first flushes its buffer; stores each
+    /// finished chunk's PCM until the engine reads it and queues it on the worker.
+    pub fn push_computer_sound_pcm(
+        &mut self,
+        samples: Vec<i16>,
+    ) -> Result<usize, RecordingControlError> {
+        let capture = self
+            .active_capture
+            .as_mut()
+            .ok_or(RecordingControlError::NotRecording)?;
+        if capture.local_recorder.state() != AudioState::Recording {
+            return Ok(0);
+        }
+        if capture.computer_sound.is_none() {
+            // The first samples end at the microphone's time, however late the stream opened.
+            let first_sample = capture
+                .captured_sample_count
+                .saturating_sub(samples.len() as u64);
+            capture.computer_sound = Some(ComputerSoundTrack {
+                chunker: new_chunker(&self.chunking_mode)?,
+                timeline_sample_count: first_sample,
+                received_end_sample: first_sample,
+            });
+        }
+        let language = self.language.or(self.default_language);
+        // Both tracks are drained together, so these samples end about where the microphone's
+        // captured audio ends.
+        let expected_start_sample = capture
+            .captured_sample_count
+            .saturating_sub(samples.len() as u64);
+        let mut finished = Vec::new();
+        if let Some(track) = capture.computer_sound.as_mut()
+            && expected_start_sample > track.received_end_sample + COMPUTER_SOUND_GAP_SAMPLES
+        {
+            finished.extend(track.chunker.drain_ready_chunks());
+            finished.extend(track.chunker.finish());
+        }
+        let mut submitted_count = 0;
+        for finalized_chunk in finished {
+            if submit_chunk(
+                capture,
+                SegmentSource::ComputerSound,
+                finalized_chunk,
+                &self.chunk_audio_store,
+                &self.recording_manager,
+                &self.device_id,
+                language,
+                None,
+            )? {
+                submitted_count += 1;
+            }
+        }
+        let ready = match capture.computer_sound.as_mut() {
+            Some(track) => {
+                if expected_start_sample > track.received_end_sample + COMPUTER_SOUND_GAP_SAMPLES {
+                    track.timeline_sample_count = expected_start_sample;
+                    track.received_end_sample = expected_start_sample;
+                }
+                track.received_end_sample += samples.len() as u64;
+                track
+                    .chunker
+                    .push_pcm(AudioChunk::new(samples, capture_config()))?;
+                track.chunker.drain_ready_chunks()
+            }
+            None => Vec::new(),
+        };
+        for finalized_chunk in ready {
+            if submit_chunk(
+                capture,
+                SegmentSource::ComputerSound,
+                finalized_chunk,
+                &self.chunk_audio_store,
+                &self.recording_manager,
+                &self.device_id,
+                language,
+                None,
             )? {
                 submitted_count += 1;
             }
@@ -455,6 +566,7 @@ impl RecordingController {
         if let Some(flushed_chunk) = capture.chunker.finish() {
             submit_chunk(
                 capture,
+                SegmentSource::Microphone,
                 flushed_chunk,
                 &self.chunk_audio_store,
                 &self.recording_manager,
@@ -462,6 +574,18 @@ impl RecordingController {
                 // Field by field: `capture` borrows `self.active_capture`.
                 self.language.or(self.default_language),
                 self.transcript_pass.as_ref(),
+            )?;
+        }
+        for flushed_chunk in flush_computer_sound(capture) {
+            submit_chunk(
+                capture,
+                SegmentSource::ComputerSound,
+                flushed_chunk,
+                &self.chunk_audio_store,
+                &self.recording_manager,
+                &self.device_id,
+                self.language.or(self.default_language),
+                None,
             )?;
         }
         Ok(())
@@ -496,17 +620,32 @@ impl RecordingController {
                 tracing::warn!("Audio received at stop had an unexpected format and was dropped");
             }
         }
-        let mut flushed_chunks = capture.chunker.drain_ready_chunks();
-        flushed_chunks.extend(capture.chunker.finish());
-        for finalized_chunk in flushed_chunks {
+        let mut flushed_chunks: Vec<(SegmentSource, FinalizedAudioChunk)> = capture
+            .chunker
+            .drain_ready_chunks()
+            .into_iter()
+            .chain(capture.chunker.finish())
+            .map(|chunk| (SegmentSource::Microphone, chunk))
+            .collect();
+        flushed_chunks.extend(
+            flush_computer_sound(&mut capture)
+                .into_iter()
+                .map(|chunk| (SegmentSource::ComputerSound, chunk)),
+        );
+        for (track, finalized_chunk) in flushed_chunks {
+            let transcript_pass = match track {
+                SegmentSource::Microphone => self.transcript_pass.as_ref(),
+                SegmentSource::ComputerSound => None,
+            };
             if let Err(error) = submit_chunk(
                 &mut capture,
+                track,
                 finalized_chunk,
                 &self.chunk_audio_store,
                 &self.recording_manager,
                 &self.device_id,
                 language,
-                self.transcript_pass.as_ref(),
+                transcript_pass,
             ) {
                 tracing::warn!(error = %error, "Final audio chunk could not be queued");
             }
@@ -649,15 +788,18 @@ fn samples_to_ms(sample_count: u64) -> u64 {
 /// Places one finished chunk on the meeting timeline and queues it for the pipeline, unless it
 /// holds no speech.
 ///
-/// Inputs: The active capture, the chunk, the engine audio store, the worker, and the device.
+/// Inputs: The active capture, the track the chunk was captured on (#108), the chunk, the engine
+/// audio store, the worker, the device, the language, and the after-meeting pass's store (`None`
+/// keeps nothing, as for the computer's sound).
 /// Outputs: `Ok(true)` once queued, `Ok(false)` for a chunk without speech (Whisper would invent
 /// text for it; Issue #51), or the worker's error.
-/// Side effects: Advances the meeting timeline either way. A queued chunk is also sealed for the
+/// Side effects: Advances the track's timeline either way. A queued chunk is also sealed for the
 /// after-meeting pass when one is configured (#87). A queued chunk's PCM is stored under
 /// a fresh recording ID (read and deleted by the engine) and a WAV copy is sent with it for
 /// diarization and review clips; a skipped chunk's audio is dropped.
 fn submit_chunk(
     capture: &mut ActiveCapture,
+    track: SegmentSource,
     finalized_chunk: FinalizedAudioChunk,
     chunk_audio_store: &ChunkAudioStore,
     recording_manager: &RecordingManager,
@@ -667,10 +809,17 @@ fn submit_chunk(
 ) -> Result<bool, RecordingControlError> {
     let contains_speech = finalized_chunk.contains_speech();
     let samples = finalized_chunk.into_audio_chunk().into_samples();
-    // Chunks are contiguous: each starts where the previous one ended.
-    let chunk_start_sample = capture.timeline_sample_count;
+    // A track's chunks are contiguous: each starts where its previous one ended.
+    let timeline_sample_count = match track {
+        SegmentSource::Microphone => &mut capture.timeline_sample_count,
+        SegmentSource::ComputerSound => match capture.computer_sound.as_mut() {
+            Some(computer_sound) => &mut computer_sound.timeline_sample_count,
+            None => return Ok(false),
+        },
+    };
+    let chunk_start_sample = *timeline_sample_count;
     let chunk_end_sample = chunk_start_sample + samples.len() as u64;
-    capture.timeline_sample_count = chunk_end_sample;
+    *timeline_sample_count = chunk_end_sample;
     if !contains_speech {
         tracing::debug!(
             meeting_id = %capture.meeting_id.as_str(),
@@ -712,7 +861,32 @@ fn submit_chunk(
     .map_err(|_| AudioError::InvalidConfiguration {
         reason: "chunk bounds are inverted".to_owned(),
     })?
-    .with_language(language);
+    .with_language(language)
+    .with_track(track);
     recording_manager.submit_chunk(vad_chunk)?;
     Ok(true)
+}
+
+/// Builds a chunker for one track.
+///
+/// Inputs: The chunking mode. Outputs: The chunker, or why the VAD model could not load.
+/// Side effects: May load the VAD model.
+fn new_chunker(chunking_mode: &ChunkingMode) -> Result<VadChunker, AudioError> {
+    Ok(match chunking_mode {
+        ChunkingMode::Vad(vad_config) => VadChunker::new(vad_config.clone())?,
+        ChunkingMode::TimeBased => VadChunker::time_based(VadConfig::english()),
+    })
+}
+
+/// Takes every chunk the computer's sound still holds (#108).
+///
+/// Inputs: The capture. Outputs: The ready chunks and the buffered tail, in order; none without
+/// computer sound. Side effects: Empties that track's chunker.
+fn flush_computer_sound(capture: &mut ActiveCapture) -> Vec<FinalizedAudioChunk> {
+    let Some(track) = capture.computer_sound.as_mut() else {
+        return Vec::new();
+    };
+    let mut chunks = track.chunker.drain_ready_chunks();
+    chunks.extend(track.chunker.finish());
+    chunks
 }
