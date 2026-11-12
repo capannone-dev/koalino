@@ -19,6 +19,7 @@ final class IncomingShare {
     required this.directory,
     required this.filePaths,
     required this.failedCount,
+    this.sharedText,
   });
 
   /// The folder holding the copies; released after use.
@@ -29,6 +30,10 @@ final class IncomingShare {
 
   /// Files that could not be read or were larger than 100 MiB.
   final int failedCount;
+
+  /// For a text-only share, the text itself (also copied as a `.txt` file), so an AI app's
+  /// answer can be kept as a summary (#114); null for files.
+  final String? sharedText;
 
   /// Decodes the map Kotlin sends, or returns `null` for a malformed one.
   static IncomingShare? fromChannel(Object? raw) {
@@ -45,6 +50,10 @@ final class IncomingShare {
       directory: directory,
       filePaths: paths.whereType<String>().toList(growable: false),
       failedCount: failedCount is int ? failedCount : 0,
+      sharedText: switch (raw['text']) {
+        final String text when text.trim().isNotEmpty => text,
+        _ => null,
+      },
     );
   }
 }

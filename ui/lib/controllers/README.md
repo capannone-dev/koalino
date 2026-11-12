@@ -90,7 +90,8 @@ carries the `HandoffController`, so every summary view can offer the owner's own
   clipboard, and the app opens.
 - **The answer:** a summary hand-off waits up to an hour. When Koalino comes back, new
   clipboard text of at least 80 characters is kept as that meeting's summary. A `HandoffKept`
-  event offers Undo, and `HandoffHint` says to copy the answer first.
+  event offers Undo, and `HandoffHint` says to copy the answer (or share it) first. An answer
+  shared back to Koalino as text goes through `keepSharedAnswer`, with the same rules.
 - **Chat:** a chat leaves nothing pending.
 
 `meeting_edit_controller.dart` (#96) holds each meeting's notes as last read or saved, and saves

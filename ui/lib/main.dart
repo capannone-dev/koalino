@@ -221,6 +221,7 @@ final class NoteTakerApp extends StatelessWidget {
         : IncomingShareListener(
             shareBridge: shareBridge,
             projectsController: _projectsController,
+            handoffController: handoff,
             child: withHandoff,
           );
     final CoreStartupController? startup = coreStartupController;

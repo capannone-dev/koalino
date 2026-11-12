@@ -46,7 +46,7 @@ Future<void> showHandoffSheet(
             child: Text(
                 'The meeting, its notes and its files go to the app you pick, '
                 'with your own account. For a summary, copy the answer there and '
-                'come back: Koalino keeps it.'),
+                'come back, or share it to Koalino: Koalino keeps it.'),
           ),
           for (final AiApp app in controller.apps) ...<Widget>[
             ListTile(
@@ -141,7 +141,8 @@ final class _HandoffReturnListenerState extends State<HandoffReturnListener> {
         messenger.showSnackBar(SnackBar(
           duration: const Duration(seconds: 6),
           content: Text(
-              'To keep the summary, copy $appName\'s answer, then come back to Koalino.'),
+              'To keep the summary, copy $appName\'s answer and come back to Koalino, '
+              'or share the answer to Koalino.'),
         ));
       case HandoffFailed(:final String message):
         messenger.showSnackBar(SnackBar(content: Text(message)));

@@ -186,6 +186,15 @@ void main() {
     });
     expect(share?.filePaths, <String>['/d/a.pdf']);
     expect(share?.failedCount, 1);
+    expect(share?.sharedText, isNull);
+    expect(
+        IncomingShare.fromChannel(<Object?, Object?>{
+          'directory': '/d',
+          'paths': <Object?>['/d/Shared text.txt'],
+          'text': 'An answer',
+        })?.sharedText,
+        'An answer',
+        reason: 'a text-only share carries its text (#114)');
     expect(IncomingShare.fromChannel(<Object?, Object?>{'paths': 3}), isNull);
     expect(IncomingShare.fromChannel(null), isNull);
   });

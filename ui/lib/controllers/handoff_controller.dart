@@ -4,7 +4,8 @@
 // when Koalino comes back to the foreground it reads the clipboard: new text of a summary's length
 // is kept as that meeting's summary, and an event offers Undo. The prompt is put on the clipboard
 // when sharing, so an app that drops the shared text can still be given it, and so the clipboard
-// still holding it means nothing was copied. A chat hand-off leaves nothing pending.
+// still holding it means nothing was copied. An answer shared back to Koalino as text is offered
+// as the summary too (`keepSharedAnswer`). A chat hand-off leaves nothing pending.
 
 import 'dart:async';
 
@@ -201,8 +202,36 @@ final class HandoffController extends ChangeNotifier
       if (text.length < minAnswerCharacters) {
         return;
       }
-      pending = null;
-      notifyListeners();
+      await _keep(waiting, text);
+    } on PlatformException {
+      // The clipboard could not be read; the hand-off stays pending.
+    } finally {
+      _checking = false;
+    }
+  }
+
+  /// Keeps text shared back to Koalino as the pending meeting's summary.
+  ///
+  /// Outputs: true when it was taken (kept, or failed with a `HandoffFailed` event); false when
+  /// no summary waits or the text is shorter than `minAnswerCharacters`.
+  /// Side effects: As `checkClipboard`, without reading the clipboard.
+  Future<bool> keepSharedAnswer(String sharedText) async {
+    final PendingAnswer? waiting = pending;
+    final String text = sharedText.trim();
+    if (waiting == null ||
+        _now().difference(waiting.startedAt) > answerWindow ||
+        text.length < minAnswerCharacters) {
+      return false;
+    }
+    await _keep(waiting, text);
+    return true;
+  }
+
+  /// Keeps `text` as `waiting`'s summary and adds the event that tells the owner.
+  Future<void> _keep(PendingAnswer waiting, String text) async {
+    pending = null;
+    notifyListeners();
+    try {
       final KeptAnswer kept = await _core.keepAnswer(waiting.meetingId,
           text: text,
           source: '${waiting.app?.displayName ?? 'Another'} app',
@@ -211,14 +240,10 @@ final class HandoffController extends ChangeNotifier
       _events.add(HandoffKept(
           meetingId: waiting.meetingId,
           title: waiting.title,
-          appName: appName,
+          appName: waiting.app?.displayName ?? 'the other app',
           previous: kept.previous));
     } on LlmException catch (error) {
       _events.add(HandoffFailed(error.message));
-    } on PlatformException {
-      // The clipboard could not be read; the hand-off stays pending.
-    } finally {
-      _checking = false;
     }
   }
 

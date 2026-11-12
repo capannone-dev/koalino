@@ -1,10 +1,13 @@
 // Shares from other apps (Issue #85): when a mail app, file manager or gallery shares to Note
 // Taker, a sheet asks which project the files go into, or creates a new one. The copies the
 // platform made are released afterwards, whether the files were added or the sheet dismissed.
+// While a summary hand-off waits for its answer (#114), shared text is first offered as that
+// meeting's summary.
 
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/handoff_controller.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/infrastructure/incoming_share_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
@@ -28,18 +31,24 @@ final class _NewProject extends _ShareTarget {
 final class IncomingShareListener extends StatefulWidget {
   /// Creates the listener.
   ///
-  /// Inputs: The share bridge, the projects controller that adds the files, and the screens it
-  /// wraps (it must sit below the app's navigator and `ScaffoldMessenger`).
+  /// Inputs: The share bridge, the projects controller that adds the files, the hand-off
+  /// controller whose waiting summary a text share may answer (null where there is none), and
+  /// the screens it wraps (it must sit below the app's navigator and `ScaffoldMessenger`).
   /// Outputs: `child`, unchanged. Side effects: Takes any share pending at start-up and each
   /// one that arrives later, and shows the sheet for it.
   const IncomingShareListener({
     required this.shareBridge,
     required this.projectsController,
     required this.child,
+    this.handoffController,
     super.key,
   });
 
   final IncomingShareBridge shareBridge;
+
+  /// Keeps a shared answer as the waiting summary; null without hand-offs.
+  final HandoffController? handoffController;
+
   final ProjectsController projectsController;
   final Widget child;
 
@@ -92,6 +101,9 @@ final class _IncomingShareListenerState extends State<IncomingShareListener> {
             content: Text('Nothing that was shared could be read.')));
         return;
       }
+      if (await _keptAsSummary(share) || !mounted) {
+        return;
+      }
       final ProjectsController controller = widget.projectsController;
       await controller.loadProjects();
       if (!mounted) {
@@ -124,6 +136,48 @@ final class _IncomingShareListenerState extends State<IncomingShareListener> {
     } finally {
       await widget.shareBridge.release(share);
     }
+  }
+
+  /// Offers a text share as the summary a hand-off waits for.
+  ///
+  /// Outputs: true when handled: saved as the summary (the hand-off controller then tells the
+  /// owner, with Undo) or the choice dismissed; false to add it to a project as usual. Side effects: May write the
+  /// meeting's summary.
+  Future<bool> _keptAsSummary(IncomingShare share) async {
+    final HandoffController? handoff = widget.handoffController;
+    final PendingAnswer? waiting = handoff?.pending;
+    final String? text = share.sharedText;
+    if (handoff == null ||
+        waiting == null ||
+        text == null ||
+        text.trim().length < minAnswerCharacters) {
+      return false;
+    }
+    final bool? asSummary = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: <Widget>[
+            ListTile(
+              leading: const Icon(Icons.summarize_outlined),
+              title: Text('Save as the summary of "${waiting.title}"'),
+              onTap: () => Navigator.of(context).pop(true),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('Add to a project instead'),
+              onTap: () => Navigator.of(context).pop(false),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (asSummary != true) {
+      return asSummary == null;
+    }
+    return handoff.keepSharedAnswer(text);
   }
 
   /// Asks for a name and creates the project; `null` when cancelled or refused.

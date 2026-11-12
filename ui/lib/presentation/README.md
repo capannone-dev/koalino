@@ -158,4 +158,6 @@ Projects (Issue #85) is the destination between Meetings and Voices:
 - `share_to_project.dart` (`IncomingShareListener`, Android) shows "Add the shared file to a
   project" when another app shares files or an e-mail: New project, or one of the projects. It
   sits inside the start-up gate, so a share that launched the app waits for the core. The
-  platform's copies are released whether the files were added or the sheet dismissed.
+  platform's copies are released whether the files were added or the sheet dismissed. While a
+  summary hand-off waits (#114), shared text is first offered as 'Save as the summary of
+  "<title>"' or 'Add to a project instead'.

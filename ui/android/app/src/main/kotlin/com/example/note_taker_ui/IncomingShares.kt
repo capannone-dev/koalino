@@ -119,7 +119,8 @@ class IncomingShares(private val context: Context) : MethodChannel.MethodCallHan
      *
      * Inputs: The content URIs, and the shared text and subject (a text-only share becomes a
      * `.txt` file named after the subject).
-     * Outputs: `{directory, paths, failedCount}`; a file that cannot be read or is larger than
+     * Outputs: `{directory, paths, failedCount, text}` (`text` only for a text-only share, so an
+     * AI app's answer shared back can be kept as a meeting's summary, #114); a file that cannot be read or is larger than
      * the API accepts is counted as failed and leaves nothing behind.
      * Side effects: Writes files under `cache/incoming`.
      */
@@ -145,7 +146,12 @@ class IncomingShares(private val context: Context) : MethodChannel.MethodCallHan
                 failedCount++
             }
         }
-        return mapOf("directory" to directory.path, "paths" to paths, "failedCount" to failedCount)
+        val share = mutableMapOf<String, Any>(
+            "directory" to directory.path, "paths" to paths, "failedCount" to failedCount)
+        if (streams.isEmpty() && !sharedText.isNullOrBlank()) {
+            share["text"] = sharedText
+        }
+        return share
     }
 
     /** Copies at most `MAX_SHARED_FILE_BYTES`; returns false, deleting the copy, otherwise. */

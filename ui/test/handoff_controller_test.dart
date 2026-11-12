@@ -1,13 +1,54 @@
 // Specifies handing a meeting to the owner's own AI app (#114): the share carries the prompt and
 // files, a summary's answer copied in that app is kept when Koalino comes back, with Undo, and a
-// chat leaves nothing pending.
+// chat leaves nothing pending. An answer shared back to Koalino as text is offered as the
+// summary too.
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/handoff_controller.dart';
+import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
+import 'package:note_taker_ui/infrastructure/incoming_share_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/presentation/handoff_widgets.dart';
+import 'package:note_taker_ui/presentation/share_to_project.dart';
+
+import 'fake_meeting_bridge.dart';
+import 'fake_project_runner.dart';
+
+/// One text share, handed out once, with its folder released.
+final class _TextShareBridge implements IncomingShareBridge {
+  _TextShareBridge(this.share);
+
+  IncomingShare? share;
+  final List<String> released = <String>[];
+
+  @override
+  Stream<void> get arrivals => const Stream<void>.empty();
+
+  @override
+  Future<IncomingShare?> takePending() async {
+    final IncomingShare? taken = share;
+    share = null;
+    return taken;
+  }
+
+  @override
+  Future<void> release(IncomingShare share) async =>
+      released.add(share.directory);
+}
+
+/// A picker that is never used here.
+final class _NoPicker implements ProjectFilesPicker {
+  const _NoPicker();
+
+  @override
+  Future<List<String>> pickFiles() async => const <String>[];
+}
 
 /// Records what the controller asks of the core and the phone.
 final class FakeHandoffPorts implements HandoffCore, HandoffPlatform {
@@ -226,5 +267,64 @@ void main() {
     await tester.tap(find.text('Undo'));
     await tester.pumpAndSettle();
     expect(ports.calls.last, 'restore m-1 null');
+  });
+
+  test('an answer shared back as text is kept while a summary waits', () async {
+    final List<HandoffEvent> events = <HandoffEvent>[];
+    controller.events.listen(events.add);
+    expect(await controller.keepSharedAnswer(answer), isFalse,
+        reason: 'nothing is waiting');
+
+    await controller.handOff('m-1', 'Review', HandoffPurpose.summary,
+        app: AiApp.claude);
+    expect(await controller.keepSharedAnswer('ok'), isFalse,
+        reason: 'too short for a summary');
+    expect(await controller.keepSharedAnswer(answer), isTrue);
+    await pumpEventQueue();
+    expect(ports.calls.last,
+        'keep m-1 Claude app "Summarize it." ${answer.length}');
+    expect(events.last, isA<HandoffKept>());
+    expect(controller.pending, isNull);
+  });
+
+  testWidgets('a text share offers to save it as the waiting summary',
+      (WidgetTester tester) async {
+    await controller.handOff('m-1', 'Review', HandoffPurpose.summary,
+        app: AiApp.claude);
+    final _TextShareBridge shares = _TextShareBridge(IncomingShare(
+      directory: '/cache/incoming/share-1',
+      filePaths: const <String>['/cache/incoming/share-1/Shared text.txt'],
+      failedCount: 0,
+      sharedText: answer,
+    ));
+    final FakeProjectRunner runner =
+        FakeProjectRunner((Map<String, Object?> request) => <String, Object?>{
+              'ok': true,
+              'projects': <Object?>[],
+            });
+    await tester.pumpWidget(MaterialApp(
+      home: IncomingShareListener(
+        shareBridge: shares,
+        projectsController: ProjectsController(
+          projectBridge: ProjectBridge(runCommand: runner.call),
+          meetingBridge: FakeMeetingBridge(meetings: const <MeetingSummary>[]),
+          filesPicker: const _NoPicker(),
+        ),
+        handoffController: controller,
+        child: HandoffReturnListener(
+            controller: controller, child: const Scaffold()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Save as the summary of "Review"'), findsOneWidget);
+    expect(find.text('Add to a project instead'), findsOneWidget);
+    await tester.tap(find.text('Save as the summary of "Review"'));
+    await tester.pumpAndSettle();
+
+    expect(ports.calls.last,
+        'keep m-1 Claude app "Summarize it." ${answer.length}');
+    expect(find.text('Summary from Claude saved to "Review".'), findsOneWidget);
+    expect(shares.released, <String>['/cache/incoming/share-1']);
   });
 }
