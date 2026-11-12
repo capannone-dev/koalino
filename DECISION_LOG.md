@@ -2787,3 +2787,31 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   licenses under Settings → About Koalino, as GPLv3 §0 asks of interactive programs.
 - **Open:** Qualcomm's QNN libraries (#75, phone NPU) are proprietary and need a review before
   they ship.
+
+## 2026-11-12 — #114 Meetings go to the owner's own AI app; the answer comes back as the summary
+
+- **Why:** the owner uses their own Claude and ChatGPT accounts and does not want to share
+  them. Koalino never holds their credentials or Claude.ai OAuth tokens (Anthropic's terms).
+  Instead, the meeting is handed to the official app on the phone, signed in as the owner.
+- **Hand-off (Android):** the core writes the meeting as Markdown (title, speakers, transcript,
+  notes, without any earlier summary) plus its photos and files into `cache/shared/handoff`.
+  It keeps at most 20 files, 50 MiB each and 100 MiB in all. The folder is emptied before each
+  hand-off and at start-up. `SharedFiles.kt` sends them with the filled-in prompt (ACTION_SEND or
+  SEND_MULTIPLE) to `com.anthropic.claude` or `com.openai.chatgpt` when installed, else through
+  the share sheet. The prompt is also put on the clipboard, for apps that drop shared text.
+- **The answer:** Android gives an app no other app's reply. So a summary hand-off waits up to
+  an hour, and the answer can come back in two ways:
+  - **Copied:** when Koalino returns to the foreground, new clipboard text of at least 80
+    characters is kept;
+  - **Shared back:** a text share arriving meanwhile offers 'Save as the summary of "<title>"'.
+
+  The answer is stored as an edited summary (`keep_answer`), recording the app as its source and
+  the prompt used. Undo puts back the earlier summary (`restore_summary`). A chat hand-off leaves
+  nothing pending: the conversation stays in the other app, as the owner asked.
+- **Export Share:** the Export menu's "Share as Markdown / PDF / JSON" sends the export with its
+  attachments to any app. Markdown attachments are flattened beside the file, because the
+  provider serves only that folder's own files, so the file's relative links no longer resolve.
+- **Not covered:** desktops (there is no comparable app hand-off; the API-key connections remain),
+  and a live test with Claude or ChatGPT. That test would send a meeting to the cloud, so it
+  awaits the owner. Package visibility and both apps' acceptance of SEND and SEND_MULTIPLE of
+  `*/*` were checked on the S23.
