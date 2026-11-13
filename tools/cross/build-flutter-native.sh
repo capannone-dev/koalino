@@ -14,6 +14,9 @@
 #   android        -> ui/native/android-assets/models/diarization/ (uncompressed APK assets)
 # Windows also stages Microsoft's ONNX Runtime, which the core loads at run time:
 #   windows -> ui/native/windows/onnxruntime/ (its contents are installed beside the runner)
+# Desktop builds also stage the read-only MCP server for the owner's AI assistant (#112):
+#   linux   -> ui/native/linux/note_taker_mcp (installed beside the app's executable)
+#   windows -> ui/native/windows/note_taker_mcp.exe (installed beside the runner)
 # The staging directories are gitignored. Usage: build-flutter-native.sh linux|android|windows ...
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -83,8 +86,12 @@ for platform in "$@"; do
       cargo build --release --features local-ai,microphone,computer-sound,vad,diarization,whisper-rs/vulkan --lib --target "$DEBIAN_TARGET"
       unset GGML_NATIVE GGML_AVX GGML_AVX2 GGML_FMA GGML_F16C
       check_debian_13_compatible "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/libnote_taker_core.so"
+      # The read-only MCP server for the owner's AI assistant (#112) needs no AI features.
+      cargo build --release --bin note_taker_mcp --target "$DEBIAN_TARGET"
+      check_debian_13_compatible "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/note_taker_mcp"
       mkdir -p ui/native/linux
       cp "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/libnote_taker_core.so" ui/native/linux/
+      cp "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/note_taker_mcp" ui/native/linux/
       stage_model ui/native/models
       stage_diarization_models ui/native/models
       ;;
@@ -108,8 +115,10 @@ for platform in "$@"; do
         --target x86_64-pc-windows-gnu
       RUSTFLAGS="-L native=$VULKAN_SDK/lib" \
         cargo zigbuild --release --features local-ai,microphone,computer-sound,vad,diarization,whisper-rs/vulkan --lib --target x86_64-pc-windows-gnu
+      cargo zigbuild --release --bin note_taker_mcp --target x86_64-pc-windows-gnu
       mkdir -p ui/native/windows
       cp "$CARGO_TARGET_DIR/x86_64-pc-windows-gnu/release/note_taker_core.dll" ui/native/windows/
+      cp "$CARGO_TARGET_DIR/x86_64-pc-windows-gnu/release/note_taker_mcp.exe" ui/native/windows/
       stage_model ui/native/models
       stage_diarization_models ui/native/models
       stage_onnx_runtime

@@ -97,6 +97,17 @@ else()
   message(WARNING "Rust core not staged; run tools/cross/build-flutter-native.sh windows")
 endif()
 
+# Install the read-only MCP server (#112) staged by tools/cross/build-flutter-native.sh beside
+# the executable, where Settings > AI assistant access finds it. Optional: without it the app
+# hides that setting.
+set(NOTE_TAKER_MCP_SERVER "${CMAKE_CURRENT_SOURCE_DIR}/../native/windows/note_taker_mcp.exe")
+if(EXISTS "${NOTE_TAKER_MCP_SERVER}")
+  install(PROGRAMS "${NOTE_TAKER_MCP_SERVER}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+else()
+  message(STATUS "MCP server not staged; run tools/cross/build-flutter-native.sh windows")
+endif()
+
 # Bundle the Whisper model staged by tools/cross/build-flutter-native.sh into data/models, where
 # the app finds it beside the executable, so a fresh install transcribes offline (Issue #45).
 # Without it the app runs but recordings report that no transcription engine is configured.
