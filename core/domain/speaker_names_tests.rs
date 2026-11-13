@@ -182,3 +182,27 @@ fn names_differing_only_in_case_or_spaces_count_together() {
         Some("Alice Rossi")
     );
 }
+
+#[test]
+fn a_name_that_wins_for_several_voices_is_suggested_to_none() {
+    // A call window that is covered stops updating, so one stale label can span every voice.
+    let first_voice = Uuid::new_v4();
+    let second_voice = Uuid::new_v4();
+    let named_voice = Uuid::new_v4();
+    let turns = vec![
+        turn(first_voice, 0, 5_000),
+        turn(second_voice, 5_000, 10_000),
+        turn(named_voice, 20_000, 25_000),
+    ];
+    let spans = vec![
+        NamedSpan::new(0, 10_000, "Alice"),
+        NamedSpan::new(20_000, 25_000, "Bruno"),
+    ];
+    let suggestions = suggest_names(&turns, &spans);
+    assert_eq!(suggestions.get(&first_voice), None);
+    assert_eq!(suggestions.get(&second_voice), None);
+    assert_eq!(
+        suggestions.get(&named_voice).map(String::as_str),
+        Some("Bruno")
+    );
+}

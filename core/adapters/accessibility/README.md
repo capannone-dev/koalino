@@ -29,5 +29,13 @@ Verified on deb-gui (Firefox ESR, a local fixture page) for all three label shap
 - a comma list ("Bruno Bianchi, video is off, speaking");
 - a text line ("Talking: Carla Neri").
 
+Verified on win11 (Edge, the same page) through UI Automation. The reader must run in the user's
+desktop session: over SSH it sees no windows.
+
+A Chromium window (Edge, Chrome, and the WebView2 inside new Teams) that is fully covered or
+minimized stops rendering, and its accessibility tree keeps the last labels. The reader then sees
+one stale name for as long as the window stays covered. `domain::speaker_names::suggest_names`
+therefore drops a name that wins for more than one voice.
+
 The labels of real call apps were not captured. An app whose labels differ gives no readings until
 `domain::speaker_names` learns its phrasing.

@@ -2994,9 +2994,26 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **Not verified:**
   - the labels of real Teams, Zoom or Meet calls, which were not captured, so their phrasing may
     need new patterns;
-  - Windows UI Automation, which compiles but was not run: win11 could not start;
   - a suggestion end to end, which needs speech, and playing audio needs the owner's permission.
     It is covered by unit tests.
+
+## 2026-11-13 — #113 on Windows, and covered call windows
+
+- **Windows verified:** on win11, `cli.exe call-names`, run in the desktop session, read the same
+  fixture page in Edge through UI Automation. It followed every change of speaker within a second,
+  for all three label shapes.
+- **Covered windows freeze:** while a console window covered Edge completely, both our reader and a
+  .NET UI Automation client saw the same tree for the whole run. Chromium (Edge, Chrome, and the
+  WebView2 inside new Teams) stops rendering a fully covered or minimized window. Its accessibility
+  tree is updated during rendering, so it keeps the last "is speaking" label. A frozen label
+  cannot be told apart from one person talking for a long time.
+- **Guard:** `suggest_names` now suggests a name only when it wins for exactly one voice. A frozen
+  label spans every voice, so it would otherwise be suggested to several of them.
+  - The cost: one person whose voice was split into two clusters gets no suggestion for either.
+    The owner then names them by hand, as before. A missing suggestion is cheaper than a wrong
+    one.
+- **For the owner:** keep the call window at least partly visible while recording. A small window
+  beside the notes is enough; a minimized one is not.
 
 ## 2026-11-13 — #87 The after-meeting pass's model in Settings, and the pass on the web
 

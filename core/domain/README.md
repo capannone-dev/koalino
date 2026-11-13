@@ -111,7 +111,8 @@ name; `is_call_window` keeps only call apps' and meeting sites' windows. `Speaki
 collects readings into spans per name (±1 s each, joined across gaps under 3 s) and writes them
 as WebVTT with `<v Name>` cues, the format of the Teams captions (#102), which `parse_voice_cues`
 reads. `suggest_names` offers a voice the name covering at least 60% of its speech under named
-spans, given at least 2 s of such speech.
+spans, given at least 2 s of such speech, and only when no other voice wins with the same name
+(a covered call window freezes on one stale label).
 
 `echo_lines.rs` and `echo_detect.rs` (#108, ported from Yogurt, MIT; see `THIRD_PARTY_NOTICES.md`)
 handle the computer's sound recorded as a second track. Without headphones the microphone also

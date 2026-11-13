@@ -301,7 +301,9 @@ fn voice_tag_name(payload: &str) -> Option<String> {
 /// Inputs: The unknown voices' turns and the named spans (window readings and captions).
 /// Outputs: For each voice with at least `MIN_EVIDENCE_MS` of speech under named spans, the name
 /// covering at least `MIN_NAME_SHARE` of that speech. Names are compared ignoring case and
-/// spacing; the spelling with the most overlap is returned. Side effects: None.
+/// spacing; the spelling with the most overlap is returned. A name that wins for more than one
+/// voice is suggested to none of them: a covered or minimized call window stops updating, and one
+/// stale label then spans every voice. Side effects: None.
 pub fn suggest_names(turns: &[VoiceTurn], spans: &[NamedSpan]) -> HashMap<Uuid, String> {
     /// Overlap per voice, then per compared name: total milliseconds and per spelling.
     type SpellingOverlap = Vec<(String, u64)>;
@@ -333,10 +335,11 @@ pub fn suggest_names(turns: &[VoiceTurn], spans: &[NamedSpan]) -> HashMap<Uuid, 
             }
         }
     }
-    let mut suggestions = HashMap::new();
+    // Winning name per voice, keyed by the compared name so ties across voices are found.
+    let mut winners: Vec<(Uuid, String, String)> = Vec::new();
     for (cluster_id, names) in overlap {
         let named_ms: u64 = names.iter().map(|(_, total, _)| total).sum();
-        let Some((_, best_ms, spellings)) = names
+        let Some((best_key, best_ms, spellings)) = names
             .iter()
             .reduce(|best, next| if next.1 > best.1 { next } else { best })
         else {
@@ -352,8 +355,12 @@ pub fn suggest_names(turns: &[VoiceTurn], spans: &[NamedSpan]) -> HashMap<Uuid, 
             .iter()
             .reduce(|best, next| if next.1 > best.1 { next } else { best })
         {
-            suggestions.insert(cluster_id, spelling.clone());
+            winners.push((cluster_id, best_key.clone(), spelling.clone()));
         }
     }
-    suggestions
+    winners
+        .iter()
+        .filter(|(_, key, _)| winners.iter().filter(|(_, other, _)| other == key).count() == 1)
+        .map(|(cluster_id, _, spelling)| (*cluster_id, spelling.clone()))
+        .collect()
 }
