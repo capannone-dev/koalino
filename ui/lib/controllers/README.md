@@ -85,11 +85,12 @@ and never lets a slower read replace a summary or prompt written meanwhile.
 carries the `HandoffController`, so every summary view can offer the owner's own AI app.
 
 `call_watch_controller.dart` (#111) looks at the microphone's users every 3 seconds on desktops.
-- A call noticed while nothing is being recorded becomes `offeredApp`. Only `acceptOffer` (the
-  owner's tap) starts a recording, titled "`<app>` call" and tied to the call.
+- A call noticed while nothing is being recorded becomes `offeredApp`, shown as a banner and,
+  where there is one, as a system notification (`CallNotifier`). Only `acceptOffer` (the owner's
+  tap on either) starts a recording, titled "`<app>` call" and tied to the call.
 - When the call ends, a tied recording stops if "Stop when the call ends" is on, and `message` says
   why. A recording the owner started themselves is never stopped by a call.
-- Where the system cannot tell, the looks stop.
+- Where the system cannot tell, the looks stop. A look that failed once does not stop them.
 
 `handoff_controller.dart` (#114) hands a meeting to the owner's own Claude or ChatGPT app.
 

@@ -2,12 +2,14 @@
 // recording starts only on the owner's tap, a recording tied to the call stops when it ends (and
 // only then), the settings are honoured, and an unavailable system stops the looks.
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
+import 'package:note_taker_ui/infrastructure/call_notifier.dart';
 import 'package:note_taker_ui/infrastructure/call_watch_bridge.dart';
 import 'package:note_taker_ui/presentation/call_offer_banner.dart';
 
@@ -46,6 +48,32 @@ final class ScriptedCallCore {
   }
 }
 
+/// A notification the test answers.
+final class FakeCallNotifier implements CallNotifier {
+  final List<String> offered = <String>[];
+  int withdrawn = 0;
+  Completer<CallNotificationAnswer>? pending;
+
+  @override
+  Future<CallNotificationAnswer> offer(String app) {
+    offered.add(app);
+    final Completer<CallNotificationAnswer> answer =
+        Completer<CallNotificationAnswer>();
+    pending = answer;
+    return answer.future;
+  }
+
+  @override
+  void withdraw() {
+    withdrawn += 1;
+    final Completer<CallNotificationAnswer>? answer = pending;
+    pending = null;
+    if (answer != null && !answer.isCompleted) {
+      answer.complete(CallNotificationAnswer.dismissed);
+    }
+  }
+}
+
 Map<String, Object?> poll(String? event, {String app = 'Teams'}) =>
     <String, Object?>{
       'ok': true,
@@ -60,14 +88,17 @@ void main() {
   late FakeRecordingBridge recordingBridge;
   late RecordingController recording;
   late CallWatchController watch;
+  late FakeCallNotifier notifier;
 
   setUp(() {
+    notifier = FakeCallNotifier();
     core = ScriptedCallCore();
     recordingBridge = FakeRecordingBridge(startResult: true);
     recording = RecordingController(recordingBridge: recordingBridge);
     watch = CallWatchController(
       bridge: CallWatchBridge(call: core.call),
       recordingController: recording,
+      notifier: notifier,
       interval: const Duration(hours: 1),
     );
   });
@@ -91,6 +122,46 @@ void main() {
     await watch.pollOnce();
     expect(recordingBridge.lifecycleCommands, <String>['stop']);
     expect(watch.message, contains('Teams call ended'));
+  });
+
+  test('Record in the system notification starts the tied recording', () async {
+    core.polls.add(poll('started', app: 'Zoom'));
+    await watch.start();
+    expect(notifier.offered, <String>['Zoom']);
+    notifier.pending!.complete(CallNotificationAnswer.record);
+    await pumpEventQueue();
+    expect(recordingBridge.requestedTitles, <String?>['Zoom call']);
+    expect(watch.offeredApp, isNull);
+    expect(watch.recordingTiedToCall, isTrue);
+  });
+
+  test('answering in the app withdraws the notification', () async {
+    core.polls.add(poll('started'));
+    await watch.start();
+    watch.dismissOffer();
+    await pumpEventQueue();
+    expect(notifier.withdrawn, greaterThan(0));
+    expect(recordingBridge.startRecordingCallCount, 0);
+  });
+
+  test('Not now in the notification clears the banner', () async {
+    core.polls.add(poll('started'));
+    await watch.start();
+    notifier.pending!.complete(CallNotificationAnswer.dismissed);
+    await pumpEventQueue();
+    expect(watch.offeredApp, isNull);
+  });
+
+  test('notify-send gets the offer with its two buttons', () {
+    expect(NotifySendCallNotifier.argumentsFor('Teams'), <String>[
+      '--app-name=Koalino',
+      '--icon=audio-input-microphone',
+      '--expire-time=120000',
+      '--action=record=Record',
+      '--action=dismiss=Not now',
+      'Teams is using the microphone',
+      'Record this call?',
+    ]);
   });
 
   test('a recording the owner started is never stopped by a call', () async {
@@ -124,6 +195,17 @@ void main() {
     await watch.pollOnce();
     expect(watch.offeredApp, isNull);
     expect(core.requests.last, <String, Object?>{'command': 'poll'});
+  });
+
+  test('a failed look keeps the watch going', () async {
+    core.polls.addAll(<Map<String, Object?>>[
+      <String, Object?>{'ok': false, 'error_code': 'probe_failed'},
+      poll('started'),
+    ]);
+    await watch.start();
+    expect(watch.offeredApp, isNull);
+    await watch.pollOnce();
+    expect(watch.offeredApp, 'Teams');
   });
 
   test('a system that cannot tell stops the looks', () async {

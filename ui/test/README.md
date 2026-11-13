@@ -135,4 +135,7 @@ copying a snippet, a disabled switch when the server is not installed, and a wor
 - a recording the owner started is never stopped by a call;
 - the auto-stop and offer settings;
 - an unavailable system;
-- the banner's Not now and Record.
+- the banner's Not now and Record;
+- Record and Not now in the system notification, withdrawing it when answered in the app, and
+  the `notify-send` arguments;
+- a failed look that keeps the watch going.

@@ -163,6 +163,11 @@ the snippets to connect Claude Code or another MCP client) and `AssistantAccessE
 
 `call_watch_bridge.dart` (#111) is `CallWatchBridge.poll()`, `settings()` and
 `set(offer:, autoStop:)` over `note_taker_call_watch`, with `CallPoll` and `CallWatchSettings`.
+`call_notifier.dart` shows the same offer as a system notification, so it is seen while the
+window is hidden. On Linux, `NotifySendCallNotifier` runs `notify-send` with Record and Not now
+buttons (libnotify 0.7.9 or later prints the chosen one). It is withdrawn when the offer is
+answered in the app or the call ends. Other platforms use `NoCallNotifier` (the banner only). No
+plugin is needed.
 
 `incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Koalino:
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and

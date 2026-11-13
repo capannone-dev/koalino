@@ -15,6 +15,7 @@ import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/infrastructure/call_notifier.dart';
 import 'package:note_taker_ui/infrastructure/call_watch_bridge.dart';
 import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
@@ -109,6 +110,7 @@ Future<void> main() async {
           ? CallWatchController(
               bridge: const CallWatchBridge(),
               recordingController: recordingController,
+              notifier: platformCallNotifier(),
             )
           : null;
   final CoreStartupController coreStartupController = CoreStartupController(

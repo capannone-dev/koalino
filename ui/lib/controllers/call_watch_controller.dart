@@ -1,7 +1,8 @@
 // Offers to record when a call starts and stops that recording when the call ends (#111).
 //
 // Polls the core's call watch every few seconds on desktops. A call noticed while nothing is
-// recorded becomes an offer, which the app shows; only the owner's tap starts a recording. A
+// recorded becomes an offer, shown in the app and as a system notification where there is one;
+// only the owner's tap (on either) starts a recording. A
 // recording started from the offer is tied to the call: when the call ends, and the owner keeps
 // "Stop when the call ends" on, it stops. A recording the owner started themselves is never
 // stopped by a call.
@@ -10,6 +11,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
+import 'package:note_taker_ui/infrastructure/call_notifier.dart';
 import 'package:note_taker_ui/infrastructure/call_watch_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 
@@ -17,20 +19,24 @@ import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 final class CallWatchController extends ChangeNotifier {
   /// Creates the controller.
   ///
-  /// Inputs: The bridge, the app's recording controller, and how often to look.
+  /// Inputs: The bridge, the app's recording controller, the system notification (none by
+  /// default), and how often to look.
   /// Outputs: A controller that does nothing until `start`. Side effects: Listens to the
   /// recording controller until `dispose`.
   CallWatchController({
     required CallWatchBridge bridge,
     required RecordingController recordingController,
+    CallNotifier notifier = const NoCallNotifier(),
     this.interval = const Duration(seconds: 3),
   })  : _bridge = bridge,
-        _recording = recordingController {
+        _recording = recordingController,
+        _notifier = notifier {
     _recording.addListener(_onRecordingChanged);
   }
 
   final CallWatchBridge _bridge;
   final RecordingController _recording;
+  final CallNotifier _notifier;
 
   /// The time between looks.
   final Duration interval;
@@ -43,6 +49,7 @@ final class CallWatchController extends ChangeNotifier {
   String? _offeredApp;
   String? _tiedApp;
   String? _message;
+  bool _disposed = false;
 
   /// The settings as last read or saved.
   CallWatchSettings get settings => _settings;
@@ -95,9 +102,12 @@ final class CallWatchController extends ChangeNotifier {
         case 'started':
           if (_settings.offer && _recording.state == RecordingUiState.idle) {
             _offeredApp = poll.app;
+            if (poll.app case final String app) {
+              unawaited(_notify(app));
+            }
           }
         case 'ended':
-          _offeredApp = null;
+          _withdrawOffer();
           final String? tiedApp = _tiedApp;
           if (tiedApp != null && _settings.autoStop && _isRecording) {
             _tiedApp = null;
@@ -113,15 +123,36 @@ final class CallWatchController extends ChangeNotifier {
     }
   }
 
+  /// Shows the system notification and acts on its answer, if the offer still stands.
+  Future<void> _notify(String app) async {
+    final CallNotificationAnswer answer = await _notifier.offer(app);
+    if (_disposed || _offeredApp != app) {
+      return;
+    }
+    switch (answer) {
+      case CallNotificationAnswer.record:
+        await acceptOffer();
+      case CallNotificationAnswer.dismissed:
+        dismissOffer();
+    }
+  }
+
+  /// Clears the offer and the notification.
+  void _withdrawOffer() {
+    _offeredApp = null;
+    _notifier.withdraw();
+  }
+
   /// Records the offered call.
   ///
-  /// Side effects: Starts a recording titled after the app, tied to the call.
+  /// Side effects: Withdraws the notification and starts a recording titled after the app,
+  /// tied to the call.
   Future<void> acceptOffer() async {
     final String? app = _offeredApp;
     if (app == null) {
       return;
     }
-    _offeredApp = null;
+    _withdrawOffer();
     notifyListeners();
     await _recording.startRecording(title: '$app call');
     if (_isRecording) {
@@ -129,9 +160,10 @@ final class CallWatchController extends ChangeNotifier {
     }
   }
 
-  /// Declines the offer for this call. Side effects: Notifies listeners.
+  /// Declines the offer for this call. Side effects: Withdraws the notification and notifies
+  /// listeners.
   void dismissOffer() {
-    _offeredApp = null;
+    _withdrawOffer();
     notifyListeners();
   }
 
@@ -148,7 +180,7 @@ final class CallWatchController extends ChangeNotifier {
       return;
     }
     if (!_settings.offer) {
-      _offeredApp = null;
+      _withdrawOffer();
     }
     notifyListeners();
   }
@@ -164,14 +196,18 @@ final class CallWatchController extends ChangeNotifier {
     }
     // Recording already: the offer is moot.
     if (_recording.state != RecordingUiState.idle && _offeredApp != null) {
-      _offeredApp = null;
+      _withdrawOffer();
       notifyListeners();
     }
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _timer?.cancel();
+    // Cleared first, so the withdrawn notification's answer finds no offer to act on.
+    _offeredApp = null;
+    _notifier.withdraw();
     _recording.removeListener(_onRecordingChanged);
     super.dispose();
   }
