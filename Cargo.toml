@@ -42,6 +42,10 @@ path = "core/bin/browser_host.rs"
 name = "daemon"
 path = "core/bin/daemon.rs"
 
+[[bin]]
+name = "note_taker_mcp"
+path = "core/bin/mcp.rs"
+
 [dependencies]
 # AES-256-GCM for voice embeddings at rest; `zeroize` wipes key schedules on drop (Issue #31).
 aes-gcm = { version = "0.10.3", features = ["zeroize"] }

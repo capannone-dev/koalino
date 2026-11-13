@@ -277,6 +277,16 @@ and meeting summaries" below). Keys are write-only.
   writes the folder at once) or `{"command":"sync_now"}`. The answer is the status of
   `GET /api/settings/notes-folder` below. Extra error code: `runtime_unavailable`.
 
+### Assistant access C ABI (#112)
+
+- `char *note_taker_assistant_access(const char *request_json)` runs `{"command":"get"}` or
+  `{"command":"set","enabled":bool}` and returns caller-freed JSON:
+  `{"ok":true,"enabled","database_path","server_path","config","claude_code","passphrase_needed"}`.
+  `server_path` is the `note_taker_mcp` binary beside the app's executable, or null where it is
+  not installed (Android). `config` is the `mcpServers` entry for Claude Desktop and similar
+  clients and `claude_code` the `claude mcp add` line; both are null without the binary and never
+  hold a key or passphrase. Error codes: `invalid_request`, `storage_failed`.
+
 ### Projects C ABI (Issue #85)
 
 - `char *note_taker_project_command(const char *request_json)` runs one Projects command and
@@ -807,6 +817,32 @@ and names each voice as one person, as above (Issue #82). It returns `200` with
 `{ "identity_id", "identity_name", "identity_created", "assigned_cluster_ids": ["uuid"], "skipped_cluster_count": 0, "variants_stored", "segments_updated" }`.
 Voices already named or gone are skipped and counted. A blank name or an empty list returns `400`, a
 malformed body `422`, and when every voice was skipped, `404` or `409` as for the first one.
+
+## MCP server for the owner's AI assistant (#112)
+
+`note_taker_mcp` (desktop bundles, beside the app's executable) speaks the Model Context Protocol
+over stdio: JSON-RPC 2.0, one message per line. It needs `NOTE_TAKER_DATABASE_PATH` set to an
+existing database (it never creates one) and unlocks it as the app does (the platform keychain,
+or the `NOTE_TAKER_ENCRYPTION_*` variables). Standard output carries only protocol messages; logs
+go to `NOTE_TAKER_LOG_DIR`, by default `logs` beside the database, and name tools, never content.
+
+- Methods: `initialize` (protocol versions `2025-06-18`, `2025-03-26`, `2024-11-05`; another
+  request gets the newest), `ping`, `tools/list`, `tools/call`. Notifications get no reply.
+  Errors: `-32700` (not JSON), `-32600`, `-32601` (unknown method), `-32602` (unknown tool).
+- Tools, all `readOnlyHint`; results are one text block of JSON:
+  - `list_meetings {project_id?, limit? = 50 (1..500)}` → `{"meetings":[{"meeting_id","title",
+    "created_at","project_id"}],"total"}`, newest first, without meetings folded into others.
+  - `read_meeting {meeting_id, include_transcript? = true}` → `{"meeting_id","title",
+    "started_at","summary","notes","transcript"}`, the transcript as `[hh:mm:ss] Speaker: text`.
+  - `search {query, scope?, project_id?}` → the hits of `GET /api/search`.
+  - `list_projects {}` → `{"projects":[...]}` as `GET /api/projects`.
+  - `read_project {project_id}` → the project, its meetings and its files, without file paths.
+  - `read_project_file {project_id, attachment_id}` → `{"attachment_id","mime_type","text"}` for
+    text, Markdown and e-mail files.
+- A failed tool answers `isError: true` with `<code>: <message>` (`meeting_not_found`,
+  `project_not_found`, `resource_not_found`, `no_text`, `invalid_request`, `storage_failed`, or a
+  search code). While access is off (`<db>.assistant-access.json`, read at every call), every
+  tool answers `isError: true` with how to turn it on, and reads nothing.
 
 ## Linux CLI contract
 

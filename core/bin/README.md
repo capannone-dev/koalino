@@ -360,6 +360,15 @@ remembers what was written, so edits made while the app was closed are recognise
 they changed to paired devices (not from the CLI, which runs no P2P task). The folder holds clear
 copies of the sealed attachment files (#99): it is a decrypted copy by the owner's choice.
 
+`mcp_server.rs` (#112) is the read-only MCP server for the owner's own AI assistant: `McpServer`
+answers JSON-RPC lines (`initialize`, `ping`, `tools/list`, `tools/call`) with six reading tools
+built on the chat, search and project commands, and `serve` runs it over a reader and a writer.
+`AssistantAccessSettings` (`<db>.assistant-access.json`, off by default) is read at every tool
+call, so turning access off stops the next read. `access_command` is the Settings side: the switch
+and how to connect Claude Code or another MCP client. `mcp.rs` is the `note_taker_mcp` binary the
+assistant starts over stdio (logging to the file only, refusing a database path that does not
+exist), and `ffi_assistant_access.rs` gives the app `note_taker_assistant_access`.
+
 `clear_copies.rs` (#99) gives the app's viewers clear copies of sealed attachments: `ffi.rs`'s
 `note_taker_clear_copy` looks an attachment up by ID and decrypts it into the private
 `clear-copies` folder beside the attachment folder (`<attachment ID>-<name>`, 0600). A copy is

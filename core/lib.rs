@@ -46,6 +46,9 @@ pub mod ffi;
 #[cfg(target_os = "android")]
 #[path = "bin/ffi_android.rs"]
 pub mod ffi_android;
+/// The assistant access setting over the C ABI (#112).
+#[path = "bin/ffi_assistant_access.rs"]
+pub mod ffi_assistant_access;
 /// Chat with notes over the C ABI (#97).
 #[path = "bin/ffi_chat.rs"]
 pub mod ffi_chat;
@@ -88,6 +91,12 @@ pub mod llm_settings;
 #[cfg(test)]
 #[path = "bin/llm_settings_tests.rs"]
 mod llm_settings_tests;
+/// Answers the owner's AI assistant over MCP, read-only and off until turned on (#112).
+#[path = "bin/mcp_server.rs"]
+pub mod mcp_server;
+#[cfg(test)]
+#[path = "bin/mcp_server_tests.rs"]
+mod mcp_server_tests;
 /// Prepares, writes and keeps meeting summaries for the app, web API and CLI (#95).
 #[path = "bin/meeting_summaries.rs"]
 pub mod meeting_summaries;

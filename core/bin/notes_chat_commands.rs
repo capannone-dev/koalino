@@ -263,8 +263,47 @@ where
     })
 }
 
+/// Reads a meeting for the assistant's MCP tools (#112).
+///
+/// Inputs: The repository, the voice library (for saved people's names), the meeting's ID, and
+/// whether to include the transcript. Outputs: `{"meeting_id","title","started_at","summary",
+/// "notes","transcript"}` (absent parts are null; the transcript as `[hh:mm:ss] Speaker: text`
+/// turns), or `meeting_not_found` / `storage_failed`. Side effects: Reads (and unseals) the
+/// meeting.
+pub fn meeting_json<Repository, Voices>(
+    repository: &Repository,
+    voices: &Voices,
+    meeting_id: &MeetingId,
+    include_transcript: bool,
+) -> Result<Value, CommandError>
+where
+    Repository: ProjectCommandRepository + ?Sized,
+    Voices: VoiceVectorDB + ?Sized,
+{
+    if repository
+        .load_meeting_metadata(meeting_id)
+        .map_err(|error| storage(&error))?
+        .is_none()
+    {
+        return Err(CommandError::new(
+            "meeting_not_found",
+            "there is no such meeting",
+        ));
+    }
+    let meeting = read_meeting(repository, voices, meeting_id)?;
+    let transcript = include_transcript.then(|| render_transcript(&meeting.lines));
+    Ok(json!({
+        "meeting_id": meeting.meeting_id,
+        "title": meeting.title,
+        "started_at": meeting.started_at.to_rfc3339(),
+        "summary": meeting.summary,
+        "notes": meeting.notes,
+        "transcript": transcript,
+    }))
+}
+
 /// Whether a meeting is shown (not folded into another, #88) and exists.
-fn listed_meetings<Repository>(repository: &Repository) -> Result<Vec<MeetingId>, StorageError>
+pub fn listed_meetings<Repository>(repository: &Repository) -> Result<Vec<MeetingId>, StorageError>
 where
     Repository: ProjectCommandRepository + ?Sized,
 {

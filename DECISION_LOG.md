@@ -2879,3 +2879,28 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   awaits the owner's permission.
 - **Also:** `THIRD_PARTY_NOTICES.md` now lists the crates of every feature (`--all-features`). cpal,
   ort, whisper-rs and openssl had been missing; all of their licenses are GPLv3-compatible.
+
+## 2026-11-13 — #112 A read-only MCP server lets the owner's own assistant read the notes
+
+- **What:** `note_taker_mcp`, a small binary shipped beside the desktop app, speaks the Model
+  Context Protocol over stdio. Its six tools only read: list and read meetings, search, list and
+  read projects, and read a project's text files. Nothing can be written through it, and it opens
+  no network listener.
+- **Separate binary, not a CLI subcommand:** the desktop bundles ship only the core library, and
+  the CLI composes recording and the AI pipeline. The server is built without AI features, so it
+  is small and quick to build, and Settings can point to it beside the app's executable.
+- **No new crates:** JSON-RPC 2.0 with `serde_json`, line by line on stdin and stdout. An MCP SDK
+  would have added a framework and an async runtime for six tools.
+- **Off until turned on**, in Settings → AI assistant access (`<db>.assistant-access.json`). The
+  page warns that the assistant may send what it reads to its online model, under the owner's own
+  account. The switch is read at every call, so turning it off stops the next read. While it is
+  off, each call answers how to turn it on.
+- **Keys stay put:** the server unlocks the database as the app does (the platform keychain). The
+  snippets Settings shows hold only the binary's path and the database's path, never a key or a
+  passphrase. The server refuses a database path that does not exist, so a wrong path cannot
+  create an empty database with a new key.
+- **Logs** name the tool and whether it worked, never arguments or results. Standard output
+  carries only protocol messages.
+- **Checked:** unit tests for the exchange, the tools and the switch; the binary answering over
+  stdio on a scratch database. Not tried with a live Claude session, to keep meeting content
+  away from a cloud model without the owner's go-ahead.
