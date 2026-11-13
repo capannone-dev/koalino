@@ -162,8 +162,14 @@ impl CallWatcher {
         };
         let event = self.watch.observe(now_ms, &users, Some(std::process::id()));
         let (event_name, event_app) = match event {
-            Some(CallEvent::Started { app }) => (Some("started"), Some(app)),
-            Some(CallEvent::Ended { app }) => (Some("ended"), Some(app)),
+            Some(CallEvent::Started { app }) => {
+                tracing::info!(app, "A call app took the microphone");
+                (Some("started"), Some(app))
+            }
+            Some(CallEvent::Ended { app }) => {
+                tracing::info!(app, "The call app left the microphone");
+                (Some("ended"), Some(app))
+            }
             None => (None, None),
         };
         json!({

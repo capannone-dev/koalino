@@ -130,9 +130,10 @@ zbus = "5.19.0"
 ort = { version = "=2.0.0-rc.13", optional = true, default-features = false, features = ["std", "download-binaries", "tls-native", "copy-dylibs", "api-27"] }
 
 [target.'cfg(windows)'.dependencies]
-# UI Automation reads who is speaking from call windows (#113, approved by the owner); the same
-# release `cpal` already builds.
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Accessibility"] }
+# UI Automation reads who is speaking from call windows (#113, approved by the owner), and the
+# audio session manager tells which apps capture the microphone (#111); the same release `cpal`
+# already builds.
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_System_Variant", "Win32_UI_Accessibility"] }
 ort = { version = "=2.0.0-rc.13", optional = true, default-features = false, features = ["std", "load-dynamic", "api-27"] }
 
 [target.'cfg(target_os = "android")'.dependencies]

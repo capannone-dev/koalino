@@ -37,6 +37,9 @@ pub mod retained_audio_store;
 pub mod retained_speech_writer;
 /// Implements feature-gated 16 kHz VAD chunking over an AudioCapture source.
 pub mod vad_chunker;
+/// The apps with an active WASAPI capture session on Windows (#111).
+#[cfg(windows)]
+pub mod wasapi_capture_sessions;
 
 #[cfg(test)]
 mod chunk_audio_store_tests;

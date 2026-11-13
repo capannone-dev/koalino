@@ -1,7 +1,9 @@
 //! Specifies reading the microphone's users from PulseAudio/PipeWire and from Windows' consent
-//! store (#111), on captured command output.
+//! store and audio sessions (#111), on captured command output.
 
-use super::microphone_users::{parse_consent_store, parse_pactl};
+use super::microphone_users::{
+    merge_users, parse_consent_store, parse_pactl, process_name_from_image_path,
+};
 use crate::domain::call_watch::MicrophoneUser;
 
 const SOURCES: &str = r#"[{"index":55,"name":"alsa_output.pci-0000_00_1b.0.analog-stereo.monitor"},
@@ -79,4 +81,42 @@ fn consent_store_entries_started_and_not_stopped_are_users() {
 fn windows_line_endings_are_read_too() {
     let users = parse_consent_store(&STORE.replace('\n', "\r\n"));
     assert_eq!(users.len(), 2);
+}
+
+#[test]
+fn an_image_path_names_the_process_by_its_file() {
+    assert_eq!(
+        process_name_from_image_path(
+            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+        ),
+        "msedge.exe"
+    );
+    assert_eq!(process_name_from_image_path("zoom.exe"), "zoom.exe");
+    assert_eq!(process_name_from_image_path(""), "");
+}
+
+#[test]
+fn users_from_several_endpoints_are_merged_once_per_app() {
+    // One app can capture from two endpoints (a headset and the built-in microphone).
+    let sessions = vec![MicrophoneUser {
+        process: String::from("msedge.exe"),
+        name: String::new(),
+        pid: Some(4242),
+    }];
+    let store = vec![
+        MicrophoneUser {
+            process: String::from("MSEDGE.EXE"),
+            name: String::new(),
+            pid: None,
+        },
+        MicrophoneUser {
+            process: String::from("MSTeams_8wekyb3d8bbwe"),
+            name: String::new(),
+            pid: None,
+        },
+    ];
+    let merged = merge_users(sessions, store);
+    assert_eq!(merged.len(), 2);
+    assert_eq!(merged[0].pid, Some(4242));
+    assert_eq!(merged[1].process, "MSTeams_8wekyb3d8bbwe");
 }

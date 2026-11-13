@@ -3,13 +3,17 @@
 //! - Linux: `pactl -f json list source-outputs` and `pactl -f json list short sources`
 //!   (PulseAudio, or PipeWire's pulse server). A paused (corked) stream and a stream on a monitor
 //!   source (someone recording the speakers) are not microphone use.
-//! - Windows: `reg query` of the microphone consent store (`HKCU\...\CapabilityAccessManager\
-//!   ConsentStore\microphone`): an app with a start time and no stop time is using it now.
-//!   Store apps (the new Teams) are named by package, desktop apps by executable.
+//! - Windows: the active WASAPI capture sessions (`wasapi_capture_sessions`), named by the
+//!   owning process's executable and carrying its process ID. Store apps (the new Teams) show as
+//!   their process too. Only when the sessions cannot be read does it fall back to `reg query`
+//!   of the microphone consent store (`HKCU\...\CapabilityAccessManager\ConsentStore\
+//!   microphone`), where an app with a start time and no stop time is using it now. Windows 11
+//!   26H2 no longer writes those times, and spawning `reg` every look is slow on a busy machine.
 //! - Elsewhere: unavailable.
 //!
-//! The standard tools are run instead of linking an audio or registry library: one look every
-//! few seconds is cheap, and no new crate is needed. Nothing here logs which apps were found.
+//! On Linux the standard tool is run instead of linking an audio library; on Windows the `windows`
+//! crate already built for UI Automation asks the audio service. No new crate is needed. Nothing
+//! here logs which apps were found.
 
 use std::{
     collections::HashSet,
@@ -41,22 +45,52 @@ pub struct SystemMicrophoneUsers;
 impl SystemMicrophoneUsers {
     /// Lists the apps capturing the microphone now.
     ///
-    /// Outputs: The users, or `Unavailable` / `Tool`. Side effects: Runs `pactl` (Linux) or
-    /// `reg` (Windows), which takes a few milliseconds; call it off the UI thread.
+    /// Outputs: The users, or `Unavailable` / `Tool` (on Windows only when both the audio
+    /// sessions and the consent store fail). Side effects: Runs `pactl` (Linux), or queries the
+    /// audio session manager and, failing that, runs `reg` (Windows); call it off the UI thread.
     pub fn current(&self) -> Result<Vec<MicrophoneUser>, MicrophoneUsersError> {
         if cfg!(target_os = "linux") {
             let outputs = run("pactl", &["-f", "json", "list", "source-outputs"])?;
             let sources = run("pactl", &["-f", "json", "list", "short", "sources"])?;
             Ok(parse_pactl(&outputs, &sources))
         } else if cfg!(windows) {
-            Ok(parse_consent_store(&run(
-                "reg",
-                &["query", CONSENT_STORE, "/s"],
-            )?))
+            // The sessions answer in milliseconds; `reg` costs a process per look, so it is
+            // asked only when they cannot be read.
+            match active_capture_sessions() {
+                Ok(sessions) => Ok(sessions),
+                Err(error) => {
+                    warn_sessions_unreadable_once(&error);
+                    Ok(parse_consent_store(&run(
+                        "reg",
+                        &["query", CONSENT_STORE, "/s"],
+                    )?))
+                }
+            }
         } else {
             Err(MicrophoneUsersError::Unavailable)
         }
     }
+}
+
+/// The active capture sessions on Windows.
+#[cfg(windows)]
+fn active_capture_sessions() -> Result<Vec<MicrophoneUser>, MicrophoneUsersError> {
+    super::wasapi_capture_sessions::active_capture_sessions()
+}
+
+/// Logs, once per process, that the audio sessions could not be read (the registry still is).
+fn warn_sessions_unreadable_once(error: &MicrophoneUsersError) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static WARNED: AtomicBool = AtomicBool::new(false);
+    if !WARNED.swap(true, Ordering::Relaxed) {
+        tracing::warn!(error = %error, "The audio sessions could not be read; calls are noticed from the registry only");
+    }
+}
+
+/// No audio sessions outside Windows (only the Windows branch asks).
+#[cfg(not(windows))]
+fn active_capture_sessions() -> Result<Vec<MicrophoneUser>, MicrophoneUsersError> {
+    Err(MicrophoneUsersError::Unavailable)
 }
 
 /// Runs a tool without a console window and returns its standard output.
@@ -183,4 +217,26 @@ pub fn parse_consent_store(reg_output: &str) -> Vec<MicrophoneUser> {
     }
     finish(entry);
     users
+}
+
+/// Names a process by its executable's file name, from a full image path.
+///
+/// Inputs: A Windows image path such as `C:\...\msedge.exe`, or a bare name.
+/// Outputs: The text after the last `\` or `/` (`msedge.exe`); empty for an empty path.
+/// Side effects: None.
+pub fn process_name_from_image_path(image_path: &str) -> &str {
+    image_path.rsplit(['\\', '/']).next().unwrap_or(image_path)
+}
+
+/// Joins two lists of users, once per app (several capture endpoints' sessions).
+///
+/// Inputs: `first` wins on a clash; `second` adds the apps it alone names. Apps match by process name, ignoring case.
+/// Outputs: `first` in order, then `second`'s new apps in order. Side effects: None.
+pub fn merge_users(first: Vec<MicrophoneUser>, second: Vec<MicrophoneUser>) -> Vec<MicrophoneUser> {
+    let mut seen: HashSet<String> = HashSet::new();
+    first
+        .into_iter()
+        .chain(second)
+        .filter(|user| seen.insert(user.process.to_lowercase()))
+        .collect()
 }
