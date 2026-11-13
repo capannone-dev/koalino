@@ -149,8 +149,6 @@ final class ChatException implements Exception {
         'no_connection' =>
           'Add an AI connection in Settings, or choose a default one.',
         'connection_not_found' => 'That AI connection no longer exists.',
-        'missing_key' =>
-          'The AI connection needs an API key. Add it in Settings.',
         'nothing_to_chat' =>
           'There is nothing to talk about yet: no transcript, summary, notes or files.',
         'context_too_small' =>

@@ -63,8 +63,8 @@ start, or when an update ships a model of a different size.
 bundle's `data/models/diarization` when both files are there (the core prefers a pair in the data
 directory), and on Android it asks `WhisperModel.kt` to copy them into the data directory.
 
-`transcription_settings_bridge.dart` reaches the core's Whisper model and OpenAI settings (#67). The key goes
-in once and never comes back. `setGlossary` saves the glossary (one term per line) and the
+`transcription_settings_bridge.dart` reaches the core's Whisper model settings (#67); there is no
+cloud transcription or key since #117. `setGlossary` saves the glossary (one term per line) and the
 settings carry the saved terms. `setKeepSpeechDays` saves the speech retention window, which the
 settings carry as `SpeechRetention` (`days` and its bounds, #93).
 
@@ -117,8 +117,8 @@ through `note_taker_project_command` on a background isolate (`runRustProjectCom
 pass a fake runner. `PlatformProjectFilesPicker` picks any file (#94).
 
 `llm_bridge.dart` (#95) defines `LlmConnection`, `LlmSettings`, `StoredSummary`,
-`MeetingSummaryState`, `SummaryResult`, the `llmPresets` (OpenAI, Anthropic, Mistral, a local
-Ollama server, and on desktops Claude Code and Codex, #105, through `availableLlmPresets`) and
+`MeetingSummaryState`, `SummaryResult`, the `llmPresets` (a local Ollama or LM Studio
+server, no API keys since #117, and on desktops Claude Code and Codex, #105, through `availableLlmPresets`) and
 `LlmException`, which words the core's `error_code` for people and, for a rejection or a failed
 local tool, adds what the server or tool said (`error_detail`, #104, #105). `LlmBridge`
 calls `note_taker_llm_command`, `note_taker_summarize_meeting`, `note_taker_get_meeting_summary`

@@ -55,7 +55,6 @@ Map<String, Object?> connection(String id, String label,
       'model': 'llama3.1:8b',
       'context_tokens': 8192,
       'plain_http': true,
-      'has_key': false,
       'is_default': isDefault,
     };
 

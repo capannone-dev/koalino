@@ -1,5 +1,5 @@
-// Reaches the Rust core's Whisper model and OpenAI settings (Issue #67). The core downloads,
-// verifies and stores everything; the OpenAI key is passed in once and never read back.
+// Reaches the Rust core's Whisper model settings (Issue #67). The core downloads, verifies and
+// stores everything. Transcription runs on the owner's devices: the app keeps no API keys (#117).
 
 import 'dart:convert';
 import 'dart:ffi';
@@ -13,12 +13,6 @@ const int transcriptionStatusOk = 0;
 
 /// Core status: the value was refused, such as a glossary term that is too long.
 const int transcriptionStatusInvalid = 1;
-
-/// Core status: the keychain is missing, so the key was not saved.
-const int transcriptionStatusNoKeychain = 3;
-
-/// Core status: OpenAI was chosen with no key.
-const int transcriptionStatusNoKey = 4;
 
 /// Core status: another download is running.
 const int transcriptionStatusBusy = 5;
@@ -226,18 +220,12 @@ final class WhisperDownload {
   final String? error;
 }
 
-/// Everything Settings shows. It holds whether a key exists, never the key.
+/// Everything Settings shows.
 final class TranscriptionSettings {
   /// Creates the view.
   const TranscriptionSettings({
-    required this.provider,
-    required this.openAiModel,
-    required this.keySaved,
-    required this.environmentKey,
-    required this.keychainAvailable,
     required this.selectedModel,
     required this.availableDiskBytes,
-    required this.usingLocalFallback,
     required this.models,
     required this.download,
     this.suggestion,
@@ -256,7 +244,6 @@ final class TranscriptionSettings {
     final Map<String, Object?> download =
         json['download']! as Map<String, Object?>;
     return TranscriptionSettings(
-      provider: json['provider']! as String,
       proposal: json['proposal'] == null
           ? null
           : WhisperProposal.fromJson(json['proposal']! as Map<String, Object?>),
@@ -285,13 +272,8 @@ final class TranscriptionSettings {
           ? const AutomaticModelStatus()
           : AutomaticModelStatus.fromJson(
               json['automatic']! as Map<String, Object?>),
-      openAiModel: json['openai_model']! as String,
-      keySaved: json['key_saved']! as bool,
-      environmentKey: json['environment_key']! as bool,
-      keychainAvailable: json['keychain_available']! as bool,
       selectedModel: json['selected_model'] as String?,
       availableDiskBytes: json['available_disk_bytes'] as int?,
-      usingLocalFallback: json['using_local_fallback']! as bool,
       models: (json['models']! as List<Object?>)
           .map((Object? row) =>
               WhisperModelInfo.fromJson(row! as Map<String, Object?>))
@@ -306,7 +288,6 @@ final class TranscriptionSettings {
     );
   }
 
-  /// `local` or `openai`.
   /// A model proposed from this device's measurements, or `null`.
   final WhisperProposal? proposal;
 
@@ -336,14 +317,12 @@ final class TranscriptionSettings {
   /// The "Automatic" model choice (#106); `selectedModel` is `null` while it is on.
   final AutomaticModelStatus automatic;
 
-  final String provider;
-  final String openAiModel;
-  final bool keySaved;
-  final bool environmentKey;
-  final bool keychainAvailable;
+  /// The hand-picked model, or `null` for Automatic.
   final String? selectedModel;
+
+  /// Free disk space where models go, when the core could tell.
   final int? availableDiskBytes;
-  final bool usingLocalFallback;
+
   final List<WhisperModelInfo> models;
   final WhisperDownload download;
 }
@@ -395,9 +374,6 @@ abstract interface class TranscriptionSettingsBridge {
   /// Chooses a model on this device. Outputs: A core status. Side effects: Stores the choice.
   Future<int> selectModel(String fileName);
 
-  /// Chooses `local` or `openai`. Outputs: A core status. Side effects: Stores the choice.
-  Future<int> setProvider(String provider);
-
   /// Turns efficient mode on or off for the next recording.
   Future<int> setEfficientGpu({required bool enabled});
 
@@ -430,21 +406,6 @@ abstract interface class TranscriptionSettingsBridge {
   /// Outputs: A core status, `transcriptionStatusInvalid` outside the bounds.
   /// Side effects: Stores it; speech older than a shorter window is deleted at the next round.
   Future<int> setKeepSpeechDays(int days);
-
-  /// Chooses the OpenAI model. Outputs: A core status. Side effects: Stores the choice.
-  Future<int> setOpenAiModel(String model);
-
-  /// Saves the key. Outputs: A core status. Side effects: Writes the key store.
-  Future<int> saveKey(String key);
-
-  /// Removes the key and returns to local. Outputs: A core status.
-  /// Side effects: Writes the key store and the choices.
-  Future<int> removeKey();
-
-  /// Tests the saved key without sending audio.
-  /// Outputs: `valid`, `invalid`, `quota_used`, `no_network`, `unexpected` or `no_key`.
-  /// Side effects: One request to OpenAI.
-  Future<String> testKey();
 
   /// Starts a download. Outputs: A core status. Side effects: The core downloads in the background.
   Future<int> download(String fileName);
@@ -484,10 +445,6 @@ final class RustTranscriptionSettingsBridge
   @override
   Future<int> selectModel(String fileName) => Isolate.run(
       () => _callWithText('note_taker_set_whisper_model', fileName));
-
-  @override
-  Future<int> setProvider(String provider) => Isolate.run(
-      () => _callWithText('note_taker_set_transcription_provider', provider));
 
   @override
   Future<int> setEfficientGpu({required bool enabled}) {
@@ -538,25 +495,6 @@ final class RustTranscriptionSettingsBridge
   Future<int> retryGpu() => Isolate.run(() => _openCoreLibrary()
       .lookupFunction<Int32 Function(), int Function()>(
           'note_taker_retry_gpu')());
-
-  @override
-  Future<int> setOpenAiModel(String model) =>
-      Isolate.run(() => _callWithText('note_taker_set_openai_model', model));
-
-  @override
-  Future<int> saveKey(String key) =>
-      Isolate.run(() => _callWithText('note_taker_save_openai_key', key));
-
-  @override
-  Future<int> removeKey() => Isolate.run(() => _openCoreLibrary()
-      .lookupFunction<Int32 Function(), int Function()>(
-          'note_taker_remove_openai_key')());
-
-  @override
-  Future<String> testKey() async =>
-      await Isolate.run<String?>(
-          () => _callForText('note_taker_test_openai_key')) ??
-      'unexpected';
 
   @override
   Future<int> download(String fileName) => Isolate.run(

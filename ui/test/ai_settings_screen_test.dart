@@ -35,7 +35,7 @@ void main() {
 
     expect(find.text('Office'), findsOneWidget);
     expect(find.textContaining('Default'), findsOneWidget);
-    expect(find.textContaining('No API key'), findsOneWidget);
+    expect(find.textContaining('API key'), findsNothing);
     expect(find.textContaining('Unencrypted http'), findsOneWidget);
     expect(find.text('Summarize {{title}}.'), findsOneWidget);
     expect(
@@ -43,33 +43,33 @@ void main() {
         isTrue);
   });
 
-  testWidgets('adds a connection from a preset; the key goes to the core only',
+  testWidgets('adds a connection from a preset, with no API key field (#117)',
       (WidgetTester tester) async {
     core.answer('command:settings', settings());
     core.answer('command:save_connection', <String, Object?>{
       'ok': true,
-      'connection': connection('c-2', 'Anthropic')
+      'connection': connection('c-2', 'LM Studio')
     });
     core.answer('command:settings', settings());
     await show(tester);
 
     await tester.tap(find.text('Add connection'));
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ActionChip, 'Anthropic'));
+    expect(find.widgetWithText(ActionChip, 'Anthropic'), findsNothing);
+    expect(find.widgetWithText(ActionChip, 'OpenAI'), findsNothing);
+    await tester.tap(find.widgetWithText(ActionChip, 'LM Studio'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-        find.widgetWithText(TextField, 'API key'), 'sk-ant-1');
+    expect(find.widgetWithText(TextField, 'API key'), findsNothing);
     await tester.tap(find.text('Save connection'));
     await tester.pumpAndSettle();
 
     final Map<String, Object?> request = core.lastCommand('save_connection');
-    expect(request['label'], 'Anthropic');
-    expect(request['kind'], 'anthropic');
-    expect(request['base_url'], 'https://api.anthropic.com');
-    expect(request['model'], 'claude-opus-5-5');
-    expect(request['api_key'], 'sk-ant-1');
-    expect(find.text('Saved Anthropic.'), findsOneWidget);
-    expect(find.text('sk-ant-1'), findsNothing);
+    expect(request['label'], 'LM Studio');
+    expect(request['kind'], 'open_ai_compatible');
+    expect(request['base_url'], 'http://192.168.1.10:1234/v1');
+    expect(request['model'], 'qwen3-8b');
+    expect(request.containsKey('api_key'), isFalse);
+    expect(find.text('Saved LM Studio.'), findsOneWidget);
   });
 
   testWidgets('tests a connection and turns automatic summaries off',

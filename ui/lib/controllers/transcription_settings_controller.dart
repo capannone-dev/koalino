@@ -1,4 +1,4 @@
-// Holds the Settings page for the Whisper model and OpenAI (Issue #67). The core does the work;
+// Holds the Settings page for the Whisper model (Issue #67). The core does the work;
 // this keeps the view fresh while a download runs and reports refusals in plain words.
 
 import 'dart:async';
@@ -207,58 +207,6 @@ final class TranscriptionSettingsController extends ChangeNotifier {
   Future<void> removeModel(String fileName) =>
       _run(() => _bridge.removeModel(fileName), success: 'Model removed.');
 
-  /// Chooses where recordings are transcribed.
-  ///
-  /// Inputs: `local`, or `openai` after the owner confirmed that recordings leave the device.
-  /// Side effects: Stores the choice and reloads.
-  Future<void> setProvider(String provider) =>
-      _run(() => _bridge.setProvider(provider),
-          success: 'Saved. The next recording uses this choice.');
-
-  /// Chooses the OpenAI model.
-  ///
-  /// Inputs: The model's name. Side effects: Stores the choice and reloads.
-  Future<void> setOpenAiModel(String model) =>
-      _run(() => _bridge.setOpenAiModel(model.trim()), success: 'Saved.');
-
-  /// Saves the OpenAI key without selecting OpenAI.
-  ///
-  /// Inputs: The pasted key. Side effects: Writes the key store and reloads.
-  Future<void> saveKey(String key) => _run(() => _bridge.saveKey(key),
-      success:
-          'Key saved. Recordings stay on this device until you choose OpenAI.');
-
-  /// Removes the key and returns to this device.
-  ///
-  /// Side effects: Writes the key store and reloads.
-  Future<void> removeKey() => _run(_bridge.removeKey,
-      success: 'Key removed. Recordings are transcribed on this device.');
-
-  /// Tests the saved key without sending audio.
-  ///
-  /// Side effects: One request to OpenAI; sets `message`.
-  Future<void> testKey() async {
-    _isBusy = true;
-    _message = null;
-    _notify();
-    String result;
-    try {
-      result = await _bridge.testKey();
-    } on Object {
-      result = 'unexpected';
-    }
-    _message = switch (result) {
-      'valid' => 'OpenAI accepted this key.',
-      'invalid' => 'OpenAI refused this key. Check it or replace it.',
-      'quota_used' => 'This OpenAI account has used up its quota.',
-      'no_network' => 'OpenAI could not be reached. Check your connection.',
-      'no_key' => 'No key is saved.',
-      _ => 'OpenAI gave an unexpected answer. Try again later.',
-    };
-    _isBusy = false;
-    _notify();
-  }
-
   /// Runs one change, reports the result, and reloads.
   Future<void> _run(Future<int> Function() change,
       {required String? success, String? invalid}) async {
@@ -274,9 +222,6 @@ final class TranscriptionSettingsController extends ChangeNotifier {
     _message = switch (status) {
       transcriptionStatusOk => success,
       transcriptionStatusInvalid when invalid != null => invalid,
-      transcriptionStatusNoKeychain =>
-        'This device has no keychain, so the key was not saved.',
-      transcriptionStatusNoKey => 'Save an OpenAI key first.',
       transcriptionStatusBusy =>
         'Another model is downloading. Wait for it to finish.',
       transcriptionStatusNoSpace =>

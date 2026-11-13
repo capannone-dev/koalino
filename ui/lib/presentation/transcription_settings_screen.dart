@@ -1,16 +1,10 @@
-// The Settings page for the Whisper model and OpenAI (Issue #67). Models are grouped by size. The
-// OpenAI key field is write-only, and choosing OpenAI needs an explicit confirmation.
+// The Settings page for the Whisper model (Issue #67). Models are grouped by size. Recordings are
+// always transcribed on the owner's devices: the app keeps no API keys (#117).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/transcription_settings_controller.dart';
 import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
-
-/// Finds the OpenAI key field in tests.
-const Key openAiKeyFieldKey = ValueKey<String>('openai-key');
-
-/// Finds the provider selector in tests.
-const Key providerSelectorKey = ValueKey<String>('transcription-provider');
 
 /// Finds the button applying the proposed model in tests.
 const Key useProposalKey = ValueKey<String>('use-proposal');
@@ -66,7 +60,7 @@ String formatModelSize(int bytes) => bytes >= 1000000000
     ? '${(bytes / 1000000000).toStringAsFixed(1)} GB'
     : '${(bytes / 1000000).round()} MB';
 
-/// Shows the models and the provider choice.
+/// Shows the models and the transcription choices.
 final class TranscriptionSettingsScreen extends StatefulWidget {
   /// Creates the page.
   ///
@@ -86,47 +80,13 @@ final class TranscriptionSettingsScreen extends StatefulWidget {
       _TranscriptionSettingsScreenState();
 }
 
-/// Holds only the typed key, which is cleared as soon as it is saved.
+/// Loads the settings when shown.
 final class _TranscriptionSettingsScreenState
     extends State<TranscriptionSettingsScreen> {
-  final TextEditingController _keyField = TextEditingController();
-  bool _replacingKey = false;
-
   @override
   void initState() {
     super.initState();
     widget.controller.load();
-  }
-
-  @override
-  void dispose() {
-    _keyField.dispose();
-    super.dispose();
-  }
-
-  /// Confirms that recordings will leave the device, then selects OpenAI.
-  Future<void> _chooseOpenAi() async {
-    final bool? confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) => AlertDialog(
-        title: const Text('Send recordings to OpenAI?'),
-        content: const Text(
-            'Your recordings will leave this device and go to OpenAI to be '
-            'transcribed, under your OpenAI account. If OpenAI can\'t be reached, this '
-            'device transcribes instead, and nothing is uploaded later.'),
-        actions: <Widget>[
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
-          FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Send to OpenAI')),
-        ],
-      ),
-    );
-    if (confirmed ?? false) {
-      await widget.controller.setProvider('openai');
-    }
   }
 
   /// Warns before a download that may not run well, then starts it.
@@ -174,8 +134,6 @@ final class _TranscriptionSettingsScreenState
                     padding: const EdgeInsets.all(16),
                     child: Text(message),
                   ),
-                ..._providerTiles(settings),
-                const Divider(),
                 ..._modelTiles(context, settings),
                 const Divider(),
                 // Keyed, so the message row above appearing keeps its text and state.
@@ -286,105 +244,6 @@ final class _TranscriptionSettingsScreenState
           ],
         ),
       );
-
-  /// The provider choice and the key field.
-  List<Widget> _providerTiles(TranscriptionSettings settings) {
-    final TranscriptionSettingsController controller = widget.controller;
-    return <Widget>[
-      ListTile(
-        leading: const Icon(Icons.cloud_outlined),
-        title: const Text('Transcribe with'),
-        subtitle: Text(settings.provider == 'openai'
-            ? 'OpenAI receives your recordings. Without a connection, this device transcribes.'
-            : 'Recordings stay on this device.'),
-        trailing: DropdownButton<String>(
-          key: providerSelectorKey,
-          value: settings.provider,
-          underline: const SizedBox.shrink(),
-          onChanged: controller.isBusy
-              ? null
-              : (String? chosen) {
-                  if (chosen == 'openai' && settings.provider != 'openai') {
-                    _chooseOpenAi();
-                  } else if (chosen == 'local') {
-                    controller.setProvider('local');
-                  }
-                },
-          items: const <DropdownMenuItem<String>>[
-            DropdownMenuItem<String>(
-                value: 'local', child: Text('This device')),
-            DropdownMenuItem<String>(value: 'openai', child: Text('OpenAI')),
-          ],
-        ),
-      ),
-      if (settings.usingLocalFallback)
-        const ListTile(
-          leading: Icon(Icons.info_outline),
-          title:
-              Text('OpenAI can\'t be reached, so this device is transcribing.'),
-        ),
-      Padding(
-        padding: const EdgeInsets.all(16),
-        child: _keySection(settings),
-      ),
-    ];
-  }
-
-  /// The write-only key field, or that a key is saved with Replace, Remove and Test.
-  Widget _keySection(TranscriptionSettings settings) {
-    final TranscriptionSettingsController controller = widget.controller;
-    if (!settings.keychainAvailable) {
-      return const Text(
-          'This device has no keychain, so an OpenAI key can\'t be saved.');
-    }
-    if (settings.keySaved && !_replacingKey) {
-      return Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: <Widget>[
-          const Text('An OpenAI key is saved.'),
-          OutlinedButton(
-              onPressed: () => setState(() => _replacingKey = true),
-              child: const Text('Replace')),
-          OutlinedButton(
-              onPressed: controller.isBusy ? null : controller.removeKey,
-              child: const Text('Remove')),
-          OutlinedButton(
-              onPressed: controller.isBusy ? null : controller.testKey,
-              child: const Text('Test key')),
-        ],
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        TextField(
-          key: openAiKeyFieldKey,
-          controller: _keyField,
-          obscureText: true,
-          autocorrect: false,
-          enableSuggestions: false,
-          decoration: const InputDecoration(
-            labelText: 'OpenAI API key',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 8),
-        FilledButton(
-          onPressed: controller.isBusy
-              ? null
-              : () async {
-                  final String key = _keyField.text;
-                  _keyField.clear();
-                  setState(() => _replacingKey = false);
-                  await controller.saveKey(key);
-                },
-          child: const Text('Save key'),
-        ),
-      ],
-    );
-  }
 
   /// The models, grouped by size in catalog order.
   List<Widget> _modelTiles(

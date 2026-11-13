@@ -1,7 +1,7 @@
-// Settings → AI connections (#95): the language model servers summaries use (OpenAI-compatible
-// or Anthropic, in the cloud or on the local network), the default one, the summary prompt
-// template, and automatic summaries of finished meetings (#101). API keys are typed once and
-// never shown again.
+// Settings → AI connections (#95): the language model servers summaries use (an OpenAI-compatible
+// server on this device or the local network, or Claude Code and Codex signed in on this
+// computer), the default one, the summary prompt template, and automatic summaries of finished
+// meetings (#101). The app keeps no API keys (#117).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
@@ -129,7 +129,7 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                     leading: Icon(Icons.cloud_off_outlined),
                     title: Text('No connections yet'),
                     subtitle: Text(
-                        'Add OpenAI, Anthropic, Mistral, a server on your network, or '
+                        'Add a server on your network (Ollama, LM Studio, llama.cpp), or '
                         'Claude Code or Codex on this computer.'),
                   ),
                 for (final LlmConnection connection in settings.connections)
@@ -233,9 +233,7 @@ final class _ConnectionTile extends StatelessWidget {
       '${connection.kind.label} · ${connection.model.isEmpty ? 'default model' : connection.model}',
       if (connection.isDefault) 'Default',
       if (tool)
-        connection.toolInstalled ? 'Installed' : 'Not found on this computer'
-      else
-        connection.hasKey ? 'API key saved' : 'No API key',
+        connection.toolInstalled ? 'Installed' : 'Not found on this computer',
       if (connection.plainHttp) 'Unencrypted http, local network only',
     ];
     final String where = tool
@@ -302,9 +300,7 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
   late final TextEditingController _context = TextEditingController(
       text:
           '${widget.existing?.contextTokens ?? llmPresets.first.contextTokens}');
-  final TextEditingController _key = TextEditingController();
   late LlmKind _kind = widget.existing?.kind ?? llmPresets.first.kind;
-  bool _clearKey = false;
   String? _error;
 
   @override
@@ -314,7 +310,6 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
       _baseUrl,
       _model,
       _context,
-      _key,
     ]) {
       field.dispose();
     }
@@ -354,12 +349,10 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
     Navigator.of(context).pop(LlmConnectionInput(
       label: _label.text.trim(),
       kind: _kind,
-      // Claude Code and Codex have no address and never get a key (#105).
+      // Claude Code and Codex have no address (#105).
       baseUrl: _kind.isLocalCli ? '' : _baseUrl.text.trim(),
       model: _model.text.trim(),
       contextTokens: contextTokens,
-      apiKey: _kind.isLocalCli ? null : _key.text,
-      clearKey: !_kind.isLocalCli && _clearKey,
     ));
   }
 
@@ -441,27 +434,6 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
                 decoration:
                     const InputDecoration(labelText: 'Context (tokens)'),
               ),
-              if (!_kind.isLocalCli)
-                TextField(
-                  controller: _key,
-                  obscureText: true,
-                  enableSuggestions: false,
-                  autocorrect: false,
-                  decoration: InputDecoration(
-                    labelText: 'API key',
-                    helperText: existing?.hasKey ?? false
-                        ? 'A key is saved. Leave empty to keep it.'
-                        : 'Leave empty for a local server without keys.',
-                  ),
-                ),
-              if (!_kind.isLocalCli && (existing?.hasKey ?? false))
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: _clearKey,
-                  title: const Text('Remove the saved key'),
-                  onChanged: (bool? value) =>
-                      setState(() => _clearKey = value ?? false),
-                ),
               if (_error case final String error)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),

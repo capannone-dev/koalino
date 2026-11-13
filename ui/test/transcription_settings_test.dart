@@ -1,4 +1,4 @@
-// Tests the Whisper model and OpenAI settings with a fake core.
+// Tests the Whisper model settings with a fake core.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,10 +40,6 @@ const WhisperModelInfo _english = WhisperModelInfo(
 );
 
 final class _FakeBridge implements TranscriptionSettingsBridge {
-  String provider = 'local';
-  bool keySaved = false;
-  bool keychain = true;
-
   /// The hand-picked model; `null` is Automatic.
   String? selected = 'ggml-base.bin';
 
@@ -65,8 +61,6 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
   WhisperProposal? proposal;
   WhisperDownload downloadState = const WhisperDownload();
   final List<String> calls = <String>[];
-  int saveKeyStatus = transcriptionStatusOk;
-  String? savedKey;
   WhisperSuggestion? suggestion;
   EfficientModeStatus efficient = const EfficientModeStatus();
 
@@ -91,14 +85,8 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
 
   @override
   Future<TranscriptionSettings?> read() async => TranscriptionSettings(
-        provider: provider,
-        openAiModel: 'whisper-1',
-        keySaved: keySaved,
-        environmentKey: false,
-        keychainAvailable: keychain,
         selectedModel: selected,
         availableDiskBytes: 100000000000,
-        usingLocalFallback: false,
         models: const <WhisperModelInfo>[_base, _small, _english],
         download: downloadState,
         suggestion: suggestion,
@@ -131,35 +119,6 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
     selected = fileName;
     return transcriptionStatusOk;
   }
-
-  @override
-  Future<int> setProvider(String value) async {
-    calls.add('provider $value');
-    provider = value;
-    return transcriptionStatusOk;
-  }
-
-  @override
-  Future<int> setOpenAiModel(String model) async => transcriptionStatusOk;
-
-  @override
-  Future<int> saveKey(String key) async {
-    savedKey = key;
-    if (saveKeyStatus == transcriptionStatusOk) {
-      keySaved = true;
-    }
-    return saveKeyStatus;
-  }
-
-  @override
-  Future<int> removeKey() async {
-    keySaved = false;
-    provider = 'local';
-    return transcriptionStatusOk;
-  }
-
-  @override
-  Future<String> testKey() async => 'invalid';
 
   @override
   Future<int> download(String fileName) async {
@@ -390,47 +349,11 @@ void main() {
     expect(find.textContaining('stopped the app'), findsNothing);
   });
 
-  testWidgets('saving a key keeps recordings local and clears the field',
+  testWidgets('the page offers no API key or cloud provider (#117)',
       (WidgetTester tester) async {
-    final _FakeBridge bridge = _FakeBridge();
-    await _pump(tester, bridge);
-    await tester.enterText(find.byKey(openAiKeyFieldKey), 'sk-secret');
-    await tester.tap(find.text('Save key'));
-    await tester.pumpAndSettle();
-    expect(bridge.savedKey, 'sk-secret');
-    expect(bridge.provider, 'local');
-    expect(find.text('sk-secret'), findsNothing);
-    expect(find.text('An OpenAI key is saved.'), findsOneWidget);
-  });
-
-  testWidgets('choosing OpenAI needs confirmation that audio leaves the device',
-      (WidgetTester tester) async {
-    final _FakeBridge bridge = _FakeBridge()..keySaved = true;
-    await _pump(tester, bridge);
-    await tester.tap(find.byKey(providerSelectorKey));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OpenAI').last);
-    await tester.pumpAndSettle();
-    expect(find.text('Send recordings to OpenAI?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(bridge.provider, 'local');
-
-    await tester.tap(find.byKey(providerSelectorKey));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('OpenAI').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Send to OpenAI'));
-    await tester.pumpAndSettle();
-    expect(bridge.provider, 'openai');
-  });
-
-  testWidgets('without a keychain the key cannot be typed',
-      (WidgetTester tester) async {
-    final _FakeBridge bridge = _FakeBridge()..keychain = false;
-    await _pump(tester, bridge);
-    expect(find.byKey(openAiKeyFieldKey), findsNothing);
-    expect(find.textContaining('no keychain'), findsOneWidget);
+    await _pump(tester, _FakeBridge());
+    expect(find.textContaining('OpenAI'), findsNothing);
+    expect(find.textContaining('API key'), findsNothing);
   });
 
   testWidgets('a model on the device can be chosen and others downloaded',
@@ -484,14 +407,6 @@ void main() {
     await controller.load();
     expect(controller.message, contains('failed its check'));
     expect(controller.message, contains('still works'));
-  });
-
-  test('a refused key test reads plainly', () async {
-    final TranscriptionSettingsController controller =
-        TranscriptionSettingsController(bridge: _FakeBridge());
-    addTearDown(controller.dispose);
-    await controller.testKey();
-    expect(controller.message, contains('refused'));
   });
 
   testWidgets('the glossary shows the saved terms and saves one per line',
@@ -683,14 +598,8 @@ void main() {
   test('settings from an older core keep the after-meeting pass on', () {
     expect(
         const TranscriptionSettings(
-          provider: 'local',
-          openAiModel: 'whisper-1',
-          keySaved: false,
-          environmentKey: false,
-          keychainAvailable: true,
           selectedModel: null,
           availableDiskBytes: null,
-          usingLocalFallback: false,
           models: <WhisperModelInfo>[],
           download: WhisperDownload(state: 'idle'),
         ).afterMeetingPass,

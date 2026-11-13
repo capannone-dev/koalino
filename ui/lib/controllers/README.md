@@ -75,7 +75,7 @@ Only the UI is locked: the Rust core, recording, and sync keep running.
 `transcription_route_controller.dart` (Issue #59) holds the Settings choice of where recordings are
 transcribed; the core stores and applies it.
 
-`transcription_settings_controller.dart` holds the Transcription page: models, downloads and OpenAI (#67).
+`transcription_settings_controller.dart` holds the Transcription page: models and downloads (#67); the OpenAI choice is gone (#117).
 
 `summaries_controller.dart` (#95) holds the AI settings and each meeting's summary for Settings,
 the meeting lists and the summary page. It lives as long as the app, so a summary keeps being

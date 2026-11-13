@@ -34,39 +34,38 @@ void main() {
     expect(controller.message, 'The app is still starting. Try again.');
   });
 
-  test('saving a connection sends its key once and reloads', () async {
+  test('saving a connection sends it and reloads', () async {
     core.answer('command:settings', settings());
     await controller.load();
     core.answer('command:save_connection', <String, Object?>{
       'ok': true,
-      'connection': connection('c-2', 'Claude')
+      'connection': connection('c-2', 'Studio')
     });
     core.answer(
         'command:settings',
         settings(connections: <Object?>[
           connection('c-1', 'Office', isDefault: true),
-          connection('c-2', 'Claude'),
+          connection('c-2', 'Studio'),
         ]));
 
     final bool saved = await controller.saveConnection(const LlmConnectionInput(
-      label: 'Claude',
-      kind: LlmKind.anthropic,
-      baseUrl: 'https://api.anthropic.com',
-      model: 'claude-opus-5-5',
-      contextTokens: 200000,
-      apiKey: ' sk-ant-1 ',
+      label: 'Studio',
+      kind: LlmKind.openAiCompatible,
+      baseUrl: 'http://192.168.1.10:1234/v1',
+      model: 'qwen3-8b',
+      contextTokens: 32768,
     ));
 
     expect(saved, isTrue);
-    expect(controller.message, 'Saved Claude.');
+    expect(controller.message, 'Saved Studio.');
     expect(controller.settings?.connections, hasLength(2));
     final Map<String, Object?> request = core.lastCommand('save_connection');
-    expect(request['api_key'], 'sk-ant-1');
-    expect(request['kind'], 'anthropic');
+    expect(request.containsKey('api_key'), isFalse);
+    expect(request['kind'], 'open_ai_compatible');
     expect(request.containsKey('id'), isFalse);
   });
 
-  test('editing without a new key keeps the saved one', () async {
+  test('editing sends the connection\'s id and no key (#117)', () async {
     core.answer('command:save_connection', <String, Object?>{
       'ok': true,
       'connection': connection('c-1', 'Office')
@@ -80,7 +79,6 @@ void main() {
           baseUrl: 'http://192.168.1.5:11434/v1',
           model: 'llama3.1:8b',
           contextTokens: 8192,
-          apiKey: '',
         ),
         id: 'c-1');
 
@@ -119,7 +117,8 @@ void main() {
     core.answer('command:test_connection',
         <String, Object?>{'ok': false, 'error_code': 'llm_unauthorized'});
     await controller.testConnection('c-1');
-    expect(controller.message, 'The AI server refused the API key.');
+    expect(controller.message,
+        'The AI server refused access. Use a server that needs no API key.');
   });
 
   test('the template, its reset and automatic summaries are saved', () async {

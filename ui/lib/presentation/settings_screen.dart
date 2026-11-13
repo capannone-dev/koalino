@@ -72,7 +72,7 @@ final class SettingsScreen extends StatelessWidget {
   final TranscriptionLanguageController? languageController;
   final NetworkSettingsController? networkSettingsController;
 
-  /// Adds the Transcription page (Whisper model and OpenAI, Issue #67) when given.
+  /// Adds the Transcription page (the Whisper model, Issue #67) when given.
   final TranscriptionSettingsBridge? transcriptionSettingsBridge;
 
   /// Adds the AI connections page (summaries, #95) when given.
@@ -130,8 +130,7 @@ final class SettingsScreen extends StatelessWidget {
               ListTile(
                 leading: const Icon(Icons.record_voice_over_outlined),
                 title: const Text('Transcription model'),
-                subtitle:
-                    const Text('Choose the Whisper model, or use OpenAI.'),
+                subtitle: const Text('Choose the Whisper model.'),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(

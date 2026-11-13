@@ -72,8 +72,8 @@ Unlock; the app's widgets stay mounted but hidden (not painted, tapped, or read 
 readers), so an active recording and every screen keep their state. It forwards the app being
 hidden and shown to `AppLockController`.
 
-`transcription_settings_screen.dart` lists the Whisper models by size, and holds the OpenAI choice and write-only
-key field (#67). The first row, "Automatic" (the default, #106), names the model it runs here and why,
+`transcription_settings_screen.dart` lists the Whisper models by size, with no cloud provider
+or key field (#67, #117). The first row, "Automatic" (the default, #106), names the model it runs here and why,
 with a Download button while the suggested model isn't on the device; picking a model by hand leaves it, and
 the efficient mode switch shows only then. Its Glossary section takes one name or term per line; the message under Save says
 it applies from the next recording, and refused text stays in the field to correct. Below it,

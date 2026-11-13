@@ -1,7 +1,7 @@
 // Reaches the Rust core's AI connections and meeting summaries (#95). Every call answers
 // `{"ok":true,...}` or `{"ok":false,"error_code","error"}`; calls run on background isolates
-// because they read files and the keychain, and a summary waits on the model for minutes.
-// API keys are passed in once when saved and never come back.
+// because they read files, and a summary waits on the model for minutes. The app keeps no API
+// keys (#117): connections are servers the owner runs, or Claude Code and Codex signed in here.
 
 import 'dart:convert';
 import 'dart:ffi';
@@ -12,11 +12,8 @@ import 'package:ffi/ffi.dart';
 
 /// The protocols a connection speaks, as the core names them.
 enum LlmKind {
-  /// OpenAI's Chat Completions, also spoken by Mistral, Ollama, llama.cpp, LM Studio and vLLM.
-  openAiCompatible('open_ai_compatible', 'OpenAI-compatible'),
-
-  /// Anthropic's Messages API.
-  anthropic('anthropic', 'Anthropic'),
+  /// OpenAI's Chat Completions, spoken by Ollama, llama.cpp, LM Studio and vLLM servers.
+  openAiCompatible('open_ai_compatible', 'OpenAI-compatible server'),
 
   /// Claude Code installed and signed in on this computer, so a Claude plan answers (#105).
   claudeCode('claude_code', 'Claude Code'),
@@ -26,7 +23,7 @@ enum LlmKind {
 
   const LlmKind(this.wire, this.label);
 
-  /// Whether it runs a tool on this computer: no address and no key, desktop only.
+  /// Whether it runs a tool on this computer: no address, desktop only.
   bool get isLocalCli => this == claudeCode || this == codex;
 
   /// The name in the core's JSON.
@@ -42,7 +39,7 @@ enum LlmKind {
       );
 }
 
-/// A saved connection; it says only whether a key is saved, never the key.
+/// A saved connection.
 final class LlmConnection {
   /// Creates an immutable connection.
   const LlmConnection({
@@ -53,7 +50,6 @@ final class LlmConnection {
     required this.model,
     required this.contextTokens,
     required this.plainHttp,
-    required this.hasKey,
     required this.isDefault,
     this.toolInstalled = false,
   });
@@ -69,7 +65,6 @@ final class LlmConnection {
         model: json['model']! as String,
         contextTokens: (json['context_tokens'] as num?)?.toInt() ?? 0,
         plainHttp: json['plain_http'] as bool? ?? false,
-        hasKey: json['has_key'] as bool? ?? false,
         isDefault: json['is_default'] as bool? ?? false,
         toolInstalled: json['tool_installed'] as bool? ?? false,
       );
@@ -83,7 +78,7 @@ final class LlmConnection {
   /// The protocol.
   final LlmKind kind;
 
-  /// The server address, such as `https://api.openai.com/v1`.
+  /// The server address, such as `http://192.168.1.10:11434/v1`.
   final String baseUrl;
 
   /// The model name the server knows.
@@ -95,9 +90,6 @@ final class LlmConnection {
   /// Whether it uses unencrypted `http://` (allowed only on this device or the local network).
   final bool plainHttp;
 
-  /// Whether an API key is saved for it.
-  final bool hasKey;
-
   /// Whether summaries use it unless another is chosen.
   final bool isDefault;
 
@@ -105,7 +97,7 @@ final class LlmConnection {
   final bool toolInstalled;
 }
 
-/// What saving a connection sends. A null `apiKey` keeps the saved key.
+/// What saving a connection sends.
 final class LlmConnectionInput {
   /// Creates the input.
   const LlmConnectionInput({
@@ -114,8 +106,6 @@ final class LlmConnectionInput {
     required this.baseUrl,
     required this.model,
     required this.contextTokens,
-    this.apiKey,
-    this.clearKey = false,
   });
 
   final String label;
@@ -123,29 +113,19 @@ final class LlmConnectionInput {
   final String baseUrl;
   final String model;
   final int contextTokens;
-
-  /// A new key, sent once; null or blank keeps the saved one.
-  final String? apiKey;
-
-  /// Removes the saved key.
-  final bool clearKey;
 }
 
 /// A ready-made starting point for a connection.
 final class LlmPreset {
   /// Creates a preset.
   const LlmPreset(
-      this.name, this.kind, this.baseUrl, this.model, this.contextTokens,
-      {this.needsKey = true});
+      this.name, this.kind, this.baseUrl, this.model, this.contextTokens);
 
   final String name;
   final LlmKind kind;
   final String baseUrl;
   final String model;
   final int contextTokens;
-
-  /// Whether the provider needs an API key (a local server usually doesn't).
-  final bool needsKey;
 }
 
 /// Whether this device can run Claude Code or Codex: desktops only.
@@ -160,19 +140,12 @@ List<LlmPreset> get availableLlmPresets => <LlmPreset>[
 
 /// The presets offered when adding a connection, matching the web's.
 const List<LlmPreset> llmPresets = <LlmPreset>[
-  LlmPreset('OpenAI', LlmKind.openAiCompatible, 'https://api.openai.com/v1',
-      'gpt-5-mini', 128000),
-  LlmPreset('Anthropic', LlmKind.anthropic, 'https://api.anthropic.com',
-      'claude-opus-5-5', 200000),
-  LlmPreset('Mistral', LlmKind.openAiCompatible, 'https://api.mistral.ai/v1',
-      'mistral-large-latest', 128000),
   LlmPreset('Local server (Ollama)', LlmKind.openAiCompatible,
-      'http://192.168.1.10:11434/v1', 'llama3.1:8b', 8192,
-      needsKey: false),
-  LlmPreset('Claude Code (Claude plan)', LlmKind.claudeCode, '', '', 200000,
-      needsKey: false),
-  LlmPreset('Codex (ChatGPT plan)', LlmKind.codex, '', '', 200000,
-      needsKey: false),
+      'http://192.168.1.10:11434/v1', 'llama3.1:8b', 8192),
+  LlmPreset('LM Studio', LlmKind.openAiCompatible,
+      'http://192.168.1.10:1234/v1', 'qwen3-8b', 32768),
+  LlmPreset('Claude Code (Claude plan)', LlmKind.claudeCode, '', '', 200000),
+  LlmPreset('Codex (ChatGPT plan)', LlmKind.codex, '', '', 200000),
 ];
 
 /// The AI settings.
@@ -329,13 +302,13 @@ final class LlmException implements Exception {
         'connection_not_found' => 'That connection no longer exists.',
         'meeting_not_found' => 'That meeting no longer exists.',
         'no_connection' => 'Add an AI connection in Settings first.',
-        'missing_key' => 'This connection needs an API key.',
         'nothing_to_summarize' =>
           'This meeting has no transcript or notes yet.',
         'too_long' =>
           'This meeting is too long for this connection. Choose one with a larger context.',
         'llm_unreachable' => 'The AI server could not be reached.',
-        'llm_unauthorized' => 'The AI server refused the API key.',
+        'llm_unauthorized' =>
+          'The AI server refused access. Use a server that needs no API key.',
         'llm_rate_limited' =>
           'The AI server is busy or over its limit. Try again later.',
         'llm_rejected' =>
@@ -347,8 +320,6 @@ final class LlmException implements Exception {
           'Claude Code or Codex is not installed on this computer, or the app cannot find it.',
         'llm_tool_failed' =>
           'Claude Code or Codex could not answer. Check that it is signed in.',
-        'keychain_failed' =>
-          'The API key could not be stored in the system keychain.',
         'save_failed' => 'The settings could not be saved.',
         'storage_failed' => 'The meeting could not be read or saved.',
         'runtime_unavailable' => 'The app is still starting. Try again.',
@@ -400,11 +371,10 @@ final class LlmBridge {
 
   /// Creates a connection, or edits the one with `id`.
   ///
-  /// Outputs: The connection as saved. Throws `LlmException` (`invalid_connection`,
-  /// `keychain_failed`, ...). Side effects: Writes the settings file and the key store.
+  /// Outputs: The connection as saved. Throws `LlmException` (`invalid_connection`, ...).
+  /// Side effects: Writes the settings file.
   Future<LlmConnection> saveConnection(LlmConnectionInput input,
       {String? id}) async {
-    final String? key = input.apiKey?.trim();
     final Map<String, Object?> answer = await _command(<String, Object?>{
       'command': 'save_connection',
       if (id != null) 'id': id,
@@ -413,14 +383,12 @@ final class LlmBridge {
       'base_url': input.baseUrl,
       'model': input.model,
       'context_tokens': input.contextTokens,
-      if (key != null && key.isNotEmpty) 'api_key': key,
-      if (input.clearKey) 'clear_key': true,
     });
     return LlmConnection.fromJson(
         answer['connection']! as Map<String, Object?>);
   }
 
-  /// Removes a connection and its key. Side effects: Writes the settings file and key store.
+  /// Removes a connection. Side effects: Writes the settings file.
   Future<void> deleteConnection(String id) =>
       _command(<String, Object?>{'command': 'delete_connection', 'id': id});
 
