@@ -27,11 +27,11 @@ const buttonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong px-4 hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus disabled:text-faint";
 
 /** The connection form's fields; `id` is set when editing. */
-type Draft = LlmConnectionInput & { id?: string; has_key?: boolean };
+type Draft = LlmConnectionInput & { id?: string };
 
 /** An empty form, starting from the first preset. */
 function emptyDraft(): Draft {
-  return { label: "", ...connectionPresets[0].input, api_key: "" };
+  return { label: "", ...connectionPresets[0].input };
 }
 
 export type AiSettingsProps = {
@@ -98,13 +98,11 @@ export function AiSettings({ initial }: AiSettingsProps) {
       kind: draft.kind,
       base_url: draft.base_url,
       model: draft.model,
-      context_tokens: Number(draft.context_tokens),
-      api_key: draft.api_key
+      context_tokens: Number(draft.context_tokens)
     };
     const id = draft.id;
-    // Claude Code and Codex have no address and never get a key (#105).
+    // Claude Code and Codex have no address (#105).
     if (isLocalCli(body.kind)) body.base_url = "";
-    if (!body.api_key || isLocalCli(body.kind)) delete body.api_key;
     void run(async () => {
       const saved = await saveLlmConnection(body, id);
       // The first connection becomes the default, so the whole list is read again.
@@ -150,7 +148,6 @@ export function AiSettings({ initial }: AiSettingsProps) {
                 {connection.plain_http ? (
                   <p className="text-sm text-warning">Unencrypted http: use it only on a network you trust.</p>
                 ) : null}
-                <p className="text-sm text-muted">{connection.has_key ? "API key saved" : "No API key"}</p>
               </>
             )}
             <div className="mt-2 flex flex-wrap gap-2">
@@ -183,7 +180,7 @@ export function AiSettings({ initial }: AiSettingsProps) {
                 type="button"
                 className={buttonClass}
                 disabled={busy}
-                onClick={() => setDraft({ ...connection, api_key: "" })}
+                onClick={() => setDraft({ id: connection.id, label: connection.label, kind: connection.kind, base_url: connection.base_url, model: connection.model, context_tokens: connection.context_tokens })}
               >
                 Edit
               </button>
@@ -304,7 +301,7 @@ function ConnectionForm({
   onSubmit: (event: FormEvent) => void;
   onCancel: () => void;
 }) {
-  const ids = { preset: useId(), label: useId(), kind: useId(), url: useId(), model: useId(), context: useId(), key: useId() };
+  const ids = { preset: useId(), label: useId(), kind: useId(), url: useId(), model: useId(), context: useId() };
   return (
     <form className="space-y-3 rounded-lg border border-line p-3" onSubmit={onSubmit}>
       <h3 className="font-semibold">{draft.id ? "Edit connection" : "New connection"}</h3>
@@ -339,8 +336,7 @@ function ConnectionForm({
           Protocol
         </label>
         <select id={ids.kind} className={fieldClass} value={draft.kind} onChange={(event) => onChange({ ...draft, kind: event.target.value as LlmKind })}>
-          <option value="open_ai_compatible">OpenAI-compatible (OpenAI, Mistral, Ollama, LM Studio…)</option>
-          <option value="anthropic">Anthropic</option>
+          <option value="open_ai_compatible">OpenAI-compatible server (Ollama, LM Studio, llama.cpp…)</option>
           <option value="claude_code">Claude Code on the server&apos;s computer (Claude plan)</option>
           <option value="codex">Codex on the server&apos;s computer (ChatGPT plan)</option>
         </select>
@@ -386,22 +382,6 @@ function ConnectionForm({
           onChange={(event) => onChange({ ...draft, context_tokens: Number(event.target.value) })}
         />
       </div>
-      {isLocalCli(draft.kind) ? null : (
-        <div>
-          <label htmlFor={ids.key} className="block text-sm font-semibold">
-            API key
-          </label>
-          <input
-            id={ids.key}
-            type="password"
-            autoComplete="off"
-            className={fieldClass}
-            placeholder={draft.has_key ? "Saved; type a new one to replace it" : "Not needed for most local servers"}
-            value={draft.api_key ?? ""}
-            onChange={(event) => onChange({ ...draft, api_key: event.target.value })}
-          />
-        </div>
-      )}
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={buttonClass} disabled={busy}>
           Save connection

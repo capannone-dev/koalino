@@ -19,8 +19,8 @@ vi.mock("@/lib/llm-api", async () => ({
 }));
 
 const connections: api.LlmConnection[] = [
-  { id: "a", label: "Office", kind: "open_ai_compatible", base_url: "http://10.0.0.2/v1", model: "llama", context_tokens: 8192, plain_http: true, has_key: false, is_default: false },
-  { id: "b", label: "Claude", kind: "anthropic", base_url: "https://api.anthropic.com", model: "claude-opus-5-5", context_tokens: 200000, plain_http: false, has_key: true, is_default: true }
+  { id: "a", label: "Office", kind: "open_ai_compatible", base_url: "http://10.0.0.2/v1", model: "llama", context_tokens: 8192, plain_http: true, is_default: false },
+  { id: "b", label: "Claude", kind: "claude_code", base_url: "", model: "", context_tokens: 200000, plain_http: false, is_default: true }
 ];
 
 const written: api.StoredSummary = {

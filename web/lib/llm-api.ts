@@ -1,17 +1,17 @@
-// Typed client for the daemon's AI connection and meeting summary routes (#95). API keys are
-// write-only: they are sent when saved and never come back.
+// Typed client for the daemon's AI connection and meeting summary routes (#95). Koalino keeps no
+// API keys (#117): connections are servers on the network, or Claude Code and Codex.
 
 import { apiBaseUrl } from "@/lib/api";
 
 /** The protocol a connection speaks; `claude_code` and `codex` run the signed-in tool on the server's computer (#105). */
-export type LlmKind = "open_ai_compatible" | "anthropic" | "claude_code" | "codex";
+export type LlmKind = "open_ai_compatible" | "claude_code" | "codex";
 
 /** Whether a kind runs a tool instead of calling a server: no address and no key. */
 export function isLocalCli(kind: LlmKind): boolean {
   return kind === "claude_code" || kind === "codex";
 }
 
-/** A saved connection; `has_key` only says whether a key is saved. */
+/** A saved connection. */
 export type LlmConnection = {
   id: string;
   label: string;
@@ -20,7 +20,6 @@ export type LlmConnection = {
   model: string;
   context_tokens: number;
   plain_http: boolean;
-  has_key: boolean;
   is_default: boolean;
   /** For Claude Code and Codex: whether the tool was found on the server's computer. */
   tool_installed?: boolean;
@@ -37,15 +36,13 @@ export type LlmSettings = {
   placeholders: string[];
 };
 
-/** What saving a connection sends; an absent `api_key` keeps the saved one. */
+/** What saving a connection sends. */
 export type LlmConnectionInput = {
   label: string;
   kind: LlmKind;
   base_url: string;
   model: string;
   context_tokens: number;
-  api_key?: string;
-  clear_key?: boolean;
 };
 
 /** A meeting's stored summary. */
@@ -93,11 +90,10 @@ const messages: Record<string, string> = {
   connection_not_found: "That connection no longer exists.",
   meeting_not_found: "That meeting no longer exists.",
   no_connection: "Add an AI connection in Settings first.",
-  missing_key: "This connection needs an API key.",
   nothing_to_summarize: "This meeting has no transcript or notes yet.",
   too_long: "This meeting is too long for this connection. Choose one with a larger context.",
   llm_unreachable: "The AI server could not be reached.",
-  llm_unauthorized: "The AI server refused the API key.",
+  llm_unauthorized: "The AI server refused access. Use a server that needs no API key.",
   llm_rate_limited: "The AI server is busy or over its limit. Try again later.",
   llm_rejected: "The AI server rejected the request. Check the model name.",
   llm_failed: "The AI server failed. Try again.",
@@ -105,7 +101,6 @@ const messages: Record<string, string> = {
   llm_invalid_response: "The AI server's answer could not be read.",
   llm_tool_missing: "Claude Code or Codex is not installed on the server's computer, or it cannot be found.",
   llm_tool_failed: "Claude Code or Codex could not answer. Check that it is signed in.",
-  keychain_failed: "The API key could not be stored in the system keychain.",
   save_failed: "The settings could not be saved.",
   storage_failed: "The meeting could not be read or saved."
 };
@@ -209,10 +204,8 @@ export async function setMeetingPrompt(meetingId: string, prompt: string | null)
 
 /** Ready-made connections the Settings form can start from. */
 export const connectionPresets: { name: string; input: Omit<LlmConnectionInput, "label"> }[] = [
-  { name: "OpenAI", input: { kind: "open_ai_compatible", base_url: "https://api.openai.com/v1", model: "gpt-5-mini", context_tokens: 128000 } },
-  { name: "Anthropic", input: { kind: "anthropic", base_url: "https://api.anthropic.com", model: "claude-opus-5-5", context_tokens: 200000 } },
-  { name: "Mistral", input: { kind: "open_ai_compatible", base_url: "https://api.mistral.ai/v1", model: "mistral-large-latest", context_tokens: 128000 } },
   { name: "Local server (Ollama)", input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:11434/v1", model: "llama3.1:8b", context_tokens: 8192 } },
+  { name: "LM Studio", input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:1234/v1", model: "qwen3-8b", context_tokens: 32768 } },
   { name: "Claude Code (Claude plan)", input: { kind: "claude_code", base_url: "", model: "", context_tokens: 200000 } },
   { name: "Codex (ChatGPT plan)", input: { kind: "codex", base_url: "", model: "", context_tokens: 200000 } }
 ];

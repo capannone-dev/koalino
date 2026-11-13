@@ -23,7 +23,6 @@ const office: api.LlmConnection = {
   model: "llama3.1:8b",
   context_tokens: 8192,
   plain_http: true,
-  has_key: false,
   is_default: true
 };
 
@@ -50,30 +49,30 @@ test("lists connections with their default, a plain-http warning and no key", ()
   expect(screen.getByText("Office server")).toBeInTheDocument();
   expect(screen.getByText("Default")).toBeInTheDocument();
   expect(screen.getByText(/Unencrypted http/)).toBeInTheDocument();
-  expect(screen.getByText("No API key")).toBeInTheDocument();
+  expect(screen.queryByText(/API key/)).not.toBeInTheDocument();
   expect(screen.getByLabelText("Summary prompt")).toHaveValue("Summarize {{title}}.");
   expect(screen.getByLabelText(/Summarize meetings automatically/)).toBeChecked();
 });
 
-test("adding a connection sends its key once and lists it", async () => {
-  const added: api.LlmConnection = { ...office, id: "c-2", label: "Claude", kind: "anthropic", base_url: "https://api.anthropic.com", model: "claude-opus-5-5", plain_http: false, has_key: true, is_default: false };
+test("adding a connection from a preset sends no key and lists it (#117)", async () => {
+  const added: api.LlmConnection = { ...office, id: "c-2", label: "Studio", base_url: "http://192.168.1.10:1234/v1", model: "qwen3-8b", is_default: false };
   vi.mocked(api.saveLlmConnection).mockResolvedValue(added);
   vi.mocked(api.getLlmSettings).mockResolvedValue({ ...settings, connections: [office, added] });
   render(<AiSettings initial={settings} />);
 
   fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
-  fireEvent.change(screen.getByLabelText("Start from"), { target: { value: "Anthropic" } });
-  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Claude" } });
-  fireEvent.change(screen.getByLabelText("API key"), { target: { value: "sk-ant-1" } });
+  expect(screen.queryByRole("option", { name: "Anthropic" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "OpenAI" })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Start from"), { target: { value: "LM Studio" } });
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Studio" } });
+  expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
 
-  expect(await screen.findByText("Saved Claude.")).toBeInTheDocument();
+  expect(await screen.findByText("Saved Studio.")).toBeInTheDocument();
   expect(api.saveLlmConnection).toHaveBeenCalledWith(
-    expect.objectContaining({ label: "Claude", kind: "anthropic", base_url: "https://api.anthropic.com", model: "claude-opus-5-5", api_key: "sk-ant-1" }),
+    { label: "Studio", kind: "open_ai_compatible", base_url: "http://192.168.1.10:1234/v1", model: "qwen3-8b", context_tokens: 32768 },
     undefined
   );
-  expect(screen.getByText("API key saved")).toBeInTheDocument();
-  expect(screen.queryByDisplayValue("sk-ant-1")).not.toBeInTheDocument();
 });
 
 test("testing a connection shows its reply, and failures are plain", async () => {
