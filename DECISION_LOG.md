@@ -2926,8 +2926,15 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **Checked on deb-gui:** a silent `parecord` stream named "zoom" brought the offer, and Record
   started "Zoom call". Ending that stream stopped the recording 20 s later and released every
   capture stream. Nothing was played.
+- **System notification (Linux):** `notify-send` with Record and Not now buttons, run by the app,
+  with no plugin. It is withdrawn when the offer is answered in the app.
+- **Child processes:** while the Flutter engine has a process of its own running (that
+  notification), it reaps children with `waitpid(-1)` and can collect the status of the core's
+  `pactl`, or of Claude Code / Codex (#105). The core then keeps the output it read, and a look
+  that failed once no longer stops the watch. deb-gui showed the bug: the call's end went
+  unnoticed after a Record tap in the notification. After the fix, it stopped as it should.
 - **Not yet:**
-  - a system notification while the window is hidden;
+  - a system notification on Windows;
   - Windows on a VM: win11's snapshot needs a missing `virtio-win.iso`, so the consent-store parser
     is tested only on the documented output;
   - Android.
