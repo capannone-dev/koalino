@@ -216,6 +216,38 @@ void main() {
     expect(find.widgetWithText(TextButton, 'Play'), findsOneWidget);
   });
 
+  testWidgets(
+      'a name the call window showed fills the field and is assigned on tap (#113)',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[
+        UnknownSpeakerCluster.fromJson(const <String, Object?>{
+          'cluster_id': 'cluster-9',
+          'meeting_id': 'meeting-1',
+          'total_duration_ms': 4000,
+          'chunk_count': 2,
+          'suggested_name': 'Alice Rossi',
+        }),
+      ],
+    );
+
+    await pumpGallery(tester, bridge);
+
+    expect(find.byKey(const ValueKey<String>('suggested-cluster-9')),
+        findsOneWidget);
+    expect(
+        find.text('The call showed Alice Rossi speaking. Check, then Assign.'),
+        findsOneWidget);
+    final TextField field = tester.widget<TextField>(
+        find.byKey(const ValueKey<String>('identity-name-cluster-9')));
+    expect(field.controller?.text, 'Alice Rossi');
+    expect(bridge.assignedClusters, isEmpty);
+    await tester.tap(find.byKey(const ValueKey<String>('assign-cluster-9')));
+    await tester.pumpAndSettle();
+    expect(bridge.assignedClusters,
+        <(String, String)>[('cluster-9', 'Alice Rossi')]);
+  });
+
   testWidgets('plays a cluster review clip through its local file path',
       (WidgetTester tester) async {
     final FakeVoiceGalleryBridge bridge =

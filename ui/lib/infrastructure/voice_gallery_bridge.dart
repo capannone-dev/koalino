@@ -19,6 +19,7 @@ final class UnknownSpeakerCluster {
     this.meetingTitle,
     this.hasReviewClip = false,
     String? voiceGroupId,
+    this.suggestedName,
   }) : voiceGroupId = voiceGroupId ?? clusterId;
 
   /// Stable cluster UUID sent back when assigning an identity.
@@ -43,6 +44,10 @@ final class UnknownSpeakerCluster {
   /// The group of voices that sound like this person (#82); the cluster's own ID when alone.
   final String voiceGroupId;
 
+  /// The name the call window or the Teams captions showed while this voice spoke (#113), or
+  /// null. It is only offered: nothing is named until the owner assigns it.
+  final String? suggestedName;
+
   /// Decodes one element of the library's `unknown_clusters` array.
   factory UnknownSpeakerCluster.fromJson(Map<String, Object?> json) {
     return UnknownSpeakerCluster(
@@ -53,6 +58,7 @@ final class UnknownSpeakerCluster {
       chunkCount: (json['chunk_count']! as num).toInt(),
       hasReviewClip: json['has_review_clip'] as bool? ?? false,
       voiceGroupId: json['voice_group_id'] as String?,
+      suggestedName: json['suggested_name'] as String?,
     );
   }
 }
@@ -71,6 +77,16 @@ final class UnknownVoiceGroup {
   /// Speech of every voice in the group, in milliseconds.
   int get totalDurationMs => voices.fold(
       0, (int sum, UnknownSpeakerCluster voice) => sum + voice.totalDurationMs);
+
+  /// The first name the call window showed for one of the voices (#113), or null.
+  String? get suggestedName {
+    for (final UnknownSpeakerCluster voice in voices) {
+      if (voice.suggestedName != null) {
+        return voice.suggestedName;
+      }
+    }
+    return null;
+  }
 
   /// The different meetings the voices come from, in order.
   List<String> get meetingIds => <String>{

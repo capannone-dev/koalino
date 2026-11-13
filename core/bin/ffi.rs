@@ -24,9 +24,9 @@ use crate::{
     application::{
         attachment_manager::AttachmentManager,
         cluster_review::{
-            ClusterReviewError, assign_cluster_to_named_identity,
+            AttachedNamedSpans, ClusterReviewError, assign_cluster_to_named_identity,
             assign_clusters_to_named_identity, find_cluster_review_clip, list_unknown_clusters,
-            load_voice_library,
+            load_voice_library_with_names,
         },
         combined_meetings::{
             MeetingListing, combining_view, name_recording_devices, split_recordings,
@@ -1074,15 +1074,19 @@ impl FfiRuntime {
     /// Describes every meeting's unresolved clusters and the saved people as JSON (Issue #63).
     ///
     /// Outputs: `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title",
-    /// "total_duration_ms","chunk_count","created_at","has_review_clip","voice_group_id"}],"saved_people":
+    /// "total_duration_ms","chunk_count","created_at","has_review_clip","voice_group_id",
+    /// "suggested_name"}],"saved_people":
     /// [{"identity_id","display_name","voice_variant_count"}]}`, or `{"ok":false,"error_code":
     /// "list_failed","error"}`. `meeting_title` is null for an untitled meeting. Voices that sound
     /// like one person share `voice_group_id` and are listed next to each other (#82).
-    /// Side effects: Reads SQLite. Writes no audio, and embeddings never leave Rust.
+    /// `suggested_name` is the name a call window or the Teams captions showed while the voice
+    /// spoke (#113), or null.
+    /// Side effects: Reads SQLite and decrypts the meetings' name readings and captions. Writes no audio, and embeddings never leave Rust.
     fn get_voice_library(&self) -> String {
-        let library = match load_voice_library(
+        let library = match load_voice_library_with_names(
             &self.note_repository,
             self.voice_identity_manager.vector_database(),
+            &AttachedNamedSpans(&self.note_repository),
         ) {
             Ok(library) => library,
             Err(error) => return export_error_json("list_failed", &error.to_string()),
@@ -1098,6 +1102,7 @@ impl FfiRuntime {
                 "created_at": cluster.summary().created_at().to_rfc3339(),
                 "has_review_clip": cluster.has_review_clip(),
                 "voice_group_id": cluster.voice_group_id().to_string(),
+                "suggested_name": cluster.suggested_name(),
             })).collect::<Vec<_>>(),
             "saved_people": library.saved_people().iter().map(|person| serde_json::json!({
                 "identity_id": person.identity_id().to_string(),

@@ -149,7 +149,8 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
     UnknownSpeakerCluster cluster,
   ) {
     final TextEditingController nameController = _nameControllers.putIfAbsent(
-        cluster.clusterId, TextEditingController.new);
+        cluster.clusterId,
+        () => TextEditingController(text: cluster.suggestedName));
     final bool isPlaying = controller.playingClusterId == cluster.clusterId;
     final ColorScheme colors = Theme.of(context).colorScheme;
     return Card(
@@ -178,6 +179,8 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                   Text(_formatSummary(cluster)),
                   if (controller.meetingId == null)
                     Text(cluster.meetingTitle ?? 'Untitled meeting'),
+                  if (cluster.suggestedName != null)
+                    _suggestionLine(cluster.clusterId, cluster.suggestedName!),
                 ],
               ),
               trailing: Row(
@@ -211,6 +214,19 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
       ),
     );
   }
+
+  /// Says where a suggested name came from (#113); the name field is filled with it.
+  Widget _suggestionLine(String keyId, String suggestedName) => Row(
+        key: ValueKey<String>('suggested-$keyId'),
+        children: <Widget>[
+          const Icon(Icons.badge_outlined, size: 16),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+                'The call showed $suggestedName speaking. Check, then Assign.'),
+          ),
+        ],
+      );
 
   /// Builds the name field, with saved people to pick from, and the Assign button.
   ///
@@ -269,8 +285,8 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
     int index,
     UnknownVoiceGroup group,
   ) {
-    final TextEditingController nameController =
-        _nameControllers.putIfAbsent(group.groupId, TextEditingController.new);
+    final TextEditingController nameController = _nameControllers.putIfAbsent(
+        group.groupId, () => TextEditingController(text: group.suggestedName));
     final bool isPlaying = group.voices.any((UnknownSpeakerCluster voice) =>
         voice.clusterId == controller.playingClusterId);
     final bool canPlay =
@@ -311,6 +327,8 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                   Text('${_formatSeconds(group.totalDurationMs)} · $coverage'),
                   if (controller.meetingId == null)
                     Text(meetingTitles.join(', ')),
+                  if (group.suggestedName != null)
+                    _suggestionLine(group.groupId, group.suggestedName!),
                 ],
               ),
               trailing: Row(

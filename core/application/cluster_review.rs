@@ -11,6 +11,10 @@
 //! every cluster in it to one identity. Grouping is recomputed on each listing and never stored,
 //! so it needs no sync; each cluster still resolves on its own, as paired devices expect.
 //!
+//! Each unknown voice may carry a suggested name (#113): the name a call window or the Teams
+//! captions showed while it spoke (`domain::speaker_names`). The gallery offers it; nothing is
+//! named without the owner's tap.
+//!
 //! Name resolution: a name matching an identity stored in `VoiceVectorDB` (trimmed,
 //! case-insensitive) reuses that identity and keeps its stored spelling; any other name becomes a
 //! new identity with a fresh UUID. The clusterer persists the identity, so names survive restarts
@@ -26,8 +30,14 @@ use crate::{
             ClusterAssignment, ClusteringConfig, ClusteringError, UnknownSpeakerClusterer,
         },
     },
-    domain::models::{MeetingId, SpeakerIdentity, UnassignedVoiceClip, UnknownSpeakerCluster},
-    ports::{storage::NoteRepository, voice::VoiceVectorDB},
+    domain::{
+        models::{MeetingId, SpeakerIdentity, UnassignedVoiceClip, UnknownSpeakerCluster},
+        speaker_names::{NamedSpan, VoiceTurn, parse_voice_cues, suggest_names},
+    },
+    ports::{
+        storage::{AttachmentRepository, NoteRepository},
+        voice::VoiceVectorDB,
+    },
 };
 
 /// Reports why a cluster could not be listed or assigned.
@@ -100,6 +110,8 @@ pub struct VoiceLibraryCluster {
     has_review_clip: bool,
     /// The group this voice belongs to: the ID of the group's first cluster (#82).
     voice_group_id: Uuid,
+    /// The name shown on the call window while this voice spoke (#113), if clear enough.
+    suggested_name: Option<String>,
 }
 
 impl VoiceLibraryCluster {
@@ -116,6 +128,11 @@ impl VoiceLibraryCluster {
     /// Reports whether a review clip can still be played for this cluster.
     pub fn has_review_clip(&self) -> bool {
         self.has_review_clip
+    }
+
+    /// Returns the name the call window or captions showed while this voice spoke (#113).
+    pub fn suggested_name(&self) -> Option<&str> {
+        self.suggested_name.as_deref()
     }
 
     /// Returns the ID of the voice group this cluster belongs to, shared by its whole group (#82).
@@ -331,15 +348,98 @@ where
     )
 }
 
+/// Gives the names a meeting's call window or captions showed as speaking (#113).
+pub trait NamedSpanSource {
+    /// Returns the meeting's named spans, in meeting milliseconds; empty when there are none or
+    /// they cannot be read. Side effects: May read and decrypt the meeting's attachments.
+    fn named_spans(&self, meeting_id: &MeetingId) -> Vec<NamedSpan>;
+}
+
+/// Gives no names: the gallery without suggestions.
+pub struct NoNamedSpans;
+
+impl NamedSpanSource for NoNamedSpans {
+    fn named_spans(&self, _meeting_id: &MeetingId) -> Vec<NamedSpan> {
+        Vec::new()
+    }
+}
+
+/// File-name prefixes of the attachments whose `<v Name>` cues are in recording time: the call
+/// window's readings (#113) and the Teams captions and live transcript (#102). The Teams
+/// transcript published after the meeting is timed from the Teams meeting's start, so it is not
+/// used.
+const NAMED_SPAN_FILE_PREFIXES: [&str; 3] = [
+    "speaker-names-",
+    "teams-captions-",
+    "teams-live-transcript-",
+];
+/// Largest attachment read for names.
+const MAX_NAMED_SPAN_FILE_BYTES: u64 = 4 * 1024 * 1024;
+
+/// Reads named spans from a meeting's WebVTT attachments.
+pub struct AttachedNamedSpans<'repository, RepositoryPort: ?Sized>(pub &'repository RepositoryPort);
+
+impl<RepositoryPort> NamedSpanSource for AttachedNamedSpans<'_, RepositoryPort>
+where
+    RepositoryPort: AttachmentRepository + ?Sized,
+{
+    /// Reads the meeting's `speaker-names`, `teams-captions` and `teams-live-transcript` WebVTT
+    /// attachments. Side effects: Decrypts those files in memory; nothing is written or logged.
+    fn named_spans(&self, meeting_id: &MeetingId) -> Vec<NamedSpan> {
+        let Ok(attachments) = self.0.get_attachments_for_meeting(meeting_id) else {
+            return Vec::new();
+        };
+        let mut spans = Vec::new();
+        for attachment in attachments {
+            let path = std::path::Path::new(attachment.file_path());
+            let is_named_span_file = attachment.mime_type() == "text/vtt"
+                && path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| {
+                        NAMED_SPAN_FILE_PREFIXES
+                            .iter()
+                            .any(|prefix| name.starts_with(prefix))
+                    });
+            if !is_named_span_file {
+                continue;
+            }
+            if let Some(bytes) = self.0.read_attachment_file(path, MAX_NAMED_SPAN_FILE_BYTES)
+                && let Ok(text) = std::str::from_utf8(&bytes)
+            {
+                spans.extend(parse_voice_cues(text));
+            }
+        }
+        spans
+    }
+}
+
 /// Loads the voice gallery: unresolved clusters of every meeting and every saved person.
 ///
 /// Inputs: The persistence ports (either may be a `dyn` port).
-/// Outputs: The library, or a storage error. No embedding or audio is included.
-/// Side effects: Reads meetings, clusters, clips, identities, and variant counts. Nothing is
-/// written to disk: a clip is only turned into a playable file when the owner asks to hear it.
+/// Outputs and side effects: As `load_voice_library_with_names`, without name suggestions.
 pub fn load_voice_library<RepositoryPort, VectorDatabase>(
     note_repository: &RepositoryPort,
     voice_vector_database: &VectorDatabase,
+) -> Result<VoiceLibrary, ClusterReviewError>
+where
+    RepositoryPort: NoteRepository + ?Sized,
+    VectorDatabase: VoiceVectorDB + ?Sized,
+{
+    load_voice_library_with_names(note_repository, voice_vector_database, &NoNamedSpans)
+}
+
+/// Loads the voice gallery, suggesting names from what call windows showed (#113).
+///
+/// Inputs: The persistence ports (either may be a `dyn` port) and the source of named spans.
+/// Outputs: The library, or a storage error. No embedding or audio is included.
+/// Side effects: Reads meetings, clusters, clips, identities, and variant counts. Nothing is
+/// written to disk: a clip is only turned into a playable file when the owner asks to hear it.
+/// For a meeting with named spans, its transcript segments are read to time each voice.
+pub fn load_voice_library_with_names<RepositoryPort, VectorDatabase>(
+    note_repository: &RepositoryPort,
+    voice_vector_database: &VectorDatabase,
+    named_spans: &dyn NamedSpanSource,
 ) -> Result<VoiceLibrary, ClusterReviewError>
 where
     RepositoryPort: NoteRepository + ?Sized,
@@ -363,6 +463,7 @@ where
         let review_clips = note_repository
             .get_unassigned_clips(&meeting_id)
             .map_err(ClusteringError::from)?;
+        let suggestions = suggested_names(note_repository, named_spans, &meeting_id)?;
         for cluster in clusters {
             let has_review_clip = review_clips
                 .iter()
@@ -373,6 +474,7 @@ where
                 meeting_title: meeting_title.clone(),
                 has_review_clip,
                 voice_group_id: cluster.cluster_id(),
+                suggested_name: suggestions.get(&cluster.cluster_id()).cloned(),
             });
         }
     }
@@ -415,6 +517,37 @@ where
         unknown_voice_groups,
         saved_people,
     })
+}
+
+/// Suggests names for one meeting's unknown voices from its named spans (#113).
+///
+/// Outputs: Cluster ID to name; empty when the meeting has no named spans.
+/// Side effects: Reads the named spans and, when there are any, the meeting's segments.
+fn suggested_names<RepositoryPort>(
+    note_repository: &RepositoryPort,
+    named_spans: &dyn NamedSpanSource,
+    meeting_id: &MeetingId,
+) -> Result<std::collections::HashMap<Uuid, String>, ClusterReviewError>
+where
+    RepositoryPort: NoteRepository + ?Sized,
+{
+    let spans = named_spans.named_spans(meeting_id);
+    if spans.is_empty() {
+        return Ok(std::collections::HashMap::new());
+    }
+    let turns: Vec<VoiceTurn> = note_repository
+        .load_transcript_segments(meeting_id)
+        .map_err(ClusteringError::from)?
+        .iter()
+        .filter_map(|segment| {
+            Some(VoiceTurn {
+                cluster_id: segment.unknown_cluster_id()?,
+                start_ms: segment.start_time_ms(),
+                end_ms: segment.end_time_ms(),
+            })
+        })
+        .collect();
+    Ok(suggest_names(&turns, &spans))
 }
 
 /// Groups voices that sound like one person (#82).

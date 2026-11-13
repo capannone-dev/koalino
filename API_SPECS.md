@@ -164,10 +164,12 @@ from a background isolate.
 
 - `char *note_taker_get_voice_library(void)` returns every meeting's unresolved clusters and the
   saved people (Issue #63):
-  `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title":"…|null","total_duration_ms","chunk_count","created_at","has_review_clip":true,"voice_group_id":"uuid"}],"saved_people":[{"identity_id","display_name","voice_variant_count"}]}`,
+  `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title":"…|null","total_duration_ms","chunk_count","created_at","has_review_clip":true,"voice_group_id":"uuid","suggested_name":"…|null"}],"saved_people":[{"identity_id","display_name","voice_variant_count"}]}`,
   or `{"ok":false,"error_code":"list_failed|runtime_unavailable","error":"…"}`. It writes no audio.
   Voices that sound like one person, in any meeting, share `voice_group_id` (the ID of the group's
   first cluster) and are listed next to each other (Issue #82). A lone voice's group is its own ID.
+  `suggested_name` is the name a call window or the Teams captions showed while the voice spoke
+  (#113), or null; it is only offered, never assigned without the owner.
 - `char *note_taker_assign_voice_group(const char *cluster_ids_json, const char *identity_name)`
   names several voices as one person (Issue #82). `cluster_ids_json` is a JSON array of UUID
   strings. It returns
@@ -285,8 +287,11 @@ and meeting summaries" below). Keys are write-only.
     `{"ok":true,"available","in_call","app","event"}`, where `event` is `started` or `ended` on
     the look that noticed it, else null. `available` is false where the system cannot tell; a
     look whose tool failed this once answers `{"ok":false,"error_code":"probe_failed"}`.
-  - `{"command":"get"}` and `{"command":"set","offer"?,"auto_stop"?}` answer
-    `{"ok":true,"offer","auto_stop"}`.
+  - `{"command":"get"}` and `{"command":"set","offer"?,"auto_stop"?,"read_names"?}` answer
+    `{"ok":true,"offer","auto_stop","read_names","restart_apps"}`. `read_names` (on by default,
+    #113) reads who call windows show as speaking during recordings. While it is on, these
+    requests turn the desktop's accessibility flag on (Linux); `restart_apps` is true when it had
+    to, because browsers and call apps already running must be restarted once.
 - Error codes: `invalid_request`, `storage_failed`, `runtime_unavailable`, `probe_failed`. No
   open runtime is needed.
 
@@ -496,8 +501,10 @@ is the stored title, or `Meeting YYYY-MM-DD HH:MM UTC` for an untitled meeting. 
 /api/meetings` with `{"title":"..."}` (or `{}`) creates an empty meeting and returns `201` with
 its summary. An invalid title returns `400` (Issue #35). `GET /api/voice-gallery` returns
 `identities` (`identity_id`, `display_name`, `voice_variant_count`), `unknown_clusters` (the summary
-below plus `meeting_title`, `has_review_clip` and `voice_group_id`, for every meeting; voices that
-sound like one person share `voice_group_id` and are listed together, Issue #82), and `unassigned_clips`
+below plus `meeting_title`, `has_review_clip`, `voice_group_id` and `suggested_name`, for every
+meeting; voices that sound like one person share `voice_group_id` and are listed together, Issue #82;
+`suggested_name` is the name a call window or the Teams captions showed while the voice spoke, or
+`null`, #113), and `unassigned_clips`
 (identifiers and timing only); voice vectors and raw audio are never serialized.
 `GET /api/clusters/{id}/review-clip` returns `200` with the clip as `audio/wav` and
 `Cache-Control: no-store`, or `404` when the cluster has none (Issue #63). `GET /api/telemetry` returns aggregate task count, duration, and latency.

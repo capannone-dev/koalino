@@ -25,10 +25,10 @@ use crate::{
     adapters::export::default_exporters,
     application::{
         cluster_review::{
-            ClusterReviewError, NamedClusterAssignment, NamedGroupAssignment, SavedPersonSummary,
-            UnknownClusterSummary, VoiceLibraryCluster, assign_cluster_to_named_identity,
-            assign_clusters_to_named_identity, find_cluster_review_clip, list_unknown_clusters,
-            load_voice_library,
+            AttachedNamedSpans, ClusterReviewError, NamedClusterAssignment, NamedGroupAssignment,
+            SavedPersonSummary, UnknownClusterSummary, VoiceLibraryCluster,
+            assign_cluster_to_named_identity, assign_clusters_to_named_identity,
+            find_cluster_review_clip, list_unknown_clusters, load_voice_library_with_names,
         },
         combined_meetings::{
             CombiningView, MeetingListing, RecordingDevice, combining_view, name_recording_devices,
@@ -917,8 +917,12 @@ async fn get_voice_gallery(
     );
     let repositories = application_state.repositories.lock().await;
     let voice_database = application_state.voice_database.lock().await;
-    let library = load_voice_library(&**repositories, &**voice_database)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let library = load_voice_library_with_names(
+        &**repositories,
+        &**voice_database,
+        &AttachedNamedSpans(&**repositories),
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     drop(voice_database);
     let meeting_ids = repositories
         .list_meeting_ids()
@@ -1453,6 +1457,8 @@ struct LibraryClusterResponse {
     has_review_clip: bool,
     /// The voice group it belongs to, shared by voices that sound like one person (#82).
     voice_group_id: String,
+    /// The name a call window or the Teams captions showed while it spoke (#113), or `null`.
+    suggested_name: Option<String>,
 }
 impl From<&VoiceLibraryCluster> for LibraryClusterResponse {
     fn from(library_cluster: &VoiceLibraryCluster) -> Self {
@@ -1461,6 +1467,7 @@ impl From<&VoiceLibraryCluster> for LibraryClusterResponse {
             meeting_title: library_cluster.meeting_title().map(String::from),
             has_review_clip: library_cluster.has_review_clip(),
             voice_group_id: library_cluster.voice_group_id().to_string(),
+            suggested_name: library_cluster.suggested_name().map(String::from),
         }
     }
 }

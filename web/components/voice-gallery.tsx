@@ -167,6 +167,8 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
         const speakerLabel = `Unknown speaker ${index + 1}`;
         const lone = group.voices.length === 1 ? group.voices[0] : null;
         const longestPlayable = group.voices.filter((voice) => voice.has_review_clip).sort((first, second) => second.total_duration_ms - first.total_duration_ms)[0];
+        // The name a call window showed while one of these voices spoke (#113); only offered.
+        const suggestedName = group.voices.find((voice) => voice.suggested_name)?.suggested_name ?? null;
         return (
           <article className="card space-y-2" key={group.groupId}>
             <div className="flex items-center justify-between gap-2">
@@ -200,9 +202,10 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
                 </ul>
               </details>
             )}
+            {suggestedName ? <p className="text-sm">The call showed {suggestedName} speaking. Check, then Assign.</p> : null}
             <form className="space-y-2" onSubmit={(event) => submitAssignment(event, group)}>
               <label className="block">Name
-                <input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" name="identityName" type="text" aria-label={`Name for ${speakerLabel.toLowerCase()}`} autoComplete="off" list="saved-people" />
+                <input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" name="identityName" type="text" aria-label={`Name for ${speakerLabel.toLowerCase()}`} autoComplete="off" list="saved-people" defaultValue={suggestedName ?? undefined} />
               </label>
               <button className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong" type="submit">Assign</button>
             </form>

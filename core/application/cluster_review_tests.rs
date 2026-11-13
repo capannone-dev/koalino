@@ -12,9 +12,9 @@ use crate::{
     },
     application::{
         cluster_review::{
-            ClusterReviewError, assign_cluster_to_named_identity,
+            ClusterReviewError, NamedSpanSource, assign_cluster_to_named_identity,
             assign_clusters_to_named_identity, find_cluster_review_clip, group_unknown_voices,
-            list_unknown_clusters, load_voice_library,
+            list_unknown_clusters, load_voice_library, load_voice_library_with_names,
         },
         unknown_speaker_clusterer::{ClusteringConfig, ClusteringError, UnknownSpeakerClusterer},
     },
@@ -597,4 +597,63 @@ fn naming_a_group_skips_clusters_already_named_and_rejects_bad_input() {
             ClusteringError::ClusterAlreadyResolved { .. }
         ))
     ));
+}
+
+/// Names shown on a call window, per meeting, for the suggestion tests (#113).
+struct FixedNames(Vec<crate::domain::speaker_names::NamedSpan>);
+
+impl NamedSpanSource for FixedNames {
+    fn named_spans(&self, _meeting_id: &MeetingId) -> Vec<crate::domain::speaker_names::NamedSpan> {
+        self.0.clone()
+    }
+}
+
+/// Verifies an unknown voice is offered the name the call window showed while it spoke, and a
+/// voice without such evidence is offered none (#113).
+#[test]
+fn voices_are_offered_the_names_shown_while_they_spoke() {
+    use crate::domain::speaker_names::NamedSpan;
+    let (note_repository, meeting_id, large_cluster_id, small_cluster_id) =
+        repository_with_two_clusters();
+    note_repository
+        .save_transcript_segments(
+            &meeting_id,
+            &[
+                TranscriptSegment::new(meeting_id.clone(), 0, 4_000, None, "one")
+                    .with_unknown_cluster_id(Some(large_cluster_id)),
+                TranscriptSegment::new(meeting_id.clone(), 5_000, 6_000, None, "two")
+                    .with_unknown_cluster_id(Some(small_cluster_id)),
+            ],
+        )
+        .unwrap_or_else(|error| panic!("segments should save: {error}"));
+    let names = FixedNames(vec![
+        NamedSpan::new(0, 4_000, "Ada Lovelace"),
+        NamedSpan::new(5_000, 6_000, "Grace Hopper"),
+    ]);
+
+    let library =
+        load_voice_library_with_names(&note_repository, &InMemoryVoiceVectorDB::default(), &names)
+            .unwrap_or_else(|error| panic!("library should load: {error}"));
+
+    let suggestion_of = |cluster_id: Uuid| {
+        library
+            .unknown_clusters()
+            .iter()
+            .find(|cluster| cluster.summary().cluster_id() == cluster_id)
+            .and_then(|cluster| cluster.suggested_name().map(str::to_owned))
+    };
+    assert_eq!(
+        suggestion_of(large_cluster_id).as_deref(),
+        Some("Ada Lovelace")
+    );
+    // One second under the name is too little evidence.
+    assert_eq!(suggestion_of(small_cluster_id), None);
+    let plain = load_voice_library(&note_repository, &InMemoryVoiceVectorDB::default())
+        .unwrap_or_else(|error| panic!("library should load: {error}"));
+    assert!(
+        plain
+            .unknown_clusters()
+            .iter()
+            .all(|cluster| cluster.suggested_name().is_none())
+    );
 }

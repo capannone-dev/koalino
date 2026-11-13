@@ -190,3 +190,15 @@ test("deleting a group deletes every part", async () => {
   expect(vi.mocked(api.deleteUnknownVoice).mock.calls).toEqual([["part-1"], ["part-2"]]);
   expect(screen.queryByText("134.0 s · 2 parts in 2 meetings")).not.toBeInTheDocument();
 });
+
+test("a name the call window showed fills the field and is sent on Assign (#113)", async () => {
+  vi.mocked(api.assignCluster).mockResolvedValue({ cluster_id: "cluster-1", identity_id: "identity-2", identity_name: "Alice Rossi", identity_created: true, variants_stored: 1, segments_updated: 1 });
+  render(<VoiceGallery clusters={[{ ...clusters[0], suggested_name: "Alice Rossi" }]} people={[]} />);
+
+  expect(screen.getByText("The call showed Alice Rossi speaking. Check, then Assign.")).toBeInTheDocument();
+  expect(screen.getByLabelText("Name for unknown speaker 1")).toHaveValue("Alice Rossi");
+  fireEvent.click(screen.getByRole("button", { name: "Assign" }));
+
+  expect(await screen.findByText("Assigned to Alice Rossi.")).toBeInTheDocument();
+  expect(api.assignCluster).toHaveBeenCalledWith("cluster-1", "Alice Rossi");
+});
