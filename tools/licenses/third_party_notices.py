@@ -4,7 +4,7 @@
 Koalino is GPL-3.0-or-later. This lists each third-party component and its declared license so
 a release can check they are all GPLv3-compatible and ship the notices. It reads:
 
-- Rust crates from `cargo metadata --offline` (every platform and feature, so a superset of any
+- Rust crates from `cargo metadata --offline --all-features` (every platform and feature, so a superset of any
   one build);
 - the npm packages the web dashboard and the browser extension depend on at run time, from their
   installed `node_modules` (run `npm install` in each first, or they are listed without a license);
@@ -84,7 +84,7 @@ def rust_crates() -> list[tuple[str, str, str]]:
     """
     metadata = json.loads(
         subprocess.run(
-            ["cargo", "metadata", "--format-version", "1", "--offline"],
+            ["cargo", "metadata", "--format-version", "1", "--offline", "--all-features"],
             cwd=REPOSITORY,
             check=True,
             capture_output=True,

@@ -67,6 +67,8 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | alloc-no-stdlib | 2.0.4 | BSD-3-Clause |
 | alloc-stdlib | 0.2.4 | BSD-3-Clause |
 | allsorts | 0.14.2 | Apache-2.0 |
+| alsa | 0.11.0 | Apache-2.0/MIT |
+| alsa-sys | 0.4.0 | MIT |
 | android_system_properties | 0.1.6 | MIT OR Apache-2.0 |
 | anstream | 1.0.0 | MIT OR Apache-2.0 |
 | anstyle | 1.0.14 | MIT OR Apache-2.0 |
@@ -105,6 +107,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | base64 | 0.22.1 | MIT OR Apache-2.0 |
 | base64 | 0.23.1 | MIT OR Apache-2.0 |
 | base64ct | 1.8.3 | Apache-2.0 OR MIT |
+| bindgen | 0.72.1 | BSD-3-Clause |
 | bitflags | 1.3.2 | MIT/Apache-2.0 |
 | bitflags | 2.13.2 | MIT OR Apache-2.0 |
 | bitmaps | 2.1.0 | MPL-2.0+ |
@@ -113,6 +116,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 |
 | block-buffer | 0.12.1 | MIT OR Apache-2.0 |
 | block-padding | 0.4.2 | MIT OR Apache-2.0 |
+| block2 | 0.6.2 | MIT |
 | blocking | 1.7.0 | Apache-2.0 OR MIT |
 | brotli-decompressor | 2.5.1 | BSD-3-Clause/MIT |
 | bs58 | 0.5.1 | MIT/Apache-2.0 |
@@ -123,6 +127,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | bytes | 1.12.1 | MIT |
 | cbc | 0.2.1 | MIT OR Apache-2.0 |
 | cc | 1.10.0 | MIT OR Apache-2.0 |
+| cexpr | 0.6.0 | Apache-2.0/MIT |
 | cfg-if | 1.0.5 | MIT OR Apache-2.0 |
 | cfg_aliases | 0.2.2 | MIT |
 | chacha20 | 0.10.2 | MIT OR Apache-2.0 |
@@ -131,6 +136,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | chrono | 0.4.45 | MIT OR Apache-2.0 |
 | cipher | 0.4.4 | MIT OR Apache-2.0 |
 | cipher | 0.5.2 | MIT OR Apache-2.0 |
+| clang-sys | 1.9.1 | Apache-2.0 |
 | clap | 4.6.7 | MIT OR Apache-2.0 |
 | clap_builder | 4.6.7 | MIT OR Apache-2.0 |
 | clap_derive | 4.6.7 | MIT OR Apache-2.0 |
@@ -147,6 +153,8 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | core-foundation | 0.9.4 | MIT OR Apache-2.0 |
 | core-foundation-sys | 0.8.7 | MIT OR Apache-2.0 |
 | core_detect | 1.0.0 | MIT/Apache-2.0 |
+| coreaudio-rs | 0.14.2 | MIT/Apache-2.0 |
+| cpal | 0.18.2 | Apache-2.0 |
 | cpubits | 0.1.1 | MIT OR Apache-2.0 |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
 | cpufeatures | 0.3.1 | MIT OR Apache-2.0 |
@@ -162,13 +170,16 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | curve25519-dalek | 4.1.3 | BSD-3-Clause |
 | curve25519-dalek | 5.0.0 | BSD-3-Clause |
 | curve25519-dalek-derive | 0.1.1 | MIT/Apache-2.0 |
+| dasp_sample | 0.11.0 | MIT OR Apache-2.0 |
 | data-encoding | 2.11.1 | MIT |
 | data-encoding-macro | 0.1.21 | MIT |
 | data-encoding-macro-internal | 0.1.19 | MIT |
+| der | 0.8.3 | Apache-2.0 OR MIT |
 | der-parser | 10.0.0 | MIT OR Apache-2.0 |
 | deranged | 0.5.9 | MIT OR Apache-2.0 |
 | digest | 0.10.7 | MIT OR Apache-2.0 |
 | digest | 0.11.3 | MIT OR Apache-2.0 |
+| dispatch2 | 0.3.1 | Zlib OR Apache-2.0 OR MIT |
 | displaydoc | 0.2.7 | MIT OR Apache-2.0 |
 | dtoa | 1.0.11 | MIT OR Apache-2.0 |
 | dunce | 1.0.5 | CC0-1.0 OR MIT-0 OR Apache-2.0 |
@@ -177,6 +188,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | either | 1.19.0 | MIT OR Apache-2.0 |
 | encoding_rs | 0.8.42 | (Apache-2.0 OR MIT) AND BSD-3-Clause |
 | endi | 1.1.1 | MIT |
+| enum-primitive-derive | 0.3.0 | MIT |
 | enumflags2 | 0.7.12 | MIT OR Apache-2.0 |
 | enumflags2_derive | 0.7.12 | MIT OR Apache-2.0 |
 | equivalent | 1.0.3 | Apache-2.0 OR MIT |
@@ -194,6 +206,8 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | flate2 | 1.1.10 | MIT OR Apache-2.0 |
 | fnv | 1.0.7 | Apache-2.0 / MIT |
 | foldhash | 0.2.0 | Zlib |
+| foreign-types | 0.3.2 | MIT/Apache-2.0 |
+| foreign-types-shared | 0.1.1 | MIT/Apache-2.0 |
 | form_urlencoded | 1.2.2 | MIT OR Apache-2.0 |
 | fs_extra | 1.3.0 | MIT |
 | futures | 0.3.34 | MIT OR Apache-2.0 |
@@ -216,6 +230,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | getrandom | 0.4.3 | MIT OR Apache-2.0 |
 | ghash | 0.5.1 | Apache-2.0 OR MIT |
 | gif | 0.13.3 | MIT OR Apache-2.0 |
+| glob | 0.3.4 | MIT OR Apache-2.0 |
 | gloo-timers | 0.2.6 | MIT/Apache-2.0 |
 | glyph-names | 0.2.0 | BSD-3-Clause |
 | h2 | 0.4.20 | MIT |
@@ -235,6 +250,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | hkdf | 0.13.0 | MIT OR Apache-2.0 |
 | hmac | 0.12.1 | MIT OR Apache-2.0 |
 | hmac | 0.13.0 | MIT OR Apache-2.0 |
+| hmac-sha256 | 1.1.15 | ISC |
 | home | 0.5.12 | MIT OR Apache-2.0 |
 | http | 1.5.0 | MIT OR Apache-2.0 |
 | http-body | 1.1.0 | MIT |
@@ -272,6 +288,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | itoa | 1.0.18 | MIT OR Apache-2.0 |
 | jni | 0.22.4 | MIT OR Apache-2.0 |
 | jni-macros | 0.22.4 | MIT OR Apache-2.0 |
+| jni-sys | 0.3.1 | MIT OR Apache-2.0 |
 | jni-sys | 0.4.1 | MIT OR Apache-2.0 |
 | jni-sys-macros | 0.4.1 | MIT OR Apache-2.0 |
 | jobserver | 0.1.35 | MIT OR Apache-2.0 |
@@ -282,6 +299,8 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | lazy_static | 1.5.1 | MIT OR Apache-2.0 |
 | leb128 | 0.2.7 | MIT OR Apache-2.0 |
 | libc | 0.2.191 | MIT OR Apache-2.0 |
+| libloading | 0.8.9 | ISC |
+| libloading | 0.9.0 | ISC |
 | libm | 0.2.16 | MIT |
 | libp2p | 0.57.1 | MIT |
 | libp2p-allow-block-list | 0.7.0 | MIT |
@@ -312,10 +331,13 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | log | 0.4.34 | MIT OR Apache-2.0 |
 | lopdf | 0.31.0 | MIT |
 | lru-slab | 0.1.3 | MIT OR Apache-2.0 OR Zlib |
+| lzma-rust2 | 0.15.8 | Apache-2.0 |
+| mach2 | 0.6.0 | BSD-2-Clause OR MIT OR Apache-2.0 |
 | mail-parser | 0.11.9 | Apache-2.0 OR MIT |
 | match-lookup | 0.1.3 | MIT |
 | matchers | 0.2.0 | MIT |
 | matchit | 0.8.4 | MIT AND BSD-3-Clause |
+| matrixmultiply | 0.3.11 | MIT/Apache-2.0 |
 | md5 | 0.7.0 | Apache-2.0/MIT |
 | memchr | 2.8.3 | Unlicense OR MIT |
 | memoffset | 0.9.1 | MIT |
@@ -331,7 +353,11 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | multihash | 0.19.5 | MIT |
 | multistream-select | 0.14.0 | MIT |
 | multiversion_no_op | 1.0.0 | Apache-2.0 OR MIT |
+| native-tls | 0.2.18 | MIT OR Apache-2.0 |
+| ndarray | 0.17.2 | MIT OR Apache-2.0 |
+| ndk | 0.9.0 | MIT OR Apache-2.0 |
 | ndk-context | 0.1.1 | MIT OR Apache-2.0 |
+| ndk-sys | 0.6.0+11769913 | MIT OR Apache-2.0 |
 | netlink-packet-core | 0.8.2 | MIT |
 | netlink-packet-route | 0.28.0 | MIT |
 | netlink-proto | 0.12.2 | MIT |
@@ -344,15 +370,32 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | num-bigint | 0.4.8 | MIT OR Apache-2.0 |
 | num-complex | 0.4.6 | MIT OR Apache-2.0 |
 | num-conv | 0.2.2 | MIT OR Apache-2.0 |
+| num-derive | 0.4.2 | MIT OR Apache-2.0 |
 | num-integer | 0.1.47 | MIT OR Apache-2.0 |
 | num-iter | 0.1.46 | MIT OR Apache-2.0 |
 | num-rational | 0.4.2 | MIT OR Apache-2.0 |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 |
+| num_enum | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 |
+| num_enum_derive | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 |
+| objc2 | 0.6.5 | MIT |
+| objc2-audio-toolbox | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
+| objc2-avf-audio | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
+| objc2-core-audio | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
+| objc2-core-audio-types | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
+| objc2-core-foundation | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
+| objc2-encode | 4.1.0 | MIT |
+| objc2-foundation | 0.3.2 | MIT |
 | oid-registry | 0.8.1 | MIT OR Apache-2.0 |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 |
 | once_cell_polyfill | 1.70.2 | MIT OR Apache-2.0 |
 | opaque-debug | 0.3.1 | MIT OR Apache-2.0 |
+| openssl | 0.10.81 | Apache-2.0 |
+| openssl-macros | 0.1.1 | MIT/Apache-2.0 |
+| openssl-probe | 0.2.2 | MIT OR Apache-2.0 |
+| openssl-sys | 0.9.117 | MIT |
 | ordered-stream | 0.2.0 | MIT OR Apache-2.0 |
+| ort | 2.0.0-rc.13 | MIT OR Apache-2.0 |
+| ort-sys | 2.0.0-rc.13 | MIT OR Apache-2.0 |
 | ouroboros | 0.17.2 | MIT OR Apache-2.0 |
 | ouroboros_macro | 0.17.2 | MIT OR Apache-2.0 |
 | owned_ttf_parser | 0.19.0 | Apache-2.0 |
@@ -362,6 +405,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | password-hash | 0.5.0 | MIT OR Apache-2.0 |
 | paste | 1.0.15 | MIT OR Apache-2.0 |
 | pem | 3.0.6 | MIT |
+| pem-rfc7468 | 1.0.0 | Apache-2.0 OR MIT |
 | percent-encoding | 2.3.2 | MIT OR Apache-2.0 |
 | pin-project | 1.1.13 | Apache-2.0 OR MIT |
 | pin-project-internal | 1.1.13 | Apache-2.0 OR MIT |
@@ -374,10 +418,12 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | polyval | 0.6.2 | Apache-2.0 OR MIT |
 | pom | 3.4.0 | MIT |
 | portable-atomic | 1.15.0 | Apache-2.0 OR MIT |
+| portable-atomic-util | 0.2.8 | Apache-2.0 OR MIT |
 | potential_utf | 0.1.6 | Unicode-3.0 |
 | powerfmt | 0.2.1 | MIT OR Apache-2.0 |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
 | prefix-trie | 0.8.4 | MIT OR Apache-2.0 |
+| prettyplease | 0.2.37 | MIT OR Apache-2.0 |
 | printpdf | 0.7.0 | MIT |
 | proc-macro-crate | 3.5.0 | MIT OR Apache-2.0 |
 | proc-macro-error | 1.0.4 | MIT OR Apache-2.0 |
@@ -392,6 +438,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | protobuf-codegen | 3.7.2 | MIT |
 | protobuf-parse | 3.7.2 | MIT |
 | protobuf-support | 3.7.2 | MIT |
+| pulseaudio | 0.3.2 | MIT |
 | quinn | 0.11.12 | MIT OR Apache-2.0 |
 | quinn-proto | 0.11.19 | MIT OR Apache-2.0 |
 | quinn-udp | 0.5.16 | MIT OR Apache-2.0 |
@@ -406,6 +453,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | rand_core | 0.9.5 | MIT OR Apache-2.0 |
 | rand_pcg | 0.10.2 | MIT OR Apache-2.0 |
 | rand_xoshiro | 0.6.0 | MIT OR Apache-2.0 |
+| rawpointer | 0.2.1 | MIT/Apache-2.0 |
 | rcgen | 0.13.2 | MIT OR Apache-2.0 |
 | redox_syscall | 0.5.18 | MIT |
 | regex | 1.13.1 | MIT OR Apache-2.0 |
@@ -429,6 +477,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | rw-stream-sink | 0.5.0 | MIT |
 | ryu | 1.0.23 | Apache-2.0 OR BSL-1.0 |
 | same-file | 1.0.6 | Unlicense/MIT |
+| schannel | 0.1.30 | MIT |
 | scopeguard | 1.2.0 | MIT OR Apache-2.0 |
 | secret-service | 5.2.0 | MIT OR Apache-2.0 |
 | security-framework | 3.7.0 | MIT OR Apache-2.0 |
@@ -447,6 +496,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | sha2 | 0.10.9 | MIT OR Apache-2.0 |
 | sha2 | 0.11.1 | MIT OR Apache-2.0 |
 | sharded-slab | 0.1.7 | MIT |
+| shlex | 1.3.0 | MIT OR Apache-2.0 |
 | shlex | 2.0.1 | MIT OR Apache-2.0 |
 | signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 |
 | signature | 3.0.0 | Apache-2.0 OR MIT |
@@ -523,8 +573,11 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | unsafe-libopus | 0.2.0 | BSD-3-Clause |
 | unsigned-varint | 0.8.0 | MIT |
 | untrusted | 0.9.0 | ISC |
+| ureq | 3.5.0 | MIT OR Apache-2.0 |
+| ureq-proto | 0.6.5 | MIT OR Apache-2.0 |
 | url | 2.5.8 | MIT OR Apache-2.0 |
 | utf-8 | 0.7.6 | MIT OR Apache-2.0 |
+| utf8-zero | 0.8.1 | MIT OR Apache-2.0 |
 | utf8_iter | 1.0.4 | Apache-2.0 OR MIT |
 | utf8parse | 0.2.2 | Apache-2.0 OR MIT |
 | uuid | 1.26.1 | Apache-2.0 OR MIT |
@@ -542,9 +595,13 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | wasm-bindgen-shared | 0.2.108 | MIT OR Apache-2.0 |
 | web-sys | 0.3.85 | MIT OR Apache-2.0 |
 | web-time | 1.1.0 | MIT OR Apache-2.0 |
+| webpki-root-certs | 1.0.11 | CDLA-Permissive-2.0 |
 | webpki-roots | 1.0.11 | CDLA-Permissive-2.0 |
+| webrtc-vad | 0.4.0 | MIT |
 | weezl | 0.1.12 | MIT OR Apache-2.0 |
 | which | 4.4.2 | MIT |
+| whisper-rs | 0.16.0 | Unlicense |
+| whisper-rs-sys | 0.15.0 | Unlicense |
 | widestring | 1.2.1 | MIT OR Apache-2.0 |
 | winapi-util | 0.1.11 | Unlicense OR MIT |
 | windows | 0.62.2 | MIT OR Apache-2.0 |
