@@ -33,7 +33,8 @@ fn settings_are_on_by_default_and_saved_beside_the_database() {
         CallWatchSettings::load(&file),
         CallWatchSettings {
             offer: true,
-            auto_stop: true
+            auto_stop: true,
+            read_names: true,
         }
     );
     let mut watcher = CallWatcher::new(file.clone());
@@ -42,6 +43,13 @@ fn settings_are_on_by_default_and_saved_beside_the_database() {
     assert_eq!(answer["offer"], true);
     assert_eq!(answer["auto_stop"], false);
     assert!(!CallWatchSettings::load(&file).auto_stop);
+    let answer = watcher.command(
+        r#"{"command":"set","read_names":false}"#,
+        &mut || Ok(zoom()),
+    );
+    assert_eq!(answer["read_names"], false);
+    assert_eq!(answer["auto_stop"], false);
+    assert!(!CallWatchSettings::load(&file).read_names);
     let _ = std::fs::remove_dir_all(&folder);
 }
 

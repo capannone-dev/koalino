@@ -72,6 +72,7 @@ final class CallWatchController extends ChangeNotifier {
   Future<void> start() async {
     try {
       _settings = await _bridge.settings();
+      _tellRestartIfNeeded();
     } on LlmException {
       // Keeps the defaults; the looks report whether the watch works at all.
     }
@@ -173,9 +174,12 @@ final class CallWatchController extends ChangeNotifier {
   }
 
   /// Saves the settings. Side effects: Writes the settings file; a look resumes if needed.
-  Future<void> setSettings({bool? offer, bool? autoStop}) async {
+  Future<void> setSettings(
+      {bool? offer, bool? autoStop, bool? readNames}) async {
     try {
-      _settings = await _bridge.set(offer: offer, autoStop: autoStop);
+      _settings = await _bridge.set(
+          offer: offer, autoStop: autoStop, readNames: readNames);
+      _tellRestartIfNeeded();
     } on LlmException {
       return;
     }
@@ -183,6 +187,14 @@ final class CallWatchController extends ChangeNotifier {
       _withdrawOffer();
     }
     notifyListeners();
+  }
+
+  /// Asks for a restart of call apps once the core turned the desktop's accessibility on (#113).
+  void _tellRestartIfNeeded() {
+    if (_settings.restartApps) {
+      _message = 'Restart your browser and call apps once, so Koalino can read '
+          'who is speaking in calls.';
+    }
   }
 
   bool get _isRecording =>

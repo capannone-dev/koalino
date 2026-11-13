@@ -7,7 +7,8 @@
 //! `AttachmentRepository` as an attachment of
 //! the meeting, so it appears next to manually added attachments. Text documents of an online
 //! meeting (the Teams transcript, live transcript or captions, #102) are stored the same way as
-//! `<meeting ID>/<kind>-<timestamp ms>-<attachment UUID>.<vtt|txt>`. Meeting IDs that are not plain
+//! `<meeting ID>/<kind>-<timestamp ms>-<attachment UUID>.<vtt|txt>`, and so are the names a call
+//! window showed during a local recording (#113, `speaker-names-…vtt`). Meeting IDs that are not plain
 //! folder names are rejected, so no file lands outside the slide directory. Only PNG and JPEG images,
 //! recognized by their signature, are accepted. If the attachment row cannot be saved (for
 //! example, the meeting does not exist), the file is deleted again. Image bytes are never logged.
@@ -27,8 +28,8 @@ use crate::{
         models::{Attachment, DeviceId, ExternalMeetingDocument, MeetingId, SlideCapture},
     },
     ports::{
-        external_bridge::AttachmentWorkflow, screen_share::MeetingSlideSink,
-        storage::AttachmentRepository,
+        call_window::SpeakerNamesSink, external_bridge::AttachmentWorkflow,
+        screen_share::MeetingSlideSink, storage::AttachmentRepository,
     },
 };
 
@@ -150,6 +151,37 @@ where
         self.store_slide(meeting_id, encoded_image, meeting_time_ms)
     }
 }
+
+impl<RepositoryPort> SpeakerNamesSink for SlideAttachmentStore<RepositoryPort>
+where
+    RepositoryPort: AttachmentRepository + Send,
+{
+    /// Saves the names a call window showed during a recording (#113) as a sealed
+    /// `speaker-names-<time>-<id>.vtt` attachment of the meeting.
+    ///
+    /// Inputs: A recorded meeting, the WebVTT readings (never logged), and the recording's start.
+    /// Outputs: As `store_file`. Side effects: As `store_file`.
+    fn attach_speaker_names(
+        &self,
+        meeting_id: &MeetingId,
+        webvtt: &str,
+        meeting_time_ms: u64,
+    ) -> Result<(), StorageError> {
+        self.store_file(
+            meeting_id,
+            webvtt.as_bytes(),
+            meeting_time_ms,
+            StoredFileKind {
+                file_stem: SPEAKER_NAMES_FILE_STEM,
+                mime_type: "text/vtt",
+                extension: "vtt",
+            },
+        )
+    }
+}
+
+/// The file-name stem of a recording's call-window readings (#113).
+pub const SPEAKER_NAMES_FILE_STEM: &str = "speaker-names";
 
 impl<RepositoryPort> SlideAttachmentStore<RepositoryPort>
 where

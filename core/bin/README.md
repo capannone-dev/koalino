@@ -370,10 +370,19 @@ assistant starts over stdio (logging to the file only, refusing a database path 
 exist), and `ffi_assistant_access.rs` gives the app `note_taker_assistant_access`.
 
 `call_watch_commands.rs` (#111) is the desktop app's call watch: `CallWatchSettings`
-(`<db>.call-watch.json`: `offer` and `auto_stop`, both on by default) and `CallWatcher`, which answers
+(`<db>.call-watch.json`: `offer`, `auto_stop` and `read_names` (#113), all on by default) and `CallWatcher`, which answers
 `poll`, `get` and `set`. A poll reads the microphone's users and reports a call's `started` or
 `ended` event once. `ffi_call_watch.rs` gives the app `note_taker_call_watch`; it needs no open
-runtime.
+runtime. While `read_names` is on, it turns the Linux desktop's accessibility flag on and says when
+call apps must be restarted.
+
+`speaker_name_watcher.rs` (#113) reads who call windows show as speaking beside a recording, on its
+own `speaker-name-watcher` thread. `RecordingController::with_speaker_names` starts one per
+recording when `read_names` is on; every 2 s while audio is captured it asks the platform's
+`CallWindowReader` and adds the names to a `SpeakingTimeline` at the meeting time. At stop the
+timeline is attached to the meeting as a sealed `speaker-names-…vtt` (`SpeakerNamesSink`, the
+slide store). `pipeline_composition::speaker_names_setup` composes it. The CLI's `call-names`
+prints what the reader sees, to check a call app, without opening the notes.
 
 `clear_copies.rs` (#99) gives the app's viewers clear copies of sealed attachments: `ffi.rs`'s
 `note_taker_clear_copy` looks an attachment up by ID and decrypts it into the private

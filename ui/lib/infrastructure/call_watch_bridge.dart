@@ -36,13 +36,20 @@ final class CallPoll {
 /// The owner's choices.
 final class CallWatchSettings {
   /// Creates the settings.
-  const CallWatchSettings({required this.offer, required this.autoStop});
+  const CallWatchSettings({
+    required this.offer,
+    required this.autoStop,
+    this.readNames = true,
+    this.restartApps = false,
+  });
 
   /// Reads the core's JSON.
   factory CallWatchSettings.fromJson(Map<String, Object?> json) =>
       CallWatchSettings(
         offer: json['offer'] != false,
         autoStop: json['auto_stop'] != false,
+        readNames: json['read_names'] != false,
+        restartApps: json['restart_apps'] == true,
       );
 
   /// Offer to record when a call starts.
@@ -50,6 +57,14 @@ final class CallWatchSettings {
 
   /// Stop a recording started from the offer when the call ends.
   final bool autoStop;
+
+  /// Read who the call window shows as speaking during recordings, to suggest names for
+  /// unknown voices (#113).
+  final bool readNames;
+
+  /// The desktop's accessibility was just turned on for reading names: call apps and browsers
+  /// already running must be restarted once.
+  final bool restartApps;
 }
 
 /// Talks to the core's call watch.
@@ -67,12 +82,14 @@ final class CallWatchBridge {
   Future<CallWatchSettings> settings() async => CallWatchSettings.fromJson(
       await _command(<String, Object?>{'command': 'get'}));
 
-  /// Saves one or both settings. Throws `LlmException`. Side effects: Writes the settings file.
-  Future<CallWatchSettings> set({bool? offer, bool? autoStop}) async =>
+  /// Saves the given settings. Throws `LlmException`. Side effects: Writes the settings file.
+  Future<CallWatchSettings> set(
+          {bool? offer, bool? autoStop, bool? readNames}) async =>
       CallWatchSettings.fromJson(await _command(<String, Object?>{
         'command': 'set',
         if (offer != null) 'offer': offer,
         if (autoStop != null) 'auto_stop': autoStop,
+        if (readNames != null) 'read_names': readNames,
       }));
 
   Future<Map<String, Object?>> _command(Map<String, Object?> request) async =>

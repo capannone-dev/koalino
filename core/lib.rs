@@ -166,6 +166,9 @@ pub mod search_commands;
 mod search_commands_tests;
 /// Exposes the headless Axum API composition without leaking HTTP details into application services.
 pub mod server;
+/// Reads who is speaking from call windows beside a recording (#113).
+#[path = "bin/speaker_name_watcher.rs"]
+pub mod speaker_name_watcher;
 /// Times a public clip with Automatic's Whisper model on this device (#109).
 #[path = "bin/speed_check.rs"]
 pub mod speed_check;

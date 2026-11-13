@@ -40,6 +40,8 @@ final class ScriptedCallCore {
           ...settings,
           if (request['offer'] != null) 'offer': request['offer'],
           if (request['auto_stop'] != null) 'auto_stop': request['auto_stop'],
+          if (request['read_names'] != null)
+            'read_names': request['read_names'],
         };
         return jsonEncode(settings);
       default:
@@ -195,6 +197,25 @@ void main() {
     await watch.pollOnce();
     expect(watch.offeredApp, isNull);
     expect(core.requests.last, <String, Object?>{'command': 'poll'});
+  });
+
+  test('reading names can be turned off, and a needed restart is told (#113)',
+      () async {
+    core.settings = <String, Object?>{
+      'ok': true,
+      'offer': true,
+      'auto_stop': true,
+      'read_names': true,
+      'restart_apps': true,
+    };
+    await watch.start();
+    expect(watch.settings.readNames, isTrue);
+    expect(watch.message, contains('Restart'));
+    watch.clearMessage();
+    await watch.setSettings(readNames: false);
+    expect(core.requests.last,
+        <String, Object?>{'command': 'set', 'read_names': false});
+    expect(watch.settings.readNames, isFalse);
   });
 
   test('a failed look keeps the watch going', () async {

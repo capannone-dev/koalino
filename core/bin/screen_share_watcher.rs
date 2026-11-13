@@ -40,7 +40,7 @@ impl RecordingClock {
     }
 
     /// Returns the published meeting time, or `None` while audio is not being captured.
-    fn capturing_meeting_time_ms(&self) -> Option<u64> {
+    pub(crate) fn capturing_meeting_time_ms(&self) -> Option<u64> {
         self.is_capturing
             .load(Ordering::SeqCst)
             .then(|| self.meeting_time_ms.load(Ordering::SeqCst))

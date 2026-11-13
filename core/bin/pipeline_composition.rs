@@ -898,6 +898,13 @@ pub fn spawn_recording_controller(
         device_id.clone(),
     )
     .with_default_language(Some(default_language));
+    let controller = match speaker_names_setup(database_path, device_id.clone(), &pass_cipher) {
+        Ok(setup) => controller.with_speaker_names(setup),
+        Err(error) => {
+            tracing::warn!(error = %format!("{error:#}"), "Call window names are off: their store could not be opened");
+            controller
+        }
+    };
     Ok(
         match start_transcript_pass(
             database_path,
@@ -910,6 +917,48 @@ pub fn spawn_recording_controller(
             None => controller,
         },
     )
+}
+
+/// Composes reading speaking names from call windows during recordings (#113).
+///
+/// Inputs: The database, this device and the database key's cipher.
+/// Outputs: The setup: this platform's reader, the call watch's `read_names` switch (read at each
+/// recording's start, so Settings apply to the next recording), sealed `speaker-names`
+/// attachments in the `slides` folder beside the database, and a 2 s interval; or the error of
+/// a store that cannot be opened.
+/// Side effects: Opens a note-repository connection for the attachments.
+fn speaker_names_setup(
+    database_path: &Path,
+    device_id: DeviceId,
+    embedding_cipher: &Arc<dyn EmbeddingCipher>,
+) -> Result<crate::speaker_name_watcher::SpeakerNamesSetup> {
+    let attachment_repository = open_note_repository(
+        database_path,
+        device_id.clone(),
+        Arc::clone(embedding_cipher),
+    )
+    .context("unable to open the note repository for call window names")?;
+    let sealed_files = attachment_repository.sealed_files();
+    let slide_directory = database_path
+        .parent()
+        .map_or_else(PathBuf::new, Path::to_path_buf)
+        .join("slides");
+    let settings_file = crate::call_watch_commands::CallWatchSettings::file_for(database_path);
+    Ok(crate::speaker_name_watcher::SpeakerNamesSetup {
+        reader_factory: Arc::new(crate::adapters::accessibility::platform_reader),
+        enabled: Box::new(move || {
+            crate::call_watch_commands::CallWatchSettings::load(&settings_file).read_names
+        }),
+        sink: Box::new(
+            crate::adapters::storage::slide_attachment_store::SlideAttachmentStore::new(
+                slide_directory,
+                attachment_repository,
+                device_id,
+                sealed_files,
+            ),
+        ),
+        sample_interval: std::time::Duration::from_secs(2),
+    })
 }
 
 /// Starts the after-meeting worker (#87, #88) when the pass is on.

@@ -114,6 +114,17 @@ final class CallWatchSettingsTiles extends StatelessWidget {
                 onChanged: (bool autoStop) =>
                     controller.setSettings(autoStop: autoStop),
               ),
+              SwitchListTile(
+                secondary: const Icon(Icons.badge_outlined),
+                title: const Text('Read speaker names from the call window'),
+                subtitle: const Text(
+                    'While recording, Koalino reads who Teams, Zoom or Meet shows as '
+                    'speaking, to suggest names for unknown voices. Nothing leaves this '
+                    'computer, and nothing is named until you tap Assign.'),
+                value: controller.settings.readNames,
+                onChanged: (bool readNames) =>
+                    controller.setSettings(readNames: readNames),
+              ),
               const Divider(),
             ],
           );

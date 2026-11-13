@@ -32,6 +32,10 @@ pub struct CallWatchSettings {
     /// Stop a recording started from the offer when the call ends.
     #[serde(default = "on")]
     pub auto_stop: bool,
+    /// Read who the call window shows as speaking during recordings, to suggest names for
+    /// unknown voices (#113).
+    #[serde(default = "on")]
+    pub read_names: bool,
 }
 
 fn on() -> bool {
@@ -43,6 +47,7 @@ impl Default for CallWatchSettings {
         Self {
             offer: true,
             auto_stop: true,
+            read_names: true,
         }
     }
 }
@@ -118,6 +123,9 @@ impl CallWatcher {
                 if let Some(auto_stop) = request.get("auto_stop").and_then(Value::as_bool) {
                     settings.auto_stop = auto_stop;
                 }
+                if let Some(read_names) = request.get("read_names").and_then(Value::as_bool) {
+                    settings.read_names = read_names;
+                }
                 if settings.save(&self.settings_file).is_err() {
                     return json!({"ok": false, "error_code": "storage_failed",
                                   "error": "the setting could not be saved"});
@@ -168,6 +176,7 @@ impl CallWatcher {
     }
 
     fn settings_json(&self, settings: CallWatchSettings) -> Value {
-        json!({"ok": true, "offer": settings.offer, "auto_stop": settings.auto_stop})
+        json!({"ok": true, "offer": settings.offer, "auto_stop": settings.auto_stop,
+               "read_names": settings.read_names})
     }
 }

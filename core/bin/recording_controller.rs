@@ -16,6 +16,9 @@
 //! With `with_screen_share`, each recording also runs a `ScreenShareWatcher` thread that attaches
 //! new slides of a running screen share to the recorded meeting at the current meeting time
 //! (Issue #49), only while audio is being captured.
+//!
+//! With `with_speaker_names`, each recording also runs a `SpeakerNameWatcher` thread that reads
+//! who call windows show as speaking and attaches the readings to the meeting at stop (#113).
 
 use crate::domain::transcription_language::TranscriptionLanguage;
 use std::{
@@ -49,6 +52,7 @@ use crate::{
     ports::audio::AudioCapture,
     refinement_worker::RefinementControl,
     screen_share_watcher::{RecordingClock, ScreenShareWatcher},
+    speaker_name_watcher::{SpeakerNameWatcher, SpeakerNamesSetup},
 };
 
 #[cfg(test)]
@@ -108,6 +112,8 @@ struct ActiveCapture {
     screen_share_watcher: Option<ScreenShareWatcher>,
     /// The computer's sound (#108), from its first samples; `None` until then.
     computer_sound: Option<ComputerSoundTrack>,
+    /// Reads speaking names from call windows (#113); `None` when off or not configured.
+    speaker_name_watcher: Option<SpeakerNameWatcher>,
 }
 
 /// The computer's sound recorded beside the microphone (#108).
@@ -162,6 +168,8 @@ pub struct RecordingController {
     screen_share: Option<ScreenShareSetup>,
     /// Where speech is kept for the after-meeting pass (#87); `None` keeps nothing.
     transcript_pass: Option<TranscriptPass>,
+    /// Reading speaking names from call windows (#113); `None` when not configured.
+    speaker_names: Option<SpeakerNamesSetup>,
 }
 
 /// The after-meeting pass's store and control, as the recorder sees them (#87).
@@ -197,7 +205,18 @@ impl RecordingController {
             inactive_state: AudioState::Idle,
             screen_share: None,
             transcript_pass: None,
+            speaker_names: None,
         }
+    }
+
+    /// Reads who call windows show as speaking during every recording the owner allows (#113).
+    ///
+    /// Inputs: The reader factory, the owner's switch, the store and the reading interval.
+    /// Outputs: The controller. Side effects: None until a recording starts.
+    #[must_use]
+    pub fn with_speaker_names(mut self, speaker_names: SpeakerNamesSetup) -> Self {
+        self.speaker_names = Some(speaker_names);
+        self
     }
 
     /// Keeps each recording's speech sealed for the after-meeting pass (#87).
@@ -386,6 +405,12 @@ impl RecordingController {
         let recording_clock = Arc::new(RecordingClock::default());
         recording_clock.publish(meeting_start_offset_ms, true);
         let screen_share_watcher = self.start_screen_share_watcher(&meeting_id, &recording_clock);
+        let speaker_name_watcher = self.speaker_names.as_ref().and_then(|setup| {
+            SpeakerNameWatcher::start(setup, Arc::clone(&recording_clock)).unwrap_or_else(|error| {
+                tracing::warn!(error = %error, "Speaker-name watcher could not start; recording without it");
+                None
+            })
+        });
         self.active_capture = Some(ActiveCapture {
             meeting_id: meeting_id.clone(),
             local_recorder,
@@ -399,6 +424,7 @@ impl RecordingController {
             recording_clock,
             screen_share_watcher,
             computer_sound: None,
+            speaker_name_watcher,
         });
         Ok(meeting_id)
     }
@@ -611,6 +637,11 @@ impl RecordingController {
             && let Some(screen_share) = self.screen_share.as_mut()
         {
             screen_share.idle_monitor = watcher.stop();
+        }
+        if let Some(watcher) = capture.speaker_name_watcher.take()
+            && let Some(setup) = self.speaker_names.as_ref()
+        {
+            watcher.finish(setup, &capture.meeting_id, capture.meeting_start_offset_ms);
         }
         if let Err(error) = capture.local_recorder.stop() {
             tracing::warn!(error = %error, "Recorder rejected stop; ending the recording anyway");
