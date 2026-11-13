@@ -1,5 +1,7 @@
 //! Exposes infrastructure adapters; this initial scaffold only configures observability.
 
+/// Reads who is speaking from call windows' accessibility trees (#113).
+pub mod accessibility;
 /// Implements opt-in local AI ports without exposing model types outside adapters.
 pub mod ai;
 /// Implements audio-capture ports with local, platform-facing infrastructure.

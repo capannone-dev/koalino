@@ -11,7 +11,7 @@ use note_taker_core::{
         storage::sqlite_peer_store::SqlitePeerStore,
     },
     application::{crypto::key_manager::KeyManagerConfig, export_manager::ExportWriter},
-    cli::{Cli, CliCommand, CoreCliService, dispatch},
+    cli::{Cli, CliCommand, CoreCliService, dispatch, read_call_names},
     cli_recording::{LocalMeetingFiles, PipelineRecordingControl, RecordingControlFiles},
     device_identity::device_id_from_environment,
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
@@ -34,6 +34,14 @@ fn main() -> Result<()> {
     // Parsed first so `--help`, `--version`, and usage errors never open the database, and so
     // `--log-level` applies to this command's own logging.
     let parsed_cli = Cli::parse();
+    // Reading call windows (#113) needs no notes, so it never opens the database or keychain.
+    if let CliCommand::CallNames { seconds, enable } = parsed_cli.command {
+        match read_call_names(seconds, enable) {
+            Ok(output) => println!("{output}"),
+            Err(message) => anyhow::bail!(message),
+        }
+        return Ok(());
+    }
     let database_path = env::var("NOTE_TAKER_DATABASE_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("note_taker.sqlite3"));

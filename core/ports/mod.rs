@@ -4,6 +4,8 @@
 pub mod ai;
 /// Declares portable lifecycle and stream contracts for audio capture.
 pub mod audio;
+/// Declares how the desktop reads who is speaking from a call app's window (#113).
+pub mod call_window;
 /// Keeps chats with notes, per device and sealed (#97).
 pub mod chat;
 /// Declares at-rest encryption contracts for voice embeddings and their key metadata.

@@ -104,6 +104,15 @@ run. `CallWatch::observe` takes one look at the microphone's users: a call start
 held the microphone for 3 s, and it ends once none has for 20 s, so muting or switching devices does
 not end it. The app's own process never counts.
 
+`speaker_names.rs` (#113) turns the names a call app shows into name suggestions for unknown
+voices. `speaking_name` picks the name out of an accessibility label ("Alice is speaking",
+"Talking: Alice", "Alice, video is off, speaking", Italian forms) and rejects text that is not a
+name; `is_call_window` keeps only call apps' and meeting sites' windows. `SpeakingTimeline`
+collects readings into spans per name (±1 s each, joined across gaps under 3 s) and writes them
+as WebVTT with `<v Name>` cues, the format of the Teams captions (#102), which `parse_voice_cues`
+reads. `suggest_names` offers a voice the name covering at least 60% of its speech under named
+spans, given at least 2 s of such speech.
+
 `echo_lines.rs` and `echo_detect.rs` (#108, ported from Yogurt, MIT; see `THIRD_PARTY_NOTICES.md`)
 handle the computer's sound recorded as a second track. Without headphones the microphone also
 hears the other side from the speakers. `EchoDetector` compares the two tracks' 10 ms loudness

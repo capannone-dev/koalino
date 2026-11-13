@@ -76,6 +76,10 @@ media and slide values, never a provider SDK. `IdentityMapper` maps the stable
 `AttachmentWorkflow` keep isolated-audio enrollment and slide routing behind independently mocked
 ports.
 
+`call_window.rs` (#113) declares `CallWindowReader`, which returns the names call windows show as
+speaking (only reading their accessibility trees), and `SpeakerNamesSink`, which stores one
+recording's readings with its meeting.
+
 `screen_share.rs` (Issue #49) declares local screen-share capture outside a meeting bridge.
 `ScreenShareDetector` reports whether a conferencing app is sharing (`ActiveScreenShare`, labelled
 by app). No operating system reliably reports another app's share, so the detector is implemented

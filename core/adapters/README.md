@@ -14,6 +14,10 @@ adapter without changing the application or domain boundaries.
 voice-embedding key is kept in the macOS Keychain, Windows Credential Manager, or Linux Secret
 Service. See `keychain/README.md` for entry names and error classification.
 
+`accessibility/` reads who call windows show as speaking (#113): over AT-SPI with zbus on
+Linux and with UI Automation on Windows, only reading, within a node and time budget. See
+`accessibility/README.md`.
+
 `child_process.rs` handles waits for the core's child processes inside the desktop app. While the
 Flutter engine has processes of its own running, it reaps children with `waitpid(-1)`, and it may
 collect the status of a process the core started (`ECHILD`). `reaped_elsewhere` recognises that

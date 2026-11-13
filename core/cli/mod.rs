@@ -172,6 +172,17 @@ pub enum CliCommand {
         #[command(subcommand)]
         action: Option<NotesFolderAction>,
     },
+    /// Prints the names call windows show as speaking, once a second, to check that Koalino can
+    /// read them (#113). Only call windows are read, and nothing is stored.
+    CallNames {
+        /// How long to read, in seconds.
+        #[arg(long, default_value_t = 10)]
+        seconds: u64,
+        /// Also tells apps that assistive technology is active (Linux), so browsers started
+        /// afterwards expose their pages.
+        #[arg(long)]
+        enable: bool,
+    },
     /// Displays aggregate privacy-safe telemetry.
     Telemetry,
     /// Changes a running daemon's log level without restarting it (applied within seconds).
@@ -878,9 +889,52 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
             };
             format_notes_folder(&cli_service.notes_folder(&request)?)
         }
+        CliCommand::CallNames { seconds, enable } => read_call_names(seconds, enable),
         CliCommand::Telemetry => cli_service.telemetry(),
         CliCommand::LogLevel { directive } => cli_service.request_log_level(&directive),
     }
+}
+
+/// Reads call windows once a second and lists the speaking names seen (#113).
+///
+/// Inputs: How many seconds to read, and whether to turn on the desktop's accessibility first.
+/// Outputs: One line per reading that found names, then a summary; an error when this platform
+/// has no reader or its accessibility service cannot be reached.
+/// Side effects: Reads other apps' accessibility trees; with `enable`, sets the session's
+/// accessibility flag (Linux). Prints names to the terminal only; nothing is logged or stored.
+pub fn read_call_names(seconds: u64, enable: bool) -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    if enable
+        && crate::adapters::accessibility::atspi::enable_accessibility()
+            .map_err(|error| error.to_string())?
+    {
+        eprintln!("Accessibility turned on: restart call apps and browsers once.");
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = enable;
+    let Some(mut reader) = crate::adapters::accessibility::platform_reader() else {
+        return Err(String::from(
+            "reading call windows is not supported on this platform",
+        ));
+    };
+    let mut lines = Vec::new();
+    for second in 0..seconds.max(1) {
+        let started = std::time::Instant::now();
+        let names = reader.speaking_names().map_err(|error| error.to_string())?;
+        if !names.is_empty() {
+            lines.push(format!("{second:>4}s  {}", names.join(", ")));
+        }
+        if let Some(rest) = std::time::Duration::from_secs(1).checked_sub(started.elapsed()) {
+            std::thread::sleep(rest);
+        }
+    }
+    if lines.is_empty() {
+        lines.push(String::from(
+            "No speaking names seen. Is a call window open, and was the app started after \
+             accessibility was turned on (--enable)?",
+        ));
+    }
+    Ok(lines.join("\n"))
 }
 
 /// Words a chat answer for the terminal: the answer and what it was given, the chat so far, or

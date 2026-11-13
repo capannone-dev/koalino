@@ -45,6 +45,10 @@ mod peer_trust_tests;
 pub mod projects;
 #[cfg(test)]
 mod projects_tests;
+/// Turns the names a call app shows into name suggestions for unknown voices (#113).
+pub mod speaker_names;
+#[cfg(test)]
+mod speaker_names_tests;
 /// Judges how far a transcript can be trusted: uncertain words, overlap and speakers.
 pub mod transcript_confidence;
 #[cfg(test)]

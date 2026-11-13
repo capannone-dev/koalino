@@ -3384,7 +3384,9 @@ dependencies = [
  "webrtc-vad",
  "whisper-rs",
  "whisper-rs-sys",
+ "windows",
  "x25519-dalek",
+ "zbus",
  "zeroize",
 ]
 

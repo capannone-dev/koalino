@@ -119,12 +119,20 @@ webrtc-vad = { version = "=0.4.0", optional = true }
 
 # Android only: Kotlin hands the Keystore-unwrapped database key straight to Rust over JNI, so it
 # never passes through the Dart heap (approved by the owner, 2026-10-28).
+# Reads who is speaking from call windows over the AT-SPI accessibility bus (#113, approved by
+# the owner). Already built for `keyring`'s Secret Service client, with the same default features.
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5.19.0"
+
 # Prebuilt ONNX Runtime linked in, except on Windows: ort has no prebuilt for windows-gnu, so the
 # Windows build loads Microsoft's onnxruntime.dll from beside the executable at run time (#60).
 [target.'cfg(not(windows))'.dependencies]
 ort = { version = "=2.0.0-rc.13", optional = true, default-features = false, features = ["std", "download-binaries", "tls-native", "copy-dylibs", "api-27"] }
 
 [target.'cfg(windows)'.dependencies]
+# UI Automation reads who is speaking from call windows (#113, approved by the owner); the same
+# release `cpal` already builds.
+windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Accessibility"] }
 ort = { version = "=2.0.0-rc.13", optional = true, default-features = false, features = ["std", "load-dynamic", "api-27"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
