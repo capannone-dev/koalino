@@ -364,6 +364,10 @@ than 2 s away), and the overlap the recording kept with the meeting (#90, #91); 
 joins every recording's overlap on the first one's timeline. Segments outside the retained
 audio are kept. Nothing is saved until every window is done, and `cancelled` is polled before each
 one. Saving goes through `save_transcript_segments`, so the meeting document syncs as usual.
+While it still holds the speech, `refine_meeting` also cuts a review clip for each unknown voice
+that has none (#116). Such a voice came only from the final speaker pass, which has no live clip
+to keep. The clip is the voice's longest microphone segment inside one retained chunk, 1 to 15 s
+of it.
 
 ## One meeting recorded on several devices (#88)
 

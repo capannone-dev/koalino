@@ -322,6 +322,78 @@ mod whole_meeting {
     }
 
     #[test]
+    fn a_speaker_without_a_review_clip_gets_one_cut_from_the_retained_speech() {
+        use crate::domain::models::UnassignedVoiceClip;
+        let (repository, meeting) = repository_with(&[]);
+        let (with_none, with_clip, too_short) = (
+            uuid::Uuid::new_v4(),
+            uuid::Uuid::new_v4(),
+            uuid::Uuid::new_v4(),
+        );
+        let spoken = |start, end, text, cluster| {
+            TranscriptSegment::new(meeting.clone(), start, end, None, text)
+                .with_unknown_cluster_id(Some(cluster))
+        };
+        repository
+            .save_transcript_segments(
+                &meeting,
+                &[
+                    spoken(10_000, 14_000, "live a", with_none),
+                    spoken(20_000, 23_000, "live b", with_clip),
+                    spoken(30_000, 30_400, "live c", too_short),
+                ],
+            )
+            .unwrap_or_else(|error| panic!("{error}"));
+        let earlier_clip = uuid::Uuid::new_v4();
+        repository
+            .save_unassigned_clip(
+                UnassignedVoiceClip::new(earlier_clip, meeting.clone(), 0, 1_000, vec![1, 2])
+                    .with_cluster_id(Some(with_clip)),
+            )
+            .unwrap_or_else(|error| panic!("{error}"));
+        let engine = ScriptedEngine {
+            answers: vec![
+                Vec::new(),
+                vec![
+                    ("Ciao", 500, 1_200),
+                    ("a", 1_300, 1_800),
+                    ("tutti", 1_900, 2_600),
+                    ("quanti.", 2_700, 3_500),
+                    ("Sì", 10_200, 12_800),
+                    ("ok", 20_050, 20_350),
+                ],
+            ],
+            ..ScriptedEngine::default()
+        };
+
+        run(&engine, &repository, &meeting, None).unwrap_or_else(|error| panic!("{error}"));
+
+        let clips = repository
+            .get_unassigned_clips(&meeting)
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(
+            clips.len(),
+            2,
+            "one new clip, for the speaker that had none"
+        );
+        let new_clip = clips
+            .iter()
+            .find(|clip| clip.cluster_id() == Some(with_none))
+            .unwrap_or_else(|| panic!("no clip for the speaker without one"));
+        assert_eq!(new_clip.start_time_ms(), 0);
+        assert_eq!(new_clip.end_time_ms(), 3_000);
+        // 3 s of 16 kHz mono 16-bit audio, after a 44-byte WAV header, all from the third chunk.
+        assert_eq!(new_clip.audio_bytes().len(), 44 + 3 * 16_000 * 2);
+        assert_eq!(&new_clip.audio_bytes()[44..46], &3_i16.to_le_bytes());
+        assert!(clips.iter().any(|clip| clip.clip_id() == earlier_clip));
+        assert!(
+            clips
+                .iter()
+                .all(|clip| clip.cluster_id() != Some(too_short))
+        );
+    }
+
+    #[test]
     fn the_new_text_replaces_the_live_text_inside_the_retained_audio() {
         let (repository, meeting) = repository_with(&[
             (0, 900, "live one"),

@@ -5,7 +5,9 @@
 //! to 30 s, the length Whisper was trained on, and transcribed again, possibly with a larger model.
 //! Each new word takes the speaker the final speaker pass gave that moment, so names and unknown
 //! voices are unchanged and only the text improves. Planning and attribution are pure;
-//! `refine_meeting` drives an engine and a repository through their ports.
+//! `refine_meeting` drives an engine and a repository through their ports. While it holds the
+//! speech, it also cuts a review clip for each unknown voice that has none (#116), so the owner
+//! can listen before naming it.
 
 use uuid::Uuid;
 
@@ -15,8 +17,9 @@ use crate::{
         errors::{StorageError, TranscriptionError},
         models::{
             AudioRecording, DeviceId, MeetingId, RecordingId, SegmentSource, TranscriptSegment,
-            TranscriptionContext,
+            TranscriptionContext, UnassignedVoiceClip,
         },
+        pcm_wav::wav_from_pcm16_le,
         transcript_confidence::{
             OverlapSpan, SegmentConfidence, is_uncertain_probability, mark_overlapping_segments,
         },
@@ -440,10 +443,117 @@ where
         without_echoes(timeline, repository.load_echo_heard(meeting_id)?, &|_| true);
     let segment_count = segment_count.saturating_sub(dropped);
     repository.save_transcript_segments(meeting_id, &timeline)?;
+    add_missing_review_clips(meeting_id, chunks, &timeline, repository);
     Ok(RefinementOutcome {
         window_count,
         segment_count,
     })
+}
+
+/// A review clip cut from the retained speech is at least this long...
+const MIN_BACKFILLED_CLIP_MS: u64 = 1_000;
+/// ...and at most this long.
+const MAX_BACKFILLED_CLIP_MS: u64 = 15_000;
+/// Samples per millisecond at 16 kHz.
+const SAMPLES_PER_MS: u64 = 16;
+
+/// Cuts a review clip for each unknown voice of the meeting that has none (#116).
+///
+/// The final speaker pass can find a voice the live pass never clustered; such a voice has no
+/// clip, and the owner could only name it from its words. The voice's longest microphone segment
+/// that lies inside one retained chunk gives the clip, up to 15 s of it; a voice with under 1 s
+/// there gets none, as live clips do.
+///
+/// Inputs: The meeting, its retained chunks, and its final timeline.
+/// Outputs: None. Side effects: Saves new clips (raw audio until the voice is named, as live
+/// clips); a storage failure is logged and changes nothing else.
+fn add_missing_review_clips<Repository>(
+    meeting_id: &MeetingId,
+    chunks: &[RefinementChunk<'_>],
+    timeline: &[TranscriptSegment],
+    repository: &Repository,
+) where
+    Repository: NoteRepository + ?Sized,
+{
+    let clipped: Vec<Uuid> = match repository.get_unassigned_clips(meeting_id) {
+        Ok(clips) => clips
+            .iter()
+            .filter_map(UnassignedVoiceClip::cluster_id)
+            .collect(),
+        Err(error) => {
+            tracing::warn!(meeting_id = %meeting_id.as_str(), error = %error, "Review clips could not be read; none were added");
+            return;
+        }
+    };
+    let mut longest: Vec<(Uuid, &TranscriptSegment)> = Vec::new();
+    for segment in timeline
+        .iter()
+        .filter(|segment| segment.source() == SegmentSource::Microphone)
+        .filter(|segment| segment.speaker_identity_id().is_none())
+    {
+        let Some(cluster_id) = segment.unknown_cluster_id() else {
+            continue;
+        };
+        if clipped.contains(&cluster_id) || !inside_one_chunk(chunks, segment) {
+            continue;
+        }
+        let length = |segment: &TranscriptSegment| {
+            segment
+                .end_time_ms()
+                .saturating_sub(segment.start_time_ms())
+        };
+        match longest.iter_mut().find(|(known, _)| *known == cluster_id) {
+            Some((_, best)) if length(segment) > length(best) => *best = segment,
+            Some(_) => {}
+            None => longest.push((cluster_id, segment)),
+        }
+    }
+    for (cluster_id, segment) in longest {
+        let start_ms = segment.start_time_ms();
+        let end_ms = segment.end_time_ms().min(start_ms + MAX_BACKFILLED_CLIP_MS);
+        if end_ms.saturating_sub(start_ms) < MIN_BACKFILLED_CLIP_MS {
+            continue;
+        }
+        let Some(samples) = samples_between(chunks, start_ms, end_ms) else {
+            continue;
+        };
+        let pcm: Vec<u8> = samples
+            .iter()
+            .flat_map(|sample| sample.to_le_bytes())
+            .collect();
+        let clip = UnassignedVoiceClip::new(
+            Uuid::new_v4(),
+            meeting_id.clone(),
+            0,
+            end_ms - start_ms,
+            wav_from_pcm16_le(&pcm, 16_000),
+        )
+        .with_cluster_id(Some(cluster_id));
+        if let Err(error) = repository.save_unassigned_clip(clip) {
+            tracing::warn!(meeting_id = %meeting_id.as_str(), error = %error, "A review clip could not be cut from the retained speech");
+        }
+    }
+}
+
+/// Whether a segment lies inside one retained chunk.
+fn inside_one_chunk(chunks: &[RefinementChunk<'_>], segment: &TranscriptSegment) -> bool {
+    chunks.iter().any(|chunk| {
+        chunk.span.start_ms <= segment.start_time_ms() && segment.end_time_ms() <= chunk.span.end_ms
+    })
+}
+
+/// The samples of one chunk between two meeting times, or `None` when no chunk holds both.
+fn samples_between<'samples>(
+    chunks: &[RefinementChunk<'samples>],
+    start_ms: u64,
+    end_ms: u64,
+) -> Option<&'samples [i16]> {
+    let chunk = chunks
+        .iter()
+        .find(|chunk| chunk.span.start_ms <= start_ms && end_ms <= chunk.span.end_ms)?;
+    let first = usize::try_from((start_ms - chunk.span.start_ms) * SAMPLES_PER_MS).ok()?;
+    let last = usize::try_from((end_ms - chunk.span.start_ms) * SAMPLES_PER_MS).ok()?;
+    chunk.samples.get(first..last.min(chunk.samples.len()))
 }
 
 /// Re-transcribes speech chunks in long windows.
