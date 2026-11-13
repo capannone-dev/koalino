@@ -2997,3 +2997,15 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   - Windows UI Automation, which compiles but was not run: win11 could not start;
   - a suggestion end to end, which needs speech, and playing audio needs the owner's permission.
     It is covered by unit tests.
+
+## 2026-11-13 — #87 The after-meeting pass's model in Settings, and the pass on the web
+
+- The pass's own model was already a saved setting (`transcript_pass_model`), but nothing set it.
+  Settings now shows "Model for this pass" while the pass is on: "Same as for recording", or a
+  model already on the device. A larger model gains most here, because the pass has time after
+  the meeting (on ponte, `small` 32% → turbo 15% difference).
+  - Only downloaded models are offered. Downloading stays in the model list above, so the choice
+    never starts a download.
+  - A model removed later falls back to the recording model: the settings read back `null`.
+- The web Settings page gains the switch and the menu (`/api/settings/after-meeting-pass`), for
+  the daemon on a server or desktop. Its menu lists the models on the daemon's machine.
