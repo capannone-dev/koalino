@@ -117,7 +117,8 @@ spans, given at least 2 s of such speech, and only when no other voice wins with
 `echo_lines.rs` and `echo_detect.rs` (#108, ported from Yogurt, MIT; see `THIRD_PARTY_NOTICES.md`)
 handle the computer's sound recorded as a second track. Without headphones the microphone also
 hears the other side from the speakers. `EchoDetector` compares the two tracks' 10 ms loudness
-envelopes over 2 s windows at lags of 0 to 300 ms. It counts echo as heard only when a steady share
+envelopes over 2 s windows at lags of -300 to +300 ms (the leak comes late, but the capture paths
+buffer differently, so the microphone can land ahead on the timeline). It counts echo as heard only when a steady share
 of the windows where both sides carry sound follow each other at one lag (`present`), and it
 remembers which windows did (`correlated_at`). `echo_positions` then picks the microphone lines
 whose words copy the computer sound's lines near the same time, in an echoing window. Short replies

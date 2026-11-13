@@ -158,3 +158,18 @@ fn the_microphone_arriving_later_than_their_track_is_still_compared() {
     }
     assert!(detector.present());
 }
+
+#[test]
+fn their_track_stamped_later_than_the_microphone_still_shows_the_echo() {
+    // The two capture paths buffer differently: on deb-gui the computer's sound landed about
+    // 120 ms after the microphone, so the leak showed up 60 ms ahead of their track.
+    let theirs = speech(5, 60);
+    let mine = leak(&theirs, 0.3, 60);
+    let mut detector = EchoDetector::new();
+    for (index, (mine, theirs)) in mine.chunks(STEP).zip(theirs.chunks(STEP)).enumerate() {
+        let start_ms = (index * 100) as u64;
+        detector.push(EchoTrack::ComputerSound, start_ms + 120, theirs);
+        detector.push(EchoTrack::Microphone, start_ms, mine);
+    }
+    assert!(detector.present());
+}

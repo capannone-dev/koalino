@@ -2997,6 +2997,28 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   - a suggestion end to end, which needs speech, and playing audio needs the owner's permission.
     It is covered by unit tests.
 
+## 2026-11-13 — #108 Checked with sound: the computer's track was 2 s late
+
+With playback allowed, deb-gui played public clips: the other side into a silent virtual
+speaker (the default sink, whose monitor the app records) and the owner into a virtual microphone.
+- **Headphones (no leak):** every turn of the other side was a `computer_sound` segment, and the
+  microphone's turns were attributed to the owner's saved voice.
+- **Echo (the speaker leaking into the microphone at half volume, 60 ms late):** nothing was
+  dropped; each of their lines appeared twice. Saving what the detector received showed why:
+  - The microphone's chunks matched the source at a 3.14 s offset, the computer's at 5.08 s.
+    The computer's sound was 2 s late on the timeline.
+  - Without a buffer size, PulseAudio delivers a record stream in fragments of about 2 s. The
+    recorder places each batch to end at the microphone's time, so every batch landed 2 s late.
+  - The detector looks 0–300 ms apart, so it never saw the leak.
+- **Fixes:**
+  - The monitor stream asks for 50 ms blocks (`BufferSize::Fixed`). Not smaller, because cpal
+    also sets the server's queue limit to that size.
+  - Afterwards every active window correlated at r = 0.99, but at −60 ms: the microphone, on
+    ALSA, still lands about 120 ms before the computer's sound. The detector now searches
+    −300 to +300 ms. Two people talking over each other is still not echo in its tests.
+- Windows' WASAPI loopback uses the shared-mode period (about 10 ms) by default, so it is left
+  alone; to be checked on win11.
+
 ## 2026-11-13 — #113 on Windows, and covered call windows
 
 - **Windows verified:** on win11, `cli.exe call-names`, run in the desktop session, read the same

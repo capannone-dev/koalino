@@ -2,8 +2,10 @@
 //!
 //! Decided from the audio, not the words: the microphone's loudness envelope is compared with the
 //! computer sound's over 2 s windows while both carry sound. Their voice from the speakers makes
-//! the two move together, a little late, at the same lag every time; two people talking over each
-//! other correlate now and then at random lags. So echo is a rate (a good share of the active
+//! the two move together at the same lag every time; two people talking over each other correlate
+//! now and then at random lags. The lag is searched on both sides of zero: the leak itself comes
+//! late, but the two capture paths buffer differently, so on the timeline the microphone may land
+//! ahead of their track (on deb-gui, by 60 ms). So echo is a rate (a good share of the active
 //! windows) at a steady lag, never a count. Without this evidence `echo_lines` drops nothing.
 //!
 //! Ported from Yogurt's `app/src/main/asr/echoDetect.ts` (FrigadeHQ/yogurt, MIT License,
@@ -20,7 +22,7 @@ const BLOCK_SAMPLES: usize = 160;
 /// Blocks in a window.
 const WINDOW_BLOCKS: u64 = 200;
 const WINDOW_MS: u64 = WINDOW_BLOCKS * BLOCK_MS;
-/// The microphone is compared at lags of 0 to 300 ms.
+/// The microphone is compared at lags of -300 to +300 ms.
 const MAX_LAG_BLOCKS: u64 = 30;
 /// Two hours of envelope.
 const RING_BLOCKS: u64 = 2 * 3_600 * 100;
@@ -96,8 +98,9 @@ pub struct EchoDetector {
     next_check: u64,
     /// Windows where both sides carried sound.
     active: usize,
-    /// The lag, in blocks, of each window where the microphone followed their track.
-    lags: Vec<u64>,
+    /// The lag, in blocks (negative: the microphone ahead), of each window where the microphone
+    /// followed their track.
+    lags: Vec<i64>,
     /// Those windows, by number.
     correlated: HashSet<u64>,
 }
@@ -183,14 +186,18 @@ impl EchoDetector {
         }
     }
 
-    /// Compares one 2 s window of their track with the microphone's at lags of 0 to 300 ms.
+    /// Compares one 2 s window of their track with the microphone's at lags of -300 to +300 ms.
     fn check(&mut self, from: u64, to: u64) {
         let them: Vec<f32> = (from..to)
             .map(|block| self.computer_sound.at(block))
             .collect();
-        let me_at = |lag: u64| -> Vec<f32> {
+        let me_at = |lag: i64| -> Vec<f32> {
             (from..to)
-                .map(|block| self.microphone.at(block + lag))
+                .map(|block| {
+                    block
+                        .checked_add_signed(lag)
+                        .map_or(0.0, |shifted| self.microphone.at(shifted))
+                })
                 .collect()
         };
         if mean(&them) < THEM_LOUD || mean(&me_at(0)) < ME_SOME {
@@ -212,7 +219,8 @@ impl EchoDetector {
             return;
         }
         let (mut best, mut best_lag) = (0.0_f32, 0);
-        for lag in 0..=MAX_LAG_BLOCKS {
+        let max_lag = MAX_LAG_BLOCKS as i64;
+        for lag in -max_lag..=max_lag {
             let correlation = pearson(&their_levels, &pick(&me_at(lag)));
             if correlation > best {
                 best = correlation;
@@ -238,13 +246,13 @@ impl EchoDetector {
         if rate >= STRONG_RATE {
             return true;
         }
-        let mut count: HashMap<u64, usize> = HashMap::new();
+        let mut count: HashMap<i64, usize> = HashMap::new();
         for lag in &self.lags {
             *count.entry(*lag).or_default() += 1;
         }
         let Some(mode) = count
             .iter()
-            .max_by_key(|(lag, times)| (**times, std::cmp::Reverse(**lag)))
+            .max_by_key(|(lag, times)| (**times, std::cmp::Reverse(lag.abs())))
             .map(|(lag, _)| *lag)
         else {
             return false;
