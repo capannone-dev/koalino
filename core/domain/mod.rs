@@ -1,5 +1,9 @@
 //! Exposes pure domain models and errors for the meeting-note business language.
 
+/// Notices a call from the apps using the microphone (#111).
+pub mod call_watch;
+#[cfg(test)]
+mod call_watch_tests;
 /// What a chat with notes is about, and its messages (#97).
 pub mod chat;
 #[cfg(test)]

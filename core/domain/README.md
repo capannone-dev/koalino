@@ -98,6 +98,12 @@ hosts. It refuses credentials in the URL. `PromptTemplate` holds the owner's sum
 `{{project}}`, `{{speakers}}`, `{{glossary}}` and `{{language}}`; an unknown or unclosed one is
 refused when saved. The transcript itself always goes in the user message, never in the template.
 
+`call_watch.rs` (#111) notices a call from the apps using the microphone. `call_app` names a call
+app (Zoom, Teams, Webex, Slack, Discord and others) or a browser, where Meet, Jitsi and Teams also
+run. `CallWatch::observe` takes one look at the microphone's users: a call starts once a call app has
+held the microphone for 3 s, and it ends once none has for 20 s, so muting or switching devices does
+not end it. The app's own process never counts.
+
 `echo_lines.rs` and `echo_detect.rs` (#108, ported from Yogurt, MIT; see `THIRD_PARTY_NOTICES.md`)
 handle the computer's sound recorded as a second track. Without headphones the microphone also
 hears the other side from the speakers. `EchoDetector` compares the two tracks' 10 ms loudness
