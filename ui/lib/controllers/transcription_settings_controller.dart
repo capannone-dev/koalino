@@ -105,6 +105,13 @@ final class TranscriptionSettingsController extends ChangeNotifier {
       _run(() => _bridge.setAfterMeetingPass(enabled: enabled),
           success: 'Saved. The next recording uses this.');
 
+  /// Turns recording the computer's sound (#108) on or off.
+  ///
+  /// Inputs: The new state. Side effects: Stores the choice and reloads.
+  Future<void> setComputerSound({required bool enabled}) =>
+      _run(() => _bridge.setComputerSound(enabled: enabled),
+          success: 'Saved. The next recording uses this.');
+
   /// Saves the glossary from text holding one term per line.
   ///
   /// Inputs: The text; lines are trimmed and blank ones dropped.

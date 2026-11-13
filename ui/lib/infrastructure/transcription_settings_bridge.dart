@@ -116,6 +116,24 @@ final class WhisperSuggestion {
   final String reason;
 }
 
+/// Recording what the computer plays beside the microphone (#108).
+final class ComputerSoundSetting {
+  const ComputerSoundSetting({this.available = false, this.enabled = true});
+
+  /// Reads `computer_sound` from the core's JSON.
+  factory ComputerSoundSetting.fromJson(Map<String, Object?> json) =>
+      ComputerSoundSetting(
+        available: json['available'] as bool? ?? false,
+        enabled: json['enabled'] as bool? ?? true,
+      );
+
+  /// Whether this build and platform can record it (desktop only).
+  final bool available;
+
+  /// Whether the owner wants it recorded; on by default.
+  final bool enabled;
+}
+
 /// Efficient mode's state on this device.
 final class AutomaticModelStatus {
   /// Creates the state; by default a model was chosen by hand, as with a core from before #106.
@@ -228,6 +246,7 @@ final class TranscriptionSettings {
     this.glossary = const <String>[],
     this.keepSpeech = const SpeechRetention(),
     this.afterMeetingPass = true,
+    this.computerSound = const ComputerSoundSetting(),
     this.automatic = const AutomaticModelStatus(),
   });
 
@@ -256,6 +275,10 @@ final class TranscriptionSettings {
           : SpeechRetention.fromJson(
               json['keep_speech']! as Map<String, Object?>),
       afterMeetingPass: json['after_meeting_pass'] as bool? ?? true,
+      computerSound: json['computer_sound'] == null
+          ? const ComputerSoundSetting()
+          : ComputerSoundSetting.fromJson(
+              json['computer_sound']! as Map<String, Object?>),
       automatic: json['automatic'] == null
           ? const AutomaticModelStatus()
           : AutomaticModelStatus.fromJson(
@@ -300,6 +323,9 @@ final class TranscriptionSettings {
   /// Whether each meeting is transcribed again after Stop, with longer context (#87). On by
   /// default; a phone runs it only while charging.
   final bool afterMeetingPass;
+
+  /// Whether recordings also capture what the computer plays (#108).
+  final ComputerSoundSetting computerSound;
 
   /// The "Automatic" model choice (#106); `selectedModel` is `null` while it is on.
   final AutomaticModelStatus automatic;
@@ -372,6 +398,10 @@ abstract interface class TranscriptionSettingsBridge {
   /// Turns the after-meeting pass (#87) on or off from the next recording.
   /// Outputs: A core status. Side effects: Stores the choice.
   Future<int> setAfterMeetingPass({required bool enabled});
+
+  /// Turns recording the computer's sound (#108) on or off from the next start or resume.
+  /// Outputs: A core status. Side effects: Stores the choice.
+  Future<int> setComputerSound({required bool enabled});
 
   /// Chooses "Automatic" (#106): the model suggested for this device.
   /// Outputs: A core status. Side effects: Forgets the hand-picked model.
@@ -467,6 +497,14 @@ final class RustTranscriptionSettingsBridge
     return Isolate.run(() => _openCoreLibrary()
         .lookupFunction<Int32 Function(Int32), int Function(int)>(
             'note_taker_set_after_meeting_pass')(value));
+  }
+
+  @override
+  Future<int> setComputerSound({required bool enabled}) {
+    final int value = enabled ? 1 : 0;
+    return Isolate.run(() => _openCoreLibrary()
+        .lookupFunction<Int32 Function(Int32), int Function(int)>(
+            'note_taker_set_computer_sound')(value));
   }
 
   @override

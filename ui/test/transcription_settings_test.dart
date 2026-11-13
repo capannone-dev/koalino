@@ -107,6 +107,8 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
         glossary: glossary,
         keepSpeech: SpeechRetention(days: keepSpeechDays),
         afterMeetingPass: afterMeetingPass,
+        computerSound: ComputerSoundSetting(
+            available: computerSoundAvailable, enabled: computerSound),
         automatic: AutomaticModelStatus(
             enabled: selected == null,
             fileName: automaticFile,
@@ -186,6 +188,17 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
 
   /// Whether meetings are re-transcribed after Stop, as the core holds it.
   bool afterMeetingPass = true;
+
+  /// Whether this build can record the computer's sound, and whether it does (#108).
+  bool computerSoundAvailable = false;
+  bool computerSound = true;
+
+  @override
+  Future<int> setComputerSound({required bool enabled}) async {
+    calls.add('computer sound $enabled');
+    computerSound = enabled;
+    return transcriptionStatusOk;
+  }
 
   @override
   Future<int> setAfterMeetingPass({required bool enabled}) async {
@@ -637,6 +650,37 @@ void main() {
           download: WhisperDownload(state: 'idle'),
         ).afterMeetingPass,
         isTrue);
+  });
+
+  testWidgets('the computer sound switch shows only where it can be recorded',
+      (WidgetTester tester) async {
+    await _pump(tester, _FakeBridge());
+    expect(find.byKey(computerSoundKey), findsNothing,
+        reason: 'a phone cannot record the computer');
+  });
+
+  testWidgets('the computer sound is recorded until turned off',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()..computerSoundAvailable = true;
+    await _pump(tester, bridge);
+    await tester.scrollUntilVisible(find.byKey(computerSoundKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(tester.widget<SwitchListTile>(find.byKey(computerSoundKey)).value,
+        isTrue);
+
+    await tester.tap(find.byKey(computerSoundKey));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('computer sound false'));
+  });
+
+  test('the computer sound setting is read from the core', () {
+    final ComputerSoundSetting setting = ComputerSoundSetting.fromJson(
+        <String, Object?>{'available': true, 'enabled': false});
+    expect(setting.available, isTrue);
+    expect(setting.enabled, isFalse);
+    expect(const ComputerSoundSetting().available, isFalse,
+        reason: 'an older core offers nothing');
   });
 
   test('the retention window is read from the core with its bounds', () {

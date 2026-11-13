@@ -39,6 +39,9 @@ const Key automaticDownloadKey = ValueKey<String>('automatic-download');
 /// Finds the after-meeting pass switch (#87).
 const Key afterMeetingPassKey = ValueKey<String>('after-meeting-pass');
 
+/// Finds the switch that records the computer's sound (#108).
+const Key computerSoundKey = ValueKey<String>('computer-sound');
+
 /// Finds the button that saves the glossary.
 const Key glossarySaveKey = ValueKey<String>('glossary-save');
 
@@ -177,12 +180,30 @@ final class _TranscriptionSettingsScreenState
                     controller: widget.controller,
                     saved: settings.glossary),
                 const Divider(),
+                if (settings.computerSound.available)
+                  _computerSoundTile(settings.computerSound.enabled),
                 _afterMeetingPassTile(settings.afterMeetingPass),
                 _keepSpeechTile(settings.keepSpeech),
               ],
             );
           },
         ),
+      );
+
+  /// Recording what the computer plays (#108): the other side of a call, as its own track.
+  Widget _computerSoundTile(bool enabled) => SwitchListTile(
+        key: computerSoundKey,
+        secondary: const Icon(Icons.speaker_outlined),
+        title: const Text("Also record the computer's sound"),
+        subtitle: const Text('Transcribes what the computer plays, such as '
+            'the other side of a call, beside the microphone. When the '
+            'microphone also hears the speakers, the repeated words are '
+            'kept once.'),
+        value: enabled,
+        onChanged: widget.controller.isBusy
+            ? null
+            : (bool value) =>
+                widget.controller.setComputerSound(enabled: value),
       );
 
   /// The after-meeting pass (#87): transcribe the meeting again after Stop, with longer context.
