@@ -443,7 +443,7 @@ where
         without_echoes(timeline, repository.load_echo_heard(meeting_id)?, &|_| true);
     let segment_count = segment_count.saturating_sub(dropped);
     repository.save_transcript_segments(meeting_id, &timeline)?;
-    add_missing_review_clips(meeting_id, chunks, &timeline, repository);
+    add_missing_review_clips(meeting_id, &[meeting_id], chunks, &timeline, repository);
     Ok(RefinementOutcome {
         window_count,
         segment_count,
@@ -464,27 +464,30 @@ const SAMPLES_PER_MS: u64 = 16;
 /// that lies inside one retained chunk gives the clip, up to 15 s of it; a voice with under 1 s
 /// there gets none, as live clips do.
 ///
-/// Inputs: The meeting, its retained chunks, and its final timeline.
+/// Inputs: The meeting the clips belong to; every meeting whose clips count as a voice's clip
+/// (the recordings of a combined meeting, #88); the retained chunks on the timeline's clock; and
+/// the final timeline.
 /// Outputs: None. Side effects: Saves new clips (raw audio until the voice is named, as live
 /// clips); a storage failure is logged and changes nothing else.
-fn add_missing_review_clips<Repository>(
+pub(crate) fn add_missing_review_clips<Repository>(
     meeting_id: &MeetingId,
+    clip_meetings: &[&MeetingId],
     chunks: &[RefinementChunk<'_>],
     timeline: &[TranscriptSegment],
     repository: &Repository,
 ) where
     Repository: NoteRepository + ?Sized,
 {
-    let clipped: Vec<Uuid> = match repository.get_unassigned_clips(meeting_id) {
-        Ok(clips) => clips
-            .iter()
-            .filter_map(UnassignedVoiceClip::cluster_id)
-            .collect(),
-        Err(error) => {
-            tracing::warn!(meeting_id = %meeting_id.as_str(), error = %error, "Review clips could not be read; none were added");
-            return;
+    let mut clipped: Vec<Uuid> = Vec::new();
+    for clip_meeting in clip_meetings {
+        match repository.get_unassigned_clips(clip_meeting) {
+            Ok(clips) => clipped.extend(clips.iter().filter_map(UnassignedVoiceClip::cluster_id)),
+            Err(error) => {
+                tracing::warn!(meeting_id = %meeting_id.as_str(), error = %error, "Review clips could not be read; none were added");
+                return;
+            }
         }
-    };
+    }
     let mut longest: Vec<(Uuid, &TranscriptSegment)> = Vec::new();
     for segment in timeline
         .iter()

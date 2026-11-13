@@ -2949,4 +2949,5 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - The clip is raw audio until the voice is named or the meeting is deleted, like every review
   clip. Nothing was played to check it; a unit test checks which voice gets a clip and which
   audio it holds.
-- Not covered: the combined pass of a meeting recorded on several devices (#88).
+- The combined pass of a meeting recorded on several devices (#88) does the same on the first
+  recording's timeline. A clip in any of the meeting's recordings counts, so no voice gets two.

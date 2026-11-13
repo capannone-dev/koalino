@@ -367,7 +367,8 @@ one. Saving goes through `save_transcript_segments`, so the meeting document syn
 While it still holds the speech, `refine_meeting` also cuts a review clip for each unknown voice
 that has none (#116). Such a voice came only from the final speaker pass, which has no live clip
 to keep. The clip is the voice's longest microphone segment inside one retained chunk, 1 to 15 s
-of it.
+of it. The combined pass (#88) does the same on the first recording's timeline, counting a clip
+in any of the meeting's recordings.
 
 ## One meeting recorded on several devices (#88)
 

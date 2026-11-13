@@ -394,6 +394,50 @@ mod whole_meeting {
     }
 
     #[test]
+    fn a_clip_in_another_recording_of_the_meeting_counts_too() {
+        use super::super::transcript_refinement::add_missing_review_clips;
+        use crate::domain::models::UnassignedVoiceClip;
+        let (repository, laptop) = repository_with(&[]);
+        let phone = MeetingId::new("meeting-phone");
+        repository
+            .create_meeting(&phone, &[])
+            .unwrap_or_else(|error| panic!("{error}"));
+        let (clipped_on_phone, unclipped) = (uuid::Uuid::new_v4(), uuid::Uuid::new_v4());
+        repository
+            .save_unassigned_clip(
+                UnassignedVoiceClip::new(uuid::Uuid::new_v4(), phone.clone(), 0, 1_000, vec![1])
+                    .with_cluster_id(Some(clipped_on_phone)),
+            )
+            .unwrap_or_else(|error| panic!("{error}"));
+        let samples = vec![7_i16; 16_000 * 10];
+        // The phone's chunk, moved onto the laptop's clock (it started 2 s later).
+        let chunks = [RefinementChunk {
+            span: ChunkSpan {
+                start_ms: 2_000,
+                end_ms: 12_000,
+            },
+            language: None,
+            samples: &samples,
+        }];
+        let timeline = [
+            TranscriptSegment::new(laptop.clone(), 3_000, 5_000, None, "a")
+                .with_unknown_cluster_id(Some(clipped_on_phone)),
+            TranscriptSegment::new(laptop.clone(), 6_000, 8_500, None, "b")
+                .with_unknown_cluster_id(Some(unclipped)),
+        ];
+
+        add_missing_review_clips(&laptop, &[&laptop, &phone], &chunks, &timeline, &repository);
+
+        let clips = repository
+            .get_unassigned_clips(&laptop)
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert_eq!(clips.len(), 1);
+        assert_eq!(clips[0].cluster_id(), Some(unclipped));
+        assert_eq!(clips[0].end_time_ms(), 2_500);
+        assert_eq!(&clips[0].audio_bytes()[44..46], &7_i16.to_le_bytes());
+    }
+
+    #[test]
     fn the_new_text_replaces_the_live_text_inside_the_retained_audio() {
         let (repository, meeting) = repository_with(&[
             (0, 900, "live one"),

@@ -26,7 +26,8 @@ use crate::{
         same_meeting::{RecordingText, comparison_key, recognise_same_meeting},
         transcript_refinement::{
             ChunkSpan, MeetingWord, RefinementChunk, RefinementError, RefinementOutcome, Speaker,
-            overlap_of, segments_of, speaker_with_doubt, transcribe_chunks,
+            add_missing_review_clips, overlap_of, segments_of, speaker_with_doubt,
+            transcribe_chunks,
         },
     },
     domain::{
@@ -374,6 +375,29 @@ where
     let (timeline, dropped) = without_echoes(timeline, echo_heard, &|_| true);
     let segment_count = segment_count.saturating_sub(dropped);
     repository.save_transcript_segments(&root.meeting_id, &timeline)?;
+    // Voices only the final passes found get a clip, cut from whichever recording holds them.
+    let mut shifted_chunks = Vec::new();
+    for (recording, (_, _, offset_ms)) in std::iter::once(root).chain(members).zip(&transcribed) {
+        shifted_chunks.extend(recording.chunks.iter().map(|chunk| RefinementChunk {
+            span: ChunkSpan {
+                start_ms: chunk.span.start_ms.saturating_add_signed(*offset_ms),
+                end_ms: chunk.span.end_ms.saturating_add_signed(*offset_ms),
+            },
+            language: chunk.language,
+            samples: chunk.samples,
+        }));
+    }
+    let recording_meetings: Vec<&MeetingId> = std::iter::once(root)
+        .chain(members)
+        .map(|recording| &recording.meeting_id)
+        .collect();
+    add_missing_review_clips(
+        &root.meeting_id,
+        &recording_meetings,
+        &shifted_chunks,
+        &timeline,
+        repository,
+    );
     Ok(RefinementOutcome {
         window_count,
         segment_count,
