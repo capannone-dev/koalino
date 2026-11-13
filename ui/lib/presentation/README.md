@@ -79,7 +79,7 @@ the efficient mode switch shows only then. Its Glossary section takes one name o
 it applies from the next recording, and refused text stays in the field to correct. Below it,
 "Keep speech for combining" is a menu of days (1 to 60, plus any window set from the CLI or the
 web) that `note_taker_set_keep_speech_days` saves (#93). Above it, the "Improve the transcript after
-the meeting" switch (on by default) is saved by `note_taker_set_after_meeting_pass` (#87). On a desktop build that can, "Also record the computer's sound" (on by default) is saved by `note_taker_set_computer_sound` (#108); the row is hidden where the core reports it unavailable.
+the meeting" switch (on by default) is saved by `note_taker_set_after_meeting_pass` (#87); while it is on, "Model for this pass" offers "Same as for recording" or a model already on the device (`note_taker_set_after_meeting_pass_model`). On a desktop build that can, "Also record the computer's sound" (on by default) is saved by `note_taker_set_computer_sound` (#108); the row is hidden where the core reports it unavailable.
 
 `settings_screen.dart` (`SettingsScreen`) is on every platform (Issue #46). Its diagnostics hold
 a Telemetry entry, which pushes the telemetry dashboard as a page (Issue #53; it used to be a

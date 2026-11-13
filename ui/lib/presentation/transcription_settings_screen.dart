@@ -39,6 +39,10 @@ const Key automaticDownloadKey = ValueKey<String>('automatic-download');
 /// Finds the after-meeting pass switch (#87).
 const Key afterMeetingPassKey = ValueKey<String>('after-meeting-pass');
 
+/// The after-meeting pass's model picker (#87).
+const Key afterMeetingPassModelKey =
+    ValueKey<String>('after-meeting-pass-model');
+
 /// Finds the switch that records the computer's sound (#108).
 const Key computerSoundKey = ValueKey<String>('computer-sound');
 
@@ -183,6 +187,8 @@ final class _TranscriptionSettingsScreenState
                 if (settings.computerSound.available)
                   _computerSoundTile(settings.computerSound.enabled),
                 _afterMeetingPassTile(settings.afterMeetingPass),
+                if (settings.afterMeetingPass)
+                  _afterMeetingPassModelTile(settings),
                 _keepSpeechTile(settings.keepSpeech),
               ],
             );
@@ -221,6 +227,39 @@ final class _TranscriptionSettingsScreenState
             : (bool value) =>
                 widget.controller.setAfterMeetingPass(enabled: value),
       );
+
+  /// The model the after-meeting pass re-transcribes with (#87): the recording model, or one
+  /// already on this device (a larger one gains most, as it has time after the meeting).
+  Widget _afterMeetingPassModelTile(TranscriptionSettings settings) {
+    final List<WhisperModelInfo> onDevice = settings.models
+        .where((WhisperModelInfo model) => model.onDevice)
+        .toList(growable: false);
+    final String? chosen = onDevice.any((WhisperModelInfo model) =>
+            model.fileName == settings.afterMeetingPassModel)
+        ? settings.afterMeetingPassModel
+        : null;
+    return ListTile(
+      leading: const Icon(Icons.model_training_outlined),
+      title: const Text('Model for this pass'),
+      subtitle: const Text('A larger model is slower but more accurate, and '
+          'the pass has time after the meeting. Download models above.'),
+      trailing: DropdownButton<String?>(
+        key: afterMeetingPassModelKey,
+        value: chosen,
+        onChanged: widget.controller.isBusy
+            ? null
+            : (String? fileName) =>
+                widget.controller.setAfterMeetingPassModel(fileName),
+        items: <DropdownMenuItem<String?>>[
+          const DropdownMenuItem<String?>(
+              value: null, child: Text('Same as for recording')),
+          for (final WhisperModelInfo model in onDevice)
+            DropdownMenuItem<String?>(
+                value: model.fileName, child: Text(model.name)),
+        ],
+      ),
+    );
+  }
 
   /// The speech retention window: how long a recording's speech waits for another device's
   /// recording of the same meeting before it is deleted (#93).

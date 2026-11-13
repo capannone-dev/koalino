@@ -105,6 +105,13 @@ final class TranscriptionSettingsController extends ChangeNotifier {
       _run(() => _bridge.setAfterMeetingPass(enabled: enabled),
           success: 'Saved. The next recording uses this.');
 
+  /// Chooses the after-meeting pass's model (#87), or `null` for the recording model.
+  ///
+  /// Inputs: A model on this device, or `null`. Side effects: Stores the choice and reloads.
+  Future<void> setAfterMeetingPassModel(String? fileName) =>
+      _run(() => _bridge.setAfterMeetingPassModel(fileName),
+          success: 'Saved. Meetings recorded from now on use this.');
+
   /// Turns recording the computer's sound (#108) on or off.
   ///
   /// Inputs: The new state. Side effects: Stores the choice and reloads.

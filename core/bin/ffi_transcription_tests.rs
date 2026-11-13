@@ -95,3 +95,35 @@ fn settings_show_the_result_for_this_hardware_only() {
         None
     );
 }
+
+#[test]
+fn the_pass_model_is_a_model_on_this_device_or_the_live_one() {
+    use super::{STATUS_INVALID, STATUS_OK, set_pass_model_in};
+    use crate::transcription_settings::load_settings;
+    let paths = paths("pass-model");
+    assert_eq!(set_pass_model_in(&paths, Some("ggml-base.bin")), STATUS_OK);
+    assert_eq!(
+        load_settings(&paths.settings_file)
+            .transcript_pass_model
+            .as_deref(),
+        Some("ggml-base.bin")
+    );
+    // Not downloaded here, or not a catalog model: refused, the choice kept.
+    assert_eq!(
+        set_pass_model_in(&paths, Some("ggml-large-v3-turbo.bin")),
+        STATUS_INVALID
+    );
+    assert_eq!(set_pass_model_in(&paths, Some("../x.bin")), STATUS_INVALID);
+    assert_eq!(
+        load_settings(&paths.settings_file)
+            .transcript_pass_model
+            .as_deref(),
+        Some("ggml-base.bin")
+    );
+    // None: the pass uses the live model again.
+    assert_eq!(set_pass_model_in(&paths, None), STATUS_OK);
+    assert_eq!(
+        load_settings(&paths.settings_file).transcript_pass_model,
+        None
+    );
+}

@@ -391,6 +391,12 @@ fn settings_json() -> String {
             "waiting_for_download": automatic.and_then(|choice| choice.waiting_for_download),
         },
         "after_meeting_pass": transcript_pass_enabled(&saved),
+        // The pass's own model when it is still on this device; null re-transcribes with the
+        // live model (#87).
+        "after_meeting_pass_model": saved
+            .transcript_pass_model
+            .as_deref()
+            .filter(|file| paths.locate_model(file).is_some()),
         "computer_sound": {
             "available": computer_sound_available(),
             "enabled": computer_sound_enabled(&saved),
@@ -574,6 +580,44 @@ pub extern "C" fn note_taker_set_after_meeting_pass(enabled: c_int) -> c_int {
         }
         Err(error) => {
             tracing::warn!(error = %error, "unable to store the after-meeting pass choice");
+            STATUS_FAILED
+        }
+    }
+}
+
+/// Chooses the model the after-meeting pass (#87) re-transcribes with, from the next recording.
+///
+/// Inputs: A catalog file name that is on this device, or null (or empty) for the live model.
+/// Outputs: 0, 1 when the model is unknown or not on this device, or 2 when the choice can't be
+/// stored. Side effects: Stores the choice; the pipeline is rebuilt before the next recording.
+///
+/// # Safety
+/// `file_name` must be null or a valid NUL-terminated C string for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_set_after_meeting_pass_model(
+    file_name: *const c_char,
+) -> c_int {
+    let file_name = unsafe { text_argument(file_name) }.filter(|name| !name.is_empty());
+    set_pass_model_in(&paths(), file_name)
+}
+
+/// Stores the after-meeting pass's model in a given data folder (#87).
+///
+/// Inputs: The folder's paths and a model file name on this device, or `None` for the live model.
+/// Outputs and side effects: As `note_taker_set_after_meeting_pass_model`.
+fn set_pass_model_in(paths: &TranscriptionPaths, file_name: Option<&str>) -> c_int {
+    if file_name.is_some_and(|name| paths.locate_model(name).is_none()) {
+        return STATUS_INVALID;
+    }
+    let mut saved = load_settings(&paths.settings_file);
+    saved.transcript_pass_model = file_name.map(str::to_owned);
+    match save_settings(&paths.settings_file, &saved) {
+        Ok(()) => {
+            PIPELINE_STALE.store(true, Ordering::Relaxed);
+            STATUS_OK
+        }
+        Err(error) => {
+            tracing::warn!(error = %error, "unable to store the after-meeting pass model");
             STATUS_FAILED
         }
     }

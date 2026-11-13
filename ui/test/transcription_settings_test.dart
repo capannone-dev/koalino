@@ -107,6 +107,7 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
         glossary: glossary,
         keepSpeech: SpeechRetention(days: keepSpeechDays),
         afterMeetingPass: afterMeetingPass,
+        afterMeetingPassModel: afterMeetingPassModel,
         computerSound: ComputerSoundSetting(
             available: computerSoundAvailable, enabled: computerSound),
         automatic: AutomaticModelStatus(
@@ -188,6 +189,16 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
 
   /// Whether meetings are re-transcribed after Stop, as the core holds it.
   bool afterMeetingPass = true;
+
+  /// The pass's own model, or null for the live one (#87).
+  String? afterMeetingPassModel;
+
+  @override
+  Future<int> setAfterMeetingPassModel(String? fileName) async {
+    calls.add('pass model $fileName');
+    afterMeetingPassModel = fileName;
+    return transcriptionStatusOk;
+  }
 
   /// Whether this build can record the computer's sound, and whether it does (#108).
   bool computerSoundAvailable = false;
@@ -633,6 +644,40 @@ void main() {
     expect(tester.widget<SwitchListTile>(find.byKey(afterMeetingPassKey)).value,
         isFalse,
         reason: 'the switch shows the saved choice');
+  });
+
+  testWidgets(
+      'the pass model lists models on this device and can return to the live one',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge();
+    await _pump(tester, bridge);
+    await tester.scrollUntilVisible(find.byKey(afterMeetingPassModelKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Same as for recording'), findsOneWidget);
+
+    await tester.tap(find.byKey(afterMeetingPassModelKey));
+    await tester.pumpAndSettle();
+    // Only `base` is on this device; `small` would need a download first.
+    expect(find.text('small'), findsNothing);
+    await tester.tap(find.text('base').last);
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('pass model ggml-base.bin'));
+
+    await tester.scrollUntilVisible(find.byKey(afterMeetingPassModelKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(afterMeetingPassModelKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Same as for recording').last);
+    await tester.pumpAndSettle();
+    expect(bridge.calls.last, 'pass model null');
+  });
+
+  testWidgets('the pass model is hidden while the pass is off',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()..afterMeetingPass = false;
+    await _pump(tester, bridge);
+    expect(find.byKey(afterMeetingPassModelKey), findsNothing);
   });
 
   test('settings from an older core keep the after-meeting pass on', () {

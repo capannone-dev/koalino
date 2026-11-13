@@ -246,6 +246,7 @@ final class TranscriptionSettings {
     this.glossary = const <String>[],
     this.keepSpeech = const SpeechRetention(),
     this.afterMeetingPass = true,
+    this.afterMeetingPassModel,
     this.computerSound = const ComputerSoundSetting(),
     this.automatic = const AutomaticModelStatus(),
   });
@@ -275,6 +276,7 @@ final class TranscriptionSettings {
           : SpeechRetention.fromJson(
               json['keep_speech']! as Map<String, Object?>),
       afterMeetingPass: json['after_meeting_pass'] as bool? ?? true,
+      afterMeetingPassModel: json['after_meeting_pass_model'] as String?,
       computerSound: json['computer_sound'] == null
           ? const ComputerSoundSetting()
           : ComputerSoundSetting.fromJson(
@@ -323,6 +325,10 @@ final class TranscriptionSettings {
   /// Whether each meeting is transcribed again after Stop, with longer context (#87). On by
   /// default; a phone runs it only while charging.
   final bool afterMeetingPass;
+
+  /// The catalog file name of the model the pass re-transcribes with, or `null` for the model
+  /// recordings use (#87).
+  final String? afterMeetingPassModel;
 
   /// Whether recordings also capture what the computer plays (#108).
   final ComputerSoundSetting computerSound;
@@ -402,6 +408,11 @@ abstract interface class TranscriptionSettingsBridge {
   /// Turns recording the computer's sound (#108) on or off from the next start or resume.
   /// Outputs: A core status. Side effects: Stores the choice.
   Future<int> setComputerSound({required bool enabled});
+
+  /// Chooses the after-meeting pass's model (#87): a model on this device, or `null` for the one
+  /// recordings use. Outputs: A core status, `transcriptionStatusInvalid` for a model not here.
+  /// Side effects: Stores the choice for the next recording.
+  Future<int> setAfterMeetingPassModel(String? fileName);
 
   /// Chooses "Automatic" (#106): the model suggested for this device.
   /// Outputs: A core status. Side effects: Forgets the hand-picked model.
@@ -498,6 +509,10 @@ final class RustTranscriptionSettingsBridge
         .lookupFunction<Int32 Function(Int32), int Function(int)>(
             'note_taker_set_after_meeting_pass')(value));
   }
+
+  @override
+  Future<int> setAfterMeetingPassModel(String? fileName) => Isolate.run(() =>
+      _callWithText('note_taker_set_after_meeting_pass_model', fileName ?? ''));
 
   @override
   Future<int> setComputerSound({required bool enabled}) {
