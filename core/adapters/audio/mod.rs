@@ -17,6 +17,10 @@ pub mod fake_microphone;
 pub mod live_microphone;
 /// Implements `AudioCapture` using a deterministic local stream seam pending OS integration.
 pub mod local_recorder;
+/// Which apps capture the microphone, for noticing calls (#111).
+pub mod microphone_users;
+#[cfg(test)]
+mod microphone_users_tests;
 /// Compresses kept speech with Opus before it is sealed or sent (#88).
 pub mod opus_speech;
 /// Reads 16 kHz mono PCM from WAV files or raw streams for file and piped recordings.
