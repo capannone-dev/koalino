@@ -2904,3 +2904,30 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
 - **Checked:** unit tests for the exchange, the tools and the switch; the binary answering over
   stdio on a scratch database. Not tried with a live Claude session, to keep meeting content
   away from a cloud model without the owner's go-ahead.
+
+## 2026-11-13 — #111 Offer to record a call, and stop when it ends
+
+- **How a call is noticed:** the desktop asks the system which apps capture the microphone every
+  3 s.
+  - Linux: `pactl -f json`, for PulseAudio or PipeWire's pulse server. Paused (corked) streams and
+    streams on monitor sources do not count.
+  - Windows: `reg query` on the microphone consent store.
+  - Running the standard tools needs no audio or registry crate, and one look every few seconds is
+    cheap.
+- **What counts:** a known call app (Zoom, Teams, Webex, Slack, Discord, Skype, Signal and
+  others) or a browser, since Meet, Jitsi and Teams run in browsers. The app's own process never
+  counts. A call starts after 3 s and ends after 20 s without a call app, so muting or switching
+  devices does not end it.
+- **Never records by itself:** the app shows "`<app>` is using the microphone. Record this call?"
+  above every screen. Only Record starts a recording, titled "`<app>` call".
+- **Auto-stop** applies only to a recording started from the offer, and it can be turned off. A
+  recording the owner started is never stopped by a call. Both switches are in Settings and on by
+  default.
+- **Checked on deb-gui:** a silent `parecord` stream named "zoom" brought the offer, and Record
+  started "Zoom call". Ending that stream stopped the recording 20 s later and released every
+  capture stream. Nothing was played.
+- **Not yet:**
+  - a system notification while the window is hidden;
+  - Windows on a VM: win11's snapshot needs a missing `virtio-win.iso`, so the consent-store parser
+    is tested only on the documented output;
+  - Android.
