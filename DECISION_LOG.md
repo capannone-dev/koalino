@@ -2939,6 +2939,31 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
     is tested only on the documented output;
   - Android.
 
+## 2026-11-13 — #111 Windows: notice calls from the audio sessions
+
+- **Problem:** on win11 (Windows 11 Home 26H2, build 26300) the microphone consent store has no
+  `LastUsedTimeStart`/`LastUsedTimeStop` values any more; usage moved to a database under
+  `C:\ProgramData\Microsoft\Windows\CapabilityAccessManager`. With Edge holding the microphone,
+  `reg query` saw nothing and no offer appeared.
+- **Fix:** the core also lists the active WASAPI capture sessions (`IMMDeviceEnumerator` →
+  `IAudioSessionManager2` → active, non-system sessions → process image name). The process ID comes
+  along, so the app's own recording is left out. Store apps show as their own process. `reg` is
+  now only the fallback when the sessions cannot be read (logged once): on the single-core win11
+  VM, spawning it took 10.6 s per look against 4 ms for the sessions, so the busy app managed one
+  look a minute, too few for the 3 s it takes to notice a call.
+- **Dependencies:** none new. The `windows` crate approved for UI Automation (#113) gains the
+  `Win32_Media_Audio`, `Win32_System_Threading` and COM/variant features.
+- **Banner bug:** `NoCallNotifier` (Windows) answered `dismissed` at once, so the controller
+  withdrew the offer the moment it appeared. A missing `notify-send` on Linux did the same. A new
+  answer, `unavailable`, now leaves the banner up.
+- **Log:** the core logs at info when a call app takes or leaves the microphone, naming only the
+  app kind (`Edge`, `Teams`), never a window or person.
+- **Checked on win11:** a page in Edge holding the microphone. The app showed "Edge is using the
+  microphone. Record this call?", and Record started "Edge call", which saved when stopped. The
+  auto-stop was not run there: Edge's other tabs are the owner's own. It is the same code as on
+  Linux. Audio sessions are per logon session, so a look from SSH sees none of the desktop's
+  apps.
+
 ## 2026-11-13 — #116 follow-up: a clip for voices only the final pass found
 
 - The final speaker pass can find a voice the live pass never clustered. Such a voice had no

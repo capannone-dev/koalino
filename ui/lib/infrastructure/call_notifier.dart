@@ -14,6 +14,10 @@ enum CallNotificationAnswer {
 
   /// Tapped Not now, closed it, or it expired or was withdrawn.
   dismissed,
+
+  /// No notification could be shown (no notifier on this platform, or `notify-send` missing or
+  /// failing); the in-app banner alone offers, so it must stay.
+  unavailable,
 }
 
 /// Shows and withdraws the call offer outside the app.
@@ -32,7 +36,7 @@ final class NoCallNotifier implements CallNotifier {
 
   @override
   Future<CallNotificationAnswer> offer(String app) async =>
-      CallNotificationAnswer.dismissed;
+      CallNotificationAnswer.unavailable;
 
   @override
   void withdraw() {}
@@ -62,8 +66,8 @@ final class NotifySendCallNotifier implements CallNotifier {
         'Record this call?',
       ];
 
-  /// Side effects: Starts `notify-send` and waits for its answer; a missing tool counts as
-  /// dismissed.
+  /// Side effects: Starts `notify-send` and waits for its answer; a missing tool, or one that
+  /// fails, answers `unavailable`.
   @override
   Future<CallNotificationAnswer> offer(String app) async {
     withdraw();
@@ -71,15 +75,19 @@ final class NotifySendCallNotifier implements CallNotifier {
     try {
       process = await _start('notify-send', argumentsFor(app));
     } on ProcessException {
-      return CallNotificationAnswer.dismissed;
+      return CallNotificationAnswer.unavailable;
     }
     _shown = process;
     final String chosen =
         (await process.stdout.transform(utf8.decoder).join()).trim();
     unawaited(process.stderr.drain<void>());
-    await process.exitCode;
-    if (identical(_shown, process)) {
+    final int exitCode = await process.exitCode;
+    final bool withdrawn = !identical(_shown, process);
+    if (!withdrawn) {
       _shown = null;
+    }
+    if (exitCode != 0 && !withdrawn) {
+      return CallNotificationAnswer.unavailable;
     }
     return chosen == 'record'
         ? CallNotificationAnswer.record

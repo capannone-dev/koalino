@@ -135,6 +135,9 @@ final class CallWatchController extends ChangeNotifier {
         await acceptOffer();
       case CallNotificationAnswer.dismissed:
         dismissOffer();
+      case CallNotificationAnswer.unavailable:
+        // No notification was shown; the banner still offers.
+        break;
     }
   }
 

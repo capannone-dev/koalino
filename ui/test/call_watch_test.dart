@@ -154,6 +154,20 @@ void main() {
     expect(watch.offeredApp, isNull);
   });
 
+  test('without a system notification the banner keeps the offer (Windows)',
+      () async {
+    final CallWatchController bannerOnly = CallWatchController(
+      bridge: CallWatchBridge(call: core.call),
+      recordingController: recording,
+      interval: const Duration(hours: 1),
+    );
+    addTearDown(bannerOnly.dispose);
+    core.polls.add(poll('started', app: 'Edge'));
+    await bannerOnly.start();
+    await pumpEventQueue();
+    expect(bannerOnly.offeredApp, 'Edge');
+  });
+
   test('notify-send gets the offer with its two buttons', () {
     expect(NotifySendCallNotifier.argumentsFor('Teams'), <String>[
       '--app-name=Koalino',
