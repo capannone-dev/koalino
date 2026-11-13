@@ -369,6 +369,12 @@ and how to connect Claude Code or another MCP client. `mcp.rs` is the `note_take
 assistant starts over stdio (logging to the file only, refusing a database path that does not
 exist), and `ffi_assistant_access.rs` gives the app `note_taker_assistant_access`.
 
+`call_watch_commands.rs` (#111) is the desktop app's call watch: `CallWatchSettings`
+(`<db>.call-watch.json`: `offer` and `auto_stop`, both on by default) and `CallWatcher`, which answers
+`poll`, `get` and `set`. A poll reads the microphone's users and reports a call's `started` or
+`ended` event once. `ffi_call_watch.rs` gives the app `note_taker_call_watch`; it needs no open
+runtime.
+
 `clear_copies.rs` (#99) gives the app's viewers clear copies of sealed attachments: `ffi.rs`'s
 `note_taker_clear_copy` looks an attachment up by ID and decrypts it into the private
 `clear-copies` folder beside the attachment folder (`<attachment ID>-<name>`, 0600). A copy is

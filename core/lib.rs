@@ -13,6 +13,12 @@ pub mod auto_summaries;
 #[cfg(test)]
 #[path = "bin/auto_summaries_tests.rs"]
 mod auto_summaries_tests;
+/// Notices calls for the desktop app: Settings and polls (#111).
+#[path = "bin/call_watch_commands.rs"]
+pub mod call_watch_commands;
+#[cfg(test)]
+#[path = "bin/call_watch_commands_tests.rs"]
+mod call_watch_commands_tests;
 /// Clear copies of sealed attachments for the app's viewers (#99).
 #[path = "bin/clear_copies.rs"]
 pub mod clear_copies;
@@ -49,6 +55,9 @@ pub mod ffi_android;
 /// The assistant access setting over the C ABI (#112).
 #[path = "bin/ffi_assistant_access.rs"]
 pub mod ffi_assistant_access;
+/// The call watch over the C ABI (#111).
+#[path = "bin/ffi_call_watch.rs"]
+pub mod ffi_call_watch;
 /// Chat with notes over the C ABI (#97).
 #[path = "bin/ffi_chat.rs"]
 pub mod ffi_chat;

@@ -277,6 +277,18 @@ and meeting summaries" below). Keys are write-only.
   writes the folder at once) or `{"command":"sync_now"}`. The answer is the status of
   `GET /api/settings/notes-folder` below. Extra error code: `runtime_unavailable`.
 
+### Call watch C ABI (#111)
+
+- `char *note_taker_call_watch(const char *request_json)` returns caller-freed JSON. The requests:
+  - `{"command":"poll"}` takes one look at the apps capturing the microphone (it runs `pactl` on
+    Linux and `reg` on Windows, so call it off the UI thread). It answers
+    `{"ok":true,"available","in_call","app","event"}`, where `event` is `started` or `ended` on
+    the look that noticed it, else null. `available` is false where the system cannot tell.
+  - `{"command":"get"}` and `{"command":"set","offer"?,"auto_stop"?}` answer
+    `{"ok":true,"offer","auto_stop"}`.
+- Error codes: `invalid_request`, `storage_failed`, `runtime_unavailable`. No open runtime is
+  needed.
+
 ### Assistant access C ABI (#112)
 
 - `char *note_taker_assistant_access(const char *request_json)` runs `{"command":"get"}` or
