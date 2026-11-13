@@ -1,14 +1,12 @@
-//! Specifies the LLM adapters (#95): the requests they build for OpenAI-compatible servers and
-//! Anthropic's Messages API, how they read answers and errors, and one real HTTP round trip
-//! against a local mock server. No request leaves the machine.
+//! Specifies the LLM adapters (#95): the requests they build for OpenAI-compatible servers, how
+//! they read answers and errors, that no API key is ever sent, and real HTTP round trips against a
+//! local mock server. No request leaves the machine.
 
 use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
-use zeroize::Zeroizing;
 
 use super::{
-    anthropic_messages::{ANTHROPIC_VERSION, AnthropicMessagesEngine},
     base64::encode_base64,
     engine_for,
     openai_compatible::OpenAiCompatibleEngine,
@@ -131,7 +129,6 @@ fn an_openai_compatible_request_carries_system_text_and_data_url_images() {
             "https://api.mistral.ai/v1",
             "mistral-large",
         ),
-        Some(Zeroizing::new("sk-test".to_owned())),
         Arc::new(transport.clone()),
     );
 
@@ -140,7 +137,11 @@ fn an_openai_compatible_request_carries_system_text_and_data_url_images() {
     assert_eq!(answer.map(|answer| answer.text), Ok("Notes".to_owned()));
     let (url, headers, body) = transport.only_request();
     assert_eq!(url, "https://api.mistral.ai/v1/chat/completions");
-    assert_eq!(header(&headers, "authorization"), Some("Bearer sk-test"));
+    assert_eq!(
+        header(&headers, "authorization"),
+        None,
+        "no API key is sent"
+    );
     assert_eq!(body["model"], "mistral-large");
     assert_eq!(body["stream"], false);
     assert_eq!(
@@ -169,7 +170,6 @@ fn a_local_server_needs_no_key_takes_plain_text_and_its_path_is_completed() {
             "http://192.168.1.20:11434",
             "llama3.1:8b",
         ),
-        None,
         Arc::new(transport.clone()),
     );
     let mut request = request_with_image();
@@ -200,109 +200,6 @@ fn a_local_server_needs_no_key_takes_plain_text_and_its_path_is_completed() {
 }
 
 #[test]
-fn an_anthropic_request_uses_the_messages_api_with_images_before_the_text() {
-    let transport = RecordingTransport::answering(
-        200,
-        json!({
-            "content": [
-                {"type": "thinking", "thinking": ""},
-                {"type": "text", "text": "Part one. "},
-                {"type": "text", "text": "Part two."}
-            ],
-            "stop_reason": "end_turn"
-        }),
-    );
-    let engine = AnthropicMessagesEngine::new(
-        &connection(
-            LlmKind::Anthropic,
-            "https://api.anthropic.com",
-            "claude-opus-5-5",
-        ),
-        Zeroizing::new("ak-test".to_owned()),
-        Arc::new(transport.clone()),
-    );
-
-    let answer = engine.complete(&request_with_image());
-
-    assert_eq!(
-        answer.map(|answer| answer.text),
-        Ok("Part one. Part two.".to_owned())
-    );
-    let (url, headers, body) = transport.only_request();
-    assert_eq!(url, "https://api.anthropic.com/v1/messages");
-    assert_eq!(header(&headers, "x-api-key"), Some("ak-test"));
-    assert_eq!(
-        header(&headers, "anthropic-version"),
-        Some(ANTHROPIC_VERSION)
-    );
-    assert_eq!(header(&headers, "authorization"), None);
-    assert_eq!(body["model"], "claude-opus-5-5");
-    assert_eq!(body["max_tokens"], 4_000);
-    assert_eq!(body["system"], "Summarize.");
-    assert_eq!(
-        body["messages"][0]["content"],
-        json!([
-            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AQID"}},
-            {"type": "text", "text": "Transcript"}
-        ])
-    );
-    assert_eq!(
-        header(&headers, "anthropic-beta"),
-        Some("server-side-fallback-2026-07-01"),
-        "a declined request is retried on a fallback model"
-    );
-    assert_eq!(body["fallbacks"], "default");
-    assert!(body.get("temperature").is_none());
-}
-
-#[test]
-fn an_anthropic_refusal_or_length_stop_is_reported() {
-    let refusing =
-        RecordingTransport::answering(200, json!({"content": [], "stop_reason": "refusal"}));
-    let engine = AnthropicMessagesEngine::new(
-        &connection(
-            LlmKind::Anthropic,
-            "https://api.anthropic.com/v1",
-            "claude-haiku-5-5",
-        ),
-        Zeroizing::new("k".to_owned()),
-        Arc::new(refusing.clone()),
-    );
-    assert_eq!(
-        engine.complete(&request_with_image()),
-        Err(LlmError::Refused)
-    );
-    let (url, headers, body) = refusing.only_request();
-    assert_eq!(url, "https://api.anthropic.com/v1/messages");
-    assert_eq!(
-        header(&headers, "anthropic-beta"),
-        None,
-        "no fallback for this model"
-    );
-    assert!(body.get("fallbacks").is_none());
-
-    let cut = RecordingTransport::answering(
-        200,
-        json!({"content": [{"type": "text", "text": "Half"}], "stop_reason": "max_tokens"}),
-    );
-    let engine = AnthropicMessagesEngine::new(
-        &connection(
-            LlmKind::Anthropic,
-            "https://api.anthropic.com",
-            "claude-haiku-5-5",
-        ),
-        Zeroizing::new("k".to_owned()),
-        Arc::new(cut),
-    );
-    assert_eq!(
-        engine
-            .complete(&request_with_image())
-            .map(|answer| answer.truncated),
-        Ok(true)
-    );
-}
-
-#[test]
 fn http_errors_map_to_portable_errors_keeping_the_reason_out_of_their_text() {
     let cases = [
         (401, LlmError::Unauthorized),
@@ -329,7 +226,6 @@ fn http_errors_map_to_portable_errors_keeping_the_reason_out_of_their_text() {
                 "https://api.openai.com/v1",
                 "gpt-5-mini",
             ),
-            Some(Zeroizing::new("k".to_owned())),
             Arc::new(transport),
         );
         let error = engine.complete(&request_with_image());
@@ -343,47 +239,11 @@ fn http_errors_map_to_portable_errors_keeping_the_reason_out_of_their_text() {
             "https://api.openai.com/v1",
             "gpt-5-mini",
         ),
-        None,
         Arc::new(empty),
     );
     assert_eq!(
         engine.complete(&request_with_image()),
         Err(LlmError::InvalidResponse)
-    );
-}
-
-#[test]
-fn an_anthropic_rejection_keeps_the_servers_reason_for_the_owner() {
-    let transport = RecordingTransport::answering(
-        400,
-        json!({"type": "error", "error": {
-            "type": "invalid_request_error",
-            "message": "Your credit balance is too low to access the Anthropic API."
-        }}),
-    );
-    let engine = AnthropicMessagesEngine::new(
-        &connection(
-            LlmKind::Anthropic,
-            "https://api.anthropic.com",
-            "claude-opus-5-5",
-        ),
-        Zeroizing::new("k".to_owned()),
-        Arc::new(transport),
-    );
-
-    let error = engine.complete(&request_with_image());
-
-    let expected = LlmError::Rejected {
-        status: 400,
-        provider_reason: Some(
-            "invalid_request_error: Your credit balance is too low to access the Anthropic API."
-                .to_owned(),
-        ),
-    };
-    assert_eq!(error, Err(expected.clone()));
-    assert!(
-        !format!("{expected}").contains("credit"),
-        "logs use the text, which leaves the reason out"
     );
 }
 
@@ -404,25 +264,6 @@ fn a_provider_reason_is_one_short_line_or_nothing() {
     let reason = provider_reason(&long).unwrap_or_default();
     assert_eq!(reason.chars().count(), 300);
     assert!(reason.ends_with('…'));
-}
-
-#[test]
-fn an_anthropic_connection_without_a_key_is_refused_before_anything_is_sent() {
-    let anthropic = connection(
-        LlmKind::Anthropic,
-        "https://api.anthropic.com",
-        "claude-opus-5-5",
-    );
-    assert!(matches!(
-        engine_for(&anthropic, None),
-        Err(LlmError::MissingKey)
-    ));
-    let local = connection(
-        LlmKind::OpenAiCompatible,
-        "http://127.0.0.1:8080/v1",
-        "local",
-    );
-    assert!(engine_for(&local, None).is_ok());
 }
 
 #[test]
@@ -468,11 +309,7 @@ fn the_reqwest_transport_round_trips_with_a_local_server() {
         "llama",
     );
     let transport = ReqwestLlmTransport::new().unwrap_or_else(|error| panic!("client: {error}"));
-    let engine = OpenAiCompatibleEngine::new(
-        &local,
-        Some(Zeroizing::new("lan-key".to_owned())),
-        Arc::new(transport),
-    );
+    let engine = OpenAiCompatibleEngine::new(&local, Arc::new(transport));
 
     let answer = std::thread::spawn(move || engine.complete(&request_with_image()))
         .join()
@@ -484,7 +321,7 @@ fn the_reqwest_transport_round_trips_with_a_local_server() {
     );
     let received = received.lock().ok().and_then(|slot| slot.clone());
     let (authorization, body) = received.unwrap_or_else(|| panic!("the server saw the request"));
-    assert_eq!(authorization.as_deref(), Some("Bearer lan-key"));
+    assert_eq!(authorization, None, "no API key is sent");
     assert_eq!(body["model"], "llama");
 }
 
@@ -493,7 +330,7 @@ fn the_reqwest_transport_reads_an_error_reply_for_its_reason() {
     let runtime = tokio::runtime::Runtime::new().unwrap_or_else(|error| panic!("runtime: {error}"));
     let address = runtime.block_on(async move {
         let router = axum::Router::new().route(
-            "/v1/messages",
+            "/v1/chat/completions",
             axum::routing::post(|| async {
                 (
                     axum::http::StatusCode::BAD_REQUEST,
@@ -514,10 +351,13 @@ fn the_reqwest_transport_reads_an_error_reply_for_its_reason() {
         });
         address
     });
-    let local = connection(LlmKind::Anthropic, &format!("http://{address}"), "claude");
+    let local = connection(
+        LlmKind::OpenAiCompatible,
+        &format!("http://{address}/v1"),
+        "llama",
+    );
     let transport = ReqwestLlmTransport::new().unwrap_or_else(|error| panic!("client: {error}"));
-    let engine =
-        AnthropicMessagesEngine::new(&local, Zeroizing::new("k".to_owned()), Arc::new(transport));
+    let engine = OpenAiCompatibleEngine::new(&local, Arc::new(transport));
 
     let answer = std::thread::spawn(move || engine.complete(&request_with_image()))
         .join()
@@ -530,4 +370,14 @@ fn the_reqwest_transport_reads_an_error_reply_for_its_reason() {
             provider_reason: Some("invalid_request_error: max_tokens: too large".to_owned()),
         })
     );
+}
+
+#[test]
+fn every_server_connection_builds_without_a_key() {
+    let local = connection(
+        LlmKind::OpenAiCompatible,
+        "http://127.0.0.1:8080/v1",
+        "local",
+    );
+    assert!(engine_for(&local).is_ok());
 }

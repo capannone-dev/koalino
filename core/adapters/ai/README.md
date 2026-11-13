@@ -32,8 +32,7 @@ path and run `cargo test --features local-ai`. No model path is read or model co
 when the feature is absent or the environment variable is unset.
 
 When supplied, portable `TranscriptionContext.previous_text` becomes whisper.cpp's initial prompt.
-The OpenAI adapter maps the same value to its documented multipart `prompt` field. Neither adapter
-logs the context text.
+The adapter never logs the context text.
 
 ## Efficient mode on phones (#75) and the GPU crash guard (#76)
 
@@ -51,5 +50,5 @@ The patched whisper.cpp is in `third_party/whisper-rs-sys`; its README lists the
 ## Language models (#95)
 
 `llm/` holds the adapters that send meeting text and photos to a language model for summaries:
-OpenAI-compatible Chat Completions (OpenAI, Mistral, local LAN servers) and Anthropic's Messages
-API. See `llm/README.md`.
+OpenAI-compatible Chat Completions servers on this device or the local network, and Claude Code
+and Codex signed in on this computer. No API keys (#117). See `llm/README.md`.

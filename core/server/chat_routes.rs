@@ -8,7 +8,7 @@
 //!
 //! Messages are as in `bin/notes_chat_commands.rs`. Failures answer `{"ok":false,"error_code",
 //! "error"}`: 400 `invalid_request`, `empty`, `too_long`; 404 `meeting_not_found`,
-//! `project_not_found`, `connection_not_found`; 409 `no_connection`, `missing_key`,
+//! `project_not_found`, `connection_not_found`; 409 `no_connection`,
 //! `nothing_to_chat`, `context_too_small`; 502 `llm_*`; 503 `unavailable` without AI settings.
 //! The model's answer is awaited on a blocking thread; the store's lock is held only to read
 //! and to write. Questions and answers are never logged.
@@ -52,9 +52,7 @@ fn status_of(answer: &Value) -> StatusCode {
     match answer["error_code"].as_str().unwrap_or_default() {
         "invalid_request" | "empty" | "too_long" => StatusCode::BAD_REQUEST,
         "meeting_not_found" | "project_not_found" | "connection_not_found" => StatusCode::NOT_FOUND,
-        "no_connection" | "missing_key" | "nothing_to_chat" | "context_too_small" => {
-            StatusCode::CONFLICT
-        }
+        "no_connection" | "nothing_to_chat" | "context_too_small" => StatusCode::CONFLICT,
         code if code.starts_with("llm_") => StatusCode::BAD_GATEWAY,
         "unavailable" => StatusCode::SERVICE_UNAVAILABLE,
         _ => StatusCode::INTERNAL_SERVER_ERROR,

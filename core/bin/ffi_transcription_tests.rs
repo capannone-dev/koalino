@@ -5,9 +5,7 @@
 use super::{efficient_gpu_status, speed_check_message_in, speed_check_target_in};
 use crate::{
     domain::whisper_speed_check::{SpeedCheckRecord, with_result},
-    transcription_settings::{
-        SavedProvider, SavedTranscriptionSettings, TranscriptionPaths, save_settings,
-    },
+    transcription_settings::{SavedTranscriptionSettings, TranscriptionPaths, save_settings},
 };
 
 /// A data folder whose only model is the shipped `base`, so Automatic runs `base` on any host.
@@ -41,15 +39,8 @@ fn automatic_on_this_device_is_the_target() {
 }
 
 #[test]
-fn openai_or_a_hand_picked_model_has_no_target() {
+fn a_hand_picked_model_has_no_target() {
     let paths = paths("no-target");
-    let openai = SavedTranscriptionSettings {
-        provider: Some(SavedProvider::Openai),
-        ..SavedTranscriptionSettings::default()
-    };
-    save_settings(&paths.settings_file, &openai).unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(speed_check_target_in(&paths), None);
-
     let hand_picked = SavedTranscriptionSettings {
         whisper_model: Some("ggml-base.bin".to_owned()),
         ..SavedTranscriptionSettings::default()

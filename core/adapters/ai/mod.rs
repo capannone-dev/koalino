@@ -18,8 +18,6 @@ pub mod llm;
 /// Implements the portable transcription port with a locally loaded whisper.cpp model.
 #[cfg(feature = "local-ai")]
 pub mod local_whisper_cpp;
-/// Implements the portable transcription port through OpenAI's multipart Whisper API.
-pub mod openai_whisper_adapter;
 /// Opens the OpenCL library only when called, so the build starts on phones without it.
 #[cfg(all(feature = "mobile-gpu", target_os = "android"))]
 pub mod opencl_loader_shim;
@@ -36,8 +34,6 @@ pub mod whisper_word_timing;
 mod compute_resources_tests;
 #[cfg(all(test, feature = "local-ai"))]
 mod local_whisper_cpp_tests;
-#[cfg(test)]
-mod openai_whisper_adapter_tests;
 #[cfg(test)]
 mod whisper_model_download_tests;
 #[cfg(test)]

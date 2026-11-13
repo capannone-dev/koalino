@@ -28,7 +28,7 @@ pub struct LlmHttpResponse {
 pub trait LlmHttpTransport: Send + Sync {
     /// Posts `body` to `url` with `headers` and waits for the reply.
     ///
-    /// Inputs: The URL, headers (some hold the API key) and body. Outputs: The reply, or
+    /// Inputs: The URL, headers (never a secret: the app keeps no API key) and body. Outputs: The reply, or
     /// `Unreachable`. Side effects: One HTTP request; nothing is logged.
     fn post_json(
         &self,
@@ -44,7 +44,8 @@ pub struct ReqwestLlmTransport {
 }
 
 impl ReqwestLlmTransport {
-    /// Builds a client with timeouts and no redirects, so a key is never sent to another host.
+    /// Builds a client with timeouts and no redirects, so meeting text never follows a redirect
+    /// to another host.
     ///
     /// Inputs: None. Outputs: The transport, or `Unreachable`. Side effects: None.
     pub fn new() -> Result<Self, LlmError> {

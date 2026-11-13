@@ -1,8 +1,8 @@
 //! Composes the live meeting pipeline from environment configuration for the FFI, CLI, and daemon.
 //!
 //! This is the only place that names concrete AI adapters. It reads the pipeline variables,
-//! selects a transcription engine (whisper.cpp in `local-ai` builds, or OpenAI when a key is
-//! configured), and spawns a `RecordingController` whose worker owns its own SQLite connections
+//! selects the transcription engine (whisper.cpp in `local-ai` builds; the app keeps no API keys,
+//! so there is no cloud transcription), and spawns a `RecordingController` whose worker owns its own SQLite connections
 //! (sharing the already-unlocked embedding cipher) and the encrypted voice library as matcher.
 //! Diarization runs when requested, in a `diarization` build, with both ONNX models configured;
 //! otherwise it logs why not and segments are `Unattributed`. Model loading happens on the worker
@@ -10,11 +10,8 @@
 //!
 //! | Variable | Values | Default |
 //! | --- | --- | --- |
-//! | `NOTE_TAKER_TRANSCRIPTION_PROVIDER` | `auto`, `local`, `openai` | `auto` (local model, else OpenAI key) |
 //! | `NOTE_TAKER_WHISPER_MODEL` | path to a GGML/GGUF model (`local-ai` builds) | unset |
 //! | `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` or a 2–3 letter Whisper language code (`it`, `en`); the apps' choice overrides it per chunk | `auto` |
-//! | `OPENAI_API_KEY` | OpenAI key (never logged) | unset |
-//! | `NOTE_TAKER_OPENAI_WHISPER_MODEL`, `NOTE_TAKER_OPENAI_LANGUAGE` | OpenAI model and language | `whisper-1`, auto |
 //! | `NOTE_TAKER_ENABLE_DIARIZATION` | boolean | `false` |
 //! | `NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL`, `NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL` | paths to the exported ONNX models (`diarization` builds) | unset |
 //! | `NOTE_TAKER_VAD_ENABLED` | boolean; `false` cuts near every 15 s | `true` |
@@ -29,9 +26,6 @@ use anyhow::{Context, Result, anyhow, bail};
 use crate::transcription_settings::settings_file_for;
 use crate::{
     adapters::{
-        ai::openai_whisper_adapter::{
-            OpenAiWhisperConfig, OpenAiWhisperTranscriptionEngine, ReqwestOpenAiHttpClient,
-        },
         audio::{
             chunk_audio_store::ChunkAudioStore, retained_audio_store::RetainedAudioStore,
             retained_speech_writer::RetainedSpeechWriter, vad_chunker::VadConfig,
@@ -78,23 +72,10 @@ mod tests;
 /// Estimated draw of on-device whisper.cpp, which runs on the CPU: the same 5 W the compute
 /// router assumes for CPU work.
 pub const LOCAL_TRANSCRIPTION_POWER_MILLIWATTS: f32 = 5_000.0;
-/// Estimated draw while a chunk is uploaded and the provider transcribes it: the device mostly
-/// waits on the network, so a fifth of the local estimate.
-pub const CLOUD_TRANSCRIPTION_POWER_MILLIWATTS: f32 = 1_000.0;
-
-/// Selects the transcription provider.
-pub const TRANSCRIPTION_PROVIDER_VARIABLE: &str = "NOTE_TAKER_TRANSCRIPTION_PROVIDER";
 /// Path of the local whisper.cpp model.
 pub const WHISPER_MODEL_VARIABLE: &str = "NOTE_TAKER_WHISPER_MODEL";
-/// OpenAI API key.
-pub const OPENAI_API_KEY_VARIABLE: &str = "OPENAI_API_KEY";
-/// OpenAI transcription model.
-pub const OPENAI_MODEL_VARIABLE: &str = "NOTE_TAKER_OPENAI_WHISPER_MODEL";
 /// Local Whisper transcription language: `auto` or a Whisper language code such as `it` or `en`.
 pub const WHISPER_LANGUAGE_VARIABLE: &str = "NOTE_TAKER_WHISPER_LANGUAGE";
-
-/// OpenAI transcription language.
-pub const OPENAI_LANGUAGE_VARIABLE: &str = "NOTE_TAKER_OPENAI_LANGUAGE";
 /// Requests speaker diarization.
 pub const ENABLE_DIARIZATION_VARIABLE: &str = "NOTE_TAKER_ENABLE_DIARIZATION";
 /// Path of the exported segmentation model.
@@ -121,35 +102,17 @@ pub type ComposedDiarizationEngine =
 pub type ComposedDiarizationEngine =
     crate::application::pipeline::pipeline_factory::NoDiarizationEngine;
 
-/// Which transcription engine the pipeline should use.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum TranscriptionProvider {
-    /// A local model when configured, otherwise OpenAI when a key is configured.
-    Auto,
-    /// Only the local whisper.cpp model.
-    Local,
-    /// Only OpenAI (chunk audio leaves the device).
-    OpenAi,
-}
-
 /// Pipeline settings read from the environment.
 #[derive(Clone)]
 pub struct PipelineConfig {
-    transcription_provider: TranscriptionProvider,
     whisper_model_path: Option<PathBuf>,
     /// Always passed to whisper.cpp, whose own default (`en`) would force English output; also
     /// the language of recordings without a chosen one.
     whisper_language: TranscriptionLanguage,
-    /// Secret; excluded from `Debug`.
-    openai_api_key: Option<String>,
-    openai_model: String,
-    openai_language: Option<String>,
     diarization_requested: bool,
     diarization_segmentation_model_path: Option<PathBuf>,
     diarization_embedding_model_path: Option<PathBuf>,
     vad_enabled: bool,
-    /// Whether a chunk OpenAI can't transcribe falls back to the local model (Settings only).
-    cloud_fallback: bool,
     /// True when local transcription should use efficient mode on a phone GPU.
     efficient_gpu: bool,
     /// The file recording an unfinished GPU attempt; `None` skips the crash check.
@@ -161,19 +124,12 @@ pub struct PipelineConfig {
 }
 
 impl std::fmt::Debug for PipelineConfig {
-    /// Prints the configuration with the API key redacted.
+    /// Prints the configuration.
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("PipelineConfig")
-            .field("transcription_provider", &self.transcription_provider)
             .field("whisper_model_path", &self.whisper_model_path)
             .field("whisper_language", &self.whisper_language)
-            .field(
-                "openai_api_key",
-                &self.openai_api_key.as_ref().map(|_| "<redacted>"),
-            )
-            .field("openai_model", &self.openai_model)
-            .field("openai_language", &self.openai_language)
             .field("diarization_requested", &self.diarization_requested)
             .field(
                 "diarization_segmentation_model_path",
@@ -211,24 +167,9 @@ impl PipelineConfig {
     /// Side effects: None beyond `lookup`.
     pub fn from_lookup(lookup: impl Fn(&str) -> Option<String>) -> Result<Self> {
         let read = |name: &str| lookup(name).filter(|value| !value.trim().is_empty());
-        let transcription_provider = match read(TRANSCRIPTION_PROVIDER_VARIABLE)
-            .map(|value| value.trim().to_ascii_lowercase())
-            .as_deref()
-        {
-            None | Some("auto") => TranscriptionProvider::Auto,
-            Some("local") => TranscriptionProvider::Local,
-            Some("openai") => TranscriptionProvider::OpenAi,
-            Some(_) => {
-                bail!("{TRANSCRIPTION_PROVIDER_VARIABLE} must be one of auto, local, or openai")
-            }
-        };
         Ok(Self {
-            transcription_provider,
             whisper_model_path: read(WHISPER_MODEL_VARIABLE).map(PathBuf::from),
             whisper_language: parse_whisper_language(read(WHISPER_LANGUAGE_VARIABLE))?,
-            openai_api_key: read(OPENAI_API_KEY_VARIABLE),
-            openai_model: read(OPENAI_MODEL_VARIABLE).unwrap_or_else(|| "whisper-1".to_owned()),
-            openai_language: read(OPENAI_LANGUAGE_VARIABLE),
             diarization_requested: parse_flag(
                 ENABLE_DIARIZATION_VARIABLE,
                 read(ENABLE_DIARIZATION_VARIABLE),
@@ -239,7 +180,6 @@ impl PipelineConfig {
             diarization_embedding_model_path: read(DIARIZATION_EMBEDDING_MODEL_VARIABLE)
                 .map(PathBuf::from),
             vad_enabled: parse_flag(VAD_ENABLED_VARIABLE, read(VAD_ENABLED_VARIABLE), true)?,
-            cloud_fallback: false,
             efficient_gpu: false,
             gpu_attempt_marker: None,
             // On everywhere: phones run it from the charging job (#87 step 2), which processes
@@ -264,55 +204,27 @@ impl PipelineConfig {
     }
 
     /// Lists the transcription models this configuration can run, for the device manifest
-    /// (REQUIREMENTS 3.4): local Whisper when a model is set in a local-ai build, and `openai`
-    /// when an API key is set, as allowed by the selected provider.
+    /// (REQUIREMENTS 3.4): local Whisper when a model is set in a local-ai build.
     ///
     /// Inputs: None. Outputs: The models, local first. Side effects: None; no model is loaded,
     /// so a model file that fails to load is still advertised.
     pub fn advertised_transcription_models(&self) -> Vec<TranscriptionModel> {
         let local_available = cfg!(feature = "local-ai") && self.whisper_model_path.is_some();
-        let cloud_available = self.openai_api_key.is_some();
-        let (allow_local, allow_cloud) = match self.transcription_provider {
-            TranscriptionProvider::Auto => (true, true),
-            TranscriptionProvider::Local => (true, false),
-            TranscriptionProvider::OpenAi => (false, true),
-        };
-        let mut models = Vec::new();
-        if allow_local && local_available {
-            models.push(TranscriptionModel::Whisper);
+        if local_available {
+            vec![TranscriptionModel::Whisper]
+        } else {
+            Vec::new()
         }
-        if allow_cloud && cloud_available {
-            models.push(TranscriptionModel::ThirdParty(String::from("openai")));
-        }
-        models
     }
 
     /// Replaces values with the ones the owner saved in Settings.
     ///
-    /// Inputs: The provider, model path, key and OpenAI model, where `None` keeps the current
-    /// value, and whether OpenAI failures fall back to the local model.
+    /// Inputs: The model path, where `None` keeps the current value.
     /// Outputs: The configuration. Side effects: None.
-    pub fn with_saved_transcription(
-        mut self,
-        provider: Option<TranscriptionProvider>,
-        whisper_model_path: Option<PathBuf>,
-        openai_api_key: Option<String>,
-        openai_model: Option<String>,
-        cloud_fallback: bool,
-    ) -> Self {
-        if let Some(provider) = provider {
-            self.transcription_provider = provider;
-        }
+    pub fn with_saved_transcription(mut self, whisper_model_path: Option<PathBuf>) -> Self {
         if whisper_model_path.is_some() {
             self.whisper_model_path = whisper_model_path;
         }
-        if openai_api_key.is_some() {
-            self.openai_api_key = openai_api_key;
-        }
-        if let Some(openai_model) = openai_model {
-            self.openai_model = openai_model;
-        }
-        self.cloud_fallback = cloud_fallback;
         self
     }
 
@@ -358,19 +270,9 @@ impl PipelineConfig {
             .or(self.whisper_model_path.as_deref())
     }
 
-    /// Reports whether OpenAI failures fall back to the local model.
-    pub fn cloud_fallback(&self) -> bool {
-        self.cloud_fallback
-    }
-
     /// Returns the local model's path, if any.
     pub fn local_model_path(&self) -> Option<&Path> {
         self.whisper_model_path.as_deref()
-    }
-
-    /// Returns the selected transcription provider.
-    pub fn transcription_provider(&self) -> TranscriptionProvider {
-        self.transcription_provider
     }
 
     /// Reports whether diarization was requested.
@@ -429,19 +331,12 @@ pub(crate) fn parse_flag(name: &str, value: Option<String>, default: bool) -> Re
 
 /// The transcription engine chosen for this device.
 pub enum SelectedTranscriptionEngine {
-    /// Cloud transcription through OpenAI.
-    OpenAi(OpenAiWhisperTranscriptionEngine),
     /// Local whisper.cpp inference.
     #[cfg(feature = "local-ai")]
     Local(crate::adapters::ai::local_whisper_cpp::LocalWhisperCppTranscriptionEngine),
-    /// OpenAI, chosen in Settings, using the local model when it can't be reached.
-    #[cfg(feature = "local-ai")]
-    OpenAiWithFallback(
-        crate::cloud_fallback::CloudFallbackEngine<
-            OpenAiWhisperTranscriptionEngine,
-            crate::adapters::ai::local_whisper_cpp::LocalWhisperCppTranscriptionEngine,
-        >,
-    ),
+    /// A build without local transcription has no engine to select.
+    #[cfg(not(feature = "local-ai"))]
+    Unavailable(std::convert::Infallible),
 }
 
 impl TranscriptionEngine for SelectedTranscriptionEngine {
@@ -452,12 +347,12 @@ impl TranscriptionEngine for SelectedTranscriptionEngine {
         transcription_context: &TranscriptionContext,
     ) -> Result<Transcript, TranscriptionError> {
         match self {
-            Self::OpenAi(engine) => engine.transcribe(audio_recording, transcription_context),
             #[cfg(feature = "local-ai")]
             Self::Local(engine) => engine.transcribe(audio_recording, transcription_context),
-            #[cfg(feature = "local-ai")]
-            Self::OpenAiWithFallback(engine) => {
-                engine.transcribe(audio_recording, transcription_context)
+            #[cfg(not(feature = "local-ai"))]
+            Self::Unavailable(never) => {
+                let _ = (audio_recording, transcription_context);
+                match *never {}
             }
         }
     }
@@ -469,12 +364,12 @@ impl TranscriptionEngine for SelectedTranscriptionEngine {
         audio_recording: &AudioRecording,
     ) -> Result<Transcript, TranscriptionError> {
         match self {
-            Self::OpenAi(engine) => engine.transcribe_external_media(media_chunk, audio_recording),
             #[cfg(feature = "local-ai")]
             Self::Local(engine) => engine.transcribe_external_media(media_chunk, audio_recording),
-            #[cfg(feature = "local-ai")]
-            Self::OpenAiWithFallback(engine) => {
-                engine.transcribe_external_media(media_chunk, audio_recording)
+            #[cfg(not(feature = "local-ai"))]
+            Self::Unavailable(never) => {
+                let _ = (media_chunk, audio_recording);
+                match *never {}
             }
         }
     }
@@ -484,60 +379,35 @@ impl TranscriptionEngine for SelectedTranscriptionEngine {
 ///
 /// Inputs: The configuration and the audio store the engine reads chunks from.
 /// Outputs: The engine, or an error naming the variables that would configure one.
-/// Side effects: Loads the local model when selected (slow; run it off the UI thread). Creates
-/// an HTTP client for OpenAI without sending any request.
+/// Side effects: Loads the local model (slow; run it off the UI thread).
 pub fn select_transcription_engine(
     config: &PipelineConfig,
     chunk_audio_store: &Arc<ChunkAudioStore>,
 ) -> Result<SelectedTranscriptionEngine> {
-    match config.transcription_provider {
-        TranscriptionProvider::Local => local_engine(config, chunk_audio_store),
-        TranscriptionProvider::OpenAi => openai_with_optional_fallback(config, chunk_audio_store),
-        TranscriptionProvider::Auto => {
-            if config.whisper_model_path.is_some() {
-                match local_engine(config, chunk_audio_store) {
-                    Ok(engine) => return Ok(engine),
-                    Err(error) if config.openai_api_key.is_some() => tracing::warn!(
-                        error = %format!("{error:#}"),
-                        "Local transcription unavailable; falling back to OpenAI"
-                    ),
-                    Err(error) => return Err(error),
-                }
-            }
-            if config.openai_api_key.is_none() {
-                bail!(
-                    "no transcription engine is configured: set {WHISPER_MODEL_VARIABLE} \
-                     (local-ai builds) for on-device transcription or {OPENAI_API_KEY_VARIABLE} \
-                     for cloud transcription"
-                );
-            }
-            openai_engine(config, chunk_audio_store)
-        }
+    if config.whisper_model_path.is_none() {
+        bail!(
+            "no transcription engine is configured: set {WHISPER_MODEL_VARIABLE} (local-ai \
+             builds) to a Whisper model for on-device transcription"
+        );
     }
+    local_engine(config, chunk_audio_store)
 }
 
 /// Describes how the selected engine's transcriptions appear in telemetry (Issue #53).
 ///
 /// Inputs: The selected engine and the configuration it was built from.
-/// Outputs: `CloudTranscription` with the OpenAI model for the cloud engine, `Transcription`
-/// with the model file's name for the local one.
+/// Outputs: `Transcription` with the model file's name.
 /// Side effects: None.
 pub fn transcription_task_profile(
     engine: &SelectedTranscriptionEngine,
     config: &PipelineConfig,
 ) -> TaskProfile {
     match engine {
-        #[cfg(feature = "local-ai")]
-        SelectedTranscriptionEngine::OpenAiWithFallback(_) => TaskProfile::new(
-            TaskType::CloudTranscription,
-            config.openai_model.clone(),
-            CLOUD_TRANSCRIPTION_POWER_MILLIWATTS,
-        ),
-        SelectedTranscriptionEngine::OpenAi(_) => TaskProfile::new(
-            TaskType::CloudTranscription,
-            config.openai_model.clone(),
-            CLOUD_TRANSCRIPTION_POWER_MILLIWATTS,
-        ),
+        #[cfg(not(feature = "local-ai"))]
+        SelectedTranscriptionEngine::Unavailable(never) => {
+            let _ = config;
+            match *never {}
+        }
         #[cfg(feature = "local-ai")]
         SelectedTranscriptionEngine::Local(_) => TaskProfile::new(
             TaskType::Transcription,
@@ -620,71 +490,6 @@ pub fn local_model_label(model_path: &Path) -> String {
     } else {
         stem.to_owned()
     }
-}
-
-/// Builds the OpenAI engine, wrapped with the local fallback when Settings chose OpenAI.
-///
-/// Inputs: The configuration and the chunk audio store.
-/// Outputs: The engine, or an error naming `OPENAI_API_KEY`.
-/// Side effects: See `openai_engine`; the local model loads only when first needed.
-fn openai_with_optional_fallback(
-    config: &PipelineConfig,
-    chunk_audio_store: &Arc<ChunkAudioStore>,
-) -> Result<SelectedTranscriptionEngine> {
-    let engine = openai_engine(config, chunk_audio_store)?;
-    #[cfg(feature = "local-ai")]
-    if config.cloud_fallback && config.whisper_model_path.is_some() {
-        if let SelectedTranscriptionEngine::OpenAi(cloud) = engine {
-            let local_config = config.clone();
-            let local_store = Arc::clone(chunk_audio_store);
-            return Ok(SelectedTranscriptionEngine::OpenAiWithFallback(
-                crate::cloud_fallback::CloudFallbackEngine::new(
-                    cloud,
-                    Box::new(move || match local_engine(&local_config, &local_store) {
-                        Ok(SelectedTranscriptionEngine::Local(engine)) => Ok(engine),
-                        Ok(_) => Err(TranscriptionError::Unavailable),
-                        Err(error) => {
-                            tracing::warn!(error = %format!("{error:#}"), "the local fallback model could not load");
-                            Err(TranscriptionError::Unavailable)
-                        }
-                    }),
-                    Arc::clone(chunk_audio_store),
-                ),
-            ));
-        }
-        return Ok(engine);
-    }
-    Ok(engine)
-}
-
-/// Builds the OpenAI engine.
-///
-/// Inputs: The configuration (requires the API key) and the chunk audio store.
-/// Outputs: The engine, or an error naming `OPENAI_API_KEY`.
-/// Side effects: Creates an HTTP client; logs that chunk audio will leave the device.
-fn openai_engine(
-    config: &PipelineConfig,
-    chunk_audio_store: &Arc<ChunkAudioStore>,
-) -> Result<SelectedTranscriptionEngine> {
-    let api_key = config.openai_api_key.clone().ok_or_else(|| {
-        anyhow!("OpenAI transcription requires {OPENAI_API_KEY_VARIABLE} to be set")
-    })?;
-    let openai_config = OpenAiWhisperConfig::new(
-        api_key,
-        config.openai_model.clone(),
-        config.openai_language.clone(),
-    )
-    .context("invalid OpenAI transcription configuration")?;
-    let http_client =
-        ReqwestOpenAiHttpClient::new().context("unable to create the OpenAI HTTP client")?;
-    tracing::warn!("Cloud transcription selected: recorded chunk audio is sent to OpenAI");
-    Ok(SelectedTranscriptionEngine::OpenAi(
-        OpenAiWhisperTranscriptionEngine::with_dependencies(
-            openai_config,
-            Arc::clone(chunk_audio_store) as _,
-            Arc::new(http_client),
-        ),
-    ))
 }
 
 /// Builds the local whisper.cpp engine.

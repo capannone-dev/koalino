@@ -12,8 +12,7 @@ use std::{
 
 use crate::{
     adapters::{
-        ai::openai_whisper_adapter::AudioFileSource, audio::chunk_audio_store::ChunkAudioStore,
-        storage::sqlite_adapter::SqliteNoteRepository,
+        audio::chunk_audio_store::ChunkAudioStore, storage::sqlite_adapter::SqliteNoteRepository,
     },
     application::{
         crypto::voice_encryptor::ephemeral_cipher, meeting_crdt::MeetingCrdtService,

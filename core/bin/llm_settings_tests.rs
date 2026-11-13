@@ -1,10 +1,11 @@
 //! Specifies the owner's language model settings (#95, #101): the connections, the default one,
-//! the summary template, automatic summaries, and where each connection's key is kept.
+//! the summary template, automatic summaries, and dropping what an earlier version kept (#117).
 
 use std::path::PathBuf;
 
 use super::llm_settings::{
-    LlmKeyStore, SavedLlmSettings, llm_settings_file_for, load_llm_settings, save_llm_settings,
+    SavedLlmSettings, forget_sealed_api_keys, llm_settings_file_for, load_llm_settings,
+    save_llm_settings,
 };
 use crate::domain::llm::{DEFAULT_SUMMARY_TEMPLATE, LlmConnection, LlmKind};
 
@@ -78,9 +79,9 @@ fn connections_round_trip_and_the_default_follows_edits_and_removals() {
     let edited = LlmConnection::with_id(
         "b",
         "Renamed",
-        LlmKind::Anthropic,
-        "https://api.anthropic.com",
-        "claude-opus-5-5",
+        LlmKind::OpenAiCompatible,
+        "https://llm.example/v1",
+        "qwen3:32b",
         200_000,
     )
     .unwrap_or_else(|e| panic!("{e}"));
@@ -108,7 +109,8 @@ fn a_hand_edited_file_loses_only_what_is_no_longer_valid() {
         &file,
         r#"{
             "connections": [
-                {"id": "ok", "label": "Fine", "kind": "anthropic", "base_url": "https://api.anthropic.com", "model": "claude-opus-5-5", "context_tokens": 200000},
+                {"id": "ok", "label": "Fine", "kind": "open_ai_compatible", "base_url": "https://llm.example/v1", "model": "m", "context_tokens": 200000},
+                {"id": "gone", "label": "Keyed", "kind": "anthropic", "base_url": "https://api.anthropic.com", "model": "claude-opus-5-5", "context_tokens": 200000},
                 {"id": "bad", "label": "Plain", "kind": "open_ai_compatible", "base_url": "http://example.com/v1", "model": "m", "context_tokens": 8192}
             ],
             "default_connection": "bad",
@@ -123,7 +125,7 @@ fn a_hand_edited_file_loses_only_what_is_no_longer_valid() {
     assert_eq!(
         settings.connections().len(),
         1,
-        "plain HTTP to a public host is dropped"
+        "plain HTTP to a public host and a removed kind (Anthropic) are dropped"
     );
     assert_eq!(
         settings.default_connection().map(LlmConnection::id),
@@ -133,35 +135,24 @@ fn a_hand_edited_file_loses_only_what_is_no_longer_valid() {
 }
 
 #[test]
-fn each_connection_keeps_its_own_sealed_key() {
-    let keys = folder("keys");
-    let host_key = Some(vec![7_u8; 32]);
-    let first = LlmKeyStore::open(&keys, host_key.clone(), "a");
-    let second = LlmKeyStore::open(&keys, host_key.clone(), "b");
+fn sealed_api_keys_of_an_earlier_version_are_deleted() {
+    let keys = folder("old-keys");
+    for name in [
+        "llm-a.sealed",
+        "llm-b.sealed",
+        "openai_key.sealed",
+        "database.key",
+    ] {
+        std::fs::write(keys.join(name), b"sealed").unwrap_or_else(|e| panic!("{e}"));
+    }
 
-    assert_eq!(first.load().map(|key| key.is_none()), Ok(true));
-    first.save("sk-first").unwrap_or_else(|e| panic!("{e}"));
-    second.save("sk-second").unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(forget_sealed_api_keys(&keys), 3);
 
-    let reopened = LlmKeyStore::open(&keys, host_key, "a");
-    assert_eq!(
-        reopened
-            .load()
-            .ok()
-            .flatten()
-            .as_deref()
-            .map(String::as_str),
-        Some("sk-first")
-    );
-    let on_disk = std::fs::read(keys.join("llm-a.sealed")).unwrap_or_default();
+    assert!(!keys.join("llm-a.sealed").exists());
     assert!(
-        !on_disk.windows(8).any(|w| w == b"sk-first"),
-        "the key is sealed"
+        !keys.join("openai_key.sealed").exists(),
+        "the OpenAI transcription key too"
     );
-    reopened.remove().unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(reopened.load().map(|key| key.is_none()), Ok(true));
-    assert_eq!(
-        second.load().ok().flatten().as_deref().map(String::as_str),
-        Some("sk-second")
-    );
+    assert!(keys.join("database.key").exists(), "other keys stay");
+    assert_eq!(forget_sealed_api_keys(&folder("missing").join("none")), 0);
 }

@@ -1,9 +1,8 @@
 //! Holds each live recording chunk's raw PCM in memory until a transcription engine reads it.
 //!
 //! The transcription port receives only `AudioRecording` metadata; engines resolve the audio
-//! through adapter-side sources. `ChunkAudioStore` implements both of them: `AudioFileSource`
-//! (WAV, for the OpenAI adapter) and, with `local-ai`, `RecordingPcmSource` (f32 PCM, for
-//! whisper.cpp). Entries are keyed by the chunk's `RecordingId`, removed on the first read, and
+//! through adapter-side sources. `ChunkAudioStore` implements `RecordingPcmSource` (f32 PCM, for
+//! whisper.cpp, with `local-ai`) and hands out WAV through `load_wav` (test engines). Entries are keyed by the chunk's `RecordingId`, removed on the first read, and
 //! wiped from memory, so raw audio (PII) never outlives its transcription. Recording controllers
 //! call `discard_with_prefix` on stop to discard audio of their chunks that were never
 //! transcribed, leaving other producers (the Teams bridge) untouched. Nothing here
@@ -17,7 +16,6 @@ use std::{
 use zeroize::Zeroize;
 
 use crate::{
-    adapters::ai::openai_whisper_adapter::AudioFileSource,
     domain::{
         errors::TranscriptionError,
         models::{AudioRecording, RecordingId},
@@ -163,13 +161,16 @@ impl ChunkSamples for ChunkAudioStore {
     }
 }
 
-impl AudioFileSource for ChunkAudioStore {
+impl ChunkAudioStore {
     /// Returns the chunk as a 16-bit PCM WAV file and deletes it from the store.
     ///
     /// Inputs: The chunk's recording metadata.
     /// Outputs: WAV bytes, or `InvalidRecording` when the chunk is unknown or already read.
     /// Side effects: Deletes and wipes the stored samples.
-    fn load_wav(&self, audio_recording: &AudioRecording) -> Result<Vec<u8>, TranscriptionError> {
+    pub fn load_wav(
+        &self,
+        audio_recording: &AudioRecording,
+    ) -> Result<Vec<u8>, TranscriptionError> {
         let mut samples = self.take_samples(audio_recording)?;
         let wav_bytes = encode_wav_pcm16(&samples, CHUNK_SAMPLE_RATE_HZ);
         samples.zeroize();

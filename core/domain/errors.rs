@@ -295,8 +295,8 @@ pub enum LlmError {
     /// The server could not be reached or did not answer in time.
     #[error("the language model could not be reached")]
     Unreachable,
-    /// The server refused the API key.
-    #[error("the language model refused the API key")]
+    /// The server refused access (it expects a key, which the app does not send).
+    #[error("the language model server refused access; use a server that needs no API key")]
     Unauthorized,
     /// The server asked to slow down.
     #[error("the language model is busy or over its limit; try again later")]
@@ -322,9 +322,6 @@ pub enum LlmError {
     /// The answer could not be read, or was empty.
     #[error("the language model's answer could not be read")]
     InvalidResponse,
-    /// The connection needs an API key and has none.
-    #[error("this connection needs an API key")]
-    MissingKey,
     /// The command-line tool a connection runs (#105) is not installed on this computer.
     #[error("{tool} is not installed on this computer")]
     ToolMissing {

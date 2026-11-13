@@ -73,8 +73,8 @@ fn a_connection_needs_a_label_a_model_and_a_sane_context_size() {
     assert_eq!(
         LlmConnection::new(
             " ",
-            LlmKind::Anthropic,
-            "https://api.anthropic.com",
+            LlmKind::OpenAiCompatible,
+            "https://llm.example/v1",
             "m",
             8_192
         )
@@ -84,8 +84,8 @@ fn a_connection_needs_a_label_a_model_and_a_sane_context_size() {
     assert_eq!(
         LlmConnection::new(
             "A",
-            LlmKind::Anthropic,
-            "https://api.anthropic.com",
+            LlmKind::OpenAiCompatible,
+            "https://llm.example/v1",
             "",
             8_192
         )
@@ -95,8 +95,8 @@ fn a_connection_needs_a_label_a_model_and_a_sane_context_size() {
     assert_eq!(
         LlmConnection::new(
             "A",
-            LlmKind::Anthropic,
-            "https://api.anthropic.com",
+            LlmKind::OpenAiCompatible,
+            "https://llm.example/v1",
             "m",
             100
         )
@@ -160,15 +160,15 @@ fn a_template_is_filled_with_the_meeting_values() {
 }
 
 #[test]
-fn a_connection_id_is_safe_for_a_keychain_entry_and_a_file_name() {
+fn a_connection_id_is_safe_for_a_file_name() {
     use super::llm::{LlmConnection, LlmConnectionError, LlmKind};
     for id in ["", "../key", "a b", "x".repeat(65).as_str()] {
         assert_eq!(
             LlmConnection::with_id(
                 id,
                 "L",
-                LlmKind::Anthropic,
-                "https://api.anthropic.com",
+                LlmKind::OpenAiCompatible,
+                "https://llm.example/v1",
                 "m",
                 8_192
             ),
@@ -178,8 +178,8 @@ fn a_connection_id_is_safe_for_a_keychain_entry_and_a_file_name() {
     }
     let fresh = LlmConnection::new(
         "L",
-        LlmKind::Anthropic,
-        "https://api.anthropic.com",
+        LlmKind::OpenAiCompatible,
+        "https://llm.example/v1",
         "m",
         8_192,
     );
@@ -202,7 +202,6 @@ fn a_local_cli_connection_needs_no_address_and_may_leave_the_model_to_the_tool()
             .unwrap_or_else(|error| panic!("{error}"));
         assert_eq!(revalidated, connection);
     }
-    assert!(!LlmKind::Anthropic.is_local_cli());
     assert!(!LlmKind::OpenAiCompatible.is_local_cli());
     let named = LlmConnection::new(
         "Sonnet",

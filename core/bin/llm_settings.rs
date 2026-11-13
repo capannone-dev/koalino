@@ -2,30 +2,16 @@
 //! summary template, and whether meetings are summarized automatically.
 //!
 //! The settings live per device in `<db>.llm-settings.json`, beside the transcription settings.
-//! API keys never do. Each connection's key is kept in the platform keychain under
-//! `note-taker-llm-<id>`, or on Android in `<key folder>/llm-<id>.sealed`, sealed under the
-//! Keystore-protected database key, as the OpenAI transcription key is.
+//! The app keeps no API keys: a connection is a server the owner runs, or Claude Code or Codex
+//! signed in on this computer. Connections of a kind removed since (Anthropic, which needed a key)
+//! are dropped when the file is read.
 
 use std::{
     fs, io,
     path::{Path, PathBuf},
 };
 
-use zeroize::Zeroizing;
-
-use crate::{
-    adapters::keychain::{
-        platform_keychain::PlatformKeychain, sealed_file_keychain::SealedFileKeychain,
-    },
-    domain::{
-        errors::CryptoError,
-        llm::{LlmConnection, PromptTemplate, PromptTemplateError},
-    },
-    ports::crypto::KeychainStore,
-};
-
-/// Prefix of each connection's keychain service.
-const LLM_KEYCHAIN_SERVICE_PREFIX: &str = "note-taker-llm-";
+use crate::domain::llm::{LlmConnection, PromptTemplate, PromptTemplateError};
 
 /// Why a default could not be chosen.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -39,7 +25,7 @@ pub enum LlmSettingsError {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SavedLlmSettings {
     /// The connections, in the order the owner added them.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "known_connections")]
     connections: Vec<LlmConnection>,
     /// The connection used when none is named.
     #[serde(default)]
@@ -50,6 +36,18 @@ pub struct SavedLlmSettings {
     /// Summarize each meeting once its transcript is final (#101); the owner can opt out.
     #[serde(default = "automatic_summaries_by_default")]
     auto_summarize: bool,
+}
+
+/// Reads the connections, skipping any the app can no longer read (a removed kind).
+fn known_connections<'de, D>(deserializer: D) -> Result<Vec<LlmConnection>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = <Vec<serde_json::Value> as serde::Deserialize>::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|value| serde_json::from_value(value).ok())
+        .collect())
 }
 
 /// Automatic summaries are on until the owner opts out (#101).
@@ -118,8 +116,7 @@ impl SavedLlmSettings {
 
     /// Removes a connection; a default pointing at it is cleared.
     ///
-    /// Outputs: Whether it existed. Side effects: Changes these settings only; the caller deletes
-    /// its key.
+    /// Outputs: Whether it existed. Side effects: Changes these settings only.
     pub fn remove_connection(&mut self, id: &str) -> bool {
         let before = self.connections.len();
         self.connections.retain(|connection| connection.id() != id);
@@ -241,137 +238,23 @@ pub fn save_llm_settings(settings_file: &Path, settings: &SavedLlmSettings) -> i
     fs::rename(&temporary, settings_file)
 }
 
-/// Where one connection's API key is kept.
-pub enum LlmKeyStore {
-    /// The operating system's credential store.
-    Platform(PlatformKeychain),
-    /// A file sealed under the Keystore-protected database key.
-    Sealed(SealedFileKeychain),
-}
-
-impl LlmKeyStore {
-    /// Opens the right store for this platform and connection.
-    ///
-    /// Inputs: The folder for sealed keys, the host-provided database key (Android) and the
-    /// connection's checked ID (letters, digits and dashes only). Outputs: The store.
-    /// Side effects: May initialize the platform's credential store.
-    pub fn open(key_directory: &Path, host_key: Option<Vec<u8>>, connection_id: &str) -> Self {
-        if cfg!(target_os = "android") || host_key.is_some() {
-            Self::Sealed(SealedFileKeychain::new(
-                key_directory.join(format!("llm-{connection_id}.sealed")),
-                host_key,
-            ))
-        } else {
-            Self::Platform(PlatformKeychain::for_service(&format!(
-                "{LLM_KEYCHAIN_SERVICE_PREFIX}{connection_id}"
-            )))
-        }
-    }
-
-    /// Reads the key.
-    ///
-    /// Outputs: The key, `None` when none is saved, or the store's error; never logged.
-    /// Side effects: Queries the store.
-    pub fn load(&self) -> Result<Option<Zeroizing<String>>, CryptoError> {
-        let stored = match self {
-            Self::Platform(store) => store.load_key(),
-            Self::Sealed(store) => store.load_key(),
-        }?;
-        Ok(stored.and_then(|bytes| String::from_utf8(bytes.to_vec()).ok().map(Zeroizing::new)))
-    }
-
-    /// Saves the key. Outputs: Success or the store's error. Side effects: Writes the store.
-    pub fn save(&self, key: &str) -> Result<(), CryptoError> {
-        match self {
-            Self::Platform(store) => store.store_key(key.as_bytes()),
-            Self::Sealed(store) => store.store_key(key.as_bytes()),
-        }
-    }
-
-    /// Deletes the key; a missing one is not an error. Side effects: Writes the store.
-    pub fn remove(&self) -> Result<(), CryptoError> {
-        match self {
-            Self::Platform(store) => store.delete_key(),
-            Self::Sealed(store) => store.delete_key(),
-        }
-    }
-}
-
-/// Keeps the API key of each connection; tests replace it with an in-memory one.
-pub trait LlmKeyring: Send + Sync {
-    /// Reads a connection's key. Outputs: The key, `None` when none is saved, or the store's
-    /// error; never logged. Side effects: Queries the store.
-    fn load(&self, connection_id: &str) -> Result<Option<Zeroizing<String>>, CryptoError>;
-    /// Saves a connection's key. Side effects: Writes the store.
-    fn save(&self, connection_id: &str, key: &str) -> Result<(), CryptoError>;
-    /// Deletes a connection's key; a missing one is not an error. Side effects: Writes the store.
-    fn remove(&self, connection_id: &str) -> Result<(), CryptoError>;
-}
-
-/// The platform keychain, or sealed files on Android, through `LlmKeyStore`.
-pub struct PlatformLlmKeyring {
-    key_directory: PathBuf,
-    host_key: Option<Zeroizing<Vec<u8>>>,
-}
-
-impl PlatformLlmKeyring {
-    /// Creates the keyring.
-    ///
-    /// Inputs: The folder for sealed keys and the host-provided database key (Android).
-    /// Outputs: The keyring. Side effects: None.
-    pub fn new(key_directory: PathBuf, host_key: Option<Vec<u8>>) -> Self {
-        Self {
-            key_directory,
-            host_key: host_key.map(Zeroizing::new),
-        }
-    }
-
-    fn store(&self, connection_id: &str) -> LlmKeyStore {
-        LlmKeyStore::open(
-            &self.key_directory,
-            self.host_key.as_ref().map(|key| key.to_vec()),
-            connection_id,
-        )
-    }
-}
-
-impl LlmKeyring for PlatformLlmKeyring {
-    fn load(&self, connection_id: &str) -> Result<Option<Zeroizing<String>>, CryptoError> {
-        self.store(connection_id).load()
-    }
-    fn save(&self, connection_id: &str, key: &str) -> Result<(), CryptoError> {
-        self.store(connection_id).save(key)
-    }
-    fn remove(&self, connection_id: &str) -> Result<(), CryptoError> {
-        self.store(connection_id).remove()
-    }
-}
-
-/// Keys kept in memory, for tests.
-#[cfg(test)]
-#[derive(Default)]
-pub(crate) struct MemoryLlmKeyring(std::sync::Mutex<std::collections::HashMap<String, String>>);
-
-#[cfg(test)]
-impl LlmKeyring for MemoryLlmKeyring {
-    fn load(&self, connection_id: &str) -> Result<Option<Zeroizing<String>>, CryptoError> {
-        Ok(self
-            .0
-            .lock()
-            .ok()
-            .and_then(|keys| keys.get(connection_id).cloned())
-            .map(Zeroizing::new))
-    }
-    fn save(&self, connection_id: &str, key: &str) -> Result<(), CryptoError> {
-        if let Ok(mut keys) = self.0.lock() {
-            keys.insert(connection_id.to_owned(), key.to_owned());
-        }
-        Ok(())
-    }
-    fn remove(&self, connection_id: &str) -> Result<(), CryptoError> {
-        if let Ok(mut keys) = self.0.lock() {
-            keys.remove(connection_id);
-        }
-        Ok(())
-    }
+/// Deletes the sealed API key files an earlier version kept on Android (#117): the connections'
+/// `llm-<id>.sealed` and the transcription key `openai_key.sealed`.
+///
+/// Inputs: The folder for sealed keys. Outputs: How many files were deleted. Side effects: Removes
+/// files; a folder that cannot be read deletes nothing. Keys an earlier desktop version put in the
+/// platform keychain stay there: asking the keychain at start-up can prompt to unlock it.
+pub fn forget_sealed_api_keys(key_directory: &Path) -> usize {
+    let Ok(entries) = fs::read_dir(key_directory) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name == "openai_key.sealed" || (name.starts_with("llm-") && name.ends_with(".sealed"))
+        })
+        .filter(|entry| fs::remove_file(entry.path()).is_ok())
+        .count()
 }

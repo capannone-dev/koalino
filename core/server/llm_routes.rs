@@ -12,11 +12,11 @@
 //! | `POST /api/meetings/{id}/summary` `{"connection_id"?}` | 200 `{"summary","parts","images_sent","images_skipped"}` |
 //! | `PUT /api/meetings/{id}/summary-prompt` `{"prompt": text or null}` | 200 `{"meeting_prompt"}` |
 //!
-//! Keys are write-only (`api_key`, `clear_key` in the connection body). Failures answer
-//! `{"ok":false,"error_code","error"}`: 400 for invalid requests, connections and templates, 404
-//! for an unknown connection or meeting, 409 when no connection is set up or a key is missing or
-//! there is nothing to summarize, 422 when the meeting is too long, 502 when the model failed,
-//! 500 for storage and keychain failures, and 503 when the process has no AI settings. Model calls
+//! The app keeps no API keys; connections are servers the owner runs, or Claude Code and Codex.
+//! Failures answer `{"ok":false,"error_code","error"}`: 400 for invalid requests, connections and
+//! templates, 404 for an unknown connection or meeting, 409 when no connection is set up or there
+//! is nothing to summarize, 422 when the meeting is too long, 502 when the model failed, 500 for
+//! storage failures, and 503 when the process has no AI settings. Model calls
 //! run on a blocking thread, and the repository is not held while the model works.
 //!
 //! `start_auto_summaries` runs the daemon's automatic summaries (#101) over the same state.
@@ -76,7 +76,7 @@ fn status_of(answer: &Value) -> StatusCode {
     match answer["error_code"].as_str().unwrap_or_default() {
         "invalid_request" | "invalid_connection" | "invalid_template" => StatusCode::BAD_REQUEST,
         "connection_not_found" | "meeting_not_found" => StatusCode::NOT_FOUND,
-        "no_connection" | "missing_key" | "nothing_to_summarize" => StatusCode::CONFLICT,
+        "no_connection" | "nothing_to_summarize" => StatusCode::CONFLICT,
         "too_long" => StatusCode::UNPROCESSABLE_ENTITY,
         code if code.starts_with("llm_") => StatusCode::BAD_GATEWAY,
         "unavailable" => StatusCode::SERVICE_UNAVAILABLE,
@@ -131,7 +131,7 @@ fn with_fields(body: Option<Json<Value>>, fields: &[(&str, Value)]) -> Value {
     request
 }
 
-/// `GET /api/settings/llm`. Side effects: Reads the settings and whether keys exist.
+/// `GET /api/settings/llm`. Side effects: Reads the settings.
 async fn read_settings(State(state): State<ServerAppState>) -> Response {
     tracing::info!(
         endpoint = "/api/settings/llm",
@@ -152,7 +152,7 @@ async fn update_settings(
     command(state, with_fields(body, &[("command", json!("update"))])).await
 }
 
-/// `POST /api/settings/llm/connections`. Side effects: Saves the connection and its key.
+/// `POST /api/settings/llm/connections`. Side effects: Saves the connection.
 async fn create_connection(
     State(state): State<ServerAppState>,
     body: Option<Json<Value>>,
@@ -168,7 +168,7 @@ async fn create_connection(
     command(state, request).await
 }
 
-/// `PUT /api/settings/llm/connections/{id}`. Side effects: Saves the connection and its key.
+/// `PUT /api/settings/llm/connections/{id}`. Side effects: Saves the connection.
 async fn edit_connection(
     State(state): State<ServerAppState>,
     Path(id): Path<String>,
@@ -188,7 +188,7 @@ async fn edit_connection(
     .await
 }
 
-/// `DELETE /api/settings/llm/connections/{id}`. Side effects: Removes it and its key.
+/// `DELETE /api/settings/llm/connections/{id}`. Side effects: Removes it.
 async fn delete_connection(
     State(state): State<ServerAppState>,
     Path(id): Path<String>,

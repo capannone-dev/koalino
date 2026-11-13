@@ -24,7 +24,6 @@ use crate::{
         models::{MeetingId, TranscriptSegment},
     },
     llm_commands::LlmServices,
-    llm_settings::MemoryLlmKeyring,
     ports::{ai::LlmEngine, storage::NoteRepository},
     server::api::{ServerAppState, build_router},
 };
@@ -73,14 +72,10 @@ fn router(with_llm: bool) -> axum::Router {
     }
     let folder = std::env::temp_dir().join(format!("llm-routes-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
-    let services = LlmServices::new(
-        folder.join("db.llm-settings.json"),
-        Arc::new(MemoryLlmKeyring::default()),
-        "Server",
-    )
-    .with_engine_factory(Arc::new(|_, _| {
-        Ok(Box::new(CountingEngine) as Box<dyn LlmEngine>)
-    }));
+    let services = LlmServices::new(folder.join("db.llm-settings.json"), "Server")
+        .with_engine_factory(Arc::new(|_| {
+            Ok(Box::new(CountingEngine) as Box<dyn LlmEngine>)
+        }));
     build_router(state.with_llm_services(Arc::new(services)))
 }
 

@@ -12,7 +12,7 @@
 //! A message is `{"role","text","created_at","included","omitted","connection"}`. Error codes:
 //! `invalid_request`, `empty`, `too_long`, `meeting_not_found`, `project_not_found`,
 //! `nothing_to_chat`, `context_too_small`, `no_connection`, `connection_not_found`,
-//! `missing_key`, the `llm_*` codes of `llm_commands`, and `storage_failed`.
+//! the `llm_*` codes of `llm_commands`, and `storage_failed`.
 //!
 //! `gather_material` reads what a chat is about: one meeting's transcript, summary, notes and
 //! photos; one project's files (text, Markdown, e-mails), images and meetings, newest first; or

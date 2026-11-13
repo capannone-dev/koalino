@@ -66,9 +66,7 @@ use crate::{
     project_commands::{ProjectFiles, run_project_command},
     recording_controller::{RecordingControlError, RecordingController},
     storage_composition::{EncryptedStores, open_encrypted_stores_with_keychain},
-    transcription_settings::{
-        OpenAiKeyStore, TranscriptionPaths, apply_saved_settings, load_settings,
-    },
+    transcription_settings::{TranscriptionPaths, apply_saved_settings, load_settings},
 };
 use uuid::Uuid;
 
@@ -1511,7 +1509,6 @@ impl FfiRuntime {
         if in_use {
             return;
         }
-        crate::cloud_fallback::reset_cloud_fallback();
         if crate::ffi_transcription::take_pipeline_stale() {
             self.recording_controller = None;
         }
@@ -2325,19 +2322,12 @@ pub(crate) fn provided_encryption_key() -> Option<Vec<u8>> {
 /// Layers the owner's saved transcription choices over the environment's configuration.
 ///
 /// Inputs: The configuration and the paths.
-/// Outputs: The configuration to run. An unreadable key store counts as no saved key.
-/// Side effects: Reads the settings file and the key store, which may prompt to unlock.
+/// Outputs: The configuration to run.
+/// Side effects: Reads the settings file.
 fn with_saved_transcription(config: PipelineConfig, paths: &TranscriptionPaths) -> PipelineConfig {
     let saved = load_settings(&paths.settings_file);
-    let saved_key = match OpenAiKeyStore::open(paths, provided_encryption_key()).load() {
-        Ok(key) => key.map(|key| key.to_string()),
-        Err(error) => {
-            tracing::warn!(error = %error, "unable to read the saved OpenAI key");
-            None
-        }
-    };
     let saved = crate::ffi_transcription::effective_settings(&saved, paths);
-    apply_saved_settings(config, &saved, paths, saved_key)
+    apply_saved_settings(config, &saved, paths)
 }
 
 /// Picks the keychain the runtime unlocks through.

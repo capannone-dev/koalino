@@ -17,7 +17,6 @@ use super::{
         AUTO_SUMMARY_ATTEMPTS, AUTO_SUMMARY_WINDOW, AutoSummarizer, AutoSummaryHost, meetings_due,
     },
     llm_commands::{LlmServices, run_llm_command},
-    llm_settings::MemoryLlmKeyring,
     meeting_summaries::PreparedSummary,
 };
 use crate::{
@@ -152,18 +151,14 @@ fn services(name: &str, fail: bool) -> (Arc<LlmServices>, Arc<Mutex<usize>>) {
     std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
     let requests: Arc<Mutex<usize>> = Arc::default();
     let counter = Arc::clone(&requests);
-    let services = LlmServices::new(
-        folder.join("db.sqlite3.llm-settings.json"),
-        Arc::new(MemoryLlmKeyring::default()),
-        "Laptop",
-    )
-    .with_transcription_settings(PathBuf::from("/nonexistent"))
-    .with_engine_factory(Arc::new(move |_connection: &LlmConnection, _key| {
-        Ok(Box::new(FakeEngine {
-            fail,
-            requests: Arc::clone(&counter),
-        }) as Box<dyn LlmEngine>)
-    }));
+    let services = LlmServices::new(folder.join("db.sqlite3.llm-settings.json"), "Laptop")
+        .with_transcription_settings(PathBuf::from("/nonexistent"))
+        .with_engine_factory(Arc::new(move |_connection: &LlmConnection| {
+            Ok(Box::new(FakeEngine {
+                fail,
+                requests: Arc::clone(&counter),
+            }) as Box<dyn LlmEngine>)
+        }));
     (Arc::new(services), requests)
 }
 

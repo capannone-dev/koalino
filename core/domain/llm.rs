@@ -1,15 +1,15 @@
 //! Describes the LLM connections that summarize meetings and answer chat (#95): which endpoint a
 //! connection may use, how a connection is checked, and the summary prompt template.
 //!
-//! Two protocols cover the providers the owner asked for:
-//! - OpenAI-compatible Chat Completions: OpenAI, Mistral (`https://api.mistral.ai/v1`), and local
-//!   servers such as Ollama (`/v1`), llama.cpp, LM Studio and vLLM;
-//! - Anthropic Messages, whose OpenAI compatibility layer is limited, images in particular.
+//! Connections need no API key (the owner removed keys from the app):
+//! - OpenAI-compatible Chat Completions on a server the owner runs, such as Ollama (`/v1`),
+//!   llama.cpp, LM Studio and vLLM;
+//! - Claude Code and Codex, signed in on this computer with the owner's own plan (#105).
 //!
 //! Meeting text leaves the device only to a connection the owner set up. HTTPS is required,
 //! except plain HTTP to a machine on the local network (loopback, RFC 1918 and IPv6 unique-local
 //! addresses, and `.local`, `.lan` and `.home.arpa` names), where a compute node often has no
-//! certificate. Everything here is pure; API keys never pass through this module.
+//! certificate. Everything here is pure.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -42,8 +42,6 @@ guessing. Use the attached pictures (whiteboards, slides) when they add informat
 pub enum LlmKind {
     /// Chat Completions at `<base_url>/chat/completions`.
     OpenAiCompatible,
-    /// Messages at `<base_url>/v1/messages`.
-    Anthropic,
     /// The Claude Code CLI installed and signed in on this computer (#105), run headlessly so a
     /// Claude subscription answers instead of API credit. No address and no key.
     ClaudeCode,
@@ -68,7 +66,7 @@ pub enum EndpointError {
     #[error("the address must start with https:// and name a server")]
     Malformed,
     /// User names or passwords in the address would end up in logs and settings.
-    #[error("put the API key in its own field, not in the address")]
+    #[error("the address must not hold a user name or password")]
     Credentials,
     /// Plain HTTP to a machine outside the local network.
     #[error("plain http:// is allowed only for a machine on your local network; use https://")]
@@ -181,7 +179,7 @@ fn is_local_v6(address: Ipv6Addr) -> bool {
 /// Why a connection was refused.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum LlmConnectionError {
-    /// The ID is not 1 to 64 letters, digits or dashes; it names a keychain entry and a file.
+    /// The ID is not 1 to 64 letters, digits or dashes; it names files and settings entries.
     #[error("the connection ID may hold only letters, digits and dashes")]
     InvalidId,
     /// The label is empty or too long.
@@ -198,7 +196,7 @@ pub enum LlmConnectionError {
     Endpoint(#[from] EndpointError),
 }
 
-/// One LLM connection; its API key lives in the keychain under its ID.
+/// One LLM connection.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct LlmConnection {
     id: String,

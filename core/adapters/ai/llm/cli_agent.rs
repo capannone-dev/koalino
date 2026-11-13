@@ -469,7 +469,7 @@ pub fn find_tool(kind: LlmKind) -> Option<PathBuf> {
     let base = match kind {
         LlmKind::ClaudeCode => "claude",
         LlmKind::Codex => "codex",
-        LlmKind::OpenAiCompatible | LlmKind::Anthropic => return None,
+        LlmKind::OpenAiCompatible => return None,
     };
     let names: Vec<String> = if cfg!(windows) {
         ["exe", "cmd"]

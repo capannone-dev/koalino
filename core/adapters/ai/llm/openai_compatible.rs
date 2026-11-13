@@ -1,10 +1,9 @@
-//! Talks to any server that speaks OpenAI's Chat Completions: OpenAI, Mistral, and local
-//! servers such as Ollama, llama.cpp, LM Studio and vLLM.
+//! Talks to a server the owner runs that speaks OpenAI's Chat Completions, such as Ollama,
+//! llama.cpp, LM Studio and vLLM. No API key is sent: the app keeps none.
 
 use std::sync::Arc;
 
 use serde_json::{Value, json};
-use zeroize::Zeroizing;
 
 use super::{
     base64::encode_base64,
@@ -23,24 +22,17 @@ use crate::{
 pub struct OpenAiCompatibleEngine {
     url: String,
     model: String,
-    api_key: Option<Zeroizing<String>>,
     transport: Arc<dyn LlmHttpTransport>,
 }
 
 impl OpenAiCompatibleEngine {
     /// Creates the engine.
     ///
-    /// Inputs: The connection, its API key (local servers often need none) and the transport.
-    /// Outputs: The engine. Side effects: None.
-    pub fn new(
-        connection: &LlmConnection,
-        api_key: Option<Zeroizing<String>>,
-        transport: Arc<dyn LlmHttpTransport>,
-    ) -> Self {
+    /// Inputs: The connection and the transport. Outputs: The engine. Side effects: None.
+    pub fn new(connection: &LlmConnection, transport: Arc<dyn LlmHttpTransport>) -> Self {
         Self {
             url: endpoint_url(connection.base_url(), "/chat/completions"),
             model: connection.model().to_owned(),
-            api_key: api_key.filter(|key| !key.trim().is_empty()),
             transport,
         }
     }
@@ -81,8 +73,7 @@ impl OpenAiCompatibleEngine {
                 messages.push(json!({"role": role, "content": turn.text}));
             }
         }
-        // No length limit is sent: OpenAI's reasoning models refuse `max_tokens`, and servers
-        // differ on the newer field.
+        // No length limit is sent: servers differ on `max_tokens` and the newer field.
         json!({"model": self.model, "messages": messages, "stream": false})
     }
 }
@@ -94,13 +85,9 @@ impl LlmEngine for OpenAiCompatibleEngine {
                 reason: "the conversation is empty",
             });
         }
-        let mut headers = Vec::new();
-        if let Some(key) = &self.api_key {
-            headers.push(("authorization", format!("Bearer {}", key.as_str())));
-        }
         let response = self
             .transport
-            .post_json(&self.url, &headers, &self.body(request))?;
+            .post_json(&self.url, &[], &self.body(request))?;
         read_answer(&response)
     }
 }

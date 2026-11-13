@@ -1,16 +1,14 @@
-//! Language model adapters (#95): one for OpenAI-compatible Chat Completions servers (OpenAI,
-//! Mistral, and local servers such as Ollama, llama.cpp, LM Studio and vLLM) and one for
-//! Anthropic's Messages API, both behind the `LlmEngine` port.
+//! Language model adapters (#95): one for OpenAI-compatible Chat Completions servers the owner
+//! runs (Ollama, llama.cpp, LM Studio, vLLM), and one for Claude Code and Codex signed in on this
+//! computer (#105), both behind the `LlmEngine` port. No adapter sends an API key.
 
-/// Anthropic's Messages API.
-pub mod anthropic_messages;
 /// Standard base64, for images sent inline.
 pub mod base64;
 /// Claude Code and Codex run as signed-in command-line tools (#105).
 pub mod cli_agent;
 /// OpenAI-compatible Chat Completions.
 pub mod openai_compatible;
-/// The blocking HTTP client both adapters post through.
+/// The blocking HTTP client the Chat Completions adapter posts through.
 pub mod transport;
 
 #[cfg(test)]
@@ -19,8 +17,6 @@ mod cli_agent_tests;
 mod llm_adapters_tests;
 
 use std::sync::Arc;
-
-use zeroize::Zeroizing;
 
 use crate::{
     domain::{
@@ -32,26 +28,16 @@ use crate::{
 
 /// Builds the engine for a connection, posting through reqwest.
 ///
-/// Inputs: The connection and its API key, if any (Claude Code and Codex use none). Outputs: The
-/// engine; `MissingKey` for an Anthropic connection without a key, `Unreachable` when no HTTP
-/// client can be built.
+/// Inputs: The connection. Outputs: The engine; `Unreachable` when no HTTP client can be built.
 /// Side effects: None until the engine is used.
-pub fn engine_for(
-    connection: &LlmConnection,
-    api_key: Option<Zeroizing<String>>,
-) -> Result<Box<dyn LlmEngine>, LlmError> {
+pub fn engine_for(connection: &LlmConnection) -> Result<Box<dyn LlmEngine>, LlmError> {
     if connection.kind().is_local_cli() {
         return Ok(Box::new(cli_agent::CliAgentEngine::installed(connection)));
     }
     let transport = Arc::new(transport::ReqwestLlmTransport::new()?);
     Ok(match connection.kind() {
         LlmKind::OpenAiCompatible => Box::new(openai_compatible::OpenAiCompatibleEngine::new(
-            connection, api_key, transport,
-        )),
-        LlmKind::Anthropic => Box::new(anthropic_messages::AnthropicMessagesEngine::new(
-            connection,
-            api_key.ok_or(LlmError::MissingKey)?,
-            transport,
+            connection, transport,
         )),
         LlmKind::ClaudeCode | LlmKind::Codex => {
             Box::new(cli_agent::CliAgentEngine::installed(connection))
@@ -69,7 +55,7 @@ const MAX_REASON_CHARS: usize = 300;
 pub(crate) fn status_error(status: u16, body: &str) -> LlmError {
     match status {
         401 | 403 => LlmError::Unauthorized,
-        // 529 is Anthropic's "overloaded".
+        // 529 is the "overloaded" some servers borrow from Anthropic's API.
         429 | 529 => LlmError::RateLimited,
         400..=499 => LlmError::Rejected {
             status,
@@ -79,7 +65,7 @@ pub(crate) fn status_error(status: u16, body: &str) -> LlmError {
     }
 }
 
-/// Reads the reason from an error reply, in the shape Anthropic and OpenAI-compatible servers
+/// Reads the reason from an error reply, in the shapes OpenAI-compatible servers
 /// share: `{"error": {"type", "message"}}`, or `{"error": "text"}` (Ollama).
 ///
 /// Inputs: The reply body. Outputs: `"<type>: <message>"` (or just one of them) on one line,

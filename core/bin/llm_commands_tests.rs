@@ -1,5 +1,5 @@
 //! Specifies the language model commands shared by the app (FFI) and the web API (#95): reading
-//! and changing the settings, keeping keys out of every answer, testing a connection, and
+//! and changing the settings, keeping no API key anywhere (#117), testing a connection, and
 //! writing a meeting's summary with a fake model.
 
 use std::{
@@ -8,11 +8,9 @@ use std::{
 };
 
 use serde_json::{Value, json};
-use zeroize::Zeroizing;
 
 use super::{
     llm_commands::{LlmServices, run_llm_command, summarize_with},
-    llm_settings::MemoryLlmKeyring,
     meeting_summaries::PreparedSummary,
 };
 use crate::{
@@ -24,7 +22,7 @@ use crate::{
     ports::ai::LlmEngine,
 };
 
-/// Answers every request with a fixed text and keeps the keys it was built with.
+/// Answers every request with a fixed text.
 struct EchoEngine(String);
 
 impl LlmEngine for EchoEngine {
@@ -36,24 +34,20 @@ impl LlmEngine for EchoEngine {
     }
 }
 
-fn services(name: &str) -> (LlmServices, Arc<Mutex<Vec<Option<String>>>>) {
+fn services(name: &str) -> (LlmServices, Arc<Mutex<Vec<String>>>) {
     let folder = std::env::temp_dir().join(format!("llm-commands-{name}-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
-    let keys_seen: Arc<Mutex<Vec<Option<String>>>> = Arc::default();
-    let seen = Arc::clone(&keys_seen);
-    let services = LlmServices::new(
-        folder.join("db.sqlite3.llm-settings.json"),
-        Arc::new(MemoryLlmKeyring::default()),
-        "Laptop",
-    )
-    .with_transcription_settings(PathBuf::from("/nonexistent"))
-    .with_engine_factory(Arc::new(move |_connection: &LlmConnection, key| {
-        if let Ok(mut seen) = seen.lock() {
-            seen.push(key.map(|key: Zeroizing<String>| key.as_str().to_owned()));
-        }
-        Ok(Box::new(EchoEngine("OK".to_owned())) as Box<dyn LlmEngine>)
-    }));
-    (services, keys_seen)
+    let built: Arc<Mutex<Vec<String>>> = Arc::default();
+    let seen = Arc::clone(&built);
+    let services = LlmServices::new(folder.join("db.sqlite3.llm-settings.json"), "Laptop")
+        .with_transcription_settings(PathBuf::from("/nonexistent"))
+        .with_engine_factory(Arc::new(move |connection: &LlmConnection| {
+            if let Ok(mut seen) = seen.lock() {
+                seen.push(connection.id().to_owned());
+            }
+            Ok(Box::new(EchoEngine("OK".to_owned())) as Box<dyn LlmEngine>)
+        }));
+    (services, built)
 }
 
 fn run(services: &LlmServices, request: Value) -> Value {
@@ -62,8 +56,8 @@ fn run(services: &LlmServices, request: Value) -> Value {
 }
 
 #[test]
-fn connections_are_saved_listed_and_never_reveal_their_key() {
-    let (services, keys_seen) = services("save");
+fn connections_are_saved_listed_and_no_api_key_is_kept() {
+    let (services, built) = services("save");
     let empty = run(&services, json!({"command": "settings"}));
     assert_eq!(empty["ok"], true, "{empty}");
     assert_eq!(empty["connections"], json!([]));
@@ -77,17 +71,28 @@ fn connections_are_saved_listed_and_never_reveal_their_key() {
 
     let saved = run(
         &services,
-        json!({"command": "save_connection", "label": "Claude", "kind": "anthropic",
-               "base_url": "https://api.anthropic.com", "model": "claude-opus-5-5",
-               "context_tokens": 200000, "api_key": "sk-ant-secret"}),
+        json!({"command": "save_connection", "label": "Office", "kind": "open_ai_compatible",
+               "base_url": "http://192.168.1.20:11434/v1", "model": "llama3.1:8b",
+               "context_tokens": 32768, "api_key": "sk-ant-secret"}),
     );
     assert_eq!(saved["ok"], true, "{saved}");
     let id = saved["connection"]["id"]
         .as_str()
         .unwrap_or_default()
         .to_owned();
-    assert_eq!(saved["connection"]["has_key"], true);
+    assert!(saved["connection"].get("has_key").is_none());
     assert!(!saved.to_string().contains("sk-ant-secret"));
+
+    let anthropic = run(
+        &services,
+        json!({"command": "save_connection", "label": "Claude", "kind": "anthropic",
+               "base_url": "https://api.anthropic.com", "model": "claude-opus-5-5",
+               "context_tokens": 200000}),
+    );
+    assert_eq!(
+        anthropic["error_code"], "invalid_request",
+        "the keyed Anthropic kind is gone: {anthropic}"
+    );
 
     let refused = run(
         &services,
@@ -100,35 +105,27 @@ fn connections_are_saved_listed_and_never_reveal_their_key() {
     assert_eq!(settings["connections"][0]["id"], id.as_str());
     assert_eq!(settings["connections"][0]["is_default"], true);
     assert!(!settings.to_string().contains("sk-ant-secret"));
+    let on_disk = std::fs::read_to_string(services_settings_file(&services)).unwrap_or_default();
+    assert!(
+        !on_disk.contains("sk-ant-secret"),
+        "a sent key is not stored"
+    );
 
     let tested = run(&services, json!({"command": "test_connection", "id": id}));
     assert_eq!(tested["ok"], true, "{tested}");
     assert_eq!(tested["reply"], "OK");
     assert_eq!(
-        keys_seen
-            .lock()
-            .map(|seen| seen.clone())
-            .unwrap_or_default(),
-        vec![Some("sk-ant-secret".to_owned())]
+        built.lock().map(|seen| seen.clone()).unwrap_or_default(),
+        vec![id.clone()]
     );
 
     let edited = run(
         &services,
-        json!({"command": "save_connection", "id": id, "label": "Claude work", "kind": "anthropic",
-               "base_url": "https://api.anthropic.com", "model": "claude-sonnet-5-5",
-               "context_tokens": 200000}),
+        json!({"command": "save_connection", "id": id, "label": "Office work", "kind": "open_ai_compatible",
+               "base_url": "http://192.168.1.20:11434/v1", "model": "qwen3:8b",
+               "context_tokens": 32768}),
     );
-    assert_eq!(
-        edited["connection"]["has_key"], true,
-        "an edit keeps the key"
-    );
-    let cleared = run(
-        &services,
-        json!({"command": "save_connection", "id": id, "label": "Claude work", "kind": "anthropic",
-               "base_url": "https://api.anthropic.com", "model": "claude-sonnet-5-5",
-               "context_tokens": 200000, "clear_key": true}),
-    );
-    assert_eq!(cleared["connection"]["has_key"], false);
+    assert_eq!(edited["connection"]["label"], "Office work", "{edited}");
 
     let deleted = run(&services, json!({"command": "delete_connection", "id": id}));
     assert_eq!(deleted["deleted"], true);
@@ -184,7 +181,7 @@ fn the_default_template_and_automatic_summaries_are_updated_only_when_named() {
 
 #[test]
 fn a_summary_uses_the_default_connection_and_is_stored() {
-    let (services, keys_seen) = services("summarize");
+    let (services, built) = services("summarize");
     let prepared = || PreparedSummary {
         material: SummaryMaterial {
             lines: vec![SpokenLine {
@@ -233,13 +230,7 @@ fn a_summary_uses_the_default_connection_and_is_stored() {
             .map(|summary| summary.text),
         Some("OK".to_owned())
     );
-    assert_eq!(
-        keys_seen
-            .lock()
-            .map(|seen| seen.clone())
-            .unwrap_or_default(),
-        vec![None]
-    );
+    assert_eq!(built.lock().map(|seen| seen.len()).unwrap_or_default(), 1);
 }
 
 /// Rejects every request the way Anthropic does when the account has no credit left.
@@ -259,7 +250,7 @@ impl LlmEngine for RejectingEngine {
 #[test]
 fn a_rejected_summary_tells_the_owner_the_servers_reason_apart_from_the_error_text() {
     let (services, _) = services("rejected");
-    let services = services.with_engine_factory(Arc::new(|_connection: &LlmConnection, _key| {
+    let services = services.with_engine_factory(Arc::new(|_connection: &LlmConnection| {
         Ok(Box::new(RejectingEngine) as Box<dyn LlmEngine>)
     }));
     run(
@@ -312,7 +303,7 @@ fn a_claude_code_connection_needs_no_address_or_key_and_says_whether_the_tool_is
     assert_eq!(connection["kind"], "claude_code", "{saved}");
     assert_eq!(connection["base_url"], "");
     assert_eq!(connection["model"], "");
-    assert_eq!(connection["has_key"], false, "a key is never stored for it");
+    assert!(connection.get("has_key").is_none());
     assert!(connection["tool_installed"].is_boolean());
 }
 
@@ -330,7 +321,7 @@ impl LlmEngine for SignedOutTool {
 #[test]
 fn a_tool_failure_has_its_own_code_and_what_the_tool_said() {
     let (services, _) = services("tool-failed");
-    let services = services.with_engine_factory(Arc::new(|_connection: &LlmConnection, _key| {
+    let services = services.with_engine_factory(Arc::new(|_connection: &LlmConnection| {
         Ok(Box::new(SignedOutTool) as Box<dyn LlmEngine>)
     }));
     let saved = run(
@@ -354,11 +345,7 @@ fn a_tool_failure_has_its_own_code_and_what_the_tool_said() {
 fn real_tool_connections_answer_the_test_request() {
     let folder = std::env::temp_dir().join(format!("llm-real-tools-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
-    let services = LlmServices::new(
-        folder.join("db.sqlite3.llm-settings.json"),
-        Arc::new(MemoryLlmKeyring::default()),
-        "Laptop",
-    );
+    let services = LlmServices::new(folder.join("db.sqlite3.llm-settings.json"), "Laptop");
     for kind in ["claude_code", "codex"] {
         let saved = run(
             &services,
@@ -372,4 +359,9 @@ fn real_tool_connections_answer_the_test_request() {
         assert_eq!(answer["ok"], true, "{kind}: {answer}");
     }
     let _ = std::fs::remove_dir_all(folder);
+}
+
+/// Where the services keep their settings file.
+fn services_settings_file(services: &LlmServices) -> PathBuf {
+    services.settings_file().to_path_buf()
 }

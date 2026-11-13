@@ -213,10 +213,9 @@ pub enum OnOff {
 /// The protocol of a new AI connection.
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
 pub enum AiKind {
-    /// OpenAI's Chat Completions, also spoken by Mistral, Ollama, llama.cpp, LM Studio and vLLM.
+    /// OpenAI's Chat Completions, spoken by servers such as Ollama, llama.cpp, LM Studio and
+    /// vLLM. No API key is sent: the app keeps none.
     Openai,
-    /// Anthropic's Messages API.
-    Anthropic,
 }
 
 /// AI connection actions (#95).
@@ -224,8 +223,7 @@ pub enum AiKind {
 pub enum AiCommand {
     /// Lists the connections, the default one and whether summaries are automatic.
     List,
-    /// Adds a connection. Its API key, if it needs one, is read from `NOTE_TAKER_LLM_API_KEY`,
-    /// so it never lands in the shell history, and kept in the system keychain.
+    /// Adds a connection to a server that needs no API key.
     Add {
         /// A name for it, such as `Office server`.
         #[arg(long)]
@@ -236,14 +234,14 @@ pub enum AiCommand {
         /// Its address: HTTPS, or plain HTTP on this machine or the local network.
         #[arg(long)]
         url: String,
-        /// The model, such as `llama3.1:8b` or `claude-opus-5-5`.
+        /// The model, such as `llama3.1:8b`.
         #[arg(long)]
         model: String,
         /// How many tokens the model reads at once.
         #[arg(long, default_value_t = 32_768)]
         context: u32,
     },
-    /// Removes a connection and its key.
+    /// Removes a connection.
     Remove {
         /// The connection's ID.
         id: String,
@@ -1186,12 +1184,10 @@ fn run_ai(command: AiCommand, cli_service: &mut impl CliService) -> Result<Strin
             "label": label,
             "kind": match kind {
                 AiKind::Openai => "open_ai_compatible",
-                AiKind::Anthropic => "anthropic",
             },
             "base_url": url,
             "model": model,
             "context_tokens": context,
-            "api_key": std::env::var("NOTE_TAKER_LLM_API_KEY").ok(),
         }),
         AiCommand::Remove { id } => json!({"command": "delete_connection", "id": id}),
         AiCommand::Default { id } => json!({"command": "update", "default_connection": id}),
@@ -1220,7 +1216,7 @@ fn run_ai(command: AiCommand, cli_service: &mut impl CliService) -> Result<Strin
     })
 }
 
-/// Formats the AI settings as a table, keys left out.
+/// Formats the AI settings as a table.
 fn format_ai_settings(settings: &serde_json::Value) -> String {
     let mut lines = vec![format!(
         "Automatic summaries: {}",
@@ -1239,7 +1235,7 @@ fn format_ai_settings(settings: &serde_json::Value) -> String {
     }
     for connection in connections {
         lines.push(format!(
-            "{}{}  {}  {}  {}{}",
+            "{}{}  {}  {}  {}",
             if connection["is_default"] == true {
                 "* "
             } else {
@@ -1249,11 +1245,6 @@ fn format_ai_settings(settings: &serde_json::Value) -> String {
             connection["label"].as_str().unwrap_or_default(),
             connection["model"].as_str().unwrap_or_default(),
             connection["base_url"].as_str().unwrap_or_default(),
-            if connection["has_key"] == true {
-                "  (key saved)"
-            } else {
-                ""
-            },
         ));
     }
     lines.join("\n")

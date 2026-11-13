@@ -8,18 +8,18 @@
 //! | `command` | Fields | Answer |
 //! | --- | --- | --- |
 //! | `settings` | | `connections`, `default_connection`, `template`, `default_template`, `custom_template`, `auto_summarize`, `placeholders` |
-//! | `save_connection` | `id`? (absent creates), `label`, `kind`, `base_url` (not for `claude_code`/`codex`), `model` (optional for those), `context_tokens`, `api_key`? (ignored for those), `clear_key`? | `connection` |
-//! | `delete_connection` | `id` | `deleted: true` (its key goes too) |
+//! | `save_connection` | `id`? (absent creates), `label`, `kind` (`open_ai_compatible`, `claude_code`, `codex`), `base_url` (not for `claude_code`/`codex`), `model` (optional for those), `context_tokens` | `connection` |
+//! | `delete_connection` | `id` | `deleted: true` |
 //! | `update` | `default_connection`?, `template`? (null resets), `auto_summarize`? | the settings |
 //! | `test_connection` | `id` | `reply`: the model's answer to a fixed one-line request, which holds no meeting content |
 //!
-//! A connection is shown as `{id,label,kind,base_url,model,context_tokens,plain_http,has_key,tool_installed,
-//! is_default}`; keys are write-only and never in an answer or a log. Meeting summaries go
+//! A connection is shown as `{id,label,kind,base_url,model,context_tokens,plain_http,tool_installed,
+//! is_default}`. The app keeps no API keys; an `api_key` field in a request is ignored. Meeting summaries go
 //! through `summarize_with`, which lets the caller hold its repository only while reading and
 //! writing, not while the model works.
 //!
 //! Error codes: `invalid_request`, `invalid_connection`, `invalid_template`,
-//! `connection_not_found`, `no_connection`, `missing_key`, `keychain_failed`, `save_failed`,
+//! `connection_not_found`, `no_connection`, `save_failed`,
 //! `nothing_to_summarize`, `too_long`, `llm_unreachable`, `llm_unauthorized`, `llm_rate_limited`,
 //! `llm_rejected`, `llm_failed`, `llm_refused`, `llm_invalid_response`, `llm_tool_missing`,
 //! `llm_tool_failed` and `storage_failed`. `llm_tool_failed` also carries `error_detail`, what
@@ -31,10 +31,11 @@ use std::{
 };
 
 use serde_json::{Value, json};
-use zeroize::Zeroizing;
 
 use super::{
-    llm_settings::{LlmKeyring, SavedLlmSettings, load_llm_settings, save_llm_settings},
+    llm_settings::{
+        SavedLlmSettings, forget_sealed_api_keys, load_llm_settings, save_llm_settings,
+    },
     meeting_summaries::{PreparedSummary, run_summary},
     transcription_settings::{load_settings, saved_glossary},
 };
@@ -52,16 +53,12 @@ use crate::{
 };
 
 /// Builds the engine for a connection; tests replace it with a fake model.
-pub type EngineFactory = Arc<
-    dyn Fn(&LlmConnection, Option<Zeroizing<String>>) -> Result<Box<dyn LlmEngine>, LlmError>
-        + Send
-        + Sync,
->;
+pub type EngineFactory =
+    Arc<dyn Fn(&LlmConnection) -> Result<Box<dyn LlmEngine>, LlmError> + Send + Sync>;
 
-/// What the commands need: the settings file, the keys, the model factory and this device.
+/// What the commands need: the settings file, the model factory and this device.
 pub struct LlmServices {
     settings_file: PathBuf,
-    keys: Arc<dyn LlmKeyring>,
     engines: EngineFactory,
     device_name: String,
     transcription_settings: Option<PathBuf>,
@@ -72,12 +69,11 @@ pub struct LlmServices {
 impl LlmServices {
     /// Creates the services with the real model adapters.
     ///
-    /// Inputs: `<db>.llm-settings.json`, the keyring and this device's name. Outputs: The
-    /// services. Side effects: None.
-    pub fn new(settings_file: PathBuf, keys: Arc<dyn LlmKeyring>, device_name: &str) -> Self {
+    /// Inputs: `<db>.llm-settings.json` and this device's name. Outputs: The services.
+    /// Side effects: None.
+    pub fn new(settings_file: PathBuf, device_name: &str) -> Self {
         Self {
             settings_file,
-            keys,
             engines: Arc::new(engine_for),
             device_name: device_name.to_owned(),
             transcription_settings: None,
@@ -85,11 +81,11 @@ impl LlmServices {
         }
     }
 
-    /// Builds the services of a daemon or CLI on a database: settings beside it, keys in the
-    /// platform keychain, the glossary from the transcription settings, and the device name from
-    /// `NOTE_TAKER_DEVICE_NAME`.
+    /// Builds the services of a daemon or CLI on a database: settings beside it, the glossary
+    /// from the transcription settings, and the device name from `NOTE_TAKER_DEVICE_NAME`.
     ///
-    /// Side effects: Reads the environment.
+    /// Side effects: Reads the environment; deletes sealed API key files an earlier version left
+    /// in the key folder.
     pub fn for_database(database_path: &std::path::Path) -> Self {
         let key_directory = std::env::var("NOTE_TAKER_ENCRYPTION_KEY_DIR").map_or_else(
             |_| {
@@ -102,12 +98,9 @@ impl LlmServices {
         );
         let device_name = std::env::var("NOTE_TAKER_DEVICE_NAME")
             .unwrap_or_else(|_| String::from("this computer"));
+        forget_sealed_api_keys(&key_directory);
         Self::new(
             super::llm_settings::llm_settings_file_for(database_path),
-            Arc::new(super::llm_settings::PlatformLlmKeyring::new(
-                key_directory,
-                None,
-            )),
             &device_name,
         )
         .with_transcription_settings(super::transcription_settings::settings_file_for(
@@ -127,21 +120,22 @@ impl LlmServices {
         self
     }
 
+    /// The settings file. Side effects: None.
+    pub fn settings_file(&self) -> &std::path::Path {
+        &self.settings_file
+    }
+
     /// Reads the current settings. Side effects: Reads the file.
     pub fn settings(&self) -> SavedLlmSettings {
         load_llm_settings(&self.settings_file)
     }
 
-    /// Builds the engine for a connection with its saved key.
+    /// Builds the engine for a connection.
     pub(crate) fn engine(
         &self,
         connection: &LlmConnection,
     ) -> Result<Box<dyn LlmEngine>, CommandError> {
-        let key = self
-            .keys
-            .load(connection.id())
-            .map_err(|_| CommandError::new("keychain_failed", "the API key could not be read"))?;
-        (self.engines)(connection, key).map_err(CommandError::from)
+        (self.engines)(connection).map_err(CommandError::from)
     }
 
     /// Changes the settings and saves them, one change at a time.
@@ -223,7 +217,6 @@ impl From<LlmError> for CommandError {
             LlmError::ServerFailed { .. } => "llm_failed",
             LlmError::Refused => "llm_refused",
             LlmError::InvalidResponse => "llm_invalid_response",
-            LlmError::MissingKey => "missing_key",
             LlmError::ToolMissing { .. } => "llm_tool_missing",
             LlmError::ToolFailed { .. } => "llm_tool_failed",
         };
@@ -267,7 +260,7 @@ pub fn run_llm_command(services: &LlmServices, request_json: &str) -> String {
 /// Picks the command.
 fn dispatch(services: &LlmServices, request: &Value) -> Result<Value, CommandError> {
     match request.get("command").and_then(Value::as_str) {
-        Some("settings") => Ok(settings_json(services, &services.settings())),
+        Some("settings") => Ok(settings_json(&services.settings())),
         Some("save_connection") => save_connection(services, request),
         Some("delete_connection") => delete_connection(services, text(request, "id")?),
         Some("update") => update(services, request),
@@ -284,14 +277,14 @@ fn text<'request>(request: &'request Value, field: &str) -> Result<&'request str
         .ok_or_else(|| CommandError::new("invalid_request", format!("`{field}` is required")))
 }
 
-/// Describes the settings, keys left out.
-pub fn settings_json(services: &LlmServices, settings: &SavedLlmSettings) -> Value {
+/// Describes the settings.
+pub fn settings_json(settings: &SavedLlmSettings) -> Value {
     let default_id = settings.default_connection().map(LlmConnection::id);
     json!({
         "connections": settings
             .connections()
             .iter()
-            .map(|connection| connection_json(services, connection, default_id))
+            .map(|connection| connection_json(connection, default_id))
             .collect::<Vec<_>>(),
         "default_connection": default_id,
         "template": settings.template().as_str(),
@@ -302,13 +295,8 @@ pub fn settings_json(services: &LlmServices, settings: &SavedLlmSettings) -> Val
     })
 }
 
-/// Describes one connection; `has_key` says only whether a key is saved.
-fn connection_json(
-    services: &LlmServices,
-    connection: &LlmConnection,
-    default_id: Option<&str>,
-) -> Value {
-    let has_key = services.keys.load(connection.id()).ok().flatten().is_some();
+/// Describes one connection.
+fn connection_json(connection: &LlmConnection, default_id: Option<&str>) -> Value {
     json!({
         "id": connection.id(),
         "label": connection.label(),
@@ -317,7 +305,6 @@ fn connection_json(
         "model": connection.model(),
         "context_tokens": connection.context_tokens(),
         "plain_http": connection.is_plain_http(),
-        "has_key": has_key,
         // For Claude Code and Codex: whether the tool is installed here (#105).
         "tool_installed": connection.kind().is_local_cli()
             && find_tool(connection.kind()).is_some(),
@@ -325,7 +312,7 @@ fn connection_json(
     })
 }
 
-/// Creates or edits a connection and saves or clears its key.
+/// Creates or edits a connection.
 fn save_connection(services: &LlmServices, request: &Value) -> Result<Value, CommandError> {
     let kind: LlmKind = request
         .get("kind")
@@ -334,7 +321,7 @@ fn save_connection(services: &LlmServices, request: &Value) -> Result<Value, Com
         .ok_or_else(|| {
             CommandError::new(
                 "invalid_request",
-                "`kind` is open_ai_compatible, anthropic, claude_code or codex",
+                "`kind` is open_ai_compatible, claude_code or codex",
             )
         })?;
     let context_tokens = request
@@ -361,41 +348,15 @@ fn save_connection(services: &LlmServices, request: &Value) -> Result<Value, Com
         None => LlmConnection::new(label, kind, base_url, model, context_tokens),
     }
     .map_err(|error| CommandError::new("invalid_connection", error.to_string()))?;
-    let api_key = request
-        .get("api_key")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|key| !key.is_empty() && !kind.is_local_cli());
-    if let Some(key) = api_key
-        && crate::transcription_settings::validated_key(key).is_none()
-    {
-        return Err(CommandError::new(
-            "invalid_connection",
-            "the API key holds spaces or is too long",
-        ));
-    }
     let settings = services.change(|settings| {
         settings.upsert_connection(checked.clone());
         Ok(())
     })?;
-    let keychain_failed =
-        |_| CommandError::new("keychain_failed", "the API key could not be saved");
-    if let Some(key) = api_key {
-        services
-            .keys
-            .save(checked.id(), key)
-            .map_err(keychain_failed)?;
-    } else if request.get("clear_key").and_then(Value::as_bool) == Some(true) {
-        services
-            .keys
-            .remove(checked.id())
-            .map_err(keychain_failed)?;
-    }
     let default_id = settings.default_connection().map(LlmConnection::id);
-    Ok(json!({"connection": connection_json(services, &checked, default_id)}))
+    Ok(json!({"connection": connection_json(&checked, default_id)}))
 }
 
-/// Removes a connection and its key.
+/// Removes a connection.
 fn delete_connection(services: &LlmServices, id: &str) -> Result<Value, CommandError> {
     services.change(|settings| {
         if settings.remove_connection(id) {
@@ -407,10 +368,6 @@ fn delete_connection(services: &LlmServices, id: &str) -> Result<Value, CommandE
             ))
         }
     })?;
-    // The connection is gone either way; a key left behind is unreachable.
-    if services.keys.remove(id).is_err() {
-        tracing::warn!("the removed connection's API key could not be deleted");
-    }
     Ok(json!({"deleted": true}))
 }
 
@@ -432,7 +389,7 @@ fn update(services: &LlmServices, request: &Value) -> Result<Value, CommandError
         }
         Ok(())
     })?;
-    Ok(settings_json(services, &settings))
+    Ok(settings_json(&settings))
 }
 
 /// Sends a fixed one-line request, holding no meeting content, to check a connection.

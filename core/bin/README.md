@@ -23,23 +23,22 @@ documented nonzero status codes distinguishable from lifecycle states.
 ## Live recordings (Issue #32)
 
 - `pipeline_composition.rs` is the only module that names concrete AI adapters. `PipelineConfig`
-  reads `NOTE_TAKER_TRANSCRIPTION_PROVIDER` (`auto`, `local`, `openai`), `NOTE_TAKER_WHISPER_MODEL`,
+  reads `NOTE_TAKER_WHISPER_MODEL`,
   `NOTE_TAKER_WHISPER_LANGUAGE` (`auto` by default; whisper.cpp would otherwise force English;
   an unknown code stops start-up; recordings without a chosen language carry it, and the daemon's
   Teams meetings record it),
-  `OPENAI_API_KEY` (redacted from `Debug`), `NOTE_TAKER_OPENAI_WHISPER_MODEL`,
-  `NOTE_TAKER_OPENAI_LANGUAGE`, `NOTE_TAKER_ENABLE_DIARIZATION`,
+  `NOTE_TAKER_ENABLE_DIARIZATION`,
   `NOTE_TAKER_DIARIZATION_SEGMENTATION_MODEL`, `NOTE_TAKER_DIARIZATION_EMBEDDING_MODEL`, and
   `NOTE_TAKER_VAD_ENABLED`. Diarization requested without both models, or in a build without the
   `diarization` feature, logs why and leaves segments unattributed; named models that cannot load
   are an error.
-  `auto` prefers a local whisper.cpp model and uses OpenAI only when a key is set (logged, since
-  chunk audio then leaves the device). `spawn_recording_controller` builds the pipeline on the
+  Transcription is always local (whisper.cpp); the OpenAI provider was removed (#117).
+  `spawn_recording_controller` builds the pipeline on the
   worker thread, with its own SQLite connections sharing the verified cipher and the encrypted
   voice library as matcher. No diarization adapter exists yet, so segments are `Unattributed`.
   Each transcribed chunk saves a telemetry row on a separate connection (Issue #53), so the
   Telemetry dashboard has data. Local whisper is recorded as `transcription` with the model's file
-  stem at an estimated 5 W. OpenAI is recorded as `cloud_transcription` with its model name at 1 W.
+  stem at an estimated 5 W.
 - `recording_controller.rs` (`RecordingController`) drives one recording: PCM → `LocalRecorder`
   (lifecycle; audio is dropped while paused) → `VadChunker` → `ChunkAudioStore` plus a
   `VadAudioChunk` with meeting-relative offsets → `RecordingManager`. A recording into an existing
@@ -281,7 +280,7 @@ saved people, writing no audio. `note_taker_assign_voice_group(cluster_ids_json,
 names a group's voices as one person, and `note_taker_prepare_cluster_review_clip(cluster_id)` writes one clip when it is played.
 All return caller-freed JSON; see `API_SPECS.md`.
 
-`transcription_settings.rs` keeps Settings' Whisper model, provider and OpenAI key, and `ffi_transcription.rs`
+`transcription_settings.rs` keeps Settings' Whisper model, and `ffi_transcription.rs`
 exposes them over the C ABI (#67). The same file keeps the transcription glossary: `glossary_source`
 reads it fresh for each recording and after-meeting pass (`pipeline_composition.rs` wires both), and
 `note_taker_set_glossary(terms)` saves newline-separated terms (0 saved, 1 refused, 2 failed). It
@@ -291,15 +290,16 @@ each round, which also bounds how far back recordings are folded, and
 `note_taker_set_keep_speech_days(days)` saves it (0 saved, 1 out of range, 2 failed). It also keeps
 whether online-meeting participants' voices are kept in the gallery (#103, `keep_meeting_voices`,
 off by default): `teams_bridge_composition.rs` gives `TeamsIdentityMapper::with_voice_keeping` a
-closure that reads `keeps_meeting_voices` at every offer. `cloud_fallback.rs` transcribes a chunk locally when OpenAI fails, and
-`device_resources.rs` reads free disk space and total memory.
+closure that reads `keeps_meeting_voices` at every offer. An old saved OpenAI choice is ignored
+and dropped at the next save (#117). `device_resources.rs` reads free disk space and total memory.
 
 `llm_settings.rs` keeps the language model settings (#95, #101) in `<db>.llm-settings.json`: the
 connections, the default one (the only connection when there is one), the summary template (the
 built-in one until the owner writes their own), and whether meetings are summarized
 automatically, which is on until the owner opts out. Entries edited by hand into something
-invalid are dropped when read. `LlmKeyStore` keeps each connection's API key in the keychain
-under `note-taker-llm-<id>`, or on Android in `llm-<id>.sealed`; keys never enter the JSON file.
+invalid, or of a removed kind such as `anthropic`, are dropped when read. No API keys are kept
+(#117); `forget_sealed_api_keys` deletes the sealed `llm-<id>.sealed` keys an older Android
+version saved.
 
 `meeting_summaries.rs` (#95) is shared by the app, the web API and the CLI. `prepare_summary` reads
 the labelled transcript, the owner's notes, the image attachments (oldest first, at most 20, each
@@ -309,11 +309,9 @@ transaction. `set_meeting_prompt` checks and stores a meeting's own template.
 
 `llm_commands.rs` (#95) runs the language model commands shared by the app and the web API, as
 `project_commands.rs` does for projects: `settings`, `save_connection`, `delete_connection`,
-`update` and `test_connection` (a fixed one-line request with no meeting content). Keys are
-write-only: answers carry `has_key`, never the key. `summarize_with` writes a meeting's summary
+`update` and `test_connection` (a fixed one-line request with no meeting content). `summarize_with` writes a meeting's summary
 with the named or default connection; the caller passes a `prepare` and a `store` step, so its
-repository is not held while the model works. `PlatformLlmKeyring` (in `llm_settings.rs`) keeps
-the keys; tests use an in-memory one.
+repository is not held while the model works.
 
 `auto_summaries.rs` (#101) summarizes finished meetings with the default connection while
 `auto_summarize` is on, in rounds on its own thread: at start, every five minutes, and when a

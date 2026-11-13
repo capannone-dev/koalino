@@ -33,12 +33,10 @@ use crate::{
         llm::MeetingSummary,
         models::{DeviceId, MeetingId},
     },
-    ffi::{
-        ffi_string, provided_encryption_key, runtime_recording_meeting, with_runtime_repositories,
-    },
+    ffi::{ffi_string, runtime_recording_meeting, with_runtime_repositories},
     ffi_settings::app_setting,
     llm_commands::{LlmServices, handoff_with, run_llm_command, summarize_with, summary_json},
-    llm_settings::{PlatformLlmKeyring, llm_settings_file_for},
+    llm_settings::{forget_sealed_api_keys, llm_settings_file_for},
     meeting_summaries::{
         MeetingPromptError, PreparedSummary, load_summary, prepare_summary, set_meeting_prompt,
         store_summary, write_handoff,
@@ -50,28 +48,20 @@ use crate::{
 /// The services, built from the app's settings on first use.
 static SERVICES: OnceLock<Arc<LlmServices>> = OnceLock::new();
 
-/// Builds or borrows the services: settings beside the database, keys in the keychain (sealed
-/// under the host key on Android), the glossary and this device's name.
+/// Builds or borrows the services: settings beside the database, the glossary and this device's
+/// name. The first build deletes sealed API key files an earlier version kept.
 pub(crate) fn services() -> Arc<LlmServices> {
     Arc::clone(SERVICES.get_or_init(|| {
         let paths = TranscriptionPaths::from_lookup(&app_setting);
         let database = database_path();
-        let key_directory = paths
-            .sealed_key_file
-            .parent()
-            .map_or_else(PathBuf::new, std::path::Path::to_path_buf);
+        let key_directory = paths.key_directory.clone();
+        // Sealed API keys an earlier version kept (Android) are deleted (#117).
+        forget_sealed_api_keys(&key_directory);
         let device_name =
             app_setting("NOTE_TAKER_DEVICE_NAME").unwrap_or_else(|| String::from("this device"));
         Arc::new(
-            LlmServices::new(
-                llm_settings_file_for(&database),
-                Arc::new(PlatformLlmKeyring::new(
-                    key_directory,
-                    provided_encryption_key(),
-                )),
-                &device_name,
-            )
-            .with_transcription_settings(paths.settings_file),
+            LlmServices::new(llm_settings_file_for(&database), &device_name)
+                .with_transcription_settings(paths.settings_file),
         )
     }))
 }

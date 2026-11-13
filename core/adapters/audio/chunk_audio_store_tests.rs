@@ -1,10 +1,7 @@
 //! Specifies the temporary chunk-audio store: WAV/PCM encoding, delete-on-read, and clearing.
 
 use crate::{
-    adapters::{
-        ai::openai_whisper_adapter::AudioFileSource,
-        audio::chunk_audio_store::{ChunkAudioStore, encode_wav_pcm16},
-    },
+    adapters::audio::chunk_audio_store::{ChunkAudioStore, encode_wav_pcm16},
     domain::{
         errors::TranscriptionError,
         models::{AudioRecording, DeviceId, MeetingId, RecordingId},

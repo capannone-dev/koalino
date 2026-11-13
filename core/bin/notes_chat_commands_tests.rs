@@ -10,7 +10,6 @@ use serde_json::{Value, json};
 
 use super::{
     llm_commands::{LlmServices, run_llm_command},
-    llm_settings::MemoryLlmKeyring,
     notes_chat_commands::{
         ChatCommand, ask_with, gather_for_ask, gather_material, parse_chat_request,
         run_chat_store_command, store_messages,
@@ -245,15 +244,11 @@ fn asking_keeps_the_question_and_the_answer_in_the_chat() {
     std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
     let seen: Arc<Mutex<Vec<LlmRequest>>> = Arc::default();
     let recorder = Arc::clone(&seen);
-    let services = LlmServices::new(
-        folder.join("db.sqlite3.llm-settings.json"),
-        Arc::new(MemoryLlmKeyring::default()),
-        "Laptop",
-    )
-    .with_transcription_settings(PathBuf::from("/nonexistent"))
-    .with_engine_factory(Arc::new(move |_connection: &LlmConnection, _key| {
-        Ok(Box::new(Recorder(Arc::clone(&recorder))) as Box<dyn LlmEngine>)
-    }));
+    let services = LlmServices::new(folder.join("db.sqlite3.llm-settings.json"), "Laptop")
+        .with_transcription_settings(PathBuf::from("/nonexistent"))
+        .with_engine_factory(Arc::new(move |_connection: &LlmConnection| {
+            Ok(Box::new(Recorder(Arc::clone(&recorder))) as Box<dyn LlmEngine>)
+        }));
     let repository = repository();
     let voices = InMemoryVoiceVectorDB::new();
     let meeting_id = meeting(

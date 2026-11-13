@@ -51,7 +51,7 @@ note-taker summary <meeting-id> [--connection <id>] [--show]
 note-taker search <word>... [--projects | --project <id>]
 note-taker notes-folder [status | on [<path>] | off | sync]
 note-taker chat <question>... [--meeting <id> | --project <id>] [--history | --clear]
-note-taker ai [list | add --label L --kind openai|anthropic --url U --model M [--context N] | remove <id> | default <id> | test <id> | auto on|off]
+note-taker ai [list | add --label L --kind openai --url U --model M [--context N] | remove <id> | default <id> | test <id> | auto on|off]
 note-taker [--log-level <level>] <command> ...
 ```
 
@@ -193,8 +193,8 @@ several voices is never kept. It is kept in the same settings file and read at e
 `summary <meeting-id>` writes the meeting's summary with the default AI connection (or the one
 `--connection` names) and prints it; the meeting's transcript, notes and photos are sent to that
 connection's server. `--show` prints the stored summary instead. `ai` manages the connections
-(#95): `add` reads an API key, when one is needed, from `NOTE_TAKER_LLM_API_KEY`, so it never
-lands in the shell history, and keeps it in the system keychain; `list` never shows keys; `test`
+(#95): `add` saves an OpenAI-compatible server on this computer or the local network (Koalino
+keeps no API keys, #117); `test`
 sends a one-line request holding no meeting content; `auto on|off` turns automatic summaries on or
 off.
 

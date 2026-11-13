@@ -1,7 +1,7 @@
-//! Settings' Whisper model and OpenAI controls over the C ABI (#67).
+//! Settings' Whisper model controls over the C ABI (#67).
 //!
-//! `note_taker_transcription_settings` returns everything Settings shows as JSON, and never the
-//! key: only whether one is saved. Changes take effect at the next recording, because the runtime
+//! `note_taker_transcription_settings` returns everything Settings shows as JSON. Transcription
+//! runs on the device: the app keeps no API keys (#117). Changes take effect at the next recording, because the runtime
 //! rebuilds the pipeline when a recording starts after a change.
 
 use std::{
@@ -24,10 +24,8 @@ use crate::{
             HuggingFaceModelSource, ModelDownloadError, download_whisper_model,
         },
     },
-    cloud_fallback::cloud_fallback_active,
     device_resources::{available_disk_bytes, total_memory_bytes},
     domain::{
-        errors::CryptoError,
         whisper_catalog::{WHISPER_MODELS, WhisperModelEntry, find_whisper_model},
         whisper_speed_check::{next_model_to_check, speed_check_message},
         whisper_suggestion::{
@@ -35,14 +33,12 @@ use crate::{
             suggest_whisper_model,
         },
     },
-    ffi::provided_encryption_key,
     ffi_settings::app_setting,
-    pipeline_composition::{OPENAI_API_KEY_VARIABLE, efficient_gpu_status, local_gpu_megabytes},
+    pipeline_composition::{efficient_gpu_status, local_gpu_megabytes},
     speed_check::{CheckTarget, load_record},
     transcription_settings::{
-        OpenAiKeyStore, SavedProvider, SavedTranscriptionSettings, TranscriptionPaths,
-        load_settings, save_settings, saved_keep_for, test_openai_key, validated_key,
-        with_automatic_model,
+        SavedTranscriptionSettings, TranscriptionPaths, load_settings, save_settings,
+        saved_keep_for, with_automatic_model,
     },
 };
 use crate::{
@@ -57,10 +53,6 @@ use crate::{
 const STATUS_OK: c_int = 0;
 const STATUS_INVALID: c_int = 1;
 const STATUS_FAILED: c_int = 2;
-/// The keychain is missing, so a key can't be saved (no plain-file fallback).
-const STATUS_NO_KEYCHAIN: c_int = 3;
-/// OpenAI was chosen with no key to use.
-const STATUS_NO_KEY: c_int = 4;
 /// Another download is running.
 const STATUS_BUSY: c_int = 5;
 /// The file would not fit on disk.
@@ -130,11 +122,6 @@ pub(crate) fn computer_sound_wanted() -> bool {
 /// Side effects: Reads the settings file.
 pub(crate) fn speech_keep_for() -> std::time::Duration {
     saved_keep_for(&load_settings(&paths().settings_file))
-}
-
-/// Opens the key store.
-fn key_store(paths: &TranscriptionPaths) -> OpenAiKeyStore {
-    OpenAiKeyStore::open(paths, provided_encryption_key())
 }
 
 /// Reads, changes and stores the choices, then marks the pipeline stale.
@@ -254,8 +241,8 @@ fn hardware_key(efficient_gpu_available: bool, models: &BTreeMap<String, PathBuf
 
 /// What the speed check (#109) times: Automatic's model on this device.
 ///
-/// Inputs: The paths. Outputs: The target, or `None` under OpenAI, with a hand-picked model on
-/// the device, or with no model. Side effects: Reads files; may start whisper.cpp's backends to
+/// Inputs: The paths. Outputs: The target, or `None` with a hand-picked model on the device, or
+/// with no model. Side effects: Reads files; may start whisper.cpp's backends to
 /// find a GPU.
 fn speed_check_target_in(paths: &TranscriptionPaths) -> Option<CheckTarget> {
     let saved = load_settings(&paths.settings_file);
@@ -263,7 +250,7 @@ fn speed_check_target_in(paths: &TranscriptionPaths) -> Option<CheckTarget> {
         .whisper_model
         .as_deref()
         .is_some_and(|file_name| paths.locate_model(file_name).is_some());
-    if saved.provider == Some(SavedProvider::Openai) || hand_picked {
+    if hand_picked {
         return None;
     }
     let automatic = automatic_on_this_device(paths).1?;
@@ -311,7 +298,7 @@ fn speed_check_message_in(
 /// The saved choices with "Automatic" applied, as the next recording uses them.
 ///
 /// Inputs: The saved choices and the paths. Outputs: The choices; a hand-picked model that is
-/// no longer on the device counts as Automatic. Under OpenAI they are unchanged.
+/// no longer on the device counts as Automatic.
 /// Side effects: See `automatic_on_this_device`, only when Automatic applies.
 pub(crate) fn effective_settings(
     saved: &SavedTranscriptionSettings,
@@ -321,22 +308,17 @@ pub(crate) fn effective_settings(
     saved.whisper_model = saved
         .whisper_model
         .filter(|file_name| paths.locate_model(file_name).is_some());
-    if saved.provider == Some(SavedProvider::Openai) || saved.whisper_model.is_some() {
+    if saved.whisper_model.is_some() {
         return saved;
     }
     with_automatic_model(&saved, automatic_on_this_device(paths).1)
 }
 
-/// Builds the whole Settings view. Side effects: Reads files and the key store.
+/// Builds the whole Settings view. Side effects: Reads files.
 fn settings_json() -> String {
     let paths = paths();
     let saved = load_settings(&paths.settings_file);
     let total_memory = total_memory_bytes();
-    let (key_saved, keychain_available) = match key_store(&paths).load() {
-        Ok(key) => (key.is_some(), true),
-        Err(CryptoError::KeychainUnavailable { .. }) => (false, false),
-        Err(_) => (false, true),
-    };
     // A hand-picked model on this device; `None` is Automatic (#106).
     let selected = saved
         .whisper_model
@@ -356,18 +338,9 @@ fn settings_json() -> String {
         paths.shipped_file_name(),
     );
     json!({
-        "provider": match saved.provider {
-            Some(SavedProvider::Openai) => "openai",
-            _ => "local",
-        },
-        "openai_model": saved.openai_model.as_deref().unwrap_or("whisper-1"),
-        "key_saved": key_saved,
-        "environment_key": app_setting(OPENAI_API_KEY_VARIABLE).is_some(),
-        "keychain_available": keychain_available,
         "selected_model": selected,
         "shipped_model": paths.shipped_file_name(),
         "available_disk_bytes": disk_probe.as_deref().and_then(available_disk_bytes),
-        "using_local_fallback": cloud_fallback_active(),
         "suggestion": {
             "file_name": suggestion.file_name,
             "efficient": suggestion.efficient,
@@ -460,14 +433,11 @@ pub unsafe extern "C" fn note_taker_dismiss_whisper_proposal(file_name: *const c
 
 /// Reads what a proposal depends on from the saved settings.
 ///
-/// Outputs: The model in use and the dismissed files, or `None` when OpenAI transcribes, since this
-/// device's speed then says nothing. Side effects: Reads the settings file.
+/// Outputs: The model in use and the dismissed files, or `None` without a model.
+/// Side effects: Reads the settings file.
 pub(crate) fn proposal_settings() -> Option<(String, Vec<String>)> {
     let paths = paths();
     let saved = load_settings(&paths.settings_file);
-    if saved.provider == Some(SavedProvider::Openai) {
-        return None;
-    }
     let current = effective_settings(&saved, &paths)
         .whisper_model
         .or_else(|| paths.shipped_file_name().map(str::to_owned))?;
@@ -647,92 +617,6 @@ pub extern "C" fn note_taker_retry_gpu() -> c_int {
     }
     PIPELINE_STALE.store(true, Ordering::Relaxed);
     STATUS_OK
-}
-
-/// Chooses where recordings are transcribed.
-///
-/// Inputs: `local` or `openai`; the app must have had the owner confirm that audio leaves the
-/// device before passing `openai`.
-/// Outputs: 0, 1 when unknown, or 4 when OpenAI has no key. Side effects: Stores the choice.
-///
-/// # Safety
-/// `provider` must be null or a valid NUL-terminated C string for this call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn note_taker_set_transcription_provider(provider: *const c_char) -> c_int {
-    let provider = match unsafe { text_argument(provider) } {
-        Some("local") => SavedProvider::Local,
-        Some("openai") => SavedProvider::Openai,
-        _ => return STATUS_INVALID,
-    };
-    if provider == SavedProvider::Openai
-        && !matches!(key_store(&paths()).load(), Ok(Some(_)))
-        && app_setting(OPENAI_API_KEY_VARIABLE).is_none()
-    {
-        return STATUS_NO_KEY;
-    }
-    update_settings(|saved| saved.provider = Some(provider))
-}
-
-/// Chooses the OpenAI model.
-///
-/// Inputs: A model name with no spaces. Outputs: 0 or 1. Side effects: Stores the choice.
-///
-/// # Safety
-/// `model` must be null or a valid NUL-terminated C string for this call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn note_taker_set_openai_model(model: *const c_char) -> c_int {
-    let Some(model) = (unsafe { text_argument(model) }).and_then(validated_key) else {
-        return STATUS_INVALID;
-    };
-    update_settings(|saved| saved.openai_model = Some(model.to_owned()))
-}
-
-/// Saves the OpenAI key without selecting OpenAI.
-///
-/// Inputs: The key. Outputs: 0, 1 when malformed, 3 when there is no keychain (nothing is
-/// written anywhere else), or 2. Side effects: Writes the key store. The key is never logged.
-///
-/// # Safety
-/// `key` must be null or a valid NUL-terminated C string for this call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn note_taker_save_openai_key(key: *const c_char) -> c_int {
-    let Some(key) = (unsafe { text_argument(key) }).and_then(validated_key) else {
-        return STATUS_INVALID;
-    };
-    match key_store(&paths()).save(key) {
-        Ok(()) => {
-            PIPELINE_STALE.store(true, Ordering::Relaxed);
-            STATUS_OK
-        }
-        Err(CryptoError::KeychainUnavailable { .. }) => STATUS_NO_KEYCHAIN,
-        Err(_) => STATUS_FAILED,
-    }
-}
-
-/// Removes the saved key and returns transcription to this device.
-///
-/// Outputs: 0, or 2 when the store refuses. Side effects: Writes the key store and the choices.
-#[unsafe(no_mangle)]
-pub extern "C" fn note_taker_remove_openai_key() -> c_int {
-    if key_store(&paths()).remove().is_err() {
-        return STATUS_FAILED;
-    }
-    update_settings(|saved| saved.provider = Some(SavedProvider::Local))
-}
-
-/// Tests the saved key without sending audio.
-///
-/// Outputs: `valid`, `invalid`, `quota_used`, `no_network`, `unexpected` or `no_key`; free it with
-/// `note_taker_free_string`. Side effects: One HTTPS request to OpenAI. Blocks: call off the UI.
-#[unsafe(no_mangle)]
-pub extern "C" fn note_taker_test_openai_key() -> *mut c_char {
-    let label = match key_store(&paths()).load() {
-        Ok(Some(key)) => test_openai_key(&key).as_str(),
-        _ => "no_key",
-    };
-    CString::new(label)
-        .map(CString::into_raw)
-        .unwrap_or(std::ptr::null_mut())
 }
 
 /// Starts downloading a model in the background.

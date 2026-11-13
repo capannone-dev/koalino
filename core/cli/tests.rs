@@ -1721,11 +1721,8 @@ fn ai_connections_are_added_and_listed_and_a_missing_summary_is_reported() {
         .create_meeting(&crate::domain::models::MeetingId::new("m-1"))
         .unwrap_or_else(|error| panic!("{error}"));
     let folder = std::env::temp_dir().join(format!("cli-ai-{}", Uuid::new_v4()));
-    let services = crate::llm_commands::LlmServices::new(
-        folder.join("db.llm-settings.json"),
-        std::sync::Arc::new(crate::llm_settings::MemoryLlmKeyring::default()),
-        "Laptop",
-    );
+    let services =
+        crate::llm_commands::LlmServices::new(folder.join("db.llm-settings.json"), "Laptop");
     let mut cli_service = CoreCliService::new(
         NoRecordingControl,
         repository,
@@ -1933,14 +1930,11 @@ fn chat_asks_shows_and_clears_the_chat() {
         .unwrap_or_else(|error| panic!("{error}"));
     let folder = std::env::temp_dir().join(format!("cli-chat-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
-    let services = crate::llm_commands::LlmServices::new(
-        folder.join("db.llm-settings.json"),
-        std::sync::Arc::new(crate::llm_settings::MemoryLlmKeyring::default()),
-        "Laptop",
-    )
-    .with_engine_factory(std::sync::Arc::new(|_, _| {
-        Ok(Box::new(FixedAnswer) as Box<dyn crate::ports::ai::LlmEngine>)
-    }));
+    let services =
+        crate::llm_commands::LlmServices::new(folder.join("db.llm-settings.json"), "Laptop")
+            .with_engine_factory(std::sync::Arc::new(|_| {
+                Ok(Box::new(FixedAnswer) as Box<dyn crate::ports::ai::LlmEngine>)
+            }));
     let saved = crate::llm_commands::run_llm_command(
         &services,
         r#"{"command":"save_connection","label":"Local","kind":"open_ai_compatible","base_url":"http://127.0.0.1:8080/v1","model":"m","context_tokens":8192}"#,

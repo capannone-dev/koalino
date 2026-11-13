@@ -3,10 +3,10 @@
 use std::path::PathBuf;
 
 use super::transcription_settings::{
-    KeyTestResult, SavedProvider, SavedTranscriptionSettings, TranscriptionPaths,
-    apply_saved_settings, load_settings, save_settings, validated_key,
+    SavedTranscriptionSettings, TranscriptionPaths, apply_saved_settings, load_settings,
+    save_settings,
 };
-use crate::pipeline_composition::{PipelineConfig, TranscriptionProvider};
+use crate::pipeline_composition::PipelineConfig;
 
 /// Creates a clean data folder holding a database path and a shipped model.
 fn paths(name: &str) -> TranscriptionPaths {
@@ -45,38 +45,6 @@ fn install(paths: &TranscriptionPaths, file: &str) -> PathBuf {
     path
 }
 
-/// Verifies saving only a key keeps audio local.
-#[test]
-fn a_saved_key_alone_stays_local() {
-    let paths = paths("key");
-    let applied = apply_saved_settings(
-        config(&paths),
-        &SavedTranscriptionSettings::default(),
-        &paths,
-        Some("sk-test".to_owned()),
-    );
-    assert_eq!(
-        applied.transcription_provider(),
-        TranscriptionProvider::Local
-    );
-}
-
-/// Verifies OpenAI is used only when chosen.
-#[test]
-fn choosing_openai_selects_it_and_enables_the_fallback() {
-    let paths = paths("openai");
-    let saved = SavedTranscriptionSettings {
-        provider: Some(SavedProvider::Openai),
-        ..Default::default()
-    };
-    let applied = apply_saved_settings(config(&paths), &saved, &paths, Some("sk-test".to_owned()));
-    assert_eq!(
-        applied.transcription_provider(),
-        TranscriptionProvider::OpenAi
-    );
-    assert!(applied.cloud_fallback());
-}
-
 /// Verifies a chosen model replaces the shipped one, and a missing one keeps it.
 #[test]
 fn a_chosen_model_applies_only_when_it_exists() {
@@ -85,10 +53,10 @@ fn a_chosen_model_applies_only_when_it_exists() {
         whisper_model: Some("ggml-small.bin".to_owned()),
         ..Default::default()
     };
-    let before = apply_saved_settings(config(&paths), &saved, &paths, None);
+    let before = apply_saved_settings(config(&paths), &saved, &paths);
     assert_eq!(before.local_model_path(), paths.shipped_model.as_deref());
     let installed = install(&paths, "ggml-small.bin");
-    let after = apply_saved_settings(config(&paths), &saved, &paths, None);
+    let after = apply_saved_settings(config(&paths), &saved, &paths);
     assert_eq!(after.local_model_path(), Some(installed.as_path()));
 }
 
@@ -104,14 +72,12 @@ fn only_catalog_models_can_be_located_or_removed() {
     assert!(paths.locate_model("ggml-base.bin").is_some());
 }
 
-/// Verifies choices survive a restart and damage is harmless, and the key is never in the file.
+/// Verifies choices survive a restart and damage is harmless.
 #[test]
-fn settings_round_trip_without_the_key() {
+fn settings_round_trip() {
     let paths = paths("file");
     let saved = SavedTranscriptionSettings {
-        provider: Some(SavedProvider::Local),
         whisper_model: Some("ggml-small.bin".to_owned()),
-        openai_model: None,
         efficient_gpu: false,
         dismissed_proposals: vec!["ggml-medium.bin".to_owned()],
         transcript_pass: Some(false),
@@ -124,28 +90,8 @@ fn settings_round_trip_without_the_key() {
     assert_eq!(load_settings(&paths.settings_file), Default::default());
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(load_settings(&paths.settings_file), saved);
-    let text = std::fs::read_to_string(&paths.settings_file).unwrap_or_else(|e| panic!("{e}"));
-    assert!(!text.contains("sk-"));
     std::fs::write(&paths.settings_file, b"{broken").unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(load_settings(&paths.settings_file), Default::default());
-}
-
-/// Verifies a key's form is checked before saving.
-#[test]
-fn keys_are_trimmed_and_malformed_ones_refused() {
-    assert_eq!(validated_key("  sk-abc\n"), Some("sk-abc"));
-    assert_eq!(validated_key("   "), None);
-    assert_eq!(validated_key("sk abc"), None);
-    assert_eq!(validated_key(&"x".repeat(600)), None);
-}
-
-/// Verifies the plain errors the owner sees.
-#[test]
-fn key_test_statuses_map_to_plain_results() {
-    assert_eq!(KeyTestResult::from_status(200), KeyTestResult::Valid);
-    assert_eq!(KeyTestResult::from_status(401), KeyTestResult::Invalid);
-    assert_eq!(KeyTestResult::from_status(429), KeyTestResult::QuotaUsed);
-    assert_eq!(KeyTestResult::from_status(500), KeyTestResult::Unexpected);
 }
 
 /// Efficient mode is off unless chosen, and old settings files still load.
@@ -277,7 +223,7 @@ fn the_after_meeting_pass_switch_is_saved_and_defaults_to_on() {
     let saved = load_settings(&paths.settings_file);
     assert_eq!(saved.transcript_pass, Some(false));
     assert!(!transcript_pass_enabled(&saved));
-    assert!(!apply_saved_settings(config(&paths), &saved, &paths, None).transcript_pass());
+    assert!(!apply_saved_settings(config(&paths), &saved, &paths).transcript_pass());
 
     save_transcript_pass(&paths.settings_file, true).unwrap_or_else(|error| panic!("{error}"));
     assert!(transcript_pass_enabled(&load_settings(
@@ -326,4 +272,23 @@ fn the_computer_sound_is_recorded_until_turned_off() {
     )));
     save_computer_sound(&paths.settings_file, true).unwrap_or_else(|error| panic!("{error}"));
     assert!(computer_sound_enabled(&load_settings(&paths.settings_file)));
+}
+
+/// Verifies a file an earlier version wrote, choosing OpenAI with its model, still loads and
+/// transcribes on the device, and the old choice is dropped when saved again (#117).
+#[test]
+fn an_old_openai_choice_is_ignored_and_dropped() {
+    let paths = paths("old-openai");
+    std::fs::write(
+        &paths.settings_file,
+        br#"{"provider":"openai","openai_model":"whisper-1","whisper_model":"ggml-base.bin"}"#,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let saved = load_settings(&paths.settings_file);
+    assert_eq!(saved.whisper_model.as_deref(), Some("ggml-base.bin"));
+    let applied = apply_saved_settings(config(&paths), &saved, &paths);
+    assert_eq!(applied.local_model_path(), paths.shipped_model.as_deref());
+    save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
+    let text = std::fs::read_to_string(&paths.settings_file).unwrap_or_else(|e| panic!("{e}"));
+    assert!(!text.contains("openai"));
 }

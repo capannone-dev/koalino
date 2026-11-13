@@ -24,7 +24,6 @@ use crate::{
         models::{MeetingId, TranscriptSegment},
     },
     llm_commands::LlmServices,
-    llm_settings::MemoryLlmKeyring,
     ports::{ai::LlmEngine, storage::NoteRepository},
     server::api::{ServerAppState, build_router},
 };
@@ -68,14 +67,10 @@ fn router() -> axum::Router {
         .unwrap_or_else(|error| panic!("{error}"));
     let folder = std::env::temp_dir().join(format!("chat-routes-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
-    let services = LlmServices::new(
-        folder.join("db.llm-settings.json"),
-        Arc::new(MemoryLlmKeyring::default()),
-        "Server",
-    )
-    .with_engine_factory(Arc::new(|_, _| {
-        Ok(Box::new(ReadingEngine) as Box<dyn LlmEngine>)
-    }));
+    let services = LlmServices::new(folder.join("db.llm-settings.json"), "Server")
+        .with_engine_factory(Arc::new(|_| {
+            Ok(Box::new(ReadingEngine) as Box<dyn LlmEngine>)
+        }));
     build_router(
         ServerAppState::new(repository, InMemoryVoiceVectorDB::new())
             .with_llm_services(Arc::new(services)),

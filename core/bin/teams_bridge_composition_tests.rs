@@ -14,7 +14,6 @@ use uuid::Uuid;
 use super::{TeamsBridgeConfig, TeamsBridgePorts, start_teams_bridge};
 use crate::{
     adapters::{
-        ai::openai_whisper_adapter::AudioFileSource,
         audio::chunk_audio_store::ChunkAudioStore,
         network::teams_bridge::message_decoder::local_meeting_uuid,
         storage::{
