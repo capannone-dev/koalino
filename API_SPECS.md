@@ -425,9 +425,9 @@ and meeting summaries" below). Keys are write-only.
   `11`, Paused `12`, Interrupted `13`, Stopped `14`, Error `15`. Runtime error codes remain below
   `10`, so lock-screen hosts can distinguish a state response from an unavailable runtime.
 - `char *note_taker_transcription_settings(void)` returns Settings' view as JSON (free it with
-  `note_taker_free_string`): `provider`, `openai_model`, `key_saved`, `environment_key`,
-  `keychain_available`, `selected_model`, `shipped_model`, `available_disk_bytes`,
-  `using_local_fallback`, `models` and `download`. It never contains the key.
+  `note_taker_free_string`): `selected_model`, `shipped_model`, `available_disk_bytes`, `models`
+  and `download`. Transcription is always on the device: the OpenAI provider and its key were
+  removed (#117).
 - `int32_t note_taker_set_efficient_gpu(int32_t enabled)` turns efficient mode on or off for the next recording. It returns `0`, or
   `1` when turning it on without a supported GPU. `int32_t note_taker_retry_gpu(void)` lets the GPU be tried again after a crash
   stopped it, and returns `0` or `2`. `note_taker_transcription_settings` adds `suggestion` (`file_name`, `efficient`, `reason`)
@@ -458,16 +458,11 @@ and meeting summaries" below). Keys are write-only.
   `int32_t note_taker_dismiss_whisper_proposal(const char *file_name)` stops proposing a catalog model
   and returns `0`, or `1` for an unknown file (#68).
 - `int32_t note_taker_set_whisper_model(const char *file_name)`,
-  `note_taker_set_transcription_provider(const char *provider)` (`local` or `openai`),
-  `note_taker_set_openai_model(const char *model)`, `note_taker_save_openai_key(const char *key)`,
-  `note_taker_remove_openai_key(void)`, `note_taker_download_whisper_model(const char *file_name)`
+  `note_taker_download_whisper_model(const char *file_name)`
   and `note_taker_remove_whisper_model(const char *file_name)` return `0` on success, `1` for an
-  invalid argument, `2` on failure, `3` with no keychain, `4` when OpenAI has no key, `5` when
-  another download runs, `6` when the file would not fit, and `7` for a model that can't be removed.
+  invalid argument, `2` on failure, `5` when another download runs, `6` when the file would not fit, and `7` for a model that can't be removed.
   Changes apply when the next recording starts.
 - `void note_taker_cancel_whisper_download(void)` cancels the download and removes its partial file.
-- `char *note_taker_test_openai_key(void)` returns `valid`, `invalid`, `quota_used`, `no_network`,
-  `unexpected` or `no_key`, after one request that lists models and sends no audio.
 
 The core never accepts background-service handles, callbacks, or retained pointers over FFI.
 
@@ -623,19 +618,19 @@ daemon without a settings file `503` `unavailable`. The apps use
 
 `GET /api/settings/llm` returns `{"ok":true,"connections":[...],"default_connection","template",
 "default_template","custom_template","auto_summarize","placeholders"}`. Each connection is
-`{"id","label","kind","base_url","model","context_tokens","plain_http","has_key","is_default",
-"tool_installed"}`, where `kind` is `open_ai_compatible` (OpenAI, Mistral, Ollama, llama.cpp,
-LM Studio, vLLM), `anthropic`, or (#105) `claude_code` or `codex`. The last two run the Claude
+`{"id","label","kind","base_url","model","context_tokens","plain_http","is_default",
+"tool_installed"}`, where `kind` is `open_ai_compatible` (a server such as Ollama, llama.cpp,
+LM Studio or vLLM) or (#105) `claude_code` or `codex`. The last two run the Claude
 Code or Codex CLI installed and signed in on the computer running the core, so a Claude or ChatGPT
 plan answers instead of API credit: they have no `base_url` and no key, their `model` may be
-empty (the tool's default), and `tool_installed` says whether the tool was found. Keys are
-write-only: no answer ever carries one.
+empty (the tool's default), and `tool_installed` says whether the tool was found. Koalino keeps
+no API keys (#117): requests carry no authorization header, a sent `api_key` is ignored, and the
+`anthropic` kind is refused (an old saved Anthropic connection is dropped when read).
 
 - `POST /api/settings/llm/connections` creates a connection from `{"label","kind","base_url",
-  "model","context_tokens","api_key"?}`; `PUT /api/settings/llm/connections/{id}` edits one (an
-  absent `api_key` keeps the saved key, `"clear_key":true` removes it). Both return
+  "model","context_tokens"}`; `PUT /api/settings/llm/connections/{id}` edits one. Both return
   `{"connection"}`. `base_url` must be HTTPS, or plain HTTP to a loopback or private LAN address.
-- `DELETE /api/settings/llm/connections/{id}` removes it and its key.
+- `DELETE /api/settings/llm/connections/{id}` removes it.
 - `POST /api/settings/llm/connections/{id}/test` sends a fixed one-line request (no meeting
   content) and returns `{"reply"}`.
 - `PUT /api/settings/llm` with any of `{"default_connection","template","auto_summarize"}` changes
@@ -656,10 +651,10 @@ write-only: no answer ever carries one.
 
 Errors are `{"ok":false,"error_code","error"}`: `400` `invalid_request`, `invalid_connection`,
 `invalid_template`; `404` `connection_not_found`, `meeting_not_found`; `409` `no_connection`,
-`missing_key`, `nothing_to_summarize`; `422` `too_long`; `502` `llm_unreachable`,
+`nothing_to_summarize`; `422` `too_long`; `502` `llm_unreachable`,
 `llm_unauthorized`, `llm_rate_limited`, `llm_rejected`, `llm_failed`, `llm_refused`,
 `llm_invalid_response`, `llm_tool_missing`, `llm_tool_failed` (with `error_detail`, what Claude
-Code or Codex said); `500` `keychain_failed`, `save_failed`, `storage_failed`; `503`
+Code or Codex said); `500` `save_failed`, `storage_failed`; `503`
 `unavailable`. An `llm_rejected` error also carries `error_detail` when the AI server gave a
 reason, for example `invalid_request_error: Your credit balance is too low…` (one line, at most
 300 characters; shown to the owner, never logged) (#104). The chat routes do the same.
@@ -723,7 +718,7 @@ reason, for example `invalid_request_error: Your credit balance is too low…` (
   project deletes its chat.
 - Failures: `400` `invalid_request`, `empty`, `too_long` (over 4 000 characters); `404`
   `meeting_not_found`, `project_not_found`, `connection_not_found`; `409` `no_connection`,
-  `missing_key`, `nothing_to_chat`, `context_too_small`; `502` `llm_*`; `503` `unavailable`.
+  `nothing_to_chat`, `context_too_small`; `502` `llm_*`; `503` `unavailable`.
 
 ### Notes folder (#98)
 

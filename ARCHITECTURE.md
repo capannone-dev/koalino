@@ -14,7 +14,7 @@
 │   ├── compute_router.rs   # Implements the Dispatcher pattern
 │   └── teams_processor.rs  # Maps guaranteed external identities and auto-enrolls variants
 ├── adapters/         # IMPLEMENTATIONS (The "Plumbing")
-│   ├── ai/           # whisper_adapter.rs, openai_adapter.rs
+│   ├── ai/           # whisper.cpp, diarization, llm/ (no cloud transcription, #117)
 │   ├── network/      # libp2p_adapter.rs, teams_bridge/ (localhost WebSocket + Protobuf)
 │   └── storage/      # sqlite_adapter.rs, automerge_adapter.rs
 ├── protocol/         # teams_bridge.proto (source of truth) + checked-in generated Rust code
@@ -83,7 +83,7 @@
              ▼                                   ▼                                    ▼
  bin::recording_controller::RecordingController            bin::pipeline_composition (env)
    LocalRecorder (Idle/Recording/Paused/Interrupted/Stopped)     selects TranscriptionEngine
-     → VadChunker (speech pauses; ≤ 15 s, cut at a quiet frame)  (whisper.cpp | OpenAI)
+     → VadChunker (speech pauses; ≤ 15 s, cut at a quiet frame)  (whisper.cpp)          
      → ChunkAudioStore (delete-on-read PCM, the engine's audio source)
      → VadAudioChunk (meeting-relative offsets) ─ submit_chunk (non-blocking)
              ▼

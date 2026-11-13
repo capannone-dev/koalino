@@ -3078,3 +3078,27 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - A model removed later falls back to the recording model: the settings read back `null`.
 - The web Settings page gains the switch and the menu (`/api/settings/after-meeting-pass`), for
   the daemon on a server or desktop. Its menu lists the models on the daemon's machine.
+
+## 2026-11-13 — #117 No API keys: OpenAI transcription and keyed AI connections removed
+
+- **Why:** the owner uses Koalino for themselves with their Claude and ChatGPT plans, through
+  Claude Code and Codex (#105), and asked to remove the API key features. Keys were an extra
+  secret to store, an extra way for meeting content to leave the device, and a source of
+  confusing errors (`missing_key`, `keychain_failed`).
+- **Transcription:** always on the device (whisper.cpp). The OpenAI Whisper adapter, the cloud
+  fallback, the provider choice, the key field and its FFI calls are gone, as are
+  `NOTE_TAKER_TRANSCRIPTION_PROVIDER`, `OPENAI_API_KEY`, `NOTE_TAKER_OPENAI_WHISPER_MODEL` and
+  `NOTE_TAKER_OPENAI_LANGUAGE`. A saved `openai` choice is ignored and dropped at the next save.
+  `TaskType::CloudTranscription` and `TranscriptionModel::ThirdParty` stay, so old telemetry rows
+  and older peers still read.
+- **AI connections:** an OpenAI-compatible server on this device or the local network (Ollama,
+  LM Studio, llama.cpp, vLLM), or Claude Code / Codex. No authorization header is ever sent. The
+  `anthropic` kind and the OpenAI, Anthropic and Mistral presets are gone; a saved Anthropic
+  connection is dropped when the settings are read, and a sent `api_key` is ignored.
+  `llm_unauthorized` now says to use a server that needs no key.
+- **Old keys:** sealed key files an older Android version wrote (`llm-*.sealed`,
+  `openai_key.sealed`) are deleted when the AI services open. Keys an older desktop version put
+  in the platform keychain (`note-taker-openai`, `note-taker-llm-<id>`) are left alone: reading the
+  keychain at start-up can ask to unlock it. The owner can delete them by hand.
+- Claude Code and Codex still run with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` removed from their
+  environment, so the plan's sign-in answers, not a stray key.

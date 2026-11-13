@@ -3,7 +3,7 @@
 # Koalino
 
 Koalino is a decentralized, offline-first meeting-notes application. It records meetings,
-transcribes them with Whisper (on-device with whisper.cpp, or with the OpenAI API by opt-in),
+transcribes them on the device with Whisper (whisper.cpp),
 groups transcript segments into known and unknown voices, and keeps notes in a CRDT-backed SQLite
 store. Voice embeddings, transcripts and meeting documents are encrypted at rest. The Rust core uses hexagonal architecture
 (ports and adapters), so you can swap the AI, network, storage, and export implementations
@@ -92,13 +92,9 @@ repository.
 | `NOTE_TAKER_P2P_LISTEN` | `/ip4/0.0.0.0/tcp/0` | libp2p listen multiaddress (port 0 picks a free port). Only paired devices can connect, except during pairing |
 | `NOTE_TAKER_DEVICE_NAME` | the host name | Name shown to your other devices during pairing |
 | `NOTE_TAKER_P2P_PEERS` | unset | Comma-separated `…/p2p/<peer-id>` addresses of your devices that mDNS cannot find (another subnet, NAT, VPN). They appear as nearby for pairing. Paired devices, configured or found by mDNS, are redialed every 10 s while disconnected |
-| `NOTE_TAKER_TRANSCRIPTION_PROVIDER` | `auto` | `auto`, `local` (whisper.cpp), or `openai` |
 | `NOTE_TAKER_WHISPER_MODEL` | unset | Path to the local GGML model (`local-ai` builds) |
 | `NOTE_TAKER_WHISPER_GPU` | on | `off` keeps local transcription on the CPU in GPU builds |
 | `NOTE_TAKER_WHISPER_LANGUAGE` | `auto` | Language detection, or a code such as `it` or `en`, for recordings without `--language`; kept in each meeting's details |
-| `OPENAI_API_KEY` | unset | Enables cloud transcription. Audio leaves the device only when this is set. In the app, a key saved in Settings replaces it |
-| `NOTE_TAKER_OPENAI_WHISPER_MODEL` | `whisper-1` | OpenAI transcription model |
-| `NOTE_TAKER_OPENAI_LANGUAGE` | unset (auto) | Language hint for the OpenAI API |
 | `NOTE_TAKER_TRANSCRIPT_PASS` | on (a phone runs it while charging) | After Stop, transcribe the meeting again in 30 s windows and replace its text. Speech is kept encrypted until then, and deleted after |
 | `NOTE_TAKER_TRANSCRIPT_PASS_MODEL` | the live model | GGML model for that pass, for example a larger one than live transcription uses (`local-ai` builds) |
 | `NOTE_TAKER_VAD_ENABLED` | `true` | Voice-activity chunking. `false` cuts near every 15 s |
