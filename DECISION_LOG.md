@@ -3016,8 +3016,13 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - Afterwards every active window correlated at r = 0.99, but at −60 ms: the microphone, on
     ALSA, still lands about 120 ms before the computer's sound. The detector now searches
     −300 to +300 ms. Two people talking over each other is still not echo in its tests.
-- Windows' WASAPI loopback uses the shared-mode period (about 10 ms) by default, so it is left
-  alone; to be checked on win11.
+- **Windows (win11):** the WASAPI loopback, left at its default period, recorded a clip played on
+  the speakers. With the chosen `tiny-q5_1` model, both voices were transcribed as the computer's
+  sound.
+  - cpal reported each WASAPI data discontinuity as an overrun, on both streams: 307 warnings in
+    3 minutes. The VM runs Windows on one usable vCPU, and any Flutter app keeps it busy there.
+  - Each capture stream now logs its first error by name, then at most one line a minute with the
+    count held back (`CaptureErrorThrottle`).
 
 ## 2026-11-13 — #113 on Windows, and covered call windows
 

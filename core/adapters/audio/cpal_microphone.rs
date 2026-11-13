@@ -20,7 +20,7 @@ use cpal::{
 };
 
 use crate::{
-    adapters::audio::pcm_resampler::PcmResampler,
+    adapters::audio::{capture_error_throttle::CaptureErrorThrottle, pcm_resampler::PcmResampler},
     domain::errors::AudioError,
     ports::audio::{MicrophoneSource, MicrophoneStream},
 };
@@ -122,7 +122,7 @@ fn start_default_input(frames: Sender<Vec<i16>>) -> Result<cpal::Stream, String>
     let supported = device
         .default_input_config()
         .map_err(|error| format!("unable to read the microphone format: {error}"))?;
-    start_capture(&device, supported, frames, None)
+    start_capture("microphone", &device, supported, frames, None)
 }
 
 /// The host the microphone opens on: ALSA on Linux even when the PulseAudio host is built in for
@@ -139,11 +139,14 @@ fn microphone_host() -> cpal::Host {
 /// Builds and plays an input stream on `device` in `supported`'s format, converting into
 /// `frames`. An output device given here is captured in loopback (WASAPI).
 ///
-/// Inputs: The device, its format, the channel for converted blocks, and the frames per delivered
-/// block (`None` leaves the host's default).
+/// Inputs: The stream's name for logs ("microphone", "computer sound"), the device, its format,
+/// the channel for converted blocks, and the frames per delivered block (`None` leaves the host's
+/// default).
 /// Outputs: The playing stream, or a privacy-safe reason.
-/// Side effects: Starts capture.
+/// Side effects: Starts capture. Stream errors are logged with the stream's name: the first one,
+/// then at most one a minute with the count held back (`CaptureErrorThrottle`).
 pub(crate) fn start_capture(
+    stream_name: &'static str,
     device: &cpal::Device,
     supported: cpal::SupportedStreamConfig,
     frames: Sender<Vec<i16>>,
@@ -155,8 +158,16 @@ pub(crate) fn start_capture(
     if let Some(frame_count) = buffer_frames {
         config.buffer_size = cpal::BufferSize::Fixed(frame_count);
     }
-    let on_error = |error: cpal::Error| {
-        tracing::warn!(error = %error, "The microphone stream reported an error");
+    let mut throttle = CaptureErrorThrottle::default();
+    let on_error = move |error: cpal::Error| {
+        if let Some(held_back) = throttle.note(std::time::Instant::now()) {
+            tracing::warn!(
+                stream = stream_name,
+                error = %error,
+                errors_held_back = held_back,
+                "A capture stream reported an error"
+            );
+        }
     };
     // A closed receiver means the recording ended; later blocks are simply dropped.
     let stream = match sample_format {

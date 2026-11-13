@@ -58,7 +58,7 @@ fn open_platform(frames: Sender<Vec<i16>>) -> Result<Box<dyn MicrophoneStream>, 
         let supported = device
             .default_output_config()
             .map_err(|error| format!("unable to read the sound output format: {error}"))?;
-        start_capture(&device, supported, frames, None)
+        start_capture("computer sound", &device, supported, frames, None)
     })
 }
 
@@ -93,7 +93,13 @@ fn open_platform(frames: Sender<Vec<i16>>) -> Result<Box<dyn MicrophoneStream>, 
             cpal::SupportedBufferSize::Unknown => (1, u32::MAX),
         };
         let buffer_frames = monitor_buffer_frames(supported.sample_rate(), min_frames, max_frames);
-        start_capture(&monitor, supported, frames, Some(buffer_frames))
+        start_capture(
+            "computer sound",
+            &monitor,
+            supported,
+            frames,
+            Some(buffer_frames),
+        )
     })
 }
 

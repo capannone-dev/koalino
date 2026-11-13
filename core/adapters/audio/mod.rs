@@ -1,5 +1,9 @@
 //! Groups audio-capture adapter implementations and their contract tests.
 
+/// Limits how often a capture stream's repeated errors are logged.
+pub mod capture_error_throttle;
+#[cfg(test)]
+mod capture_error_throttle_tests;
 /// Holds each live chunk's PCM until a transcription engine reads (and deletes) it.
 pub mod chunk_audio_store;
 /// Captures what the computer plays with cpal, beside the microphone (#108).
