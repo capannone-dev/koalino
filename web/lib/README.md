@@ -25,6 +25,10 @@ throw `P2pRequestError`, whose `kind` is `invalid_peer` (400), `not_found` (404)
 `DeviceCapabilities` is the manifest summary the status carries for this server and for each
 connected paired device (`null` while not connected).
 
+`pass-api.ts` (#87) reads and changes the after-meeting pass: `getAfterMeetingPass` and
+`setAfterMeetingPass` over `/api/settings/after-meeting-pass`, throwing `PassError` with
+`invalid_model`, `unavailable`, `server` or `network`.
+
 `projects-api.ts` (Issue #85) is the projects client: `getProjects`, `getProject`, `createProject`,
 `renameProject`, `deleteProject`, `moveMeetingToProject`, `uploadProjectFile` (the raw file, its
 name in the query), `addProjectNote`, `deleteProjectResource`, `getProjectEmail`,

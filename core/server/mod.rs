@@ -39,6 +39,10 @@ mod notes_folder_routes_tests;
 pub mod p2p_routes;
 #[cfg(test)]
 mod p2p_routes_tests;
+/// Serves the web Settings page's after-meeting pass and its model (#87).
+pub mod pass_routes;
+#[cfg(test)]
+mod pass_routes_tests;
 /// Serves the `/api/projects` routes of the web Projects pages (Issue #85).
 pub mod project_routes;
 #[cfg(test)]

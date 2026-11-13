@@ -53,6 +53,9 @@ that the folder is a decrypted copy.
 (off by default) through `PUT /api/settings/meeting-voices`. It explains that rooms are never kept,
 and a failed save goes back to the saved choice.
 
+`pass-settings.tsx` turns the after-meeting pass (#87) on or off and chooses its model, from the
+models on the server's computer, through `PUT /api/settings/after-meeting-pass`.
+
 `retention-settings.tsx` chooses how many days speech waits to be combined with another device's
 recording (#93) through `PUT /api/settings/retention`; a refused choice goes back to the saved one.
 

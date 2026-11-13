@@ -442,6 +442,10 @@ and meeting summaries" below). Keys are write-only.
 - `int32_t note_taker_set_after_meeting_pass(int32_t enabled)` turns the after-meeting pass (#87) on or off from the next
   recording, and returns `0` or `2` when the choice can't be stored. `note_taker_transcription_settings` reads it back as
   `after_meeting_pass` (a boolean, `true` unless turned off). A phone runs the pass only while charging.
+- `int32_t note_taker_set_after_meeting_pass_model(const char *file_name)` chooses the model the pass re-transcribes
+  with (#87): a catalog model on this device, or null or empty for the recording model. It returns `0`, `1` for a model
+  that is unknown or not on this device, or `2` when the choice can't be stored. `note_taker_transcription_settings`
+  reads it back as `after_meeting_pass_model` (the file name, or `null`).
 - `int32_t note_taker_set_computer_sound(int32_t enabled)` turns recording what the computer plays (#108) on or off
   from the next start or resume, and returns `0` or `2` when the choice can't be stored. `note_taker_transcription_settings`
   reads it back as `computer_sound: {available, enabled}`: `available` is true on desktop builds with the
@@ -597,6 +601,13 @@ list over 500 characters in all, returns `400` `{"error_code":"invalid_glossary"
 failure `500` `save_failed`; a daemon without a settings file `503` `unavailable`. The apps use
 `note_taker_set_glossary(terms)` (newline-separated; returns 0 saved, 1 refused, 2 failed) and read
 the saved terms as `glossary` in `note_taker_get_transcription_settings()`.
+
+`GET /api/settings/after-meeting-pass` returns `{"enabled":true,"model":null,"models":[{"file_name","name"}]}`:
+whether each meeting is transcribed again after Stop (#87), its model (`null` is the recording
+model), and the catalog models on the daemon's machine. `PUT` with `{"enabled"?,"model"?}` (a
+missing field is kept, `"model":null` returns to the recording model) saves and returns the same.
+A model not on that machine returns `400` `invalid_model` and saves nothing; a write failure `500`
+`save_failed`; a daemon without a settings file `503` `unavailable`.
 
 `GET /api/settings/retention` returns `{"days":21,"min_days":1,"max_days":60}`: how many days a
 recording's speech may wait to be combined with another device's recording of the same meeting

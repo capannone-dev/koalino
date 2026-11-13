@@ -3,8 +3,8 @@
 // be combined with another device's recording (#93), the daemon's log level
 // and a download of its logs (Issue #46), and, with device sync on, where recordings are
 // transcribed (Issue #59), the AI connections summaries are written with (#95), the opt-in
-// notes folder on the server's computer (#98), and whether online-meeting participants' voices
-// are kept in the voice gallery (#103).
+// notes folder on the server's computer (#98), whether online-meeting participants' voices
+// are kept in the voice gallery (#103), and the after-meeting pass and its model (#87).
 
 import { AiSettings } from "@/components/ai-settings";
 import { DevicesEntry } from "@/components/devices-entry";
@@ -12,6 +12,7 @@ import { GlossarySettings } from "@/components/glossary-settings";
 import { LogSettings } from "@/components/log-settings";
 import { MeetingVoicesSettings } from "@/components/meeting-voices-settings";
 import { NotesFolderSettings } from "@/components/notes-folder-settings";
+import { PassSettings } from "@/components/pass-settings";
 import { RetentionSettings } from "@/components/retention-settings";
 import { TelemetryEntry } from "@/components/telemetry-entry";
 import { TranscriptionRouteSettings } from "@/components/transcription-route-settings";
@@ -19,12 +20,14 @@ import { getGlossary, getLogLevel, getRetention } from "@/lib/api";
 import { getLlmSettings } from "@/lib/llm-api";
 import { getMeetingVoices } from "@/lib/meeting-voices-api";
 import { getNotesFolder } from "@/lib/notes-folder-api";
+import { getAfterMeetingPass } from "@/lib/pass-api";
 import { getP2pStatus } from "@/lib/p2p-api";
 
 export default async function SettingsPage() {
   const level = await getLogLevel().catch(() => null);
   const glossary = await getGlossary().catch(() => null);
   const retention = await getRetention().catch(() => null);
+  const afterMeetingPass = await getAfterMeetingPass().catch(() => null);
   const p2pStatus = await getP2pStatus().catch(() => null);
   const llmSettings = await getLlmSettings().catch(() => null);
   const notesFolder = await getNotesFolder().catch(() => null);
@@ -40,6 +43,7 @@ export default async function SettingsPage() {
         />
       ) : null}
       <GlossarySettings initialTerms={glossary} />
+      <PassSettings initial={afterMeetingPass} />
       <RetentionSettings initial={retention} />
       <MeetingVoicesSettings initial={meetingVoices} />
       <AiSettings initial={llmSettings} />

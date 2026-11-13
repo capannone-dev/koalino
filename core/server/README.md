@@ -84,6 +84,11 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
   - `PUT /api/settings/glossary` with `{"terms":[...]}` saves the cleaned list and returns it;
     an invalid list returns `400` `{"error_code":"invalid_glossary"}`, a write failure `500`
     `save_failed`, and a daemon without a settings file `503` `unavailable`. Terms are never logged.
+- The after-meeting pass (`pass_routes.rs`, #87) lives in the same file:
+  `GET /api/settings/after-meeting-pass` returns `{"enabled","model","models"}`, and `PUT` with
+  `{"enabled"?,"model"?}` saves either. A model not on the daemon's machine returns `400`
+  `invalid_model`, a write failure `500` `save_failed`, and no settings file `503` `unavailable`.
+  `pass_routes_tests.rs` covers each case.
 - The speech retention window (`retention_routes.rs`, #93) lives in the same file:
   - `GET /api/settings/retention` returns `{"days","min_days","max_days"}`.
   - `PUT /api/settings/retention` with `{"days"}` saves a window of 1 to 60 days and returns it;
