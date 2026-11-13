@@ -1563,7 +1563,10 @@ impl FfiRuntime {
             return;
         };
         match LiveMicrophone::open(source.as_ref()) {
-            Ok(computer_sound) => self.live_computer_sound = Some(computer_sound),
+            Ok(computer_sound) => {
+                tracing::info!("Recording the computer's sound beside the microphone");
+                self.live_computer_sound = Some(computer_sound);
+            }
             Err(error) => {
                 tracing::warn!(error = %error, "Recording without the computer's sound");
             }

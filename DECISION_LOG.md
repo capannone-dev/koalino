@@ -2839,3 +2839,43 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   most 15 s.
 - **Settings:** the Automatic row adds "Checked on this device: 0.3× real time, so it keeps up with
   recordings." If the model is too slow, it adds which smaller model keeps up, or that none does.
+
+## 2026-11-13 — #108 The computer's sound is recorded as a second track
+
+- **What:** on a desktop, a recording also captures what the computer plays, such as the other side
+  of a call, beside the microphone. It is transcribed as its own track: its segments are marked
+  `computer_sound`, in the meeting document and in SQLite. The after-meeting passes keep those
+  segments, because only the microphone's speech is retained and re-transcribed. On by default;
+  Settings can turn it off ("Also record the computer's sound"). Phones cannot: Android needs a
+  screen-capture grant to hear other apps.
+- **Capture:** `cpal`, already used for the microphone, behind a `computer-sound` feature:
+  - Windows: WASAPI loopback of the default output.
+  - Linux: the default sink's `.monitor` source, through cpal's pure-Rust PulseAudio host, which
+    also serves PipeWire.
+  - Yogurt's own libpulse code was not taken, to avoid a new system library.
+  - The microphone stays on ALSA on Linux, as before.
+  - New crates: `pulseaudio` and `enum-primitive-derive`, both MIT.
+- **Timing:** both tracks are drained on the same 100 ms tick. The computer's samples are placed so
+  they end at the microphone's captured time. That covers a loopback that opens late, and one that
+  sends nothing while nothing plays: the track jumps ahead when it falls more than 0.2 s behind.
+  That keeps the two tracks within the echo search's 0–300 ms.
+- **Echo without headphones:** the microphone also hears the speakers, so the other side's words
+  land on both tracks. Ported from Yogurt (MIT, credited in `THIRD_PARTY_NOTICES.md`), without its
+  per-line audio check:
+  - Detection compares 10 ms loudness envelopes over 2 s windows at lags of 0–300 ms. Echo counts as
+    heard when at least 40% of the windows where both carry sound correlate at a steady lag, or
+    55% at any lag.
+  - Two people talking over each other correlate rarely and at random lags, so they do not count.
+  - Once echo is heard, a microphone line is dropped when its words copy a computer-sound line near
+    the same time, in an echoing window.
+  - English and Italian short replies ("sì", "ok", "esatto") are never dropped.
+  - The meeting stores `echo_heard`, so the after-meeting passes, whose audio is gone, drop the
+    copies from their new text too.
+- **Checked on deb-gui (PipeWire 1.4):** a recording opens two capture streams: the microphone
+  through ALSA, and the default sink's monitor through `cpal-pulseaudio`. Pause closes both and
+  resume reopens both; stop releases them. On each close, the `pulseaudio` crate logs "Reactor
+  error: Client disconnected"; that is its client ending, not a failure.
+- **Not verified:** the content of a real capture. Testing it needs sound played in a VM, which
+  awaits the owner's permission.
+- **Also:** `THIRD_PARTY_NOTICES.md` now lists the crates of every feature (`--all-features`). cpal,
+  ort, whisper-rs and openssl had been missing; all of their licenses are GPLv3-compatible.
