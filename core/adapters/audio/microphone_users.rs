@@ -11,11 +11,14 @@
 //! The standard tools are run instead of linking an audio or registry library: one look every
 //! few seconds is cheap, and no new crate is needed. Nothing here logs which apps were found.
 
-use std::{collections::HashSet, process::Command};
+use std::{
+    collections::HashSet,
+    process::{Command, Stdio},
+};
 
 use serde_json::Value;
 
-use crate::domain::call_watch::MicrophoneUser;
+use crate::{adapters::child_process::reaped_elsewhere, domain::call_watch::MicrophoneUser};
 
 /// The consent store's microphone key.
 const CONSENT_STORE: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone";
@@ -57,9 +60,17 @@ impl SystemMicrophoneUsers {
 }
 
 /// Runs a tool without a console window and returns its standard output.
+///
+/// When the Flutter engine collected the exit status first (`child_process`), the output, read to
+/// its end, is still whole, so it is kept.
 fn run(program: &str, arguments: &[&str]) -> Result<String, MicrophoneUsersError> {
+    use std::io::Read as _;
     let mut command = Command::new(program);
-    command.args(arguments);
+    command
+        .args(arguments)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt as _;
@@ -67,17 +78,24 @@ fn run(program: &str, arguments: &[&str]) -> Result<String, MicrophoneUsersError
         const CREATE_NO_WINDOW: u32 = 0x0800_0000;
         command.creation_flags(CREATE_NO_WINDOW);
     }
-    let output = command.output().map_err(|error| match error.kind() {
+    let mut child = command.spawn().map_err(|error| match error.kind() {
         std::io::ErrorKind::NotFound => MicrophoneUsersError::Unavailable,
         kind => MicrophoneUsersError::Tool(kind.to_string()),
     })?;
-    if !output.status.success() {
-        return Err(MicrophoneUsersError::Tool(format!(
-            "{program} exited with {}",
-            output.status
-        )));
+    let mut output = String::new();
+    if let Some(mut stdout) = child.stdout.take() {
+        stdout
+            .read_to_string(&mut output)
+            .map_err(|error| MicrophoneUsersError::Tool(error.kind().to_string()))?;
     }
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    match child.wait() {
+        Ok(status) if status.success() => Ok(output),
+        Ok(status) => Err(MicrophoneUsersError::Tool(format!(
+            "{program} exited with {status}"
+        ))),
+        Err(error) if reaped_elsewhere(&error) && !output.trim().is_empty() => Ok(output),
+        Err(error) => Err(MicrophoneUsersError::Tool(error.kind().to_string())),
+    }
 }
 
 /// Reads `pactl`'s JSON: the source outputs, and the sources to tell monitors apart.

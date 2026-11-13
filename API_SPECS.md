@@ -283,11 +283,12 @@ and meeting summaries" below). Keys are write-only.
   - `{"command":"poll"}` takes one look at the apps capturing the microphone (it runs `pactl` on
     Linux and `reg` on Windows, so call it off the UI thread). It answers
     `{"ok":true,"available","in_call","app","event"}`, where `event` is `started` or `ended` on
-    the look that noticed it, else null. `available` is false where the system cannot tell.
+    the look that noticed it, else null. `available` is false where the system cannot tell; a
+    look whose tool failed this once answers `{"ok":false,"error_code":"probe_failed"}`.
   - `{"command":"get"}` and `{"command":"set","offer"?,"auto_stop"?}` answer
     `{"ok":true,"offer","auto_stop"}`.
-- Error codes: `invalid_request`, `storage_failed`, `runtime_unavailable`. No open runtime is
-  needed.
+- Error codes: `invalid_request`, `storage_failed`, `runtime_unavailable`, `probe_failed`. No
+  open runtime is needed.
 
 ### Assistant access C ABI (#112)
 

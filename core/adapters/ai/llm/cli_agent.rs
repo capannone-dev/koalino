@@ -30,6 +30,7 @@ use serde_json::Value;
 
 use super::one_short_line;
 use crate::{
+    adapters::child_process::reaped_elsewhere,
     domain::{
         errors::LlmError,
         llm::{LlmCompletion, LlmConnection, LlmKind, LlmRequest, LlmRole},
@@ -122,10 +123,13 @@ impl CliRunner for ProcessRunner {
         let stdout_reader = child.stdout.take().map(read_all);
         let stderr_reader = child.stderr.take().map(read_all);
         let started = Instant::now();
+        // `None` once the Flutter engine collected the status first (`child_process`): the tool
+        // has ended, and its answer is judged by its output alone.
         let status = loop {
             match child.try_wait() {
-                Ok(Some(status)) => break status,
+                Ok(Some(status)) => break Some(status),
                 Ok(None) if started.elapsed() < timeout => thread::sleep(POLL_INTERVAL),
+                Err(error) if reaped_elsewhere(&error) => break None,
                 Ok(None) | Err(_) => {
                     let _ = child.kill();
                     let _ = child.wait();
@@ -146,9 +150,10 @@ impl CliRunner for ProcessRunner {
                 .and_then(|reader| reader.join().ok())
                 .unwrap_or_default()
         };
+        let stdout = joined(stdout_reader);
         Ok(CliOutput {
-            success: status.success(),
-            stdout: joined(stdout_reader),
+            success: status.map_or(!stdout.trim().is_empty(), |status| status.success()),
+            stdout,
             stderr: joined(stderr_reader),
         })
     }

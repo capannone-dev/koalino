@@ -14,6 +14,12 @@ adapter without changing the application or domain boundaries.
 voice-embedding key is kept in the macOS Keychain, Windows Credential Manager, or Linux Secret
 Service. See `keychain/README.md` for entry names and error classification.
 
+`child_process.rs` handles waits for the core's child processes inside the desktop app. While the
+Flutter engine has processes of its own running, it reaps children with `waitpid(-1)`, and it may
+collect the status of a process the core started (`ECHILD`). `reaped_elsewhere` recognises that
+case. The microphone-user probe (#111) and the Claude Code / Codex runner (#105) then keep the
+output they read and treat the status as unknown, instead of reporting a failure.
+
 `email/` implements the `EmailReader` port with the pure-Rust `mail-parser` crate, for e-mails kept in projects
 (#85). See `email/README.md`.
 

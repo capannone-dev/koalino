@@ -3,7 +3,8 @@
 //! A request is `{"command":"poll"}`, `{"command":"get"}` or `{"command":"set","offer"?,
 //! "auto_stop"?}`. A poll looks at the microphone's users once and answers
 //! `{"ok":true,"available","in_call","app","event"}`, where `event` is `started` or `ended` on the
-//! poll that noticed it, else null. `get` and `set` answer `{"ok":true,"offer","auto_stop"}`.
+//! poll that noticed it, else null; a look whose tool failed this once answers `probe_failed`, and
+//! the next may work. `get` and `set` answer `{"ok":true,"offer","auto_stop"}`.
 //! `offer` (on by default) is whether the app offers to record when a call starts; `auto_stop`
 //! (on by default) is whether a recording started from that offer stops when the call ends. Both
 //! live in `<db>.call-watch.json`. Nothing here logs the apps seen.
@@ -131,16 +132,25 @@ impl CallWatcher {
     /// Takes one look at a given time.
     ///
     /// Inputs: The time on the watcher's clock and the users read (or why they could not be).
-    /// Outputs: The poll answer; `available` is false when the users could not be read, and the
-    /// watch is then left as it was. Side effects: None beyond the watch's state.
+    /// Outputs: The poll answer; `available` is false where the system cannot tell, and a tool
+    /// that failed this once answers `probe_failed`. The watch is then left as it was. Side effects: None beyond the watch's state.
     pub fn poll_at(
         &mut self,
         now_ms: u64,
         users: Result<Vec<MicrophoneUser>, MicrophoneUsersError>,
     ) -> Value {
-        let Ok(users) = users else {
-            return json!({"ok": true, "available": false, "in_call": false, "app": null,
-                          "event": null});
+        let users = match users {
+            Ok(users) => users,
+            Err(MicrophoneUsersError::Unavailable) => {
+                return json!({"ok": true, "available": false, "in_call": false, "app": null,
+                              "event": null});
+            }
+            // A look that failed once (the tool busy, its status collected elsewhere) changes
+            // nothing; the next look may work.
+            Err(MicrophoneUsersError::Tool(_)) => {
+                return json!({"ok": false, "error_code": "probe_failed",
+                              "error": "the system's audio tool failed this time"});
+            }
         };
         let event = self.watch.observe(now_ms, &users, Some(std::process::id()));
         let (event_name, event_app) = match event {

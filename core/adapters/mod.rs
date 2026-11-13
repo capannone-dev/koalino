@@ -4,6 +4,8 @@
 pub mod ai;
 /// Implements audio-capture ports with local, platform-facing infrastructure.
 pub mod audio;
+/// Waits for child processes that the Flutter engine may reap first.
+pub mod child_process;
 /// Reads imported e-mails with `mail-parser` behind the e-mail port (Issue #85).
 pub mod email;
 /// Implements portable meeting export renderers behind the export port.

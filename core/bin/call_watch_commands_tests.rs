@@ -74,6 +74,19 @@ fn polls_report_the_start_and_the_end_of_a_call_once() {
 }
 
 #[test]
+fn a_failed_look_in_a_call_does_not_end_it() {
+    let folder = folder();
+    let mut watcher = CallWatcher::new(CallWatchSettings::file_for(&folder.join("n.sqlite3")));
+    watcher.poll_at(0, Ok(zoom()));
+    assert_eq!(watcher.poll_at(4_000, Ok(zoom()))["event"], "started");
+    for at in [30_000, 60_000] {
+        watcher.poll_at(at, Err(MicrophoneUsersError::Tool(String::from("busy"))));
+    }
+    assert_eq!(watcher.poll_at(62_000, Ok(zoom()))["in_call"], true);
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
 fn an_unavailable_system_says_so() {
     let folder = folder();
     let mut watcher = CallWatcher::new(CallWatchSettings::file_for(&folder.join("n.sqlite3")));
@@ -81,7 +94,11 @@ fn an_unavailable_system_says_so() {
     assert_eq!(answer["ok"], true);
     assert_eq!(answer["available"], false);
     let failed = watcher.poll_at(0, Err(MicrophoneUsersError::Tool(String::from("x"))));
-    assert_eq!(failed["available"], false);
+    assert_eq!(
+        failed["ok"], false,
+        "a failed look is not an unavailable system"
+    );
+    assert_eq!(failed["error_code"], "probe_failed");
     let bad = watcher.command("{", &mut || Ok(Vec::new()));
     assert_eq!(
         bad,
