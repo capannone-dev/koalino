@@ -146,6 +146,10 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   that lets the owner's own assistant read the notes through the read-only MCP server, the warning
   that the assistant may send what it reads to its online model, and, once on, the `claude mcp
   add` line and the `mcpServers` settings, each with a copy button.
+- `call_offer_banner.dart` (#111) puts "`<app>` is using the microphone. Record this call?" with
+  Not now and Record above every screen on desktops. It shows a snackbar when a call's recording
+  stopped because the call ended. `CallWatchSettingsTiles` are the two Settings switches, "Offer
+  to record calls" and "Stop when the call ends", shown where the system can tell.
 - `ai_settings_screen.dart` (#95) is Settings → AI connections: add (from a preset), edit, test,
   remove and choose the default connection; the summary prompt template with its placeholders;
   and automatic summaries (#101). Keys are typed in a hidden field and never shown again. On

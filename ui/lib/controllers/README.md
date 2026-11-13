@@ -84,6 +84,13 @@ and never lets a slower read replace a summary or prompt written meanwhile.
 `editSummary` saves the owner's own text through `MeetingEditBridge` (#96). On Android it also
 carries the `HandoffController`, so every summary view can offer the owner's own AI app.
 
+`call_watch_controller.dart` (#111) looks at the microphone's users every 3 seconds on desktops.
+- A call noticed while nothing is being recorded becomes `offeredApp`. Only `acceptOffer` (the
+  owner's tap) starts a recording, titled "`<app>` call" and tied to the call.
+- When the call ends, a tied recording stops if "Stop when the call ends" is on, and `message` says
+  why. A recording the owner started themselves is never stopped by a call.
+- Where the system cannot tell, the looks stop.
+
 `handoff_controller.dart` (#114) hands a meeting to the owner's own Claude or ChatGPT app.
 
 - **The hand-off:** the core writes the meeting and its files, the prompt also goes on the

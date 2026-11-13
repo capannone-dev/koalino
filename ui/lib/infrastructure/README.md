@@ -161,6 +161,9 @@ round writes the whole folder), with `NotesFolderStatus` and `NotesFolderExcepti
 `note_taker_assistant_access`, with `AssistantAccessStatus` (the switch, the installed server and
 the snippets to connect Claude Code or another MCP client) and `AssistantAccessException`.
 
+`call_watch_bridge.dart` (#111) is `CallWatchBridge.poll()`, `settings()` and
+`set(offer:, autoStop:)` over `note_taker_call_watch`, with `CallPoll` and `CallWatchSettings`.
+
 `incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Koalino:
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and
 `IncomingShareBridge` (`arrivals`, `takePending`, `release`). `AndroidIncomingShareBridge` talks

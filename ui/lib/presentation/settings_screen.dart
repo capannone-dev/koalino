@@ -17,9 +17,11 @@ import 'package:note_taker_ui/controllers/transcription_settings_controller.dart
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
+import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
 import 'package:note_taker_ui/presentation/assistant_access_screen.dart';
+import 'package:note_taker_ui/presentation/call_offer_banner.dart';
 import 'package:note_taker_ui/presentation/notes_folder_screen.dart';
 import 'package:note_taker_ui/presentation/transcription_settings_screen.dart';
 
@@ -56,6 +58,7 @@ final class SettingsScreen extends StatelessWidget {
     this.summariesController,
     this.notesFolderBridge,
     this.assistantAccessBridge,
+    this.callWatchController,
     super.key,
   });
 
@@ -80,6 +83,9 @@ final class SettingsScreen extends StatelessWidget {
 
   /// Adds the AI assistant access page (#112, desktops) when given.
   final AssistantAccessBridge? assistantAccessBridge;
+
+  /// Adds the call offer switches (#111, desktops) when given and the system can tell.
+  final CallWatchController? callWatchController;
 
   @override
   Widget build(BuildContext context) {
@@ -183,6 +189,8 @@ final class SettingsScreen extends StatelessWidget {
               ),
               const Divider(),
             ],
+            if (callWatchController case final CallWatchController callWatch)
+              CallWatchSettingsTiles(controller: callWatch),
             if (route != null && route.available) ...<Widget>[
               ..._transcriptionTiles(route),
               const Divider(),

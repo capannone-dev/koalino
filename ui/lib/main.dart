@@ -9,11 +9,13 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/infrastructure/call_watch_bridge.dart';
 import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
@@ -57,6 +59,7 @@ import 'package:note_taker_ui/presentation/app_theme.dart';
 import 'package:note_taker_ui/presentation/handoff_widgets.dart';
 import 'package:note_taker_ui/presentation/core_startup_gate.dart';
 import 'package:note_taker_ui/presentation/devices_screen.dart';
+import 'package:note_taker_ui/presentation/call_offer_banner.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
@@ -100,6 +103,14 @@ Future<void> main() async {
     recordingBridge: recordingBridge,
     meetingBridge: const RustMeetingBridge(),
   );
+  // Desktops notice calls and offer to record them (#111).
+  final CallWatchController? callWatchController =
+      Platform.isLinux || Platform.isWindows
+          ? CallWatchController(
+              bridge: const CallWatchBridge(),
+              recordingController: recordingController,
+            )
+          : null;
   final CoreStartupController coreStartupController = CoreStartupController(
     // Android keeps the key in the Keystore and Kotlin hands it to Rust over JNI first;
     // desktops reach their keychain from Rust.
@@ -123,6 +134,7 @@ Future<void> main() async {
     appLockController: appLockController,
     languageController: languageController,
     incomingShareBridge: platformIncomingShareBridge(),
+    callWatchController: callWatchController,
   ));
   unawaited(appLockController?.initialize());
   if (_handoffController case final HandoffController handoff) {
@@ -135,6 +147,7 @@ Future<void> main() async {
   }
   // Starts after the first frame, so the waiting message shows during a keychain prompt.
   unawaited(coreStartupController.start());
+  unawaited(callWatchController?.start());
 }
 
 /// Configures the application-wide Material 3 light and dark themes and the adaptive navigation shell.
@@ -150,7 +163,8 @@ final class NoteTakerApp extends StatelessWidget {
   /// and adds the App lock switch to Settings. `languageController`, when given, adds the language
   /// selector to the Record screen and the default language to Settings.
   /// `incomingShareBridge`, when given (Android), offers files shared from other apps to a
-  /// project once the core is open (Issue #85).
+  /// project once the core is open (Issue #85). `callWatchController`, when given (desktops),
+  /// offers to record a call above every screen and adds its switches to Settings (#111).
   /// Outputs: A configured Material application.
   /// Side effects: None.
   const NoteTakerApp({
@@ -161,6 +175,7 @@ final class NoteTakerApp extends StatelessWidget {
     this.appLockController,
     this.languageController,
     this.incomingShareBridge,
+    this.callWatchController,
     super.key,
   });
 
@@ -173,6 +188,9 @@ final class NoteTakerApp extends StatelessWidget {
   final CoreStartupController? coreStartupController;
   final AppLockController? appLockController;
   final IncomingShareBridge? incomingShareBridge;
+
+  /// Offers to record calls on desktops (#111), when given.
+  final CallWatchController? callWatchController;
 
   /// Builds the root Material 3 application.
   ///
@@ -209,6 +227,7 @@ final class NoteTakerApp extends StatelessWidget {
       settingsScreenBuilder: (BuildContext context) => _SettingsDestination(
         appLockController: appLockController,
         languageController: languageController,
+        callWatchController: callWatchController,
       ),
     );
     final IncomingShareBridge? shareBridge = incomingShareBridge;
@@ -225,6 +244,11 @@ final class NoteTakerApp extends StatelessWidget {
             handoffController: handoff,
             child: withHandoff,
           );
+    final CallWatchController? callWatch = callWatchController;
+    // Inside the startup gate, so Record works once the offer can be seen.
+    final Widget offered = callWatch == null
+        ? shell
+        : CallOfferBanner(controller: callWatch, child: shell);
     final CoreStartupController? startup = coreStartupController;
     final AppLockController? appLock = appLockController;
     return MaterialApp(
@@ -239,8 +263,8 @@ final class NoteTakerApp extends StatelessWidget {
           : (BuildContext context, Widget? navigator) =>
               AppLockGate(controller: appLock, child: navigator!),
       home: startup == null
-          ? shell
-          : CoreStartupGate(controller: startup, onQuit: _quit, child: shell),
+          ? offered
+          : CoreStartupGate(controller: startup, onQuit: _quit, child: offered),
     );
   }
 }
@@ -462,6 +486,7 @@ final class _SettingsDestination extends StatefulWidget {
   const _SettingsDestination({
     required this.appLockController,
     required this.languageController,
+    this.callWatchController,
   });
 
   /// Android's app lock, or `null` on platforms without it.
@@ -469,6 +494,9 @@ final class _SettingsDestination extends StatefulWidget {
 
   /// The transcription language, owned by the app.
   final TranscriptionLanguageController? languageController;
+
+  /// The call watch (#111, desktops), owned by the app.
+  final CallWatchController? callWatchController;
 
   @override
   State<_SettingsDestination> createState() => _SettingsDestinationState();
@@ -528,6 +556,7 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         assistantAccessBridge: Platform.isAndroid || Platform.isIOS
             ? null
             : const AssistantAccessBridge(),
+        callWatchController: widget.callWatchController,
       );
 }
 

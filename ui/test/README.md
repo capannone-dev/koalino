@@ -129,3 +129,10 @@ checks the summary button on each row.
 `assistant_access_test.dart` covers Settings → AI assistant access (#112) over a fake core: off at
 first with the warning, turned on to show the `claude mcp add` line and the `mcpServers` settings,
 copying a snippet, a disabled switch when the server is not installed, and a worded failure.
+
+`call_watch_test.dart` covers the call watch (#111) over a scripted core:
+- a call offered, recorded only on the owner's tap, and stopped when it ends;
+- a recording the owner started is never stopped by a call;
+- the auto-stop and offer settings;
+- an unavailable system;
+- the banner's Not now and Record.
