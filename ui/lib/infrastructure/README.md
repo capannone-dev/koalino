@@ -157,6 +157,10 @@ resources names the sealed file, which only the core can read.
 `syncNow()` over `note_taker_notes_folder` (on a background isolate through `callRustLlm`, since a
 round writes the whole folder), with `NotesFolderStatus` and `NotesFolderException`.
 
+`assistant_access_bridge.dart` (#112) is `AssistantAccessBridge.status()` and `set(enabled:)` over
+`note_taker_assistant_access`, with `AssistantAccessStatus` (the switch, the installed server and
+the snippets to connect Claude Code or another MCP client) and `AssistantAccessException`.
+
 `incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Koalino:
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and
 `IncomingShareBridge` (`arrivals`, `takePending`, `release`). `AndroidIncomingShareBridge` talks

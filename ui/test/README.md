@@ -125,3 +125,7 @@ which scripts the core's answers per function or command (some held until the te
 them): requests (a key only when typed), progress, reports, failures in plain words, the
 meeting's own prompt, the row menu, and automatic summaries. `meeting_list_screen_test.dart`
 checks the summary button on each row.
+
+`assistant_access_test.dart` covers Settings → AI assistant access (#112) over a fake core: off at
+first with the warning, turned on to show the `claude mcp add` line and the `mcpServers` settings,
+copying a snippet, a disabled switch when the server is not installed, and a worded failure.

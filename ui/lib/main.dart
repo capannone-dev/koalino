@@ -14,6 +14,7 @@ import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/core_startup_controller.dart';
@@ -523,6 +524,10 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         notesFolderBridge: Platform.isAndroid || Platform.isIOS
             ? null
             : const NotesFolderBridge(),
+        // The read-only MCP server ships with the desktop apps only (#112).
+        assistantAccessBridge: Platform.isAndroid || Platform.isIOS
+            ? null
+            : const AssistantAccessBridge(),
       );
 }
 

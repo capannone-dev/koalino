@@ -142,6 +142,10 @@ Projects (Issue #85) is the destination between Meetings and Voices:
 - `notes_folder_screen.dart` (#98) is Settings → Notes folder on desktops: the folder (typed or
   chosen with the system dialog), the switch, Sync now, the last round, and the warning that the
   folder is a decrypted copy.
+- `assistant_access_screen.dart` (#112) is Settings → AI assistant access on desktops: the switch
+  that lets the owner's own assistant read the notes through the read-only MCP server, the warning
+  that the assistant may send what it reads to its online model, and, once on, the `claude mcp
+  add` line and the `mcpServers` settings, each with a copy button.
 - `ai_settings_screen.dart` (#95) is Settings → AI connections: add (from a preset), edit, test,
   remove and choose the default connection; the summary prompt template with its placeholders;
   and automatic summaries (#101). Keys are typed in a hidden field and never shown again. On

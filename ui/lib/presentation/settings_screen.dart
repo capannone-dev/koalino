@@ -17,7 +17,9 @@ import 'package:note_taker_ui/controllers/transcription_settings_controller.dart
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
+import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
+import 'package:note_taker_ui/presentation/assistant_access_screen.dart';
 import 'package:note_taker_ui/presentation/notes_folder_screen.dart';
 import 'package:note_taker_ui/presentation/transcription_settings_screen.dart';
 
@@ -53,6 +55,7 @@ final class SettingsScreen extends StatelessWidget {
     this.transcriptionSettingsBridge,
     this.summariesController,
     this.notesFolderBridge,
+    this.assistantAccessBridge,
     super.key,
   });
 
@@ -74,6 +77,9 @@ final class SettingsScreen extends StatelessWidget {
 
   /// Adds the notes folder page (#98, desktops) when given.
   final NotesFolderBridge? notesFolderBridge;
+
+  /// Adds the AI assistant access page (#112, desktops) when given.
+  final AssistantAccessBridge? assistantAccessBridge;
 
   @override
   Widget build(BuildContext context) {
@@ -158,6 +164,21 @@ final class SettingsScreen extends StatelessWidget {
                 onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (BuildContext context) =>
                       NotesFolderScreen(bridge: notesFolder),
+                )),
+              ),
+              const Divider(),
+            ],
+            if (assistantAccessBridge
+                case final AssistantAccessBridge assistantAccess) ...<Widget>[
+              ListTile(
+                leading: const Icon(Icons.smart_toy_outlined),
+                title: const Text('AI assistant access'),
+                subtitle: const Text(
+                    'Let your own assistant, such as Claude Code, read your notes.'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (BuildContext context) =>
+                      AssistantAccessScreen(bridge: assistantAccess),
                 )),
               ),
               const Divider(),
