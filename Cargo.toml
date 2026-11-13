@@ -131,9 +131,9 @@ ort = { version = "=2.0.0-rc.13", optional = true, default-features = false, fea
 
 [target.'cfg(windows)'.dependencies]
 # UI Automation reads who is speaking from call windows (#113, approved by the owner), and the
-# audio session manager tells which apps capture the microphone (#111); the same release `cpal`
-# already builds.
-windows = { version = "0.62.2", features = ["Win32_Foundation", "Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Threading", "Win32_System_Variant", "Win32_UI_Accessibility"] }
+# audio session manager tells which apps capture the microphone (#111), and the call offer shows
+# as a toast (#111); the same release `cpal` already builds.
+windows = { version = "0.62.2", features = ["Data_Xml_Dom", "Foundation", "UI_Notifications", "Win32_Foundation", "Win32_Media_Audio", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_Registry", "Win32_System_Threading", "Win32_System_Variant", "Win32_UI_Accessibility"] }
 ort = { version = "=2.0.0-rc.13", optional = true, default-features = false, features = ["std", "load-dynamic", "api-27"] }
 
 [target.'cfg(target_os = "android")'.dependencies]

@@ -282,8 +282,10 @@ and meeting summaries" below). Keys are write-only.
 ### Call watch C ABI (#111)
 
 - `char *note_taker_call_watch(const char *request_json)` returns caller-freed JSON. The requests:
-  - `{"command":"poll"}` takes one look at the apps capturing the microphone (it runs `pactl` on
-    Linux and `reg` on Windows, so call it off the UI thread). It answers
+  - `{"command":"poll","users"?}` takes one look at the apps capturing the microphone (it runs
+    `pactl` on Linux and asks the audio sessions on Windows, so call it off the UI thread). A host
+    that looks itself (Android) sends `"users":[{"process","name"}]` and the system is not asked;
+    `android:voice-communication` is a call whose app is unknown, shown as `A call app`. It answers
     `{"ok":true,"available","in_call","app","event"}`, where `event` is `started` or `ended` on
     the look that noticed it, else null. `available` is false where the system cannot tell; a
     look whose tool failed this once answers `{"ok":false,"error_code":"probe_failed"}`.

@@ -15,6 +15,7 @@ import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/infrastructure/android_call_signals.dart';
 import 'package:note_taker_ui/infrastructure/call_notifier.dart';
 import 'package:note_taker_ui/infrastructure/call_watch_bridge.dart';
 import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
@@ -104,7 +105,8 @@ Future<void> main() async {
     recordingBridge: recordingBridge,
     meetingBridge: const RustMeetingBridge(),
   );
-  // Desktops notice calls and offer to record them (#111).
+  // Desktops and Android phones notice calls and offer to record them (#111). Android tells
+  // the core what it sees, since the core cannot look there.
   final CallWatchController? callWatchController =
       Platform.isLinux || Platform.isWindows
           ? CallWatchController(
@@ -112,7 +114,14 @@ Future<void> main() async {
               recordingController: recordingController,
               notifier: platformCallNotifier(),
             )
-          : null;
+          : Platform.isAndroid
+              ? CallWatchController(
+                  bridge: const CallWatchBridge(),
+                  recordingController: recordingController,
+                  notifier: AndroidCallNotifier(),
+                  hostUsers: const AndroidCallSignals().users,
+                )
+              : null;
   final CoreStartupController coreStartupController = CoreStartupController(
     // Android keeps the key in the Keystore and Kotlin hands it to Rust over JNI first;
     // desktops reach their keychain from Rust.

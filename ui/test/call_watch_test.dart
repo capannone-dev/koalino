@@ -6,9 +6,11 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
+import 'package:note_taker_ui/infrastructure/android_call_signals.dart';
 import 'package:note_taker_ui/infrastructure/call_notifier.dart';
 import 'package:note_taker_ui/infrastructure/call_watch_bridge.dart';
 import 'package:note_taker_ui/presentation/call_offer_banner.dart';
@@ -86,6 +88,7 @@ Map<String, Object?> poll(String? event, {String app = 'Teams'}) =>
     };
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late ScriptedCallCore core;
   late FakeRecordingBridge recordingBridge;
   late RecordingController recording;
@@ -247,6 +250,86 @@ void main() {
     core.polls.add(<String, Object?>{'ok': true, 'available': false});
     await watch.start();
     expect(watch.available, isFalse);
+  });
+
+  test('a host that sees the users sends them with each look (Android)',
+      () async {
+    final CallWatchController android = CallWatchController(
+      bridge: CallWatchBridge(call: core.call),
+      recordingController: recording,
+      notifier: notifier,
+      hostUsers: () async => <HostMicrophoneUser>[
+        const HostMicrophoneUser(process: 'android:voice-communication'),
+      ],
+      interval: const Duration(hours: 1),
+    );
+    addTearDown(android.dispose);
+    core.polls.add(poll('started', app: 'A call app'));
+    await android.start();
+
+    final Map<String, Object?> sent = core.requests.lastWhere(
+        (Map<String, Object?> request) => request['command'] == 'poll');
+    expect(sent['users'], <Object?>[
+      <String, Object?>{'process': 'android:voice-communication', 'name': ''},
+    ]);
+    expect(android.offeredApp, 'A call app');
+    await android.acceptOffer();
+    expect(recordingBridge.requestedTitles, <String?>['Call'],
+        reason: 'an unnamed call app is not "A call app call"');
+  });
+
+  test('a host that cannot answer skips the look', () async {
+    final CallWatchController android = CallWatchController(
+      bridge: CallWatchBridge(call: core.call),
+      recordingController: recording,
+      hostUsers: () async => throw PlatformException(code: 'gone'),
+      interval: const Duration(hours: 1),
+    );
+    addTearDown(android.dispose);
+    await android.start();
+    expect(
+        core.requests.where(
+            (Map<String, Object?> request) => request['command'] == 'poll'),
+        isEmpty);
+  });
+
+  test('the Android notification asks Kotlin and takes its answer', () async {
+    final List<MethodCall> calls = <MethodCall>[];
+    const MethodChannel channel = MethodChannel('test/call_offer');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async {
+      calls.add(call);
+      return call.method == 'show';
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+    final AndroidCallNotifier android = AndroidCallNotifier(channel: channel);
+
+    final Future<CallNotificationAnswer> answer = android.offer('A call app');
+    await pumpEventQueue();
+    expect(calls.single.method, 'show');
+    expect(calls.single.arguments, <String, Object?>{'app': 'A call app'});
+    await android.handleCall(const MethodCall('answer', 'record'));
+    expect(await answer, CallNotificationAnswer.record);
+
+    final Future<CallNotificationAnswer> second = android.offer('A call app');
+    await pumpEventQueue();
+    android.withdraw();
+    expect(await second, CallNotificationAnswer.dismissed);
+    expect(calls.last.method, 'withdraw');
+  });
+
+  test('the Android notification is unavailable when notifications are off',
+      () async {
+    const MethodChannel channel = MethodChannel('test/call_offer_off');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (MethodCall call) async => false);
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+    expect(await AndroidCallNotifier(channel: channel).offer('Teams'),
+        CallNotificationAnswer.unavailable);
   });
 
   testWidgets('the banner offers, and Not now dismisses',

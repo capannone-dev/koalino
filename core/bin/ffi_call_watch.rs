@@ -1,8 +1,9 @@
-//! The call watch (#111) over the C ABI, for the desktop app.
+//! The call watch (#111) over the C ABI, for the desktop and Android app.
 //!
 //! `note_taker_call_watch` takes one JSON request (`poll`, `get`, `set`; see
 //! `call_watch_commands`) and returns caller-freed JSON (`note_taker_free_string`). The app polls
-//! every few seconds; a poll runs `pactl` or `reg`, so the app calls it off the UI thread. It
+//! every few seconds; a poll runs `pactl` or asks the audio sessions, so the app calls it off the
+//! UI thread. On Android the poll carries the users Kotlin saw instead. It
 //! needs no open runtime. Nothing here logs the apps seen.
 //!
 //! While reading names from call windows is on (#113), `get` and `set` also make sure the
@@ -19,8 +20,8 @@ use std::{
 use serde_json::json;
 
 use crate::{
-    adapters::audio::microphone_users::SystemMicrophoneUsers,
-    call_watch_commands::{CallWatchSettings, CallWatcher},
+    adapters::{audio::microphone_users::SystemMicrophoneUsers, notification::call_toast},
+    call_watch_commands::{CallWatchSettings, CallWatcher, toast_command},
     ffi::ffi_string,
     ffi_settings::app_setting,
 };
@@ -60,6 +61,32 @@ pub unsafe extern "C" fn note_taker_call_watch(request_json: *const c_char) -> *
         }
     };
     let answer = with_accessibility(answer);
+    CString::new(answer.to_string())
+        .map(CString::into_raw)
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// Shows or withdraws the call offer as a Windows toast.
+///
+/// Inputs: `request_json`, `{"command":"offer","app"}` or `{"command":"withdraw"}` (see
+/// `call_watch_commands::toast_command`). Outputs: An owned JSON answer (free with
+/// `note_taker_free_string`); `offer` answers `unavailable` outside Windows. Side effects: `offer`
+/// shows a toast and blocks until it is answered, withdrawn or two minutes pass, so call it on a
+/// background thread; `withdraw` hides it.
+///
+/// # Safety
+/// `request_json` must be null or a valid NUL-terminated C string that stays alive for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_call_toast(request_json: *const c_char) -> *mut c_char {
+    let answer = match unsafe { ffi_string(request_json) } {
+        None => json!({"ok": false, "error_code": "invalid_request",
+                       "error": "the request must be a UTF-8 C string"}),
+        Some(request_json) => toast_command(
+            request_json,
+            &mut call_toast::offer,
+            &mut call_toast::withdraw,
+        ),
+    };
     CString::new(answer.to_string())
         .map(CString::into_raw)
         .unwrap_or(std::ptr::null_mut())

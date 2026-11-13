@@ -2,6 +2,8 @@
 //!
 //! The desktop asks the system which apps capture the microphone (`MicrophoneUser`, from
 //! `adapters::audio::microphone_users`) every few seconds and feeds the answer to `CallWatch`.
+//! Android hides which app captures it, so the phone reports a voice call as one unnamed user
+//! (`ANDROID_VOICE_CALL`), shown as `UNNAMED_CALL_APP`.
 //! A call app (Zoom, Teams, Webex, Slack, Discord, Skype...) or a browser (Meet, Jitsi and Teams
 //! run in one) that holds the microphone for `START_MS` starts a call; the call ends once no
 //! call app has held it for `END_GRACE_MS`, so muting or switching devices does not end it. The
@@ -34,6 +36,12 @@ pub enum CallEvent {
     },
 }
 
+/// The process name the Android host gives a voice call in progress (another app holds the
+/// audio in communication mode, or captures the voice-call source), since it cannot see which app.
+pub const ANDROID_VOICE_CALL: &str = "android:voice-communication";
+/// The name shown for a call whose app is unknown.
+pub const UNNAMED_CALL_APP: &str = "A call app";
+
 /// A call app holding the microphone this long starts a call.
 pub const START_MS: u64 = 3_000;
 /// The microphone free of call apps this long ends a call.
@@ -60,6 +68,7 @@ const CALL_APPS: &[(&str, &str)] = &[
     ("brave", "Brave"),
     ("vivaldi", "Vivaldi"),
     ("opera", "Opera"),
+    (ANDROID_VOICE_CALL, UNNAMED_CALL_APP),
 ];
 
 /// Names a call app.

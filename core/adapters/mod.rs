@@ -18,6 +18,8 @@ pub mod keychain;
 pub mod media;
 /// Implements encrypted libp2p transport and decentralized local discovery.
 pub mod network;
+/// Shows the system notifications the core owns (the call offer's Windows toast, #111).
+pub mod notification;
 /// Configures structured, redaction-aware logging sinks.
 pub mod observability;
 /// Implements persistence ports with local storage technologies.

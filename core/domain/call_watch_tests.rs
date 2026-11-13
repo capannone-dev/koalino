@@ -84,3 +84,23 @@ fn another_call_app_keeps_the_call_going() {
     assert_eq!(watch.observe(40_000, &[user("firefox", "", 2)], None), None);
     assert_eq!(watch.in_call(), Some("Zoom"));
 }
+
+#[test]
+fn an_android_voice_call_is_a_call_app_without_a_name() {
+    // Android hides which app captures the microphone; the host reports the call itself (#111).
+    assert_eq!(
+        call_app(super::call_watch::ANDROID_VOICE_CALL, ""),
+        Some(super::call_watch::UNNAMED_CALL_APP)
+    );
+    let mut watch = CallWatch::new();
+    let call = [MicrophoneUser {
+        process: super::call_watch::ANDROID_VOICE_CALL.to_owned(),
+        name: String::new(),
+        pid: None,
+    }];
+    watch.observe(0, &call, Some(42));
+    assert_eq!(
+        watch.observe(3_000, &call, Some(42)),
+        Some(CallEvent::Started { app: "A call app" })
+    );
+}

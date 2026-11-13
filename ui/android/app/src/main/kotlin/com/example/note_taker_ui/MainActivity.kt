@@ -9,6 +9,8 @@
 // (`SharedFiles`, Issue #46). Files and e-mails shared to the app from others are copied by
 // `IncomingShares` and offered to Dart on `note_taker/incoming_shares` (Issue #85).
 // `ChargingReporter` tells the core when the phone charges, so the after-meeting pass can run (#87).
+// `CallSignals` (`note_taker/call_signals`) tells Dart when another app is in a call, and
+// `CallOffer` (`note_taker/call_offer`) offers to record it as a notification (#111).
 package com.example.note_taker_ui
 
 import android.content.Context
@@ -36,6 +38,9 @@ class MainActivity : FlutterActivity() {
     /** Reports charging to the core while the activity exists; created with it. */
     private val chargingReporter by lazy { ChargingReporter(applicationContext) }
 
+    /** Offers to record a call as a notification; created with the activity. */
+    private val callOffer by lazy { CallOffer(this) }
+
     /** Runs Keystore work off the main thread. */
     private val keyVaultExecutor = Executors.newSingleThreadExecutor()
 
@@ -60,6 +65,12 @@ class MainActivity : FlutterActivity() {
             MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/incoming_shares")
         sharesChannel.setMethodCallHandler(incomingShares)
         incomingShares.channel = sharesChannel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/call_signals")
+            .setMethodCallHandler(CallSignals(applicationContext))
+        val callOfferChannel =
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/call_offer")
+        callOfferChannel.setMethodCallHandler(callOffer)
+        callOffer.channel = callOfferChannel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/whisper_model")
             .setMethodCallHandler(WhisperModel(assets))
         val recordingChannel =
@@ -131,6 +142,7 @@ class MainActivity : FlutterActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         RecordingService.stateListener = null
         incomingShares.channel = null
+        callOffer.channel = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
@@ -141,6 +153,7 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         chargingReporter.start()
+        callOffer.start()
         if (savedInstanceState == null && incomingShares.receive(intent)) {
             // Cleared so a later recreation of the activity does not import it again.
             setIntent(Intent(Intent.ACTION_MAIN))
@@ -150,13 +163,19 @@ class MainActivity : FlutterActivity() {
     /** Stops reporting charging when the activity goes away. */
     override fun onDestroy() {
         chargingReporter.stop()
+        callOffer.stop()
         super.onDestroy()
     }
 
-    /** Copies a share that reached the running app (the activity is `singleTop`). */
+    /**
+     * Copies a share that reached the running app (the activity is `singleTop`), or answers the
+     * call offer's Record.
+     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        incomingShares.receive(intent)
+        if (!callOffer.receive(intent)) {
+            incomingShares.receive(intent)
+        }
     }
 
     /** Hands RECORD_AUDIO answers to `MicrophonePermission`. */

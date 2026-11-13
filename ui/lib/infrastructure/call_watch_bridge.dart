@@ -1,6 +1,7 @@
 // Calls the core's call watch (#111): one look at which apps use the microphone, and the two
 // Settings (offer to record a call; stop when it ends). Requests go through
-// `note_taker_call_watch` on a background isolate, since a look runs a system tool.
+// `note_taker_call_watch` on a background isolate, since a look runs a system tool. On Android
+// the host sees the microphone itself (`android_call_signals.dart`), so a poll carries its users.
 
 import 'dart:convert';
 
@@ -31,6 +32,22 @@ final class CallPoll {
 
   /// `started` or `ended` on the look that noticed it, else null.
   final String? event;
+}
+
+/// An app the host saw using the microphone, sent with a poll where the core cannot look itself.
+final class HostMicrophoneUser {
+  /// Creates a user; `name` may be empty.
+  const HostMicrophoneUser({required this.process, this.name = ''});
+
+  /// The process or package name, or `android:voice-communication` for an unnamed call.
+  final String process;
+
+  /// The name the app gives itself, possibly empty.
+  final String name;
+
+  /// The core's JSON.
+  Map<String, Object?> toJson() =>
+      <String, Object?>{'process': process, 'name': name};
 }
 
 /// The owner's choices.
@@ -74,9 +91,19 @@ final class CallWatchBridge {
 
   final LlmNativeCall _call;
 
-  /// Takes one look. Throws `LlmException`. Side effects: Runs a system tool in the core.
-  Future<CallPoll> poll() async =>
-      CallPoll.fromJson(await _command(<String, Object?>{'command': 'poll'}));
+  /// Takes one look.
+  ///
+  /// Inputs: The users the host saw, or null for the core to ask the system.
+  /// Outputs: The answer. Throws `LlmException`. Side effects: Without `users`, runs a system
+  /// tool in the core.
+  Future<CallPoll> poll({List<HostMicrophoneUser>? users}) async =>
+      CallPoll.fromJson(await _command(<String, Object?>{
+        'command': 'poll',
+        if (users != null)
+          'users': <Object?>[
+            for (final HostMicrophoneUser user in users) user.toJson()
+          ],
+      }));
 
   /// Reads the settings. Throws `LlmException`. Side effects: None.
   Future<CallWatchSettings> settings() async => CallWatchSettings.fromJson(

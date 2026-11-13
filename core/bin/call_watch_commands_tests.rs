@@ -2,9 +2,12 @@
 
 use serde_json::json;
 
-use super::call_watch_commands::{CallWatchSettings, CallWatcher};
+use super::call_watch_commands::{CallWatchSettings, CallWatcher, toast_command};
 use crate::{
-    adapters::audio::microphone_users::MicrophoneUsersError, domain::call_watch::MicrophoneUser,
+    adapters::{
+        audio::microphone_users::MicrophoneUsersError, notification::call_toast::CallToastAnswer,
+    },
+    domain::call_watch::MicrophoneUser,
 };
 
 fn zoom() -> Vec<MicrophoneUser> {
@@ -114,4 +117,66 @@ fn an_unavailable_system_says_so() {
                             "error": "the command must be poll, get or set"})
     );
     let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn a_poll_can_carry_the_users_the_host_saw() {
+    // On Android the system answer comes from Kotlin, so the poll carries it (#111).
+    let folder = folder();
+    let mut watcher = CallWatcher::new(CallWatchSettings::file_for(&folder.join("n.sqlite3")));
+    let poll =
+        r#"{"command":"poll","users":[{"process":"android:voice-communication","name":""}]}"#;
+    let mut asked_the_system = false;
+    let mut system = || {
+        asked_the_system = true;
+        Err(MicrophoneUsersError::Unavailable)
+    };
+    let first = watcher.command(poll, &mut system);
+    assert_eq!(first["available"], true);
+    assert_eq!(first["in_call"], false);
+    assert!(!asked_the_system, "the host's users replace the system's");
+
+    let empty = watcher.command(r#"{"command":"poll","users":[]}"#, &mut || {
+        Err(MicrophoneUsersError::Unavailable)
+    });
+    assert_eq!(empty["available"], true, "no users is an answer too");
+
+    let bad = watcher.command(r#"{"command":"poll","users":"teams"}"#, &mut || {
+        Ok(Vec::new())
+    });
+    assert_eq!(bad["error_code"], "invalid_request");
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn the_toast_offers_for_an_app_and_withdraws() {
+    let mut offered = Vec::new();
+    let mut withdrawn = 0;
+    let answer = toast_command(
+        r#"{"command":"offer","app":"Teams"}"#,
+        &mut |app| {
+            offered.push(app.to_owned());
+            CallToastAnswer::Record
+        },
+        &mut || withdrawn += 1,
+    );
+    assert_eq!(answer, json!({"ok": true, "answer": "record"}));
+    assert_eq!(offered, ["Teams"]);
+
+    let answer = toast_command(
+        r#"{"command":"withdraw"}"#,
+        &mut |_| CallToastAnswer::Record,
+        &mut || withdrawn += 1,
+    );
+    assert_eq!(answer, json!({"ok": true}));
+    assert_eq!(withdrawn, 1);
+
+    for bad in [
+        r#"{"command":"offer"}"#,
+        r#"{"command":"offer","app":""}"#,
+        "{",
+    ] {
+        let answer = toast_command(bad, &mut |_| CallToastAnswer::Record, &mut || {});
+        assert_eq!(answer["error_code"], "invalid_request", "{bad}");
+    }
 }

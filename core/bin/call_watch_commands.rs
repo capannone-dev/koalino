@@ -1,10 +1,11 @@
 //! The call watch (#111) for the desktop app: its Settings and the polls that notice calls.
 //!
-//! A request is `{"command":"poll"}`, `{"command":"get"}` or `{"command":"set","offer"?,
+//! A request is `{"command":"poll","users"?}`, `{"command":"get"}` or `{"command":"set","offer"?,
 //! "auto_stop"?}`. A poll looks at the microphone's users once and answers
 //! `{"ok":true,"available","in_call","app","event"}`, where `event` is `started` or `ended` on the
 //! poll that noticed it, else null; a look whose tool failed this once answers `probe_failed`, and
-//! the next may work. `get` and `set` answer `{"ok":true,"offer","auto_stop"}`.
+//! the next may work. A host that sees the users itself (Android, through Kotlin) sends them as
+//! `"users": [{"process","name"}]`, and the system is not asked. `get` and `set` answer `{"ok":true,"offer","auto_stop"}`.
 //! `offer` (on by default) is whether the app offers to record when a call starts; `auto_stop`
 //! (on by default) is whether a recording started from that offer stops when the call ends. Both
 //! live in `<db>.call-watch.json`. Nothing here logs the apps seen.
@@ -19,7 +20,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    adapters::audio::microphone_users::MicrophoneUsersError,
+    adapters::{
+        audio::microphone_users::MicrophoneUsersError, notification::call_toast::CallToastAnswer,
+    },
     domain::call_watch::{CallEvent, CallWatch, MicrophoneUser},
 };
 
@@ -112,7 +115,12 @@ impl CallWatcher {
         match request.get("command").and_then(Value::as_str) {
             Some("poll") => {
                 let now_ms = u64::try_from(self.started.elapsed().as_millis()).unwrap_or(u64::MAX);
-                self.poll_at(now_ms, users())
+                match request.get("users") {
+                    None | Some(Value::Null) => self.poll_at(now_ms, users()),
+                    Some(Value::Array(sent)) => self.poll_at(now_ms, Ok(host_users(sent))),
+                    Some(_) => json!({"ok": false, "error_code": "invalid_request",
+                                      "error": "users must be a list"}),
+                }
             }
             Some("get") => self.settings_json(CallWatchSettings::load(&self.settings_file)),
             Some("set") => {
@@ -184,5 +192,55 @@ impl CallWatcher {
     fn settings_json(&self, settings: CallWatchSettings) -> Value {
         json!({"ok": true, "offer": settings.offer, "auto_stop": settings.auto_stop,
                "read_names": settings.read_names})
+    }
+}
+
+/// Reads the users a host sent with a poll.
+///
+/// Inputs: The `users` list; entries without a text `process` are skipped. Outputs: The users,
+/// with no process ID (a host reports other apps only). Side effects: None.
+fn host_users(sent: &[Value]) -> Vec<MicrophoneUser> {
+    sent.iter()
+        .filter_map(|user| {
+            let process = user.get("process")?.as_str()?;
+            Some(MicrophoneUser {
+                process: process.to_owned(),
+                name: user
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                pid: None,
+            })
+        })
+        .collect()
+}
+
+/// Runs one request for the call offer's toast (Windows).
+///
+/// Inputs: `{"command":"offer","app"}` or `{"command":"withdraw"}`, how to show the offer (it
+/// blocks until answered) and how to withdraw it. Outputs: `{"ok":true,"answer"}` (`record`,
+/// `dismissed`, `open` or `unavailable`), `{"ok":true}` for `withdraw`, or `invalid_request`.
+/// Side effects: Those of `offer` and `withdraw`.
+pub fn toast_command(
+    request_json: &str,
+    offer: &mut dyn FnMut(&str) -> CallToastAnswer,
+    withdraw: &mut dyn FnMut(),
+) -> Value {
+    let request: Value = serde_json::from_str(request_json).unwrap_or(Value::Null);
+    match request.get("command").and_then(Value::as_str) {
+        Some("offer") => match request.get("app").and_then(Value::as_str) {
+            Some(app) if !app.trim().is_empty() => {
+                json!({"ok": true, "answer": offer(app).as_str()})
+            }
+            _ => json!({"ok": false, "error_code": "invalid_request",
+                        "error": "offer needs the app's name"}),
+        },
+        Some("withdraw") => {
+            withdraw();
+            json!({"ok": true})
+        }
+        _ => json!({"ok": false, "error_code": "invalid_request",
+                    "error": "the command must be offer or withdraw"}),
     }
 }

@@ -53,6 +53,19 @@ lock-screen (public) version omits the meeting title. A tap opens the app. Verif
 recording from the background while another app played audio, pause and resume from the
 notification, and a stop that finished transcription and ended the service.
 
+## Noticing calls (#111)
+
+Android does not tell an ordinary app which app captures the microphone. `CallSignals.kt`
+(`note_taker/call_signals`) therefore reports a call, as the one unnamed user
+`android:voice-communication`, while the audio mode is `MODE_IN_COMMUNICATION` (set by VoIP apps
+such as Teams, Zoom, WhatsApp and Meet in a browser for the call) or a recording uses the
+`VOICE_COMMUNICATION` source. Koalino's own recorder uses neither. Dart passes it to the core's
+call watch every 3 seconds while the app's process runs. `CallOffer.kt` (`note_taker/call_offer`)
+shows the offer on the high-importance "Calls" channel with Record and Not now. Record opens the
+app, because a microphone foreground service can only start while the app is visible, and then
+answers `record`; Not now or a swipe answers `dismissed`. It expires after two minutes. No new
+permission is needed (`POST_NOTIFICATIONS` is already asked for the recording's notification).
+
 ## Charging and the after-meeting pass (#87)
 
 A phone runs the after-meeting transcript pass only while charging, and the core cannot read the
