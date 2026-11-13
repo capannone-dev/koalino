@@ -2938,3 +2938,15 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   - Windows on a VM: win11's snapshot needs a missing `virtio-win.iso`, so the consent-store parser
     is tested only on the documented output;
   - Android.
+
+## 2026-11-13 — #116 follow-up: a clip for voices only the final pass found
+
+- The final speaker pass can find a voice the live pass never clustered. Such a voice had no
+  review clip, so the owner could only name it from its words.
+- The after-meeting pass (#87) still holds the meeting's speech. It now cuts a clip for each
+  unknown voice without one: the voice's longest microphone segment inside one retained chunk, up
+  to 15 s, and none under 1 s, as live clips.
+- The clip is raw audio until the voice is named or the meeting is deleted, like every review
+  clip. Nothing was played to check it; a unit test checks which voice gets a clip and which
+  audio it holds.
+- Not covered: the combined pass of a meeting recorded on several devices (#88).
