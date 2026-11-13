@@ -122,7 +122,7 @@ fn start_default_input(frames: Sender<Vec<i16>>) -> Result<cpal::Stream, String>
     let supported = device
         .default_input_config()
         .map_err(|error| format!("unable to read the microphone format: {error}"))?;
-    start_capture(&device, supported, frames)
+    start_capture(&device, supported, frames, None)
 }
 
 /// The host the microphone opens on: ALSA on Linux even when the PulseAudio host is built in for
@@ -139,17 +139,22 @@ fn microphone_host() -> cpal::Host {
 /// Builds and plays an input stream on `device` in `supported`'s format, converting into
 /// `frames`. An output device given here is captured in loopback (WASAPI).
 ///
-/// Inputs: The device, its format, and the channel for converted blocks.
+/// Inputs: The device, its format, the channel for converted blocks, and the frames per delivered
+/// block (`None` leaves the host's default).
 /// Outputs: The playing stream, or a privacy-safe reason.
 /// Side effects: Starts capture.
 pub(crate) fn start_capture(
     device: &cpal::Device,
     supported: cpal::SupportedStreamConfig,
     frames: Sender<Vec<i16>>,
+    buffer_frames: Option<u32>,
 ) -> Result<cpal::Stream, String> {
     let sample_format = supported.sample_format();
     let mut resampler = PcmResampler::new(supported.sample_rate(), supported.channels());
-    let config: cpal::StreamConfig = supported.into();
+    let mut config: cpal::StreamConfig = supported.into();
+    if let Some(frame_count) = buffer_frames {
+        config.buffer_size = cpal::BufferSize::Fixed(frame_count);
+    }
     let on_error = |error: cpal::Error| {
         tracing::warn!(error = %error, "The microphone stream reported an error");
     };

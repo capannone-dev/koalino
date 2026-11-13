@@ -10,6 +10,8 @@
 //!   a screen-capture grant, and macOS needs a virtual device.
 //!
 //! The stream runs on its own thread, as the microphone's does, converted to 16 kHz mono PCM16.
+//! On Linux it asks for 50 ms blocks (`monitor_buffer_frames`), not PulseAudio's default 2 s, so
+//! the track stays in step with the microphone.
 //! Audio is never logged; errors name the failing step only.
 
 use std::sync::mpsc::Sender;
@@ -56,7 +58,7 @@ fn open_platform(frames: Sender<Vec<i16>>) -> Result<Box<dyn MicrophoneStream>, 
         let supported = device
             .default_output_config()
             .map_err(|error| format!("unable to read the sound output format: {error}"))?;
-        start_capture(&device, supported, frames)
+        start_capture(&device, supported, frames, None)
     })
 }
 
@@ -86,7 +88,12 @@ fn open_platform(frames: Sender<Vec<i16>>) -> Result<Box<dyn MicrophoneStream>, 
         let supported = monitor
             .default_input_config()
             .map_err(|error| format!("unable to read the monitor format: {error}"))?;
-        start_capture(&monitor, supported, frames)
+        let (min_frames, max_frames) = match supported.buffer_size() {
+            cpal::SupportedBufferSize::Range { min, max } => (*min, *max),
+            cpal::SupportedBufferSize::Unknown => (1, u32::MAX),
+        };
+        let buffer_frames = monitor_buffer_frames(supported.sample_rate(), min_frames, max_frames);
+        start_capture(&monitor, supported, frames, Some(buffer_frames))
     })
 }
 
@@ -95,6 +102,19 @@ fn open_platform(_frames: Sender<Vec<i16>>) -> Result<Box<dyn MicrophoneStream>,
     Err(AudioError::Unavailable {
         reason: String::from("this platform cannot record the computer's sound"),
     })
+}
+
+/// Frames per block asked of the monitor stream: 50 ms, within the host's supported range.
+///
+/// Without a size, PulseAudio delivers a record stream in fragments of about 2 s. The recorder
+/// places each batch to end at the microphone's time, so the computer's sound landed 2 s late and
+/// the echo detector, which looks 0–300 ms apart, never saw the speakers in the microphone.
+/// cpal also uses the size as the server's queue limit, so it is not made smaller than 50 ms.
+///
+/// Inputs: The stream's sample rate and the supported buffer range in frames.
+/// Outputs: The frame count. Side effects: None.
+pub fn monitor_buffer_frames(sample_rate_hz: u32, min_frames: u32, max_frames: u32) -> u32 {
+    (sample_rate_hz / 20).clamp(min_frames, max_frames.max(min_frames))
 }
 
 /// Finds the monitor source of a PulseAudio sink among the devices.
