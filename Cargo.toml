@@ -22,6 +22,9 @@ vad = ["dep:webrtc-vad"]
 # Captures the default microphone with cpal (ALSA on Linux, WASAPI on Windows, AAudio on Android;
 # Issue #45). Linux builds need the ALSA development package (`libasound2-dev`).
 microphone = ["dep:cpal"]
+# Also records what the computer plays (#108): WASAPI loopback on Windows, the default sink's monitor
+# through cpal's PulseAudio host on Linux (pure Rust, no system library).
+computer-sound = ["microphone", "cpal/pulseaudio"]
 # Runs local speaker diarization with ONNX Runtime (Issue #44). ONNX Runtime's prebuilt library is
 # downloaded at build time (approved by the owner, 2026-10-30); the models are exported with
 # `tools/diarization/export_models.py` and their paths come from configuration.

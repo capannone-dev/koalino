@@ -49,8 +49,8 @@ use crate::{
     application::combined_meetings::{MAX_KEEP_SPEECH_DAYS, MIN_KEEP_SPEECH_DAYS, keep_for_days},
     domain::transcription_glossary::TranscriptionGlossary,
     transcription_settings::{
-        keep_speech_days, save_glossary, save_keep_speech_days, save_transcript_pass,
-        transcript_pass_enabled,
+        computer_sound_enabled, keep_speech_days, save_computer_sound, save_glossary,
+        save_keep_speech_days, save_transcript_pass, transcript_pass_enabled,
     },
 };
 
@@ -107,6 +107,22 @@ fn download_slot() -> &'static (Mutex<DownloadStatus>, Arc<AtomicBool>) {
 /// Reads the app's paths.
 fn paths() -> TranscriptionPaths {
     TranscriptionPaths::from_lookup(&app_setting)
+}
+
+/// Whether this build can record what the computer plays (#108): the `computer-sound` feature on
+/// Windows or Linux.
+pub(crate) fn computer_sound_available() -> bool {
+    cfg!(all(
+        feature = "computer-sound",
+        any(target_os = "windows", target_os = "linux")
+    ))
+}
+
+/// Whether the next start or resume should also record the computer's sound (#108).
+///
+/// Side effects: Reads the settings file.
+pub(crate) fn computer_sound_wanted() -> bool {
+    computer_sound_available() && computer_sound_enabled(&load_settings(&paths().settings_file))
 }
 
 /// Reads how long speech waits to be combined on this device (#93).
@@ -375,6 +391,10 @@ fn settings_json() -> String {
             "waiting_for_download": automatic.and_then(|choice| choice.waiting_for_download),
         },
         "after_meeting_pass": transcript_pass_enabled(&saved),
+        "computer_sound": {
+            "available": computer_sound_available(),
+            "enabled": computer_sound_enabled(&saved),
+        },
         "efficient": {
             "gpu_name": efficient_gpu_name,
             "enabled": saved.efficient_gpu,
@@ -523,6 +543,21 @@ pub extern "C" fn note_taker_set_keep_speech_days(days: c_int) -> c_int {
 #[unsafe(no_mangle)]
 pub extern "C" fn note_taker_use_automatic_model() -> c_int {
     update_settings(|saved| saved.whisper_model = None)
+}
+
+/// Turns recording the computer's sound (#108) on or off from the next start or resume.
+///
+/// Inputs: Non-zero to turn it on. Outputs: 0, or 2 when the choice can't be stored.
+/// Side effects: Stores the choice; a recording in progress keeps its capture until paused.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_set_computer_sound(enabled: c_int) -> c_int {
+    match save_computer_sound(&paths().settings_file, enabled != 0) {
+        Ok(()) => STATUS_OK,
+        Err(error) => {
+            tracing::warn!(error = %error, "unable to store the computer sound choice");
+            STATUS_FAILED
+        }
+    }
 }
 
 /// Turns the after-meeting pass (#87) on or off from the next recording.

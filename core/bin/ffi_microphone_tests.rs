@@ -125,3 +125,63 @@ fn a_start_that_fails_turns_the_microphone_off_again() {
     assert_ne!(status, FFI_SUCCESS);
     assert_eq!(microphone.counts(), (1, 1));
 }
+
+/// Verifies the computer's sound opens and closes with the microphone and becomes its own
+/// track (#108).
+#[test]
+fn the_computer_sound_is_recorded_beside_the_microphone() {
+    use crate::domain::models::SegmentSource;
+    let microphone = FakeMicrophone::working();
+    let computer_sound = FakeMicrophone::working();
+    let (runtime, directory) = runtime_with(&microphone);
+    let mut runtime =
+        runtime.with_computer_sound_source(std::sync::Arc::new(computer_sound.clone()));
+
+    assert_eq!(
+        runtime.start_recording_for(Some(MeetingId::new("ffi-two-tracks"))),
+        FFI_SUCCESS
+    );
+    assert_eq!(computer_sound.counts(), (1, 0));
+    for _ in 0..20 {
+        microphone.speak(vec![100; 1_600]);
+        computer_sound.speak(vec![100; 1_600]);
+        assert!(runtime.drain_microphone());
+    }
+    assert_eq!(runtime.pause_recording(), FFI_SUCCESS);
+    assert_eq!(computer_sound.counts(), (1, 1), "pause turns it off too");
+    assert_eq!(
+        runtime.start_recording_for(Some(MeetingId::new("ffi-two-tracks"))),
+        FFI_SUCCESS
+    );
+    assert_eq!(computer_sound.counts(), (2, 1), "resume turns it on again");
+    assert_eq!(runtime.stop_recording(), FFI_SUCCESS);
+
+    let sources: Vec<SegmentSource> = runtime
+        .note_repository
+        .load_transcript_segments(&MeetingId::new("ffi-two-tracks"))
+        .unwrap_or_else(|error| panic!("segments must load: {error}"))
+        .iter()
+        .map(|segment| segment.source())
+        .collect();
+    drop(runtime);
+    let _ = std::fs::remove_dir_all(&directory);
+    assert_eq!(computer_sound.counts(), (2, 2));
+    assert!(sources.contains(&SegmentSource::Microphone));
+    assert!(sources.contains(&SegmentSource::ComputerSound));
+}
+
+/// Verifies a computer sound that cannot open leaves the recording to the microphone (#108).
+#[test]
+fn a_computer_sound_that_cannot_open_does_not_stop_the_recording() {
+    let microphone = FakeMicrophone::working();
+    let (runtime, directory) = runtime_with(&microphone);
+    let mut runtime =
+        runtime.with_computer_sound_source(std::sync::Arc::new(FakeMicrophone::failing()));
+    assert_eq!(
+        runtime.start_recording_for(Some(MeetingId::new("ffi-no-sound"))),
+        FFI_SUCCESS
+    );
+    assert_eq!(runtime.stop_recording(), FFI_SUCCESS);
+    drop(runtime);
+    let _ = std::fs::remove_dir_all(&directory);
+}

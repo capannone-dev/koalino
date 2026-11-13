@@ -2,6 +2,11 @@
 
 /// Holds each live chunk's PCM until a transcription engine reads (and deletes) it.
 pub mod chunk_audio_store;
+/// Captures what the computer plays with cpal, beside the microphone (#108).
+#[cfg(feature = "computer-sound")]
+pub mod cpal_computer_sound;
+#[cfg(all(test, feature = "computer-sound"))]
+mod cpal_computer_sound_tests;
 /// Captures the default microphone with cpal (Issue #45).
 #[cfg(feature = "microphone")]
 pub mod cpal_microphone;

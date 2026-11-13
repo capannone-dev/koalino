@@ -80,7 +80,7 @@ for platform in "$@"; do
       source "$CROSS_DIR/debian-13.sh"
       refresh_whisper_build linux "$GGML_NATIVE $GGML_AVX $GGML_AVX2 $GGML_FMA $GGML_F16C $(cat "$CROSS_DIR/cmake/debian-13.cmake")" \
         --target "$DEBIAN_TARGET"
-      cargo build --release --features local-ai,microphone,vad,diarization,whisper-rs/vulkan --lib --target "$DEBIAN_TARGET"
+      cargo build --release --features local-ai,microphone,computer-sound,vad,diarization,whisper-rs/vulkan --lib --target "$DEBIAN_TARGET"
       unset GGML_NATIVE GGML_AVX GGML_AVX2 GGML_FMA GGML_F16C
       check_debian_13_compatible "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/libnote_taker_core.so"
       mkdir -p ui/native/linux
@@ -107,7 +107,7 @@ for platform in "$@"; do
       refresh_whisper_build windows "$(cat "$CROSS_DIR"/cmake/windows-gnu-zig.cmake "$CROSS_DIR"/cmake/mingw-library-names.cmake)" \
         --target x86_64-pc-windows-gnu
       RUSTFLAGS="-L native=$VULKAN_SDK/lib" \
-        cargo zigbuild --release --features local-ai,microphone,vad,diarization,whisper-rs/vulkan --lib --target x86_64-pc-windows-gnu
+        cargo zigbuild --release --features local-ai,microphone,computer-sound,vad,diarization,whisper-rs/vulkan --lib --target x86_64-pc-windows-gnu
       mkdir -p ui/native/windows
       cp "$CARGO_TARGET_DIR/x86_64-pc-windows-gnu/release/note_taker_core.dll" ui/native/windows/
       stage_model ui/native/models

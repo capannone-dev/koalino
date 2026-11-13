@@ -119,6 +119,7 @@ fn settings_round_trip_without_the_key() {
         glossary: vec!["Marco Rossi".to_owned()],
         keep_speech_days: Some(14),
         keep_meeting_voices: true,
+        computer_sound: Some(false),
     };
     assert_eq!(load_settings(&paths.settings_file), Default::default());
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
@@ -311,4 +312,18 @@ fn automatic_fills_in_the_model_and_efficient_mode_only_when_none_was_chosen() {
 
     let nothing = with_automatic_model(&SavedTranscriptionSettings::default(), None);
     assert_eq!(nothing.whisper_model, None);
+}
+
+/// Verifies recording the computer's sound is on until turned off (#108).
+#[test]
+fn the_computer_sound_is_recorded_until_turned_off() {
+    use super::transcription_settings::{computer_sound_enabled, save_computer_sound};
+    let paths = paths("computer-sound");
+    assert!(computer_sound_enabled(&load_settings(&paths.settings_file)));
+    save_computer_sound(&paths.settings_file, false).unwrap_or_else(|error| panic!("{error}"));
+    assert!(!computer_sound_enabled(&load_settings(
+        &paths.settings_file
+    )));
+    save_computer_sound(&paths.settings_file, true).unwrap_or_else(|error| panic!("{error}"));
+    assert!(computer_sound_enabled(&load_settings(&paths.settings_file)));
 }

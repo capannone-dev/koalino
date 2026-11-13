@@ -268,6 +268,13 @@ struct FfiRuntime {
     microphone_source: Option<Arc<dyn MicrophoneSource>>,
     /// The microphone while a recording captures from it.
     live_microphone: Option<LiveMicrophone>,
+    /// What the computer plays (#108), captured beside the microphone; `None` without the
+    /// `computer-sound` feature or on a platform that cannot.
+    computer_sound_source: Option<Arc<dyn MicrophoneSource>>,
+    /// The computer's sound while a recording captures it.
+    live_computer_sound: Option<LiveMicrophone>,
+    /// Reads whether the owner wants the computer's sound recorded (the settings file).
+    computer_sound_wanted: fn() -> bool,
     /// Whether a drain ticker is running for the open microphone.
     microphone_ticker_running: bool,
     /// The language chosen for the next recording or the current one; a stop clears it.
@@ -558,6 +565,8 @@ impl FfiRuntime {
             }
         }
         runtime.microphone_source = default_microphone_source();
+        runtime.computer_sound_source = default_computer_sound_source();
+        runtime.computer_sound_wanted = crate::ffi_transcription::computer_sound_wanted;
         runtime.spawn_microphone_ticker = spawn_global_microphone_ticker;
         Ok(runtime)
     }
@@ -594,6 +603,9 @@ impl FfiRuntime {
             speed_check_due: None,
             microphone_source: None,
             live_microphone: None,
+            computer_sound_source: None,
+            live_computer_sound: None,
+            computer_sound_wanted: || false,
             microphone_ticker_running: false,
             recording_language: None,
             spawn_microphone_ticker: || {},
@@ -731,6 +743,17 @@ impl FfiRuntime {
     #[cfg(test)]
     fn with_microphone_source(mut self, microphone_source: Arc<dyn MicrophoneSource>) -> Self {
         self.microphone_source = Some(microphone_source);
+        self
+    }
+
+    /// Also records `source` as the computer's sound, as if the owner wanted it (#108).
+    ///
+    /// Inputs: The source opened beside the microphone. Outputs: The runtime using it.
+    /// Side effects: None.
+    #[cfg(test)]
+    fn with_computer_sound_source(mut self, source: Arc<dyn MicrophoneSource>) -> Self {
+        self.computer_sound_source = Some(source);
+        self.computer_sound_wanted = || true;
         self
     }
 
@@ -1458,7 +1481,10 @@ impl FfiRuntime {
                 // Nothing is recording, so the captured audio is discarded.
                 drop(microphone.close());
             }
-        } else if self.live_microphone.is_some() && !self.microphone_ticker_running {
+        } else if status == FFI_SUCCESS {
+            self.open_computer_sound();
+        }
+        if self.live_microphone.is_some() && !self.microphone_ticker_running {
             self.microphone_ticker_running = true;
             (self.spawn_microphone_ticker)();
         }
@@ -1522,6 +1548,28 @@ impl FfiRuntime {
         }
     }
 
+    /// Opens the computer's sound beside an open microphone, when wanted and possible (#108).
+    ///
+    /// Outputs: None; a capture that cannot open is logged and the recording goes on without it.
+    /// Side effects: Starts capturing what the computer plays.
+    fn open_computer_sound(&mut self) {
+        if self.live_microphone.is_none()
+            || self.live_computer_sound.is_some()
+            || !(self.computer_sound_wanted)()
+        {
+            return;
+        }
+        let Some(source) = &self.computer_sound_source else {
+            return;
+        };
+        match LiveMicrophone::open(source.as_ref()) {
+            Ok(computer_sound) => self.live_computer_sound = Some(computer_sound),
+            Err(error) => {
+                tracing::warn!(error = %error, "Recording without the computer's sound");
+            }
+        }
+    }
+
     /// Moves the microphone's queued audio into the recording; the ticker calls it.
     ///
     /// Outputs: Whether a microphone is still open (the ticker stops when it is not).
@@ -1532,7 +1580,13 @@ impl FfiRuntime {
             return false;
         };
         let blocks = microphone.drain();
+        let computer_blocks = self
+            .live_computer_sound
+            .as_ref()
+            .map(LiveMicrophone::drain)
+            .unwrap_or_default();
         self.push_microphone_blocks(blocks);
+        self.push_computer_sound_blocks(computer_blocks);
         true
     }
 
@@ -1543,6 +1597,25 @@ impl FfiRuntime {
         if let Some(microphone) = self.live_microphone.take() {
             let tail = microphone.close();
             self.push_microphone_blocks(tail);
+        }
+        if let Some(computer_sound) = self.live_computer_sound.take() {
+            let tail = computer_sound.close();
+            self.push_computer_sound_blocks(tail);
+        }
+    }
+
+    /// Pushes the computer's sound into the active recording (#108).
+    ///
+    /// Side effects: As `RecordingController::push_computer_sound_pcm`; failures are logged,
+    /// never the audio.
+    fn push_computer_sound_blocks(&mut self, blocks: Vec<Vec<i16>>) {
+        let Some(recording_controller) = self.recording_controller.as_mut() else {
+            return;
+        };
+        for block in blocks {
+            if let Err(error) = recording_controller.push_computer_sound_pcm(block) {
+                tracing::warn!(error = %error, "The computer's sound was not accepted");
+            }
         }
     }
 
@@ -3536,6 +3609,27 @@ fn default_microphone_source() -> Option<Arc<dyn MicrophoneSource>> {
         ))
     }
     #[cfg(not(feature = "microphone"))]
+    {
+        None
+    }
+}
+
+/// What the computer plays, when built with the `computer-sound` feature on Windows or Linux
+/// (#108).
+fn default_computer_sound_source() -> Option<Arc<dyn MicrophoneSource>> {
+    #[cfg(all(
+        feature = "computer-sound",
+        any(target_os = "windows", target_os = "linux")
+    ))]
+    {
+        Some(Arc::new(
+            crate::adapters::audio::cpal_computer_sound::CpalComputerSound::new(),
+        ))
+    }
+    #[cfg(not(all(
+        feature = "computer-sound",
+        any(target_os = "windows", target_os = "linux")
+    )))]
     {
         None
     }

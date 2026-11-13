@@ -51,36 +51,48 @@ impl MicrophoneSource for CpalMicrophone {
     /// unreadable format, unsupported sample format, or the stream refused to start).
     /// Side effects: Spawns the `microphone` thread and turns the microphone on.
     fn open(&self, frames: Sender<Vec<i16>>) -> Result<Box<dyn MicrophoneStream>, AudioError> {
-        let (ready_sender, ready_receiver) = mpsc::sync_channel::<Result<(), String>>(1);
-        let (stop_sender, stop_receiver) = mpsc::sync_channel::<()>(1);
-        let thread = thread::Builder::new()
-            .name(String::from("microphone"))
-            .spawn(move || {
-                let stream = match start_default_input(frames) {
-                    Ok(stream) => stream,
-                    Err(reason) => {
-                        let _ = ready_sender.send(Err(reason));
-                        return;
-                    }
-                };
-                let _ = ready_sender.send(Ok(()));
-                // Returns on `close` or when the stream handle is dropped.
-                let _ = stop_receiver.recv();
-                drop(stream);
-            })
-            .map_err(|error| unavailable(format!("unable to start the capture thread: {error}")))?;
-        let started = ready_receiver
-            .recv()
-            .unwrap_or_else(|_| Err(String::from("the capture thread ended early")));
-        match started {
-            Ok(()) => Ok(Box::new(CpalStream {
-                stop: stop_sender,
-                thread: Some(thread),
-            })),
-            Err(reason) => {
-                let _ = thread.join();
-                Err(unavailable(reason))
-            }
+        open_on_thread("microphone", move || start_default_input(frames))
+    }
+}
+
+/// Builds and plays a capture stream on its own thread, which owns it until it is closed.
+///
+/// Inputs: The thread's name, and the function that builds and starts the stream there.
+/// Outputs: The open stream, or `Unavailable` with the builder's reason.
+/// Side effects: Spawns the thread; the stream captures until `close`.
+pub(crate) fn open_on_thread(
+    thread_name: &str,
+    build: impl FnOnce() -> Result<cpal::Stream, String> + Send + 'static,
+) -> Result<Box<dyn MicrophoneStream>, AudioError> {
+    let (ready_sender, ready_receiver) = mpsc::sync_channel::<Result<(), String>>(1);
+    let (stop_sender, stop_receiver) = mpsc::sync_channel::<()>(1);
+    let thread = thread::Builder::new()
+        .name(thread_name.to_owned())
+        .spawn(move || {
+            let stream = match build() {
+                Ok(stream) => stream,
+                Err(reason) => {
+                    let _ = ready_sender.send(Err(reason));
+                    return;
+                }
+            };
+            let _ = ready_sender.send(Ok(()));
+            // Returns on `close` or when the stream handle is dropped.
+            let _ = stop_receiver.recv();
+            drop(stream);
+        })
+        .map_err(|error| unavailable(format!("unable to start the capture thread: {error}")))?;
+    let started = ready_receiver
+        .recv()
+        .unwrap_or_else(|_| Err(String::from("the capture thread ended early")));
+    match started {
+        Ok(()) => Ok(Box::new(CpalStream {
+            stop: stop_sender,
+            thread: Some(thread),
+        })),
+        Err(reason) => {
+            let _ = thread.join();
+            Err(unavailable(reason))
         }
     }
 }
@@ -103,13 +115,38 @@ impl MicrophoneStream for CpalStream {
 /// Outputs: The playing stream, or a privacy-safe reason.
 /// Side effects: Turns the microphone on.
 fn start_default_input(frames: Sender<Vec<i16>>) -> Result<cpal::Stream, String> {
-    let host = cpal::default_host();
+    let host = microphone_host();
     let device = host
         .default_input_device()
         .ok_or_else(|| String::from("no microphone is available"))?;
     let supported = device
         .default_input_config()
         .map_err(|error| format!("unable to read the microphone format: {error}"))?;
+    start_capture(&device, supported, frames)
+}
+
+/// The host the microphone opens on: ALSA on Linux even when the PulseAudio host is built in for
+/// the computer's sound (#108), so the microphone behaves as before; the platform default
+/// elsewhere.
+fn microphone_host() -> cpal::Host {
+    #[cfg(target_os = "linux")]
+    if let Ok(host) = cpal::host_from_id(cpal::HostId::Alsa) {
+        return host;
+    }
+    cpal::default_host()
+}
+
+/// Builds and plays an input stream on `device` in `supported`'s format, converting into
+/// `frames`. An output device given here is captured in loopback (WASAPI).
+///
+/// Inputs: The device, its format, and the channel for converted blocks.
+/// Outputs: The playing stream, or a privacy-safe reason.
+/// Side effects: Starts capture.
+pub(crate) fn start_capture(
+    device: &cpal::Device,
+    supported: cpal::SupportedStreamConfig,
+    frames: Sender<Vec<i16>>,
+) -> Result<cpal::Stream, String> {
     let sample_format = supported.sample_format();
     let mut resampler = PcmResampler::new(supported.sample_rate(), supported.channels());
     let config: cpal::StreamConfig = supported.into();
@@ -142,12 +179,12 @@ fn start_default_input(frames: Sender<Vec<i16>>) -> Result<cpal::Stream, String>
             on_error,
             None,
         ),
-        other => return Err(format!("unsupported microphone sample format {other}")),
+        other => return Err(format!("unsupported capture sample format {other}")),
     }
-    .map_err(|error| format!("unable to open the microphone: {error}"))?;
+    .map_err(|error| format!("unable to open the capture stream: {error}"))?;
     stream
         .play()
-        .map_err(|error| format!("unable to start the microphone: {error}"))?;
+        .map_err(|error| format!("unable to start the capture stream: {error}"))?;
     Ok(stream)
 }
 

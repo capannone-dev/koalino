@@ -81,6 +81,10 @@ pub struct SavedTranscriptionSettings {
     /// prints are biometric, so this is off until the owner turns it on.
     #[serde(default)]
     pub keep_meeting_voices: bool,
+    /// Whether recordings also capture what the computer plays (#108); `None` keeps the default
+    /// (on where the platform can).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub computer_sound: Option<bool>,
 }
 
 /// Where the settings, downloaded models and sealed key live.
@@ -329,6 +333,24 @@ pub fn keeps_meeting_voices(settings_file: &Path) -> bool {
 pub fn save_keep_meeting_voices(settings_file: &Path, keep: bool) -> io::Result<()> {
     let mut saved = load_settings(settings_file);
     saved.keep_meeting_voices = keep;
+    save_settings(settings_file, &saved)
+}
+
+/// Whether recordings also capture what the computer plays (#108), as Settings shows it.
+///
+/// Inputs: The saved choices. Outputs: The saved switch; `true` when unset.
+/// Side effects: None.
+pub fn computer_sound_enabled(saved: &SavedTranscriptionSettings) -> bool {
+    saved.computer_sound.unwrap_or(true)
+}
+
+/// Saves whether recordings capture the computer's sound, keeping every other choice.
+///
+/// Inputs: The settings file and the choice. Outputs: `Ok(())` or the write error.
+/// Side effects: Rewrites the file atomically; it applies from the next start or resume.
+pub fn save_computer_sound(settings_file: &Path, enabled: bool) -> io::Result<()> {
+    let mut saved = load_settings(settings_file);
+    saved.computer_sound = Some(enabled);
     save_settings(settings_file, &saved)
 }
 

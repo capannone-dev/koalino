@@ -414,6 +414,12 @@ and meeting summaries" below). Keys are write-only.
 - `int32_t note_taker_set_after_meeting_pass(int32_t enabled)` turns the after-meeting pass (#87) on or off from the next
   recording, and returns `0` or `2` when the choice can't be stored. `note_taker_transcription_settings` reads it back as
   `after_meeting_pass` (a boolean, `true` unless turned off). A phone runs the pass only while charging.
+- `int32_t note_taker_set_computer_sound(int32_t enabled)` turns recording what the computer plays (#108) on or off
+  from the next start or resume, and returns `0` or `2` when the choice can't be stored. `note_taker_transcription_settings`
+  reads it back as `computer_sound: {available, enabled}`: `available` is true on desktop builds with the
+  `computer-sound` feature (Windows loopback, Linux PulseAudio/PipeWire monitor), and `enabled` is `true` unless turned
+  off. The sound opens beside the microphone, is transcribed as its own track (segments marked as the computer's), and,
+  once the microphone is heard following the speakers, the microphone's copies of those words are dropped.
 - `char *note_taker_whisper_proposal(void)` returns a model proposed from this device's speed as
   JSON (`file_name`, `reason`, `measured`), the text `null` with nothing to propose, or a null pointer
   when the runtime is unavailable; free it with `note_taker_free_string`.
