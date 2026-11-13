@@ -2951,3 +2951,49 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
   audio it holds.
 - The combined pass of a meeting recorded on several devices (#88) does the same on the first
   recording's timeline. A clip in any of the meeting's recordings counts, so no voice gets two.
+
+## 2026-11-13 — #113 Speaker names read from the call window
+
+- **Context:** call apps show who is speaking. A name on screen while an unknown voice speaks is
+  strong evidence for naming that voice. The owner approved new dependencies for this:
+  - `zbus` on Linux, already built for `keyring`;
+  - the `windows` crate's UI Automation on Windows, the same release `cpal` builds.
+- **Reading:** while a recording captures audio, a `speaker-name-watcher` thread asks the platform
+  reader every 2 s.
+  - Linux reads AT-SPI over D-Bus; Windows uses UI Automation.
+  - Only windows whose title is a call app's or a meeting site's are walked (Teams, Meet, Zoom,
+    Jitsi, Webex, Whereby, Discord, Slack huddles, Skype, BigBlueButton, GoToMeeting).
+  - Each reading is limited to 3,000 elements and 800 ms, and each D-Bus call to 300 ms.
+  - The reader only reads: nothing is clicked or focused, and labels and names are never logged.
+  - A label gives a name when it says that person is speaking ("Alice is speaking", "Talking:
+    Alice", "Alice, video is off, speaking", "Alice (speaking)", "Alice sta parlando").
+  - Text that is not a name is refused: more than 5 words or 60 characters, or words such as
+    "you" and "someone".
+- **Storage:** each reading covers ±1 s, and readings of one name less than 3 s apart join into
+  one span. At stop the spans are attached to the meeting as a sealed `speaker-names-…vtt`, with
+  one `<v Name>` cue per span. The attachment syncs like the Teams captions (#102), which use the
+  same format.
+- **Suggestions, not assignments:** the voice gallery reads a meeting's `speaker-names`, Teams
+  captions and Teams live-transcript attachments. It compares their spans with each unknown voice's
+  segments.
+  - A voice needs at least 2 s of speech under named spans.
+  - One name must cover at least 60% of that speech.
+  - The Teams transcript published after the meeting is not used, because it is timed from the
+    Teams meeting's start, not the recording's.
+  - The app and web fill the name field with the suggestion and say where it came from. Only Assign
+    names the voice.
+- **Accessibility on Linux:** browsers and Electron apps expose their pages only while assistive
+  technology is active.
+  - While "Read speaker names from the call window" is on (Settings, on by default), the app sets
+    `org.a11y.Status.IsEnabled`. The bus launcher keeps that in the desktop settings.
+  - When it had to turn the flag on, the app asks for a restart of the browser and call apps. On
+    deb-gui, Firefox ESR started before the change did not expose its page; after a restart it did.
+- **Verified on deb-gui:** `cli call-names` read a local fixture page in Firefox ESR, with no
+  audio. All three label shapes were read: a tile label, a comma list with "speaking", and a
+  "Talking: …" text line.
+- **Not verified:**
+  - the labels of real Teams, Zoom or Meet calls, which were not captured, so their phrasing may
+    need new patterns;
+  - Windows UI Automation, which compiles but was not run: win11 could not start;
+  - a suggestion end to end, which needs speech, and playing audio needs the owner's permission.
+    It is covered by unit tests.
