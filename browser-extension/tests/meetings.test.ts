@@ -4,7 +4,9 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  HEARTBEAT_MS,
   RecordedMeeting,
+  heartbeatDue,
   matchRecapToMeeting,
   newMeetingId,
   pendingTranscriptMeetings,
@@ -51,6 +53,30 @@ describe("matchRecapToMeeting", () => {
     expect(matchRecapToMeeting({ title: "weekly sync", startMs: null, endMs: null }, meetings)?.meetingId).toBe(
       "browser-teams-2",
     );
+  });
+});
+
+describe("a page reloaded during the call (#102)", () => {
+  /** A two-hour call whose page reloaded at 18:00: no end, last seen then. */
+  const reloaded = weeklySync({ startMs: NOV_9_16H, endMs: null, lastSeenMs: NOV_9_16H + 2 * HOUR });
+  const lateCard = { title: "Weekly sync", startMs: NOV_9_16H + 100 * 60_000, endMs: NOV_9_16H + 2 * HOUR };
+
+  it("matches by the last time the recording was seen", () => {
+    expect(matchRecapToMeeting(lateCard, [reloaded])?.meetingId).toBe("browser-teams-1");
+  });
+
+  it("would not match from the start alone", () => {
+    const { lastSeenMs: _dropped, ...withoutHeartbeat } = reloaded;
+    expect(matchRecapToMeeting(lateCard, [withoutHeartbeat])).toBeNull();
+  });
+
+  it("notes a running recording every half minute", () => {
+    const running = weeklySync({ startMs: NOV_9_16H, endMs: null });
+    expect(heartbeatDue(running, NOV_9_16H + HEARTBEAT_MS - 1)).toBe(false);
+    expect(heartbeatDue(running, NOV_9_16H + HEARTBEAT_MS)).toBe(true);
+    const noted = { ...running, lastSeenMs: NOV_9_16H + HEARTBEAT_MS };
+    expect(heartbeatDue(noted, NOV_9_16H + HEARTBEAT_MS + 1_000)).toBe(false);
+    expect(heartbeatDue(weeklySync(), NOV_9_16H + HOUR), "an ended recording").toBe(false);
   });
 });
 

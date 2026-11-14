@@ -2638,6 +2638,11 @@ Under load (twice as many busy loops as cores, or a release compile alongside) t
     a recurring meeting are not browsed.
   - A recording's end time is lost when the Teams page is reloaded during the call. Matching then
     uses its start, with the 30-minute slack.
+    - **Fixed (2026-11-14):** a running recording now notes `lastSeenMs` in its record every
+      30 s, and matching uses it when `endMs` is missing. The `pagehide` save could not be
+      relied on: storage writes are asynchronous and the page is gone first. A two-hour call
+      reloaded at its end, whose recap showed only its last 20 minutes, now matches; from its
+      start alone it did not.
 
 ## 2026-11-10 — #104 Show the AI server's reason when it rejects a request
 

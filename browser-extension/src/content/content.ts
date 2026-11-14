@@ -32,6 +32,7 @@ import {
 import {
   RecapAttempts,
   RecordedMeeting,
+  heartbeatDue,
   matchRecapToMeeting,
   newMeetingId,
   pendingTranscriptMeetings,
@@ -183,6 +184,18 @@ function stopRecording(): void {
   toBackground({ kind: "recording", recording: false, title: record.title });
   recorder = null;
   hideOverlay();
+}
+
+/**
+ * Notes in the record that the recording still runs, every `HEARTBEAT_MS`, so a page reloaded
+ * during the call leaves an approximate end for matching its Teams transcript (#102).
+ * Side effects: Writes the record to storage.
+ */
+function noteStillRecording(): void {
+  const now = Date.now();
+  if (!record || !heartbeatDue(record, now)) return;
+  record = { ...record, lastSeenMs: now };
+  void saveMeeting(record);
 }
 
 /** The owner pressed Stop: no more recording until this call ends. */
@@ -373,7 +386,10 @@ async function tick(): Promise<void> {
         askConsent(onConsent);
       }
     }
-    if (state === "recording") await whileRecording();
+    if (state === "recording") {
+      noteStillRecording();
+      await whileRecording();
+    }
     return;
   }
   if (state === "recording") stopRecording();

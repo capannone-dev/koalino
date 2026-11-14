@@ -16,6 +16,11 @@ export interface RecordedMeeting {
   /** When recording started and ended (epoch ms; `endMs` is null while it runs). */
   startMs: number;
   endMs: number | null;
+  /**
+   * The last time the recording was seen running (epoch ms), noted every `HEARTBEAT_MS`. A page
+   * reloaded during the call never writes `endMs`, so this stands in for it (#102).
+   */
+  lastSeenMs?: number;
   /** Whether Teams transcription was seen running during the meeting. */
   teamsTranscriptSeen: boolean;
   /** Whether the Teams transcript was already sent to Koalino. */
@@ -24,6 +29,8 @@ export interface RecordedMeeting {
 
 /** How long a record is kept: Teams transcripts appear within minutes, but people look later. */
 export const KEEP_MS = 14 * 24 * 3_600_000;
+/** How often a running recording notes that it is still running. */
+export const HEARTBEAT_MS = 30_000;
 /** How far a recap's times may differ from the recorded times. */
 const TIME_SLACK_MS = 30 * 60_000;
 
@@ -49,7 +56,7 @@ export function matchRecapToMeeting(
     const cardStart = card.startMs;
     const cardEnd = card.endMs ?? card.startMs;
     const overlapping = meetings.filter((meeting) => {
-      const end = meeting.endMs ?? meeting.startMs;
+      const end = recordedEnd(meeting);
       return meeting.startMs <= cardEnd + TIME_SLACK_MS && end >= cardStart - TIME_SLACK_MS;
     });
     return (
@@ -61,6 +68,24 @@ export function matchRecapToMeeting(
     .filter((meeting) => normalized(meeting.title) === title)
     .sort((first, second) => second.startMs - first.startMs);
   return sameTitle[0] ?? null;
+}
+
+/**
+ * When a recording ended: its end, else the last time it was seen running, else its start.
+ * Inputs: The record. Outputs: Epoch ms. Side effects: None.
+ */
+export function recordedEnd(meeting: RecordedMeeting): number {
+  return meeting.endMs ?? meeting.lastSeenMs ?? meeting.startMs;
+}
+
+/**
+ * Whether a running recording should note that it is still running.
+ * Inputs: The record and the time now. Outputs: `true` once `HEARTBEAT_MS` passed since it was
+ * last noted (or started); `false` for an ended recording. Side effects: None.
+ */
+export function heartbeatDue(meeting: RecordedMeeting, nowMs: number): boolean {
+  if (meeting.endMs !== null) return false;
+  return nowMs - (meeting.lastSeenMs ?? meeting.startMs) >= HEARTBEAT_MS;
 }
 
 /**
