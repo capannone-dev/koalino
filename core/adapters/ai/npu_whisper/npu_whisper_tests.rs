@@ -3,7 +3,10 @@
 
 use super::{
     ggml_vocab::{GgmlVocabError, WhisperVocab},
-    greedy_decoder::{EOT, NpuError, SOT, WhisperNpu, decode_greedy, language_token},
+    greedy_decoder::{
+        DecodeRequest, DecodedToken, EOT, LogitScale, NO_SPEECH, NpuError, SOT, SOT_PREV,
+        TIMESTAMP_BEGIN, WhisperNpu, decode_greedy, language_token, segments_of, token_times,
+    },
     log_mel::{N_FRAMES, N_MELS, dft_power, log_mel, quantize},
 };
 
@@ -119,11 +122,24 @@ fn the_vocabulary_and_filters_come_from_a_whisper_cpp_model() {
     assert!(WhisperVocab::read(&mut &tiny_ggml()[..30]).is_err());
 }
 
-/// An NPU that answers each step from a script: the token to rate highest, given the token fed.
+/// An NPU that answers each step from a script: at each position, the tokens to rate above the
+/// rest (as quantized logits); every other token gets 1,000.
 struct ScriptedNpu {
     fed: Vec<(u32, usize)>,
-    answers: Vec<u32>,
+    answers: Vec<Vec<(u32, u16)>>,
     encoded: usize,
+    restarted: usize,
+}
+
+impl ScriptedNpu {
+    fn new(answers: Vec<Vec<(u32, u16)>>) -> Self {
+        Self {
+            fed: Vec::new(),
+            answers,
+            encoded: 0,
+            restarted: 0,
+        }
+    }
 }
 
 impl WhisperNpu for ScriptedNpu {
@@ -133,33 +149,70 @@ impl WhisperNpu for ScriptedNpu {
         Ok(())
     }
 
+    fn restart(&mut self) -> Result<(), NpuError> {
+        self.restarted += 1;
+        Ok(())
+    }
+
     fn step(&mut self, token: u32, position: usize) -> Result<Vec<u16>, NpuError> {
         self.fed.push((token, position));
         let mut logits = vec![1_000_u16; 51_865];
-        // A timestamp token always looks best; the decoder must never pick one.
-        logits[50_400] = 65_535;
-        if let Some(best) = self.answers.get(position) {
-            logits[*best as usize] = 60_000;
-        }
         // Italian a little ahead of English among the languages.
-        logits[language_token("it").unwrap_or(0) as usize] =
-            logits[language_token("it").unwrap_or(0) as usize].max(50_000);
+        logits[language_token("it").unwrap_or(0) as usize] = 50_000;
         logits[language_token("en").unwrap_or(0) as usize] = 40_000;
+        if let Some(answers) = self.answers.get(self.fed.len() - 1) {
+            for (answer, value) in answers {
+                logits[*answer as usize] = *value;
+            }
+        }
         Ok(logits)
+    }
+}
+
+/// The logits' quantization in the precompiled model.
+const SCALE: LogitScale = LogitScale {
+    scale: 0.001_292_54,
+    zero_point: 17_867,
+};
+
+/// A request with no prompt.
+fn request(
+    language: Option<&'static str>,
+    timestamps: bool,
+    max_positions: usize,
+) -> DecodeRequest<'static> {
+    DecodeRequest {
+        language,
+        prompt: &[],
+        timestamps,
+        max_positions,
+        logit_scale: SCALE,
     }
 }
 
 #[test]
 fn a_forced_language_is_decoded_greedily_until_the_end() {
-    // Positions: 0 SOT, 1 language, 2 transcribe, 3 no timestamps, then text.
-    let mut npu = ScriptedNpu {
-        fed: Vec::new(),
-        answers: vec![0, 0, 0, 7, 8, EOT],
-        encoded: 0,
-    };
-    let decoded = decode_greedy(&mut npu, &[0; N_MELS * N_FRAMES], Some("en"), 199)
-        .unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(decoded.tokens, vec![7, 8]);
+    // Steps: SOT, language, transcribe, no timestamps, then text.
+    let mut npu = ScriptedNpu::new(vec![
+        vec![],
+        vec![],
+        vec![],
+        vec![(7, 60_000), (50_400, 65_535)],
+        vec![(8, 60_000)],
+        vec![(EOT, 60_000)],
+    ]);
+    let decoded = decode_greedy(
+        &mut npu,
+        &[0; N_MELS * N_FRAMES],
+        &request(Some("en"), false, 199),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        decoded.tokens.iter().map(|t| t.token).collect::<Vec<_>>(),
+        vec![7, 8],
+        "a timestamp rated higher is never picked without timestamps"
+    );
+    assert!(decoded.complete);
     assert_eq!(decoded.language, "en");
     assert_eq!(npu.encoded, 1);
     let english = language_token("en").unwrap_or(0);
@@ -174,22 +227,172 @@ fn a_forced_language_is_decoded_greedily_until_the_end() {
             (8, 5)
         ]
     );
+    let sure = decoded.tokens[1].probability;
+    assert!(
+        sure > 0.99,
+        "a logit far above the rest is near-certain: {sure}"
+    );
 }
 
 #[test]
 fn without_a_language_the_model_picks_one_and_the_length_is_capped() {
-    let mut npu = ScriptedNpu {
-        fed: Vec::new(),
-        answers: vec![0, 0, 0, 5, 5, 5, 5, 5, 5, 5],
-        encoded: 0,
-    };
-    let decoded =
-        decode_greedy(&mut npu, &[0; N_MELS * N_FRAMES], None, 8).unwrap_or_else(|e| panic!("{e}"));
+    let five = vec![(5, 60_000)];
+    let mut npu = ScriptedNpu::new(vec![
+        vec![],
+        vec![],
+        vec![],
+        five.clone(),
+        five.clone(),
+        five.clone(),
+        five.clone(),
+        five,
+    ]);
+    let decoded = decode_greedy(&mut npu, &[0; N_MELS * N_FRAMES], &request(None, false, 8))
+        .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(decoded.language, "it");
     assert_eq!(npu.fed[1], (language_token("it").unwrap_or(0), 1));
     assert_eq!(decoded.tokens.len(), 4, "8 positions, 4 of them forced");
+    assert!(!decoded.complete, "cut by the window");
     assert_eq!(language_token("xx"), None);
     assert_eq!(language_token("it"), Some(50_274));
+}
+
+#[test]
+fn timestamps_follow_whisper_rules() {
+    let ts = |seconds_hundredths: u32| TIMESTAMP_BEGIN + seconds_hundredths / 2;
+    // Steps: SOT, language, transcribe, then sampling.
+    let mut npu = ScriptedNpu::new(vec![
+        vec![],
+        vec![],
+        // First sampled token: text rated highest, but a window must start with a timestamp,
+        // and not later than 1 s.
+        vec![(7, 65_000), (ts(300), 64_000), (ts(40), 60_000)],
+        // After the first timestamp only text: a timestamp rated highest is refused.
+        vec![(ts(100), 65_000), (8, 60_000)],
+        // Text then a timestamp closes the segment...
+        vec![(ts(240), 60_000)],
+        // ...and after a lone timestamp, text is refused: the next must be a timestamp (not
+        // earlier than the last) or the end.
+        vec![(9, 65_000), (ts(100), 64_000), (ts(240), 60_000)],
+        vec![(10, 60_000)],
+        vec![(EOT, 60_000)],
+    ]);
+    let decoded = decode_greedy(
+        &mut npu,
+        &[0; N_MELS * N_FRAMES],
+        &request(Some("it"), true, 199),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        decoded.tokens.iter().map(|t| t.token).collect::<Vec<_>>(),
+        vec![ts(40), 8, ts(240), ts(240), 10]
+    );
+    assert!(
+        !npu.fed.iter().any(|(token, _)| *token == 50_363),
+        "no <|notimestamps|>"
+    );
+}
+
+#[test]
+fn a_prompt_goes_before_the_transcript_and_language_detection_restarts() {
+    let mut npu = ScriptedNpu::new(vec![
+        vec![], // language detection on SOT alone
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![(EOT, 60_000)],
+    ]);
+    let request = DecodeRequest {
+        language: None,
+        prompt: &[11, 12],
+        timestamps: false,
+        max_positions: 199,
+        logit_scale: SCALE,
+    };
+    let decoded = decode_greedy(&mut npu, &[0; N_MELS * N_FRAMES], &request)
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(decoded.language, "it");
+    assert_eq!(npu.restarted, 1, "the detection step is undone");
+    let italian = language_token("it").unwrap_or(0);
+    assert_eq!(
+        npu.fed,
+        vec![
+            (SOT, 0),
+            (SOT_PREV, 0),
+            (11, 1),
+            (12, 2),
+            (SOT, 3),
+            (italian, 4),
+            (50_359, 5),
+            (50_363, 6),
+        ]
+    );
+    assert!(decoded.tokens.is_empty());
+}
+
+#[test]
+fn segments_and_the_next_window_follow_the_timestamps() {
+    let ts = |hundredths: u32| TIMESTAMP_BEGIN + hundredths / 2;
+    let token = |token: u32| DecodedToken {
+        token,
+        probability: 0.9,
+    };
+    // Two closed segments, then an unfinished third: the next window starts at the last pair.
+    let tokens = [ts(0), 7, 8, ts(240), ts(240), 9, ts(500), ts(500), 10].map(token);
+    let (segments, consumed) = segments_of(&tokens, true, 480_000);
+    assert_eq!(segments.len(), 2);
+    assert_eq!((segments[0].start_ms, segments[0].end_ms), (0, 2_400));
+    assert_eq!(
+        segments[0]
+            .tokens
+            .iter()
+            .map(|t| t.token)
+            .collect::<Vec<_>>(),
+        vec![7, 8]
+    );
+    assert_eq!((segments[1].start_ms, segments[1].end_ms), (2_400, 5_000));
+    assert_eq!(consumed, 80_000, "5 s at 16 kHz");
+
+    // Ending on a lone timestamp: the whole window is done.
+    let ended = [ts(0), 7, ts(240), ts(240), 9, ts(500)].map(token);
+    let (segments, consumed) = segments_of(&ended, true, 480_000);
+    assert_eq!(segments.len(), 2);
+    assert_eq!(consumed, 480_000);
+
+    // No pair at all: one segment for the whole window, which is done.
+    let loose = [ts(100), 7, 8].map(token);
+    let (segments, consumed) = segments_of(&loose, false, 160_000);
+    assert_eq!(segments.len(), 1);
+    assert_eq!((segments[0].start_ms, segments[0].end_ms), (1_000, 10_000));
+    assert_eq!(consumed, 160_000);
+}
+
+#[test]
+fn prompt_text_is_tokenized_like_whisper_cpp() {
+    let vocab = WhisperVocab::from_tokens(&["Mar", "co", " Ross", "i", ",", " OK", "R", " ", "M"]);
+    assert_eq!(
+        vocab.tokenize("Marco Rossi, OKR"),
+        vec![0, 1, 2, 3, 4, 5, 6],
+        "longest match per word, a word keeping its leading space"
+    );
+    assert_eq!(
+        vocab.tokenize("Zz"),
+        Vec::<u32>::new(),
+        "unknown bytes are skipped"
+    );
+}
+
+#[test]
+fn segment_time_is_shared_out_by_length() {
+    let times = token_times(&[b" Ciao".as_slice(), b" a", b" tutti"], 1_000, 2_300);
+    assert_eq!(
+        times,
+        vec![(100, 150), (150, 170), (170, 230)],
+        "10 ms units"
+    );
 }
 
 /// Writes the log-mel of a WAV (16 kHz mono) as little-endian f32, to compare with a reference
@@ -231,7 +434,7 @@ impl crate::adapters::ai::local_whisper_cpp::RecordingPcmSource for WavSamples {
 ///
 /// Run by hand on a Snapdragon 8 Gen 2 phone, with `LD_LIBRARY_PATH` naming ONNX Runtime's folder
 /// and `ADSP_LIBRARY_PATH` the QNN folder: `NPU_WAV`, `NPU_MODEL_DIR`, `NPU_QNN_DIR`,
-/// `NPU_VOCAB` (a multilingual whisper.cpp model) and `NPU_LANGUAGE`.
+/// `NPU_VOCAB` (a multilingual whisper.cpp model), `NPU_LANGUAGE`, and optionally `NPU_PROMPT`.
 #[cfg(feature = "npu-whisper")]
 #[test]
 #[ignore = "needs a phone NPU, the downloaded model and a WAV"]
@@ -269,7 +472,7 @@ fn transcribes_a_wav_on_the_npu() {
                 MeetingId::new("meeting"),
                 DeviceId::new("phone"),
             ),
-            &TranscriptionContext::new(None),
+            &TranscriptionContext::new(std::env::var("NPU_PROMPT").ok()),
         )
         .unwrap_or_else(|e| panic!("{e}"));
     println!(
@@ -278,6 +481,15 @@ fn transcribes_a_wav_on_the_npu() {
         started.elapsed(),
         transcript.content()
     );
+    for word in transcript.timed_words() {
+        println!(
+            "{:>7} {:>7} {:>4} {}",
+            word.start_ms(),
+            word.end_ms(),
+            word.probability_permille().unwrap_or(0),
+            word.text()
+        );
+    }
     assert!(!transcript.content().is_empty());
 }
 
@@ -319,4 +531,136 @@ fn only_snapdragon_8_gen_2_runs_the_precompiled_model() {
     assert!(!supported_soc("SM8650"), "another NPU generation");
     assert!(!supported_soc("Tensor G3"));
     assert!(!supported_soc(""));
+}
+
+#[test]
+fn a_recording_becomes_timed_words_window_by_window() {
+    use super::transcriber::{WindowSettings, transcribe_windows};
+    let ts = |hundredths: u32| TIMESTAMP_BEGIN + hundredths / 2;
+    let vocab = WhisperVocab::from_tokens(&[" Ciao", " a", " tutti", " ancora", "[BLANK_AUDIO]"]);
+    // 40 s of audio: the first window ends inside a segment at 20 s, so the second starts there.
+    let samples = vec![0.0_f32; 16_000 * 40];
+    let mut npu = ScriptedNpu::new(vec![
+        // Window 1 (language forced): SOT, language, transcribe, then sampling.
+        vec![],
+        vec![],
+        vec![(ts(0), 60_000)],
+        vec![(0, 60_000)],
+        vec![(1, 60_000)],
+        vec![(2, 60_000)],
+        vec![(ts(1300), 60_000)],
+        vec![(ts(1300), 60_000)],
+        vec![(4, 60_000)],
+        vec![(ts(2000), 60_000)],
+        vec![(ts(2000), 60_000)],
+        vec![(3, 60_000)],
+        vec![(EOT, 60_000)],
+        // Window 2 (20 s to 40 s), prompted with the first window's text.
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![(ts(0), 60_000)],
+        vec![(3, 60_000)],
+        vec![(ts(300), 60_000)],
+        vec![(EOT, 60_000)],
+    ]);
+    let settings = WindowSettings {
+        language: Some("it"),
+        prompt: Vec::new(),
+        input_scale: 1.0,
+        input_zero_point: 0,
+        logit_scale: SCALE,
+        max_positions: 199,
+    };
+    let transcript =
+        transcribe_windows(&mut npu, &vocab, &samples, &settings).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        transcript.text, "Ciao a tutti ancora",
+        "the marker segment is dropped"
+    );
+    let words: Vec<(&str, u64, u64)> = transcript
+        .words
+        .iter()
+        .map(|word| (word.text(), word.start_ms(), word.end_ms()))
+        .collect();
+    assert_eq!(
+        words,
+        vec![
+            ("Ciao", 0, 5_000),
+            ("a", 5_000, 7_000),
+            ("tutti", 7_000, 13_000),
+            ("ancora", 20_000, 23_000),
+        ]
+    );
+    assert!(
+        transcript
+            .words
+            .iter()
+            .all(|word| word.probability_permille().is_some())
+    );
+    assert_eq!(npu.encoded, 2);
+    // The second window is prompted with the first's text tokens.
+    let second_start = npu
+        .fed
+        .iter()
+        .rposition(|(token, position)| *token == SOT_PREV && *position == 0);
+    let second_start = second_start.unwrap_or_else(|| panic!("no prompt in the second window"));
+    assert_eq!(
+        npu.fed[second_start + 1..second_start + 4]
+            .iter()
+            .map(|(t, _)| *t)
+            .collect::<Vec<_>>(),
+        vec![0, 1, 2]
+    );
+}
+
+#[test]
+fn a_window_the_model_finds_silent_and_unsure_is_dropped() {
+    use super::transcriber::{WindowSettings, transcribe_windows};
+    let ts = |hundredths: u32| TIMESTAMP_BEGIN + hundredths / 2;
+    let vocab = WhisperVocab::from_tokens(&[" E", " che", " altra"]);
+    let samples = vec![0.0_f32; 16_000 * 5];
+    // Each word barely ahead of three others: about 28% sure.
+    let unsure = |token: u32| vec![(token, 60_100), (10, 60_000), (11, 60_000), (12, 60_000)];
+    let mut npu = ScriptedNpu::new(vec![
+        // After SOT: <|nospeech|> very likely.
+        vec![(NO_SPEECH, 65_000)],
+        vec![],
+        vec![(ts(0), 60_000)],
+        unsure(0),
+        unsure(1),
+        unsure(2),
+        vec![(ts(200), 60_000)],
+        vec![(EOT, 60_000)],
+    ]);
+    let settings = WindowSettings {
+        language: Some("it"),
+        prompt: Vec::new(),
+        input_scale: 1.0,
+        input_zero_point: 0,
+        logit_scale: SCALE,
+        max_positions: 199,
+    };
+    let transcript =
+        transcribe_windows(&mut npu, &vocab, &samples, &settings).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(
+        transcript.text, "",
+        "Whisper's no-speech rule drops the made-up words"
+    );
+    assert!(transcript.words.is_empty());
+}
+
+/// Prints the tokens of `NPU_TOKENIZE_TEXT` from the vocabulary in `NPU_VOCAB` (a whisper.cpp
+/// model), to compare with Whisper's own tokenizer by hand.
+#[test]
+#[ignore = "needs a whisper.cpp model and a text"]
+fn prints_the_tokens_of_a_text() {
+    let variable = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("{name} is unset"));
+    let model = std::fs::File::open(variable("NPU_VOCAB")).unwrap_or_else(|e| panic!("{e}"));
+    let vocab =
+        WhisperVocab::read(&mut std::io::BufReader::new(model)).unwrap_or_else(|e| panic!("{e}"));
+    println!("{:?}", vocab.tokenize(&variable("NPU_TOKENIZE_TEXT")));
 }

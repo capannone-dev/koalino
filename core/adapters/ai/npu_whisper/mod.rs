@@ -20,3 +20,5 @@ mod npu_whisper_tests;
 /// The engine on ONNX Runtime's QNN provider.
 #[cfg(feature = "npu-whisper")]
 pub mod qnn_engine;
+/// Transcribes a recording window by window, with timing and a prompt.
+pub mod transcriber;

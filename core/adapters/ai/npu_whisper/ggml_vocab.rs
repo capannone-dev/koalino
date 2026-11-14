@@ -4,8 +4,12 @@
 //! (`n_mels` x `n_fft` floats) and the token table (count, then length and bytes per token). The
 //! multilingual models share one vocabulary, so the NPU's `small` reads it from `base` and no
 //! tokenizer has to be shipped or downloaded. Only the header is read, never the weights.
+//!
+//! `tokenize` turns prompt text into tokens the way whisper.cpp does: GPT-2's split into words
+//! (letters, digits or other symbols, each with an optional leading space, and English
+//! contractions), then the longest known token at each point of a word.
 
-use std::io::Read;
+use std::{collections::HashMap, io::Read};
 
 /// The whisper.cpp model magic, `ggml` as a little-endian `u32`.
 const MAGIC: u32 = 0x6767_6d6c;
@@ -38,6 +42,10 @@ pub struct WhisperVocab {
     tokens: Vec<Vec<u8>>,
     /// The model's vocabulary size (`n_vocab`, the first hyperparameter).
     vocabulary_size: u32,
+    /// Each token's ID by its bytes, for `tokenize`.
+    ids: HashMap<Vec<u8>, u32>,
+    /// The longest token, in bytes.
+    longest: usize,
 }
 
 /// The vocabulary size of multilingual Whisper models; English-only ones have one token fewer.
@@ -80,12 +88,75 @@ impl WhisperVocab {
             reader.read_exact(&mut token).map_err(short)?;
             tokens.push(token);
         }
-        Ok(Self {
+        Ok(Self::with_tokens(
             filters,
-            filter_shape: (rows, columns),
+            (rows, columns),
             tokens,
             vocabulary_size,
-        })
+        ))
+    }
+
+    /// Builds the vocabulary and its lookup table.
+    fn with_tokens(
+        filters: Vec<f32>,
+        filter_shape: (usize, usize),
+        tokens: Vec<Vec<u8>>,
+        vocabulary_size: u32,
+    ) -> Self {
+        let ids = tokens
+            .iter()
+            .enumerate()
+            .filter_map(|(id, bytes)| Some((bytes.clone(), u32::try_from(id).ok()?)))
+            .collect();
+        let longest = tokens.iter().map(Vec::len).max().unwrap_or(0);
+        Self {
+            filters,
+            filter_shape,
+            tokens,
+            vocabulary_size,
+            ids,
+            longest,
+        }
+    }
+
+    /// A vocabulary of the given tokens only, for tests.
+    #[cfg(test)]
+    pub(crate) fn from_tokens(tokens: &[&str]) -> Self {
+        Self::with_tokens(
+            vec![0.0; super::log_mel::N_MELS * 201],
+            (super::log_mel::N_MELS, 201),
+            tokens
+                .iter()
+                .map(|token| token.as_bytes().to_vec())
+                .collect(),
+            0,
+        )
+    }
+
+    /// Turns text into token IDs, as whisper.cpp does for a prompt.
+    ///
+    /// Inputs: The text. Outputs: Each word's longest known tokens in turn; bytes no token
+    /// starts with are skipped. Side effects: None.
+    pub fn tokenize(&self, text: &str) -> Vec<u32> {
+        let mut ids = Vec::new();
+        for word in gpt2_words(text) {
+            let bytes = word.as_bytes();
+            let mut start = 0;
+            while start < bytes.len() {
+                let end_limit = bytes.len().min(start + self.longest);
+                let found = (start + 1..=end_limit)
+                    .rev()
+                    .find_map(|end| self.ids.get(&bytes[start..end]).map(|id| (end, *id)));
+                match found {
+                    Some((end, id)) => {
+                        ids.push(id);
+                        start = end;
+                    }
+                    None => start += 1,
+                }
+            }
+        }
+        ids
     }
 
     /// The mel filters, row-major.
@@ -101,6 +172,11 @@ impl WhisperVocab {
     /// Reports whether the model is multilingual, so its token IDs match the NPU model's.
     pub fn is_multilingual(&self) -> bool {
         self.vocabulary_size >= MULTILINGUAL_VOCABULARY
+    }
+
+    /// A token's bytes; empty for special and unknown tokens.
+    pub fn bytes(&self, token: u32) -> &[u8] {
+        self.tokens.get(token as usize).map_or(&[], Vec::as_slice)
     }
 
     /// The text of token IDs: their bytes joined and read as UTF-8 (invalid bytes replaced).
@@ -137,4 +213,74 @@ fn read_u32(reader: &mut impl Read) -> Result<u32, GgmlVocabError> {
 
 fn read_size(reader: &mut impl Read) -> Result<usize, GgmlVocabError> {
     usize::try_from(read_u32(reader)?).map_err(|_| GgmlVocabError::Damaged)
+}
+
+/// What a character counts as in GPT-2's word split.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CharClass {
+    Letter,
+    Digit,
+    Space,
+    Other,
+}
+
+/// Classifies a character.
+fn class_of(character: char) -> CharClass {
+    if character.is_alphabetic() {
+        CharClass::Letter
+    } else if character.is_numeric() {
+        CharClass::Digit
+    } else if character.is_whitespace() {
+        CharClass::Space
+    } else {
+        CharClass::Other
+    }
+}
+
+/// Splits text like GPT-2's pattern: `'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+|
+/// ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+`.
+fn gpt2_words(text: &str) -> Vec<&str> {
+    const CONTRACTIONS: [&str; 7] = ["'s", "'t", "'re", "'ve", "'m", "'ll", "'d"];
+    let characters: Vec<(usize, char)> = text.char_indices().collect();
+    let byte_at = |index: usize| characters.get(index).map_or(text.len(), |(at, _)| *at);
+    let mut words = Vec::new();
+    let mut index = 0;
+    while index < characters.len() {
+        let start = index;
+        let rest = &text[byte_at(index)..];
+        if let Some(contraction) = CONTRACTIONS.iter().find(|c| rest.starts_with(**c)) {
+            index += contraction.chars().count();
+            words.push(&text[byte_at(start)..byte_at(index)]);
+            continue;
+        }
+        let class = class_of(characters[index].1);
+        let next_class = characters.get(index + 1).map(|(_, c)| class_of(*c));
+        if class == CharClass::Space {
+            // A run of spaces; its last space joins the next word, unless the text ends.
+            let mut end = index;
+            while end < characters.len() && class_of(characters[end].1) == CharClass::Space {
+                end += 1;
+            }
+            let keeps_last = end < characters.len() && characters[end - 1].1 == ' ';
+            let run_end = if keeps_last { end - 1 } else { end };
+            if run_end > index {
+                words.push(&text[byte_at(index)..byte_at(run_end)]);
+                index = run_end;
+                continue;
+            }
+            // A single space before a word: it starts that word.
+            let word_class = next_class.unwrap_or(CharClass::Space);
+            index += 1;
+            while index < characters.len() && class_of(characters[index].1) == word_class {
+                index += 1;
+            }
+            words.push(&text[byte_at(start)..byte_at(index)]);
+            continue;
+        }
+        while index < characters.len() && class_of(characters[index].1) == class {
+            index += 1;
+        }
+        words.push(&text[byte_at(start)..byte_at(index)]);
+    }
+    words
 }

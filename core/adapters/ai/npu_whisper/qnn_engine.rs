@@ -2,12 +2,11 @@
 //! Runtime's QNN provider, with no CPU fallback.
 //!
 //! The model folder holds `encoder.onnx`/`.bin`, `decoder.onnx`/`.bin` and `metadata.json` (the
-//! encoder input's quantization). The QNN folder holds `libQnnHtp.so` and the HTP skeleton the
-//! NPU loads (found through `ADSP_LIBRARY_PATH`, which the Android host sets at start-up). The
-//! decoder keeps a 200-token window: its self-attention caches start at the quantized zero (128),
-//! and the attention mask, right-aligned, opens one position per step. Audio longer than 30 s is
-//! cut into 30 s windows. The model has no word timing here (timestamps are off), so the
-//! transcript carries none; a glossary prompt is not used yet.
+//! encoder input's and the logits' quantization). The QNN folder holds `libQnnHtp.so` and the HTP
+//! skeleton the NPU loads (found through `ADSP_LIBRARY_PATH`, which the Android host sets at
+//! start-up). The decoder keeps a 200-token window: its self-attention caches start at the
+//! quantized zero (128), and the attention mask, right-aligned, opens one position per step.
+//! `transcriber` runs the windows, with timestamps, the chunk's prompt and approximate word times.
 
 use std::{
     collections::HashMap,
@@ -24,11 +23,11 @@ use ort::{
 
 use super::{
     ggml_vocab::WhisperVocab,
-    greedy_decoder::{NpuError, WhisperNpu, decode_greedy},
-    log_mel::{N_SAMPLES, log_mel, quantize},
+    greedy_decoder::{LogitScale, NpuError, WhisperNpu},
+    transcriber::{WindowSettings, transcribe_windows},
 };
 use crate::{
-    adapters::ai::local_whisper_cpp::{RecordingPcmSource, is_non_speech_marker},
+    adapters::ai::local_whisper_cpp::RecordingPcmSource,
     domain::models::{Transcript, TranscriptionContext},
     domain::{errors::TranscriptionError, models::AudioRecording},
     ports::ai::TranscriptionEngine,
@@ -152,6 +151,10 @@ impl WhisperNpu for QnnWhisperNpu {
             into[..count].copy_from_slice(&data[..count]);
         }
         drop(outputs);
+        self.restart()
+    }
+
+    fn restart(&mut self) -> Result<(), NpuError> {
         // Empty self-attention caches hold the quantized zero; the whole window starts masked.
         for (name, value) in &mut self.decoder_inputs {
             if name.contains("_cache_self_") {
@@ -263,11 +266,15 @@ fn failed(error: impl std::fmt::Display) -> NpuError {
     NpuError(error.to_string())
 }
 
-/// The encoder input's quantization, from the model's `metadata.json`.
-fn input_quantization(model_dir: &Path) -> Result<(f32, i32), NpuError> {
+/// Reads the model's `metadata.json`.
+fn model_metadata(model_dir: &Path) -> Result<serde_json::Value, NpuError> {
     let text = fs::read_to_string(model_dir.join("metadata.json")).map_err(failed)?;
-    let metadata: serde_json::Value = serde_json::from_str(&text).map_err(failed)?;
-    let parameters = &metadata["model_files"]["encoder.onnx"]["inputs"]["input_features"]["quantization_parameters"];
+    serde_json::from_str(&text).map_err(failed)
+}
+
+/// A tensor's quantization (step and zero point) from its metadata entry.
+fn quantization(tensor: &serde_json::Value) -> Result<(f32, i32), NpuError> {
+    let parameters = &tensor["quantization_parameters"];
     match (
         parameters["scale"].as_f64(),
         parameters["zero_point"].as_i64(),
@@ -276,7 +283,7 @@ fn input_quantization(model_dir: &Path) -> Result<(f32, i32), NpuError> {
             Ok((scale as f32, i32::try_from(zero_point).map_err(failed)?))
         }
         _ => Err(NpuError(String::from(
-            "the model's metadata has no input quantization",
+            "the model's metadata has no quantization for a tensor",
         ))),
     }
 }
@@ -287,6 +294,7 @@ pub struct QnnWhisperEngine {
     vocabulary: WhisperVocab,
     scale: f32,
     zero_point: i32,
+    logit_scale: LogitScale,
     language: Option<String>,
     source: std::sync::Arc<dyn RecordingPcmSource>,
 }
@@ -302,7 +310,11 @@ impl QnnWhisperEngine {
         language: Option<String>,
         source: std::sync::Arc<dyn RecordingPcmSource>,
     ) -> Result<Self, NpuError> {
-        let (scale, zero_point) = input_quantization(&files.model_dir)?;
+        let metadata = model_metadata(&files.model_dir)?;
+        let (scale, zero_point) =
+            quantization(&metadata["model_files"]["encoder.onnx"]["inputs"]["input_features"])?;
+        let (logit_step, logit_zero) =
+            quantization(&metadata["model_files"]["decoder.onnx"]["outputs"]["logits"])?;
         let model = fs::File::open(&files.vocabulary_model).map_err(failed)?;
         let vocabulary = WhisperVocab::read(&mut std::io::BufReader::new(model)).map_err(failed)?;
         if vocabulary.filter_shape() != (super::log_mel::N_MELS, 201)
@@ -317,6 +329,10 @@ impl QnnWhisperEngine {
             vocabulary,
             scale,
             zero_point,
+            logit_scale: LogitScale {
+                scale: logit_step,
+                zero_point: logit_zero,
+            },
             language: language.filter(|code| code != "auto"),
             source,
         })
@@ -338,31 +354,32 @@ impl TranscriptionEngine for QnnWhisperEngine {
             });
         }
         let language = transcription_context.language_or(self.language.as_deref());
+        // The chunk's previous text and the glossary, so names come out as the owner wrote them.
+        let prompt = transcription_context
+            .prompt()
+            // With a leading space, as Whisper encodes a prompt.
+            .map(|text| self.vocabulary.tokenize(&format!(" {}", text.trim())))
+            .unwrap_or_default();
         let mut npu = self
             .npu
             .lock()
             .map_err(|_| TranscriptionError::Unavailable)?;
-        let max_positions = npu.max_positions();
-        let mut text = String::new();
-        for window in samples.chunks(N_SAMPLES) {
-            let mel = quantize(
-                &log_mel(window, self.vocabulary.mel_filters()),
-                self.scale,
-                self.zero_point,
-            );
-            let decoded =
-                decode_greedy(&mut *npu, &mel, language, max_positions).map_err(|error| {
-                    tracing::warn!(%error, "NPU transcription failed");
-                    TranscriptionError::Unavailable
-                })?;
-            let window_text = self.vocabulary.text(&decoded.tokens);
-            if !is_non_speech_marker(window_text.trim()) {
-                text.push_str(&window_text);
-            }
-        }
-        Ok(Transcript::new(
-            audio_recording.meeting_id().clone(),
-            text.trim(),
-        ))
+        let settings = WindowSettings {
+            language,
+            prompt,
+            input_scale: self.scale,
+            input_zero_point: self.zero_point,
+            logit_scale: self.logit_scale,
+            max_positions: npu.max_positions(),
+        };
+        let transcript = transcribe_windows(&mut *npu, &self.vocabulary, &samples, &settings)
+            .map_err(|error| {
+                tracing::warn!(%error, "NPU transcription failed");
+                TranscriptionError::Unavailable
+            })?;
+        Ok(
+            Transcript::new(audio_recording.meeting_id().clone(), transcript.text)
+                .with_timed_words(transcript.words),
+        )
     }
 }
