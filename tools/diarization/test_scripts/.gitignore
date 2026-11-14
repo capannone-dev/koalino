@@ -3,3 +3,5 @@
 !.gitignore
 !README.md
 !*.txt
+# Transcripts of real meetings are personal data too, even as .txt.
+Trascrizione*
