@@ -123,12 +123,41 @@ pub fn install_linux(host_path: &Path, home: &Path) -> Result<Vec<PathBuf>> {
     Ok(written)
 }
 
+/// Drops the `\\?\` verbatim prefix that `canonicalize` gives Windows paths.
+///
+/// Chrome finds neither a manifest nor a host through such a path, so the registry value and the
+/// manifest's `path` must be ordinary ones (#102).
+///
+/// Inputs: A path. Outputs: `\\?\C:\…` as `C:\…` and `\\?\UNC\server\…` as `\\server\…`;
+/// any other path (including verbatim volume paths, which have no ordinary form) unchanged.
+/// Side effects: None.
+pub fn without_verbatim_prefix(path: &Path) -> PathBuf {
+    let Some(text) = path.to_str() else {
+        return path.to_path_buf();
+    };
+    if let Some(share) = text.strip_prefix(r"\\?\UNC\") {
+        return PathBuf::from(format!(r"\\{share}"));
+    }
+    match text.strip_prefix(r"\\?\") {
+        Some(rest) if is_drive_path(rest) => PathBuf::from(rest),
+        _ => path.to_path_buf(),
+    }
+}
+
+/// Whether text starts like `C:\`.
+fn is_drive_path(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'\\'
+}
+
 /// Writes the Windows manifests next to the host and points each browser's registry key at them.
 ///
-/// Inputs: The absolute host path.
+/// Inputs: The absolute host path (a `\\?\` prefix is dropped first).
 /// Outputs: The manifest files written.
 /// Side effects: Writes files beside the host; runs `reg add` for each browser.
 pub fn install_windows(host_path: &Path) -> Result<Vec<PathBuf>> {
+    let host_path = without_verbatim_prefix(host_path);
+    let host_path = host_path.as_path();
     let host_directory = host_path
         .parent()
         .context("the host path has no directory")?;

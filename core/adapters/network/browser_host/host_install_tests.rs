@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use super::host_install::{
     Browser, CHROMIUM_EXTENSION_ID, FIREFOX_EXTENSION_ID, HOST_NAME, host_manifest, install_linux,
-    linux_manifest_path, windows_registry_key,
+    linux_manifest_path, windows_registry_key, without_verbatim_prefix,
 };
 
 /// A unique temporary home directory, removed on drop.
@@ -108,4 +108,32 @@ fn installing_on_linux_writes_firefox_and_the_browsers_present() {
     )
     .unwrap_or_else(|error| panic!("manifest should be JSON: {error}"));
     assert_eq!(chromium["path"], "/opt/nt/browser-host");
+}
+
+#[test]
+fn windows_paths_lose_the_verbatim_prefix_browsers_reject() {
+    // `canonicalize` on Windows returns `\\?\` paths; Chrome finds neither the manifest nor the
+    // host through them (seen on Windows 11 with Chrome 157, #102).
+    assert_eq!(
+        without_verbatim_prefix(Path::new(r"\\?\C:\Users\me\kx\browser-host.exe")),
+        PathBuf::from(r"C:\Users\me\kx\browser-host.exe")
+    );
+    assert_eq!(
+        without_verbatim_prefix(Path::new(r"\\?\UNC\server\share\browser-host.exe")),
+        PathBuf::from(r"\\server\share\browser-host.exe")
+    );
+}
+
+#[test]
+fn ordinary_paths_are_kept_as_they_are() {
+    for path in [
+        r"C:\Program Files\Koalino\browser-host.exe",
+        "/opt/nt/browser-host",
+        r"\\?\Volume{0}\browser-host.exe",
+    ] {
+        assert_eq!(
+            without_verbatim_prefix(Path::new(path)),
+            PathBuf::from(path)
+        );
+    }
 }

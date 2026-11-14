@@ -3282,3 +3282,30 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   document isn't suited to.
 - **Terms:** this is the owner running their own tool on their own computer for their own
   meetings. Whether it holds for other people's use of a distributed app stays open (see #107).
+
+## 2026-11-14 — #102 First run in Chrome on Windows: the host's registration paths
+
+- **Context:** the extension had been tested live only in Firefox on Linux. It was run in
+  Chrome 157 on the Windows 11 test VM, in a separate profile, against a fixture call page
+  served as `teams.live.com` (Chrome's `--host-resolver-rules`, a test certificate and Chrome's
+  fake microphone). It used a test daemon with the bridge enabled. Edge and Teams desktop on the
+  VM were not touched.
+- **Found:** `browser-host install` registered `\\?\C:\…` paths, because `canonicalize` returns
+  verbatim paths on Windows. Chrome then said "Koalino helper not installed":
+  - with the `\\?\` registry value it did not find the manifest;
+  - with only the registry value fixed, it found the manifest but the host "exited" (the
+    manifest's `path` had the same prefix).
+- **Decision:** `install_windows` drops the prefix (`without_verbatim_prefix`: `\\?\C:\…` →
+  `C:\…`, `\\?\UNC\server\…` → `\\server\…`, anything else unchanged) before it writes the
+  manifests and the registry values. This needs no new crate. Rerun on the VM, the new `install`
+  wrote plain paths and Chrome connected (`bridge: connected`).
+- **Verified in the same run:**
+  - both tracks reached the daemon (`browser-owner:<name>` and `browser-remote-mix`) and were
+    transcribed;
+  - leaving the call set `endMs`, and the daemon ended the meeting;
+  - a page reloaded during the call left a record with `lastSeenMs` at most 30 s before the
+    reload, and no `endMs` (the earlier fix today);
+  - the daemon ended the interrupted meeting when the new recording started.
+- **Open:** a call that is reloaded becomes two Koalino meetings with the same title: one
+  before the reload and one after. Joining them would mean reusing the meeting ID within a short
+  gap, after the daemon has already ended the first one. Left for the owner to decide.

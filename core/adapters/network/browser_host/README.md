@@ -22,7 +22,7 @@ extension (background) ──connectNative("com.note_taker.browser_bridge")─�
 | `extension_message.rs` | The extension's message schema (table in the file header) and its conversion into `TeamsBridgeMessage` frames. Microphone audio is a `PARTICIPANT` track of the owner; remote audio is the `MIXED_REMOTE` track `browser-remote-mix`. |
 | `bridge_client.rs` | The WebSocket client: optional authentication, ordered delivery, a queue bounded by audio length (audio dropped oldest first; meetings, slides, documents and meeting ends always kept), and reconnection every 2 s while the daemon is down. |
 | `host_session.rs` | One session: a blocking stdin reader, the client, and a stdout writer for status and rejections. |
-| `host_install.rs` | The host manifests and where each browser looks for them: files under `~/.mozilla` and `~/.config/<browser>` on Linux; files next to the host plus `HKCU\Software\…\NativeMessagingHosts` keys on Windows. |
+| `host_install.rs` | The host manifests and where each browser looks for them: files under `~/.mozilla` and `~/.config/<browser>` on Linux; files next to the host plus `HKCU\Software\…\NativeMessagingHosts` keys on Windows. On Windows, paths are written without `canonicalize`'s `\\?\` prefix: Chrome finds neither a manifest nor a host through it. |
 | `*_tests.rs` | TDD specs. The client and session tests run against the real `TeamsWebSocketServer`. |
 
 ## Security
