@@ -25,6 +25,7 @@ use uuid::Uuid;
 
 use crate::{
     application::{
+        export_manager::SpeakerLabels,
         pipeline::meeting_speaker_pass::{average_linkage, dense_labels, unit_vector},
         unknown_speaker_clusterer::{
             ClusterAssignment, ClusteringConfig, ClusteringError, UnknownSpeakerClusterer,
@@ -62,18 +63,30 @@ pub struct UnknownClusterSummary {
     total_duration_ms: u64,
     chunk_count: usize,
     created_at: DateTime<Utc>,
+    /// The label its meeting's transcript shows for this voice, "Speaker N" (#118); `None` when no
+    /// segment carries the cluster.
+    speaker_label: Option<String>,
 }
 
 impl UnknownClusterSummary {
     /// Copies the display-safe fields of `cluster`, dropping its embedding.
-    fn from_cluster(cluster: &UnknownSpeakerCluster) -> Self {
+    fn from_cluster(cluster: &UnknownSpeakerCluster, labels: &SpeakerLabels) -> Self {
         Self {
             cluster_id: cluster.cluster_id(),
             meeting_id: cluster.meeting_id().clone(),
             total_duration_ms: cluster.total_duration_ms(),
             chunk_count: cluster.chunk_ids().len(),
             created_at: cluster.created_at(),
+            speaker_label: labels
+                .cluster_label(cluster.cluster_id())
+                .map(str::to_owned),
         }
+    }
+
+    /// Returns the label the meeting's transcript shows for this voice ("Speaker 2"), so the
+    /// review list and the transcript agree (#118).
+    pub fn speaker_label(&self) -> Option<&str> {
+        self.speaker_label.as_deref()
     }
 
     /// Returns the cluster UUID.
@@ -332,20 +345,52 @@ impl NamedClusterAssignment {
 /// meeting, and an unknown meeting simply has no clusters.
 /// Outputs: Display-safe summaries in creation order, or a storage error.
 /// Side effects: Reads cluster rows; the biometric representative vectors are discarded.
-pub fn list_unknown_clusters<RepositoryPort>(
+pub fn list_unknown_clusters<RepositoryPort, VectorDatabase>(
     note_repository: &RepositoryPort,
+    voice_vector_database: &VectorDatabase,
     meeting_id: &MeetingId,
 ) -> Result<Vec<UnknownClusterSummary>, ClusterReviewError>
 where
     RepositoryPort: NoteRepository + ?Sized,
+    VectorDatabase: VoiceVectorDB + ?Sized,
 {
-    Ok(
-        UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default())
-            .get_clusters_for_meeting(meeting_id)?
-            .iter()
-            .map(UnknownClusterSummary::from_cluster)
-            .collect(),
-    )
+    let clusters = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default())
+        .get_clusters_for_meeting(meeting_id)?;
+    if clusters.is_empty() {
+        return Ok(Vec::new());
+    }
+    let labels = meeting_speaker_labels(note_repository, voice_vector_database, meeting_id)?;
+    Ok(clusters
+        .iter()
+        .map(|cluster| UnknownClusterSummary::from_cluster(cluster, &labels))
+        .collect())
+}
+
+/// Numbers a meeting's voices as its transcript shows them (#118).
+///
+/// Outputs: The labels, or a storage error. Side effects: Reads the meeting's segments and the
+/// saved people's names.
+pub fn meeting_speaker_labels<RepositoryPort, VectorDatabase>(
+    note_repository: &RepositoryPort,
+    voice_vector_database: &VectorDatabase,
+    meeting_id: &MeetingId,
+) -> Result<SpeakerLabels, ClusterReviewError>
+where
+    RepositoryPort: NoteRepository + ?Sized,
+    VectorDatabase: VoiceVectorDB + ?Sized,
+{
+    let names: std::collections::HashMap<Uuid, String> = voice_vector_database
+        .list_speaker_identities()
+        .map_err(ClusteringError::from)?
+        .into_iter()
+        .map(|identity| (identity.identity_id(), identity.display_name().to_owned()))
+        .collect();
+    let segments = note_repository
+        .load_transcript_segments(meeting_id)
+        .map_err(ClusteringError::from)?;
+    Ok(SpeakerLabels::for_segments(&segments, |identity_id| {
+        names.get(&identity_id).map(String::as_str)
+    }))
 }
 
 /// Gives the names a meeting's call window or captions showed as speaking (#113).
@@ -464,13 +509,14 @@ where
             .get_unassigned_clips(&meeting_id)
             .map_err(ClusteringError::from)?;
         let suggestions = suggested_names(note_repository, named_spans, &meeting_id)?;
+        let labels = meeting_speaker_labels(note_repository, voice_vector_database, &meeting_id)?;
         for cluster in clusters {
             let has_review_clip = review_clips
                 .iter()
                 .any(|clip| clip.cluster_id() == Some(cluster.cluster_id()));
             representatives.push(cluster.representative_embedding().to_vec());
             listed_clusters.push(VoiceLibraryCluster {
-                summary: UnknownClusterSummary::from_cluster(&cluster),
+                summary: UnknownClusterSummary::from_cluster(&cluster, &labels),
                 meeting_title: meeting_title.clone(),
                 has_review_clip,
                 voice_group_id: cluster.cluster_id(),

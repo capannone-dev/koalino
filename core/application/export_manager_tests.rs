@@ -14,8 +14,7 @@ use uuid::Uuid;
 use crate::{
     adapters::{export::default_exporters, storage::sqlite_adapter::SqliteNoteRepository},
     application::export_manager::{
-        ExportManager, ExportWriter, UNATTRIBUTED_SPEAKER_LABEL, UNKNOWN_SPEAKER_LABEL,
-        segment_speaker_label,
+        ExportManager, ExportWriter, SpeakerLabels, UNATTRIBUTED_SPEAKER_LABEL,
     },
     domain::{
         errors::{ExportError, StorageError},
@@ -217,7 +216,8 @@ fn exports_attributed_segments_with_identity_names() {
     let segments = &parsed_json["meetings"][0]["transcript_segments"];
 
     assert_eq!(segments[0]["speaker"]["display_name"], "Alice");
-    assert_eq!(segments[1]["speaker"]["display_name"], "Unknown speaker");
+    // A person who no longer exists is numbered like any unnamed voice (#118).
+    assert_eq!(segments[1]["speaker"]["display_name"], "Speaker 1");
     assert_eq!(segments[2]["speaker"]["display_name"], "Unattributed");
     assert_eq!(segments[2]["start_time_ms"], 6_000);
     assert_eq!(
@@ -230,33 +230,46 @@ fn exports_attributed_segments_with_identity_names() {
 }
 
 /// Verifies a meeting with only a flat transcript exports it as one unattributed segment.
-/// A label tells a named person, a separated voice without a name, and no speaker information apart.
+/// Unnamed voices are numbered "Speaker 1", "Speaker 2"… in order of first appearance (#118), so a
+/// transcript, an export or a summary can tell them apart; a named person keeps their name.
 #[test]
-fn segment_labels_tell_unknown_voices_from_missing_speaker_information() {
+fn unnamed_voices_are_numbered_in_order_of_first_appearance() {
     let person = Uuid::from_u128(1);
-    let name_of = |identity_id: Uuid| (identity_id == person).then_some("Grace");
-    let segment = |identity: Option<Uuid>, cluster: Option<Uuid>| {
-        TranscriptSegment::new(MeetingId::new("meeting"), 0, 1, identity, "text")
-            .with_unknown_cluster_id(cluster)
+    let first_voice = Some(Uuid::from_u128(2));
+    let second_voice = Some(Uuid::from_u128(3));
+    let gone_person = Some(Uuid::from_u128(4));
+    let segment = |start: u64, identity: Option<Uuid>, cluster: Option<Uuid>| {
+        TranscriptSegment::new(
+            MeetingId::new("meeting"),
+            start,
+            start + 1,
+            identity,
+            "text",
+        )
+        .with_unknown_cluster_id(cluster)
     };
-    let cluster = Some(Uuid::from_u128(2));
+    // Stored out of order: numbering follows time, not storage order.
+    let segments = vec![
+        segment(30, None, second_voice),
+        segment(10, Some(person), None),
+        segment(20, None, first_voice),
+        segment(40, gone_person, None),
+        segment(50, None, first_voice),
+        segment(60, None, None),
+    ];
+    let name_of = |identity_id: Uuid| (identity_id == person).then_some("Grace");
+    let labels = SpeakerLabels::for_segments(&segments, name_of);
 
-    assert_eq!(
-        segment_speaker_label(&segment(Some(person), None), name_of),
-        "Grace"
-    );
-    assert_eq!(
-        segment_speaker_label(&segment(None, cluster), name_of),
-        UNKNOWN_SPEAKER_LABEL
-    );
-    assert_eq!(
-        segment_speaker_label(&segment(Some(Uuid::from_u128(3)), None), name_of),
-        UNKNOWN_SPEAKER_LABEL
-    );
-    assert_eq!(
-        segment_speaker_label(&segment(None, None), name_of),
-        UNATTRIBUTED_SPEAKER_LABEL
-    );
+    let label = |index: usize| labels.label(&segments[index]).to_owned();
+    assert_eq!(label(1), "Grace");
+    assert_eq!(label(2), "Speaker 1");
+    assert_eq!(label(0), "Speaker 2");
+    assert_eq!(label(4), "Speaker 1");
+    // A person who no longer exists is an unnamed voice too.
+    assert_eq!(label(3), "Speaker 3");
+    assert_eq!(label(5), UNATTRIBUTED_SPEAKER_LABEL);
+    assert_eq!(labels.cluster_label(Uuid::from_u128(3)), Some("Speaker 2"));
+    assert_eq!(labels.cluster_label(Uuid::from_u128(9)), None);
 }
 
 #[test]

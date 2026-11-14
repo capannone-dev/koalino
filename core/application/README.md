@@ -313,7 +313,9 @@ shares.
    range). An empty selection fails with `ExportError::NoMeetingsSelected`.
 3. **Extract.** `extract_meeting` returns `ExportError::MeetingNotFound` for unknown meetings. It
    prefers stored `TranscriptSegment`s, labelling speakers by resolved identity name, as
-   `Unknown speaker` (identity no longer in the voice store), or as `Unattributed` (no identity).
+   `Speaker N` for an unnamed voice (an unnamed cluster or an identity no longer in the voice
+   store, numbered in order of first appearance by `SpeakerLabels`, #118), or as `Unattributed`
+   (no speaker information).
    Without segments, a non-empty flat transcript becomes one unattributed segment; with neither,
    the export has an empty transcript. Attachments are loaded only when
    `include_attachments` is set. Titles equal the meeting ID because no title is stored.

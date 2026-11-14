@@ -148,7 +148,9 @@ from a background isolate.
 
 - `char *note_taker_get_unknown_clusters(const char *meeting_id)` returns a JSON array in
   creation order:
-  `[{"cluster_id":"uuid","meeting_id":"m1","total_duration_ms":2500,"chunk_count":2,"created_at":"RFC 3339","review_clip_path":"/abs/<clip>.wav"}]`.
+  `[{"cluster_id":"uuid","meeting_id":"m1","total_duration_ms":2500,"chunk_count":2,"created_at":"RFC 3339","speaker_label":"Speaker 2","review_clip_path":"/abs/<clip>.wav"}]`.
+  `speaker_label` is the voice's label in its meeting's transcript (#118), or `null` when no
+  transcript segment carries it.
   `review_clip_path` is present only while the cluster still has a review clip. The clip is written
   to `NOTE_TAKER_REVIEW_CLIP_DIR` for local playback. A meeting without clusters, including an
   unknown meeting, returns `[]`. On failure the function returns
@@ -164,7 +166,7 @@ from a background isolate.
 
 - `char *note_taker_get_voice_library(void)` returns every meeting's unresolved clusters and the
   saved people (Issue #63):
-  `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title":"…|null","total_duration_ms","chunk_count","created_at","has_review_clip":true,"voice_group_id":"uuid","suggested_name":"…|null"}],"saved_people":[{"identity_id","display_name","voice_variant_count"}]}`,
+  `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title":"…|null","total_duration_ms","chunk_count","created_at","speaker_label":"Speaker 2|null","has_review_clip":true,"voice_group_id":"uuid","suggested_name":"…|null"}],"saved_people":[{"identity_id","display_name","voice_variant_count"}]}`,
   or `{"ok":false,"error_code":"list_failed|runtime_unavailable","error":"…"}`. It writes no audio.
   Voices that sound like one person, in any meeting, share `voice_group_id` (the ID of the group's
   first cluster) and are listed next to each other (Issue #82). A lone voice's group is its own ID.
@@ -400,8 +402,8 @@ and meeting summaries" below). Keys are write-only.
   `char *note_taker_get_meeting(const char *meeting_id)` returns the same fields plus
   `transcript` (the flat transcript, null until stored) and `segments`
   (`[{"start_time_ms","end_time_ms","speaker","text","overlapping_speech","uncertain_speaker","uncertain_words"}]`
-  in timeline order, where `speaker` is the voice-store name, `Unknown speaker`, or
-  `Unattributed`, as in exports; Issue #36; the confidence marks are described under
+  in timeline order, where `speaker` is the voice-store name, `Speaker N` for an unnamed voice (numbered in order
+  of first appearance in that meeting, #118), or `Unattributed`, as in exports; Issue #36; the confidence marks are described under
   "Transcript confidence"), and
   `attachments`
   (`[{"attachment_id","file_name","file_path","mime_type","meeting_time_ms"}]` in the order they
@@ -869,8 +871,11 @@ bodies are `{ "error": "message" }`.
 creation order:
 
 ```json
-[{ "cluster_id": "uuid", "meeting_id": "meeting-1", "total_duration_ms": 2500, "chunk_count": 2, "created_at": "2026-10-27T09:15:00+00:00" }]
+[{ "cluster_id": "uuid", "meeting_id": "meeting-1", "total_duration_ms": 2500, "chunk_count": 2, "created_at": "2026-10-27T09:15:00+00:00", "speaker_label": "Speaker 2" }]
 ```
+
+`speaker_label` is the label the meeting's transcript gives that voice ("Speaker N", numbered in
+order of first appearance, #118), or `null` when no segment carries it; the voice gallery uses it.
 
 A meeting without clusters, including an unknown meeting, returns `[]`. Representative and member
 embeddings are never serialized.

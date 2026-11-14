@@ -2184,20 +2184,24 @@ where
             .map_err(|error| error.to_string())
     }
     fn list_unknown_clusters(&self, meeting_id: &str) -> Result<Vec<(String, u64, usize)>, String> {
-        list_unknown_clusters(&self.repository, &MeetingId::new(meeting_id))
-            .map(|summaries| {
-                summaries
-                    .iter()
-                    .map(|summary| {
-                        (
-                            summary.cluster_id().to_string(),
-                            summary.total_duration_ms(),
-                            summary.chunk_count(),
-                        )
-                    })
-                    .collect()
-            })
-            .map_err(|error| error.to_string())
+        list_unknown_clusters(
+            &self.repository,
+            self.voice_identity_manager.vector_database(),
+            &MeetingId::new(meeting_id),
+        )
+        .map(|summaries| {
+            summaries
+                .iter()
+                .map(|summary| {
+                    (
+                        summary.cluster_id().to_string(),
+                        summary.total_duration_ms(),
+                        summary.chunk_count(),
+                    )
+                })
+                .collect()
+        })
+        .map_err(|error| error.to_string())
     }
     fn assign_cluster(&mut self, cluster_id: Uuid, identity_name: &str) -> Result<String, String> {
         assign_cluster_to_named_identity(

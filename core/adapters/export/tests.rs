@@ -817,7 +817,7 @@ fn doubtful_export_document() -> ExportDocument {
         "Crosstalk",
         fixture_start(),
         vec![
-            ExportTranscriptSegment::new(0, 5_000, None, "Unknown speaker", "we ship on Friday")
+            ExportTranscriptSegment::new(0, 5_000, None, "Speaker 1", "we ship on Friday")
                 .with_confidence(SegmentConfidence {
                     overlapping_speech: true,
                     uncertain_speaker: true,
@@ -841,7 +841,7 @@ fn markdown_marks_doubtful_transcript() {
 
     assert!(
         rendered_markdown.contains(
-            "**Unknown speaker (?)** — [00:00:00] (overlapping speech) we *ship (?)* on *Friday (?)*"
+            "**Speaker 1 (?)** — [00:00:00] (overlapping speech) we *ship (?)* on *Friday (?)*"
         ),
         "{rendered_markdown}"
     );
@@ -875,7 +875,7 @@ fn pdf_marks_doubtful_transcript() {
     let pdf = export_pdf(&doubtful_export_document(), directory.path());
     let text = page_texts(&pdf).join(" ");
 
-    assert!(text.contains("Unknown speaker (?)"), "{text}");
+    assert!(text.contains("Speaker 1 (?)"), "{text}");
     assert!(text.contains("overlapping speech"), "{text}");
     assert!(text.contains("ship (?)"), "{text}");
 }

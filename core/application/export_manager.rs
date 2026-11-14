@@ -35,23 +35,76 @@ use crate::{
 
 /// Speaker label for segments diarization could not attribute.
 pub const UNATTRIBUTED_SPEAKER_LABEL: &str = "Unattributed";
-/// Speaker label for segments of a voice nobody has named, or whose identity no longer exists.
-pub const UNKNOWN_SPEAKER_LABEL: &str = "Unknown speaker";
+/// Prefix of an unnamed voice's label: "Speaker 1", "Speaker 2"… (#118).
+pub const SPEAKER_LABEL_PREFIX: &str = "Speaker";
 
-/// Chooses the label a transcript segment shows.
+/// The labels one meeting's transcript shows.
 ///
-/// Inputs: The segment, and a way to find a saved person's name.
-/// Outputs: The person's name; `Unknown speaker` for a voice that was separated but has no name, or a
-/// person who no longer exists; `Unattributed` when the segment has no speaker information at all.
-/// Side effects: None.
-pub fn segment_speaker_label<'name>(
-    segment: &TranscriptSegment,
-    name_of: impl Fn(Uuid) -> Option<&'name str>,
-) -> &'name str {
-    match (segment.speaker_identity_id(), segment.unknown_cluster_id()) {
-        (Some(identity_id), _) => name_of(identity_id).unwrap_or(UNKNOWN_SPEAKER_LABEL),
-        (None, Some(_)) => UNKNOWN_SPEAKER_LABEL,
-        (None, None) => UNATTRIBUTED_SPEAKER_LABEL,
+/// A named person shows their name. Every other voice, an unknown cluster or a person who no longer
+/// exists, is numbered "Speaker 1", "Speaker 2"… in order of first appearance in the meeting, so the
+/// transcript, exports, summaries and chat can tell voices apart. A segment without any speaker
+/// information shows `Unattributed`. The numbers depend only on the meeting's own segments, so every
+/// view of the same meeting agrees.
+pub struct SpeakerLabels {
+    /// The label of each voice: named people by identity, unnamed voices by identity or cluster.
+    labels: HashMap<Uuid, String>,
+}
+
+impl SpeakerLabels {
+    /// Numbers a meeting's voices.
+    ///
+    /// Inputs: The meeting's segments, in any order, and a way to find a saved person's name.
+    /// Outputs: The labels. Side effects: None.
+    pub fn for_segments<'name>(
+        segments: &[TranscriptSegment],
+        name_of: impl Fn(Uuid) -> Option<&'name str>,
+    ) -> Self {
+        let mut ordered: Vec<&TranscriptSegment> = segments.iter().collect();
+        ordered.sort_by_key(|segment| (segment.start_time_ms(), segment.end_time_ms()));
+        let mut labels = HashMap::new();
+        let mut unnamed = 0_usize;
+        for segment in ordered {
+            let Some(key) = segment
+                .speaker_identity_id()
+                .or(segment.unknown_cluster_id())
+            else {
+                continue;
+            };
+            if labels.contains_key(&key) {
+                continue;
+            }
+            let named = segment.speaker_identity_id().and_then(&name_of);
+            let label = match named {
+                Some(name) => name.to_owned(),
+                None => {
+                    unnamed += 1;
+                    format!("{SPEAKER_LABEL_PREFIX} {unnamed}")
+                }
+            };
+            labels.insert(key, label);
+        }
+        Self { labels }
+    }
+
+    /// Returns the label a segment shows.
+    ///
+    /// Inputs: A segment of the meeting the labels were made for. Outputs: The person's name,
+    /// "Speaker N", or `Unattributed` when the segment has no speaker information (or belongs to
+    /// another meeting). Side effects: None.
+    pub fn label(&self, segment: &TranscriptSegment) -> &str {
+        segment
+            .speaker_identity_id()
+            .or(segment.unknown_cluster_id())
+            .and_then(|key| self.labels.get(&key))
+            .map_or(UNATTRIBUTED_SPEAKER_LABEL, String::as_str)
+    }
+
+    /// Returns the label of an unknown cluster, as its transcript shows it.
+    ///
+    /// Outputs: "Speaker N", or `None` when no segment of the meeting has that cluster.
+    /// Side effects: None.
+    pub fn cluster_label(&self, cluster_id: Uuid) -> Option<&str> {
+        self.labels.get(&cluster_id).map(String::as_str)
     }
 }
 
@@ -218,17 +271,19 @@ where
             .map(|identity| (identity.identity_id(), identity))
             .collect();
 
-        let mut transcript_segments = self
+        let stored_segments = self
             .note_repository
             .load_transcript_segments(meeting_id)
-            .context("unable to load transcript segments for export")?
-            .into_iter()
+            .context("unable to load transcript segments for export")?;
+        let speaker_labels = SpeakerLabels::for_segments(&stored_segments, |identity_id| {
+            known_identities
+                .get(&identity_id)
+                .map(SpeakerIdentity::display_name)
+        });
+        let mut transcript_segments = stored_segments
+            .iter()
             .map(|segment| {
-                let speaker_label = segment_speaker_label(&segment, |identity_id| {
-                    known_identities
-                        .get(&identity_id)
-                        .map(SpeakerIdentity::display_name)
-                });
+                let speaker_label = speaker_labels.label(segment);
                 ExportTranscriptSegment::new(
                     segment.start_time_ms(),
                     segment.end_time_ms(),

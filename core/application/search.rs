@@ -21,8 +21,8 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use super::{
-    combined_meetings::MeetingListing, export_manager::segment_speaker_label,
-    meeting_edits::read_notes, meeting_summary_document::read_summary,
+    combined_meetings::MeetingListing, export_manager::SpeakerLabels, meeting_edits::read_notes,
+    meeting_summary_document::read_summary,
 };
 use crate::{
     domain::{
@@ -129,7 +129,7 @@ pub enum SearchPlace {
     Transcript {
         start_time_ms: u64,
         end_time_ms: u64,
-        /// The speaker's name, `Unknown speaker` or `Unattributed`.
+        /// The speaker's name, "Speaker N" for an unnamed voice (#118) or `Unattributed`.
         speaker: String,
     },
     /// A line of a transcript imported without times.
@@ -596,6 +596,15 @@ where
         return Ok(());
     }
     segments.sort_by_key(|segment| (segment.start_time_ms(), segment.end_time_ms()));
+    // Saved names decide which voices are numbered, so the numbers match the transcript (#118).
+    let names: std::collections::HashMap<Uuid, String> = segments
+        .iter()
+        .filter_map(|segment| segment.speaker_identity_id())
+        .filter_map(|identity_id| Some((identity_id, sources.speaker_name(identity_id)?)))
+        .collect();
+    let speaker_labels = SpeakerLabels::for_segments(&segments, |identity_id| {
+        names.get(&identity_id).map(String::as_str)
+    });
     for segment in &segments {
         if collector.is_full() {
             return Ok(());
@@ -603,13 +612,7 @@ where
         let Some(snippet) = match_passage(query, segment.text().trim()) else {
             continue;
         };
-        let speaker = match segment
-            .speaker_identity_id()
-            .and_then(|id| sources.speaker_name(id))
-        {
-            Some(name) => name,
-            None => segment_speaker_label(segment, |_| None).to_owned(),
-        };
+        let speaker = speaker_labels.label(segment).to_owned();
         push(
             collector,
             SearchPlace::Transcript {

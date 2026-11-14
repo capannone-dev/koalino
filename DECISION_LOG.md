@@ -3342,3 +3342,21 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - a follow-up carried the earlier turns (4 messages at the model);
   - with the model stopped, the phone got `llm_unreachable` and kept nothing;
   - the laptop kept no chat, and neither device's logs held question text.
+
+## 2026-11-14 — #118 Unnamed voices are "Speaker 1", "Speaker 2"… everywhere
+
+- **Problem:** every unnamed voice was labelled "Unknown speaker", so a transcript with three
+  unnamed people could not be followed, and the voice gallery's "Unknown speaker 1" did not match
+  anything in the transcript.
+- **Decision (owner):** number unnamed voices "Speaker N" in order of first appearance, per
+  meeting, in every view: exports (Markdown, PDF, JSON, TXT), the meeting page (app and web), the
+  notes folder, chat context and search results, and the voice gallery.
+- **How:** `export_manager::SpeakerLabels::for_segments` walks the segments in time order and
+  numbers each unnamed voice (cluster or deleted identity) the first time it speaks; named voices
+  keep their names and segments with no speaker information stay `Unattributed`. The numbers are
+  computed when a view is built, not stored, so they never go stale after a voice is named (the
+  remaining voices are renumbered, which keeps the sequence gap-free).
+- **Gallery:** unknown clusters carry `speaker_label` (FFI, `GET /api/voice-gallery`,
+  `GET /api/meetings/{id}/unknown-clusters`), so a card reads "Speaker 2", the same label as the
+  transcript. A voice heard in several meetings shows each label once ("Speaker 1 / Speaker 3").
+  Older cores without the field fall back to "Unknown speaker N" by list position.

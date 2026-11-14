@@ -555,16 +555,16 @@ async fn get_meeting(
         .into_iter()
         .map(|identity| (identity.identity_id(), identity.display_name().to_owned()))
         .collect();
+    let speaker_labels = crate::application::export_manager::SpeakerLabels::for_segments(
+        &stored_segments,
+        |identity_id| speaker_names.get(&identity_id).map(String::as_str),
+    );
     let segments = stored_segments
         .iter()
         .map(|segment| SegmentView {
             start_time_ms: segment.start_time_ms(),
             end_time_ms: segment.end_time_ms(),
-            speaker: crate::application::export_manager::segment_speaker_label(
-                segment,
-                |identity_id| speaker_names.get(&identity_id).map(String::as_str),
-            )
-            .to_owned(),
+            speaker: speaker_labels.label(segment).to_owned(),
             text: segment.text().to_owned(),
             overlapping_speech: segment.confidence().overlapping_speech,
             uncertain_speaker: segment.confidence().uncertain_speaker,
@@ -1057,7 +1057,12 @@ async fn get_unknown_clusters(
 ) -> Response {
     tracing::info!(endpoint = "/api/meetings/:meeting_id/unknown-clusters", meeting_id = %meeting_identifier, "headless API request received");
     let repositories = application_state.repositories.lock().await;
-    match list_unknown_clusters(&**repositories, &MeetingId::new(meeting_identifier)) {
+    let voice_database = application_state.voice_database.lock().await;
+    match list_unknown_clusters(
+        &**repositories,
+        &**voice_database,
+        &MeetingId::new(meeting_identifier),
+    ) {
         Ok(summaries) => Json(
             summaries
                 .iter()
@@ -1233,6 +1238,8 @@ struct UnknownClusterResponse {
     chunk_count: usize,
     /// RFC 3339 UTC creation time of the cluster's first chunk.
     created_at: String,
+    /// The label the meeting's transcript shows for this voice, "Speaker N" (#118).
+    speaker_label: Option<String>,
 }
 
 impl From<&UnknownClusterSummary> for UnknownClusterResponse {
@@ -1243,6 +1250,7 @@ impl From<&UnknownClusterSummary> for UnknownClusterResponse {
             total_duration_ms: summary.total_duration_ms(),
             chunk_count: summary.chunk_count(),
             created_at: summary.created_at().to_rfc3339(),
+            speaker_label: summary.speaker_label().map(str::to_owned),
         }
     }
 }
@@ -1393,7 +1401,7 @@ struct MeetingDetail {
 struct SegmentView {
     start_time_ms: u64,
     end_time_ms: u64,
-    /// The person's name, `Unknown speaker`, or `Unattributed`.
+    /// The person's name, "Speaker N" for an unnamed voice (#118), or `Unattributed`.
     speaker: String,
     text: String,
     /// The segment lies largely in overlapping speech.

@@ -32,7 +32,7 @@ use crate::{
             MeetingListing, combining_view, name_recording_devices, split_recordings,
         },
         crypto::key_manager::KeyManagerConfig,
-        export_manager::{ExportManager, ExportWriter, segment_speaker_label},
+        export_manager::{ExportManager, ExportWriter, SpeakerLabels},
         meeting_rename::{MeetingRenameError, rename_meeting},
         p2p_service::P2pControl,
         unknown_speaker_clusterer::ClusteringError,
@@ -1028,7 +1028,11 @@ impl FfiRuntime {
             return export_error_json("invalid_argument", "meeting_id must not be empty");
         }
         let typed_meeting_id = MeetingId::new(meeting_id);
-        let summaries = match list_unknown_clusters(&self.note_repository, &typed_meeting_id) {
+        let summaries = match list_unknown_clusters(
+            &self.note_repository,
+            self.voice_identity_manager.vector_database(),
+            &typed_meeting_id,
+        ) {
             Ok(summaries) => summaries,
             Err(error) => return export_error_json("list_failed", &error.to_string()),
         };
@@ -1050,6 +1054,7 @@ impl FfiRuntime {
                     "total_duration_ms": summary.total_duration_ms(),
                     "chunk_count": summary.chunk_count(),
                     "created_at": summary.created_at().to_rfc3339(),
+                    "speaker_label": summary.speaker_label(),
                 });
                 let cluster_clip = review_clips
                     .iter()
@@ -1076,12 +1081,13 @@ impl FfiRuntime {
     ///
     /// Outputs: `{"ok":true,"unknown_clusters":[{"cluster_id","meeting_id","meeting_title",
     /// "total_duration_ms","chunk_count","created_at","has_review_clip","voice_group_id",
-    /// "suggested_name"}],"saved_people":
+    /// "suggested_name","speaker_label"}],"saved_people":
     /// [{"identity_id","display_name","voice_variant_count"}]}`, or `{"ok":false,"error_code":
     /// "list_failed","error"}`. `meeting_title` is null for an untitled meeting. Voices that sound
     /// like one person share `voice_group_id` and are listed next to each other (#82).
     /// `suggested_name` is the name a call window or the Teams captions showed while the voice
-    /// spoke (#113), or null.
+    /// spoke (#113), or null. `speaker_label` is the voice's label in its meeting's transcript
+    /// ("Speaker 2", #118).
     /// Side effects: Reads SQLite and decrypts the meetings' name readings and captions. Writes no audio, and embeddings never leave Rust.
     fn get_voice_library(&self) -> String {
         let library = match load_voice_library_with_names(
@@ -1104,6 +1110,7 @@ impl FfiRuntime {
                 "has_review_clip": cluster.has_review_clip(),
                 "voice_group_id": cluster.voice_group_id().to_string(),
                 "suggested_name": cluster.suggested_name(),
+                "speaker_label": cluster.summary().speaker_label(),
             })).collect::<Vec<_>>(),
             "saved_people": library.saved_people().iter().map(|person| serde_json::json!({
                 "identity_id": person.identity_id().to_string(),
@@ -1904,7 +1911,7 @@ impl FfiRuntime {
     /// the voice is unknown.
     /// Side effects: Irreversibly deletes its embeddings and review audio, in storage and on disk,
     /// leaving a record that also deletes it on paired devices. Its transcript stays and shows
-    /// `Unknown speaker`.
+    /// its "Speaker N" label (#118).
     fn delete_unknown_voice(&mut self, cluster_id: &str) -> c_int {
         let Ok(parsed_cluster_id) = Uuid::parse_str(cluster_id) else {
             return FFI_INVALID_ARGUMENT;
@@ -2013,7 +2020,7 @@ impl FfiRuntime {
     /// Outputs: `{"meeting_id","title","created_at","duration_ms","transcription_languages",
     /// "transcript","segments","attachments"}`, where `transcript` is null until a flat transcript is stored, `segments` is
     /// `[{"start_time_ms","end_time_ms","speaker","text"}]` in timeline order (`speaker` is the
-    /// voice-store name, `Unknown speaker`, or `Unattributed`, as in exports), and `attachments`
+    /// voice-store name, "Speaker N" for an unnamed voice (#118), or `Unattributed`, as in exports), and `attachments`
     /// is `[{"attachment_id","file_name","file_path","mime_type","meeting_time_ms"}]` in the
     /// order they were added (`meeting_time_ms` is null for the end of the meeting); or
     /// `{"ok":false,"error_code","error"}` where `error_code` is `invalid_argument`,
@@ -2077,12 +2084,13 @@ impl FfiRuntime {
         meeting_json["transcript"] = transcript
             .map(|transcript| serde_json::Value::from(transcript.content()))
             .unwrap_or(serde_json::Value::Null);
+        let speaker_labels = SpeakerLabels::for_segments(&segments, |identity_id| {
+            speaker_names.get(&identity_id).map(String::as_str)
+        });
         meeting_json["segments"] = segments
             .iter()
             .map(|segment| {
-                let speaker = segment_speaker_label(segment, |identity_id| {
-                    speaker_names.get(&identity_id).map(String::as_str)
-                });
+                let speaker = speaker_labels.label(segment);
                 serde_json::json!({
                     "start_time_ms": segment.start_time_ms(),
                     "end_time_ms": segment.end_time_ms(),
@@ -4791,7 +4799,7 @@ mod ffi_contract_tests {
 
         assert_eq!(meeting_detail["duration_ms"], 4_000);
         assert_eq!(meeting_detail["segments"][0]["speaker"], "Alice");
-        assert_eq!(meeting_detail["segments"][1]["speaker"], "Unknown speaker");
+        assert_eq!(meeting_detail["segments"][1]["speaker"], "Speaker 1");
         assert_eq!(meeting_detail["segments"][1]["text"], "Hi.");
     }
 

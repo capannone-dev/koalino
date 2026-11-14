@@ -43,7 +43,7 @@ use uuid::Uuid;
 use crate::{
     application::{
         combined_meetings::MeetingListing,
-        export_manager::segment_speaker_label,
+        export_manager::SpeakerLabels,
         meeting_edits::{EditError, edit_summary, read_notes, set_notes},
         meeting_summary_document::read_summary,
     },
@@ -1032,10 +1032,11 @@ where
         }
         return Ok(text);
     }
+    let speaker_labels = SpeakerLabels::for_segments(&segments, |identity_id| {
+        speaker_names.get(&identity_id).map(String::as_str)
+    });
     for segment in &segments {
-        let speaker = segment_speaker_label(segment, |identity_id| {
-            speaker_names.get(&identity_id).map(String::as_str)
-        });
+        let speaker = speaker_labels.label(segment);
         let seconds = segment.start_time_ms() / 1_000;
         let at = if seconds >= 3_600 {
             format!(

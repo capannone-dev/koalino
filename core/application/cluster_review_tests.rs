@@ -61,8 +61,9 @@ fn lists_unresolved_cluster_summaries_for_a_meeting() {
     let (note_repository, meeting_id, large_cluster_id, small_cluster_id) =
         repository_with_two_clusters();
 
-    let summaries = list_unknown_clusters(&note_repository, &meeting_id)
-        .unwrap_or_else(|error| panic!("clusters should list: {error}"));
+    let summaries =
+        list_unknown_clusters(&note_repository, &InMemoryVoiceVectorDB::new(), &meeting_id)
+            .unwrap_or_else(|error| panic!("clusters should list: {error}"));
 
     assert_eq!(summaries.len(), 2);
     assert_eq!(summaries[0].cluster_id(), large_cluster_id);
@@ -74,13 +75,45 @@ fn lists_unresolved_cluster_summaries_for_a_meeting() {
     assert_eq!(summaries[1].chunk_count(), 1);
 }
 
+/// Verifies each unknown voice carries the label its transcript shows, numbered by first
+/// appearance rather than by creation order (#118).
+#[test]
+fn listed_clusters_carry_the_transcripts_speaker_numbers() {
+    let (note_repository, meeting_id, large_cluster_id, small_cluster_id) =
+        repository_with_two_clusters();
+    // The cluster created second speaks first.
+    note_repository
+        .save_transcript_segments(
+            &meeting_id,
+            &[
+                TranscriptSegment::new(meeting_id.clone(), 0, 1_000, None, "first")
+                    .with_unknown_cluster_id(Some(small_cluster_id)),
+                TranscriptSegment::new(meeting_id.clone(), 1_000, 2_000, None, "second")
+                    .with_unknown_cluster_id(Some(large_cluster_id)),
+            ],
+        )
+        .unwrap_or_else(|error| panic!("segments should save: {error}"));
+
+    let summaries =
+        list_unknown_clusters(&note_repository, &InMemoryVoiceVectorDB::new(), &meeting_id)
+            .unwrap_or_else(|error| panic!("clusters should list: {error}"));
+
+    assert_eq!(summaries[0].cluster_id(), large_cluster_id);
+    assert_eq!(summaries[0].speaker_label(), Some("Speaker 2"));
+    assert_eq!(summaries[1].speaker_label(), Some("Speaker 1"));
+}
+
 /// Verifies a meeting without clusters (or an unknown meeting) lists nothing.
 #[test]
 fn lists_no_clusters_for_an_unknown_meeting() {
     let (note_repository, _, _, _) = repository_with_two_clusters();
 
-    let summaries = list_unknown_clusters(&note_repository, &MeetingId::new("meeting-other"))
-        .unwrap_or_else(|error| panic!("clusters should list: {error}"));
+    let summaries = list_unknown_clusters(
+        &note_repository,
+        &InMemoryVoiceVectorDB::new(),
+        &MeetingId::new("meeting-other"),
+    )
+    .unwrap_or_else(|error| panic!("clusters should list: {error}"));
 
     assert!(summaries.is_empty());
 }
@@ -120,8 +153,9 @@ fn assigning_a_new_name_creates_an_identity_and_resolves_the_cluster() {
             .unwrap_or_default(),
         0
     );
-    let remaining = list_unknown_clusters(&note_repository, &meeting_id)
-        .unwrap_or_else(|error| panic!("clusters should list: {error}"));
+    let remaining =
+        list_unknown_clusters(&note_repository, &InMemoryVoiceVectorDB::new(), &meeting_id)
+            .unwrap_or_else(|error| panic!("clusters should list: {error}"));
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].cluster_id(), small_cluster_id);
 }
@@ -182,7 +216,7 @@ fn blank_identity_names_are_rejected() {
         Err(ClusterReviewError::BlankIdentityName)
     ));
     assert_eq!(
-        list_unknown_clusters(&note_repository, &meeting_id)
+        list_unknown_clusters(&note_repository, &InMemoryVoiceVectorDB::new(), &meeting_id)
             .unwrap_or_else(|error| panic!("clusters should list: {error}"))
             .len(),
         2
@@ -238,9 +272,13 @@ fn accepts_trait_object_ports() {
     let voice_object: &dyn VoiceVectorDB = &voice_vector_database;
 
     assert_eq!(
-        list_unknown_clusters(repository_object, &meeting_id)
-            .unwrap_or_else(|error| panic!("clusters should list: {error}"))
-            .len(),
+        list_unknown_clusters(
+            repository_object,
+            &InMemoryVoiceVectorDB::new(),
+            &meeting_id
+        )
+        .unwrap_or_else(|error| panic!("clusters should list: {error}"))
+        .len(),
         2
     );
     assign_cluster_to_named_identity(repository_object, voice_object, large_cluster_id, "Grace")
@@ -360,7 +398,7 @@ fn voice_library_spans_meetings_and_lists_saved_people() {
                 .with_cluster_id(Some(large_cluster_id)),
         )
         .unwrap_or_else(|error| panic!("clip should be saved: {error}"));
-    let voice_database = InMemoryVoiceVectorDB::default();
+    let voice_database = InMemoryVoiceVectorDB::new();
     assign_cluster_to_named_identity(
         &note_repository,
         &voice_database,
@@ -478,7 +516,7 @@ fn the_library_groups_one_persons_voices_across_meetings() {
     let other = add_meeting_with_voice(&note_repository, "meeting-b", &[0.0, 1.0, 0.0], 5_000);
     let second = add_meeting_with_voice(&note_repository, "meeting-c", &[0.97, 0.0, 0.24], 12_000);
 
-    let library = load_voice_library(&note_repository, &InMemoryVoiceVectorDB::default())
+    let library = load_voice_library(&note_repository, &InMemoryVoiceVectorDB::new())
         .unwrap_or_else(|error| panic!("library should load: {error}"));
 
     let groups = library.unknown_voice_groups();
@@ -529,7 +567,7 @@ fn naming_a_group_names_each_cluster_once_for_one_person() {
     .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
     let first = add_meeting_with_voice(&note_repository, "meeting-a", &[1.0, 0.0], 3_000);
     let second = add_meeting_with_voice(&note_repository, "meeting-b", &[0.9, 0.1], 2_000);
-    let voice_database = InMemoryVoiceVectorDB::default();
+    let voice_database = InMemoryVoiceVectorDB::new();
 
     let assignment = assign_clusters_to_named_identity(
         &note_repository,
@@ -567,7 +605,7 @@ fn naming_a_group_skips_clusters_already_named_and_rejects_bad_input() {
     .unwrap_or_else(|error| panic!("in-memory SQLite should open: {error}"));
     let first = add_meeting_with_voice(&note_repository, "meeting-a", &[1.0, 0.0], 3_000);
     let second = add_meeting_with_voice(&note_repository, "meeting-b", &[0.9, 0.1], 2_000);
-    let voice_database = InMemoryVoiceVectorDB::default();
+    let voice_database = InMemoryVoiceVectorDB::new();
     assign_cluster_to_named_identity(&note_repository, &voice_database, first, "Grace")
         .unwrap_or_else(|error| panic!("{error}"));
 
@@ -632,7 +670,7 @@ fn voices_are_offered_the_names_shown_while_they_spoke() {
     ]);
 
     let library =
-        load_voice_library_with_names(&note_repository, &InMemoryVoiceVectorDB::default(), &names)
+        load_voice_library_with_names(&note_repository, &InMemoryVoiceVectorDB::new(), &names)
             .unwrap_or_else(|error| panic!("library should load: {error}"));
 
     let suggestion_of = |cluster_id: Uuid| {
@@ -648,7 +686,7 @@ fn voices_are_offered_the_names_shown_while_they_spoke() {
     );
     // One second under the name is too little evidence.
     assert_eq!(suggestion_of(small_cluster_id), None);
-    let plain = load_voice_library(&note_repository, &InMemoryVoiceVectorDB::default())
+    let plain = load_voice_library(&note_repository, &InMemoryVoiceVectorDB::new())
         .unwrap_or_else(|error| panic!("library should load: {error}"));
     assert!(
         plain

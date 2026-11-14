@@ -33,7 +33,7 @@ const MAX_CONDENSE_ROUNDS: usize = 3;
 /// One speaker's line of the transcript.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SpokenLine {
-    /// The speaker's name, or a label such as `Unknown speaker`.
+    /// The speaker's name, or "Speaker N" for an unnamed voice (#118).
     pub speaker: String,
     /// When it starts, in meeting milliseconds.
     pub start_ms: u64,
