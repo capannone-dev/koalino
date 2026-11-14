@@ -22,3 +22,4 @@ mod npu_whisper_tests;
 pub mod qnn_engine;
 /// Transcribes a recording window by window, with timing and a prompt.
 pub mod transcriber;
+mod unicode_letters;

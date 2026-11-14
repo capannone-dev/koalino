@@ -124,13 +124,17 @@ impl WhisperVocab {
     /// A vocabulary of the given tokens only, for tests.
     #[cfg(test)]
     pub(crate) fn from_tokens(tokens: &[&str]) -> Self {
+        let bytes: Vec<&[u8]> = tokens.iter().map(|token| token.as_bytes()).collect();
+        Self::from_byte_tokens(&bytes)
+    }
+
+    /// A vocabulary of the given byte tokens only (which need not be whole characters), for tests.
+    #[cfg(test)]
+    pub(crate) fn from_byte_tokens(tokens: &[&[u8]]) -> Self {
         Self::with_tokens(
             vec![0.0; super::log_mel::N_MELS * 201],
             (super::log_mel::N_MELS, 201),
-            tokens
-                .iter()
-                .map(|token| token.as_bytes().to_vec())
-                .collect(),
+            tokens.iter().map(|token| token.to_vec()).collect(),
             0,
         )
     }
@@ -229,9 +233,11 @@ enum CharClass {
     Other,
 }
 
-/// Classifies a character.
+/// Classifies a character as GPT-2's pattern does: letters are `\p{L}` only, so combining marks
+/// (Thai and Devanagari vowel signs, for example) are `Other`, though Rust counts many as
+/// alphabetic.
 fn class_of(character: char) -> CharClass {
-    if character.is_alphabetic() {
+    if super::unicode_letters::is_letter(character) {
         CharClass::Letter
     } else if character.is_numeric() {
         CharClass::Digit

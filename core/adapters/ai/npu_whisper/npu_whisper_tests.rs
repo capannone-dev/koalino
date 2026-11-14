@@ -381,7 +381,27 @@ fn prompt_text_is_tokenized_like_whisper() {
         vec![0, 3, 6, 3],
         "a word keeps its leading space: \"bc\" merges, then \" a\""
     );
-    assert_eq!(vocab.tokenize("Zz"), Vec::<u32>::new(), "unknown bytes are skipped");
+    assert_eq!(
+        vocab.tokenize("Zz"),
+        Vec::<u32>::new(),
+        "unknown bytes are skipped"
+    );
+}
+
+#[test]
+fn combining_marks_start_a_new_word_as_in_gpt2() {
+    // GPT-2's split counts only \p{L} as letters. The Thai vowel sign U+0E34 is a mark (Mn), so
+    // "a\u{0E34}" is two words and "a" + 0xE0 (rank 4) may not merge across them.
+    let vocab = WhisperVocab::from_byte_tokens(&[
+        b"a",
+        b"\xE0",
+        b"\xB8",
+        b"\xB4",
+        b"a\xE0",
+        b"\xE0\xB8",
+        b"\xE0\xB8\xB4",
+    ]);
+    assert_eq!(vocab.tokenize("a\u{0E34}"), vec![0, 6]);
 }
 
 #[test]
@@ -662,7 +682,8 @@ fn writes_the_tokens_of_each_line() {
     let model = std::fs::File::open(variable("NPU_VOCAB")).unwrap_or_else(|e| panic!("{e}"));
     let vocab =
         WhisperVocab::read(&mut std::io::BufReader::new(model)).unwrap_or_else(|e| panic!("{e}"));
-    let text = std::fs::read_to_string(variable("NPU_TOKENIZE_IN")).unwrap_or_else(|e| panic!("{e}"));
+    let text =
+        std::fs::read_to_string(variable("NPU_TOKENIZE_IN")).unwrap_or_else(|e| panic!("{e}"));
     let lines: Vec<String> = text
         .lines()
         .map(|line| {
@@ -674,5 +695,6 @@ fn writes_the_tokens_of_each_line() {
                 .join(" ")
         })
         .collect();
-    std::fs::write(variable("NPU_TOKENIZE_OUT"), lines.join("\n")).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(variable("NPU_TOKENIZE_OUT"), lines.join("\n"))
+        .unwrap_or_else(|e| panic!("{e}"));
 }
