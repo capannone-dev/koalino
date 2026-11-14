@@ -20,6 +20,7 @@ final class UnknownSpeakerCluster {
     this.hasReviewClip = false,
     String? voiceGroupId,
     this.suggestedName,
+    this.speakerLabel,
   }) : voiceGroupId = voiceGroupId ?? clusterId;
 
   /// Stable cluster UUID sent back when assigning an identity.
@@ -48,6 +49,10 @@ final class UnknownSpeakerCluster {
   /// null. It is only offered: nothing is named until the owner assigns it.
   final String? suggestedName;
 
+  /// The label its meeting's transcript shows for this voice, such as `Speaker 2` (#118), or null
+  /// from an older core.
+  final String? speakerLabel;
+
   /// Decodes one element of the library's `unknown_clusters` array.
   factory UnknownSpeakerCluster.fromJson(Map<String, Object?> json) {
     return UnknownSpeakerCluster(
@@ -59,6 +64,7 @@ final class UnknownSpeakerCluster {
       hasReviewClip: json['has_review_clip'] as bool? ?? false,
       voiceGroupId: json['voice_group_id'] as String?,
       suggestedName: json['suggested_name'] as String?,
+      speakerLabel: json['speaker_label'] as String?,
     );
   }
 }

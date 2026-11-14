@@ -200,6 +200,34 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('names each voice as its transcript does, "Speaker N" (#118)',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[
+        const UnknownSpeakerCluster(
+          clusterId: 'cluster-1',
+          meetingId: 'meeting-1',
+          totalDurationMs: 12500,
+          chunkCount: 3,
+          speakerLabel: 'Speaker 2',
+        ),
+        const UnknownSpeakerCluster(
+          clusterId: 'cluster-2',
+          meetingId: 'meeting-1',
+          totalDurationMs: 700,
+          chunkCount: 1,
+          speakerLabel: 'Speaker 1',
+        ),
+      ],
+    );
+
+    await pumpGallery(tester, bridge);
+
+    expect(find.text('Speaker 2'), findsOneWidget);
+    expect(find.text('Speaker 1'), findsOneWidget);
+    expect(find.textContaining('Unknown speaker'), findsNothing);
+  });
+
   testWidgets('renders one card per unknown-speaker cluster',
       (WidgetTester tester) async {
     final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(

@@ -267,7 +267,7 @@ final class MeetingTranscriptSegment {
   /// Offset of the segment end from the meeting start.
   final int endTimeMs;
 
-  /// Speaker name resolved by Rust, or `Unknown speaker` / `Unattributed`.
+  /// Speaker name resolved by Rust, `Speaker N` for an unnamed voice (#118), or `Unattributed`.
   final String speaker;
 
   /// Transcribed text of the segment.

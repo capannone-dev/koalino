@@ -167,7 +167,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
               leading: isPlaying
                   ? Icon(Icons.volume_up, color: colors.onPrimaryContainer)
                   : null,
-              title: Text('Unknown speaker ${index + 1}'),
+              title: Text(_voiceTitle(cluster, index)),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -315,7 +315,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
               leading: isPlaying
                   ? Icon(Icons.volume_up, color: colors.onPrimaryContainer)
                   : null,
-              title: Text('Unknown speaker ${index + 1}'),
+              title: Text(_groupTitle(group, index)),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
@@ -388,6 +388,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
         ),
         Expanded(
           child: Text(
+            '${voice.speakerLabel != null ? '${voice.speakerLabel} in ' : ''}'
             '${voice.meetingTitle ?? 'Untitled meeting'} · '
             '${_formatSeconds(voice.totalDurationMs)}',
           ),
@@ -411,7 +412,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   ) async {
     if (await confirmDelete(
       context,
-      title: 'Delete Unknown speaker ${index + 1}?',
+      title: 'Delete ${_groupTitle(group, index)}?',
       message: 'Its ${group.voices.length} voice samples go for good, here '
           'and on your paired devices. The transcripts stay.',
     )) {
@@ -428,7 +429,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   ) async {
     if (await confirmDelete(
       context,
-      title: 'Delete Unknown speaker ${index + 1}?',
+      title: 'Delete ${_voiceTitle(cluster, index)}?',
       message: 'Its voice sample goes for good, here and on your paired '
           'devices. The transcript stays.',
     )) {
@@ -446,7 +447,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
       context,
       title: 'Delete ${person.displayName}?',
       message: 'Their name and voice samples go for good, here and on your '
-          'paired devices. Transcripts stay and show an unknown speaker.',
+          'paired devices. Transcripts stay and number them as a speaker.',
     )) {
       await controller.deleteSavedPerson(person);
     }
@@ -474,6 +475,21 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
         }
       });
     }
+  }
+
+  /// Names an unknown voice as its meeting's transcript does ("Speaker 2", #118); an older core
+  /// without labels falls back to its place in the list.
+  String _voiceTitle(UnknownSpeakerCluster cluster, int index) =>
+      cluster.speakerLabel ?? 'Unknown speaker ${index + 1}';
+
+  /// Names a group of voices by their transcripts' labels, each once ("Speaker 1 / Speaker 3"
+  /// when the voice was numbered differently in different meetings).
+  String _groupTitle(UnknownVoiceGroup group, int index) {
+    final List<String> labels = <String>{
+      for (final UnknownSpeakerCluster voice in group.voices)
+        if (voice.speakerLabel != null) voice.speakerLabel!,
+    }.toList(growable: false);
+    return labels.isEmpty ? 'Unknown speaker ${index + 1}' : labels.join(' / ');
   }
 
   /// Formats total speech time (seconds, one decimal) and chunk count, e.g. `12.5 s · 3 chunks`.
