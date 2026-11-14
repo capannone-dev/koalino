@@ -3189,3 +3189,20 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **After-meeting pass:** with the NPU on and no separate pass model chosen, the pass uses the NPU,
   since "the live model" is then the NPU's. It falls back to whisper.cpp with the live model. A
   model chosen for the pass keeps whisper.cpp.
+
+## 2026-11-14 — #75 NPU prompts tokenized exactly as Whisper does
+
+- **Problem:** the ggml file has the vocabulary but no BPE merge list, so prompts were tokenized
+  by longest match (as whisper.cpp does), which can differ from what Whisper was trained on.
+- **Decision:** infer the merges from the vocabulary. In Whisper's tiktoken vocabulary a token's
+  ID is its merge rank, so byte-pair encoding repeatedly joins the adjacent pair whose joined
+  bytes form the known token with the lowest ID. No data file or tokenizer library is added.
+- **Validation:** 697 lines (the clip's FLEURS references with and without a leading space, plus
+  edge cases) against Hugging Face's `tokenizers` with the `openai/whisper-small` tokenizer.
+  - 697/697 identical once the HF file's missing first merge (`Ġ t`, a known conversion bug of
+    that file) is restored; every earlier difference came from that merge.
+  - So the inferred tokenizer matches OpenAI's own (`multilingual.tiktoken`).
+- **Effect:** on the 83 s FLEURS clip, the WER was 3.4% without a prompt, 4.8% with
+  "imbarcazioni, missioni.", 3.4% with a five-term glossary and 4.1% with unrelated names. Same as
+  with the longest-match tokenizer: the glossary still does not fix "embarcazioni" or "emissioni"
+  on the quantized NPU model. The tokenizer stays because it is what Whisper expects.

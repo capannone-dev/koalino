@@ -16,7 +16,7 @@ checks each archive's SHA-256. The files go into `<data directory>/npu`.
 | `mod.rs` | Declares the modules; `qnn_engine` needs the `npu-whisper` feature. |
 | `install.rs` | Where the downloaded files go (`model/`, `qnn/`), whether they are all there, and whether this phone's chip (`ro.soc.model`) runs the model. |
 | `log_mel.rs` | Whisper's 80-band log-mel spectrogram of a 30 s window (a recursive FFT; it matches faster-whisper to 1e-5), and its 16-bit quantization for the encoder. |
-| `ggml_vocab.rs` | Reads the mel filters and the vocabulary from a multilingual whisper.cpp model's header (the shipped `ggml-base.bin`), so no tokenizer library is needed, and tokenizes prompts as whisper.cpp does (GPT-2's word split, then the longest known token). |
+| `ggml_vocab.rs` | Reads the mel filters and the vocabulary from a multilingual whisper.cpp model's header (the shipped `ggml-base.bin`), so no tokenizer library is needed, and tokenizes prompts exactly as Whisper does: GPT-2's word split, then byte-pair merges ranked by token ID (in Whisper's vocabulary a token's ID is its merge rank). |
 | `greedy_decoder.rs` | The `WhisperNpu` trait (encode a window, restart, take one decoder step), greedy decoding with an optional prompt and Whisper's timestamp rules, token probabilities from the dequantized logits, the split of a window's tokens into timed segments, and the share-out of a segment's time among its tokens. |
 | `transcriber.rs` | Runs a recording window by window: the next window starts after the last finished segment, each window is prompted with the earlier text, segments that are only `[BLANK_AUDIO]` and windows the no-speech rule rejects are dropped, and the words get approximate times and confidences. |
 | `qnn_engine.rs` | The ONNX Runtime sessions on the NPU and `QnnWhisperEngine`, the `TranscriptionEngine`. |
@@ -48,7 +48,8 @@ a 2.3 s model load. In the spike, on separate FLEURS clips, the error rate was 8
 for the same Whisper Small unquantized (faster-whisper, greedy) on a computer.
 
 The glossary prompt reaches the model, but on that clip it did not fix the terms given and moved
-the error rate by about two words either way. Its benefit on the NPU is not shown yet.
+the error rate by about two words either way, with the exact tokenizer as with the earlier
+longest-match one. Its benefit on the NPU is not shown yet.
 
 The after-meeting pass uses the NPU too when the NPU is on and no separate pass model was chosen
 (`pass_engine_choice` in `core/bin/pipeline_composition.rs`). It falls back to whisper.cpp with
