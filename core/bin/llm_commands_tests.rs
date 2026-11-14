@@ -10,14 +10,19 @@ use std::{
 use serde_json::{Value, json};
 
 use super::{
-    llm_commands::{LlmServices, run_llm_command, summarize_with},
+    llm_commands::{
+        LlmServices, new_summary_request, run_llm_command, summarize_with, summary_request_json,
+    },
     meeting_summaries::PreparedSummary,
 };
 use crate::{
     application::meeting_summary::{SpokenLine, SummaryMaterial},
     domain::{
         errors::LlmError,
-        llm::{LlmCompletion, LlmConnection, LlmRequest, MeetingSummary},
+        llm::{
+            LlmCompletion, LlmConnection, LlmRequest, MeetingSummary, SummaryRequest,
+            SummaryRequestState,
+        },
     },
     ports::ai::LlmEngine,
 };
@@ -177,6 +182,38 @@ fn the_default_template_and_automatic_summaries_are_updated_only_when_named() {
         run(&services, json!({"command": "fly"}))["error_code"],
         "invalid_request"
     );
+}
+
+#[test]
+fn the_connection_that_answers_paired_devices_is_chosen_and_cleared() {
+    let (services, _) = services("paired");
+    assert_eq!(
+        run(&services, json!({"command": "settings"}))["paired_summary_connection"],
+        Value::Null,
+        "off by default"
+    );
+    let saved = run(
+        &services,
+        json!({"command": "save_connection", "label": "Claude", "kind": "claude_code"}),
+    );
+    let id = saved["connection"]["id"].clone();
+    let chosen = run(
+        &services,
+        json!({"command": "update", "paired_summary_connection": id}),
+    );
+    assert_eq!(chosen["paired_summary_connection"], id, "{chosen}");
+    let untouched = run(&services, json!({"command": "update"}));
+    assert_eq!(untouched["paired_summary_connection"], id);
+    let unknown = run(
+        &services,
+        json!({"command": "update", "paired_summary_connection": "missing"}),
+    );
+    assert_eq!(unknown["error_code"], "connection_not_found");
+    let off = run(
+        &services,
+        json!({"command": "update", "paired_summary_connection": null}),
+    );
+    assert_eq!(off["paired_summary_connection"], Value::Null);
 }
 
 #[test]
@@ -364,4 +401,68 @@ fn real_tool_connections_answer_the_test_request() {
 /// Where the services keep their settings file.
 fn services_settings_file(services: &LlmServices) -> PathBuf {
     services.settings_file().to_path_buf()
+}
+
+#[test]
+fn a_request_for_the_computer_carries_this_devices_template_only_when_the_owner_wrote_one() {
+    let (services, _) = services("request");
+    let at = chrono::DateTime::parse_from_rfc3339("2026-11-14T10:00:00Z")
+        .map(|time| time.with_timezone(&chrono::Utc))
+        .unwrap_or_default();
+    let request = new_summary_request(&services, "12D3KooWPhone", at);
+    assert_eq!(
+        request,
+        SummaryRequest {
+            requested_by: "12D3KooWPhone".to_owned(),
+            requested_at: at,
+            template: None,
+            state: SummaryRequestState::Waiting,
+        },
+        "the built-in template: the computer uses its own"
+    );
+    run(
+        &services,
+        json!({"command": "update", "template": "Only decisions of {{title}}."}),
+    );
+    assert_eq!(
+        new_summary_request(&services, "12D3KooWPhone", at)
+            .template
+            .as_deref(),
+        Some("Only decisions of {{title}}.")
+    );
+}
+
+#[test]
+fn a_request_is_described_for_the_app_by_its_state() {
+    let at = chrono::DateTime::parse_from_rfc3339("2026-11-14T10:00:00Z")
+        .map(|time| time.with_timezone(&chrono::Utc))
+        .unwrap_or_default();
+    let request = |state| SummaryRequest {
+        requested_by: "phone".to_owned(),
+        requested_at: at,
+        template: Some("secret template text".to_owned()),
+        state,
+    };
+    assert_eq!(
+        summary_request_json(&request(SummaryRequestState::Waiting)),
+        json!({"state": "waiting", "requested_at": "2026-11-14T10:00:00+00:00"})
+    );
+    assert_eq!(
+        summary_request_json(&request(SummaryRequestState::Working {
+            by: "laptop".to_owned(),
+            since: at,
+        })),
+        json!({"state": "working", "requested_at": "2026-11-14T10:00:00+00:00",
+               "by": "laptop", "since": "2026-11-14T10:00:00+00:00"})
+    );
+    assert_eq!(
+        summary_request_json(&request(SummaryRequestState::Failed {
+            by: "laptop".to_owned(),
+            error_code: "llm_tool_failed".to_owned(),
+            at,
+        })),
+        json!({"state": "failed", "requested_at": "2026-11-14T10:00:00+00:00",
+               "by": "laptop", "error_code": "llm_tool_failed",
+               "failed_at": "2026-11-14T10:00:00+00:00"})
+    );
 }

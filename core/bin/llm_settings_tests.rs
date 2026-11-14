@@ -4,8 +4,8 @@
 use std::path::PathBuf;
 
 use super::llm_settings::{
-    SavedLlmSettings, forget_sealed_api_keys, llm_settings_file_for, load_llm_settings,
-    save_llm_settings,
+    LlmSettingsError, SavedLlmSettings, forget_sealed_api_keys, llm_settings_file_for,
+    load_llm_settings, save_llm_settings,
 };
 use crate::domain::llm::{DEFAULT_SUMMARY_TEMPLATE, LlmConnection, LlmKind};
 
@@ -155,4 +155,41 @@ fn sealed_api_keys_of_an_earlier_version_are_deleted() {
     );
     assert!(keys.join("database.key").exists(), "other keys stay");
     assert_eq!(forget_sealed_api_keys(&folder("missing").join("none")), 0);
+}
+
+#[test]
+fn answering_other_devices_is_off_until_a_connection_is_chosen_and_follows_removals() {
+    let mut settings = SavedLlmSettings::default();
+    assert_eq!(settings.paired_summary_connection(), None, "off by default");
+    assert_eq!(
+        settings.set_paired_summary_connection(Some("missing")),
+        Err(LlmSettingsError::UnknownConnection)
+    );
+    settings.upsert_connection(local("office"));
+    settings.upsert_connection(local("other"));
+    assert_eq!(
+        settings.set_paired_summary_connection(Some("office")),
+        Ok(())
+    );
+    assert_eq!(
+        settings.paired_summary_connection().map(LlmConnection::id),
+        Some("office")
+    );
+
+    let file = folder("paired").join("settings.json");
+    save_llm_settings(&file, &settings).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(load_llm_settings(&file), settings, "it is saved");
+
+    assert!(settings.remove_connection("office"));
+    assert_eq!(
+        settings.paired_summary_connection(),
+        None,
+        "removing the connection turns answering off"
+    );
+    assert_eq!(
+        settings.set_paired_summary_connection(Some("other")),
+        Ok(())
+    );
+    assert_eq!(settings.set_paired_summary_connection(None), Ok(()));
+    assert_eq!(settings.paired_summary_connection(), None);
 }

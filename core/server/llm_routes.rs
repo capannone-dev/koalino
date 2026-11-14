@@ -36,11 +36,17 @@ use super::api::ServerAppState;
 use crate::{
     application::{combined_meetings::HeldSpeech, meeting_summary::SummaryError},
     auto_summaries::{AutoSummarizer, AutoSummaryHost, AutoSummaryWake},
-    domain::{llm::MeetingSummary, models::MeetingId},
+    domain::{
+        llm::{MeetingSummary, SummaryRequest},
+        models::MeetingId,
+    },
     llm_commands::{LlmServices, run_llm_command, summarize_with, summary_json},
     meeting_summaries::PreparedSummary,
-    meeting_summaries::{load_summary, prepare_summary, set_meeting_prompt, store_summary},
-    ports::storage::MeetingRecording,
+    meeting_summaries::{
+        load_summary, load_summary_request, prepare_summary, set_meeting_prompt,
+        store_answered_request, store_summary, store_summary_request,
+    },
+    ports::storage::{DocumentChanges, MeetingRecording},
 };
 
 /// Registers the routes; `build_router` merges them before its layers.
@@ -434,6 +440,41 @@ impl AutoSummaryHost for ServerAutoSummaryHost {
         let repositories = self.state.repositories();
         let repositories = repositories.blocking_lock();
         store_summary(&**repositories, meeting_id, summary)
+    }
+
+    fn summary_request(&self, meeting_id: &MeetingId) -> Result<Option<SummaryRequest>, String> {
+        let repositories = self.state.repositories();
+        let repositories = repositories.blocking_lock();
+        load_summary_request(&**repositories, meeting_id).map_err(|error| error.to_string())
+    }
+
+    fn set_summary_request(
+        &self,
+        meeting_id: &MeetingId,
+        request: &SummaryRequest,
+    ) -> Result<(), String> {
+        let repositories = self.state.repositories();
+        let repositories = repositories.blocking_lock();
+        store_summary_request(&**repositories, meeting_id, Some(request))
+            .map_err(|error| error.to_string())
+    }
+
+    fn document_changes_since(&self, after_revision: u64) -> Result<DocumentChanges, String> {
+        let repositories = self.state.repositories();
+        let repositories = repositories.blocking_lock();
+        repositories
+            .document_changes_since(after_revision)
+            .map_err(|error| error.to_string())
+    }
+
+    fn answer_request(
+        &self,
+        meeting_id: &MeetingId,
+        summary: &MeetingSummary,
+    ) -> Result<(), SummaryError> {
+        let repositories = self.state.repositories();
+        let repositories = repositories.blocking_lock();
+        store_answered_request(&**repositories, meeting_id, summary)
     }
 }
 

@@ -7,10 +7,10 @@
 //!
 //! | `command` | Fields | Answer |
 //! | --- | --- | --- |
-//! | `settings` | | `connections`, `default_connection`, `template`, `default_template`, `custom_template`, `auto_summarize`, `placeholders` |
+//! | `settings` | | `connections`, `default_connection`, `template`, `default_template`, `custom_template`, `auto_summarize`, `paired_summary_connection`, `placeholders` |
 //! | `save_connection` | `id`? (absent creates), `label`, `kind` (`open_ai_compatible`, `claude_code`, `codex`), `base_url` (not for `claude_code`/`codex`), `model` (optional for those), `context_tokens` | `connection` |
 //! | `delete_connection` | `id` | `deleted: true` |
-//! | `update` | `default_connection`?, `template`? (null resets), `auto_summarize`? | the settings |
+//! | `update` | `default_connection`?, `template`? (null resets), `auto_summarize`?, `paired_summary_connection`? (null stops answering paired devices, #107) | the settings |
 //! | `test_connection` | `id` | `reply`: the model's answer to a fixed one-line request, which holds no meeting content |
 //!
 //! A connection is shown as `{id,label,kind,base_url,model,context_tokens,plain_http,tool_installed,
@@ -46,7 +46,7 @@ use crate::{
         errors::LlmError,
         llm::{
             DEFAULT_SUMMARY_TEMPLATE, LlmConnection, LlmKind, LlmRequest, LlmRole, LlmTurn,
-            MeetingSummary, PLACEHOLDERS,
+            MeetingSummary, PLACEHOLDERS, PromptTemplate, SummaryRequest, SummaryRequestState,
         },
     },
     ports::ai::LlmEngine,
@@ -291,6 +291,7 @@ pub fn settings_json(settings: &SavedLlmSettings) -> Value {
         "default_template": DEFAULT_SUMMARY_TEMPLATE,
         "custom_template": settings.has_custom_template(),
         "auto_summarize": settings.auto_summarize(),
+        "paired_summary_connection": settings.paired_summary_connection().map(LlmConnection::id),
         "placeholders": PLACEHOLDERS,
     })
 }
@@ -387,6 +388,11 @@ fn update(services: &LlmServices, request: &Value) -> Result<Value, CommandError
         if let Some(enabled) = request.get("auto_summarize").and_then(Value::as_bool) {
             settings.set_auto_summarize(enabled);
         }
+        if let Some(paired) = request.get("paired_summary_connection") {
+            settings
+                .set_paired_summary_connection(paired.as_str())
+                .map_err(|error| CommandError::new("connection_not_found", error.to_string()))?;
+        }
         Ok(())
     })?;
     Ok(settings_json(&settings))
@@ -421,6 +427,43 @@ pub fn summary_json(summary: &MeetingSummary) -> Value {
         "edited": summary.edited,
         "truncated": summary.truncated,
     })
+}
+
+/// Builds this device's request that a paired computer summarize a meeting (#107).
+///
+/// Inputs: The services, this device's peer ID and the time. Outputs: A waiting request that
+/// carries the owner's template when they wrote one here; with the built-in template the computer
+/// uses its own. Side effects: Reads the settings.
+pub fn new_summary_request(
+    services: &LlmServices,
+    device_id: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> SummaryRequest {
+    let settings = services.settings();
+    SummaryRequest {
+        requested_by: device_id.to_owned(),
+        requested_at: now,
+        template: settings
+            .has_custom_template()
+            .then(|| settings.template().as_str().to_owned()),
+        state: SummaryRequestState::Waiting,
+    }
+}
+
+/// Describes a summary request for the app: its state and times, without the template.
+pub fn summary_request_json(request: &SummaryRequest) -> Value {
+    let requested_at = request.requested_at.to_rfc3339();
+    match &request.state {
+        SummaryRequestState::Waiting => json!({"state": "waiting", "requested_at": requested_at}),
+        SummaryRequestState::Working { by, since } => json!({
+            "state": "working", "requested_at": requested_at, "by": by,
+            "since": since.to_rfc3339(),
+        }),
+        SummaryRequestState::Failed { by, error_code, at } => json!({
+            "state": "failed", "requested_at": requested_at, "by": by,
+            "error_code": error_code, "failed_at": at.to_rfc3339(),
+        }),
+    }
 }
 
 /// Writes a meeting's hand-off to the owner's own AI app (#114).
@@ -466,6 +509,50 @@ pub fn summarize_with(
     prepare: impl FnOnce(&[String], &str) -> Result<PreparedSummary, SummaryError>,
     store: impl FnOnce(&MeetingSummary) -> Result<(), SummaryError>,
 ) -> Value {
+    summarize_meeting_with(services, connection_id, None, prepare, store)
+}
+
+/// Writes the summary a paired device asked for (#107) with this computer's connection.
+///
+/// Inputs: As `summarize_with`, plus the asking device's own template (`None` uses this
+/// computer's). A meeting's own prompt still comes first. Outputs: As `summarize_with`; an
+/// invalid template is `invalid_template` and sends nothing. Side effects: As `summarize_with`;
+/// the stored summary's label names this computer ("Claude Code on Laptop"), so the asking device
+/// shows where it was written.
+pub fn summarize_for_paired_device(
+    services: &LlmServices,
+    connection_id: &str,
+    template: Option<&str>,
+    prepare: impl FnOnce(&[String], &str) -> Result<PreparedSummary, SummaryError>,
+    store: impl FnOnce(&MeetingSummary) -> Result<(), SummaryError>,
+) -> Value {
+    let template = match template.map(PromptTemplate::parse).transpose() {
+        Ok(template) => template,
+        Err(error) => return CommandError::new("invalid_template", error.to_string()).to_json(),
+    };
+    summarize_meeting_with(
+        services,
+        Some(connection_id),
+        template,
+        prepare,
+        |summary: &MeetingSummary| {
+            let mut labelled = summary.clone();
+            labelled.connection_label =
+                format!("{} on {}", summary.connection_label, services.device_name);
+            store(&labelled)
+        },
+    )
+}
+
+/// Writes a meeting's summary with a connection and, when given, a template in place of the
+/// owner's default; the shared body of `summarize_with` and `summarize_for_paired_device`.
+fn summarize_meeting_with(
+    services: &LlmServices,
+    connection_id: Option<&str>,
+    template: Option<PromptTemplate>,
+    prepare: impl FnOnce(&[String], &str) -> Result<PreparedSummary, SummaryError>,
+    store: impl FnOnce(&MeetingSummary) -> Result<(), SummaryError>,
+) -> Value {
     let run = || -> Result<Value, CommandError> {
         let settings = services.settings();
         let connection = match connection_id {
@@ -484,7 +571,7 @@ pub fn summarize_with(
         let outcome = run_summary(
             engine.as_ref(),
             connection,
-            &settings.template(),
+            &template.unwrap_or_else(|| settings.template()),
             prepared,
             chrono::Utc::now(),
         )?;

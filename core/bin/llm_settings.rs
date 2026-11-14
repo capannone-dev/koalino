@@ -1,5 +1,6 @@
 //! Keeps the owner's language model settings (#95, #101): the connections, the default one, the
-//! summary template, and whether meetings are summarized automatically.
+//! summary template, whether meetings are summarized automatically, and which connection answers
+//! paired devices' summary requests (#107).
 //!
 //! The settings live per device in `<db>.llm-settings.json`, beside the transcription settings.
 //! The app keeps no API keys: a connection is a server the owner runs, or Claude Code or Codex
@@ -36,6 +37,10 @@ pub struct SavedLlmSettings {
     /// Summarize each meeting once its transcript is final (#101); the owner can opt out.
     #[serde(default = "automatic_summaries_by_default")]
     auto_summarize: bool,
+    /// The connection that writes the summaries paired devices ask for (#107); `None`, the
+    /// default, leaves their requests unanswered on this device.
+    #[serde(default)]
+    paired_summary_connection: Option<String>,
 }
 
 /// Reads the connections, skipping any the app can no longer read (a removed kind).
@@ -62,6 +67,7 @@ impl Default for SavedLlmSettings {
             default_connection: None,
             summary_template: None,
             auto_summarize: automatic_summaries_by_default(),
+            paired_summary_connection: None,
         }
     }
 }
@@ -123,6 +129,9 @@ impl SavedLlmSettings {
         if self.default_connection.as_deref() == Some(id) {
             self.default_connection = None;
         }
+        if self.paired_summary_connection.as_deref() == Some(id) {
+            self.paired_summary_connection = None;
+        }
         self.connections.len() != before
     }
 
@@ -174,6 +183,32 @@ impl SavedLlmSettings {
         self.auto_summarize = enabled;
     }
 
+    /// Returns the connection that answers paired devices' summary requests (#107), if the
+    /// owner chose one that still exists. Side effects: None.
+    pub fn paired_summary_connection(&self) -> Option<&LlmConnection> {
+        self.paired_summary_connection
+            .as_deref()
+            .and_then(|id| self.connection(id))
+    }
+
+    /// Chooses the connection that answers paired devices' summary requests, or `None` to stop
+    /// answering them.
+    ///
+    /// Outputs: `UnknownConnection` when no connection has that ID. Side effects: Changes these
+    /// settings only.
+    pub fn set_paired_summary_connection(
+        &mut self,
+        id: Option<&str>,
+    ) -> Result<(), LlmSettingsError> {
+        if let Some(id) = id
+            && self.connection(id).is_none()
+        {
+            return Err(LlmSettingsError::UnknownConnection);
+        }
+        self.paired_summary_connection = id.map(str::to_owned);
+        Ok(())
+    }
+
     /// Drops what is no longer valid, such as a hand-edited connection to a public plain-HTTP
     /// host or an unparsable template. Side effects: Logs counts only.
     fn revalidated(mut self) -> Self {
@@ -198,6 +233,9 @@ impl SavedLlmSettings {
         }
         if self.chosen_default_id().is_none() {
             self.default_connection = None;
+        }
+        if self.paired_summary_connection().is_none() {
+            self.paired_summary_connection = None;
         }
         self
     }

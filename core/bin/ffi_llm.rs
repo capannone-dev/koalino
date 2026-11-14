@@ -11,6 +11,10 @@
 //! `note_taker_handoff_meeting` writes a meeting's hand-off to the owner's own AI app (#114):
 //! the message and the files the share sheet carries.
 //!
+//! `note_taker_request_paired_summary` asks a paired computer to write a meeting's summary with
+//! its own connection, such as Claude Code or Codex signed in there (#107), or cancels the
+//! request. `note_taker_get_meeting_summary` reports the request's state.
+//!
 //! `start_auto_summaries` runs the app's automatic summaries (#101) once the runtime opens, and
 //! a stopped recording wakes them.
 
@@ -30,18 +34,22 @@ use crate::{
     },
     auto_summaries::{AutoSummarizer, AutoSummaryHost, AutoSummaryWake},
     domain::{
-        llm::MeetingSummary,
+        llm::{MeetingSummary, SummaryRequest},
         models::{DeviceId, MeetingId},
     },
     ffi::{ffi_string, runtime_recording_meeting, with_runtime_repositories},
     ffi_settings::app_setting,
-    llm_commands::{LlmServices, handoff_with, run_llm_command, summarize_with, summary_json},
+    llm_commands::{
+        LlmServices, handoff_with, new_summary_request, run_llm_command, summarize_with,
+        summary_json, summary_request_json,
+    },
     llm_settings::{forget_sealed_api_keys, llm_settings_file_for},
     meeting_summaries::{
-        MeetingPromptError, PreparedSummary, load_summary, prepare_summary, set_meeting_prompt,
-        store_summary, write_handoff,
+        MeetingPromptError, PreparedSummary, load_summary, load_summary_request, prepare_summary,
+        set_meeting_prompt, store_answered_request, store_summary, store_summary_request,
+        write_handoff,
     },
-    ports::storage::{MeetingRecording, NoteRepository},
+    ports::storage::{DocumentChanges, MeetingRecording, NoteRepository},
     transcription_settings::TranscriptionPaths,
 };
 
@@ -217,7 +225,8 @@ pub unsafe extern "C" fn note_taker_handoff_meeting(request_json: *const c_char)
 /// Reads a meeting's summary and its own prompt.
 ///
 /// Inputs: The meeting ID. Outputs: Caller-freed `{"ok":true,"summary": {...} or null,
-/// "meeting_prompt": text or null}` or an error. Side effects: Reads the meeting document.
+/// "meeting_prompt": text or null, "request": a paired computer's summary request (#107) or null}`
+/// or an error. Side effects: Reads the meeting document.
 ///
 /// # Safety
 /// `meeting_id` must be null or a valid NUL-terminated string that stays alive for the call.
@@ -234,17 +243,78 @@ pub unsafe extern "C" fn note_taker_get_meeting_summary(meeting_id: *const c_cha
             .load_crdt_document(&meeting_id)
             .ok()
             .and_then(|document| read_summary_prompt(&document).ok().flatten());
+        let request = load_summary_request(repository, &meeting_id)
+            .ok()
+            .flatten()
+            .map(|request| summary_request_json(&request));
         match load_summary(repository, &meeting_id) {
             Ok(summary) => json!({
                 "ok": true,
                 "summary": summary.as_ref().map(summary_json),
                 "meeting_prompt": prompt,
+                "request": request,
             }),
             Err(_) => json!({"ok": false, "error_code": "storage_failed",
                              "error": "the summary could not be read"}),
         }
     });
     into_c(answer.map_or_else(runtime_unavailable, |answer| answer.to_string()))
+}
+
+/// Asks a paired computer to write a meeting's summary (#107), or cancels the request.
+///
+/// Inputs: JSON `{"meeting_id", "cancel"?: bool}`. Outputs: Caller-freed `{"ok":true,"request":
+/// the new request or null}`, or `invalid_request` / `storage_failed` / `runtime_unavailable`.
+/// Side effects: Writes the request (this device, the time, and the owner's own template if they
+/// wrote one) into the meeting document, which syncs to paired devices; a computer whose owner
+/// chose a connection for paired devices answers it. A new request replaces an earlier one, such
+/// as a failed one. Nothing is sent to an AI server from this device.
+///
+/// # Safety
+/// `request_json` must be null or a valid NUL-terminated string that stays alive for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_request_paired_summary(
+    request_json: *const c_char,
+) -> *mut c_char {
+    let Some(request) = (unsafe { ffi_string(request_json) })
+        .and_then(|text| serde_json::from_str::<Value>(text).ok())
+    else {
+        return into_c(failure(
+            "invalid_request",
+            "the request must be a JSON object",
+        ));
+    };
+    let Some(meeting_id) = request
+        .get("meeting_id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.is_empty())
+        .map(MeetingId::new)
+    else {
+        return into_c(failure("invalid_request", "`meeting_id` is required"));
+    };
+    let cancel = request
+        .get("cancel")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let services = services();
+    let answer = with_runtime_repositories(|repository, _| {
+        let summary_request = (!cancel).then(|| {
+            new_summary_request(
+                &services,
+                repository.device_id().as_str(),
+                chrono::Utc::now(),
+            )
+        });
+        match store_summary_request(repository, &meeting_id, summary_request.as_ref()) {
+            Ok(()) => json!({
+                "ok": true,
+                "request": summary_request.as_ref().map(summary_request_json),
+            })
+            .to_string(),
+            Err(error) => failure("storage_failed", &error.to_string()),
+        }
+    });
+    into_c(answer.unwrap_or_else(runtime_unavailable))
 }
 
 /// Sets or clears a meeting's own summary prompt.
@@ -340,6 +410,41 @@ impl AutoSummaryHost for FfiAutoSummaryHost {
         with_runtime_repositories(|repository, _| store_summary(repository, meeting_id, summary))
             .unwrap_or_else(|| Err(runtime_gone()))
     }
+
+    fn summary_request(&self, meeting_id: &MeetingId) -> Result<Option<SummaryRequest>, String> {
+        with_runtime_repositories(|repository, _| load_summary_request(repository, meeting_id))
+            .unwrap_or_else(|| Err(runtime_gone()))
+            .map_err(|error| error.to_string())
+    }
+
+    fn set_summary_request(
+        &self,
+        meeting_id: &MeetingId,
+        request: &SummaryRequest,
+    ) -> Result<(), String> {
+        with_runtime_repositories(|repository, _| {
+            store_summary_request(repository, meeting_id, Some(request))
+        })
+        .unwrap_or_else(|| Err(runtime_gone()))
+        .map_err(|error| error.to_string())
+    }
+
+    fn document_changes_since(&self, after_revision: u64) -> Result<DocumentChanges, String> {
+        with_runtime_repositories(|repository, _| repository.document_changes_since(after_revision))
+            .ok_or_else(|| String::from("the native runtime is unavailable"))?
+            .map_err(|error| error.to_string())
+    }
+
+    fn answer_request(
+        &self,
+        meeting_id: &MeetingId,
+        summary: &MeetingSummary,
+    ) -> Result<(), SummaryError> {
+        with_runtime_repositories(|repository, _| {
+            store_answered_request(repository, meeting_id, summary)
+        })
+        .unwrap_or_else(|| Err(runtime_gone()))
+    }
 }
 
 /// Starts the app's automatic summaries, once per process (#101).
@@ -375,7 +480,10 @@ mod tests {
 
     use std::ffi::{CStr, CString};
 
-    use super::{note_taker_handoff_meeting, note_taker_llm_command, note_taker_summarize_meeting};
+    use super::{
+        note_taker_handoff_meeting, note_taker_llm_command, note_taker_request_paired_summary,
+        note_taker_summarize_meeting,
+    };
 
     fn answer(pointer: *mut std::ffi::c_char) -> serde_json::Value {
         assert!(!pointer.is_null());
@@ -396,6 +504,13 @@ mod tests {
         let refused =
             answer(unsafe { note_taker_summarize_meeting(std::ptr::null(), std::ptr::null()) });
         assert_eq!(refused["error_code"], "invalid_request");
+        let refused = answer(unsafe { note_taker_request_paired_summary(std::ptr::null()) });
+        assert_eq!(refused["error_code"], "invalid_request");
+        for request in [r#"{"cancel":true}"#, r#"{"meeting_id":""}"#, "[]"] {
+            let request = CString::new(request).unwrap_or_default();
+            let refused = answer(unsafe { note_taker_request_paired_summary(request.as_ptr()) });
+            assert_eq!(refused["error_code"], "invalid_request", "{request:?}");
+        }
     }
 
     #[test]

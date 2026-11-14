@@ -19,13 +19,14 @@ use crate::{
             SpokenLine, SummaryError, SummaryMaterial, SummaryOutcome, summarize_meeting,
         },
         meeting_summary_document::{
-            read_summary, read_summary_prompt, with_summary, with_summary_prompt,
+            read_summary, read_summary_prompt, read_summary_request, with_summary,
+            with_summary_prompt, with_summary_request, without_summary_request,
         },
     },
     domain::{
         llm::{
             LlmConnection, LlmImage, MAX_LLM_IMAGE_BYTES, MAX_LLM_IMAGES, MeetingSummary,
-            PromptTemplate, PromptTemplateError, PromptValues,
+            PromptTemplate, PromptTemplateError, PromptValues, SummaryRequest,
         },
         models::{ExportFormat, ExportOptions, MeetingId},
     },
@@ -389,6 +390,64 @@ where
     repository
         .load_crdt_document(meeting_id)
         .and_then(|document| read_summary(&document))
+        .map_err(|error| SummaryError::Storage(error.to_string()))
+}
+
+/// Reads a meeting's summary request from a paired device (#107).
+///
+/// Outputs: The request, `None` when there is none, or a storage error. Side effects: Reads the
+/// document.
+pub fn load_summary_request<Repository>(
+    repository: &Repository,
+    meeting_id: &MeetingId,
+) -> Result<Option<SummaryRequest>, SummaryError>
+where
+    Repository: NoteRepository + ?Sized,
+{
+    repository
+        .load_crdt_document(meeting_id)
+        .and_then(|document| read_summary_request(&document))
+        .map_err(|error| SummaryError::Storage(error.to_string()))
+}
+
+/// Stores a meeting's summary request, or removes it with `None` (answered elsewhere or
+/// cancelled).
+///
+/// Outputs: Success or a storage error. Side effects: Writes the document, which syncs to paired
+/// devices.
+pub fn store_summary_request<Repository>(
+    repository: &Repository,
+    meeting_id: &MeetingId,
+    request: Option<&SummaryRequest>,
+) -> Result<(), SummaryError>
+where
+    Repository: NoteRepository + ?Sized,
+{
+    repository
+        .edit_crdt_document(meeting_id, &|document| match request {
+            Some(request) => with_summary_request(document, request),
+            None => without_summary_request(document),
+        })
+        .map_err(|error| SummaryError::Storage(error.to_string()))
+}
+
+/// Stores the summary written for a paired device's request and removes the request, in one
+/// write.
+///
+/// Outputs: Success or a storage error. Side effects: Writes the document, which syncs to paired
+/// devices.
+pub fn store_answered_request<Repository>(
+    repository: &Repository,
+    meeting_id: &MeetingId,
+    summary: &MeetingSummary,
+) -> Result<(), SummaryError>
+where
+    Repository: NoteRepository + ?Sized,
+{
+    repository
+        .edit_crdt_document(meeting_id, &|document| {
+            with_summary(document, summary).and_then(|document| without_summary_request(&document))
+        })
         .map_err(|error| SummaryError::Storage(error.to_string()))
 }
 
