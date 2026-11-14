@@ -1,6 +1,7 @@
 // Verifies the telemetry dashboard presents summary metrics and known device status cards.
 
 import { render, screen } from "@testing-library/react";
+import { expect, test } from "vitest";
 import { TelemetryDashboard } from "@/components/telemetry-dashboard";
 
 test("renders summary cards and a known device", () => {
