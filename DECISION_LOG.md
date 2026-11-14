@@ -3260,6 +3260,19 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   shows waiting (with what the computer needs), working (progress bar) or failed (reason, Try
   again), offers Cancel request, and reads the request again every 10 s while open. A cancel
   can't stop a computer already writing; its summary is still stored.
+- **Headless devices:** the CLI's `summary <meeting> --on-paired-computer` (and
+  `--cancel-request`) asks the same way; `--show` reports the request's state.
+- **Verified end to end** on two test VMs, each with its own database: a "phone" daemon on
+  deb-shell and a "computer" daemon on deb-gui, paired over the LAN.
+  - A meeting of public FLEURS Italian clips was recorded on the phone and synced to the
+    computer.
+  - The computer's paired connection was a loopback OpenAI-compatible mock (it logs sizes only),
+    with automatic summaries off.
+  - After `--on-paired-computer`, the summary was back on the phone within 10 s, labelled "Mock
+    on Laptop-sim", and the request was gone.
+  - With the mock stopped, a second request showed "could not write the summary
+    (llm_unreachable)" on the phone within 10 s and was not retried.
+  - The Claude Code and Codex paths themselves were checked in #105.
 - **Not done:** chat (#97) through the computer. It needs a back-and-forth that the meeting
   document isn't suited to.
 - **Terms:** this is the owner running their own tool on their own computer for their own
