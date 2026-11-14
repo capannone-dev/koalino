@@ -1,5 +1,6 @@
 // Verifies the web Settings page's AI connections (#95): listing connections without their keys,
-// adding one, testing it, the default, the prompt, and automatic summaries (#101).
+// adding one, testing it, the default, the prompt, automatic summaries (#101), and the
+// connection that answers paired devices' summary requests (#107).
 
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -33,6 +34,7 @@ const settings: api.LlmSettings = {
   default_template: "Built in",
   custom_template: true,
   auto_summarize: true,
+  paired_summary_connection: null,
   placeholders: ["title", "date"]
 };
 
@@ -46,7 +48,9 @@ beforeEach(() => {
 test("lists connections with their default, a plain-http warning and no key", () => {
   render(<AiSettings initial={settings} />);
 
-  expect(screen.getByText("Office server")).toBeInTheDocument();
+  // Once in the list, once in the menu of the connection that answers paired devices (#107).
+  expect(screen.getAllByText("Office server")).toHaveLength(2);
+  expect(screen.getByRole("option", { name: "Office server" })).toBeInTheDocument();
   expect(screen.getByText("Default")).toBeInTheDocument();
   expect(screen.getByText(/Unencrypted http/)).toBeInTheDocument();
   expect(screen.queryByText(/API key/)).not.toBeInTheDocument();
@@ -129,4 +133,30 @@ test("a Claude Code connection is saved without an address or a key (#105)", asy
 
   const [body] = vi.mocked(api.saveLlmConnection).mock.calls[0];
   expect(body).toEqual({ label: "Claude Pro", kind: "claude_code", base_url: "", model: "", context_tokens: 200000 });
+});
+
+test("a connection can answer the summaries paired devices ask for (#107)", async () => {
+  vi.mocked(api.updateLlmSettings).mockResolvedValue({ ...settings, paired_summary_connection: "c-1" });
+  render(<AiSettings initial={settings} />);
+
+  const menu = screen.getByLabelText(/Summaries for my other devices/);
+  expect(menu).toHaveValue("");
+  fireEvent.change(menu, { target: { value: "c-1" } });
+
+  expect(
+    await screen.findByText("Office server now writes the summaries your other devices ask for.")
+  ).toBeInTheDocument();
+  expect(api.updateLlmSettings).toHaveBeenCalledWith({ paired_summary_connection: "c-1" });
+});
+
+test("answering paired devices can be turned off (#107)", async () => {
+  vi.mocked(api.updateLlmSettings).mockResolvedValue(settings);
+  render(<AiSettings initial={{ ...settings, paired_summary_connection: "c-1" }} />);
+
+  fireEvent.change(screen.getByLabelText(/Summaries for my other devices/), { target: { value: "" } });
+
+  expect(
+    await screen.findByText("This computer no longer writes summaries for your other devices.")
+  ).toBeInTheDocument();
+  expect(api.updateLlmSettings).toHaveBeenCalledWith({ paired_summary_connection: null });
 });

@@ -33,6 +33,8 @@ export type LlmSettings = {
   default_template: string;
   custom_template: boolean;
   auto_summarize: boolean;
+  /** The connection that writes the summaries paired devices ask for (#107), or null. */
+  paired_summary_connection: string | null;
   placeholders: string[];
 };
 
@@ -149,12 +151,14 @@ export function getLlmSettings(): Promise<LlmSettings> {
 
 /**
  * Changes only the fields given (`PUT /api/settings/llm`); `template: null` restores the
- * built-in one. Returns the settings as saved.
+ * built-in one, and `paired_summary_connection: null` stops answering paired devices (#107).
+ * Returns the settings as saved.
  */
 export function updateLlmSettings(change: {
   default_connection?: string | null;
   template?: string | null;
   auto_summarize?: boolean;
+  paired_summary_connection?: string | null;
 }): Promise<LlmSettings> {
   return request<LlmSettings>("/api/settings/llm", json("PUT", change));
 }

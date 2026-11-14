@@ -1,7 +1,8 @@
 // Renders the web Settings page's AI connections (#95): the language models summaries are written
-// with (OpenAI, Anthropic, Mistral or a server on the local network), the default one, the
-// summary prompt with its placeholders, and whether meetings are summarized automatically (#101).
-// API keys can be typed in but are never shown again.
+// with (a server on the local network, or Claude Code and Codex signed in on this computer), the
+// default one, the summary prompt with its placeholders, whether meetings are summarized
+// automatically (#101), and the connection that answers paired devices' summary requests (#107).
+// The app keeps no API keys (#117).
 
 "use client";
 
@@ -56,6 +57,7 @@ export function AiSettings({ initial }: AiSettingsProps) {
   );
   const templateId = useId();
   const autoId = useId();
+  const pairedId = useId();
 
   if (settings === null) {
     return (
@@ -279,6 +281,39 @@ export function AiSettings({ initial }: AiSettingsProps) {
         />
         <label htmlFor={autoId}>Summarize meetings automatically with the default connection</label>
       </div>
+
+      {current.connections.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <label htmlFor={pairedId}>Summaries for my other devices</label>
+          <select
+            id={pairedId}
+            className="w-full max-w-sm rounded border px-2 py-2"
+            value={current.paired_summary_connection ?? ""}
+            disabled={busy}
+            onChange={(event) => {
+              const id = event.target.value === "" ? null : event.target.value;
+              const label = current.connections.find((connection) => connection.id === id)?.label;
+              void run(async () => {
+                setSettings(await updateLlmSettings({ paired_summary_connection: id }));
+                return id === null
+                  ? "This computer no longer writes summaries for your other devices."
+                  : `${label ?? "The connection"} now writes the summaries your other devices ask for.`;
+              });
+            }}
+          >
+            <option value="">Off</option>
+            {current.connections.map((connection) => (
+              <option key={connection.id} value={connection.id}>
+                {connection.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-sm opacity-80">
+            A paired phone can ask this computer to write a summary with this connection. It counts
+            against that plan; at most 10 an hour.
+          </p>
+        </div>
+      )}
 
       <p role="status" aria-live="polite">
         {message}
