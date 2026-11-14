@@ -14,7 +14,7 @@ vi.mock("@/lib/edits-api", async () => ({
 const doubtful = {
   start_time_ms: 61_000,
   end_time_ms: 65_000,
-  speaker: "Unknown speaker",
+  speaker: "Speaker 1",
   text: "we ship on Friday",
   overlapping_speech: true,
   uncertain_speaker: true,
@@ -35,7 +35,7 @@ test("segments show their speaker, start and text", () => {
 
 test("a guessed speaker, overlap and unclear words are marked", () => {
   render(<MeetingTranscript transcript={null} segments={[doubtful]} />);
-  expect(screen.getByText("Unknown speaker (?) · 1:01")).toHaveAttribute("title", "The speaker is a guess");
+  expect(screen.getByText("Speaker 1 (?) · 1:01")).toHaveAttribute("title", "The speaker is a guess");
   expect(screen.getByText("Overlapping speech")).toBeInTheDocument();
   const unclear = screen.getByText("ship");
   expect(unclear.tagName).toBe("EM");
@@ -66,7 +66,7 @@ describe("editing (#96)", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(/won't be re-transcribed/);
     expect(screen.getByText("we ship on Monday", { selector: "p" })).toBeInTheDocument();
     expect(edits.editSegment).toHaveBeenCalledWith("m-1", 61_000, 65_000, "we ship on Monday");
-    expect(screen.getByText("Unknown speaker (?) · 1:01")).toBeInTheDocument();
+    expect(screen.getByText("Speaker 1 (?) · 1:01")).toBeInTheDocument();
   });
 
   test("an emptied segment disappears, and a failure keeps the text", async () => {
@@ -81,7 +81,7 @@ describe("editing (#96)", () => {
 
     vi.mocked(edits.editSegment).mockResolvedValueOnce(null);
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(screen.queryByText("Unknown speaker (?) · 1:01")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Speaker 1 (?) · 1:01")).not.toBeInTheDocument());
   });
 
   test("without a meeting ID the transcript is read-only", () => {

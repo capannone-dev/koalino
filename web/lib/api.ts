@@ -50,7 +50,8 @@ export type MeetingDetail = {
 } & RecordedOn;
 export type VoiceIdentity = { identity_id: string; display_name: string; voice_variant_count: number };
 export type UnassignedClip = { clip_id: string; meeting_id: string; start_time_ms: number; end_time_ms: number; audio_url?: string };
-export type UnknownCluster = { cluster_id: string; meeting_id: string; total_duration_ms: number; chunk_count: number; created_at: string };
+/** `speaker_label` is the voice's label in its meeting's transcript, "Speaker 2" (#118); older servers omit it. */
+export type UnknownCluster = { cluster_id: string; meeting_id: string; total_duration_ms: number; chunk_count: number; created_at: string; speaker_label?: string | null };
 /**
  * `voice_group_id` is shared by voices that sound like one person (#82); older servers omit it.
  * `suggested_name` is the name the call window or Teams captions showed while the voice spoke (#113).

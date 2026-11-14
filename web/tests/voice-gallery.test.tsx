@@ -202,3 +202,16 @@ test("a name the call window showed fills the field and is sent on Assign (#113)
   expect(await screen.findByText("Assigned to Alice Rossi.")).toBeInTheDocument();
   expect(api.assignCluster).toHaveBeenCalledWith("cluster-1", "Alice Rossi");
 });
+
+test("cards use the transcript's speaker numbers when the server gives them (#118)", () => {
+  const labelled: api.LibraryCluster[] = [
+    { ...clusters[0], speaker_label: "Speaker 2" },
+    { ...clusters[1], speaker_label: "Speaker 3" }
+  ];
+  render(<VoiceGallery clusters={labelled} people={[]} />);
+
+  expect(screen.getByText("Speaker 2")).toBeInTheDocument();
+  expect(screen.getByText("Speaker 3")).toBeInTheDocument();
+  expect(screen.getByLabelText("Name for speaker 3")).toBeInTheDocument();
+  expect(screen.queryByText("Unknown speaker 1")).not.toBeInTheDocument();
+});

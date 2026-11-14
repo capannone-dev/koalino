@@ -90,7 +90,7 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
   function askToDeletePerson(person: VoiceIdentity) {
     setPendingDeletion({
       title: `Delete ${person.display_name}?`,
-      message: "Their name and voice samples go for good, here and on your paired devices. Transcripts stay and show an unknown speaker.",
+      message: "Their name and voice samples go for good, here and on your paired devices. Transcripts stay and number them as a speaker.",
       run: async () => {
         await deleteSavedPerson(person.identity_id);
         setPeople((current) => current.filter((candidate) => candidate.identity_id !== person.identity_id));
@@ -164,7 +164,10 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
       <h2 className="text-lg font-semibold">Unknown speakers</h2>
       {groups.length === 0 ? <p>No unknown speakers to review.</p> : null}
       {groups.map((group, index) => {
-        const speakerLabel = `Unknown speaker ${index + 1}`;
+        // The voice's label in its meeting's transcript ("Speaker 2", #118), each once; older
+        // servers without labels fall back to the place in the list.
+        const transcriptLabels = [...new Set(group.voices.map((voice) => voice.speaker_label).filter((label): label is string => Boolean(label)))];
+        const speakerLabel = transcriptLabels.length > 0 ? transcriptLabels.join(" / ") : `Unknown speaker ${index + 1}`;
         const lone = group.voices.length === 1 ? group.voices[0] : null;
         const longestPlayable = group.voices.filter((voice) => voice.has_review_clip).sort((first, second) => second.total_duration_ms - first.total_duration_ms)[0];
         // The name a call window showed while one of these voices spoke (#113); only offered.
