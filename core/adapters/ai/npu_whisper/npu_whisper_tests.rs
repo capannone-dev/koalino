@@ -371,18 +371,17 @@ fn segments_and_the_next_window_follow_the_timestamps() {
 }
 
 #[test]
-fn prompt_text_is_tokenized_like_whisper_cpp() {
-    let vocab = WhisperVocab::from_tokens(&["Mar", "co", " Ross", "i", ",", " OK", "R", " ", "M"]);
+fn prompt_text_is_tokenized_like_whisper() {
+    // IDs are merge ranks: "bc" (3) merges before "ab" (4), so "abc" is a + bc, where a
+    // longest-match tokenizer would take ab + c.
+    let vocab = WhisperVocab::from_tokens(&["a", "b", "c", "bc", "ab", " ", " a"]);
+    assert_eq!(vocab.tokenize("abc"), vec![0, 3]);
     assert_eq!(
-        vocab.tokenize("Marco Rossi, OKR"),
-        vec![0, 1, 2, 3, 4, 5, 6],
-        "longest match per word, a word keeping its leading space"
+        vocab.tokenize("abc abc"),
+        vec![0, 3, 6, 3],
+        "a word keeps its leading space: \"bc\" merges, then \" a\""
     );
-    assert_eq!(
-        vocab.tokenize("Zz"),
-        Vec::<u32>::new(),
-        "unknown bytes are skipped"
-    );
+    assert_eq!(vocab.tokenize("Zz"), Vec::<u32>::new(), "unknown bytes are skipped");
 }
 
 #[test]
@@ -653,14 +652,27 @@ fn a_window_the_model_finds_silent_and_unsure_is_dropped() {
     assert!(transcript.words.is_empty());
 }
 
-/// Prints the tokens of `NPU_TOKENIZE_TEXT` from the vocabulary in `NPU_VOCAB` (a whisper.cpp
-/// model), to compare with Whisper's own tokenizer by hand.
+/// Writes the tokens of each line of `NPU_TOKENIZE_IN`, from the vocabulary in `NPU_VOCAB` (a
+/// whisper.cpp model), to `NPU_TOKENIZE_OUT` (space-separated IDs per line), to compare with
+/// Whisper's own tokenizer.
 #[test]
-#[ignore = "needs a whisper.cpp model and a text"]
-fn prints_the_tokens_of_a_text() {
+#[ignore = "needs a whisper.cpp model and a text file"]
+fn writes_the_tokens_of_each_line() {
     let variable = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("{name} is unset"));
     let model = std::fs::File::open(variable("NPU_VOCAB")).unwrap_or_else(|e| panic!("{e}"));
     let vocab =
         WhisperVocab::read(&mut std::io::BufReader::new(model)).unwrap_or_else(|e| panic!("{e}"));
-    println!("{:?}", vocab.tokenize(&variable("NPU_TOKENIZE_TEXT")));
+    let text = std::fs::read_to_string(variable("NPU_TOKENIZE_IN")).unwrap_or_else(|e| panic!("{e}"));
+    let lines: Vec<String> = text
+        .lines()
+        .map(|line| {
+            vocab
+                .tokenize(line)
+                .iter()
+                .map(u32::to_string)
+                .collect::<Vec<_>>()
+                .join(" ")
+        })
+        .collect();
+    std::fs::write(variable("NPU_TOKENIZE_OUT"), lines.join("\n")).unwrap_or_else(|e| panic!("{e}"));
 }

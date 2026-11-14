@@ -5,9 +5,11 @@
 //! multilingual models share one vocabulary, so the NPU's `small` reads it from `base` and no
 //! tokenizer has to be shipped or downloaded. Only the header is read, never the weights.
 //!
-//! `tokenize` turns prompt text into tokens the way whisper.cpp does: GPT-2's split into words
-//! (letters, digits or other symbols, each with an optional leading space, and English
-//! contractions), then the longest known token at each point of a word.
+//! `tokenize` turns prompt text into tokens as Whisper's own (tiktoken) tokenizer does: GPT-2's
+//! split into words (letters, digits or other symbols, each with an optional leading space, and
+//! English contractions), then byte-pair merges. The merge table is not in the file, but it does
+//! not need to be: in Whisper's vocabulary a token's ID is its merge rank, so each step merges the
+//! adjacent pair whose joined bytes form the lowest-ID token.
 
 use std::{collections::HashMap, io::Read};
 
@@ -44,9 +46,10 @@ pub struct WhisperVocab {
     vocabulary_size: u32,
     /// Each token's ID by its bytes, for `tokenize`.
     ids: HashMap<Vec<u8>, u32>,
-    /// The longest token, in bytes.
-    longest: usize,
 }
+
+/// Tokens from `<|endoftext|>` on are special and never come from text.
+const FIRST_SPECIAL: u32 = 50_257;
 
 /// The vocabulary size of multilingual Whisper models; English-only ones have one token fewer.
 const MULTILINGUAL_VOCABULARY: u32 = 51_865;
@@ -107,15 +110,14 @@ impl WhisperVocab {
             .iter()
             .enumerate()
             .filter_map(|(id, bytes)| Some((bytes.clone(), u32::try_from(id).ok()?)))
+            .filter(|(_, id)| *id < FIRST_SPECIAL)
             .collect();
-        let longest = tokens.iter().map(Vec::len).max().unwrap_or(0);
         Self {
             filters,
             filter_shape,
             tokens,
             vocabulary_size,
             ids,
-            longest,
         }
     }
 
@@ -133,28 +135,31 @@ impl WhisperVocab {
         )
     }
 
-    /// Turns text into token IDs, as whisper.cpp does for a prompt.
+    /// Turns text into token IDs, as Whisper's tokenizer does.
     ///
-    /// Inputs: The text. Outputs: Each word's longest known tokens in turn; bytes no token
-    /// starts with are skipped. Side effects: None.
+    /// Inputs: The text. Outputs: Each word's byte-pair tokens in turn; bytes with no token are
+    /// skipped (every byte has one in a real vocabulary). Side effects: None.
     pub fn tokenize(&self, text: &str) -> Vec<u32> {
         let mut ids = Vec::new();
         for word in gpt2_words(text) {
-            let bytes = word.as_bytes();
-            let mut start = 0;
-            while start < bytes.len() {
-                let end_limit = bytes.len().min(start + self.longest);
-                let found = (start + 1..=end_limit)
-                    .rev()
-                    .find_map(|end| self.ids.get(&bytes[start..end]).map(|id| (end, *id)));
-                match found {
-                    Some((end, id)) => {
-                        ids.push(id);
-                        start = end;
-                    }
-                    None => start += 1,
-                }
+            let mut parts: Vec<Vec<u8>> = word.bytes().map(|byte| vec![byte]).collect();
+            // Merge the adjacent pair whose joined bytes have the lowest rank, until none joins.
+            loop {
+                let best = parts
+                    .windows(2)
+                    .enumerate()
+                    .filter_map(|(index, pair)| {
+                        let joined = [pair[0].as_slice(), pair[1].as_slice()].concat();
+                        self.ids.get(&joined).map(|rank| (*rank, index))
+                    })
+                    .min();
+                let Some((_, index)) = best else {
+                    break;
+                };
+                let right = parts.remove(index + 1);
+                parts[index].extend(right);
             }
+            ids.extend(parts.iter().filter_map(|part| self.ids.get(part).copied()));
         }
         ids
     }
