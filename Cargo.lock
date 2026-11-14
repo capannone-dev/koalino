@@ -3379,6 +3379,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "unicode-general-category",
  "unsafe-libopus",
  "uuid",
  "webrtc-vad",

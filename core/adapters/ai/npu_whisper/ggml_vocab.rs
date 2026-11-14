@@ -237,7 +237,16 @@ enum CharClass {
 /// (Thai and Devanagari vowel signs, for example) are `Other`, though Rust counts many as
 /// alphabetic.
 fn class_of(character: char) -> CharClass {
-    if super::unicode_letters::is_letter(character) {
+    use unicode_general_category::{GeneralCategory, get_general_category};
+    let is_letter = matches!(
+        get_general_category(character),
+        GeneralCategory::UppercaseLetter
+            | GeneralCategory::LowercaseLetter
+            | GeneralCategory::TitlecaseLetter
+            | GeneralCategory::ModifierLetter
+            | GeneralCategory::OtherLetter
+    );
+    if is_letter {
         CharClass::Letter
     } else if character.is_numeric() {
         CharClass::Digit
