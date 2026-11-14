@@ -555,3 +555,43 @@ pub struct MeetingSummary {
     /// The model stopped at its length limit, so the end may be missing.
     pub truncated: bool,
 }
+
+/// A device's request that a paired computer summarize a meeting (#107), kept in the meeting's
+/// document so it syncs to the computer and waits there while the two are apart.
+///
+/// The computer answers with its own Claude Code, Codex or local-server connection, so a phone
+/// can use the owner's plan without holding its credentials.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SummaryRequest {
+    /// The device that asked (its peer ID).
+    pub requested_by: String,
+    /// When it asked.
+    pub requested_at: chrono::DateTime<chrono::Utc>,
+    /// The asking device's own summary template; `None` lets the computer use its own.
+    pub template: Option<String>,
+    /// How far the request has got.
+    pub state: SummaryRequestState,
+}
+
+/// How far a summary request has got.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SummaryRequestState {
+    /// No computer has taken it yet.
+    Waiting,
+    /// A computer is summarizing the meeting.
+    Working {
+        /// The computer (its peer ID).
+        by: String,
+        /// When it started.
+        since: chrono::DateTime<chrono::Utc>,
+    },
+    /// A computer tried and failed; the asking device may ask again.
+    Failed {
+        /// The computer (its peer ID).
+        by: String,
+        /// The summary command's error code, such as `llm_tool_failed`.
+        error_code: String,
+        /// When it failed.
+        at: chrono::DateTime<chrono::Utc>,
+    },
+}
