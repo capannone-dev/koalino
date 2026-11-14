@@ -4,6 +4,7 @@
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/transcription_settings_controller.dart';
+import 'package:note_taker_ui/infrastructure/npu_download.dart';
 import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
 
 /// Finds the button applying the proposed model in tests.
@@ -39,6 +40,15 @@ const Key afterMeetingPassModelKey =
 
 /// Finds the switch that records the computer's sound (#108).
 const Key computerSoundKey = ValueKey<String>('computer-sound');
+
+/// Finds the button downloading the NPU files (#75).
+const Key npuDownloadKey = ValueKey<String>('npu-download');
+
+/// Finds the switch turning Whisper on the NPU on and off (#75).
+const Key npuSwitchKey = ValueKey<String>('npu-switch');
+
+/// Finds the button removing the NPU files (#75).
+const Key npuRemoveKey = ValueKey<String>('npu-remove');
 
 /// Finds the button that saves the glossary.
 const Key glossarySaveKey = ValueKey<String>('glossary-save');
@@ -135,6 +145,10 @@ final class _TranscriptionSettingsScreenState
                     child: Text(message),
                   ),
                 ..._modelTiles(context, settings),
+                if (settings.npu.supported) ...<Widget>[
+                  const Divider(),
+                  ..._npuTiles(settings.npu),
+                ],
                 const Divider(),
                 // Keyed, so the message row above appearing keeps its text and state.
                 _GlossarySection(
@@ -153,6 +167,104 @@ final class _TranscriptionSettingsScreenState
           },
         ),
       );
+
+  /// Asks the owner to accept Qualcomm's terms before the NPU files download (#75).
+  Future<void> _downloadNpu() async {
+    final bool? accepted = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text('Download from Qualcomm?'),
+        content: const SingleChildScrollView(
+          child: Text(
+              'About 360 MB is downloaded from Qualcomm and needs about '
+              '460 MB of space:\n\n'
+              '• Qualcomm\'s QNN runtime, which lets apps use the NPU. It is '
+              'licensed under Qualcomm\'s AI Stack License, not the app\'s '
+              'licence.\n'
+              '• Whisper Small, compiled by Qualcomm AI Hub for this '
+              'phone\'s NPU.\n\n'
+              'Each file is checked before it is used. Your recordings never '
+              'leave the phone. By downloading, you accept Qualcomm\'s terms.'),
+        ),
+        actions: <Widget>[
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Accept and download')),
+        ],
+      ),
+    );
+    if (accepted ?? false) {
+      await widget.controller.downloadNpu();
+    }
+  }
+
+  /// Whisper on the NPU (#75): download, progress, the switch, and removal.
+  List<Widget> _npuTiles(NpuStatus npu) {
+    final TranscriptionSettingsController controller = widget.controller;
+    const Widget icon = Icon(Icons.memory_outlined);
+    if (controller.npuProgress case final NpuDownloadProgress progress) {
+      final double? fraction = progress.fraction;
+      return <Widget>[
+        ListTile(
+          leading: icon,
+          title: const Text('Downloading the NPU files…'),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(value: fraction),
+          ),
+          trailing: TextButton(
+            onPressed: controller.cancelNpuDownload,
+            child: const Text('Cancel'),
+          ),
+        ),
+      ];
+    }
+    if (!npu.installed) {
+      return <Widget>[
+        ListTile(
+          leading: icon,
+          title: const Text('Transcribe on the NPU'),
+          subtitle: const Text(
+              'This phone has an AI chip (NPU) that can run Whisper Small, '
+              'leaving the processor free: 30 seconds of speech take about '
+              '2 seconds. It needs a download from Qualcomm.'),
+          trailing: FilledButton.tonal(
+            key: npuDownloadKey,
+            onPressed: controller.isBusy ? null : _downloadNpu,
+            child: const Text('Download'),
+          ),
+        ),
+      ];
+    }
+    return <Widget>[
+      SwitchListTile(
+        key: npuSwitchKey,
+        secondary: icon,
+        title: const Text('Transcribe on the NPU'),
+        subtitle: const Text('Runs Whisper Small on the phone\'s AI chip, '
+            'in place of the model chosen above. Word timing and the glossary '
+            'are not used there yet.'),
+        value: npu.enabled,
+        onChanged: controller.isBusy
+            ? null
+            : (bool enabled) => controller.setNpuWhisper(enabled: enabled),
+      ),
+      Align(
+        alignment: Alignment.centerLeft,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: TextButton(
+            key: npuRemoveKey,
+            onPressed: controller.isBusy ? null : controller.removeNpu,
+            child: const Text('Remove the NPU files'),
+          ),
+        ),
+      ),
+    ];
+  }
 
   /// Recording what the computer plays (#108): the other side of a call, as its own track.
   Widget _computerSoundTile(bool enabled) => SwitchListTile(

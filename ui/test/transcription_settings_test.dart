@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/transcription_settings_controller.dart';
+import 'package:note_taker_ui/infrastructure/npu_download.dart';
 import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
 import 'package:note_taker_ui/presentation/transcription_settings_screen.dart';
 
@@ -98,6 +99,7 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
         afterMeetingPassModel: afterMeetingPassModel,
         computerSound: ComputerSoundSetting(
             available: computerSoundAvailable, enabled: computerSound),
+        npu: npu,
         automatic: AutomaticModelStatus(
             enabled: selected == null,
             fileName: automaticFile,
@@ -177,6 +179,24 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
     return transcriptionStatusOk;
   }
 
+  /// The NPU's state as the core reports it (#75).
+  NpuStatus npu = const NpuStatus();
+
+  @override
+  Future<int> setNpuWhisper({required bool enabled}) async {
+    calls.add('npu $enabled');
+    if (enabled && !npu.installed) {
+      return transcriptionStatusInvalid;
+    }
+    npu = NpuStatus(
+        available: npu.available,
+        supported: npu.supported,
+        directory: npu.directory,
+        installed: npu.installed,
+        enabled: enabled);
+    return transcriptionStatusOk;
+  }
+
   @override
   Future<int> setKeepSpeechDays(int days) async {
     calls.add('keep $days');
@@ -198,13 +218,60 @@ final class _FakeBridge implements TranscriptionSettingsBridge {
   }
 }
 
+/// Downloads the NPU files on a script: each `progress` call returns the next state.
+final class _FakeNpuDownloader implements NpuDownloader {
+  _FakeNpuDownloader(this.bridge);
+
+  final _FakeBridge bridge;
+  final List<String> calls = <String>[];
+  List<NpuDownloadProgress> script = <NpuDownloadProgress>[];
+
+  @override
+  Future<void> download(String directory) async {
+    calls.add('download $directory');
+  }
+
+  @override
+  Future<NpuDownloadProgress> progress() async {
+    if (!calls.any((String call) => call.startsWith('download'))) {
+      return const NpuDownloadProgress(state: 'idle');
+    }
+    final NpuDownloadProgress next = script.isEmpty
+        ? const NpuDownloadProgress(state: 'idle')
+        : script.removeAt(0);
+    if (next.state == 'done') {
+      bridge.npu = NpuStatus(
+          available: true,
+          supported: true,
+          directory: bridge.npu.directory,
+          installed: true,
+          enabled: bridge.npu.enabled);
+    }
+    return next;
+  }
+
+  @override
+  Future<void> cancel() async => calls.add('cancel');
+
+  @override
+  Future<bool> remove(String directory) async {
+    calls.add('remove $directory');
+    bridge.npu = NpuStatus(
+        available: true, supported: true, directory: bridge.npu.directory);
+    return true;
+  }
+}
+
 /// Pumps the page over a fake core.
 Future<TranscriptionSettingsController> _pump(
     WidgetTester tester, _FakeBridge bridge,
-    {String language = 'it'}) async {
+    {String language = 'it', NpuDownloader? npuDownloader}) async {
   final TranscriptionSettingsController controller =
       TranscriptionSettingsController(
-          bridge: bridge, refreshInterval: const Duration(hours: 1));
+          bridge: bridge,
+          refreshInterval: const Duration(hours: 1),
+          npuDownloader: npuDownloader ?? const NoNpuDownloader(),
+          npuRefreshInterval: const Duration(milliseconds: 10));
   addTearDown(controller.dispose);
   await tester.pumpWidget(MaterialApp(
     home: TranscriptionSettingsScreen(
@@ -663,5 +730,121 @@ void main() {
     expect(find.text(longTerm), findsOneWidget,
         reason: 'the refused text stays');
     expect(bridge.glossary, isEmpty);
+  });
+
+  test('the NPU status is read from the core (#75)', () {
+    final NpuStatus status = NpuStatus.fromJson(<String, Object?>{
+      'available': true,
+      'supported': true,
+      'directory': '/data/npu',
+      'installed': false,
+      'enabled': false,
+    });
+    expect(status.supported, isTrue);
+    expect(status.directory, '/data/npu');
+    expect(status.installed, isFalse);
+    expect(const NpuStatus().supported, isFalse,
+        reason: 'an older core offers nothing');
+    final NpuDownloadProgress progress =
+        NpuDownloadProgress.fromMap(<Object?, Object?>{
+      'state': 'downloading',
+      'receivedBytes': 5,
+      'totalBytes': 10,
+      'error': null,
+    });
+    expect(progress.fraction, 0.5);
+  });
+
+  testWidgets('the NPU is offered only on a phone that can run it',
+      (WidgetTester tester) async {
+    await _pump(tester, _FakeBridge());
+    expect(find.byKey(npuDownloadKey), findsNothing);
+    expect(find.byKey(npuSwitchKey), findsNothing);
+  });
+
+  testWidgets(
+      'the NPU files download after accepting Qualcomm\'s terms, then the NPU is on',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..npu = const NpuStatus(
+          available: true, supported: true, directory: '/data/npu');
+    final _FakeNpuDownloader downloader = _FakeNpuDownloader(bridge)
+      ..script = <NpuDownloadProgress>[
+        const NpuDownloadProgress(
+            state: 'downloading', receivedBytes: 50, totalBytes: 100),
+        const NpuDownloadProgress(
+            state: 'done', receivedBytes: 100, totalBytes: 100),
+      ];
+    final TranscriptionSettingsController controller =
+        await _pump(tester, bridge, npuDownloader: downloader);
+    await tester.scrollUntilVisible(find.byKey(npuDownloadKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(npuDownloadKey));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('AI Stack License'), findsWidgets);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(downloader.calls, isEmpty, reason: 'nothing without consent');
+
+    await tester.tap(find.byKey(npuDownloadKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Accept and download'));
+    await tester.pump();
+    expect(downloader.calls, <String>['download /data/npu']);
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('npu true'),
+        reason: 'turned on once the files are complete');
+    expect(controller.message, contains('transcribe on the NPU'));
+    expect(
+        tester.widget<SwitchListTile>(find.byKey(npuSwitchKey)).value, isTrue);
+  });
+
+  testWidgets('a failed NPU download says why and leaves the NPU off',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..npu = const NpuStatus(
+          available: true, supported: true, directory: '/data/npu');
+    final _FakeNpuDownloader downloader = _FakeNpuDownloader(bridge)
+      ..script = <NpuDownloadProgress>[
+        const NpuDownloadProgress(state: 'failed', error: 'corrupted'),
+      ];
+    final TranscriptionSettingsController controller =
+        await _pump(tester, bridge, npuDownloader: downloader);
+    await controller.downloadNpu();
+    await tester.pump(const Duration(milliseconds: 10));
+    await tester.pumpAndSettle();
+    expect(controller.message, contains('failed its check'));
+    expect(bridge.calls, isNot(contains('npu true')));
+  });
+
+  testWidgets('the NPU can be turned off and its files removed',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge()
+      ..npu = const NpuStatus(
+          available: true,
+          supported: true,
+          directory: '/data/npu',
+          installed: true,
+          enabled: true);
+    final _FakeNpuDownloader downloader = _FakeNpuDownloader(bridge);
+    await _pump(tester, bridge, npuDownloader: downloader);
+    await tester.scrollUntilVisible(find.byKey(npuSwitchKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(npuSwitchKey));
+    await tester.pumpAndSettle();
+    expect(bridge.calls, contains('npu false'));
+
+    await tester.scrollUntilVisible(find.byKey(npuRemoveKey), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(npuRemoveKey));
+    await tester.pumpAndSettle();
+    expect(downloader.calls, contains('remove /data/npu'));
+    expect(find.byKey(npuDownloadKey), findsOneWidget);
   });
 }

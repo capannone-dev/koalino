@@ -16,6 +16,7 @@ import 'package:note_taker_ui/controllers/transcription_route_controller.dart';
 import 'package:note_taker_ui/controllers/transcription_settings_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
+import 'package:note_taker_ui/infrastructure/npu_download.dart';
 import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
 import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
@@ -478,7 +479,8 @@ final class _TranscriptionPage extends StatefulWidget {
 /// Creates and disposes the controller.
 final class _TranscriptionPageState extends State<_TranscriptionPage> {
   late final TranscriptionSettingsController _controller =
-      TranscriptionSettingsController(bridge: widget.bridge);
+      TranscriptionSettingsController(
+          bridge: widget.bridge, npuDownloader: platformNpuDownloader());
 
   @override
   void dispose() {

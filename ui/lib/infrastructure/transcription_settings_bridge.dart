@@ -128,6 +128,43 @@ final class ComputerSoundSetting {
   final bool enabled;
 }
 
+/// Whisper on a Snapdragon NPU (#75): what this phone can do, where the files go, and the
+/// owner's choice.
+final class NpuStatus {
+  /// Creates the state; by default the NPU is not offered.
+  const NpuStatus({
+    this.available = false,
+    this.supported = false,
+    this.directory = '',
+    this.installed = false,
+    this.enabled = false,
+  });
+
+  /// Reads `npu` from the core's JSON.
+  factory NpuStatus.fromJson(Map<String, Object?> json) => NpuStatus(
+        available: json['available'] as bool? ?? false,
+        supported: json['supported'] as bool? ?? false,
+        directory: json['directory'] as String? ?? '',
+        installed: json['installed'] as bool? ?? false,
+        enabled: json['enabled'] as bool? ?? false,
+      );
+
+  /// Whether this build has the NPU engine.
+  final bool available;
+
+  /// Whether this phone's chip runs it (Snapdragon 8 Gen 2).
+  final bool supported;
+
+  /// The core's NPU folder, where the files are downloaded.
+  final String directory;
+
+  /// Whether every file is there.
+  final bool installed;
+
+  /// Whether the owner turned it on.
+  final bool enabled;
+}
+
 /// Efficient mode's state on this device.
 final class AutomaticModelStatus {
   /// Creates the state; by default a model was chosen by hand, as with a core from before #106.
@@ -236,6 +273,7 @@ final class TranscriptionSettings {
     this.afterMeetingPass = true,
     this.afterMeetingPassModel,
     this.computerSound = const ComputerSoundSetting(),
+    this.npu = const NpuStatus(),
     this.automatic = const AutomaticModelStatus(),
   });
 
@@ -268,6 +306,9 @@ final class TranscriptionSettings {
           ? const ComputerSoundSetting()
           : ComputerSoundSetting.fromJson(
               json['computer_sound']! as Map<String, Object?>),
+      npu: json['npu'] == null
+          ? const NpuStatus()
+          : NpuStatus.fromJson(json['npu']! as Map<String, Object?>),
       automatic: json['automatic'] == null
           ? const AutomaticModelStatus()
           : AutomaticModelStatus.fromJson(
@@ -313,6 +354,9 @@ final class TranscriptionSettings {
 
   /// Whether recordings also capture what the computer plays (#108).
   final ComputerSoundSetting computerSound;
+
+  /// Whisper on the NPU (#75).
+  final NpuStatus npu;
 
   /// The "Automatic" model choice (#106); `selectedModel` is `null` while it is on.
   final AutomaticModelStatus automatic;
@@ -376,6 +420,10 @@ abstract interface class TranscriptionSettingsBridge {
 
   /// Turns efficient mode on or off for the next recording.
   Future<int> setEfficientGpu({required bool enabled});
+
+  /// Turns Whisper on the NPU on or off for the next recording (#75); turning it on needs the
+  /// downloaded files.
+  Future<int> setNpuWhisper({required bool enabled});
 
   /// Turns the after-meeting pass (#87) on or off from the next recording.
   /// Outputs: A core status. Side effects: Stores the choice.
@@ -470,6 +518,14 @@ final class RustTranscriptionSettingsBridge
   @override
   Future<int> setAfterMeetingPassModel(String? fileName) => Isolate.run(() =>
       _callWithText('note_taker_set_after_meeting_pass_model', fileName ?? ''));
+
+  @override
+  Future<int> setNpuWhisper({required bool enabled}) {
+    final int value = enabled ? 1 : 0;
+    return Isolate.run(() => _openCoreLibrary()
+        .lookupFunction<Int32 Function(Int32), int Function(int)>(
+            'note_taker_set_npu_whisper')(value));
+  }
 
   @override
   Future<int> setComputerSound({required bool enabled}) {
