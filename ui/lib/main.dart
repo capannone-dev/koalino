@@ -40,6 +40,7 @@ import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
 import 'package:note_taker_ui/infrastructure/host_key.dart';
 import 'package:note_taker_ui/infrastructure/incoming_share_bridge.dart';
+import 'package:note_taker_ui/infrastructure/pairing_link_bridge.dart';
 import 'package:note_taker_ui/infrastructure/language_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_attachment_bridge.dart';
@@ -61,6 +62,7 @@ import 'package:note_taker_ui/presentation/app_theme.dart';
 import 'package:note_taker_ui/presentation/handoff_widgets.dart';
 import 'package:note_taker_ui/presentation/core_startup_gate.dart';
 import 'package:note_taker_ui/presentation/devices_screen.dart';
+import 'package:note_taker_ui/presentation/pairing_link_listener.dart';
 import 'package:note_taker_ui/presentation/call_offer_banner.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
@@ -145,6 +147,7 @@ Future<void> main() async {
     appLockController: appLockController,
     languageController: languageController,
     incomingShareBridge: platformIncomingShareBridge(),
+    pairingLinkBridge: Platform.isAndroid ? platformPairingLinkBridge() : null,
     callWatchController: callWatchController,
   ));
   unawaited(appLockController?.initialize());
@@ -176,6 +179,8 @@ final class NoteTakerApp extends StatelessWidget {
   /// `incomingShareBridge`, when given (Android), offers files shared from other apps to a
   /// project once the core is open (Issue #85). `callWatchController`, when given (desktops),
   /// offers to record a call above every screen and adds its switches to Settings (#111).
+  /// `pairingLinkBridge`, when given (Android), offers to pair with the device whose invite QR
+  /// code the camera opened in the app (#122).
   /// Outputs: A configured Material application.
   /// Side effects: None.
   const NoteTakerApp({
@@ -186,6 +191,7 @@ final class NoteTakerApp extends StatelessWidget {
     this.appLockController,
     this.languageController,
     this.incomingShareBridge,
+    this.pairingLinkBridge,
     this.callWatchController,
     super.key,
   });
@@ -199,6 +205,9 @@ final class NoteTakerApp extends StatelessWidget {
   final CoreStartupController? coreStartupController;
   final AppLockController? appLockController;
   final IncomingShareBridge? incomingShareBridge;
+
+  /// Offers pairing from invite links the camera opened (#122), when given.
+  final PairingLinkBridge? pairingLinkBridge;
 
   /// Offers to record calls on desktops (#111), when given.
   final CallWatchController? callWatchController;
@@ -255,11 +264,21 @@ final class NoteTakerApp extends StatelessWidget {
             handoffController: handoff,
             child: withHandoff,
           );
+    final PairingLinkBridge? linkBridge = pairingLinkBridge;
+    // Inside the startup gate, so pairing starts once the core runs.
+    final Widget linked = linkBridge == null
+        ? shell
+        : PairingLinkListener(
+            linkBridge: linkBridge,
+            devicesController: () =>
+                DevicesController(p2pBridge: const RustP2pBridge()),
+            child: shell,
+          );
     final CallWatchController? callWatch = callWatchController;
     // Inside the startup gate, so Record works once the offer can be seen.
     final Widget offered = callWatch == null
-        ? shell
-        : CallOfferBanner(controller: callWatch, child: shell);
+        ? linked
+        : CallOfferBanner(controller: callWatch, child: linked);
     final CoreStartupController? startup = coreStartupController;
     final AppLockController? appLock = appLockController;
     return MaterialApp(

@@ -169,6 +169,10 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   installed Claude or ChatGPT app, or in another app through the share sheet. The summary menu
   and the summary page offer it as "Use your own AI app". It also holds `HandoffReturnListener`,
   which shows "Summary from Claude saved", with Undo, and the hint to copy the answer.
+- `pairing_link_listener.dart` (`PairingLinkListener`, Android, #122) asks "Pair with another
+  device?" when the camera opened an invite link from another device's QR code. On Pair it opens
+  the Devices screen and starts pairing there (`DevicesController.pairWithInvite`), where both
+  devices show the code to compare; a refused invite says why. Opening a link never pairs alone.
 - `share_to_project.dart` (`IncomingShareListener`, Android) shows "Add the shared file to a
   project" when another app shares files or an e-mail: New project, or one of the projects. It
   sits inside the start-up gate, so a share that launched the app waits for the core. The

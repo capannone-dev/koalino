@@ -3400,3 +3400,18 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   `small` is downloaded (still only with the owner's say, #68), the speed check (#109) times it,
   and Automatic steps down to `base` only if it falls behind. Phones under 6 GiB and computers
   under 7 GiB keep `base`, since there memory, not speed, is the limit.
+
+## 2026-11-14 — #122 A phone's camera opens the pairing invite in Koalino
+
+- **Problem:** the invite QR code holds a `note-taker-invite:` link, but no Android app claimed
+  that scheme, so the camera said no app supports the link and the owner had to copy and paste.
+- **Decision:** the Android activity accepts `VIEW` for the `note-taker-invite` scheme
+  (`BROWSABLE`, so camera and browser apps may open it). `PairingLinks.kt` keeps the link for
+  Dart, which asks "Pair with another device?" and on Pair opens the Devices screen and starts
+  pairing with the inviting device. The scheme stays the internal one until the release names
+  are settled (Koalino naming decision).
+- **Security:** a link is untrusted text from any app or web page. It is only offered, never
+  acted on alone; the core validates it as before; and pairing still needs the code both devices
+  show to match. The link is capped at 4096 characters.
+- **Not done:** desktops are not registered as handlers. A desktop has no camera app that reads
+  QR codes, and the usual direction is the desktop showing the code to the phone.

@@ -183,3 +183,8 @@ carries to the core, and `AndroidCallNotifier` posts the offer as a notification
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and
 `IncomingShareBridge` (`arrivals`, `takePending`, `release`). `AndroidIncomingShareBridge` talks
 to `IncomingShares.kt` on `note_taker/incoming_shares`; desktops get `NoIncomingShareBridge`.
+
+`pairing_link_bridge.dart` (Issue #122) hands over the pairing invite links a phone's camera opens
+from another device's QR code: `PairingLinkBridge` (`arrivals`, `takePending`, which returns only
+`note-taker-invite:` text). `AndroidPairingLinkBridge` talks to `PairingLinks.kt` on
+`note_taker/pairing_links`; desktops get `NoPairingLinkBridge`.

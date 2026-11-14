@@ -69,6 +69,9 @@ Devices (Issue #43):
   messages, 2 s polling, and the five-minute discoverable window (with `fake_async`).
 - `devices_screen_test.dart` covers the sections, the large and spoken codes, Accept and
   Codes match, the waiting state, the confirmed removal, make discoverable, and sync off.
+- `pairing_link_listener_test.dart` covers an invite link the camera opened (#122): asked first,
+  Pair finds the device and starts pairing on the Devices screen, Cancel does nothing, and an
+  expired invite says so.
 
 `fake_p2p_bridge.dart` holds the scripted bridge and the `busyStatus` and `emptyStatus` fixtures.
 

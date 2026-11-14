@@ -12,7 +12,8 @@
 // `CallSignals` (`note_taker/call_signals`) tells Dart when another app is in a call, and
 // `CallOffer` (`note_taker/call_offer`) offers to record it as a notification (#111).
 // `NpuDownload` (`note_taker/npu`) fetches the NPU's Whisper files on request and points the
-// NPU's library search at them (#75).
+// NPU's library search at them (#75). `PairingLinks` (`note_taker/pairing_links`) hands Dart
+// the pairing invite links the camera opens from another device's QR code (#122).
 package com.example.note_taker_ui
 
 import android.content.Context
@@ -36,6 +37,9 @@ class MainActivity : FlutterActivity() {
 
     /** Copies what other apps share to the app; created with the activity. */
     private val incomingShares by lazy { IncomingShares(applicationContext) }
+
+    /** Invite links opened from the camera (#122). */
+    private val pairingLinks = PairingLinks()
 
     /** Reports charging to the core while the activity exists; created with it. */
     private val chargingReporter by lazy { ChargingReporter(applicationContext) }
@@ -67,6 +71,10 @@ class MainActivity : FlutterActivity() {
             MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/incoming_shares")
         sharesChannel.setMethodCallHandler(incomingShares)
         incomingShares.channel = sharesChannel
+        val linksChannel =
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/pairing_links")
+        linksChannel.setMethodCallHandler(pairingLinks)
+        pairingLinks.channel = linksChannel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/call_signals")
             .setMethodCallHandler(CallSignals(applicationContext))
         val callOfferChannel =
@@ -146,6 +154,7 @@ class MainActivity : FlutterActivity() {
     override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
         RecordingService.stateListener = null
         incomingShares.channel = null
+        pairingLinks.channel = null
         callOffer.channel = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
@@ -160,7 +169,9 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         chargingReporter.start()
         callOffer.start()
-        if (savedInstanceState == null && incomingShares.receive(intent)) {
+        if (savedInstanceState == null &&
+            (pairingLinks.receive(intent) || incomingShares.receive(intent))
+        ) {
             // Cleared so a later recreation of the activity does not import it again.
             setIntent(Intent(Intent.ACTION_MAIN))
         }
@@ -179,7 +190,7 @@ class MainActivity : FlutterActivity() {
      */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (!callOffer.receive(intent)) {
+        if (!callOffer.receive(intent) && !pairingLinks.receive(intent)) {
             incomingShares.receive(intent)
         }
     }

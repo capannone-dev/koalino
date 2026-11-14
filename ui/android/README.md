@@ -192,6 +192,13 @@ The provider also serves `handoff/<name>` and types files by extension, Markdown
 Both apps accept `SEND` and `SEND_MULTIPLE` of any type (checked on the S23 with
 `cmd package query-activities`).
 
+## Pairing invite links (Issue #122)
+
+The QR code a device shows to pair holds a `note-taker-invite:` link. The activity accepts `VIEW`
+(`DEFAULT`, `BROWSABLE`) for that scheme, so a phone's camera app offers to open it in Koalino.
+`PairingLinks.kt` keeps the link (at most 4096 characters) until Dart takes it on
+`note_taker/pairing_links`; Dart asks the owner before pairing, and the core checks the invite.
+
 ## Sharing to a project (Issue #85)
 
 The activity accepts `SEND` and `SEND_MULTIPLE` for e-mails (`message/rfc822`), PDFs, pictures

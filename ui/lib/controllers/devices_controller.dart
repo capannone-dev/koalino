@@ -136,7 +136,39 @@ final class DevicesController extends ChangeNotifier {
     try {
       await _bridge.joinInvite(inviteText);
     } on P2pException catch (error) {
-      return switch (error.errorCode) {
+      return _inviteRefusal(error.errorCode);
+    } on Object {
+      return 'That did not work. Try again.';
+    }
+    await refresh();
+    return null;
+  }
+
+  /// Finds the device an invite came from and starts pairing with it (#122): the invite link a
+  /// phone's camera opened in the app.
+  ///
+  /// Inputs: The link's text; it is untrusted, and Rust checks it.
+  /// Outputs: `null` once pairing started, or a message for the owner.
+  /// Side effects: Dials the inviting device and refreshes. No trust is granted: both devices
+  /// still show a code the owner compares before confirming.
+  Future<String?> pairWithInvite(String inviteText) async {
+    final String peerId;
+    try {
+      peerId = await _bridge.joinInvite(inviteText);
+    } on P2pException catch (error) {
+      return _inviteRefusal(error.errorCode);
+    } on Object {
+      return 'That did not work. Try again.';
+    }
+    if (await _run('start_pairing', peerId: peerId)) {
+      await refresh();
+      return null;
+    }
+    return errorMessage ?? 'That did not work. Try again.';
+  }
+
+  /// Words an invite's refusal for the owner.
+  String _inviteRefusal(String errorCode) => switch (errorCode) {
         'invite_expired' =>
           'This invite has expired. Make a new one on the other device.',
         'invite_from_this_device' =>
@@ -146,12 +178,6 @@ final class DevicesController extends ChangeNotifier {
         'unavailable' => 'Device sync is not running.',
         _ => 'That did not work. Try again.',
       };
-    } on Object {
-      return 'That did not work. Try again.';
-    }
-    await refresh();
-    return null;
-  }
 
   /// Runs a peer command and refreshes when it succeeds.
   Future<void> _runAndRefresh(String command, String peerId) async {
