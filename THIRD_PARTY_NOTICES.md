@@ -12,6 +12,21 @@ Koalino is free software under the GNU General Public License, version 3 or (at 
 | pyannote segmentation-3.0 (`segmentation.onnx`) | pyannote | MIT |
 | SpeechBrain ECAPA-TDNN spkrec-ecapa-voxceleb (`embedding.onnx`) | SpeechBrain | Apache-2.0 |
 
+## Native libraries
+
+| Library | From | License |
+| --- | --- | --- |
+| ONNX Runtime (`onnxruntime.dll` on Windows, `libonnxruntime.so` on Android) | Microsoft | MIT |
+
+## Downloaded only on request
+
+These are not part of Koalino and are not shipped with it. The Android app downloads them from their publishers only when the owner turns on Whisper on the NPU and accepts the publisher's terms; each archive is checked against a pinned SHA-256.
+
+| Component | From | Terms |
+| --- | --- | --- |
+| QNN runtime 2.50.0 (`libQnnHtp.so` and its companions), for Whisper on a Snapdragon NPU | Qualcomm | Qualcomm AI Stack License |
+| Whisper Small, precompiled for the Snapdragon 8 Gen 2 NPU (w8a16) | Qualcomm AI Hub; model by OpenAI | Qualcomm's terms for AI Hub models |
+
 ## Data
 
 | Data | From | License |

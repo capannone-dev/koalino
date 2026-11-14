@@ -44,6 +44,31 @@ DATA = [
 ]
 
 
+# Prebuilt native libraries shipped with the app, which no package manager lists.
+NATIVE_LIBRARIES = [
+    (
+        "ONNX Runtime (`onnxruntime.dll` on Windows, `libonnxruntime.so` on Android)",
+        "Microsoft",
+        "MIT",
+    ),
+]
+
+# Files the app downloads only when the owner asks, under their publishers' terms. They are not
+# part of Koalino and are never shipped with it (#75).
+ON_REQUEST = [
+    (
+        "QNN runtime 2.50.0 (`libQnnHtp.so` and its companions), for Whisper on a Snapdragon NPU",
+        "Qualcomm",
+        "Qualcomm AI Stack License",
+    ),
+    (
+        "Whisper Small, precompiled for the Snapdragon 8 Gen 2 NPU (w8a16)",
+        "Qualcomm AI Hub; model by OpenAI",
+        "Qualcomm's terms for AI Hub models",
+    ),
+]
+
+
 # Code ported from other projects, with the notice their license asks to keep.
 PORTED = [
     (
@@ -144,6 +169,18 @@ def notices() -> str:
         "## AI models",
         "",
         table(MODELS, ("Model", "From", "License")),
+        "",
+        "## Native libraries",
+        "",
+        table(NATIVE_LIBRARIES, ("Library", "From", "License")),
+        "",
+        "## Downloaded only on request",
+        "",
+        "These are not part of Koalino and are not shipped with it. The Android app downloads them "
+        "from their publishers only when the owner turns on Whisper on the NPU and accepts the "
+        "publisher's terms; each archive is checked against a pinned SHA-256.",
+        "",
+        table(ON_REQUEST, ("Component", "From", "Terms")),
         "",
         "## Data",
         "",

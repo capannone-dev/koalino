@@ -5,6 +5,10 @@
 `diarization/` holds the local speaker diarization adapter; see its README. Its ONNX Runtime
 models are compiled only with `--features diarization`.
 
+`npu_whisper/` runs Whisper Small on a Snapdragon 8 Gen 2 NPU through ONNX Runtime's QNN provider
+(#75); see its README. Its engine is compiled only with `--features npu-whisper` (Android builds),
+and its files are downloaded on the owner's request, never shipped.
+
 The rest of this directory contains opt-in local AI infrastructure. It is compiled only with
 `--features local-ai`; the default crate, `make rust-test`, and application layer remain free of
 Whisper/whisper.cpp types and native model initialization.

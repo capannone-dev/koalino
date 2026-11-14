@@ -29,6 +29,9 @@ computer-sound = ["microphone", "cpal/pulseaudio"]
 # downloaded at build time (approved by the owner, 2026-10-30); the models are exported with
 # `tools/diarization/export_models.py` and their paths come from configuration.
 diarization = ["dep:ort"]
+# Runs Whisper on a Qualcomm NPU through ONNX Runtime's QNN provider (#75; ONNX Runtime approved by
+# the owner, 2026-11-13). The QNN libraries and the model are downloaded on request, never built in.
+npu-whisper = ["dep:ort", "ort/qnn", "local-ai"]
 
 [[bin]]
 name = "cli"
@@ -126,7 +129,7 @@ zbus = "5.19.0"
 
 # Prebuilt ONNX Runtime linked in, except on Windows: ort has no prebuilt for windows-gnu, so the
 # Windows build loads Microsoft's onnxruntime.dll from beside the executable at run time (#60).
-[target.'cfg(not(windows))'.dependencies]
+[target.'cfg(not(any(windows, target_os = "android")))'.dependencies]
 ort = { version = "=2.0.0-rc.13", optional = true, default-features = false, features = ["std", "download-binaries", "tls-native", "copy-dylibs", "api-27"] }
 
 [target.'cfg(windows)'.dependencies]
@@ -138,6 +141,9 @@ ort = { version = "=2.0.0-rc.13", optional = true, default-features = false, fea
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.22.4"
+# Android loads Microsoft's ONNX Runtime (MIT, with the QNN provider) from the APK at run time, for
+# diarization and the NPU (#75).
+ort = { version = "=2.0.0-rc.13", optional = true, default-features = false, features = ["std", "load-dynamic", "api-27"] }
 
 [dev-dependencies]
 # Regenerates core/protocol/generated/ from teams_bridge.proto (pure-Rust parser, no protoc) in

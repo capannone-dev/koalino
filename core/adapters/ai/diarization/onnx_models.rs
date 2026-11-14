@@ -123,10 +123,13 @@ impl SpeakerEmbeddingModel for OnnxSpeakerEmbeddingModel {
 ///
 /// Outputs: The session, or `Unavailable` (with ONNX Runtime's reason logged).
 /// Side effects: Reads the model file; on Windows loads `onnxruntime.dll` from beside the
-/// executable first, because `ort` panics on first use if the library cannot be loaded.
+/// executable first, and on Android `libonnxruntime.so` from the APK (#75), because `ort` panics
+/// on first use if the library cannot be loaded.
 fn load_session(model_path: &Path) -> Result<Session, DiarizationError> {
     #[cfg(windows)]
     let _environment = ort::init_from("onnxruntime.dll").map_err(load_failure)?;
+    #[cfg(target_os = "android")]
+    let _environment = ort::init_from("libonnxruntime.so").map_err(load_failure)?;
     let thread_count = crate::adapters::ai::compute_resources::preferred_inference_threads();
     let mut builder = Session::builder()
         .map_err(load_failure)?

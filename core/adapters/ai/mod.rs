@@ -18,6 +18,8 @@ pub mod llm;
 /// Implements the portable transcription port with a locally loaded whisper.cpp model.
 #[cfg(feature = "local-ai")]
 pub mod local_whisper_cpp;
+/// Whisper on a Qualcomm NPU through ONNX Runtime (#75).
+pub mod npu_whisper;
 /// Opens the OpenCL library only when called, so the build starts on phones without it.
 #[cfg(all(feature = "mobile-gpu", target_os = "android"))]
 pub mod opencl_loader_shim;

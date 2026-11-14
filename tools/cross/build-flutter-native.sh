@@ -3,7 +3,8 @@
 # chunking and diarization (`--features local-ai,microphone,vad,diarization`; Issues #51, #60) and stages it where the Flutter
 # app's builds pick it up:
 #   linux   -> ui/native/linux/libnote_taker_core.so (installed into the bundle's lib/ by CMake)
-#   android -> ui/android/app/src/main/jniLibs/arm64-v8a/ (with the NDK's libc++_shared.so)
+#   android -> ui/android/app/src/main/jniLibs/arm64-v8a/ (with the NDK's libc++_shared.so and
+#              Microsoft's libonnxruntime.so)
 #   windows -> ui/native/windows/note_taker_core.dll (installed beside the runner by CMake;
 #              release only: a debug DLL exports more than Windows' 65,535-symbol limit)
 # It also stages the Whisper model from fetch.sh, so the app transcribes out of the box:
@@ -102,11 +103,17 @@ for platform in "$@"; do
         exit 1
       fi
       # mobile-gpu adds efficient mode; the phone's OpenCL library is opened at run time (#75).
-      cargo build --release --features local-ai,mobile-gpu,microphone,vad,diarization --lib --target aarch64-linux-android
+      # npu-whisper runs Whisper on the NPU with Microsoft's ONNX Runtime, staged below (#75).
+      if [ ! -f "$T/onnxruntime-android/libonnxruntime.so" ]; then
+        echo "missing $T/onnxruntime-android: run tools/cross/fetch-onnxruntime-android.sh" >&2
+        exit 1
+      fi
+      cargo build --release --features local-ai,mobile-gpu,microphone,vad,diarization,npu-whisper --lib --target aarch64-linux-android
       jni=ui/android/app/src/main/jniLibs/arm64-v8a
       mkdir -p "$jni"
       cp "$CARGO_TARGET_DIR/aarch64-linux-android/release/libnote_taker_core.so" "$jni/"
       cp "$NDK_BIN/../sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$jni/"
+      cp "$T/onnxruntime-android/libonnxruntime.so" "$jni/"
       stage_model ui/native/android-assets/models
       stage_diarization_models ui/native/android-assets/models
       ;;
