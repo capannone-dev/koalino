@@ -1,5 +1,6 @@
 // The chat page (#97): ask the default AI connection about one meeting, one project, or every
-// meeting, summary and project. Each answer says what the model was given and what was left out.
+// meeting, summary and project. On the phone, a paired computer answers by default (#107); the
+// "Who answers" menu switches to the phone's own connection. Each answer says what the model was given and what was left out.
 // The chat is kept on this device; it can be deleted from the menu. The places an answer cites
 // are listed under it, and open the meeting at that moment or the file (#110).
 
@@ -78,6 +79,9 @@ final class _ChatScreenState extends State<ChatScreen> {
   /// The question waiting for its answer, shown until it is kept.
   String? _pending;
 
+  /// Whether a paired computer answers (#107); the phone's default.
+  late bool _onComputer = widget.bridge.canAskPairedComputer;
+
   @override
   void initState() {
     super.initState();
@@ -125,8 +129,8 @@ final class _ChatScreenState extends State<ChatScreen> {
     });
     _toEnd();
     try {
-      final (ChatEntry asked, ChatEntry answer) =
-          await widget.bridge.ask(widget.topic, question);
+      final (ChatEntry asked, ChatEntry answer) = await widget.bridge
+          .ask(widget.topic, question, onPairedComputer: _onComputer);
       if (!mounted) {
         return;
       }
@@ -252,6 +256,27 @@ final class _ChatScreenState extends State<ChatScreen> {
       appBar: AppBar(
         title: Text(widget.title),
         actions: <Widget>[
+          if (widget.bridge.canAskPairedComputer)
+            PopupMenuButton<bool>(
+              tooltip: 'Who answers',
+              icon: Icon(_onComputer
+                  ? Icons.computer_outlined
+                  : Icons.smartphone_outlined),
+              enabled: !_asking,
+              initialValue: _onComputer,
+              onSelected: (bool onComputer) =>
+                  setState(() => _onComputer = onComputer),
+              itemBuilder: (BuildContext context) => <PopupMenuEntry<bool>>[
+                CheckedPopupMenuItem<bool>(
+                    value: true,
+                    checked: _onComputer,
+                    child: const Text('My paired computer')),
+                CheckedPopupMenuItem<bool>(
+                    value: false,
+                    checked: !_onComputer,
+                    child: const Text("This phone's AI connection")),
+              ],
+            ),
           IconButton(
             tooltip: 'Delete this chat',
             icon: const Icon(Icons.delete_sweep_outlined),
@@ -273,8 +298,12 @@ final class _ChatScreenState extends State<ChatScreen> {
                             child: Padding(
                               padding: const EdgeInsets.all(24),
                               child: Text(
-                                'Ask about your notes. The answer comes from your '
-                                'default AI connection, which is sent the notes that fit.',
+                                _onComputer
+                                    ? 'Ask about your notes. Answers come from your paired '
+                                        'computer, which reads its own copy of your notes '
+                                        'with the connection chosen there for your other devices.'
+                                    : 'Ask about your notes. The answer comes from your '
+                                        'default AI connection, which is sent the notes that fit.',
                                 textAlign: TextAlign.center,
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                     color: theme.colorScheme.onSurfaceVariant),

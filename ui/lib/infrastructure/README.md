@@ -141,7 +141,8 @@ match is: `placeLabel` such as `1:01 · Anna`, and the snippet's `SnippetPart`s)
 `chat_bridge.dart` (#97) is `ChatBridge.history(topic)`, `ask(topic, question)` and
 `clear(topic)` over `note_taker_chat` (on a background isolate through `callRustLlm`), with
 `ChatTopic` (a meeting, a project or everything), `ChatEntry` with its cited `ChatSource`s
-(#110) and `ChatException`.
+(#110) and `ChatException`. On the phone (`canAskPairedComputer`), `ask(..., onPairedComputer:
+true)` has a paired computer answer from its own copy of the notes (#107).
 
 `handoff_bridge.dart` (#114) holds the two halves of handing a meeting to the owner's own AI app.
 `RustHandoffCore` calls `note_taker_handoff_meeting` and the `keep_answer` / `restore_summary`

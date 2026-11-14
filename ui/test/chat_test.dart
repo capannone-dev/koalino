@@ -168,4 +168,82 @@ void main() {
     await tester.pumpAndSettle();
     expect(opened, <(String, int?)>[('m-1', 65000)]);
   });
+
+  testWidgets(
+      "a phone's chat asks the paired computer, or its own connection (#107)",
+      (WidgetTester tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: ChatScreen(
+        bridge: ChatBridge(call: call, canAskPairedComputer: true),
+        topic: const ChatTopic.meeting('m-1'),
+        title: 'Chat: Review',
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Answers come from your paired computer'),
+        findsNothing,
+        reason: 'the chat already has messages');
+
+    answers.add(<String, Object?>{
+      'ok': true,
+      'question': message('user', 'When do we ship?'),
+      'answer': message('assistant', 'On Friday.'),
+    });
+    await tester.enterText(
+        find.byKey(chatQuestionFieldKey), 'When do we ship?');
+    await tester.tap(find.byTooltip('Ask'));
+    await tester.pumpAndSettle();
+    expect(requests.last['on_paired_computer'], true);
+
+    await tester.tap(find.byTooltip('Who answers'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text("This phone's AI connection"));
+    await tester.pumpAndSettle();
+    answers.add(<String, Object?>{'ok': false, 'error_code': 'no_connection'});
+    await tester.enterText(find.byKey(chatQuestionFieldKey), 'And then?');
+    await tester.tap(find.byTooltip('Ask'));
+    await tester.pumpAndSettle();
+    expect(requests.last.containsKey('on_paired_computer'), isFalse);
+  });
+
+  testWidgets('a computer chat that is not answered says why (#107)',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: ChatScreen(
+        bridge: ChatBridge(call: call, canAskPairedComputer: true),
+        topic: const ChatTopic.meeting('m-1'),
+        title: 'Chat: Review',
+      ),
+    ));
+    await tester.pumpAndSettle();
+    answers.add(
+        <String, Object?>{'ok': false, 'error_code': 'no_paired_computer'});
+    await tester.enterText(find.byKey(chatQuestionFieldKey), 'Anything?');
+    await tester.tap(find.byTooltip('Ask'));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.textContaining('Summaries for my other devices'), findsOneWidget);
+  });
+
+  test('every paired-computer code is worded', () {
+    for (final String code in <String>[
+      'no_paired_computer',
+      'paired_computer_timeout',
+      'paired_computer_left',
+      'rate_limited',
+      'busy',
+      'p2p_unavailable',
+    ]) {
+      expect(ChatException(code).message,
+          isNot('Something went wrong. Try again.'),
+          reason: code);
+    }
+  });
+
+  testWidgets('a computer without the choice only asks its own connection',
+      (WidgetTester tester) async {
+    await show(tester);
+    expect(find.byTooltip('Who answers'), findsNothing);
+  });
 }

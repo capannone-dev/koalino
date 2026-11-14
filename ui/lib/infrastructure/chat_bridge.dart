@@ -163,6 +163,17 @@ final class ChatException implements Exception {
         'llm_tool_missing' =>
           'Claude Code or Codex is not installed on this computer, or the app cannot find it.',
         'storage_failed' => 'The notes could not be read.',
+        'no_paired_computer' =>
+          'No paired computer answered. On a computer, open Settings → AI and choose a '
+              'connection under "Summaries for my other devices", then keep it on and connected.',
+        'paired_computer_timeout' => 'The computer took too long to answer.',
+        'paired_computer_left' =>
+          'The computer disconnected before answering. Try again.',
+        'rate_limited' =>
+          'The computer answers at most 30 questions an hour. Try again later.',
+        'busy' =>
+          'The computer is answering other questions. Try again shortly.',
+        'p2p_unavailable' => 'Paired devices are off on this phone.',
         'runtime_unavailable' => 'The app is still starting. Try again.',
         _ when code.startsWith('llm_') =>
           'The AI server could not answer. Try again.',
@@ -176,9 +187,14 @@ final class ChatException implements Exception {
 /// Chats through the core.
 final class ChatBridge {
   /// Creates the bridge; `call` is replaced in tests.
-  const ChatBridge({LlmNativeCall call = callRustLlm}) : _call = call;
+  const ChatBridge(
+      {LlmNativeCall call = callRustLlm, this.canAskPairedComputer = false})
+      : _call = call;
 
   final LlmNativeCall _call;
+
+  /// Whether this device can ask a paired computer to answer (the phone, #107).
+  final bool canAskPairedComputer;
 
   /// Reads a chat's messages, oldest first. Throws `ChatException`.
   Future<List<ChatEntry>> history(ChatTopic topic) async {
@@ -192,15 +208,19 @@ final class ChatBridge {
     ];
   }
 
-  /// Asks a question with the default AI connection.
+  /// Asks a question with the default AI connection, or a paired computer.
   ///
   /// Outputs: The question and the answer as kept. Throws `ChatException`. Side effects: The
-  /// question, the recent messages and the notes that fit go to the connection's server.
-  Future<(ChatEntry, ChatEntry)> ask(ChatTopic topic, String question) async {
+  /// question, the recent messages and the notes that fit go to the connection's server. With
+  /// `onPairedComputer` (#107), the question and the recent messages go sealed to a paired
+  /// computer, which answers from its own copy of the notes; this can take minutes.
+  Future<(ChatEntry, ChatEntry)> ask(ChatTopic topic, String question,
+      {bool onPairedComputer = false}) async {
     final Map<String, Object?> answer = await _command(<String, Object?>{
       'command': 'ask',
       ...topic._json,
       'question': question,
+      if (onPairedComputer) 'on_paired_computer': true,
     });
     return (
       ChatEntry.fromJson(

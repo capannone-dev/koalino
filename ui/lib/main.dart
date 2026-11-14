@@ -229,7 +229,7 @@ final class NoteTakerApp extends StatelessWidget {
             _MeetingsDestination(openMeetingId: meetingId),
         summariesController: _summariesController,
         searchBridge: const SearchBridge(),
-        chatBridge: const ChatBridge(),
+        chatBridge: _chatBridge,
         meetingMomentBuilder:
             (BuildContext context, String meetingId, int? startTimeMs) =>
                 _MeetingsDestination(
@@ -355,10 +355,14 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
       summariesController: _summariesController,
       editController: _meetingEditController,
       searchBridge: const SearchBridge(),
-      chatBridge: const ChatBridge(),
+      chatBridge: _chatBridge,
     );
   }
 }
+
+/// Chat with notes (#97); on the phone a paired computer answers by default (#107).
+final ChatBridge _chatBridge =
+    ChatBridge(canAskPairedComputer: Platform.isAndroid);
 
 /// AI connections and meeting summaries (#95), shared by Settings and every meeting list; a
 /// summary keeps being written when its page is left, so this lives as long as the app.
