@@ -97,6 +97,8 @@ hosts. It refuses credentials in the URL. `PromptTemplate` holds the owner's sum
 8000 characters). Placeholders are `{{title}}`, `{{date}}`, `{{time}}`, `{{duration}}`, `{{device}}`,
 `{{project}}`, `{{speakers}}`, `{{glossary}}` and `{{language}}`; an unknown or unclosed one is
 refused when saved. The transcript itself always goes in the user message, never in the template.
+`{{device}}` is the recording device's name, even when a paired computer writes the summary, and
+`{{duration}}` is rounded to the nearest minute (#119).
 
 `call_watch.rs` (#111) notices a call from the apps using the microphone. `call_app` names a call
 app (Zoom, Teams, Webex, Slack, Discord and others) or a browser, where Meet, Jitsi and Teams also

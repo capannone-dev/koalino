@@ -8,7 +8,7 @@ use chrono::{DateTime, TimeZone, Utc};
 use super::combined_meetings::{
     AudioPlan, COMBINING_GRACE, CombiningState, CombiningStatus, CombiningView, HeldSpeech,
     KEEP_FOR_COMBINING, MeetingListing, PlanContext, combining_device, combining_status,
-    find_combinations, name_recording_devices, plan_retained_audio,
+    find_combinations, name_recording_devices, plan_retained_audio, recording_devices_label,
 };
 use crate::{
     domain::{
@@ -892,4 +892,22 @@ fn the_window_is_between_one_and_sixty_days() {
     assert_eq!(keep_for_days(1), Some(DAY));
     assert_eq!(keep_for_days(60), Some(60 * DAY));
     assert_eq!(keep_for_days(61), None);
+}
+
+#[test]
+fn a_summary_names_the_devices_that_recorded_the_meeting() {
+    let status = laptop_status();
+    let label = |devices: &[&str]| {
+        let devices: Vec<DeviceId> = devices.iter().map(|id| DeviceId::new(*id)).collect();
+        recording_devices_label(&name_recording_devices(&devices, Some(&status)), "Laptop")
+    };
+
+    assert_eq!(label(&["phone"]), "Phone");
+    assert_eq!(label(&["laptop", "phone"]), "Laptop + Phone");
+    assert_eq!(label(&["unknown"]), "another device");
+    assert_eq!(
+        label(&[]),
+        "Laptop",
+        "a meeting with no recording is this device's"
+    );
 }

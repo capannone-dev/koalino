@@ -3360,3 +3360,17 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   `GET /api/meetings/{id}/unknown-clusters`), so a card reads "Speaker 2", the same label as the
   transcript. A voice heard in several meetings shows each label once ("Speaker 1 / Speaker 3").
   Older cores without the field fall back to "Unknown speaker N" by list position.
+
+## 2026-11-14 — #119 `{{device}}` names the recording device; durations round to the minute
+
+- **Problem:** a summary written by a paired computer for a phone's meeting said it was
+  "recorded on" the computer, because the template's `{{device}}` was the summarizing device's
+  name. `{{duration}}` rounded up, so a 10:00 meeting read "11 min".
+- **Decision:** `{{device}}` lists the devices that recorded the meeting (its own recording and
+  any folded into it), named as the "recorded on" line of the meeting list names them: this
+  device's name, a paired device's pairing name, or "another device" for one not paired here.
+  Without P2P every meeting is taken to be this device's. `{{duration}}` rounds to the nearest
+  minute, half a minute up, with a floor of 1 minute.
+- **Why not store the name in the meeting:** the pairing names are already synced and shown in
+  the meeting list; reusing them keeps the summary and the list in agreement and needs no new
+  document field. A device renamed later (#121) is shown by its current name in both.

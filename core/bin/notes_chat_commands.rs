@@ -377,7 +377,7 @@ where
             }
             let meeting = read_meeting(repository, voices, meeting_id)?;
             // The summary's material holds the meeting's photos and slides, already checked.
-            let images = prepare_summary(repository, voices, meeting_id, &[], "")
+            let images = prepare_summary(repository, voices, meeting_id, &[], "", None)
                 .map(|prepared| prepared.material.images)
                 .unwrap_or_default();
             Ok(ChatMaterial {

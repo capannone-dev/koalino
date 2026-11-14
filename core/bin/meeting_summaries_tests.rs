@@ -86,6 +86,7 @@ fn preparing_gathers_the_transcript_notes_photos_and_values() {
         &meeting(),
         &["OKR".to_owned()],
         "Laptop",
+        None,
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -121,6 +122,7 @@ fn the_meetings_own_prompt_wins_and_a_summary_is_kept_in_its_document() {
         &meeting(),
         &[],
         "Laptop",
+        None,
     )
     .unwrap_or_else(|e| panic!("{e}"));
     let template = summary_template_for(&prepared, &PromptTemplate::default_summary());
@@ -133,6 +135,7 @@ fn the_meetings_own_prompt_wins_and_a_summary_is_kept_in_its_document() {
         &meeting(),
         &[],
         "Laptop",
+        None,
     )
     .unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(
@@ -183,6 +186,7 @@ fn a_hand_off_writes_the_meeting_and_its_files_into_a_fresh_folder() {
         &meeting(),
         &[],
         "Laptop",
+        None,
         &PromptTemplate::default_summary(),
         HandoffPurpose::Summary,
         &handoff_folder,
@@ -216,4 +220,86 @@ fn a_hand_off_writes_the_meeting_and_its_files_into_a_fresh_folder() {
         "an earlier hand-off's copies are removed"
     );
     drop(std::fs::remove_dir_all(folder));
+}
+
+/// A computer's P2P status, paired with the phone that recorded the test meeting (#119).
+fn computer_paired_with_the_recording_phone() -> crate::application::p2p_service::P2pStatus {
+    use crate::domain::{
+        models::{DeviceId, DeviceManifest},
+        peer_trust::{DeviceName, TrustedPeer},
+    };
+    let name = |name: &str| DeviceName::parse(name).unwrap_or_else(|error| panic!("{error}"));
+    let mut local_manifest = DeviceManifest::new(DeviceId::new("peer-computer"), 4, 0, Vec::new());
+    local_manifest.storage_device_id = Some(DeviceId::new("computer"));
+    crate::application::p2p_service::P2pStatus {
+        local_peer_id: DeviceId::new("peer-computer"),
+        device_name: name("Computer"),
+        transcription_route: crate::application::compute_router::ComputePreference::LocalOnly,
+        trusted_devices: vec![
+            TrustedPeer::new(DeviceId::new("peer-phone"), name("Galaxy"), 1)
+                .with_storage_device_id(Some(DeviceId::new("in-memory-test-device"))),
+        ],
+        nearby_devices: Vec::new(),
+        incoming_requests: Vec::new(),
+        outgoing_pairings: Vec::new(),
+        recent_updates: Vec::new(),
+        local_manifest,
+        peer_manifests: Vec::new(),
+    }
+}
+
+#[test]
+fn the_device_is_the_one_that_recorded_the_meeting_not_the_one_summarizing() {
+    let repository = repository();
+    let folder = record(&repository);
+    let status = computer_paired_with_the_recording_phone();
+
+    let prepared = prepare_summary(
+        &repository,
+        &InMemoryVoiceVectorDB::new(),
+        &meeting(),
+        &[],
+        "Computer",
+        Some(&status),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    assert_eq!(prepared.material.values.device, "Galaxy");
+    drop(std::fs::remove_dir_all(folder));
+}
+
+#[test]
+fn the_duration_is_rounded_to_the_nearest_minute_and_is_never_zero() {
+    let duration_for = |end_ms: u64| {
+        let repository = repository();
+        MeetingCrdtService::new(&repository)
+            .create_titled_meeting(
+                &meeting(),
+                &MeetingTitle::parse("Short").unwrap_or_else(|e| panic!("{e}")),
+            )
+            .unwrap_or_else(|e| panic!("{e}"));
+        repository
+            .save_transcript_segments(
+                &meeting(),
+                &[TranscriptSegment::new(meeting(), 0, end_ms, None, "Hi.")],
+            )
+            .unwrap_or_else(|e| panic!("{e}"));
+        prepare_summary(
+            &repository,
+            &InMemoryVoiceVectorDB::new(),
+            &meeting(),
+            &[],
+            "Laptop",
+            None,
+        )
+        .unwrap_or_else(|e| panic!("{e}"))
+        .material
+        .values
+        .duration
+    };
+
+    assert_eq!(duration_for(600_000), "10 min", "10:00 is ten minutes");
+    assert_eq!(duration_for(629_999), "10 min");
+    assert_eq!(duration_for(630_000), "11 min");
+    assert_eq!(duration_for(5_000), "1 min");
 }

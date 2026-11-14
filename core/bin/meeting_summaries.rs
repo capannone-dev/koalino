@@ -12,6 +12,7 @@ use chrono::{DateTime, Utc};
 
 use crate::{
     application::{
+        combined_meetings::{MeetingListing, name_recording_devices, recording_devices_label},
         export_manager::{ExportManager, ExportWriter},
         meeting_crdt::MeetingCrdtService,
         meeting_handoff::{HandoffPurpose, prepare_handoff},
@@ -22,6 +23,7 @@ use crate::{
             read_summary, read_summary_prompt, read_summary_request, with_summary,
             with_summary_prompt, with_summary_request, without_summary_request,
         },
+        p2p_service::P2pStatus,
     },
     domain::{
         llm::{
@@ -49,7 +51,9 @@ pub struct PreparedSummary {
 
 /// Reads everything a meeting's summary is written from.
 ///
-/// Inputs: The repositories, the meeting, the glossary terms and the recording device's name.
+/// Inputs: The repositories, the meeting, the glossary terms, this device's name and the P2P
+/// status (`None` without P2P). `{{device}}` names the devices that recorded the meeting, as
+/// paired devices are named here, or this device when there is no P2P (#119).
 /// Outputs: The material; `Storage` when the meeting cannot be read. Images are the meeting's
 /// JPEG, PNG, WebP and GIF attachments under the size limit, oldest first, at most
 /// `MAX_LLM_IMAGES`. Side effects: Reads the database and the image files.
@@ -59,6 +63,7 @@ pub fn prepare_summary<Repository, Voices>(
     meeting_id: &MeetingId,
     glossary: &[String],
     device_name: &str,
+    p2p: Option<&P2pStatus>,
 ) -> Result<PreparedSummary, SummaryError>
 where
     Repository: NoteRepository + AttachmentRepository + ProjectRepository + ?Sized,
@@ -127,8 +132,23 @@ where
         })
         .take(MAX_LLM_IMAGES)
         .collect();
+    let device = match p2p {
+        Some(status) => {
+            let recordings = repository
+                .meeting_recordings()
+                .map_err(|error| storage(&error))?;
+            recording_devices_label(
+                &name_recording_devices(
+                    &MeetingListing::of(&recordings).recorded_on(meeting_id),
+                    Some(status),
+                ),
+                device_name,
+            )
+        }
+        None => device_name.to_owned(),
+    };
     let started_at = document.started_at();
-    let minutes = document.duration_ms().div_ceil(60_000);
+    let minutes = rounded_minutes(document.duration_ms());
     Ok(PreparedSummary {
         material: SummaryMaterial {
             values: PromptValues {
@@ -136,7 +156,7 @@ where
                 date: started_at.format("%Y-%m-%d").to_string(),
                 time: started_at.format("%H:%M UTC").to_string(),
                 duration: format!("{minutes} min"),
-                device: device_name.to_owned(),
+                device,
                 project,
                 speakers,
                 glossary: glossary.to_vec(),
@@ -148,6 +168,12 @@ where
         },
         meeting_prompt,
     })
+}
+
+/// Rounds a meeting's length to whole minutes for `{{duration}}`: to the nearest minute, half a
+/// minute up, and at least 1 so a short meeting never reads "0 min" (#119).
+fn rounded_minutes(duration_ms: u64) -> u64 {
+    (duration_ms.saturating_add(30_000) / 60_000).max(1)
 }
 
 /// Most files a hand-off attaches besides the meeting itself (#114).
@@ -181,7 +207,8 @@ pub struct WrittenHandoff {
 
 /// Writes a meeting's hand-off to the owner's own AI app (#114) into `directory`.
 ///
-/// Inputs: The repositories, the meeting, the glossary and device name (for the prompt), the
+/// Inputs: The repositories, the meeting, the glossary, device name and P2P status (for the
+/// prompt's `{{device}}`, see `prepare_summary`), the
 /// owner's default template (the meeting's own wins), the purpose, and a folder the hand-off
 /// owns. Outputs: The message and the files, or why there is nothing to hand off.
 /// Side effects: Empties `directory` of an earlier hand-off's files, then writes the meeting as
@@ -194,6 +221,7 @@ pub fn write_handoff<Repository, Voices>(
     meeting_id: &MeetingId,
     glossary: &[String],
     device_name: &str,
+    p2p: Option<&P2pStatus>,
     default_template: &PromptTemplate,
     purpose: HandoffPurpose,
     directory: &Path,
@@ -203,7 +231,7 @@ where
     Voices: VoiceVectorDB + ?Sized,
 {
     let storage = |error: &dyn std::fmt::Display| SummaryError::Storage(error.to_string());
-    let prepared = prepare_summary(repository, voices, meeting_id, glossary, device_name)?;
+    let prepared = prepare_summary(repository, voices, meeting_id, glossary, device_name, p2p)?;
     let template = summary_template_for(&prepared, default_template);
     let handoff = prepare_handoff(&template, &prepared.material, purpose)?;
     empty_folder(directory).map_err(|error| storage(&error))?;

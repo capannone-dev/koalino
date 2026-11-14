@@ -335,12 +335,14 @@ fn summarize_in_background(
             let repositories = repositories.blocking_lock();
             let voices = state.voice_database();
             let voices = voices.blocking_lock();
+            let p2p_status = state.p2p_control().map(|p2p| p2p.snapshot().status);
             prepare_summary(
                 &**repositories,
                 &**voices,
                 meeting_id,
                 glossary,
                 device_name,
+                p2p_status.as_ref(),
             )
         },
         |summary| {
@@ -432,12 +434,14 @@ impl AutoSummaryHost for ServerAutoSummaryHost {
         let repositories = repositories.blocking_lock();
         let voices = self.state.voice_database();
         let voices = voices.blocking_lock();
+        let p2p_status = self.state.p2p_control().map(|p2p| p2p.snapshot().status);
         prepare_summary(
             &**repositories,
             &**voices,
             meeting_id,
             glossary,
             device_name,
+            p2p_status.as_ref(),
         )
     }
 

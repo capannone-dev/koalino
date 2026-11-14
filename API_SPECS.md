@@ -675,7 +675,10 @@ no API keys (#117): requests carry no authorization header, a sent `api_key` is 
   summarize each meeting recorded on their device in the last 7 days once its transcript is
   final and it has no summary (#101). Templates may use
   `{{title}}`, `{{date}}`, `{{time}}`, `{{duration}}`, `{{device}}`, `{{project}}`,
-  `{{speakers}}`, `{{glossary}}` and `{{language}}`.
+  `{{speakers}}`, `{{glossary}}` and `{{language}}`. `{{device}}` names the devices that
+  recorded the meeting (by the names paired devices gave, joined with " + "; "another device"
+  for one not paired here), not the one writing the summary; `{{duration}}` is rounded to the
+  nearest minute and is at least `1 min` (#119).
 - `PUT /api/settings/llm` with `{"paired_summary_connection": id or null}` (#107) chooses the
   connection that writes the summaries paired devices ask for, or stops answering them (the
   default). An unknown ID is `connection_not_found`, and removing the connection turns answering

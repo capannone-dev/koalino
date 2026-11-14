@@ -37,7 +37,10 @@ use crate::{
         llm::{MeetingSummary, SummaryRequest},
         models::{DeviceId, MeetingId},
     },
-    ffi::{ffi_string, runtime_recording_meeting, with_runtime_repositories},
+    ffi::{
+        ffi_string, runtime_recording_meeting, with_runtime_repositories,
+        with_runtime_summary_sources,
+    },
     ffi_settings::app_setting,
     llm_commands::{
         LlmServices, handoff_with, new_summary_request, run_llm_command, summarize_with,
@@ -145,8 +148,8 @@ pub unsafe extern "C" fn note_taker_summarize_meeting(
         &services(),
         connection_id,
         |glossary, device_name| {
-            with_runtime_repositories(|repository, voices| {
-                prepare_summary(repository, voices, &meeting_id, glossary, device_name)
+            with_runtime_summary_sources(|repository, voices, p2p| {
+                prepare_summary(repository, voices, &meeting_id, glossary, device_name, p2p)
             })
             .unwrap_or_else(|| Err(unavailable()))
         },
@@ -201,13 +204,14 @@ pub unsafe extern "C" fn note_taker_handoff_meeting(request_json: *const c_char)
     let meeting_id = MeetingId::new(meeting_id);
     let directory = PathBuf::from(directory);
     let answer = handoff_with(&services(), |glossary, device_name, template| {
-        with_runtime_repositories(|repository, voices| {
+        with_runtime_summary_sources(|repository, voices, p2p| {
             write_handoff(
                 repository,
                 voices,
                 &meeting_id,
                 glossary,
                 device_name,
+                p2p,
                 template,
                 purpose,
                 &directory,
@@ -400,8 +404,8 @@ impl AutoSummaryHost for FfiAutoSummaryHost {
         glossary: &[String],
         device_name: &str,
     ) -> Result<PreparedSummary, SummaryError> {
-        with_runtime_repositories(|repository, voices| {
-            prepare_summary(repository, voices, meeting_id, glossary, device_name)
+        with_runtime_summary_sources(|repository, voices, p2p| {
+            prepare_summary(repository, voices, meeting_id, glossary, device_name, p2p)
         })
         .unwrap_or_else(|| Err(runtime_gone()))
     }

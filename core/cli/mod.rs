@@ -1829,6 +1829,7 @@ where
                     &meeting_id,
                     glossary,
                     device_name,
+                    None,
                 )
             },
             |summary| crate::meeting_summaries::store_summary(repository, &meeting_id, summary),

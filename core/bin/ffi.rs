@@ -2726,6 +2726,31 @@ pub(crate) fn with_runtime_repositories<Output>(
     output
 }
 
+/// Lends the runtime's repository, voice database and P2P status to a summary, which names the
+/// devices that recorded the meeting (#119).
+///
+/// Inputs: The work, run while the runtime lock is held, so it must be short (no model calls).
+/// Outputs: Its result, or `None` when the runtime cannot be created or locked.
+pub(crate) fn with_runtime_summary_sources<Output>(
+    work: impl FnOnce(
+        &SqliteNoteRepository,
+        &SqliteVoiceVectorDB,
+        Option<&crate::application::p2p_service::P2pStatus>,
+    ) -> Output,
+) -> Option<Output> {
+    let mut output = None;
+    let _ = with_runtime_json(|runtime| {
+        let p2p_status = runtime.p2p_status();
+        output = Some(work(
+            &runtime.note_repository,
+            runtime.voice_identity_manager.vector_database(),
+            p2p_status.as_ref(),
+        ));
+        Ok(String::new())
+    });
+    output
+}
+
 /// Lends the runtime's repository, voice database and project files to the chat (#97).
 ///
 /// Inputs: The work, run while the runtime lock is held, so it must be short (no model calls).

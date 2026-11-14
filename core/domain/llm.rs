@@ -368,9 +368,9 @@ pub struct PromptValues {
     pub date: String,
     /// Its start time, `HH:MM`.
     pub time: String,
-    /// Its length in words, such as `45 min`.
+    /// Its length in words, rounded to the nearest minute (at least 1), such as `45 min`.
     pub duration: String,
-    /// The device that recorded it.
+    /// The devices that recorded it, such as `Phone` or `Laptop + Phone` (#119).
     pub device: String,
     /// Its project, or `None`.
     pub project: Option<String>,

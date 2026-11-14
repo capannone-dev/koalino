@@ -194,6 +194,22 @@ pub fn name_recording_devices(
         .collect()
 }
 
+/// What a summary's `{{device}}` says for a meeting's recording devices (#119).
+///
+/// Inputs: The devices as `name_recording_devices` names them, and the name to use when the
+/// meeting lists none (this device's own). Outputs: The names joined with " + ", in the same
+/// order; a device without a known name reads "another device". Side effects: None.
+pub fn recording_devices_label(devices: &[RecordingDevice], when_none: &str) -> String {
+    if devices.is_empty() {
+        return when_none.to_owned();
+    }
+    devices
+        .iter()
+        .map(|device| device.name.as_deref().unwrap_or("another device"))
+        .collect::<Vec<_>>()
+        .join(" + ")
+}
+
 /// Names one device that recorded a meeting (see `name_recording_devices`).
 fn name_recording_device(
     device: &DeviceId,
