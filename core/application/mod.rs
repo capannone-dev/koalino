@@ -121,6 +121,14 @@ pub mod p2p_view;
 pub mod pair_key_exchange;
 #[cfg(test)]
 mod pair_key_exchange_tests;
+/// Encodes the sealed `NTQ1`/`NTQ2` messages that ask a paired computer to answer a chat (#107).
+pub mod paired_chat_exchange;
+#[cfg(test)]
+mod paired_chat_exchange_tests;
+/// Sends a chat question to the paired computers in turn until one answers (#107).
+pub mod paired_chat_relay;
+#[cfg(test)]
+mod paired_chat_relay_tests;
 /// Orchestrates numeric-comparison pairing and the trusted-peer allowlist (Issue #43).
 pub mod pairing_manager;
 #[cfg(test)]
