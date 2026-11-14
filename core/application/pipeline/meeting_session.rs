@@ -938,6 +938,18 @@ where
                     );
                     None
                 });
+            // Scores and IDs only, for tuning the naming cutoff (#61); nothing that identifies a person.
+            if let Some((identity_id, score)) = matched {
+                tracing::debug!(
+                    meeting_id = %self.meeting_id.as_str(),
+                    speaker,
+                    identity_id = %identity_id,
+                    score,
+                    windows = voice.window_count,
+                    consistency = voice.consistency,
+                    "final speaker's closest saved voice"
+                );
+            }
             let Some((identity_id, score)) =
                 matched.filter(|(_, score)| *score >= SPEAKER_NAME_THRESHOLD)
             else {

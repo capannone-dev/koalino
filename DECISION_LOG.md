@@ -3415,3 +3415,28 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   show to match. The link is capped at 4096 characters.
 - **Not done:** desktops are not registered as handlers. A desktop has no camera app that reads
   QR codes, and the usual direction is the desktop showing the code to the phone.
+
+## 2026-11-14 — #61 Naming cutoff checked on enrolled readers and a real meeting
+
+- **Setup:** the three solo readings (`tools/diarization/test_scripts`) were recorded and named
+  in the app's way (assign a cluster), then the twelve two- and three-reader recordings and the
+  10-minute Ponte extract were recorded against copies of that database (Whisper small,
+  diarization on). A debug line logs each final speaker's closest saved voice, its score, its
+  windows and its consistency; scores and IDs only.
+- **Enrollment:** Ettore (72 s, consistency 0.67) and Renzo (91 s, 0.71) were saved. Marta
+  (60 s, 0.56) was not: under the 0.60 consistency needed to save a voice. She counts as
+  someone with no saved voice below.
+- **Naming at 0.60 (`SPEAKER_NAME_THRESHOLD`), kept:**
+  - 20 final speakers whose voice was saved scored 0.675–0.949 against it (Ettore 0.675–0.786,
+    Renzo 0.818–0.949); all 20 were named, each with their own name.
+  - 12 final speakers with no saved voice (Marta in 10 readings, the two Ponte voices)
+    scored 0.106–0.255 against their closest saved voice; none was named.
+  - The gap runs from 0.26 to 0.67, and 0.60 sits in it. Same microphone and room for all three
+    readers, so real meetings may score lower; 0.60 stays until such data says otherwise.
+- **Consistency to save a voice (0.60), kept:** people alone measured 0.48–0.71 (readings
+  0.56–0.71, the Ponte voices 0.61 and 0.48), and the mixed groups measured earlier 0.47–0.53.
+  An even three-way synthetic mix measures 0.58, so lowering the bar to 0.55 would save such a
+  mix under a person's name. The cost of keeping it: a quiet or far voice is not learned from
+  that meeting (Marta here, one of the two Ponte voices).
+- **Not measured:** the live per-turn cutoffs (0.80 automatic, 0.50 suggestion) in
+  `voice_identity_manager.rs`.
