@@ -14,6 +14,7 @@ use std::{
 };
 
 use crate::{
+    adapters::ai::npu_whisper::install::NpuInstall,
     application::{
         combined_meetings::{
             KEEP_FOR_COMBINING, MAX_KEEP_SPEECH_DAYS, MIN_KEEP_SPEECH_DAYS, keep_for_days,
@@ -62,6 +63,10 @@ pub struct SavedTranscriptionSettings {
     /// (on where the platform can).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub computer_sound: Option<bool>,
+    /// Whether Whisper runs on the phone's NPU once its files are downloaded (#75); off until the
+    /// owner turns it on.
+    #[serde(default)]
+    pub npu_whisper: bool,
 }
 
 /// Where the settings, downloaded models and sealed key live.
@@ -79,6 +84,8 @@ pub struct TranscriptionPaths {
     pub gpu_attempt_marker: PathBuf,
     /// The results of timing the clip on this device (#109), written by the after-meeting worker.
     pub speed_check_file: PathBuf,
+    /// `<data directory>/npu`, where the NPU model and QNN libraries are downloaded (#75).
+    pub npu_directory: PathBuf,
 }
 
 impl TranscriptionPaths {
@@ -105,6 +112,7 @@ impl TranscriptionPaths {
             shipped_model: setting(WHISPER_MODEL_VARIABLE).map(PathBuf::from),
             gpu_attempt_marker: PathBuf::from(gpu_attempt_marker),
             speed_check_file: crate::speed_check::record_file_for(&database_path),
+            npu_directory: data_directory.join("npu"),
         }
     }
 
@@ -294,6 +302,16 @@ pub fn save_transcript_pass(settings_file: &Path, enabled: bool) -> io::Result<(
     save_settings(settings_file, &saved)
 }
 
+/// Saves whether Whisper runs on the NPU, keeping every other saved choice (#75).
+///
+/// Inputs: The settings file and the choice. Outputs: `Ok(())` or the write error.
+/// Side effects: Rewrites the file atomically; it applies when the engine is next composed.
+pub fn save_npu_whisper(settings_file: &Path, enabled: bool) -> io::Result<()> {
+    let mut saved = load_settings(settings_file);
+    saved.npu_whisper = enabled;
+    save_settings(settings_file, &saved)
+}
+
 /// Whether online-meeting participants' voices may be kept in the gallery (#103).
 ///
 /// Inputs: The settings file. Outputs: The saved choice; `false` when unset or unreadable.
@@ -381,4 +399,28 @@ pub fn apply_saved_settings(
                 .as_deref()
                 .and_then(|file_name| paths.locate_model(file_name)),
         )
+        .with_npu_whisper(npu_choice(saved, paths))
+}
+
+/// Returns the NPU folder and the vocabulary model when the NPU engine should be tried (#75).
+///
+/// Inputs: The saved choices and the paths. Outputs: `Some` when the owner turned the NPU on,
+/// every downloaded file is present, and the shipped multilingual model exists to supply the mel
+/// filters and vocabulary. Side effects: Checks files.
+fn npu_choice(
+    saved: &SavedTranscriptionSettings,
+    paths: &TranscriptionPaths,
+) -> Option<(PathBuf, PathBuf)> {
+    if !saved.npu_whisper {
+        return None;
+    }
+    if !NpuInstall::new(&paths.npu_directory).is_installed() {
+        tracing::warn!("the NPU is turned on but its files are not all downloaded");
+        return None;
+    }
+    let vocabulary_model = paths
+        .shipped_model
+        .clone()
+        .filter(|model| model.is_file())?;
+    Some((paths.npu_directory.clone(), vocabulary_model))
 }

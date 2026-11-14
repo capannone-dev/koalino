@@ -20,6 +20,7 @@ use crate::{
     adapters::ai::{
         compute_resources::core_max_speeds,
         gpu_attempt_guard::{clear_gpu_block, gpu_is_blocked},
+        npu_whisper::install::{NpuInstall, supported_soc, this_soc},
         whisper_model_download::{
             HuggingFaceModelSource, ModelDownloadError, download_whisper_model,
         },
@@ -314,6 +315,28 @@ pub(crate) fn effective_settings(
     with_automatic_model(&saved, automatic_on_this_device(paths).1)
 }
 
+/// Describes the NPU engine for Settings (#75).
+///
+/// Inputs: The paths, the saved choices, whether this build has the `npu-whisper` feature, and
+/// this phone's system-on-chip. Outputs: `available` (the build can), `supported` (and so can
+/// this chip), `directory` (where the host downloads the files), `installed` (they are all
+/// there) and `enabled` (the owner's choice). Side effects: Checks files.
+pub(crate) fn npu_json(
+    paths: &TranscriptionPaths,
+    saved: &SavedTranscriptionSettings,
+    available: bool,
+    soc_model: Option<&str>,
+) -> serde_json::Value {
+    let install = NpuInstall::new(&paths.npu_directory);
+    json!({
+        "available": available,
+        "supported": available && soc_model.is_some_and(supported_soc),
+        "directory": paths.npu_directory.display().to_string(),
+        "installed": install.is_installed(),
+        "enabled": saved.npu_whisper,
+    })
+}
+
 /// Builds the whole Settings view. Side effects: Reads files.
 fn settings_json() -> String {
     let paths = paths();
@@ -374,6 +397,12 @@ fn settings_json() -> String {
             "available": computer_sound_available(),
             "enabled": computer_sound_enabled(&saved),
         },
+        "npu": npu_json(
+            &paths,
+            &saved,
+            cfg!(feature = "npu-whisper"),
+            this_soc().as_deref(),
+        ),
         "efficient": {
             "gpu_name": efficient_gpu_name,
             "enabled": saved.efficient_gpu,
@@ -604,6 +633,26 @@ pub extern "C" fn note_taker_set_efficient_gpu(enabled: c_int) -> c_int {
         return STATUS_INVALID;
     }
     update_settings(|saved| saved.efficient_gpu = enabled)
+}
+
+/// Turns Whisper on the NPU on or off for the next recording (#75).
+///
+/// Inputs: Non-zero to turn it on, which needs a supported phone and every downloaded file;
+/// turning it off always works. Outputs: 0, or 1 when the NPU can't be used here yet.
+/// Side effects: Stores the choice and marks the pipeline stale.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_set_npu_whisper(enabled: c_int) -> c_int {
+    let enabled = enabled != 0;
+    if enabled {
+        let paths = paths();
+        let usable = cfg!(feature = "npu-whisper")
+            && this_soc().as_deref().is_some_and(supported_soc)
+            && NpuInstall::new(&paths.npu_directory).is_installed();
+        if !usable {
+            return STATUS_INVALID;
+        }
+    }
+    update_settings(|saved| saved.npu_whisper = enabled)
 }
 
 /// Lets the GPU be tried again after a crash stopped it, for example after a system update.

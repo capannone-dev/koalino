@@ -86,6 +86,7 @@ fn settings_round_trip() {
         keep_speech_days: Some(14),
         keep_meeting_voices: true,
         computer_sound: Some(false),
+        npu_whisper: true,
     };
     assert_eq!(load_settings(&paths.settings_file), Default::default());
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
@@ -291,4 +292,67 @@ fn an_old_openai_choice_is_ignored_and_dropped() {
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
     let text = std::fs::read_to_string(&paths.settings_file).unwrap_or_else(|e| panic!("{e}"));
     assert!(!text.contains("openai"));
+}
+
+/// Verifies the NPU engine is chosen only when the owner turned it on and its files are complete,
+/// and that the shipped multilingual model supplies its vocabulary (#75).
+#[test]
+fn the_npu_applies_only_when_turned_on_and_installed() {
+    use crate::adapters::ai::npu_whisper::install::{MODEL_FILES, NpuInstall, QNN_FILES};
+    let paths = paths("npu");
+    assert_eq!(
+        paths.npu_directory,
+        paths.models_directory.with_file_name("npu"),
+        "beside the models folder"
+    );
+    let off = SavedTranscriptionSettings::default();
+    assert!(!off.npu_whisper, "off until the owner turns it on");
+    let on = SavedTranscriptionSettings {
+        npu_whisper: true,
+        ..Default::default()
+    };
+    assert_eq!(
+        apply_saved_settings(config(&paths), &on, &paths).npu_directory(),
+        None,
+        "nothing downloaded yet"
+    );
+    let install = NpuInstall::new(&paths.npu_directory);
+    for (folder, files) in [
+        (install.model_dir(), MODEL_FILES.as_slice()),
+        (install.qnn_dir(), QNN_FILES.as_slice()),
+    ] {
+        std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
+        for file in files {
+            std::fs::write(folder.join(file), b"x").unwrap_or_else(|e| panic!("{e}"));
+        }
+    }
+    let applied = apply_saved_settings(config(&paths), &on, &paths);
+    assert_eq!(applied.npu_directory(), Some(paths.npu_directory.as_path()));
+    assert_eq!(
+        applied.npu_vocabulary_model(),
+        paths.shipped_model.as_deref()
+    );
+    assert_eq!(
+        apply_saved_settings(config(&paths), &off, &paths).npu_directory(),
+        None,
+        "turned off"
+    );
+}
+
+/// Verifies turning the NPU on and off is stored and keeps the other choices.
+#[test]
+fn the_npu_choice_round_trips() {
+    use super::transcription_settings::save_npu_whisper;
+    let paths = paths("npu-save");
+    let saved = SavedTranscriptionSettings {
+        efficient_gpu: true,
+        ..Default::default()
+    };
+    save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));
+    save_npu_whisper(&paths.settings_file, true).unwrap_or_else(|e| panic!("{e}"));
+    let loaded = load_settings(&paths.settings_file);
+    assert!(loaded.npu_whisper);
+    assert!(loaded.efficient_gpu, "other choices stay");
+    save_npu_whisper(&paths.settings_file, false).unwrap_or_else(|e| panic!("{e}"));
+    assert!(!load_settings(&paths.settings_file).npu_whisper);
 }

@@ -440,6 +440,13 @@ and meeting summaries" below). Keys are write-only.
   `1` when turning it on without a supported GPU. `int32_t note_taker_retry_gpu(void)` lets the GPU be tried again after a crash
   stopped it, and returns `0` or `2`. `note_taker_transcription_settings` adds `suggestion` (`file_name`, `efficient`, `reason`)
   and `efficient` (`gpu_name`, `enabled`, `gpu_blocked`, `gpu_in_use`).
+- `int32_t note_taker_set_npu_whisper(int32_t enabled)` turns Whisper on the NPU (#75) on or off from the next
+  recording. It returns `0`, `1` when turning it on where it cannot run (a build without `npu-whisper`, a chip other than the
+  SM8550, or files not all downloaded), or `2` when the choice can't be stored. `note_taker_transcription_settings` adds
+  `npu` (`available`: the build has the engine; `supported`: and this phone's chip runs it; `directory`: where the Android
+  host downloads the files; `installed`: every file is there; `enabled`: the owner's choice). The download itself is the
+  Android host's `note_taker/npu` channel (`download(directory)`, `progress()`, `cancel()`, `remove(directory)`), see
+  `ui/android/README.md`. When the NPU cannot open, the core transcribes with whisper.cpp.
 - `int32_t note_taker_use_automatic_model(void)` chooses "Automatic" (#106) and returns `0` or `2`; choosing a model with
   `note_taker_set_whisper_model` leaves it. `selected_model` is then `null` (it no longer falls back to the shipped model), and
   `automatic` reports `enabled`, `file_name` (the model the next recording loads: the suggestion when it is on the device,

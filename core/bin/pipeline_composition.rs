@@ -72,6 +72,15 @@ mod tests;
 /// Estimated draw of on-device whisper.cpp, which runs on the CPU: the same 5 W the compute
 /// router assumes for CPU work.
 pub const LOCAL_TRANSCRIPTION_POWER_MILLIWATTS: f32 = 5_000.0;
+
+/// How the NPU engine's model appears in telemetry (#75).
+#[cfg(feature = "npu-whisper")]
+pub const NPU_MODEL_LABEL: &str = "whisper-small-npu";
+
+/// The assumed power of NPU transcription, in milliwatts (#75). It is an unmeasured estimate:
+/// the NPU finishes a 30 s window in about 1.5 s, against whisper.cpp's several seconds on the CPU.
+#[cfg(feature = "npu-whisper")]
+pub const NPU_TRANSCRIPTION_POWER_MILLIWATTS: f32 = 1_500.0;
 /// Path of the local whisper.cpp model.
 pub const WHISPER_MODEL_VARIABLE: &str = "NOTE_TAKER_WHISPER_MODEL";
 /// Local Whisper transcription language: `auto` or a Whisper language code such as `it` or `en`.
@@ -121,6 +130,9 @@ pub struct PipelineConfig {
     transcript_pass: bool,
     /// The model for that pass; `None` uses `whisper_model_path`.
     transcript_pass_model_path: Option<PathBuf>,
+    /// The downloaded NPU folder and the multilingual model supplying its vocabulary, when the
+    /// NPU engine should be tried first (#75).
+    npu_whisper: Option<(PathBuf, PathBuf)>,
 }
 
 impl std::fmt::Debug for PipelineConfig {
@@ -145,6 +157,7 @@ impl std::fmt::Debug for PipelineConfig {
                 "transcript_pass_model_path",
                 &self.transcript_pass_model_path,
             )
+            .field("npu_whisper", &self.npu_whisper)
             .finish()
     }
 }
@@ -190,6 +203,7 @@ impl PipelineConfig {
                 true,
             )?,
             transcript_pass_model_path: read(TRANSCRIPT_PASS_MODEL_VARIABLE).map(PathBuf::from),
+            npu_whisper: None,
         })
     }
 
@@ -237,6 +251,28 @@ impl PipelineConfig {
         self.efficient_gpu = efficient_gpu;
         self.gpu_attempt_marker = Some(gpu_attempt_marker);
         self
+    }
+
+    /// Chooses the NPU engine (#75).
+    ///
+    /// Inputs: The NPU folder and the vocabulary model, or `None` for whisper.cpp only.
+    /// Outputs: The configuration. Side effects: None.
+    #[must_use]
+    pub fn with_npu_whisper(mut self, npu_whisper: Option<(PathBuf, PathBuf)>) -> Self {
+        self.npu_whisper = npu_whisper;
+        self
+    }
+
+    /// Returns the NPU folder when the NPU engine should be tried. Side effects: None.
+    pub fn npu_directory(&self) -> Option<&Path> {
+        self.npu_whisper
+            .as_ref()
+            .map(|(folder, _)| folder.as_path())
+    }
+
+    /// Returns the model supplying the NPU engine's vocabulary. Side effects: None.
+    pub fn npu_vocabulary_model(&self) -> Option<&Path> {
+        self.npu_whisper.as_ref().map(|(_, model)| model.as_path())
     }
 
     /// Applies the owner's choices for the after-meeting transcript pass (#87).
@@ -334,6 +370,9 @@ pub enum SelectedTranscriptionEngine {
     /// Local whisper.cpp inference.
     #[cfg(feature = "local-ai")]
     Local(crate::adapters::ai::local_whisper_cpp::LocalWhisperCppTranscriptionEngine),
+    /// Whisper Small on a Snapdragon NPU (#75).
+    #[cfg(feature = "npu-whisper")]
+    Npu(Box<crate::adapters::ai::npu_whisper::qnn_engine::QnnWhisperEngine>),
     /// A build without local transcription has no engine to select.
     #[cfg(not(feature = "local-ai"))]
     Unavailable(std::convert::Infallible),
@@ -349,6 +388,8 @@ impl TranscriptionEngine for SelectedTranscriptionEngine {
         match self {
             #[cfg(feature = "local-ai")]
             Self::Local(engine) => engine.transcribe(audio_recording, transcription_context),
+            #[cfg(feature = "npu-whisper")]
+            Self::Npu(engine) => engine.transcribe(audio_recording, transcription_context),
             #[cfg(not(feature = "local-ai"))]
             Self::Unavailable(never) => {
                 let _ = (audio_recording, transcription_context);
@@ -366,6 +407,8 @@ impl TranscriptionEngine for SelectedTranscriptionEngine {
         match self {
             #[cfg(feature = "local-ai")]
             Self::Local(engine) => engine.transcribe_external_media(media_chunk, audio_recording),
+            #[cfg(feature = "npu-whisper")]
+            Self::Npu(engine) => engine.transcribe_external_media(media_chunk, audio_recording),
             #[cfg(not(feature = "local-ai"))]
             Self::Unavailable(never) => {
                 let _ = (media_chunk, audio_recording);
@@ -390,7 +433,49 @@ pub fn select_transcription_engine(
              builds) to a Whisper model for on-device transcription"
         );
     }
+    #[cfg(feature = "npu-whisper")]
+    if let Some(engine) = npu_engine(config, chunk_audio_store) {
+        return Ok(engine);
+    }
     local_engine(config, chunk_audio_store)
+}
+
+/// Opens the NPU engine when the owner chose it (#75).
+///
+/// Inputs: The configuration and the audio store. Outputs: The engine; `None` when the NPU was
+/// not chosen or cannot open (another phone, a damaged download), so whisper.cpp is used.
+/// Side effects: Loads ONNX Runtime, the QNN libraries and the model onto the NPU; logs why it
+/// could not.
+#[cfg(feature = "npu-whisper")]
+fn npu_engine(
+    config: &PipelineConfig,
+    chunk_audio_store: &Arc<ChunkAudioStore>,
+) -> Option<SelectedTranscriptionEngine> {
+    use crate::adapters::ai::npu_whisper::{
+        install::NpuInstall,
+        qnn_engine::{NpuWhisperFiles, QnnWhisperEngine},
+    };
+    let (directory, vocabulary_model) = config.npu_whisper.as_ref()?;
+    let install = NpuInstall::new(directory);
+    let files = NpuWhisperFiles {
+        model_dir: install.model_dir(),
+        qnn_dir: install.qnn_dir(),
+        vocabulary_model: vocabulary_model.clone(),
+    };
+    match QnnWhisperEngine::open(
+        &files,
+        Some(config.whisper_language.as_str().to_owned()),
+        Arc::clone(chunk_audio_store) as _,
+    ) {
+        Ok(engine) => {
+            tracing::info!("NPU transcription model loaded");
+            Some(SelectedTranscriptionEngine::Npu(Box::new(engine)))
+        }
+        Err(error) => {
+            tracing::warn!(%error, "the NPU could not be used; transcribing with whisper.cpp");
+            None
+        }
+    }
 }
 
 /// Describes how the selected engine's transcriptions appear in telemetry (Issue #53).
@@ -416,6 +501,12 @@ pub fn transcription_task_profile(
                 .as_deref()
                 .map_or_else(|| "whisper.cpp".to_owned(), local_model_label),
             LOCAL_TRANSCRIPTION_POWER_MILLIWATTS,
+        ),
+        #[cfg(feature = "npu-whisper")]
+        SelectedTranscriptionEngine::Npu(_) => TaskProfile::new(
+            TaskType::Transcription,
+            NPU_MODEL_LABEL.to_owned(),
+            NPU_TRANSCRIPTION_POWER_MILLIWATTS,
         ),
     }
 }

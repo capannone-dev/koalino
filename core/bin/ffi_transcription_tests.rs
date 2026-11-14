@@ -118,3 +118,29 @@ fn the_pass_model_is_a_model_on_this_device_or_the_live_one() {
         None
     );
 }
+
+/// Verifies what Settings learns about the NPU (#75): whether this build and phone can use it,
+/// where its files go, whether they are all there, and the owner's choice.
+#[test]
+fn the_npu_section_reports_support_files_and_choice() {
+    use super::npu_json;
+    let paths = paths("npu");
+    let saved = SavedTranscriptionSettings {
+        npu_whisper: true,
+        ..SavedTranscriptionSettings::default()
+    };
+    let on_a_supported_phone = npu_json(&paths, &saved, true, Some("SM8550"));
+    assert_eq!(on_a_supported_phone["available"], true);
+    assert_eq!(on_a_supported_phone["supported"], true);
+    assert_eq!(on_a_supported_phone["installed"], false);
+    assert_eq!(on_a_supported_phone["enabled"], true);
+    assert_eq!(
+        on_a_supported_phone["directory"],
+        paths.npu_directory.display().to_string()
+    );
+    let elsewhere = npu_json(&paths, &saved, true, Some("SM8650"));
+    assert_eq!(elsewhere["supported"], false, "another chip");
+    let without_the_feature = npu_json(&paths, &saved, false, Some("SM8550"));
+    assert_eq!(without_the_feature["supported"], false);
+    assert_eq!(npu_json(&paths, &saved, true, None)["supported"], false);
+}
