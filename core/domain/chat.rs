@@ -193,7 +193,8 @@ fn parse_bracket(inside: &str) -> Option<Vec<(u16, Option<u64>)>> {
 /// Finds the citations in an answer: `[1]`, `[1, 2]`, `[1, 00:12:34]` or `[2, 12:34]`.
 ///
 /// Inputs: The answer and the numbered material, `[1]` first. Outputs: The places cited, in
-/// order of first mention, each `(number, time)` once. Numbers outside the material, Markdown
+/// order of first mention, each `(number, time)` once; a number also cited at a moment is not
+/// listed again without one (#120). Numbers outside the material, Markdown
 /// links (`[text](url)`) and other bracketed text are ignored. Side effects: None.
 pub fn parse_citations(answer: &str, material: &[CitedMaterial]) -> Vec<ChatSource> {
     let mut sources: Vec<ChatSource> = Vec::new();
@@ -234,5 +235,11 @@ pub fn parse_citations(answer: &str, material: &[CitedMaterial]) -> Vec<ChatSour
             });
         }
     }
+    let timed: Vec<u16> = sources
+        .iter()
+        .filter(|source| source.at_ms.is_some())
+        .map(|source| source.number)
+        .collect();
+    sources.retain(|source| source.at_ms.is_some() || !timed.contains(&source.number));
     sources
 }

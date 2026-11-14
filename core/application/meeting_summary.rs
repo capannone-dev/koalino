@@ -84,19 +84,27 @@ pub enum SummaryError {
     Storage(String),
 }
 
-/// Writes the transcript as `[hh:mm:ss] Speaker: text` lines, one per change of speaker.
+/// Longest stretch of one speaker's lines joined under one time: a longer turn starts a new line,
+/// so a chat answer can cite the moment something was said, not the turn's start (#120).
+const MAX_TURN_MS: u64 = 30_000;
+
+/// Writes the transcript as `[hh:mm:ss] Speaker: text` lines, one per change of speaker and at
+/// least every `MAX_TURN_MS` within a long turn.
 ///
 /// Inputs: Lines in time order. Outputs: The text. Side effects: None.
 pub fn render_transcript(lines: &[SpokenLine]) -> String {
     merged_lines(lines).join("\n")
 }
 
-/// Joins a speaker's consecutive lines and formats each turn.
+/// Joins a speaker's consecutive lines (up to `MAX_TURN_MS` apart) and formats each turn.
 fn merged_lines(lines: &[SpokenLine]) -> Vec<String> {
     let mut turns: Vec<(String, u64, String)> = Vec::new();
     for line in lines.iter().filter(|line| !line.text.trim().is_empty()) {
         match turns.last_mut() {
-            Some((speaker, _, text)) if *speaker == line.speaker => {
+            Some((speaker, turn_start_ms, text))
+                if *speaker == line.speaker
+                    && line.start_ms.saturating_sub(*turn_start_ms) < MAX_TURN_MS =>
+            {
                 text.push(' ');
                 text.push_str(line.text.trim());
             }

@@ -124,6 +124,20 @@ fn the_transcript_joins_a_speakers_consecutive_lines_and_shows_times() {
 }
 
 #[test]
+fn a_long_turn_gets_a_new_time_every_half_minute_so_answers_can_cite_moments() {
+    let text = render_transcript(&[
+        line("Speaker 1", 0, "One."),
+        line("Speaker 1", 10_000, "Two."),
+        line("Speaker 1", 40_000, "Three."),
+        line("Speaker 1", 75_000, "Four."),
+    ]);
+    assert_eq!(
+        text,
+        "[00:00:00] Speaker 1: One. Two.\n[00:00:40] Speaker 1: Three.\n[00:01:15] Speaker 1: Four."
+    );
+}
+
+#[test]
 fn a_short_meeting_is_summarized_in_one_request_with_the_rendered_template_and_images() {
     let engine = ScriptedEngine::new(vec![answer("## Overview\nAll good.")]);
     let template = PromptTemplate::parse("Summarize {{title}} for {{project}} in {{language}}.")

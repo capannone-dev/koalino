@@ -758,7 +758,10 @@ reason, for example `invalid_request_error: Your credit balance is too low…` (
   `{"number","label","at_ms","meeting_id"}` for a meeting (with `at_ms` when it cites a moment
   in the transcript) or `{"number","label","at_ms","project_id","resource_id"}` for a file. The
   model is given the material numbered (`## [1] Meeting "…"`) and asked to cite `[n]` or
-  `[n, hh:mm:ss]`; numbers outside the material and Markdown links are ignored.
+  `[n, hh:mm:ss]`; numbers outside the material and Markdown links are ignored. Each place is
+  listed once, and a meeting cited at moments is not listed again without one (#120). Transcripts
+  are given as `[hh:mm:ss] Speaker: text` lines, a new line at each change of speaker and at least
+  every 30 s within a long turn, so the model has a time near every statement.
 - `POST /api/chat` `{"scope","id"?,"question","connection_id"?}` asks the connection (the
   default one without `connection_id`) and answers `{"ok":true,"question","answer",
   "truncated","images_sent"}`; both messages are kept.

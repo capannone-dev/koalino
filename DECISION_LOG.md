@@ -3374,3 +3374,17 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Why not store the name in the meeting:** the pairing names are already synced and shown in
   the meeting list; reusing them keeps the summary and the list in agreement and needs no new
   document field. A device renamed later (#121) is shown by its current name in both.
+
+## 2026-11-14 — #120 Chat citations point at moments
+
+- **Problem:** on a real 10-minute meeting every citation read `[1, 00:00:00]`, and `sources`
+  listed the meeting twice. The transcript given to the model joins a speaker's consecutive
+  lines under the first line's time; with every unnamed voice labelled "Unknown speaker" (before
+  #118), the whole meeting was one turn stamped 00:00:00, the only time the model could cite. A
+  bare `[1]` beside `[1, hh:mm:ss]` also became its own source.
+- **Decision:** a speaker's lines are joined only while they start within 30 s of the turn's
+  first line, so the material has a time at least every half minute (the cost is one short
+  prefix per line). `parse_citations` drops a number's bare entry when the answer also cites it
+  at a moment, so each meeting appears once per cited moment.
+- **Same rendering for summaries and hand-offs:** they share `render_transcript`; the extra
+  times cost little and let a summary refer to moments too.
