@@ -3309,3 +3309,36 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Open:** a call that is reloaded becomes two Koalino meetings with the same title: one
   before the reload and one after. Joining them would mean reusing the meeting ID within a short
   gap, after the daemon has already ended the first one. Left for the owner to decide.
+
+## 2026-11-14 — #107 A phone's chat is answered by a paired computer
+
+- **Context:** the phone has no language model of its own: Claude Code and Codex run on the
+  computer, and API keys were removed (#117). Summaries already reach the phone through the
+  meeting document (earlier today). A chat needs a quick back-and-forth, though, and its history
+  is kept per device and not synced, so the document is the wrong carrier.
+- **Decision:** a direct, sealed request and answer over the existing P2P link, like remote
+  transcription (#59):
+  - **Messages:** `NTQ1` carries the question, its scope and the phone's recent turns (at most
+    40). `NTQ2` carries `Accepted`, then `Answered` or `Declined` with an error code. Each is JSON
+    sealed with the pair key and bound to both devices, and bounded on decode. `NTC1` was already
+    the cluster shares' header; a test now keeps every header distinct.
+  - **Who answers:** the phone asks the connected paired computers one at a time. A computer
+    answers only if its owner chose a connection under "Summaries for my other devices" (the
+    same choice as for summaries); otherwise it declines at once (`not_offered`). A computer
+    silent for 20 s (an older version) is skipped. An accepted question may take 6 minutes.
+  - **Material:** the computer reads its own synced copy of the notes, so only the question and
+    turns travel. The answer is labelled "<connection> on <computer>", and the phone keeps both
+    messages in its own chat; the computer keeps nothing.
+  - **Limits:** one question at a time, a queue of four (`busy`), and 30 answers an hour
+    (`rate_limited`), so a paired device cannot run up the owner's plan.
+  - **Where:** the app (C ABI `note_taker_chat` with `on_paired_computer`) and the daemon
+    (`POST /api/chat`). On Android the chat asks the computer by default; a "Who answers" menu
+    switches to the phone's own connection.
+- **Verified:** two daemons on the test VMs ("Phone-sim" and "Laptop-sim", paired, a mock model
+  on the laptop's loopback):
+  - with the laptop's choice off, the phone got `no_paired_computer` at once;
+  - with it on, the answer came back in 0.4 s labelled "Mock on Laptop-sim", from the laptop's
+    copy of the meeting;
+  - a follow-up carried the earlier turns (4 messages at the model);
+  - with the model stopped, the phone got `llm_unreachable` and kept nothing;
+  - the laptop kept no chat, and neither device's logs held question text.
