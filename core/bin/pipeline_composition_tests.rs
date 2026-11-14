@@ -1,7 +1,7 @@
 //! Specifies environment-driven pipeline composition without loading models or calling networks.
 //! Configuration is read through an injected lookup, so the process environment is never used.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 use uuid::Uuid;
 
@@ -312,4 +312,47 @@ fn advertised_models_follow_the_configured_engines() {
 fn the_after_meeting_pass_is_on_by_default_everywhere() {
     assert!(valid_config(&[]).transcript_pass());
     assert!(!valid_config(&[("NOTE_TAKER_TRANSCRIPT_PASS", "false")]).transcript_pass());
+}
+
+/// Verifies the after-meeting pass runs on the NPU when the live engine does and no separate pass
+/// model was chosen, with the live whisper.cpp model as its fallback (#75).
+#[test]
+fn the_after_meeting_pass_follows_the_npu_unless_it_has_its_own_model() {
+    use super::{PassEngineChoice, pass_engine_choice};
+    let live = PathBuf::from("/models/ggml-base.bin");
+    let npu = (
+        PathBuf::from("/data/npu"),
+        PathBuf::from("/models/ggml-base.bin"),
+    );
+    let base = valid_config(&[("NOTE_TAKER_WHISPER_MODEL", "/models/ggml-base.bin")]);
+
+    assert_eq!(
+        pass_engine_choice(&base),
+        Some(PassEngineChoice::WhisperCpp(live.clone())),
+        "without the NPU, the live model"
+    );
+    assert_eq!(
+        pass_engine_choice(&base.clone().with_npu_whisper(Some(npu.clone()))),
+        Some(PassEngineChoice::Npu {
+            directory: npu.0.clone(),
+            vocabulary_model: npu.1.clone(),
+            fallback_model: live,
+        })
+    );
+    let own = PathBuf::from("/models/ggml-large-v3-turbo.bin");
+    assert_eq!(
+        pass_engine_choice(
+            &base
+                .clone()
+                .with_npu_whisper(Some(npu))
+                .with_transcript_pass(None, Some(own.clone()))
+        ),
+        Some(PassEngineChoice::WhisperCpp(own)),
+        "a model chosen for the pass wins"
+    );
+    assert_eq!(
+        pass_engine_choice(&valid_config(&[])),
+        None,
+        "no model at all"
+    );
 }

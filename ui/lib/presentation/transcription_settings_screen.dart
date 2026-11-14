@@ -245,8 +245,8 @@ final class _TranscriptionSettingsScreenState
         secondary: icon,
         title: const Text('Transcribe on the NPU'),
         subtitle: const Text('Runs Whisper Small on the phone\'s AI chip, '
-            'in place of the model chosen above. Word timing and the glossary '
-            'are not used there yet.'),
+            'in place of the model chosen above, and for the after-meeting '
+            'pass unless it has its own model. Word times are approximate.'),
         value: npu.enabled,
         onChanged: controller.isBusy
             ? null

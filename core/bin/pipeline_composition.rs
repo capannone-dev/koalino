@@ -857,6 +857,39 @@ fn speaker_names_setup(
     })
 }
 
+/// Which engine the after-meeting pass transcribes with.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PassEngineChoice {
+    /// whisper.cpp with this model.
+    WhisperCpp(PathBuf),
+    /// The NPU (#75), with whisper.cpp and the live model if the NPU will not open.
+    Npu {
+        /// The downloaded NPU folder.
+        directory: PathBuf,
+        /// The multilingual model supplying the vocabulary.
+        vocabulary_model: PathBuf,
+        /// The whisper.cpp model used when the NPU cannot.
+        fallback_model: PathBuf,
+    },
+}
+
+/// Chooses the after-meeting pass's engine.
+///
+/// Inputs: The configuration. Outputs: A model chosen for the pass runs on whisper.cpp;
+/// otherwise the pass uses what live transcription uses: the NPU when it is on, else the live
+/// whisper.cpp model. `None` when there is no model. Side effects: None.
+pub fn pass_engine_choice(config: &PipelineConfig) -> Option<PassEngineChoice> {
+    let model = config.transcript_pass_model_path()?.to_path_buf();
+    match (&config.transcript_pass_model_path, &config.npu_whisper) {
+        (None, Some((directory, vocabulary_model))) => Some(PassEngineChoice::Npu {
+            directory: directory.clone(),
+            vocabulary_model: vocabulary_model.clone(),
+            fallback_model: model,
+        }),
+        _ => Some(PassEngineChoice::WhisperCpp(model)),
+    }
+}
+
 /// Starts the after-meeting worker (#87, #88) when the pass is on.
 ///
 /// Inputs: The database (its folder holds `retained-audio`), this device, the database key's
@@ -879,11 +912,8 @@ pub fn start_transcript_pass(
     if !config.transcript_pass() {
         return None;
     }
-    let model_path = config
-        .transcript_pass_model_path()
-        .filter(|_| cfg!(feature = "local-ai"))
-        .map(Path::to_path_buf);
-    if model_path.is_none() && speech_link.is_none() {
+    let engine_choice = pass_engine_choice(config).filter(|_| cfg!(feature = "local-ai"));
+    if engine_choice.is_none() && speech_link.is_none() {
         return None;
     }
     let store = Arc::new(RetainedAudioStore::new(
@@ -906,11 +936,21 @@ pub fn start_transcript_pass(
             )?) as Box<dyn NoteRepository>)
         })
     };
-    let worker = match model_path {
-        Some(model_path) => {
+    let worker = match engine_choice {
+        Some(engine_choice) => {
             let efficient_gpu = config.efficient_gpu;
-            let make_engine: EngineFactory = Box::new(move |audio_source| {
-                transcript_pass_engine(&model_path, efficient_gpu, audio_source)
+            let make_engine: EngineFactory = Box::new(move |audio_source| match &engine_choice {
+                PassEngineChoice::WhisperCpp(model_path) => {
+                    transcript_pass_engine(model_path, efficient_gpu, audio_source)
+                }
+                PassEngineChoice::Npu {
+                    directory,
+                    vocabulary_model,
+                    fallback_model,
+                } => npu_pass_engine(directory, vocabulary_model, &audio_source).map_or_else(
+                    || transcript_pass_engine(fallback_model, efficient_gpu, audio_source),
+                    Ok,
+                ),
             });
             RefinementWorker::new(
                 Arc::clone(&store),
@@ -1016,6 +1056,43 @@ fn transcript_pass_engine(
     let engine = LocalWhisperCppTranscriptionEngine::new(config, audio_source as _)
         .context("unable to load the transcript pass model")?;
     Ok(Box::new(engine))
+}
+
+/// Opens the NPU engine for one round of the after-meeting pass (#75).
+///
+/// Inputs: The NPU folder, the vocabulary model and the store the engine reads windows from.
+/// Outputs: The engine; `None` when the NPU will not open (logged) or this build lacks it.
+/// Side effects: Loads the model onto the NPU (about 2 s).
+fn npu_pass_engine(
+    directory: &Path,
+    vocabulary_model: &Path,
+    audio_source: &Arc<ChunkAudioStore>,
+) -> Option<Box<dyn TranscriptionEngine>> {
+    #[cfg(feature = "npu-whisper")]
+    {
+        use crate::adapters::ai::npu_whisper::{
+            install::NpuInstall,
+            qnn_engine::{NpuWhisperFiles, QnnWhisperEngine},
+        };
+        let install = NpuInstall::new(directory);
+        let files = NpuWhisperFiles {
+            model_dir: install.model_dir(),
+            qnn_dir: install.qnn_dir(),
+            vocabulary_model: vocabulary_model.to_path_buf(),
+        };
+        match QnnWhisperEngine::open(&files, None, Arc::clone(audio_source) as _) {
+            Ok(engine) => Some(Box::new(engine)),
+            Err(error) => {
+                tracing::warn!(%error, "the NPU could not be used for the after-meeting pass");
+                None
+            }
+        }
+    }
+    #[cfg(not(feature = "npu-whisper"))]
+    {
+        let _ = (directory, vocabulary_model, audio_source);
+        None
+    }
 }
 
 /// Reports that this build has no local engine for the pass.
