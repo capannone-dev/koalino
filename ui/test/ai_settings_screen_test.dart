@@ -164,4 +164,30 @@ void main() {
     expect(find.textContaining('Not found on this computer'), findsOneWidget);
     expect(find.textContaining('API key'), findsNothing);
   });
+
+  testWidgets(
+      'a desktop chooses the connection that answers its other devices (#107)',
+      (WidgetTester tester) async {
+    core.answer('command:settings', settings());
+    core.answer('command:update', settings(paired: 'c-1'));
+    await show(tester);
+
+    expect(find.text('Summaries for my other devices'), findsOneWidget);
+    await tester.tap(find.byKey(pairedSummaryConnectionKey));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Office').last);
+    await tester.pumpAndSettle();
+
+    expect(core.lastCommand('update')['paired_summary_connection'], 'c-1');
+  });
+
+  testWidgets('a phone does not offer to answer other devices',
+      (WidgetTester tester) async {
+    controller = SummariesController(
+        bridge: LlmBridge(call: core.call), asksPairedComputer: true);
+    core.answer('command:settings', settings());
+    await show(tester);
+
+    expect(find.text('Summaries for my other devices'), findsNothing);
+  });
 }

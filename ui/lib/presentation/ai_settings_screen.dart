@@ -1,7 +1,8 @@
 // Settings → AI connections (#95): the language model servers summaries use (an OpenAI-compatible
 // server on this device or the local network, or Claude Code and Codex signed in on this
 // computer), the default one, the summary prompt template, and automatic summaries of finished
-// meetings (#101). The app keeps no API keys (#117).
+// meetings (#101), and on a computer the connection that writes the summaries paired phones ask
+// for (#107). The app keeps no API keys (#117).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
@@ -13,6 +14,13 @@ const Key summaryTemplateFieldKey = ValueKey<String>('summary-template');
 
 /// Finds the automatic summaries switch in tests.
 const Key autoSummarizeSwitchKey = ValueKey<String>('auto-summarize');
+
+/// Finds the menu of the connection that answers paired devices in tests (#107).
+const Key pairedSummaryConnectionKey =
+    ValueKey<String>('paired-summary-connection');
+
+/// The menu value that stops answering paired devices.
+const String _notAnswering = '';
 
 /// Lists the AI connections and edits the summary settings.
 final class AiSettingsScreen extends StatefulWidget {
@@ -153,6 +161,37 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                       : (bool enabled) =>
                           controller.setAutoSummarize(enabled: enabled),
                 ),
+                if (!controller.asksPairedComputer &&
+                    settings.connections.isNotEmpty)
+                  ListTile(
+                    title: const Text('Summaries for my other devices'),
+                    subtitle: const Text(
+                        'A paired phone can ask this computer to write a summary with this '
+                        'connection. It counts against that plan; at most 10 an hour.'),
+                    trailing: DropdownButton<String>(
+                      key: pairedSummaryConnectionKey,
+                      value: settings.pairedSummaryConnection ?? _notAnswering,
+                      onChanged: controller.isBusy
+                          ? null
+                          : (String? id) =>
+                              controller.setPairedSummaryConnection(
+                                  id == null || id == _notAnswering
+                                      ? null
+                                      : id),
+                      items: <DropdownMenuItem<String>>[
+                        const DropdownMenuItem<String>(
+                          value: _notAnswering,
+                          child: Text('Off'),
+                        ),
+                        for (final LlmConnection connection
+                            in settings.connections)
+                          DropdownMenuItem<String>(
+                            value: connection.id,
+                            child: Text(connection.label),
+                          ),
+                      ],
+                    ),
+                  ),
                 const Divider(height: 32),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),

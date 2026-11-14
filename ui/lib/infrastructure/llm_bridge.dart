@@ -2,6 +2,8 @@
 // `{"ok":true,...}` or `{"ok":false,"error_code","error"}`; calls run on background isolates
 // because they read files, and a summary waits on the model for minutes. The app keeps no API
 // keys (#117): connections are servers the owner runs, or Claude Code and Codex signed in here.
+// A phone can also ask a paired computer to write a summary with that computer's connection
+// (#107); the request travels in the meeting's synced document.
 
 import 'dart:convert';
 import 'dart:ffi';
@@ -159,6 +161,7 @@ final class LlmSettings {
     required this.customTemplate,
     required this.autoSummarize,
     required this.placeholders,
+    this.pairedSummaryConnection,
   });
 
   /// Reads the settings from the core's JSON.
@@ -175,6 +178,7 @@ final class LlmSettings {
         defaultTemplate: json['default_template'] as String? ?? '',
         customTemplate: json['custom_template'] as bool? ?? false,
         autoSummarize: json['auto_summarize'] as bool? ?? true,
+        pairedSummaryConnection: json['paired_summary_connection'] as String?,
         placeholders:
             (json['placeholders'] as List<Object?>? ?? const <Object?>[])
                 .whereType<String>()
@@ -200,6 +204,10 @@ final class LlmSettings {
 
   /// The `{{placeholder}}` names a template may use.
   final List<String> placeholders;
+
+  /// The connection that writes the summaries paired devices ask for (#107), or null when this
+  /// device does not answer them.
+  final String? pairedSummaryConnection;
 }
 
 /// A meeting's stored summary.
@@ -239,15 +247,60 @@ final class StoredSummary {
   final bool truncated;
 }
 
-/// A meeting's summary and its own prompt, each null when absent.
+/// How far a paired computer has got with a summary request (#107).
+enum PairedRequestState {
+  /// No computer has taken it yet: none is on, paired and set to answer.
+  waiting,
+
+  /// A computer is writing the summary.
+  working,
+
+  /// A computer tried and failed; asking again replaces the request.
+  failed;
+
+  /// Reads the core's name; unknown names count as waiting.
+  static PairedRequestState fromWire(Object? wire) => switch (wire) {
+        'working' => working,
+        'failed' => failed,
+        _ => waiting,
+      };
+}
+
+/// This device's request that a paired computer write a meeting's summary (#107).
+final class PairedSummaryRequest {
+  /// Creates the request.
+  const PairedSummaryRequest(
+      {required this.state, required this.requestedAt, this.errorCode});
+
+  /// Reads the request from the core's JSON.
+  factory PairedSummaryRequest.fromJson(Map<String, Object?> json) =>
+      PairedSummaryRequest(
+        state: PairedRequestState.fromWire(json['state']),
+        requestedAt:
+            DateTime.tryParse(json['requested_at'] as String? ?? '')?.toUtc() ??
+                DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+        errorCode: json['error_code'] as String?,
+      );
+
+  final PairedRequestState state;
+  final DateTime requestedAt;
+
+  /// The computer's error code when it failed, such as `llm_tool_failed`.
+  final String? errorCode;
+}
+
+/// A meeting's summary, its own prompt and a paired computer's request, each null when absent.
 final class MeetingSummaryState {
   /// Creates the state.
-  const MeetingSummaryState({this.summary, this.meetingPrompt});
+  const MeetingSummaryState({this.summary, this.meetingPrompt, this.request});
 
   final StoredSummary? summary;
 
   /// The meeting's own template, or null when it uses the Settings one.
   final String? meetingPrompt;
+
+  /// The request that a paired computer write the summary (#107), or null.
+  final PairedSummaryRequest? request;
 }
 
 /// What writing a summary reports.
@@ -392,7 +445,8 @@ final class LlmBridge {
   Future<void> deleteConnection(String id) =>
       _command(<String, Object?>{'command': 'delete_connection', 'id': id});
 
-  /// Changes only the fields given; `resetTemplate` restores the built-in prompt.
+  /// Changes only the fields given; `resetTemplate` restores the built-in prompt, and
+  /// `stopAnsweringPairedDevices` stops this device writing summaries for paired ones (#107).
   ///
   /// Outputs: The settings as saved. Side effects: Writes the settings file.
   Future<LlmSettings> update({
@@ -400,6 +454,8 @@ final class LlmBridge {
     String? template,
     bool resetTemplate = false,
     bool? autoSummarize,
+    String? pairedSummaryConnection,
+    bool stopAnsweringPairedDevices = false,
   }) async =>
       LlmSettings.fromJson(await _command(<String, Object?>{
         'command': 'update',
@@ -409,6 +465,10 @@ final class LlmBridge {
         else if (template != null)
           'template': template,
         if (autoSummarize != null) 'auto_summarize': autoSummarize,
+        if (stopAnsweringPairedDevices)
+          'paired_summary_connection': null
+        else if (pairedSummaryConnection != null)
+          'paired_summary_connection': pairedSummaryConnection,
       }));
 
   /// Sends a fixed one-line request, holding no meeting content, and returns the reply.
@@ -421,7 +481,8 @@ final class LlmBridge {
       }))['reply'] as String? ??
       '';
 
-  /// Reads a meeting's summary and its own prompt. Side effects: Reads the meeting document.
+  /// Reads a meeting's summary, its own prompt and any request to a paired computer.
+  /// Side effects: Reads the meeting document.
   Future<MeetingSummaryState> meetingSummary(String meetingId) async {
     final Map<String, Object?> answer = decodeLlmAnswer(
         await _call('note_taker_get_meeting_summary', <String?>[meetingId]));
@@ -431,7 +492,32 @@ final class LlmBridge {
         _ => null,
       },
       meetingPrompt: answer['meeting_prompt'] as String?,
+      request: switch (answer['request']) {
+        final Map<String, Object?> request =>
+          PairedSummaryRequest.fromJson(request),
+        _ => null,
+      },
     );
+  }
+
+  /// Asks a paired computer to write the meeting's summary (#107), or cancels the request.
+  ///
+  /// Outputs: The new request, or null once cancelled. Side effects: Writes the request into the
+  /// meeting document, which syncs to paired devices; nothing is sent to an AI server from here.
+  Future<PairedSummaryRequest?> requestPairedSummary(String meetingId,
+      {bool cancel = false}) async {
+    final Map<String, Object?> answer = decodeLlmAnswer(
+        await _call('note_taker_request_paired_summary', <String?>[
+      jsonEncode(<String, Object?>{
+        'meeting_id': meetingId,
+        if (cancel) 'cancel': true,
+      })
+    ]));
+    return switch (answer['request']) {
+      final Map<String, Object?> request =>
+        PairedSummaryRequest.fromJson(request),
+      _ => null,
+    };
   }
 
   /// Writes a meeting's summary with `connectionId`, or the default connection when null.

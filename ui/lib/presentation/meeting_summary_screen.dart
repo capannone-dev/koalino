@@ -1,7 +1,10 @@
 // A meeting's summary (#95): the page that shows it and writes it with a chosen connection, the
 // summary button shown beside meeting names, and the menu opened from a meeting row (Summarize
 // with ▸ a connection, the meeting's own prompt, back to the Settings prompt). The model runs in
-// the core on a background isolate, so leaving the page does not stop it.
+// the core on a background isolate, so leaving the page does not stop it. A phone can ask a
+// paired computer to write the summary instead (#107); the page then shows how far it has got.
+
+import 'dart:async';
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
@@ -103,6 +106,11 @@ final class _UseOwnApp extends _SummaryMenuChoice {
   const _UseOwnApp();
 }
 
+/// Asks a paired computer to write the summary (#107).
+final class _AskComputer extends _SummaryMenuChoice {
+  const _AskComputer();
+}
+
 /// Shows the summary menu of one meeting and runs the choice.
 ///
 /// Inputs: A context, the controller and the meeting. Outputs: Completes when the menu and any
@@ -141,6 +149,16 @@ Future<void> showMeetingSummaryMenu(
               subtitle: Text(connection.isDefault
                   ? '${connection.model} · default'
                   : connection.model),
+            ),
+          ),
+        if (controller.asksPairedComputer)
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(context).pop(const _AskComputer()),
+            child: const ListTile(
+              leading: Icon(Icons.computer_outlined),
+              title: Text('Summarize on my computer'),
+              subtitle: Text(
+                  'With Claude Code, Codex or the connection set up there'),
             ),
           ),
         if (controller.handoff != null)
@@ -201,6 +219,14 @@ Future<void> showMeetingSummaryMenu(
           controller: controller, meetingId: meeting.meetingId);
     case _ResetPrompt():
       await controller.setMeetingPrompt(meeting.meetingId, null);
+    case _AskComputer():
+      await controller.askComputer(meeting.meetingId);
+      if (context.mounted) {
+        await openMeetingSummary(context,
+            controller: controller,
+            meetingId: meeting.meetingId,
+            title: meeting.title);
+      }
     case _UseOwnApp():
       if (controller.handoff case final HandoffController handoff) {
         await showHandoffSheet(context,
@@ -323,9 +349,13 @@ final class MeetingSummaryScreen extends StatefulWidget {
   State<MeetingSummaryScreen> createState() => _MeetingSummaryScreenState();
 }
 
-/// Keeps the chosen connection.
+/// How often an open request to a paired computer is read again while the page is shown.
+const Duration _pairedRequestRefresh = Duration(seconds: 10);
+
+/// Keeps the chosen connection, and reads a request to a paired computer again while it is open.
 final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
   String? _connectionId;
+  Timer? _refresh;
 
   @override
   void initState() {
@@ -334,6 +364,22 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
       widget.controller.load();
     }
     widget.controller.loadMeeting(widget.meetingId);
+    if (widget.controller.asksPairedComputer) {
+      _refresh = Timer.periodic(_pairedRequestRefresh, (_) {
+        final PairedRequestState? state =
+            widget.controller.stateFor(widget.meetingId)?.request?.state;
+        if (state == PairedRequestState.waiting ||
+            state == PairedRequestState.working) {
+          widget.controller.loadMeeting(widget.meetingId);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _refresh?.cancel();
+    super.dispose();
   }
 
   /// Opens the Markdown editor on `text` and saves the result as the summary (#96).
@@ -375,9 +421,21 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                       style: theme.textTheme.headlineSmall
                           ?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 16),
+                  if (controller.asksPairedComputer) ...<Widget>[
+                    _PairedComputerPanel(
+                      request: state?.request,
+                      onAsk: () => controller.askComputer(widget.meetingId),
+                      onCancel: () =>
+                          controller.cancelComputer(widget.meetingId),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   if (connections.isEmpty)
-                    const Text(
-                        'Add an AI connection in Settings to write summaries.')
+                    if (!controller.asksPairedComputer)
+                      const Text(
+                          'Add an AI connection in Settings to write summaries.')
+                    else
+                      const SizedBox.shrink()
                   else
                     Wrap(
                       spacing: 12,
@@ -500,6 +558,55 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+/// Asks a paired computer to write the summary (#107) and shows how far it has got.
+final class _PairedComputerPanel extends StatelessWidget {
+  const _PairedComputerPanel(
+      {required this.request, required this.onAsk, required this.onCancel});
+
+  /// The open request, or null when none was made.
+  final PairedSummaryRequest? request;
+  final VoidCallback onAsk;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final PairedSummaryRequest? request = this.request;
+    final bool open =
+        request != null && request.state != PairedRequestState.failed;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        if (!open)
+          FilledButton.tonalIcon(
+            icon: const Icon(Icons.computer_outlined),
+            label: Text(request == null
+                ? 'Summarize on my computer'
+                : 'Try again on my computer'),
+            onPressed: onAsk,
+          ),
+        if (request != null) ...<Widget>[
+          if (request.state == PairedRequestState.working) ...<Widget>[
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(),
+          ],
+          const SizedBox(height: 8),
+          Text(describePairedRequest(request),
+              style: theme.textTheme.bodyMedium),
+          if (open)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: onCancel,
+                child: const Text('Cancel request'),
+              ),
+            ),
+        ],
+      ],
     );
   }
 }

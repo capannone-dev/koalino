@@ -2,6 +2,7 @@
 // answers, the requests sent (keys only when given), and the plain messages for failures.
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
@@ -248,5 +249,63 @@ void main() {
 
     expect(controller.stateFor('m-1')?.summary?.text,
         contains('Budget approved.'));
+  });
+
+  group('a paired computer writes the summary (#107)', () {
+    test('asking writes a request and cancelling removes it', () async {
+      core.answer('note_taker_request_paired_summary',
+          <String, Object?>{'ok': true, 'request': pairedRequest('waiting')});
+      core.answer('note_taker_request_paired_summary',
+          <String, Object?>{'ok': true, 'request': null});
+
+      await controller.askComputer('m-1');
+      expect(controller.stateFor('m-1')?.request?.state,
+          PairedRequestState.waiting);
+      expect(jsonDecode(core.calls.last.$2.single!),
+          <String, Object?>{'meeting_id': 'm-1'});
+
+      await controller.cancelComputer('m-1');
+      expect(controller.stateFor('m-1')?.request, isNull);
+      expect(jsonDecode(core.calls.last.$2.single!),
+          <String, Object?>{'meeting_id': 'm-1', 'cancel': true});
+      expect(controller.meetingMessage('m-1'), 'Request cancelled.');
+    });
+
+    test('a failed request says why, in the computer\'s words', () async {
+      core.answer('note_taker_get_meeting_summary', <String, Object?>{
+        'ok': true,
+        'summary': null,
+        'meeting_prompt': null,
+        'request': pairedRequest('failed', errorCode: 'llm_tool_failed'),
+      });
+
+      await controller.loadMeeting('m-1');
+
+      final PairedSummaryRequest? request = controller.stateFor('m-1')?.request;
+      expect(request?.state, PairedRequestState.failed);
+      expect(
+          describePairedRequest(request!),
+          'Your computer could not write the summary: Claude Code or Codex '
+          'could not answer. Check that it is signed in.');
+    });
+
+    test('a desktop chooses which connection answers its other devices',
+        () async {
+      core.answer('command:update', settings(paired: 'c-1'));
+      core.answer('command:update', settings());
+
+      await controller.setPairedSummaryConnection('c-1');
+      expect(core.lastCommand('update')['paired_summary_connection'], 'c-1');
+      expect(controller.settings?.pairedSummaryConnection, 'c-1');
+      expect(controller.message,
+          'Office now writes the summaries your other devices ask for.');
+
+      await controller.setPairedSummaryConnection(null);
+      final Map<String, Object?> off = core.lastCommand('update');
+      expect(off.containsKey('paired_summary_connection'), isTrue);
+      expect(off['paired_summary_connection'], isNull);
+      expect(controller.message,
+          'This computer no longer writes summaries for your other devices.');
+    });
   });
 }

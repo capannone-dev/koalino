@@ -362,8 +362,11 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
 
 /// AI connections and meeting summaries (#95), shared by Settings and every meeting list; a
 /// summary keeps being written when its page is left, so this lives as long as the app.
-final SummariesController _summariesController =
-    SummariesController(bridge: const LlmBridge(), handoff: _handoffController);
+final SummariesController _summariesController = SummariesController(
+  bridge: const LlmBridge(),
+  handoff: _handoffController,
+  asksPairedComputer: Platform.isAndroid,
+);
 
 /// Hands meetings to the owner's own Claude or ChatGPT app and keeps a summary's answer (#114);
 /// Android only. It lives as long as the app, since the answer comes back after a switch of apps.

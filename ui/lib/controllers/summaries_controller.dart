@@ -1,6 +1,7 @@
 // Owns the AI connections and meeting summaries state (#95), shared by Settings, the meeting
 // lists and the summary page. The core does the work; this keeps the latest answers, tracks the
-// summaries being written, and words failures for people.
+// summaries being written, and words failures for people. On a phone it also asks a paired
+// computer to write a summary (#107); on a computer it chooses the connection that answers.
 
 import 'package:note_taker_ui/controllers/handoff_controller.dart';
 import 'package:flutter/foundation.dart';
@@ -15,6 +16,7 @@ final class SummariesController extends ChangeNotifier {
     required LlmBridge bridge,
     MeetingEditBridge editBridge = const MeetingEditBridge(),
     this.handoff,
+    this.asksPairedComputer = false,
   })  : _bridge = bridge,
         _editBridge = editBridge;
 
@@ -23,6 +25,10 @@ final class SummariesController extends ChangeNotifier {
 
   /// Hands a meeting to the owner's own AI app (#114); null where that is not offered (desktops).
   final HandoffController? handoff;
+
+  /// Whether this device asks a paired computer for summaries (phones), rather than answering
+  /// paired devices itself (computers) (#107).
+  final bool asksPairedComputer;
   LlmSettings? _settings;
   String? _message;
   bool _isBusy = false;
@@ -135,6 +141,52 @@ final class SummariesController extends ChangeNotifier {
             : 'Automatic summaries are off.';
       });
 
+  /// Chooses the connection that writes the summaries paired devices ask for, or stops this
+  /// device answering them with null (#107). Outputs: Whether it was saved.
+  Future<bool> setPairedSummaryConnection(String? id) => _change(() async {
+        _settings = id == null
+            ? await _bridge.update(stopAnsweringPairedDevices: true)
+            : await _bridge.update(pairedSummaryConnection: id);
+        return id == null
+            ? 'This computer no longer writes summaries for your other devices.'
+            : '${_labelOf(id)} now writes the summaries your other devices ask for.';
+      });
+
+  /// Asks a paired computer to write the meeting's summary (#107); a failed request is replaced.
+  ///
+  /// Side effects: Writes the request into the meeting document, which syncs to the computer.
+  /// Nothing is sent to an AI server from this device.
+  Future<void> askComputer(String meetingId) =>
+      _changeRequest(meetingId, cancel: false);
+
+  /// Cancels the meeting's request to a paired computer (#107).
+  ///
+  /// Side effects: Removes the request from the meeting document. A computer already writing
+  /// the summary may still store it.
+  Future<void> cancelComputer(String meetingId) =>
+      _changeRequest(meetingId, cancel: true);
+
+  Future<void> _changeRequest(String meetingId, {required bool cancel}) async {
+    try {
+      final PairedSummaryRequest? request =
+          await _bridge.requestPairedSummary(meetingId, cancel: cancel);
+      _bump(meetingId);
+      _meetings[meetingId] = MeetingSummaryState(
+        summary: _meetings[meetingId]?.summary,
+        meetingPrompt: _meetings[meetingId]?.meetingPrompt,
+        request: request,
+      );
+      if (cancel) {
+        _meetingMessages[meetingId] = 'Request cancelled.';
+      } else {
+        _meetingMessages.remove(meetingId);
+      }
+    } on LlmException catch (error) {
+      _meetingMessages[meetingId] = error.message;
+    }
+    _notify();
+  }
+
   /// Reads a meeting's summary and its own prompt.
   ///
   /// Side effects: Reads the meeting document through the core; a failure is kept as the
@@ -170,6 +222,7 @@ final class SummariesController extends ChangeNotifier {
       _meetings[meetingId] = MeetingSummaryState(
         summary: result.summary,
         meetingPrompt: _meetings[meetingId]?.meetingPrompt,
+        request: _meetings[meetingId]?.request,
       );
       _meetingMessages[meetingId] = describeSummaryResult(result);
     } on LlmException catch (error) {
@@ -191,6 +244,7 @@ final class SummariesController extends ChangeNotifier {
       _meetings[meetingId] = MeetingSummaryState(
         summary: _meetings[meetingId]?.summary,
         meetingPrompt: prompt,
+        request: _meetings[meetingId]?.request,
       );
       _meetingMessages[meetingId] = prompt == null
           ? 'This meeting uses the Settings prompt again.'
@@ -215,6 +269,7 @@ final class SummariesController extends ChangeNotifier {
       _meetings[meetingId] = MeetingSummaryState(
         summary: saved,
         meetingPrompt: _meetings[meetingId]?.meetingPrompt,
+        request: _meetings[meetingId]?.request,
       );
       _meetingMessages[meetingId] = 'Summary saved.';
       _notify();
@@ -290,3 +345,17 @@ String describeSummaryResult(SummaryResult result) {
   }
   return text.toString();
 }
+
+/// Words a request to a paired computer (#107) for people.
+///
+/// Inputs: The request. Outputs: One sentence; a failure uses the computer's error code, worded
+/// as on the computer. Side effects: None.
+String describePairedRequest(PairedSummaryRequest request) =>
+    switch (request.state) {
+      PairedRequestState.waiting =>
+        'Waiting for your computer. It writes the summary once it is on, connected to this '
+            'device, and set to answer in Settings → AI connections.',
+      PairedRequestState.working => 'Your computer is writing the summary…',
+      PairedRequestState.failed => 'Your computer could not write the summary: '
+          '${LlmException(request.errorCode ?? 'unknown').message}',
+    };

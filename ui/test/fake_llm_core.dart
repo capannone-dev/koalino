@@ -59,7 +59,8 @@ Map<String, Object?> connection(String id, String label,
     };
 
 /// The settings as the core describes them.
-Map<String, Object?> settings({List<Object?>? connections, bool auto = true}) =>
+Map<String, Object?> settings(
+        {List<Object?>? connections, bool auto = true, String? paired}) =>
     <String, Object?>{
       'ok': true,
       'connections': connections ??
@@ -69,6 +70,7 @@ Map<String, Object?> settings({List<Object?>? connections, bool auto = true}) =>
       'default_template': 'Built in',
       'custom_template': true,
       'auto_summarize': auto,
+      'paired_summary_connection': paired,
       'placeholders': <String>['title', 'date'],
     };
 
@@ -85,3 +87,14 @@ const Map<String, Object?> summary = <String, Object?>{
 
 /// The summary as JSON text.
 String summaryJson() => jsonEncode(summary);
+
+/// A paired computer's summary request as the core describes it (#107).
+Map<String, Object?> pairedRequest(String state, {String? errorCode}) =>
+    <String, Object?>{
+      'state': state,
+      'requested_at': '2026-11-14T10:00:00+00:00',
+      if (state != 'waiting') 'by': '12D3KooWLaptop',
+      if (state == 'working') 'since': '2026-11-14T10:01:00+00:00',
+      if (errorCode != null) 'error_code': errorCode,
+      if (errorCode != null) 'failed_at': '2026-11-14T10:02:00+00:00',
+    };

@@ -208,4 +208,86 @@ void main() {
         <String?>['m-1', 'c-2']);
     expect(find.text('Budget approved.'), findsOneWidget);
   });
+
+  group('on a phone, a paired computer writes the summary (#107)', () {
+    Widget phonePage() {
+      controller = SummariesController(
+          bridge: LlmBridge(call: core.call), asksPairedComputer: true);
+      return page();
+    }
+
+    testWidgets('asking shows that the request waits for the computer',
+        (WidgetTester tester) async {
+      core.answer('command:settings', settings(connections: <Object?>[]));
+      core.answer('note_taker_get_meeting_summary', <String, Object?>{
+        'ok': true,
+        'summary': null,
+        'meeting_prompt': null,
+        'request': null
+      });
+      core.answer('note_taker_request_paired_summary',
+          <String, Object?>{'ok': true, 'request': pairedRequest('waiting')});
+      await tester.pumpWidget(phonePage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Summarize on my computer'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Waiting for your computer'), findsOneWidget);
+      expect(find.text('Cancel request'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a computer at work shows progress',
+        (WidgetTester tester) async {
+      core.answer('command:settings', settings(connections: <Object?>[]));
+      core.answer('note_taker_get_meeting_summary', <String, Object?>{
+        'ok': true,
+        'summary': null,
+        'meeting_prompt': null,
+        'request': pairedRequest('working'),
+      });
+      await tester.pumpWidget(phonePage());
+      // The progress bar animates for ever, so settle by frames instead.
+      for (int frame = 0; frame < 5; frame++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      expect(
+          find.text('Your computer is writing the summary…'), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a failure explains it and offers to try again',
+        (WidgetTester tester) async {
+      core.answer('command:settings', settings(connections: <Object?>[]));
+      core.answer('note_taker_get_meeting_summary', <String, Object?>{
+        'ok': true,
+        'summary': null,
+        'meeting_prompt': null,
+        'request': pairedRequest('failed', errorCode: 'llm_rate_limited'),
+      });
+      await tester.pumpWidget(phonePage());
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Your computer could not write the summary'),
+          findsOneWidget);
+      expect(find.text('Try again on my computer'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a desktop does not offer it', (WidgetTester tester) async {
+      core.answer('command:settings', settings());
+      core.answer('note_taker_get_meeting_summary', <String, Object?>{
+        'ok': true,
+        'summary': null,
+        'meeting_prompt': null
+      });
+      await tester.pumpWidget(page());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Summarize on my computer'), findsNothing);
+    });
+  });
 }
