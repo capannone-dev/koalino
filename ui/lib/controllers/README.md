@@ -82,7 +82,10 @@ the meeting lists and the summary page. It lives as long as the app, so a summar
 written when its page is left; it ignores a second request for a meeting already being summarized
 and never lets a slower read replace a summary or prompt written meanwhile.
 `editSummary` saves the owner's own text through `MeetingEditBridge` (#96). On Android it also
-carries the `HandoffController`, so every summary view can offer the owner's own AI app.
+carries the `HandoffController`, so every summary view can offer the owner's own AI app, and
+`asksPairedComputer` is set, so `askComputer` and `cancelComputer` write or remove a request that
+a paired computer write the summary (#107); `describePairedRequest` words its state. On a computer,
+`setPairedSummaryConnection` chooses the connection that answers paired devices.
 
 `call_watch_controller.dart` (#111) looks at the microphone's users every 3 seconds on desktops
 and Android phones (where `hostUsers` passes the core what Kotlin saw).

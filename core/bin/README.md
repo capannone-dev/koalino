@@ -296,7 +296,8 @@ and dropped at the next save (#117). `device_resources.rs` reads free disk space
 `llm_settings.rs` keeps the language model settings (#95, #101) in `<db>.llm-settings.json`: the
 connections, the default one (the only connection when there is one), the summary template (the
 built-in one until the owner writes their own), and whether meetings are summarized
-automatically, which is on until the owner opts out. Entries edited by hand into something
+automatically, which is on until the owner opts out, and which connection answers paired
+devices' summary requests (#107; none until the owner chooses one). Entries edited by hand into something
 invalid, or of a removed kind such as `anthropic`, are dropped when read. No API keys are kept
 (#117); `forget_sealed_api_keys` deletes the sealed `llm-<id>.sealed` keys an older Android
 version saved.
@@ -306,12 +307,17 @@ the labelled transcript, the owner's notes, the image attachments (oldest first,
 under 3.75 MB), the project, the language and the meeting's own prompt; `run_summary` asks the
 model with no lock held; `store_summary` writes the result into the meeting document in one
 transaction. `set_meeting_prompt` checks and stores a meeting's own template.
+`load_summary_request`, `store_summary_request` and `store_answered_request` read, write and
+answer a paired device's request (#107); the last stores the summary and removes the request in
+one write.
 
 `llm_commands.rs` (#95) runs the language model commands shared by the app and the web API, as
 `project_commands.rs` does for projects: `settings`, `save_connection`, `delete_connection`,
 `update` and `test_connection` (a fixed one-line request with no meeting content). `summarize_with` writes a meeting's summary
 with the named or default connection; the caller passes a `prepare` and a `store` step, so its
-repository is not held while the model works.
+repository is not held while the model works. `summarize_for_paired_device` does the same with the
+asking device's template and labels the summary with this computer's name (#107);
+`new_summary_request` and `summary_request_json` build and describe a request.
 
 `auto_summaries.rs` (#101) summarizes finished meetings with the default connection while
 `auto_summarize` is on, in rounds on its own thread: at start, every five minutes, and when a
@@ -321,6 +327,14 @@ the after-meeting pass, and it has no summary; it is left for a manual summary a
 `AutoSummaryHost` is how a process lends it its repositories: `ffi_llm.rs` for the app (started
 when the runtime opens) and `server/llm_routes.rs::start_auto_summaries` for the daemon. The CLI
 has none: `summary <meeting>` writes one by hand.
+
+The same thread answers paired devices' summary requests (#107) when the owner chose a connection
+for them, whatever `auto_summarize` says: at each round it reads every meeting, and between rounds,
+every 20 s, only the meetings whose document changed since the last check and the requests it left
+for later. It marks a request `working`, writes the summary with the asking device's template and
+removes the request, or marks it `failed` with the error code. Another computer's work is taken
+over after 30 minutes, and at most 10 requests are sent per hour. `ffi_llm.rs` also gives the app
+`note_taker_request_paired_summary`, which writes or cancels a request.
 
 `ffi_edits.rs` (#96) gives the app `note_taker_meeting_edit`: the notes, the summary's text and
 single transcript segments, through `application/meeting_edits.rs` (the same rules as the web).

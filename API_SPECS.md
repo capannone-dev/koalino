@@ -223,8 +223,17 @@ and meeting summaries" below). Keys are write-only.
   the meeting's summary with that connection, or the default one when `connection_id` is null or
   empty. It blocks while the model works (minutes with a local model), so call it off the UI
   thread; the runtime is locked only while the meeting is read and the summary stored.
-- `char *note_taker_get_meeting_summary(const char *meeting_id)` returns `summary` (or null) and
-  `meeting_prompt` (or null).
+- `char *note_taker_get_meeting_summary(const char *meeting_id)` returns `summary` (or null),
+  `meeting_prompt` (or null) and `request` (or null), this meeting's request to a paired
+  computer (#107): `{"state":"waiting"|"working"|"failed","requested_at", "by"?, "since"?,
+  "error_code"?, "failed_at"?}`.
+- `char *note_taker_request_paired_summary(const char *request_json)` (#107) asks a paired
+  computer to write the meeting's summary, or cancels the request, from
+  `{"meeting_id","cancel"?:bool}`. It writes the request (this device, the time, and the owner's
+  own template when they wrote one) into the meeting document, which syncs to paired devices, and
+  returns `{"request"}` (null once cancelled). A new request replaces an earlier, failed one.
+  Nothing goes to an AI server from the asking device. Errors: `invalid_request`,
+  `storage_failed`, `runtime_unavailable`.
 - `char *note_taker_set_meeting_summary_prompt(const char *meeting_id, const char *prompt)` sets
   the meeting's own template, or clears it when `prompt` is null or blank.
 - `char *note_taker_handoff_meeting(const char *request_json)` (#114) prepares a meeting for the
@@ -632,7 +641,8 @@ daemon without a settings file `503` `unavailable`. The apps use
 ### AI connections and meeting summaries (#95)
 
 `GET /api/settings/llm` returns `{"ok":true,"connections":[...],"default_connection","template",
-"default_template","custom_template","auto_summarize","placeholders"}`. Each connection is
+"default_template","custom_template","auto_summarize","paired_summary_connection",
+"placeholders"}`. Each connection is
 `{"id","label","kind","base_url","model","context_tokens","plain_http","is_default",
 "tool_installed"}`, where `kind` is `open_ai_compatible` (a server such as Ollama, llama.cpp,
 LM Studio or vLLM) or (#105) `claude_code` or `codex`. The last two run the Claude
@@ -655,6 +665,20 @@ no API keys (#117): requests carry no authorization header, a sent `api_key` is 
   final and it has no summary (#101). Templates may use
   `{{title}}`, `{{date}}`, `{{time}}`, `{{duration}}`, `{{device}}`, `{{project}}`,
   `{{speakers}}`, `{{glossary}}` and `{{language}}`.
+- `PUT /api/settings/llm` with `{"paired_summary_connection": id or null}` (#107) chooses the
+  connection that writes the summaries paired devices ask for, or stops answering them (the
+  default). An unknown ID is `connection_not_found`, and removing the connection turns answering
+  off. While it is set, the daemon and the desktop app answer each waiting request found in a
+  meeting document, whatever `auto_summarize` says:
+  - They check every 20 s for documents changed since the last check, and every meeting at
+    start-up and every 5 minutes.
+  - The request is marked `working` with this device and the time; another computer takes it
+    over only after 30 minutes.
+  - The summary is written with the asking device's template, or this computer's when it sent
+    none (a meeting's own prompt still comes first). Its `connection_label` names this computer
+    (`"Claude Code on Laptop"`). It is stored and the request removed in one write.
+  - A failure marks the request `failed` with the error code and is not retried.
+  - At most 10 requests are sent per hour; the rest wait.
 - `GET /api/meetings/{id}/summary` returns `{"summary": {"text","connection_label","model",
   "created_at","prompt","edited","truncated"} or null, "meeting_prompt": text or null}`.
 - `POST /api/meetings/{id}/summary` with `{"connection_id"?}` sends the meeting's transcript,

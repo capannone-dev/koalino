@@ -119,7 +119,10 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   written; `showMeetingSummaryMenu` (row long press or right-click) offers Summarize with ▸ each
   connection, the meeting's prompt, and a return to the Settings prompt.
   The page also offers Edit summary, or Write a summary when there is none (#96); a summary
-  written by hand reads "Written by you".
+  written by hand reads "Written by you". On a phone, the page and the menu offer "Summarize on
+  my computer" (#107): a paired computer writes it with its own connection. The page then shows
+  whether the request waits, is being written (with a progress bar) or failed (with the reason
+  and Try again), offers Cancel request, and reads the request again every 10 s while it is open.
 - `meeting_edit_widgets.dart` (#96) holds the owner's editing tools: `MarkdownEditorScreen`
   (opened by `showMarkdownEditor`, with Edit / Preview and a Save action), `MeetingNotesSection`
   (the Notes section of an open meeting, read again each time a meeting is shown), and
@@ -154,7 +157,8 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   remove and choose the default connection; the summary prompt template with its placeholders;
   and automatic summaries (#101). Keys are typed in a hidden field and never shown again. On
   desktops it also offers Claude Code and Codex (#105), which need no address or key and show
-  whether the tool is installed.
+  whether the tool is installed. On a computer, "Summaries for my other devices" chooses the
+  connection that writes the summaries paired phones ask for, or Off (#107).
 - `project_dialogs.dart` holds the name, note and meeting-picker dialogs, and
   `MoveToProjectButton`, which meeting pages show to move a meeting into a project or out.
   `chooseProjectForMeeting` is its chooser, ending in "New project…", which names, creates and

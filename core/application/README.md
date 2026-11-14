@@ -516,9 +516,11 @@ the instructions; the owner's notes and the speaker-attributed transcript (`[hh:
 go in the user message, with photos attached. A transcript longer than the connection's context
 (sized at 3 characters per token) is split into parts, the model takes notes on each, and the
 summary is written from those notes, so nothing is cut. A server that cannot read images is asked
-once more without them. `meeting_summary_document.rs` keeps the summary (`summary` map) and the
-meeting's own prompt (`summary_prompt`) in the meeting document, so both sync and are sealed at
-rest; writes go through `NoteRepository::edit_crdt_document`, one SQLite transaction.
+once more without them. `meeting_summary_document.rs` keeps the summary (`summary` map), the
+meeting's own prompt (`summary_prompt`) and a device's request that a paired computer write the
+summary (`summary_request`, #107: waiting, working or failed) in the meeting document, so all of
+them sync and are sealed at rest; writes go through `NoteRepository::edit_crdt_document`, one
+SQLite transaction.
 
 `meeting_edits.rs` (#96) holds the owner's edits: the Markdown notes (`note_text`), the summary's
 text (marked `edited`, or written by hand when there is none), and single transcript segments,

@@ -117,12 +117,14 @@ through `note_taker_project_command` on a background isolate (`runRustProjectCom
 pass a fake runner. `PlatformProjectFilesPicker` picks any file (#94).
 
 `llm_bridge.dart` (#95) defines `LlmConnection`, `LlmSettings`, `StoredSummary`,
-`MeetingSummaryState`, `SummaryResult`, the `llmPresets` (a local Ollama or LM Studio
+`MeetingSummaryState` (with `PairedSummaryRequest`, a request to a paired computer, #107),
+`SummaryResult`, the `llmPresets` (a local Ollama or LM Studio
 server, no API keys since #117, and on desktops Claude Code and Codex, #105, through `availableLlmPresets`) and
 `LlmException`, which words the core's `error_code` for people and, for a rejection or a failed
 local tool, adds what the server or tool said (`error_detail`, #104, #105). `LlmBridge`
-calls `note_taker_llm_command`, `note_taker_summarize_meeting`, `note_taker_get_meeting_summary`
-and `note_taker_set_meeting_summary_prompt` on a background isolate (`callRustLlm`), since a
+calls `note_taker_llm_command`, `note_taker_summarize_meeting`, `note_taker_get_meeting_summary`,
+`note_taker_set_meeting_summary_prompt` and `note_taker_request_paired_summary` (#107) on a
+background isolate (`callRustLlm`), since a
 summary waits on the model for minutes; tests pass a fake call. API keys are sent once and never
 read back.
 

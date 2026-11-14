@@ -3221,3 +3221,46 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   generated table and `tools/unicode/` were replaced by `unicode-general-category` (Apache-2.0),
   already in the build through printpdf and listed in THIRD_PARTY_NOTICES. The comparisons above
   were rerun with it: still 76/76 and 697/697 identical.
+
+## 2026-11-14 — #107 Phone summaries written by a paired computer
+
+- **Context:** the owner wants the phone to use their Claude or ChatGPT plan for summaries.
+  Putting the plan's token on the phone is against Anthropic's terms and a strong credential to
+  lose. The computer already runs Claude Code and Codex signed in there (#105).
+- **Decision:** the request travels in the meeting's own Automerge document (`summary_request`),
+  not as a new network message.
+  - Meeting documents already sync between paired devices over the encrypted libp2p link, and
+    they are sealed at rest.
+  - A request made while the two are apart waits in the document and is answered at the next
+    sync, without a queue of its own.
+  - The answer comes back the same way, as the meeting's `summary`.
+  - The phone sends no meeting content and no credential; the computer already has the
+    transcript and photos through sync.
+- **The computer answers only when the owner says so:** "Summaries for my other devices"
+  (`paired_summary_connection`) is off by default. It names one of the computer's connections, and
+  removing that connection turns answering off.
+- **How the computer answers** (the automatic-summary thread, #101):
+  - It marks the request `working` with its peer ID and the time, so a second computer leaves it
+    alone. A computer that stopped mid-way is taken over after 30 minutes; its own `working`
+    mark from before a restart is taken at once.
+  - It writes with the phone's template when the owner wrote one there, else its own; a
+    meeting's own prompt still comes first.
+  - The label names the computer ("Claude Code on Laptop"), so the phone shows where it was
+    written.
+  - The summary is stored and the request removed in one document write.
+  - A failure leaves `failed` with the error code, which the phone words as on the computer. It
+    is not retried until the phone asks again, so a signed-out tool doesn't loop on the plan.
+  - At most 10 sends per hour, failures included; the rest wait. A paired device can't use up the
+    plan.
+- **Latency:** a full scan of every meeting's document every 20 s would be costly. So between the
+  5-minute rounds, a check every 20 s reads only the meetings whose document revision changed
+  since the last check (a synced request is such a change), plus requests it left for later.
+  A request is taken within about 20 s of the sync.
+- **Phone UI:** "Summarize on my computer" on the summary page and in the meeting menu. The page
+  shows waiting (with what the computer needs), working (progress bar) or failed (reason, Try
+  again), offers Cancel request, and reads the request again every 10 s while open. A cancel
+  can't stop a computer already writing; its summary is still stored.
+- **Not done:** chat (#97) through the computer. It needs a back-and-forth that the meeting
+  document isn't suited to.
+- **Terms:** this is the owner running their own tool on their own computer for their own
+  meetings. Whether it holds for other people's use of a distributed app stays open (see #107).
