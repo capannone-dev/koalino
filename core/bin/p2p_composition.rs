@@ -50,16 +50,19 @@ use crate::{
         compute_router::ComputePreference,
         crypto::pair_key::PairAgreementSecret,
         p2p_service::{
-            LocalCapabilities, NetworkCommand, NetworkCommandError, NetworkCommandOutcome,
-            P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError, P2pService, P2pSnapshot,
-            PAIRING_WINDOW, REMOTE_TRANSCRIPTION_TIMEOUT, RemoteTranscriptionJob,
-            SPEECH_TRANSFER_TIMEOUT, SpeechTransferJob,
+            FinishedPairedChat, LocalCapabilities, NetworkCommand, NetworkCommandError,
+            NetworkCommandOutcome, P2pCommand, P2pCommandOutcome, P2pControl, P2pControlError,
+            P2pService, P2pSnapshot, PAIRING_WINDOW, PairedChatHost, REMOTE_TRANSCRIPTION_TIMEOUT,
+            RemoteTranscriptionJob, SPEECH_TRANSFER_TIMEOUT, SpeechTransferJob,
         },
+        paired_chat_exchange::{PairedChatRequest, PairedChatTurn},
+        paired_chat_relay::{PairedChatJob, PairedChatResult},
         pairing_manager::PairingManager,
         repository_sync_manager::RepositorySyncManager,
         transcription_routing::RemoteTranscriptionGateway,
     },
     domain::{
+        chat::ChatScope,
         errors::TranscriptionError,
         models::{DeviceId, DeviceManifest, MeetingId},
         network_addresses::NetworkAddresses,
@@ -103,6 +106,11 @@ const LOCAL_CHANGE_POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// How often paired devices that are not connected are dialed again, so a device that comes
 /// back online reconnects within this time, without waiting for a new mDNS announcement.
 const PAIRED_PEER_REDIAL_INTERVAL: Duration = Duration::from_secs(10);
+
+/// Chat questions that may wait for the task (#107).
+const PAIRED_CHAT_QUEUE_CAPACITY: usize = 8;
+/// How long `ask_paired_computer` waits: every computer's accept window plus one answer.
+const PAIRED_CHAT_WAIT: Duration = Duration::from_secs(8 * 60);
 
 /// Commands that may wait for the task before senders see back-pressure.
 const COMMAND_QUEUE_CAPACITY: usize = 64;
@@ -231,6 +239,10 @@ pub struct P2pHandle {
     speech_transfers: mpsc::Sender<SpeechTransferJob>,
     /// Where speech paired devices send is stored, once the after-meeting worker runs.
     speech_inbox: Arc<Mutex<Option<Box<dyn SpeechInbox>>>>,
+    /// Chat questions for the paired computers (#107).
+    paired_chats: mpsc::Sender<PairedChatJob>,
+    /// Answers paired devices' chat questions, once the host attaches it (#107).
+    paired_chat_host: Arc<Mutex<Option<Box<dyn PairedChatHost>>>>,
     /// Tells the task to stop; taken by `shutdown`.
     stop: Mutex<Option<oneshot::Sender<()>>>,
     /// The task's thread; taken by `shutdown`.
@@ -369,6 +381,70 @@ impl SpeechSender for P2pHandle {
     }
 }
 
+impl P2pHandle {
+    /// Asks the connected paired computers a chat question and blocks until one answers (#107).
+    ///
+    /// Inputs: The scope, the question and the chat so far (oldest first).
+    /// Outputs: The answer, or an error code (`no_paired_computer`, `paired_computer_timeout`,
+    /// `paired_computer_left`, a computer's own code, or `p2p_unavailable` when the task is not
+    /// running). Side effects: Sends the question sealed to paired computers. Blocks for up to
+    /// about seven minutes, so callers run it off the UI thread and outside async tasks.
+    pub fn ask_paired_computer(
+        &self,
+        scope: ChatScope,
+        question: String,
+        history: Vec<PairedChatTurn>,
+    ) -> PairedChatResult {
+        let (reply, answer) = std::sync::mpsc::channel();
+        self.paired_chats
+            .try_send(PairedChatJob {
+                scope,
+                question,
+                history,
+                reply,
+            })
+            .map_err(|_| "p2p_unavailable".to_owned())?;
+        answer
+            .recv_timeout(PAIRED_CHAT_WAIT)
+            .map_err(|_| "paired_computer_timeout".to_owned())?
+    }
+
+    /// Answers paired devices' chat questions with `host` from now on (#107).
+    ///
+    /// Side effects: Replaces any host attached before.
+    pub fn answer_paired_chats_with(&self, host: Box<dyn PairedChatHost>) {
+        *self
+            .paired_chat_host
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(host);
+    }
+}
+
+/// The P2P service's chat host: forwards to the host attached later, and declines until then.
+struct AttachedPairedChatHost(Arc<Mutex<Option<Box<dyn PairedChatHost>>>>);
+
+impl PairedChatHost for AttachedPairedChatHost {
+    fn submit(&mut self, peer: DeviceId, request: PairedChatRequest) -> Result<(), String> {
+        match self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_mut()
+        {
+            Some(host) => host.submit(peer, request),
+            None => Err("not_offered".to_owned()),
+        }
+    }
+
+    fn poll_finished(&mut self) -> Option<FinishedPairedChat> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_mut()
+            .and_then(|host| host.poll_finished())
+    }
+}
+
 impl SpeechLink for P2pHandle {
     fn accept_speech_with(&self, inbox: Box<dyn SpeechInbox>) {
         *self
@@ -464,6 +540,9 @@ pub fn spawn_p2p_task(
     let (speech_sender, speech_receiver) = mpsc::channel(SPEECH_TRANSFER_QUEUE_CAPACITY);
     let speech_inbox: Arc<Mutex<Option<Box<dyn SpeechInbox>>>> = Arc::new(Mutex::new(None));
     let service_inbox = AttachedSpeechInbox(Arc::clone(&speech_inbox));
+    let (chat_sender, chat_receiver) = mpsc::channel(PAIRED_CHAT_QUEUE_CAPACITY);
+    let paired_chat_host: Arc<Mutex<Option<Box<dyn PairedChatHost>>>> = Arc::new(Mutex::new(None));
+    let service_chat_host = AttachedPairedChatHost(Arc::clone(&paired_chat_host));
     let database_path = database_path.to_path_buf();
     let worker = std::thread::Builder::new()
         .name("note-taker-p2p".to_owned())
@@ -493,7 +572,9 @@ pub fn spawn_p2p_task(
                         return;
                     }
                 };
-                let mut service = service.with_speech_inbox(Box::new(service_inbox));
+                let mut service = service
+                    .with_speech_inbox(Box::new(service_inbox))
+                    .with_paired_chat_host(Box::new(service_chat_host));
                 let (snapshot_sender, snapshot_receiver) =
                     watch::channel(snapshot_of(&service, &network_routes));
                 if startup_sender.send(Ok(snapshot_receiver)).is_err() {
@@ -508,6 +589,7 @@ pub fn spawn_p2p_task(
                         network: network_receiver,
                         remote_transcriptions: remote_receiver,
                         speech_transfers: speech_receiver,
+                        paired_chats: chat_receiver,
                         stop: stop_receiver,
                     },
                 )
@@ -525,6 +607,8 @@ pub fn spawn_p2p_task(
         remote_transcriptions: remote_sender,
         speech_transfers: speech_sender,
         speech_inbox,
+        paired_chats: chat_sender,
+        paired_chat_host,
         snapshots,
         stop: Mutex::new(Some(stop_sender)),
         worker: Mutex::new(Some(worker)),
@@ -644,6 +728,8 @@ struct TaskQueues {
     remote_transcriptions: mpsc::Receiver<RemoteTranscriptionJob>,
     /// Retained speech parts to send to the device that combines a meeting (#88).
     speech_transfers: mpsc::Receiver<SpeechTransferJob>,
+    /// Chat questions for the paired computers (#107).
+    paired_chats: mpsc::Receiver<PairedChatJob>,
     /// Fires once to stop the task.
     stop: oneshot::Receiver<()>,
 }
@@ -662,6 +748,7 @@ async fn run_service(
         network: mut network_receiver,
         remote_transcriptions: mut remote_receiver,
         speech_transfers: mut speech_receiver,
+        paired_chats: mut chat_receiver,
         mut stop,
     } = queues;
     let mut change_poll = tokio::time::interval(LOCAL_CHANGE_POLL_INTERVAL);
@@ -696,6 +783,7 @@ async fn run_service(
             }
             Some(job) = remote_receiver.recv() => service.request_remote_transcription(job),
             Some(job) = speech_receiver.recv() => service.request_speech_transfer(job),
+            Some(job) = chat_receiver.recv() => service.request_paired_chat(job),
             request = command_receiver.recv() => {
                 let Some((command, reply_sender)) = request else {
                     break;

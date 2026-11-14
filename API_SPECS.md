@@ -268,8 +268,17 @@ and meeting summaries" below). Keys are write-only.
 
 - `char *note_taker_chat(const char *request_json)` runs one command and returns caller-freed
   JSON: `{"command":"history"|"ask"|"clear","scope":"meeting"|"project"|"all","id"?,
-  "question"?,"connection_id"?}`. Answers and errors are as for `/api/chat` below, plus
-  `runtime_unavailable`. `ask` blocks until the model answers.
+  "question"?,"connection_id"?,"on_paired_computer"?}`. Answers and errors are as for
+  `/api/chat` below, plus `runtime_unavailable`. `ask` blocks until the model answers.
+- `"on_paired_computer": true` (#107, the phone) sends the question and the chat so far, sealed,
+  to the connected paired computers one at a time. The first computer whose owner chose a
+  connection under "Summaries for my other devices" answers from its own copy of the notes, and
+  the phone keeps both messages in its own chat (the answer's `connection` reads like
+  "Claude Code on Laptop"). Extra error codes: `no_paired_computer`, `paired_computer_timeout`
+  (an accepted question gets 6 minutes), `paired_computer_left`, `rate_limited` (30 questions
+  an hour per computer), `busy`, `p2p_unavailable`, or the computer's own code (such as
+  `llm_unreachable`). A computer that does not offer chat declines at once; one that stays
+  silent for 20 s (an older version) is skipped.
 
 ### Clear copies C ABI (#99)
 

@@ -23,10 +23,17 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 
+use std::sync::Arc;
+
 use super::api::ServerAppState;
-use crate::notes_chat_commands::{
-    ChatCommand, ask_with, gather_for_ask, parse_chat_request, run_chat_store_command,
-    store_messages,
+use crate::{
+    domain::models::DeviceId,
+    notes_chat_commands::{
+        ChatCommand, answer_for_paired_device, ask_with, gather_for_ask, gather_material,
+        offers_paired_chat, parse_chat_request, run_chat_store_command, store_messages,
+    },
+    p2p_composition::P2pHandle,
+    paired_chat_host::ThreadedPairedChatHost,
 };
 
 /// Registers the routes; `build_router` merges them before its layers.
@@ -112,6 +119,8 @@ async fn ask_question(State(state): State<ServerAppState>, body: Option<Json<Val
                 scope,
                 question,
                 connection_id,
+                // The daemon answers with its own connections.
+                on_paired_computer: _,
             }) => (scope, question, connection_id),
             Ok(_) => return respond(json!({"ok": false, "error_code": "invalid_request"})),
             Err(error) => return respond(error.to_json()),
@@ -145,4 +154,40 @@ async fn ask_question(State(state): State<ServerAppState>, body: Option<Json<Val
     .await
     .unwrap_or_else(|_| json!({"ok": false, "error_code": "failed", "error": "the chat failed"}));
     respond(answer)
+}
+
+/// Answers paired devices' chat questions from the daemon's notes when the owner chose a
+/// connection for them (#107).
+///
+/// Inputs: The state (with AI services) and the P2P task. Side effects: Starts the answering
+/// thread and attaches it to the task; nothing without AI services.
+pub fn answer_paired_chats(state: &ServerAppState, p2p: &P2pHandle) {
+    let Some(services) = state.llm() else {
+        return;
+    };
+    let offering = Arc::clone(&services);
+    let state = state.clone();
+    let host = ThreadedPairedChatHost::spawn(
+        move || offers_paired_chat(&offering),
+        move |_peer: &DeviceId, request| {
+            answer_for_paired_device(&services, &request, |scope, question| {
+                let files = state.project_files();
+                let repositories = state.repositories();
+                let repositories = repositories.blocking_lock();
+                let voices = state.voice_database();
+                let voices = voices.blocking_lock();
+                gather_material(
+                    &**repositories,
+                    &**voices,
+                    files.as_deref(),
+                    scope,
+                    question,
+                )
+            })
+        },
+    );
+    match host {
+        Ok(host) => p2p.answer_paired_chats_with(Box::new(host)),
+        Err(error) => tracing::warn!(error = %error, "paired devices' chats cannot be answered"),
+    }
 }

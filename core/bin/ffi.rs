@@ -437,6 +437,9 @@ impl FfiRuntime {
         let runtime = Self::from_settings(&app_setting)?;
         // Its thread waits for this runtime's lock, which the caller releases after this call.
         crate::ffi_llm::start_auto_summaries(runtime.note_repository.device_id().clone());
+        if let Some(p2p) = &runtime.p2p {
+            crate::ffi_chat::answer_paired_chats(p2p);
+        }
         crate::ffi_notes_folder::start_notes_folder();
         Ok(runtime)
     }
@@ -2297,7 +2300,7 @@ fn start_p2p(
 ///
 /// Outputs: `Ok(None)` when P2P is off, or `Err` when the runtime cannot start.
 /// Side effects: Opens the runtime on first use.
-fn runtime_p2p() -> Result<Option<Arc<P2pHandle>>, c_int> {
+pub(crate) fn runtime_p2p() -> Result<Option<Arc<P2pHandle>>, c_int> {
     let runtime_mutex = FFI_RUNTIME.get_or_init(|| Mutex::new(None));
     let mut runtime_guard = runtime_mutex.lock().map_err(|_| FFI_RUNTIME_UNAVAILABLE)?;
     if runtime_guard.is_none() {

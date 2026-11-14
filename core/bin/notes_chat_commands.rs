@@ -6,13 +6,15 @@
 //! | `command` | Fields | Answer |
 //! | --- | --- | --- |
 //! | `history` | `scope`, `id`? | `messages` |
-//! | `ask` | `scope`, `id`?, `question`, `connection_id`? | `question`, `answer` (messages) |
+//! | `ask` | `scope`, `id`?, `question`, `connection_id`?, `on_paired_computer`? | `question`, `answer` (messages) |
 //! | `clear` | `scope`, `id`? | `cleared` |
 //!
 //! A message is `{"role","text","created_at","included","omitted","connection"}`. Error codes:
 //! `invalid_request`, `empty`, `too_long`, `meeting_not_found`, `project_not_found`,
 //! `nothing_to_chat`, `context_too_small`, `no_connection`, `connection_not_found`,
-//! the `llm_*` codes of `llm_commands`, and `storage_failed`.
+//! the `llm_*` codes of `llm_commands`, and `storage_failed`. With `on_paired_computer` (#107),
+//! a paired computer answers: `no_paired_computer`, `paired_computer_timeout`,
+//! `paired_computer_left`, `rate_limited`, `busy`, `p2p_unavailable`, or the computer's own code.
 //!
 //! `gather_material` reads what a chat is about: one meeting's transcript, summary, notes and
 //! photos; one project's files (text, Markdown, e-mails), images and meetings, newest first; or
@@ -32,6 +34,10 @@ use crate::{
         meeting_crdt::MeetingCrdtService,
         meeting_summary::{SpokenLine, render_transcript},
         notes_chat::{ChatError, ChatMaterial, ContextItem, ask, relevance},
+        paired_chat_exchange::{
+            PairedChatAnswer, PairedChatOutcome, PairedChatRequest, PairedChatTurn,
+        },
+        paired_chat_relay::PairedChatResult,
     },
     domain::{
         chat::{ChatMessage, ChatRole, ChatScope, ChatSource, ChatTarget},
@@ -57,6 +63,8 @@ pub enum ChatCommand {
         scope: ChatScope,
         question: String,
         connection_id: Option<String>,
+        /// Ask a paired computer instead of a connection on this device (#107).
+        on_paired_computer: bool,
     },
     Clear(ChatScope),
 }
@@ -88,6 +96,10 @@ pub fn parse_chat_request(request_json: &str) -> Result<ChatCommand, CommandErro
                 .and_then(Value::as_str)
                 .filter(|id| !id.is_empty())
                 .map(str::to_owned),
+            on_paired_computer: request
+                .get("on_paired_computer")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
         }),
         _ => Err(invalid("the command must be history, ask or clear")),
     }
@@ -669,4 +681,148 @@ where
     store
         .append_chat_messages(scope, messages)
         .map_err(|error| CommandError::new("storage_failed", error.to_string()))
+}
+
+/// Reports whether this computer answers its paired devices' chat questions (#107): the owner
+/// chose a connection under "Summaries for my other devices".
+///
+/// Side effects: Reads the settings file.
+pub fn offers_paired_chat(services: &LlmServices) -> bool {
+    services.settings().paired_summary_connection().is_some()
+}
+
+/// Answers a paired device's chat question from this computer's own copy of the notes (#107).
+///
+/// Inputs: The services, the question with its scope and recent turns, and `gather` (reads the
+/// material for a scope and question, holding the host's store only while it reads).
+/// Outputs: `Answered`, labelled "<connection> on <this computer>", or `Declined` with an error
+/// code: `not_offered` when no connection is chosen for paired devices, else the `ask` codes
+/// (`nothing_to_chat`, `llm_unreachable`, ...). Side effects: Sends the question, the turns and
+/// the material that fits to the chosen connection's server; blocks for as long as the model
+/// takes. Nothing is stored here: the asking device keeps its own chat. Nothing is logged.
+pub fn answer_for_paired_device(
+    services: &LlmServices,
+    request: &PairedChatRequest,
+    gather: impl FnOnce(&ChatScope, &str) -> Result<ChatMaterial, CommandError>,
+) -> PairedChatOutcome {
+    let declined = |error: CommandError| PairedChatOutcome::Declined {
+        error_code: error.code.to_owned(),
+    };
+    let settings = services.settings();
+    let Some(connection) = settings.paired_summary_connection() else {
+        return PairedChatOutcome::Declined {
+            error_code: "not_offered".to_owned(),
+        };
+    };
+    let engine = match services.engine(connection) {
+        Ok(engine) => engine,
+        Err(error) => return declined(error),
+    };
+    let material = match gather(&request.scope, &request.question) {
+        Ok(material) => material,
+        Err(error) => return declined(error),
+    };
+    let asked_at = Utc::now();
+    let history: Vec<ChatMessage> = request
+        .history
+        .iter()
+        .map(|turn| ChatMessage {
+            role: turn.role,
+            ..ChatMessage::question(&turn.text, asked_at)
+        })
+        .collect();
+    match ask(
+        engine.as_ref(),
+        connection,
+        material,
+        &history,
+        &request.question,
+    ) {
+        Ok(reply) => PairedChatOutcome::Answered(PairedChatAnswer {
+            text: reply.text,
+            included: reply.included,
+            omitted: reply.omitted,
+            sources: reply.sources,
+            connection_label: format!("{} on {}", connection.label(), services.device_name()),
+            truncated: reply.truncated,
+            images_sent: u32::try_from(reply.images_sent).unwrap_or(u32::MAX),
+        }),
+        Err(error) => declined(error.into()),
+    }
+}
+
+/// Asks a paired computer and keeps its answer in this device's chat (#107).
+///
+/// Inputs: The question, `history` (reads this device's chat so far), `ask` (sends the trimmed
+/// question and the turns to the paired computers and waits; see `P2pHandle::ask_paired_computer`)
+/// and `store` (adds the question and answer to this device's chat).
+/// Outputs: `{"ok":true,"question","answer"}` as `ask_with`, or `{"ok":false,"error_code","error"}`.
+/// Side effects: Sends the question and the turns, sealed, to a paired computer, which reads its
+/// own copy of the notes; on an answer, stores both messages here. Blocks for minutes at most.
+pub fn ask_paired_computer_with(
+    question: &str,
+    history: impl FnOnce() -> Result<Vec<ChatMessage>, CommandError>,
+    ask: impl FnOnce(String, Vec<PairedChatTurn>) -> PairedChatResult,
+    store: impl FnOnce(&[ChatMessage]) -> Result<(), CommandError>,
+) -> Value {
+    let question = question.trim();
+    if question.is_empty() {
+        return CommandError::from(ChatError::EmptyQuestion).to_json();
+    }
+    let turns = match history() {
+        Ok(messages) => messages
+            .into_iter()
+            .map(|message| PairedChatTurn {
+                role: message.role,
+                text: message.text,
+            })
+            .collect(),
+        Err(error) => return error.to_json(),
+    };
+    let asked_at = Utc::now();
+    let answer = match ask(question.to_owned(), turns) {
+        Ok(answer) => answer,
+        Err(code) => {
+            return json!({"ok": false, "error": paired_chat_problem(&code), "error_code": code});
+        }
+    };
+    let messages = [
+        ChatMessage::question(question, asked_at),
+        ChatMessage {
+            role: ChatRole::Assistant,
+            text: answer.text,
+            created_at: Utc::now(),
+            included: answer.included,
+            omitted: answer.omitted,
+            connection_label: Some(answer.connection_label),
+            sources: answer.sources,
+        },
+    ];
+    if let Err(error) = store(&messages) {
+        return error.to_json();
+    }
+    json!({
+        "ok": true,
+        "question": message_json(&messages[0]),
+        "answer": message_json(&messages[1]),
+        "truncated": answer.truncated,
+        "images_sent": answer.images_sent,
+    })
+}
+
+/// A message for people about a paired computer's error code.
+fn paired_chat_problem(code: &str) -> String {
+    match code {
+        "no_paired_computer" => String::from(
+            "No paired computer answered. Turn on \"Summaries for my other devices\" in a computer's AI settings, and keep it on and connected.",
+        ),
+        "paired_computer_timeout" => String::from("The computer took too long to answer."),
+        "paired_computer_left" => String::from("The computer disconnected before answering."),
+        "rate_limited" => {
+            String::from("The computer answers at most 30 questions an hour; try again later.")
+        }
+        "busy" => String::from("The computer is answering other questions; try again shortly."),
+        "p2p_unavailable" => String::from("Paired devices are off on this device."),
+        other => format!("The computer could not answer ({other})."),
+    }
 }

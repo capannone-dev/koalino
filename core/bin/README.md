@@ -111,7 +111,11 @@ documented nonzero status codes distinguishable from lifecycle states.
 ## P2P pairing and sync (Issue #43)
 
 `transcription_host.rs` runs paired devices' transcriptions on its own thread (#59), loading the
-engine on the first job and deleting each job's audio when it ends.
+engine on the first job and deleting each job's audio when it ends. `paired_chat_host.rs` answers
+paired devices' chat questions on its own thread (#107), one at a time, with a queue of four,
+declining at once when the owner chose no connection for paired devices (`not_offered`) and
+beyond 30 questions an hour (`rate_limited`). The app (`ffi_chat.rs`) and the daemon
+(`server/chat_routes.rs`) attach it to the P2P task with `P2pHandle::answer_paired_chats_with`.
 
 `p2p_composition.rs` runs the daemon's P2P task on its own `note-taker-p2p` thread, with a
 single-threaded Tokio runtime. libp2p's event loop and document merges therefore never run on the
@@ -354,7 +358,10 @@ reads what a chat is about. For a meeting: its summary, notes, transcript and ph
 project: its files' text and newest images, then its meetings newest first. For everything: a
 list of all meetings and projects, then the meetings (and matching files) that best match the
 question. `ask_with` holds the store only while reading and storing, never while the model
-answers.
+answers. A phone asks a paired computer instead (#107): `ask_paired_computer_with` sends the
+question and its own chat's turns through `P2pHandle::ask_paired_computer` and keeps the answer
+locally, and `answer_for_paired_device` answers on the computer with the connection chosen for
+paired devices (`not_offered` without one), reading the computer's own copy of the notes.
 
 `notes_folder.rs` (#98) keeps the opt-in notes folder: a tree of plain files mirroring projects
 (`<Project>/`, with their files) and meetings (`<Project or No project>/<YYYY-MM-DD HH-MM Title>/`

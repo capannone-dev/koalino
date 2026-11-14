@@ -1872,6 +1872,7 @@ where
             scope,
             question,
             connection_id,
+            on_paired_computer: _,
         } = command
         else {
             return Ok(run_chat_store_command(&self.repository, &command));

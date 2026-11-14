@@ -67,6 +67,11 @@ pub struct LlmServices {
 }
 
 impl LlmServices {
+    /// This device's name, as paired devices see it in labels ("Claude Code on Laptop").
+    pub fn device_name(&self) -> &str {
+        &self.device_name
+    }
+
     /// Creates the services with the real model adapters.
     ///
     /// Inputs: `<db>.llm-settings.json` and this device's name. Outputs: The services.

@@ -329,3 +329,194 @@ fn unreachable_gather() -> Result<
 > {
     panic!("nothing is read without a connection")
 }
+
+#[test]
+fn a_paired_device_is_answered_only_with_the_chosen_connection() {
+    use super::notes_chat_commands::{answer_for_paired_device, offers_paired_chat};
+    use crate::application::paired_chat_exchange::{
+        PairedChatOutcome, PairedChatRequest, PairedChatTurn,
+    };
+    use crate::domain::chat::ChatRole;
+
+    let folder = std::env::temp_dir().join(format!("chat-paired-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
+    let seen: Arc<Mutex<Vec<LlmRequest>>> = Arc::default();
+    let recorder = Arc::clone(&seen);
+    let services = LlmServices::new(folder.join("db.sqlite3.llm-settings.json"), "Laptop")
+        .with_transcription_settings(PathBuf::from("/nonexistent"))
+        .with_engine_factory(Arc::new(move |_connection: &LlmConnection| {
+            Ok(Box::new(Recorder(Arc::clone(&recorder))) as Box<dyn LlmEngine>)
+        }));
+    let repository = repository();
+    let voices = InMemoryVoiceVectorDB::new();
+    let meeting_id = meeting(
+        &repository,
+        "m-1",
+        "Budget review",
+        "The budget is approved.",
+    );
+    let request = PairedChatRequest {
+        job_id: uuid::Uuid::from_u128(3),
+        scope: ChatScope::Meeting(meeting_id),
+        question: "Was the budget approved?".to_owned(),
+        history: vec![
+            PairedChatTurn {
+                role: ChatRole::User,
+                text: "Who came to the budget review?".to_owned(),
+            },
+            PairedChatTurn {
+                role: ChatRole::Assistant,
+                text: "Anna and Luca.".to_owned(),
+            },
+        ],
+    };
+    let gather = |scope: &ChatScope, question: &str| {
+        gather_material(&repository, &voices, None, scope, question)
+    };
+
+    assert!(!offers_paired_chat(&services));
+    assert_eq!(
+        answer_for_paired_device(&services, &request, gather),
+        PairedChatOutcome::Declined {
+            error_code: "not_offered".to_owned()
+        }
+    );
+
+    let saved: Value = serde_json::from_str(&run_llm_command(
+        &services,
+        &json!({"command": "save_connection", "label": "Local", "kind": "open_ai_compatible",
+                "base_url": "http://127.0.0.1:8080/v1", "model": "m", "context_tokens": 8192})
+        .to_string(),
+    ))
+    .unwrap_or_default();
+    let id = saved["connection"]["id"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    let chosen: Value = serde_json::from_str(&run_llm_command(
+        &services,
+        &json!({"command": "update", "paired_summary_connection": id}).to_string(),
+    ))
+    .unwrap_or_default();
+    assert_eq!(chosen["paired_summary_connection"], id, "{chosen}");
+    assert!(offers_paired_chat(&services));
+
+    let outcome = answer_for_paired_device(&services, &request, gather);
+
+    let PairedChatOutcome::Answered(answer) = outcome else {
+        panic!("not answered: {outcome:?}");
+    };
+    assert_eq!(answer.text, "It was approved.");
+    assert_eq!(answer.connection_label, "Local on Laptop");
+    assert!(answer.included[0].starts_with("Meeting \"Budget review\""));
+    let sent = seen
+        .lock()
+        .map(|seen| format!("{:?}", seen.last()))
+        .unwrap_or_default();
+    assert!(
+        sent.contains("Who came to the budget review?"),
+        "the history was not sent"
+    );
+}
+
+#[test]
+fn a_phone_keeps_the_paired_computers_answer_in_its_own_chat() {
+    use super::notes_chat_commands::ask_paired_computer_with;
+    use crate::application::paired_chat_exchange::{PairedChatAnswer, PairedChatTurn};
+    use crate::domain::chat::{ChatMessage, ChatRole};
+
+    let earlier = vec![
+        ChatMessage::question("Who came?", chrono::Utc::now()),
+        ChatMessage {
+            role: ChatRole::Assistant,
+            ..ChatMessage::question("Anna and Luca.", chrono::Utc::now())
+        },
+    ];
+    let mut sent: Option<(String, Vec<PairedChatTurn>)> = None;
+    let mut stored: Vec<ChatMessage> = Vec::new();
+    let answer = ask_paired_computer_with(
+        " Was it approved? ",
+        || Ok(earlier.clone()),
+        |question, turns| {
+            sent = Some((question, turns));
+            Ok(PairedChatAnswer {
+                text: "Yes [1].".to_owned(),
+                included: vec!["Meeting \"Budget review\"".to_owned()],
+                omitted: Vec::new(),
+                sources: Vec::new(),
+                connection_label: "Claude Code on Laptop".to_owned(),
+                truncated: false,
+                images_sent: 0,
+            })
+        },
+        |messages| {
+            stored.extend_from_slice(messages);
+            Ok(())
+        },
+    );
+
+    assert_eq!(answer["ok"], true, "{answer}");
+    assert_eq!(answer["answer"]["text"], "Yes [1].");
+    assert_eq!(answer["answer"]["connection"], "Claude Code on Laptop");
+    let (question, turns) = sent.unwrap_or_default();
+    assert_eq!(question, "Was it approved?");
+    assert_eq!(
+        turns
+            .iter()
+            .map(|turn| turn.text.as_str())
+            .collect::<Vec<_>>(),
+        vec!["Who came?", "Anna and Luca."]
+    );
+    assert_eq!(stored.len(), 2);
+    assert_eq!(stored[0].text, "Was it approved?");
+    assert_eq!(
+        stored[1].connection_label.as_deref(),
+        Some("Claude Code on Laptop")
+    );
+}
+
+#[test]
+fn a_phone_reports_why_no_computer_answered_and_keeps_nothing() {
+    use super::notes_chat_commands::ask_paired_computer_with;
+    for code in ["no_paired_computer", "llm_unreachable", "rate_limited"] {
+        let mut stored = 0;
+        let answer = ask_paired_computer_with(
+            "Approved?",
+            || Ok(Vec::new()),
+            |_, _| Err(code.to_owned()),
+            |messages| {
+                stored += messages.len();
+                Ok(())
+            },
+        );
+        assert_eq!(answer["ok"], false);
+        assert_eq!(answer["error_code"], code);
+        assert!(
+            answer["error"]
+                .as_str()
+                .is_some_and(|text| !text.is_empty())
+        );
+        assert_eq!(stored, 0);
+    }
+    let blank = ask_paired_computer_with(
+        " ",
+        || Ok(Vec::new()),
+        |_, _| Err("x".to_owned()),
+        |_| Ok(()),
+    );
+    assert_eq!(blank["error_code"], "empty");
+}
+
+#[test]
+fn an_ask_can_name_the_paired_computer() {
+    let command = parse_chat_request(
+        r#"{"command":"ask","scope":"all","question":"Hi","on_paired_computer":true}"#,
+    );
+    assert!(matches!(
+        command,
+        Ok(ChatCommand::Ask {
+            on_paired_computer: true,
+            ..
+        })
+    ));
+}

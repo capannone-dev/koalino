@@ -9,14 +9,71 @@
 use std::ffi::{CString, c_char};
 
 use crate::{
-    ffi::{ffi_string, with_runtime_chat_sources, with_runtime_repositories},
+    domain::chat::ChatScope,
+    ffi::{ffi_string, runtime_p2p, with_runtime_chat_sources, with_runtime_repositories},
     ffi_llm::services,
     llm_commands::CommandError,
     notes_chat_commands::{
-        ChatCommand, ask_with, gather_for_ask, parse_chat_request, run_chat_store_command,
+        ChatCommand, answer_for_paired_device, ask_paired_computer_with, ask_with, gather_for_ask,
+        gather_material, offers_paired_chat, parse_chat_request, run_chat_store_command,
         store_messages,
     },
+    paired_chat_host::ThreadedPairedChatHost,
+    ports::chat::ChatHistoryRepository,
 };
+
+/// Asks a paired computer and keeps its answer in this device's chat (#107).
+///
+/// Side effects: Reads this device's chat, sends the question sealed to the paired computers
+/// through the P2P task, and stores both messages; blocks for minutes at most.
+fn ask_paired_computer(scope: ChatScope, question: &str) -> serde_json::Value {
+    let p2p = match runtime_p2p() {
+        Ok(Some(p2p)) => p2p,
+        Ok(None) => {
+            return serde_json::json!({"ok": false, "error_code": "p2p_unavailable",
+                "error": "Paired devices are off on this device."});
+        }
+        Err(_) => return runtime_unavailable().to_json(),
+    };
+    ask_paired_computer_with(
+        question,
+        || {
+            with_runtime_repositories(|repository, _| {
+                repository
+                    .chat_history(&scope)
+                    .map_err(|error| CommandError::new("storage_failed", error.to_string()))
+            })
+            .unwrap_or_else(|| Err(runtime_unavailable()))
+        },
+        |question, turns| p2p.ask_paired_computer(scope.clone(), question, turns),
+        |messages| {
+            with_runtime_repositories(|repository, _| store_messages(repository, &scope, messages))
+                .unwrap_or_else(|| Err(runtime_unavailable()))
+        },
+    )
+}
+
+/// Answers paired devices' chat questions from this app's notes when the owner chose a connection
+/// for them (#107).
+///
+/// Side effects: Starts the answering thread and attaches it to the P2P task.
+pub(crate) fn answer_paired_chats(p2p: &crate::p2p_composition::P2pHandle) {
+    let host = ThreadedPairedChatHost::spawn(
+        || offers_paired_chat(&services()),
+        |_peer: &crate::domain::models::DeviceId, request| {
+            answer_for_paired_device(&services(), &request, |scope, question| {
+                with_runtime_chat_sources(|repository, voices, files| {
+                    gather_material(repository, voices, Some(files), scope, question)
+                })
+                .unwrap_or_else(|| Err(runtime_unavailable()))
+            })
+        },
+    );
+    match host {
+        Ok(host) => p2p.answer_paired_chats_with(Box::new(host)),
+        Err(error) => tracing::warn!(error = %error, "paired devices' chats cannot be answered"),
+    }
+}
 
 /// The answer when the runtime cannot be opened.
 fn runtime_unavailable() -> CommandError {
@@ -42,7 +99,14 @@ pub unsafe extern "C" fn note_taker_chat(request_json: *const c_char) -> *mut c_
         Some(Ok(ChatCommand::Ask {
             scope,
             question,
+            on_paired_computer: true,
+            ..
+        })) => ask_paired_computer(scope, &question),
+        Some(Ok(ChatCommand::Ask {
+            scope,
+            question,
             connection_id,
+            on_paired_computer: false,
         })) => ask_with(
             &services(),
             connection_id.as_deref(),

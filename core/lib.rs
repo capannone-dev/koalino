@@ -128,6 +128,12 @@ mod notes_folder_tests;
 pub mod p2p_composition;
 #[path = "bin/p2p_network_routes.rs"]
 pub mod p2p_network_routes;
+/// Answers paired devices' chat questions on a thread of their own (#107).
+#[path = "bin/paired_chat_host.rs"]
+pub mod paired_chat_host;
+#[cfg(test)]
+#[path = "bin/paired_chat_host_tests.rs"]
+mod paired_chat_host_tests;
 /// Composes the live meeting pipeline from environment configuration.
 #[path = "bin/pipeline_composition.rs"]
 pub mod pipeline_composition;
