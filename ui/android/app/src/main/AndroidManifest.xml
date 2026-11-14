@@ -26,6 +26,9 @@
         <!-- Efficient mode (#75): apps can only open the vendor's OpenCL library if they declare
              it. Not required, so phones without it install the app and stay on the processor. -->
         <uses-native-library android:name="libOpenCL.so" android:required="false"/>
+        <!-- Whisper on the NPU (#75): the downloaded QNN runtime reaches the NPU through the
+             vendor's FastRPC library, which apps can open only if they declare it. -->
+        <uses-native-library android:name="libcdsprpc.so" android:required="false"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

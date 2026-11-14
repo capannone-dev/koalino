@@ -11,6 +11,8 @@
 // `ChargingReporter` tells the core when the phone charges, so the after-meeting pass can run (#87).
 // `CallSignals` (`note_taker/call_signals`) tells Dart when another app is in a call, and
 // `CallOffer` (`note_taker/call_offer`) offers to record it as a notification (#111).
+// `NpuDownload` (`note_taker/npu`) fetches the NPU's Whisper files on request and points the
+// NPU's library search at them (#75).
 package com.example.note_taker_ui
 
 import android.content.Context
@@ -71,6 +73,8 @@ class MainActivity : FlutterActivity() {
             MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/call_offer")
         callOfferChannel.setMethodCallHandler(callOffer)
         callOffer.channel = callOfferChannel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/npu")
+            .setMethodCallHandler(NpuDownload())
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/whisper_model")
             .setMethodCallHandler(WhisperModel(assets))
         val recordingChannel =
@@ -151,6 +155,8 @@ class MainActivity : FlutterActivity() {
      * skips the share: its intent was imported before the process was killed.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Before the engine starts, so the core finds the NPU's libraries (#75).
+        NpuDownload.prepareEnvironment(applicationContext)
         super.onCreate(savedInstanceState)
         chargingReporter.start()
         callOffer.start()

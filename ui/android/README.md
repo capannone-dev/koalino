@@ -42,6 +42,27 @@ source in `app/build.gradle.kts`). whisper.cpp needs a file path, so `WhisperMod
 into the app's data directory through a temporary file on first start. The APK is about 218 MB;
 Play Store distribution would need an asset pack instead.
 
+## Whisper on the NPU (#75)
+
+On a Snapdragon 8 Gen 2 phone (SM8550), Settings → Transcription model offers "Transcribe on the
+NPU". `NpuDownload.kt` serves `note_taker/npu`: after the owner accepts Qualcomm's terms it
+downloads Qualcomm's QNN runtime 2.50.0 (Maven Central) and AI Hub's precompiled Whisper Small,
+both pinned by size and SHA-256, extracts only the files needed into a staging folder, and moves
+them into `<data directory>/npu/{qnn,model}` when both are complete. Dart polls its progress and
+turns the NPU on (`note_taker_set_npu_whisper`) once done. No Qualcomm code is in the APK; only
+Microsoft's `libonnxruntime.so` (MIT) is, beside the core.
+
+Two platform details make the NPU reachable from an app:
+
+- The manifest declares `libcdsprpc.so` with `<uses-native-library>`, like `libOpenCL.so`;
+  without it QNN fails with `QNN_DEVICE_ERROR_INVALID_CONFIG`.
+- `MainActivity.onCreate` calls `NpuDownload.prepareEnvironment` before the engine starts. It
+  sets `ADSP_LIBRARY_PATH` to the downloaded `qnn` folder followed by the system's DSP folders, so
+  the NPU loads `libQnnHtpV73Skel.so` from there.
+
+The core opens the NPU when it composes the pipeline. If that fails, for example after a system
+update, it falls back to whisper.cpp and logs why.
+
 ## Background recording (Issue #47)
 
 `RecordingService.kt` is a foreground service of type `microphone` (permissions
