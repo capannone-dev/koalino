@@ -680,7 +680,8 @@ no API keys (#117): requests carry no authorization header, a sent `api_key` is 
   - A failure marks the request `failed` with the error code and is not retried.
   - At most 10 requests are sent per hour; the rest wait.
 - `GET /api/meetings/{id}/summary` returns `{"summary": {"text","connection_label","model",
-  "created_at","prompt","edited","truncated"} or null, "meeting_prompt": text or null}`.
+  "created_at","prompt","edited","truncated"} or null, "meeting_prompt": text or null,
+  "request": the meeting's request to a paired computer (#107, as in the C ABI) or null}`.
 - `POST /api/meetings/{id}/summary` with `{"connection_id"?}` sends the meeting's transcript,
   notes and photos to that connection (the default when absent), stores the summary in the
   meeting document, which syncs to paired devices, and returns `{"summary","parts",

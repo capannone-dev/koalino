@@ -164,6 +164,10 @@ async fn a_connection_is_added_and_a_meeting_summarized_and_stored() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["summary"]["model"], "llama");
     assert_eq!(body["meeting_prompt"], Value::Null);
+    assert!(
+        body.get("request").is_some_and(Value::is_null),
+        "no request to a paired computer (#107): {body}"
+    );
 
     let (status, body) = send(&router, "POST", "/api/meetings/missing/summary", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "{body}");

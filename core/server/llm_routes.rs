@@ -8,7 +8,7 @@
 //! | `PUT /api/settings/llm/connections/{id}` | 200 `{"connection"}`, edited |
 //! | `DELETE /api/settings/llm/connections/{id}` | 200 `{"deleted":true}` |
 //! | `POST /api/settings/llm/connections/{id}/test` | 200 `{"reply"}` |
-//! | `GET /api/meetings/{id}/summary` | 200 `{"summary": {...} or null, "meeting_prompt": text or null}` |
+//! | `GET /api/meetings/{id}/summary` | 200 `{"summary": {...} or null, "meeting_prompt": text or null, "request": a paired computer's summary request (#107) or null}` |
 //! | `POST /api/meetings/{id}/summary` `{"connection_id"?}` | 200 `{"summary","parts","images_sent","images_skipped"}` |
 //! | `PUT /api/meetings/{id}/summary-prompt` `{"prompt": text or null}` | 200 `{"meeting_prompt"}` |
 //!
@@ -258,11 +258,16 @@ async fn read_summary(
                 .ok()
                 .flatten()
         });
+    let request = load_summary_request(&**repositories, &meeting_id)
+        .ok()
+        .flatten()
+        .map(|request| crate::llm_commands::summary_request_json(&request));
     match summary {
         Ok(summary) => respond(json!({
             "ok": true,
             "summary": summary.as_ref().map(summary_json),
             "meeting_prompt": prompt,
+            "request": request,
         })),
         Err(_) => failure("storage_failed", "the summary could not be read"),
     }
