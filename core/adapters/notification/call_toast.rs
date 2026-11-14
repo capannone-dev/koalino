@@ -134,10 +134,7 @@ mod windows_toast {
         },
         Win32::System::{
             Com::{COINIT_MULTITHREADED, CoInitializeEx},
-            Registry::{
-                HKEY, HKEY_CURRENT_USER, KEY_WRITE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
-                RegCreateKeyExW, RegSetValueExW,
-            },
+            Registry::{HKEY_CURRENT_USER, REG_SZ, RegSetKeyValueW},
         },
         core::{HSTRING, IInspectable, Interface, PCWSTR},
     };
@@ -231,29 +228,20 @@ mod windows_toast {
     /// Registers the AppUserModelID with the name Koalino, so the toast shows and names the app.
     fn register_app_id() -> windows::core::Result<()> {
         let path = HSTRING::from(format!(r"Software\Classes\AppUserModelId\{APP_ID}"));
-        let mut key = HKEY::default();
+        let value = HSTRING::from("DisplayName");
+        let name: Vec<u16> = "Koalino\0".encode_utf16().collect();
+        let size = u32::try_from(name.len() * 2).unwrap_or(u32::MAX);
+        // Creates the key when missing and sets the value in one call.
         unsafe {
-            RegCreateKeyExW(
+            RegSetKeyValueW(
                 HKEY_CURRENT_USER,
                 PCWSTR(path.as_ptr()),
-                None,
-                PCWSTR::null(),
-                REG_OPTION_NON_VOLATILE,
-                KEY_WRITE,
-                None,
-                &mut key,
-                None,
+                PCWSTR(value.as_ptr()),
+                REG_SZ.0,
+                Some(name.as_ptr().cast()),
+                size,
             )
-            .ok()?;
+            .ok()
         }
-        let name: Vec<u16> = "Koalino\0".encode_utf16().collect();
-        let bytes: Vec<u8> = name.iter().flat_map(|unit| unit.to_le_bytes()).collect();
-        let value = HSTRING::from("DisplayName");
-        let result =
-            unsafe { RegSetValueExW(key, PCWSTR(value.as_ptr()), None, REG_SZ, Some(&bytes)).ok() };
-        unsafe {
-            let _ = RegCloseKey(key);
-        }
-        result
     }
 }

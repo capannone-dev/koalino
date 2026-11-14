@@ -3102,3 +3102,25 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   keychain at start-up can ask to unlock it. The owner can delete them by hand.
 - Claude Code and Codex still run with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` removed from their
   environment, so the plan's sign-in answers, not a stray key.
+
+## 2026-11-14 — #111 Calls noticed on Android, and a Windows toast
+
+- **Android:** an ordinary app cannot see which app captures the microphone (the recording
+  configurations hide the client's package). Kotlin therefore reports a call while the audio mode
+  is `MODE_IN_COMMUNICATION` (set by VoIP apps for a call) or a capture uses the
+  `VOICE_COMMUNICATION` source, as one unnamed user that Dart sends with each poll. The core keeps
+  the start and end logic, names it "A call app", and the recording is titled "Call". Koalino's
+  own recorder uses neither, so it never counts.
+  - The offer is a high-importance notification. Record opens the app, because a microphone
+    foreground service can start only while the app is visible.
+  - Verified on the S23 by holding the communication mode from a shell helper for 25 s, with no
+    microphone and no sound: notification and banner shown, both withdrawn after the grace period.
+    Record from the phone's notification was not tried, since it would record the owner's room.
+  - Detection runs while the app's process lives; Android may stop a backgrounded app.
+- **Windows toast:** Windows PowerShell 5.1 cannot subscribe to WinRT events, so a script could
+  show a toast but not learn which button was pressed. The core shows it instead
+  (`adapters/notification/call_toast.rs`, existing `windows` crate with three more features) and
+  receives the in-process Activated/Dismissed events; the AppUserModelID is registered under HKCU,
+  no shortcut needed. Verified on win11: the toast from "Koalino" offered "Edge", Record in it
+  started and saved "Edge call", and dismissing it cleared the banner. On the VM the pop-up was not
+  always visible over the app's window, but the toast was always in the notification centre.

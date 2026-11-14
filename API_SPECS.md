@@ -296,6 +296,12 @@ and meeting summaries" below). Keys are write-only.
     to, because browsers and call apps already running must be restarted once.
 - Error codes: `invalid_request`, `storage_failed`, `runtime_unavailable`, `probe_failed`. No
   open runtime is needed.
+- `char *note_taker_call_toast(const char *request_json)` shows the offer as a Windows toast.
+  `{"command":"offer","app"}` blocks until the owner answers, the offer is withdrawn or two
+  minutes pass, and returns `{"ok":true,"answer"}` (`record`, `dismissed`, `open` for a click on
+  the toast itself, or `unavailable`, always outside Windows); call it on a background thread.
+  `{"command":"withdraw"}` hides the toast and returns `{"ok":true}`. The toast comes from the
+  AppUserModelID `Koalino.NoteTaker`, registered under `HKCU\Software\Classes\AppUserModelId`.
 
 ### Assistant access C ABI (#112)
 

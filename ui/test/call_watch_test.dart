@@ -183,6 +183,42 @@ void main() {
     ]);
   });
 
+  test('the Windows toast asks the core and maps its answers', () async {
+    final List<Map<String, Object?>> requests = <Map<String, Object?>>[];
+    String answer = 'record';
+    final CoreToastCallNotifier toast = CoreToastCallNotifier(
+        call: (String function, List<String?> arguments) async {
+      expect(function, 'note_taker_call_toast');
+      final Map<String, Object?> request =
+          jsonDecode(arguments.single!) as Map<String, Object?>;
+      requests.add(request);
+      return request['command'] == 'offer'
+          ? jsonEncode(<String, Object?>{'ok': true, 'answer': answer})
+          : jsonEncode(<String, Object?>{'ok': true});
+    });
+
+    expect(await toast.offer('Teams'), CallNotificationAnswer.record);
+    expect(
+        requests.single, <String, Object?>{'command': 'offer', 'app': 'Teams'});
+    answer = 'dismissed';
+    expect(await toast.offer('Teams'), CallNotificationAnswer.dismissed);
+    answer = 'open';
+    expect(await toast.offer('Teams'), CallNotificationAnswer.unavailable,
+        reason: 'a click on the toast itself leaves the banner up');
+    answer = 'unavailable';
+    expect(await toast.offer('Teams'), CallNotificationAnswer.unavailable);
+    toast.withdraw();
+    await pumpEventQueue();
+    expect(requests.last, <String, Object?>{'command': 'withdraw'});
+  });
+
+  test('a core without the toast leaves the banner up', () async {
+    final CoreToastCallNotifier toast = CoreToastCallNotifier(
+        call: (String function, List<String?> arguments) async =>
+            throw ArgumentError('missing symbol'));
+    expect(await toast.offer('Teams'), CallNotificationAnswer.unavailable);
+  });
+
   test('a recording the owner started is never stopped by a call', () async {
     await recording.startRecording(title: 'Mine');
     core.polls.addAll(<Map<String, Object?>>[poll('started'), poll('ended')]);

@@ -1,11 +1,15 @@
 // Shows the offer to record a call as a system notification (#111), so it is seen while the
 // app's window is hidden. On Linux it runs `notify-send` with Record and Not now buttons
-// (libnotify 0.7.9 or later prints the chosen button); elsewhere, or without `notify-send`, only
-// the in-app banner shows. No plugin is needed.
+// (libnotify 0.7.9 or later prints the chosen button). On Windows the core shows a toast
+// (`note_taker_call_toast`, through WinRT; Windows PowerShell cannot receive a toast's button
+// events). Android uses `android_call_signals.dart`. Elsewhere, or without the tool, only the
+// in-app banner shows. No plugin is needed.
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 
 /// What the owner did with the notification.
 enum CallNotificationAnswer {
@@ -102,6 +106,46 @@ final class NotifySendCallNotifier implements CallNotifier {
   }
 }
 
+/// The toast the core shows (Windows).
+final class CoreToastCallNotifier implements CallNotifier {
+  /// Creates the notifier; `call` is replaced in tests.
+  const CoreToastCallNotifier({LlmNativeCall call = callRustLlm})
+      : _call = call;
+
+  final LlmNativeCall _call;
+
+  /// Side effects: Shows the toast; the core's call waits on a background isolate until it is
+  /// answered, withdrawn or two minutes pass. A click on the toast itself, or a core that cannot
+  /// show one, answers `unavailable`, which leaves the banner up.
+  @override
+  Future<CallNotificationAnswer> offer(String app) async {
+    try {
+      final Map<String, Object?> answer =
+          decodeLlmAnswer(await _call('note_taker_call_toast', <String?>[
+        jsonEncode(<String, Object?>{'command': 'offer', 'app': app})
+      ]));
+      return switch (answer['answer']) {
+        'record' => CallNotificationAnswer.record,
+        'dismissed' => CallNotificationAnswer.dismissed,
+        _ => CallNotificationAnswer.unavailable,
+      };
+    } on Object {
+      return CallNotificationAnswer.unavailable;
+    }
+  }
+
+  /// Side effects: Hides the toast; its waiting offer answers `dismissed`.
+  @override
+  void withdraw() {
+    unawaited(_call('note_taker_call_toast', <String?>[
+      jsonEncode(<String, Object?>{'command': 'withdraw'})
+    ]).then((String _) {}, onError: (Object _) {}));
+  }
+}
+
 /// The notifier for this platform.
-CallNotifier platformCallNotifier() =>
-    Platform.isLinux ? NotifySendCallNotifier() : const NoCallNotifier();
+CallNotifier platformCallNotifier() => Platform.isLinux
+    ? NotifySendCallNotifier()
+    : Platform.isWindows
+        ? const CoreToastCallNotifier()
+        : const NoCallNotifier();

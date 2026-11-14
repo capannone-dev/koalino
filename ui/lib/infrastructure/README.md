@@ -166,7 +166,9 @@ the snippets to connect Claude Code or another MCP client) and `AssistantAccessE
 `call_notifier.dart` shows the same offer as a system notification, so it is seen while the
 window is hidden. On Linux, `NotifySendCallNotifier` runs `notify-send` with Record and Not now
 buttons (libnotify 0.7.9 or later prints the chosen one). It is withdrawn when the offer is
-answered in the app or the call ends. Other platforms use `NoCallNotifier` (the banner only). No
+answered in the app or the call ends. On Windows, `CoreToastCallNotifier` asks the core for a
+toast (`note_taker_call_toast`; Windows PowerShell cannot receive a toast's button events).
+Other platforms use `NoCallNotifier` (the banner only). No
 plugin is needed. When no notification can be shown (`NoCallNotifier`, or `notify-send` missing
 or failing), the answer is `unavailable`, which leaves the banner up; only `dismissed` clears it.
 `android_call_signals.dart` is the Android side: `AndroidCallSignals.users()` asks Kotlin
