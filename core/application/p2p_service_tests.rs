@@ -1655,3 +1655,103 @@ async fn a_paired_device_s_storage_id_is_remembered_with_its_pairing() {
     assert_eq!(remembered(&laptop), vec![DeviceId::new("device-phone")]);
     assert_eq!(remembered(&phone), vec![DeviceId::new("device-laptop")]);
 }
+
+/// A chat host that answers every question with the question's own text, or declines.
+struct FakeChatHost {
+    decline: Option<String>,
+    finished: Vec<crate::application::p2p_service::FinishedPairedChat>,
+}
+
+impl crate::application::p2p_service::PairedChatHost for FakeChatHost {
+    fn submit(
+        &mut self,
+        peer: DeviceId,
+        request: crate::application::paired_chat_exchange::PairedChatRequest,
+    ) -> Result<(), String> {
+        if let Some(code) = &self.decline {
+            return Err(code.clone());
+        }
+        self.finished
+            .push(crate::application::p2p_service::FinishedPairedChat {
+                peer,
+                job_id: request.job_id,
+                outcome: crate::application::paired_chat_exchange::PairedChatOutcome::Answered(
+                    crate::application::paired_chat_exchange::PairedChatAnswer {
+                        text: format!(
+                            "answer to {} after {} turns",
+                            request.question,
+                            request.history.len()
+                        ),
+                        included: vec!["transcript".to_owned()],
+                        omitted: Vec::new(),
+                        sources: Vec::new(),
+                        connection_label: "Mock on Laptop".to_owned(),
+                        truncated: false,
+                        images_sent: 0,
+                    },
+                ),
+            });
+        Ok(())
+    }
+
+    fn poll_finished(&mut self) -> Option<crate::application::p2p_service::FinishedPairedChat> {
+        self.finished.pop()
+    }
+}
+
+/// Asks the phone's paired computers a chat question and waits for the result.
+async fn ask_chat(
+    laptop: &mut Service,
+    phone: &mut Service,
+) -> Option<crate::application::paired_chat_relay::PairedChatResult> {
+    let (reply, answer) = std::sync::mpsc::channel();
+    phone.request_paired_chat(crate::application::paired_chat_relay::PairedChatJob {
+        scope: crate::domain::chat::ChatScope::All,
+        question: "What is open?".to_owned(),
+        history: vec![crate::application::paired_chat_exchange::PairedChatTurn {
+            role: crate::domain::chat::ChatRole::User,
+            text: "Hello".to_owned(),
+        }],
+        reply,
+    });
+    let mut result = None;
+    drive(laptop, phone, |_, _| {
+        result = answer.try_recv().ok();
+        result.is_some()
+    })
+    .await;
+    result
+}
+
+/// A computer that answers for its devices answers the phone's chat question.
+#[tokio::test]
+async fn a_paired_computer_answers_a_chat_question() {
+    let (laptop, mut phone) = paired_with_host("/memory/9611", FakeHost::default()).await;
+    let mut laptop = laptop.with_paired_chat_host(Box::new(FakeChatHost {
+        decline: None,
+        finished: Vec::new(),
+    }));
+
+    let result = ask_chat(&mut laptop, &mut phone).await;
+
+    let answer = result.and_then(Result::ok).map(|answer| answer.text);
+    assert_eq!(
+        answer.as_deref(),
+        Some("answer to What is open? after 1 turns")
+    );
+}
+
+/// A computer that does not answer for its devices declines, and the phone hears why at once.
+#[tokio::test]
+async fn a_computer_without_chat_declines_the_question() {
+    let (mut laptop, mut phone) = paired_with_host("/memory/9612", FakeHost::default()).await;
+    let result = ask_chat(&mut laptop, &mut phone).await;
+    assert_eq!(result, Some(Err("no_paired_computer".to_owned())));
+
+    let mut laptop = laptop.with_paired_chat_host(Box::new(FakeChatHost {
+        decline: Some("llm_unreachable".to_owned()),
+        finished: Vec::new(),
+    }));
+    let result = ask_chat(&mut laptop, &mut phone).await;
+    assert_eq!(result, Some(Err("llm_unreachable".to_owned())));
+}

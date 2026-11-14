@@ -199,6 +199,14 @@ connected manifests with `ComputeDispatcher`, follows the owner's choice, and fa
 engine on any remote failure, with the audio intact. A paired device receives the prompt
 (previous text, then the glossary) as the job's `previous_text`.
 
+`paired_chat_exchange.rs` encodes the sealed `NTQ1`/`NTQ2` messages that let a phone's chat be
+answered by a paired computer (#107): the question, scope and recent turns go out; `Accepted`, then
+`Answered` or `Declined` (with an error code) come back. `paired_chat_relay.rs` asks the connected
+computers one at a time: a computer that does not offer it declines (`not_offered`), one silent for
+20 s is skipped, and an accepted question may take up to 6 minutes. `p2p_paired_chat.rs` wires both
+into the P2P service: it sends the relay's questions, and hands paired devices' questions to the
+`PairedChatHost`, declining with `not_offered` when there is none.
+
 `glossary_transcription.rs` wraps any engine so each call carries the owner's glossary and comes back
 without its echo; the after-meeting pass uses it, as its engine is loaded outside the pipeline.
 

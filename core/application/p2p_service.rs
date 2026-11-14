@@ -54,6 +54,7 @@ use crate::{
         pair_key_exchange::{
             PairKeyMessageError, decode_pair_key_message, encode_pair_key_message,
         },
+        paired_chat_exchange::{is_paired_chat_request, is_paired_chat_response},
         pairing_manager::{
             IncomingPairingRequest, OutgoingPairingStatus, PairingError, PairingManager,
             PairingUpdate,
@@ -295,9 +296,12 @@ pub struct RemoteTranscriptionJob {
     pub reply: std::sync::mpsc::Sender<Result<String, TranscriptionError>>,
 }
 
+#[path = "p2p_paired_chat.rs"]
+mod paired_chat;
 /// Carries a meeting's retained speech to the device that combines it (#88).
 #[path = "p2p_speech_transfer.rs"]
 mod speech_transfer;
+pub use paired_chat::{FinishedPairedChat, PairedChatHost};
 pub use speech_transfer::{SPEECH_TRANSFER_TIMEOUT, SpeechTransferJob};
 
 /// A job waiting for its answer.
@@ -454,6 +458,10 @@ pub struct P2pService<Transport, Store, Repository> {
     speech_inbox: Option<Box<dyn crate::ports::speech_transfer::SpeechInbox>>,
     /// Speech parts sent to paired devices, by job ID.
     pending_speech: HashMap<Uuid, speech_transfer::PendingSpeech>,
+    /// Answers paired devices' chat questions (#107); `None` declines them.
+    paired_chat_host: Option<Box<dyn PairedChatHost>>,
+    /// This device's chat questions in flight on paired computers (#107).
+    paired_chats: crate::application::paired_chat_relay::PairedChatRelay,
     /// Attachment exchange with paired devices; `None` leaves attachments on this device.
     attachment_sync: Option<AttachmentSync>,
     /// The voice library to keep in step with paired devices; `None` leaves it on this device.
@@ -511,6 +519,8 @@ where
             pending_transcriptions: HashMap::new(),
             speech_inbox: None,
             pending_speech: HashMap::new(),
+            paired_chat_host: None,
+            paired_chats: Default::default(),
             attachment_sync: None,
             voice_library: None,
             shared_deletion_counts: HashMap::new(),
@@ -653,6 +663,7 @@ where
         self.share_attachments();
         self.expire_pending_transcriptions();
         self.expire_pending_speech();
+        self.expire_paired_chats();
     }
 
     /// Sends every meeting document written since the last call to the connected peers.
@@ -731,6 +742,7 @@ where
         }
         self.process_file_transfers();
         self.send_finished_transcriptions();
+        self.send_finished_paired_chats();
         self.run_scheduled_restarts();
     }
 
@@ -761,6 +773,14 @@ where
                 }
                 if is_transcription_response(payload) {
                     self.accept_transcription_response(peer_device_id, payload);
+                    return;
+                }
+                if is_paired_chat_request(payload) {
+                    self.accept_paired_chat_request(peer_device_id, payload);
+                    return;
+                }
+                if is_paired_chat_response(payload) {
+                    self.accept_paired_chat_response(peer_device_id, payload);
                     return;
                 }
                 if is_speech_part(payload) {
@@ -816,6 +836,7 @@ where
                 }
                 self.fail_pending_transcriptions(peer_device_id);
                 self.fail_pending_speech(peer_device_id);
+                self.paired_chat_peer_lost(peer_device_id);
                 None
             }
             // The device may have missed the voice library or attachment list, so they are sent
@@ -830,6 +851,7 @@ where
                 // A request may be what was lost, so nobody would ever answer it.
                 self.fail_pending_transcriptions(peer_device_id);
                 self.fail_pending_speech(peer_device_id);
+                self.paired_chat_peer_lost(peer_device_id);
                 None
             }
         };
