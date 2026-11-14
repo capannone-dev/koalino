@@ -3217,3 +3217,7 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
     CJK, Korean, Arabic, Hebrew, Persian, Urdu, Devanagari, Thai, Tamil, Bengali, Burmese, Khmer,
     Telugu, Gujarati, Kannada, Malayalam, Gurmukhi, Georgian, Armenian, Ethiopic, Vietnamese,
     emoji, combining accents), and still 697/697 Italian lines.
+- **Library instead of the table (same day):** the owner allowed adding libraries, so the
+  generated table and `tools/unicode/` were replaced by `unicode-general-category` (Apache-2.0),
+  already in the build through printpdf and listed in THIRD_PARTY_NOTICES. The comparisons above
+  were rerun with it: still 76/76 and 697/697 identical.
