@@ -42,12 +42,25 @@ fn a_fast_phone_without_a_known_gpu_gets_small_on_its_cpu() {
     assert!(!suggestion.efficient);
 }
 
-/// A slow, small or unknown phone stays on the bundled model.
+/// `base` misses more than half the words of a real Italian meeting (#106), so a phone with the
+/// memory for `small` is offered it whatever its core speed: the speed check (#109) times it on the
+/// phone and steps down to `base` only if it falls behind.
 #[test]
-fn other_phones_keep_the_bundled_model() {
+fn a_phone_with_enough_memory_gets_small_and_the_speed_check_decides() {
     for profile in [
         phone(8, DeviceGpu::None, Some(2_000_000)),
         phone(8, DeviceGpu::None, None),
+    ] {
+        let suggestion = suggest_whisper_model(&profile);
+        assert_eq!(suggestion.file_name, "ggml-small.bin");
+        assert!(!suggestion.efficient);
+    }
+}
+
+/// A phone without the memory for `small` stays on the bundled model.
+#[test]
+fn other_phones_keep_the_bundled_model() {
+    for profile in [
         phone(4, DeviceGpu::None, Some(3_000_000)),
         phone(4, DeviceGpu::EfficientPhoneGpu, Some(3_000_000)),
     ] {

@@ -150,7 +150,15 @@ fn suggest_for_phone(device: &DeviceProfile, memory: u64) -> WhisperSuggestion {
             reason: "Far fewer mistakes than base, and this phone should keep up with recordings.",
         };
     }
-    base_model("A larger model may fall behind live recordings on this phone.")
+    // `base` misses over half the words of a real Italian meeting (#106), so a slower or unknown
+    // core is no reason to settle for it: the speed check (#109) times `small` once it is here
+    // and steps down to `base` only if it falls behind.
+    WhisperSuggestion {
+        file_name: "ggml-small.bin",
+        efficient: false,
+        reason: "Far fewer mistakes than base. A short timing check confirms this phone keeps up, \
+                 and falls back to base if it does not.",
+    }
 }
 
 /// Suggests the model the app ships with.

@@ -3388,3 +3388,15 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   at a moment, so each meeting appears once per cited moment.
 - **Same rendering for summaries and hand-offs:** they share `render_transcript`; the extra
   times cost little and let a summary refer to moments too.
+
+## 2026-11-14 — #106 Automatic no longer settles for `base` on a slower phone
+
+- **Evidence:** on the owner's hand-corrected 10-minute Italian meeting, `base` scored 56.6% WER
+  against 37.3% for `small` and 26.1% for `large-v3-turbo` (glossary off). `base` is not usable
+  for Italian meetings.
+- **Before:** a phone with 6 GiB or more but no efficient GPU and a top core under 2.8 GHz (or an
+  unknown one) was suggested `base`, from an estimate alone.
+- **Decision:** such a phone is suggested `small`. The estimate is replaced by a measurement: once
+  `small` is downloaded (still only with the owner's say, #68), the speed check (#109) times it,
+  and Automatic steps down to `base` only if it falls behind. Phones under 6 GiB and computers
+  under 7 GiB keep `base`, since there memory, not speed, is the limit.
