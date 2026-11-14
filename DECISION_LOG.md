@@ -3124,3 +3124,43 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   no shortcut needed. Verified on win11: the toast from "Koalino" offered "Edge", Record in it
   started and saved "Edge call", and dismissing it cleared the banner. On the VM the pop-up was not
   always visible over the app's window, but the toast was always in the notification centre.
+
+## 2026-11-14 — #75 Whisper on the phone's NPU, downloaded on request
+
+- **Engine:** Qualcomm AI Hub's precompiled `whisper_small_quantized` (w8a16, SM8550) on
+  Microsoft's ONNX Runtime 1.29.0 with the QNN execution provider, CPU fallback off. The spike
+  showed it on the S23's Hexagon NPU at about 0.05× real time, with a word error rate of 8.6%
+  against 8.0% for unquantized Whisper Small on public FLEURS Italian clips.
+  - The core does the rest in Rust with no new library: log-mel (matches faster-whisper to
+    1e-5), the vocabulary and mel filters read from the shipped `ggml-base.bin`, and greedy
+    decoding.
+  - No word timing, glossary prompt or previous-text context yet; the after-meeting pass still
+    uses whisper.cpp.
+- **Licensing (owner's choice: download on demand):** the QNN runtime is under Qualcomm's AI Stack
+  License, which is not GPLv3-compatible. So the APK carries none of it.
+  - Settings → Transcription model → "Transcribe on the NPU" shows a dialog naming Qualcomm's
+    terms. After "Accept and download", `NpuDownload.kt` fetches the QNN runtime AAR (Maven
+    Central) and the model zip (AI Hub's public bucket), each pinned by size and SHA-256.
+  - Only the needed files are extracted, into a staging folder, and moved into place when both
+    archives are complete.
+  - ONNX Runtime itself (MIT) ships in the APK.
+  - `THIRD_PARTY_NOTICES.md` lists ONNX Runtime and, separately, what is downloaded only on
+    request.
+- **Use:** the setting `npu_whisper` in `<db>.transcription-settings.json`, off by default. It is
+  turned on when the download ends. The pipeline tries the NPU first when the setting is on, the
+  files are complete and the shipped multilingual model exists. If the NPU will not open, it
+  falls back to whisper.cpp with a warning. The section only shows on a chip that runs the model
+  (`ro.soc.model` = SM8550).
+- **Android details found on the device:**
+  - An app reaches the NPU only if its manifest declares `libcdsprpc.so` with
+    `<uses-native-library>`. The shell did not need it; the app failed with
+    `QNN_DEVICE_ERROR_INVALID_CONFIG`.
+  - `ADSP_LIBRARY_PATH` is set to the downloaded `qnn` folder in `MainActivity.onCreate`.
+  - Loading the libraries from the app's files folder works; `LD_LIBRARY_PATH` is not needed.
+- **Verified on the S23:**
+  - The on-device test transcribed JFK correctly in 0.56 s after a 2.3 s load.
+  - In the app, the download, checks and installation finished within a minute on Wi-Fi, and the
+    switch turned on.
+  - After a restart, the app opened the NPU session (the HTP skeleton loaded from the downloaded
+    folder, QoS raised).
+  - A recording transcribed in the app on the NPU was not tried: the phone is not to record.
