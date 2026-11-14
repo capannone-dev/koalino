@@ -3206,3 +3206,14 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   "imbarcazioni, missioni.", 3.4% with a five-term glossary and 4.1% with unrelated names. Same as
   with the longest-match tokenizer: the glossary still does not fix "embarcazioni" or "emissioni"
   on the quantized NPU model. The tokenizer stays because it is what Whisper expects.
+- **Other languages (same day):** the method does not depend on the language, but the word split
+  did. `char::is_alphabetic` counts combining vowel signs as letters, while GPT-2's pattern
+  (`\p{L}`) does not. Of 44 test lines in 18 languages (plus symbol, number and spacing lines),
+  the only 2 that differed were the Thai line with and without a leading space.
+  - Letters now come from a generated table of `\p{L}` ranges (`tools/unicode/letter_ranges.py`,
+    Unicode 15.1) rather than the `unicode-general-category` crate, which is only an indirect
+    dependency: no new library.
+  - Re-checked: 76/76 lines identical, in 32 languages plus symbol lines (Latin, Cyrillic, Greek,
+    CJK, Korean, Arabic, Hebrew, Persian, Urdu, Devanagari, Thai, Tamil, Bengali, Burmese, Khmer,
+    Telugu, Gujarati, Kannada, Malayalam, Gurmukhi, Georgian, Armenian, Ethiopic, Vietnamese,
+    emoji, combining accents), and still 697/697 Italian lines.
