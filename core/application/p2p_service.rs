@@ -416,6 +416,20 @@ pub trait P2pControl: Send + Sync {
     /// Side effects: Queues a `LocalChange` for the task; a full queue is logged, and the change
     /// then reaches peers at their next connection.
     fn notify_local_change(&self, meeting_id: &MeetingId);
+
+    /// Asks the connected paired computers a chat question and blocks until one answers (#107).
+    ///
+    /// Outputs: The answer or an error code; by default `p2p_unavailable`. Side effects: Sends
+    /// the question sealed to paired computers. Blocks for minutes at most: callers run it on a
+    /// blocking thread.
+    fn ask_paired_computer(
+        &self,
+        _scope: crate::domain::chat::ChatScope,
+        _question: String,
+        _history: Vec<crate::application::paired_chat_exchange::PairedChatTurn>,
+    ) -> crate::application::paired_chat_relay::PairedChatResult {
+        Err("p2p_unavailable".to_owned())
+    }
 }
 
 /// Pairing plus whole-repository sync over one shared transport.

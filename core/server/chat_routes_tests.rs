@@ -186,3 +186,85 @@ async fn refusals_have_their_statuses() {
         (StatusCode::BAD_REQUEST, Some("empty"))
     );
 }
+
+/// A P2P task whose paired computer answers every question, or none is connected.
+struct ComputerControl {
+    answers: bool,
+}
+
+#[async_trait::async_trait]
+impl crate::application::p2p_service::P2pControl for ComputerControl {
+    fn snapshot(&self) -> crate::application::p2p_service::P2pSnapshot {
+        panic!("the chat never reads the snapshot")
+    }
+
+    async fn command(
+        &self,
+        _command: crate::application::p2p_service::P2pCommand,
+    ) -> Result<
+        crate::application::p2p_service::P2pCommandOutcome,
+        crate::application::p2p_service::P2pControlError,
+    > {
+        Err(crate::application::p2p_service::P2pControlError::Stopped)
+    }
+
+    fn notify_local_change(&self, _meeting_id: &MeetingId) {}
+
+    fn ask_paired_computer(
+        &self,
+        _scope: crate::domain::chat::ChatScope,
+        question: String,
+        history: Vec<crate::application::paired_chat_exchange::PairedChatTurn>,
+    ) -> crate::application::paired_chat_relay::PairedChatResult {
+        if !self.answers {
+            return Err("no_paired_computer".to_owned());
+        }
+        Ok(crate::application::paired_chat_exchange::PairedChatAnswer {
+            text: format!("{question} Yes, after {} turns.", history.len()),
+            included: Vec::new(),
+            omitted: Vec::new(),
+            sources: Vec::new(),
+            connection_label: "Claude Code on Laptop".to_owned(),
+            truncated: false,
+            images_sent: 0,
+        })
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_question_can_go_to_the_paired_computer() {
+    let router = |answers: bool| {
+        let repository = SqliteNoteRepository::open_in_memory(ephemeral_cipher())
+            .and_then(|repository| {
+                repository.with_document_codec(Arc::new(AutomergeMeetingDocumentCodec))
+            })
+            .unwrap_or_else(|error| panic!("{error}"));
+        build_router(
+            ServerAppState::new(repository, InMemoryVoiceVectorDB::new())
+                .with_p2p_control(Arc::new(ComputerControl { answers })),
+        )
+    };
+    let asking = router(true);
+    let (status, body) = send(
+        &asking,
+        "POST",
+        "/api/chat",
+        Some(json!({"scope": "all", "question": "Approved?", "on_paired_computer": true})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["answer"]["text"], "Approved? Yes, after 0 turns.");
+    assert_eq!(body["answer"]["connection"], "Claude Code on Laptop");
+    let (_, history) = send(&asking, "GET", "/api/chat?scope=all", None).await;
+    assert_eq!(history["messages"].as_array().map(Vec::len), Some(2));
+
+    let (status, body) = send(
+        &router(false),
+        "POST",
+        "/api/chat",
+        Some(json!({"scope": "all", "question": "Approved?", "on_paired_computer": true})),
+    )
+    .await;
+    assert_eq!(body["error_code"], "no_paired_computer", "{body}");
+    assert_ne!(status, StatusCode::OK);
+}

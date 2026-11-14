@@ -27,10 +27,12 @@ use std::sync::Arc;
 
 use super::api::ServerAppState;
 use crate::{
-    domain::models::DeviceId,
+    domain::{chat::ChatScope, models::DeviceId},
+    llm_commands::CommandError,
     notes_chat_commands::{
-        ChatCommand, answer_for_paired_device, ask_with, gather_for_ask, gather_material,
-        offers_paired_chat, parse_chat_request, run_chat_store_command, store_messages,
+        ChatCommand, answer_for_paired_device, ask_paired_computer_with, ask_with, gather_for_ask,
+        gather_material, offers_paired_chat, parse_chat_request, run_chat_store_command,
+        store_messages,
     },
     p2p_composition::P2pHandle,
     paired_chat_host::ThreadedPairedChatHost,
@@ -61,7 +63,13 @@ fn status_of(answer: &Value) -> StatusCode {
         "meeting_not_found" | "project_not_found" | "connection_not_found" => StatusCode::NOT_FOUND,
         "no_connection" | "nothing_to_chat" | "context_too_small" => StatusCode::CONFLICT,
         code if code.starts_with("llm_") => StatusCode::BAD_GATEWAY,
-        "unavailable" => StatusCode::SERVICE_UNAVAILABLE,
+        "unavailable"
+        | "p2p_unavailable"
+        | "no_paired_computer"
+        | "paired_computer_left"
+        | "busy" => StatusCode::SERVICE_UNAVAILABLE,
+        "paired_computer_timeout" => StatusCode::GATEWAY_TIMEOUT,
+        "rate_limited" => StatusCode::TOO_MANY_REQUESTS,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
@@ -104,10 +112,6 @@ async fn clear_chat(
 /// connection's server, and stores the question and the answer.
 async fn ask_question(State(state): State<ServerAppState>, body: Option<Json<Value>>) -> Response {
     tracing::info!(endpoint = "/api/chat", "headless API request received");
-    let Some(services) = state.llm() else {
-        return respond(json!({"ok": false, "error_code": "unavailable",
-                              "error": "AI connections are unavailable in this process"}));
-    };
     let mut request = match body {
         Some(Json(Value::Object(fields))) => fields,
         _ => serde_json::Map::new(),
@@ -118,13 +122,22 @@ async fn ask_question(State(state): State<ServerAppState>, body: Option<Json<Val
             Ok(ChatCommand::Ask {
                 scope,
                 question,
+                on_paired_computer: true,
+                ..
+            }) => return respond(ask_on_paired_computer(state, scope, question).await),
+            Ok(ChatCommand::Ask {
+                scope,
+                question,
                 connection_id,
-                // The daemon answers with its own connections.
-                on_paired_computer: _,
+                on_paired_computer: false,
             }) => (scope, question, connection_id),
             Ok(_) => return respond(json!({"ok": false, "error_code": "invalid_request"})),
             Err(error) => return respond(error.to_json()),
         };
+    let Some(services) = state.llm() else {
+        return respond(json!({"ok": false, "error_code": "unavailable",
+                              "error": "AI connections are unavailable in this process"}));
+    };
     let answer = tokio::task::spawn_blocking(move || {
         let files = state.project_files();
         ask_with(
@@ -154,6 +167,42 @@ async fn ask_question(State(state): State<ServerAppState>, body: Option<Json<Val
     .await
     .unwrap_or_else(|_| json!({"ok": false, "error_code": "failed", "error": "the chat failed"}));
     respond(answer)
+}
+
+/// Asks a paired computer and keeps its answer in this device's chat (#107).
+///
+/// Outputs: The JSON answer, or `p2p_unavailable` without a P2P task. Side effects: Sends the
+/// question and the chat so far, sealed, to the paired computers; stores both messages. Waits on
+/// a blocking thread for minutes at most.
+async fn ask_on_paired_computer(
+    state: ServerAppState,
+    scope: ChatScope,
+    question: String,
+) -> Value {
+    let Some(p2p) = state.p2p_control() else {
+        return json!({"ok": false, "error_code": "p2p_unavailable",
+                      "error": "Paired devices are off on this device."});
+    };
+    tokio::task::spawn_blocking(move || {
+        ask_paired_computer_with(
+            &question,
+            || {
+                let repositories = state.repositories();
+                let repositories = repositories.blocking_lock();
+                repositories
+                    .chat_history(&scope)
+                    .map_err(|error| CommandError::new("storage_failed", error.to_string()))
+            },
+            |question, turns| p2p.ask_paired_computer(scope.clone(), question, turns),
+            |messages| {
+                let repositories = state.repositories();
+                let repositories = repositories.blocking_lock();
+                store_messages(&**repositories, &scope, messages)
+            },
+        )
+    })
+    .await
+    .unwrap_or_else(|_| json!({"ok": false, "error_code": "failed", "error": "the chat failed"}))
 }
 
 /// Answers paired devices' chat questions from the daemon's notes when the owner chose a

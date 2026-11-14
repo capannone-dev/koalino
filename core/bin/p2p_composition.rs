@@ -511,6 +511,15 @@ impl P2pControl for P2pHandle {
     fn notify_local_change(&self, meeting_id: &MeetingId) {
         P2pHandle::notify_local_change(self, meeting_id);
     }
+
+    fn ask_paired_computer(
+        &self,
+        scope: ChatScope,
+        question: String,
+        history: Vec<PairedChatTurn>,
+    ) -> PairedChatResult {
+        P2pHandle::ask_paired_computer(self, scope, question, history)
+    }
 }
 
 /// The service type the task runs.

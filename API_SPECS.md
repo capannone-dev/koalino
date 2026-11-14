@@ -768,6 +768,11 @@ reason, for example `invalid_request_error: Your credit balance is too low…` (
 - Failures: `400` `invalid_request`, `empty`, `too_long` (over 4 000 characters); `404`
   `meeting_not_found`, `project_not_found`, `connection_not_found`; `409` `no_connection`,
   `nothing_to_chat`, `context_too_small`; `502` `llm_*`; `503` `unavailable`.
+- `"on_paired_computer": true` in `POST /api/chat` (#107) has a paired computer answer, as the C
+  ABI's `note_taker_chat` does (see the Chat C ABI). It needs no connection here and keeps both
+  messages in this device's chat. Extra failures: `503` `p2p_unavailable`, `no_paired_computer`,
+  `paired_computer_left`, `busy`; `504` `paired_computer_timeout`; `429` `rate_limited`; a
+  computer's own code otherwise.
 
 ### Notes folder (#98)
 
