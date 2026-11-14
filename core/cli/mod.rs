@@ -115,7 +115,8 @@ pub enum CliCommand {
     },
     /// Writes a meeting's summary with an AI connection (the default unless `--connection` names
     /// one), or shows the stored one with `--show`. The meeting's transcript, notes and photos
-    /// are sent to that connection's server.
+    /// are sent to that connection's server. `--on-paired-computer` asks a paired computer to
+    /// write it with its own connection instead (#107).
     Summary {
         /// The meeting to summarize.
         meeting_id: String,
@@ -123,8 +124,14 @@ pub enum CliCommand {
         #[arg(long)]
         connection: Option<String>,
         /// Shows the stored summary instead of writing a new one.
-        #[arg(long)]
+        #[arg(long, conflicts_with_all = ["connection", "on_paired_computer", "cancel_request"])]
         show: bool,
+        /// Asks a paired computer to write the summary; it answers once connected and set to.
+        #[arg(long, conflicts_with_all = ["connection", "cancel_request"])]
+        on_paired_computer: bool,
+        /// Cancels the request to a paired computer.
+        #[arg(long, conflicts_with = "connection")]
+        cancel_request: bool,
     },
     /// Lists, adds and removes the AI connections summaries use, and turns automatic summaries
     /// on or off.
@@ -689,6 +696,17 @@ pub trait CliService {
     fn meeting_summary(&self, _meeting_id: &str) -> Result<Option<String>, String> {
         Err(String::from("summaries are not available here"))
     }
+    /// Asks a paired computer to write a meeting's summary, or cancels the request (#107).
+    fn request_paired_summary(&mut self, _meeting_id: &str, _cancel: bool) -> Result<(), String> {
+        Err(String::from("summaries are not available here"))
+    }
+    /// Returns the meeting's request to a paired computer, or `None` (#107).
+    fn paired_summary_request(
+        &self,
+        _meeting_id: &str,
+    ) -> Result<Option<crate::domain::llm::SummaryRequest>, String> {
+        Ok(None)
+    }
     /// Runs one AI settings command (see `llm_commands.rs`) and returns its answer.
     fn llm_command(&mut self, _request: &serde_json::Value) -> Result<serde_json::Value, String> {
         Err(String::from("AI connections are not available here"))
@@ -817,15 +835,32 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
         CliCommand::MeetingVoices { choice } => meeting_voices(choice, cli_service),
         CliCommand::Summary {
             meeting_id,
-            connection: _,
             show: true,
-        } => Ok(cli_service
-            .meeting_summary(&meeting_id)?
-            .unwrap_or_else(|| String::from("This meeting has no summary yet."))),
+            ..
+        } => show_summary(&meeting_id, cli_service),
+        CliCommand::Summary {
+            meeting_id,
+            on_paired_computer: true,
+            ..
+        } => cli_service
+            .request_paired_summary(&meeting_id, false)
+            .map(|()| {
+                String::from(
+                    "Asked your paired computer to write the summary. It does once it is \
+                     connected and set to answer (its AI settings).",
+                )
+            }),
+        CliCommand::Summary {
+            meeting_id,
+            cancel_request: true,
+            ..
+        } => cli_service
+            .request_paired_summary(&meeting_id, true)
+            .map(|()| String::from("The request to your paired computer is cancelled.")),
         CliCommand::Summary {
             meeting_id,
             connection,
-            show: false,
+            ..
         } => cli_service.summarize_meeting(&meeting_id, connection.as_deref()),
         CliCommand::Ai(AiArgs { command }) => run_ai(command, cli_service),
         CliCommand::Search {
@@ -1162,6 +1197,29 @@ fn edit_glossary(
         0 => String::from("Glossary cleared."),
         1 => String::from("Glossary saved: 1 term. It applies from the next recording."),
         count => format!("Glossary saved: {count} terms. It applies from the next recording."),
+    })
+}
+
+/// Shows a meeting's summary, and how far a request to a paired computer has got (#107).
+///
+/// Outputs: The summary text, or a note that there is none, then the request's state when one
+/// is open. Side effects: Reads the meeting document.
+fn show_summary(meeting_id: &str, cli_service: &mut impl CliService) -> Result<String, String> {
+    let summary = cli_service
+        .meeting_summary(meeting_id)?
+        .unwrap_or_else(|| String::from("This meeting has no summary yet."));
+    let request = cli_service.paired_summary_request(meeting_id)?;
+    Ok(match request.map(|request| request.state) {
+        None => summary,
+        Some(crate::domain::llm::SummaryRequestState::Waiting) => {
+            format!("{summary}\nYour paired computer has not taken the request yet.")
+        }
+        Some(crate::domain::llm::SummaryRequestState::Working { .. }) => {
+            format!("{summary}\nYour paired computer is writing the summary.")
+        }
+        Some(crate::domain::llm::SummaryRequestState::Failed { error_code, .. }) => {
+            format!("{summary}\nYour paired computer could not write the summary ({error_code}).")
+        }
     })
 }
 
@@ -1856,6 +1914,46 @@ where
         crate::meeting_summaries::load_summary(&self.repository, &MeetingId::new(meeting_id))
             .map(|summary| summary.map(|summary| summary.text))
             .map_err(|error| error.to_string())
+    }
+    fn request_paired_summary(&mut self, meeting_id: &str, cancel: bool) -> Result<(), String> {
+        let llm = self
+            .llm
+            .clone()
+            .ok_or_else(|| String::from("summaries are not available here"))?;
+        let meeting_id = MeetingId::new(meeting_id);
+        if self
+            .repository
+            .load_meeting_metadata(&meeting_id)
+            .map_err(|error| error.to_string())?
+            .is_none()
+        {
+            return Err(String::from("there is no such meeting"));
+        }
+        let request = (!cancel).then(|| {
+            crate::llm_commands::new_summary_request(
+                &llm,
+                self.recording_device
+                    .as_ref()
+                    .map_or("", |(device, _)| device.as_str()),
+                chrono::Utc::now(),
+            )
+        });
+        crate::meeting_summaries::store_summary_request(
+            &self.repository,
+            &meeting_id,
+            request.as_ref(),
+        )
+        .map_err(|error| error.to_string())
+    }
+    fn paired_summary_request(
+        &self,
+        meeting_id: &str,
+    ) -> Result<Option<crate::domain::llm::SummaryRequest>, String> {
+        crate::meeting_summaries::load_summary_request(
+            &self.repository,
+            &MeetingId::new(meeting_id),
+        )
+        .map_err(|error| error.to_string())
     }
     fn llm_command(&mut self, request: &serde_json::Value) -> Result<serde_json::Value, String> {
         let llm = self

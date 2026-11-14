@@ -47,7 +47,7 @@ note-taker telemetry
 note-taker log-level <error|warn|info|debug|trace|directive>
 note-taker glossary [show | set <term>... | add <term>... | remove <term>... | clear]
 note-taker keep-speech [days]
-note-taker summary <meeting-id> [--connection <id>] [--show]
+note-taker summary <meeting-id> [--connection <id>] [--show] [--on-paired-computer] [--cancel-request]
 note-taker search <word>... [--projects | --project <id>]
 note-taker notes-folder [status | on [<path>] | off | sync]
 note-taker chat <question>... [--meeting <id> | --project <id>] [--history | --clear]
@@ -192,7 +192,10 @@ several voices is never kept. It is kept in the same settings file and read at e
 
 `summary <meeting-id>` writes the meeting's summary with the default AI connection (or the one
 `--connection` names) and prints it; the meeting's transcript, notes and photos are sent to that
-connection's server. `--show` prints the stored summary instead. `ai` manages the connections
+connection's server. `--show` prints the stored summary instead, and how far a request to a
+paired computer has got. `--on-paired-computer` asks a paired computer to write it with its own
+connection (#107): the request goes into the meeting document, which syncs, and nothing is sent to
+an AI server from this device; `--cancel-request` withdraws it. `ai` manages the connections
 (#95): `add` saves an OpenAI-compatible server on this computer or the local network (Koalino
 keeps no API keys, #117); `test`
 sends a one-line request holding no meeting content; `auto on|off` turns automatic summaries on or

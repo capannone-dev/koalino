@@ -1781,6 +1781,36 @@ fn ai_connections_are_added_and_listed_and_a_missing_summary_is_reported() {
     let shown = run(&mut cli_service, &["cli", "summary", "m-1", "--show"])
         .unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(shown, "This meeting has no summary yet.");
+
+    // A headless device asks a paired computer instead (#107).
+    let asked = run(
+        &mut cli_service,
+        &["cli", "summary", "m-1", "--on-paired-computer"],
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    assert!(asked.starts_with("Asked your paired computer"), "{asked}");
+    let shown = run(&mut cli_service, &["cli", "summary", "m-1", "--show"])
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(
+        shown.contains("Your paired computer has not taken the request yet"),
+        "{shown}"
+    );
+    let cancelled = run(
+        &mut cli_service,
+        &["cli", "summary", "m-1", "--cancel-request"],
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(
+        cancelled,
+        "The request to your paired computer is cancelled."
+    );
+    let shown = run(&mut cli_service, &["cli", "summary", "m-1", "--show"])
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(shown, "This meeting has no summary yet.");
+    assert!(
+        Cli::try_parse_from(["cli", "summary", "m-1", "--on-paired-computer", "--show"]).is_err(),
+        "asking and showing are separate"
+    );
     drop(std::fs::remove_dir_all(folder));
 }
 
