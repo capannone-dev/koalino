@@ -3164,3 +3164,28 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - After a restart, the app opened the NPU session (the HTP skeleton loaded from the downloaded
     folder, QoS raised).
   - A recording transcribed in the app on the NPU was not tried: the phone is not to record.
+
+## 2026-11-14 — #75 NPU Whisper: timing, prompt, silence, and the after-meeting pass
+
+- **Timestamps:** the NPU decoder now uses Whisper's timestamp rules (a window starts with a
+  timestamp no later than 1 s, timestamps come in pairs and never go back, and a timestamp is
+  taken when timestamps together are likelier than any text token).
+  - Segments come from the timestamp pairs. The next 30 s window starts after the last finished
+    segment, so a word cut at the window's edge is decoded again.
+  - Word times are approximate: the precompiled model gives no attention weights for whisper.cpp's
+    alignment, so each segment's time is shared among its tokens by byte length.
+  - Confidence is each word's least sure token, from the dequantized logits.
+- **Prompt:** the chunk's previous text and the glossary, then the text decoded so far, at most 64
+  tokens (the decoder holds 200 positions).
+  - It is tokenized as whisper.cpp does: the ggml file has no BPE merges, so no tokenizer is added.
+  - On 83 s of public FLEURS Italian clips, the glossary did not fix the terms given and moved
+    the error rate by about two words either way. It stays for consistency with whisper.cpp; its
+    benefit on the NPU is not shown.
+- **Silence:** Whisper's no-speech rule drops a window when `<|nospeech|>` was likelier than 0.6
+  and its text tokens' mean log probability is below −1. The mean is over text tokens only, since
+  near-certain timestamps would dilute it.
+  - On the same clip it removed a phrase made up in the trailing silence: WER 8.2% → 3.4%,
+    83 s transcribed in 6.2 s on the S23.
+- **After-meeting pass:** with the NPU on and no separate pass model chosen, the pass uses the NPU,
+  since "the live model" is then the NPU's. It falls back to whisper.cpp with the live model. A
+  model chosen for the pass keeps whisper.cpp.
