@@ -148,8 +148,8 @@ final class SummariesController extends ChangeNotifier {
             ? await _bridge.update(stopAnsweringPairedDevices: true)
             : await _bridge.update(pairedSummaryConnection: id);
         return id == null
-            ? 'This computer no longer writes summaries for your other devices.'
-            : '${_labelOf(id)} now writes the summaries your other devices ask for.';
+            ? 'This computer no longer writes summaries or answers chats for your other devices.'
+            : '${_labelOf(id)} now writes the summaries and answers the chats your other devices ask for.';
       });
 
   /// Asks a paired computer to write the meeting's summary (#107); a failed request is replaced.

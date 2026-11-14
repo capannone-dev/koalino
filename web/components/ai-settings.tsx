@@ -296,8 +296,8 @@ export function AiSettings({ initial }: AiSettingsProps) {
               void run(async () => {
                 setSettings(await updateLlmSettings({ paired_summary_connection: id }));
                 return id === null
-                  ? "This computer no longer writes summaries for your other devices."
-                  : `${label ?? "The connection"} now writes the summaries your other devices ask for.`;
+                  ? "This computer no longer writes summaries or answers chats for your other devices."
+                  : `${label ?? "The connection"} now writes the summaries and answers the chats your other devices ask for.`;
               });
             }}
           >
@@ -309,8 +309,9 @@ export function AiSettings({ initial }: AiSettingsProps) {
             ))}
           </select>
           <p className="text-sm opacity-80">
-            A paired phone can ask this computer to write a summary with this connection. It counts
-            against that plan; at most 10 an hour.
+            A paired phone can ask this computer to write a summary or answer a chat with this
+            connection, from this computer&apos;s copy of your notes. It counts against that plan; at
+            most 10 summaries and 30 chat answers an hour.
           </p>
         </div>
       )}

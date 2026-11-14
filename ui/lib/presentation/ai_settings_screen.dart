@@ -166,8 +166,9 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                   ListTile(
                     title: const Text('Summaries for my other devices'),
                     subtitle: const Text(
-                        'A paired phone can ask this computer to write a summary with this '
-                        'connection. It counts against that plan; at most 10 an hour.'),
+                        'A paired phone can ask this computer to write a summary or answer a '
+                        'chat with this connection, from this computer\'s copy of your notes. It '
+                        'counts against that plan; at most 10 summaries and 30 chat answers an hour.'),
                     trailing: DropdownButton<String>(
                       key: pairedSummaryConnectionKey,
                       value: settings.pairedSummaryConnection ?? _notAnswering,

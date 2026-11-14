@@ -144,7 +144,7 @@ test("a connection can answer the summaries paired devices ask for (#107)", asyn
   fireEvent.change(menu, { target: { value: "c-1" } });
 
   expect(
-    await screen.findByText("Office server now writes the summaries your other devices ask for.")
+    await screen.findByText("Office server now writes the summaries and answers the chats your other devices ask for.")
   ).toBeInTheDocument();
   expect(api.updateLlmSettings).toHaveBeenCalledWith({ paired_summary_connection: "c-1" });
 });
@@ -156,7 +156,7 @@ test("answering paired devices can be turned off (#107)", async () => {
   fireEvent.change(screen.getByLabelText(/Summaries for my other devices/), { target: { value: "" } });
 
   expect(
-    await screen.findByText("This computer no longer writes summaries for your other devices.")
+    await screen.findByText("This computer no longer writes summaries or answers chats for your other devices.")
   ).toBeInTheDocument();
   expect(api.updateLlmSettings).toHaveBeenCalledWith({ paired_summary_connection: null });
 });

@@ -298,14 +298,14 @@ void main() {
       expect(core.lastCommand('update')['paired_summary_connection'], 'c-1');
       expect(controller.settings?.pairedSummaryConnection, 'c-1');
       expect(controller.message,
-          'Office now writes the summaries your other devices ask for.');
+          'Office now writes the summaries and answers the chats your other devices ask for.');
 
       await controller.setPairedSummaryConnection(null);
       final Map<String, Object?> off = core.lastCommand('update');
       expect(off.containsKey('paired_summary_connection'), isTrue);
       expect(off['paired_summary_connection'], isNull);
       expect(controller.message,
-          'This computer no longer writes summaries for your other devices.');
+          'This computer no longer writes summaries or answers chats for your other devices.');
     });
   });
 }
