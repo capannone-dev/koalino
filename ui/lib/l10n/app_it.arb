@@ -714,7 +714,7 @@
   "handoffStepPressEnter": "{site} si apre con la riunione già nella casella del messaggio. Premi Invio per inviarla.",
   "handoffStepSentByItself": "{site} si apre e invia la riunione da solo. Se lo chiede, accedi prima.",
   "handoffStepPaste": "{site} si apre e Koalino copia la riunione. Fai clic nella casella del messaggio, incollala (Ctrl+V) e premi Invio.",
-  "handoffStepDragFiles": "Si apre anche una cartella con le foto e i file della riunione: trascinali nella casella del messaggio, così vanno come file.",
+  "handoffStepDragFiles": "Si apre anche una cartella con i file: trascinali tutti nella casella del messaggio, così vanno come file.",
   "handoffStepCopyAnswer": "Quando la risposta è completa, premi il pulsante di copia sotto di essa.",
   "handoffStepComeBack": "Torna su Koalino: la risposta diventa il riassunto della riunione, con Annulla.",
   "handoffStepAskThere": "Poi fai lì le tue domande sulla riunione.",

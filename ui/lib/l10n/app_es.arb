@@ -714,7 +714,7 @@
   "handoffStepPressEnter": "{site} se abre con la reunión ya en el cuadro de mensaje. Pulsa Intro para enviarla.",
   "handoffStepSentByItself": "{site} se abre y envía la reunión por sí solo. Inicia sesión primero si te lo pide.",
   "handoffStepPaste": "{site} se abre y Koalino copia la reunión. Haz clic en el cuadro de mensaje, pégala (Ctrl+V) y pulsa Intro.",
-  "handoffStepDragFiles": "También se abre una carpeta con las fotos y archivos de la reunión: arrástralos al cuadro de mensaje para que vayan como archivos.",
+  "handoffStepDragFiles": "También se abre una carpeta con los archivos: arrástralos todos al cuadro del mensaje para que vayan como archivos.",
   "handoffStepCopyAnswer": "Cuando la respuesta esté completa, pulsa el botón de copiar debajo de ella.",
   "handoffStepComeBack": "Vuelve a Koalino: la respuesta se convierte en el resumen de la reunión, con Deshacer.",
   "handoffStepAskThere": "Luego haz allí tus preguntas sobre la reunión.",

@@ -2204,7 +2204,7 @@
   "@handoffStepSentByItself": {"placeholders": {"site": {"type": "String"}}},
   "handoffStepPaste": "{site} opens and Koalino copies the meeting. Click the message box, paste it (Ctrl+V) and press Enter.",
   "@handoffStepPaste": {"placeholders": {"site": {"type": "String"}}},
-  "handoffStepDragFiles": "A folder with the meeting's photos and files opens too: drag them into the message box, so they go as files.",
+  "handoffStepDragFiles": "A folder with the files opens too: drag them all into the message box, so they go as files.",
   "@handoffStepDragFiles": {},
   "handoffStepCopyAnswer": "When the answer is complete, press the copy button under it.",
   "@handoffStepCopyAnswer": {},

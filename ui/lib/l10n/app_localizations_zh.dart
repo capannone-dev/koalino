@@ -2555,7 +2555,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get handoffStepDragFiles => '还会打开一个包含会议照片和文件的文件夹：把它们拖进消息框，作为文件发送。';
+  String get handoffStepDragFiles => '同时会打开一个包含这些文件的文件夹：把它们全部拖进消息框，以文件形式发送。';
 
   @override
   String get handoffStepCopyAnswer => '回答完成后，点击其下方的复制按钮。';

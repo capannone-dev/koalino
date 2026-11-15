@@ -206,7 +206,8 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                       topic: const ChatTopic.everything(),
                       title: l10n.chatWithAllNotes,
                       openMeeting: _openCitedMeeting,
-                      projectsController: widget.projectsController),
+                      projectsController: widget.projectsController,
+                      handoff: widget.summariesController?.handoff),
                 ),
               if (isTwoPane)
                 if (widget.chatBridge case final ChatBridge bridge)

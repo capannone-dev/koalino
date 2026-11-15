@@ -189,7 +189,7 @@ final class HandoffController extends ChangeNotifier
             app: app,
             purpose: purpose,
             prefilled: _platform.prefills(handoff, app),
-            hasFiles: handoff.files.length > 1,
+            hasFiles: handoff.hasFilesToDrag,
           ))) {
         return null;
       }
@@ -215,23 +215,26 @@ final class HandoffController extends ChangeNotifier
     }
   }
 
-  /// Hands a project's chat to `app`, or to one picked in the share sheet (#126).
+  /// Hands a project's chat, or every note's when `projectId` is null, to `app`, or to one
+  /// picked in the share sheet (#126).
   ///
-  /// Inputs: The project, the app, and `confirm` as in `handOff`. Outputs: null once shared or
-  /// cancelled, or a message why not. Side effects: The core writes the project's meetings and
-  /// every file of the project and its meetings to the hand-off folder; the message goes on the
+  /// Inputs: The project or none, the app, and `confirm` as in `handOff`. Outputs: null once
+  /// shared or cancelled, or a message why not. Side effects: The core writes the meetings and
+  /// every file of the projects and meetings to the hand-off folder; the message goes on the
   /// clipboard; the other app opens with them. Nothing comes back, so no answer is awaited.
-  Future<String?> handOffProject(String projectId,
-      {AiApp? app, Future<bool> Function(HandoffSteps steps)? confirm}) async {
+  Future<String?> handOffNotes(
+      {String? projectId,
+      AiApp? app,
+      Future<bool> Function(HandoffSteps steps)? confirm}) async {
     try {
-      final PreparedHandoff handoff = await _core.prepareProject(
+      final PreparedHandoff handoff = await _core.prepareNotes(
           projectId, await _platform.handoffDirectory());
       if (confirm != null &&
           !await confirm(HandoffSteps(
             app: app,
             purpose: HandoffPurpose.chat,
             prefilled: _platform.prefills(handoff, app),
-            hasFiles: handoff.files.length > 1,
+            hasFiles: handoff.hasFilesToDrag,
           ))) {
         return null;
       }

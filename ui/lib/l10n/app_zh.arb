@@ -714,7 +714,7 @@
   "handoffStepPressEnter": "{site} 打开时会议已在消息框中。按 Enter 发送。",
   "handoffStepSentByItself": "{site} 打开后会自动发送会议。如有提示，请先登录。",
   "handoffStepPaste": "{site} 会打开，Koalino 会复制会议。点击消息框，粘贴（Ctrl+V）后按 Enter。",
-  "handoffStepDragFiles": "还会打开一个包含会议照片和文件的文件夹：把它们拖进消息框，作为文件发送。",
+  "handoffStepDragFiles": "同时会打开一个包含这些文件的文件夹：把它们全部拖进消息框，以文件形式发送。",
   "handoffStepCopyAnswer": "回答完成后，点击其下方的复制按钮。",
   "handoffStepComeBack": "回到 Koalino：回答会成为会议摘要，可撤销。",
   "handoffStepAskThere": "然后在那里提出关于会议的问题。",

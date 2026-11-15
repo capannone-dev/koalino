@@ -4405,7 +4405,7 @@ abstract class AppLocalizations {
   /// No description provided for @handoffStepDragFiles.
   ///
   /// In en, this message translates to:
-  /// **'A folder with the meeting\'s photos and files opens too: drag them into the message box, so they go as files.'**
+  /// **'A folder with the files opens too: drag them all into the message box, so they go as files.'**
   String get handoffStepDragFiles;
 
   /// No description provided for @handoffStepCopyAnswer.

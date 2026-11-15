@@ -2767,7 +2767,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'يُفتح أيضًا مجلد فيه صور الاجتماع وملفاته: اسحبها إلى مربع الرسالة لتُرسل كملفات.';
+      'يُفتح أيضًا مجلد يضم الملفات: اسحبها كلها إلى مربع الرسالة، لتُرسل كملفات.';
 
   @override
   String get handoffStepCopyAnswer =>

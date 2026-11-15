@@ -2753,7 +2753,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'Si apre anche una cartella con le foto e i file della riunione: trascinali nella casella del messaggio, così vanno come file.';
+      'Si apre anche una cartella con i file: trascinali tutti nella casella del messaggio, così vanno come file.';
 
   @override
   String get handoffStepCopyAnswer =>

@@ -98,6 +98,7 @@ final class PreparedHandoff {
     required this.prompt,
     required this.files,
     required this.skipped,
+    this.documentAttached = false,
   });
 
   /// Reads the core's JSON.
@@ -115,6 +116,7 @@ final class PreparedHandoff {
               ),
         ],
         skipped: (json['skipped'] as num?)?.toInt() ?? 0,
+        documentAttached: json['document_attached'] as bool? ?? false,
       );
 
   /// The text the share carries.
@@ -128,6 +130,14 @@ final class PreparedHandoff {
 
   /// Files left out for size or count.
   final int skipped;
+
+  /// Whether the Markdown goes only as a file: the message does not carry it (every note,
+  /// #126), so on a computer it is dragged in like the other files.
+  final bool documentAttached;
+
+  /// Whether files must be added to a website by hand: photos and files beside the Markdown, or
+  /// the Markdown itself when the message does not carry it.
+  bool get hasFilesToDrag => files.length > 1 || documentAttached;
 }
 
 /// An answer kept as the summary, and the summary it replaced (as the core's JSON), for Undo.
@@ -147,9 +157,10 @@ abstract interface class HandoffCore {
   Future<PreparedHandoff> prepare(
       String meetingId, HandoffPurpose purpose, String directory);
 
-  /// Writes a project's chat hand-off into `directory`: its meetings as one document and every
-  /// file of the project and its meetings (#126). Throws `LlmException`.
-  Future<PreparedHandoff> prepareProject(String projectId, String directory);
+  /// Writes a project's chat hand-off into `directory`, or every note's when `projectId` is
+  /// null: the meetings as one document and every file of the projects and meetings (#126).
+  /// Throws `LlmException`.
+  Future<PreparedHandoff> prepareNotes(String? projectId, String directory);
 
   /// Keeps an answer as the meeting's summary. Throws `LlmException`.
   Future<KeptAnswer> keepAnswer(String meetingId,
@@ -210,12 +221,12 @@ final class RustHandoffCore implements HandoffCore {
       ])));
 
   @override
-  Future<PreparedHandoff> prepareProject(
-          String projectId, String directory) async =>
+  Future<PreparedHandoff> prepareNotes(
+          String? projectId, String directory) async =>
       PreparedHandoff.fromJson(
           decodeLlmAnswer(await _call('note_taker_handoff_meeting', <String?>[
         jsonEncode(<String, Object?>{
-          'project_id': projectId,
+          if (projectId != null) 'project_id': projectId else 'all': true,
           'purpose': HandoffPurpose.chat.name,
           'directory': directory,
           if (_inline) 'inline': true,

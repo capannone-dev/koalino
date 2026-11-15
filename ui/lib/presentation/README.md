@@ -160,8 +160,8 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   moment, a file in its viewer. It opens from the Meetings screen (every note), a meeting (its
   app bar, or the two-pane app bar for the selected meeting) and a project's page. On the phone a
   paired computer answers by default (#107); the "Who answers" menu switches to the phone's own
-  AI connection. A meeting's or a project's chat can also go on in the owner's own AI app, with
-  its photos and files (#126).
+  AI connection. Any chat can also go on in the owner's own AI app, with the photos and files
+  (#126).
 - `notes_folder_screen.dart` (#98) is Settings → Notes folder on desktops: the folder (typed or
   chosen with the system dialog), the switch, Sync now, the last round, and the warning that the
   folder is a decrypted copy.
@@ -189,7 +189,8 @@ Projects (Issue #85) is the destination between Meetings and Voices:
 - `handoff_widgets.dart` (#114, Android) holds `showHandoffSheet`: Summarize or Chat in the
   installed Claude or ChatGPT app, or in another app through the share sheet. The summary menu
   and the summary page offer it as "Use your own AI app". `showChatHandoffSheet` (#126) offers
-  only Chat, for a meeting's or a project's chat page (the open-in-new icon in its app bar). On a
+  only Chat, for any chat page: a meeting, a project, or every note (the open-in-new icon in its
+  app bar). On a
   computer both go through `showHandoffSteps`. It also holds `HandoffReturnListener`,
   which shows "Summary from Claude saved", with Undo, and the hint to copy the answer.
 - `pairing_link_listener.dart` (`PairingLinkListener`, Android, #122) asks "Pair with another

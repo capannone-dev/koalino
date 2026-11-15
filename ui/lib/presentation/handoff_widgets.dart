@@ -9,6 +9,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/handoff_controller.dart';
+import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
@@ -45,16 +46,15 @@ Future<void> showHandoffSheet(
   }
 }
 
-/// Asks where to continue a chat about a meeting or a project, and hands it over (#126).
+/// Asks where to continue a chat, and hands it over (#126).
 ///
-/// Inputs: A context with a `ScaffoldMessenger`, the controller, and `meetingId` or
-/// `projectId`. Side effects: Writes the hand-off (a project's goes with every file of the
-/// project and its meetings) and opens the other app; a failure is shown in a snack bar.
+/// Inputs: A context with a `ScaffoldMessenger`, the controller, and the chat's topic: a
+/// meeting, a project, or every note. Side effects: Writes the hand-off (a project's or every
+/// note's goes with all their files) and opens the other app; a failure is shown in a snack bar.
 Future<void> showChatHandoffSheet(
   BuildContext context, {
   required HandoffController controller,
-  String? meetingId,
-  String? projectId,
+  required ChatTopic topic,
 }) async {
   final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
   final _HandoffChoice? choice = await _pickHandoff(context, controller,
@@ -65,13 +65,13 @@ Future<void> showChatHandoffSheet(
   }
   final Future<bool> Function(HandoffSteps steps)? confirm =
       _stepsFor(context, controller);
-  final String? problem = switch ((meetingId, projectId)) {
-    (final String meetingId, _) => await controller.handOff(
-        meetingId, '', HandoffPurpose.chat,
+  final String? problem = switch (topic) {
+    ChatTopic(scope: 'meeting', :final String id) => await controller.handOff(
+        id, '', HandoffPurpose.chat,
         app: choice.app, confirm: confirm),
-    (null, final String projectId) => await controller.handOffProject(projectId,
-        app: choice.app, confirm: confirm),
-    (null, null) => null,
+    ChatTopic(scope: 'project', :final String id) => await controller
+        .handOffNotes(projectId: id, app: choice.app, confirm: confirm),
+    _ => await controller.handOffNotes(app: choice.app, confirm: confirm),
   };
   if (problem != null) {
     messenger.showSnackBar(SnackBar(content: Text(problem)));

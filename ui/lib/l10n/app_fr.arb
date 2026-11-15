@@ -714,7 +714,7 @@
   "handoffStepPressEnter": "{site} s'ouvre avec la réunion déjà dans la zone de message. Appuyez sur Entrée pour l'envoyer.",
   "handoffStepSentByItself": "{site} s'ouvre et envoie la réunion tout seul. Connectez-vous d'abord s'il le demande.",
   "handoffStepPaste": "{site} s'ouvre et Koalino copie la réunion. Cliquez dans la zone de message, collez-la (Ctrl+V) et appuyez sur Entrée.",
-  "handoffStepDragFiles": "Un dossier avec les photos et fichiers de la réunion s'ouvre aussi : faites-les glisser dans la zone de message, pour qu'ils partent comme fichiers.",
+  "handoffStepDragFiles": "Un dossier avec les fichiers s'ouvre aussi : fais-les tous glisser dans la zone du message, pour qu'ils partent en tant que fichiers.",
   "handoffStepCopyAnswer": "Quand la réponse est terminée, appuyez sur le bouton de copie en dessous.",
   "handoffStepComeBack": "Revenez dans Koalino : la réponse devient le résumé de la réunion, avec Annuler.",
   "handoffStepAskThere": "Posez ensuite vos questions sur la réunion là-bas.",

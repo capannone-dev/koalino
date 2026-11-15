@@ -2748,7 +2748,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'Também abre uma pasta com as fotos e ficheiros da reunião: arraste-os para a caixa de mensagem, para irem como ficheiros.';
+      'Abre-se também uma pasta com os ficheiros: arraste-os todos para a caixa da mensagem, para que sigam como ficheiros.';
 
   @override
   String get handoffStepCopyAnswer =>

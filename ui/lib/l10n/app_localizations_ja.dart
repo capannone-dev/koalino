@@ -2613,7 +2613,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      '会議の写真とファイルのフォルダーも開きます。メッセージ欄にドラッグすると、ファイルとして送られます。';
+      'ファイルの入ったフォルダーも開きます。すべてをメッセージ欄にドラッグすると、ファイルのまま送られます。';
 
   @override
   String get handoffStepCopyAnswer => '回答が完成したら、その下のコピーボタンを押してください。';

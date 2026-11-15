@@ -8,7 +8,9 @@ import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
 
 /// A hand-off with `extraFiles` photos or files beside the Markdown.
 PreparedHandoff _handoff(
-        {int extraFiles = 0, String message = 'Summarize it.\n\n# Review'}) =>
+        {int extraFiles = 0,
+        String message = 'Summarize it.\n\n# Review',
+        bool documentAttached = false}) =>
     PreparedHandoff(
       message: message,
       prompt: 'Summarize it.',
@@ -20,6 +22,7 @@ PreparedHandoff _handoff(
               path: '/data/handoff/photo$index.jpg', mimeType: 'image/jpeg'),
       ],
       skipped: 0,
+      documentAttached: documentAttached,
     );
 
 void main() {
@@ -82,6 +85,19 @@ void main() {
     expect(opened.first, 'https://chatgpt.com/');
     expect(platform.prefills(_handoff(extraFiles: 1), AiApp.chatgpt), isFalse);
     expect(platform.prefills(_handoff(extraFiles: 1), AiApp.claude), isTrue);
+  });
+
+  test('a document that goes only as a file opens its folder too (#126)',
+      () async {
+    final PreparedHandoff everyNote =
+        _handoff(message: 'Read the file.', documentAttached: true);
+
+    await platform.share(everyNote, AiApp.claude);
+
+    expect(opened.last, '/data/handoff');
+    expect(everyNote.hasFilesToDrag, isTrue);
+    expect(platform.prefills(everyNote, AiApp.chatgpt), isFalse);
+    expect(platform.prefills(everyNote, AiApp.claude), isTrue);
   });
 
   test('the core is asked for a message that carries the meeting', () async {

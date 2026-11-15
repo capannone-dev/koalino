@@ -3,7 +3,8 @@
 // "Who answers" menu switches to the phone's own connection. Each answer says what the model was given and what was left out.
 // The chat is kept on this device; it can be deleted from the menu. The places an answer cites
 // are listed under it, and open the meeting at that moment or the file (#110). A meeting's or a
-// project's chat can go on in the owner's own AI app instead, with its photos and files (#126).
+// project's chat, or every note's, can go on in the owner's own AI app instead, with the photos
+// and files (#126).
 
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/handoff_controller.dart';
@@ -71,8 +72,7 @@ final class ChatScreen extends StatefulWidget {
   /// Finds a cited file; without it, file sources can't be opened.
   final ProjectsController? projectsController;
 
-  /// Continues the chat in the owner's own AI app; without it, or for every meeting, the
-  /// action is not offered.
+  /// Continues the chat in the owner's own AI app; without it, the action is not offered.
   final HandoffController? handoff;
 
   @override
@@ -288,19 +288,13 @@ final class _ChatScreenState extends State<ChatScreen> {
                     child: Text(l10n.thisPhoneSAiConnection)),
               ],
             ),
-          if ((widget.handoff, widget.topic)
-              case (
-                final HandoffController handoff,
-                ChatTopic(scope: 'meeting' || 'project', :final String id)
-              ))
+          if (widget.handoff case final HandoffController handoff)
             IconButton(
               key: const ValueKey<String>('chat-handoff'),
               tooltip: l10n.useYourOwnAiApp,
               icon: const Icon(Icons.open_in_new),
               onPressed: () => showChatHandoffSheet(context,
-                  controller: handoff,
-                  meetingId: widget.topic.scope == 'meeting' ? id : null,
-                  projectId: widget.topic.scope == 'project' ? id : null),
+                  controller: handoff, topic: widget.topic),
             ),
           IconButton(
             tooltip: l10n.deleteThisChat2,

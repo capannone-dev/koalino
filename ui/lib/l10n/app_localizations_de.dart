@@ -2785,7 +2785,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'Ein Ordner mit den Fotos und Dateien der Besprechung öffnet sich auch: zieh sie ins Nachrichtenfeld, damit sie als Dateien mitgehen.';
+      'Ein Ordner mit den Dateien öffnet sich ebenfalls: Zieh sie alle in das Nachrichtenfeld, damit sie als Dateien mitgehen.';
 
   @override
   String get handoffStepCopyAnswer =>

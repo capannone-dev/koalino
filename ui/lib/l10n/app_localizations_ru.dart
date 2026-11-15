@@ -2758,7 +2758,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'Также откроется папка с фото и файлами встречи: перетащите их в поле сообщения, чтобы они ушли как файлы.';
+      'Также откроется папка с файлами: перетащите их все в поле сообщения, чтобы они ушли как файлы.';
 
   @override
   String get handoffStepCopyAnswer =>

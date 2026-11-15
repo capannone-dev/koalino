@@ -54,7 +54,7 @@ final class DesktopHandoffPlatform implements HandoffPlatform {
             ? app.prefilledAddress(handoff.message)
             : null) ??
         app.webAddress);
-    if (handoff.files.length > 1) {
+    if (handoff.hasFilesToDrag) {
       await _open(await handoffDirectory());
     }
   }
@@ -65,7 +65,7 @@ final class DesktopHandoffPlatform implements HandoffPlatform {
   bool prefills(PreparedHandoff handoff, AiApp? app) =>
       app != null &&
       app.prefilledAddress(handoff.message) != null &&
-      !(app.sendsByItself && handoff.files.length > 1);
+      !(app.sendsByItself && handoff.hasFilesToDrag);
 
   @override
   Future<String?> readClipboard() async =>

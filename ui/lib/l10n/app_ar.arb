@@ -714,7 +714,7 @@
   "handoffStepPressEnter": "يفتح {site} والاجتماع موجود بالفعل في مربع الرسالة. اضغط Enter لإرساله.",
   "handoffStepSentByItself": "يفتح {site} ويرسل الاجتماع تلقائيًا. سجّل الدخول أولًا إذا طُلب منك.",
   "handoffStepPaste": "يفتح {site} وينسخ Koalino الاجتماع. انقر مربع الرسالة والصقه (Ctrl+V) ثم اضغط Enter.",
-  "handoffStepDragFiles": "يُفتح أيضًا مجلد فيه صور الاجتماع وملفاته: اسحبها إلى مربع الرسالة لتُرسل كملفات.",
+  "handoffStepDragFiles": "يُفتح أيضًا مجلد يضم الملفات: اسحبها كلها إلى مربع الرسالة، لتُرسل كملفات.",
   "handoffStepCopyAnswer": "عند اكتمال الإجابة، اضغط زر النسخ أسفلها.",
   "handoffStepComeBack": "عُد إلى Koalino: تصبح الإجابة ملخص الاجتماع، مع إمكانية التراجع.",
   "handoffStepAskThere": "ثم اطرح أسئلتك عن الاجتماع هناك.",

@@ -714,7 +714,7 @@
   "handoffStepPressEnter": "{site} が会議をメッセージ欄に入れた状態で開きます。Enter キーを押して送信してください。",
   "handoffStepSentByItself": "{site} が開き、会議を自動で送信します。求められたら先にサインインしてください。",
   "handoffStepPaste": "{site} が開き、Koalino が会議をコピーします。メッセージ欄をクリックして貼り付け（Ctrl+V）、Enter キーを押してください。",
-  "handoffStepDragFiles": "会議の写真とファイルのフォルダーも開きます。メッセージ欄にドラッグすると、ファイルとして送られます。",
+  "handoffStepDragFiles": "ファイルの入ったフォルダーも開きます。すべてをメッセージ欄にドラッグすると、ファイルのまま送られます。",
   "handoffStepCopyAnswer": "回答が完成したら、その下のコピーボタンを押してください。",
   "handoffStepComeBack": "Koalino に戻ると、回答が会議の要約になります（元に戻せます）。",
   "handoffStepAskThere": "その後、そこで会議について質問してください。",

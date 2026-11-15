@@ -153,7 +153,9 @@ true)` has a paired computer answer from its own copy of the notes (#107).
 edits. `AndroidHandoffPlatform` covers the folder (`cache/shared/handoff`), the installed apps,
 `shareFiles` and the clipboard. `clearHandoffFolder` deletes an earlier hand-off's copies at
 start-up. `RustHandoffCore(inline: true)` asks for a message that carries the meeting itself.
-`prepareProject` (#126) asks for a project's chat hand-off (`project_id`).
+`prepareNotes` (#126) asks for a project's chat hand-off (`project_id`), or every note's
+(`all`). `PreparedHandoff.hasFilesToDrag` is true when files, or the Markdown itself
+(`documentAttached`), must be dragged into a website.
 
 `desktop_handoff.dart` (#126) is the computer's `HandoffPlatform`, for owners who use claude.ai or
 chatgpt.com rather than Claude Code or Codex. Both websites are always offered (`viaBrowser`).

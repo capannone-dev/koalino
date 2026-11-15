@@ -79,21 +79,35 @@ final class FakeHandoffPorts implements HandoffCore, HandoffPlatform {
   }
 
   @override
-  Future<PreparedHandoff> prepareProject(
-      String projectId, String directory) async {
-    calls.add('prepare project $projectId $directory');
-    return const PreparedHandoff(
-      message: 'Read it.',
-      prompt: '',
-      files: <HandoffFile>[
-        HandoffFile(
-            path: '/cache/shared/handoff/Launch.md', mimeType: 'text/markdown'),
-        HandoffFile(
-            path: '/cache/shared/handoff/plan.pdf',
-            mimeType: 'application/pdf'),
-      ],
-      skipped: 0,
-    );
+  Future<PreparedHandoff> prepareNotes(
+      String? projectId, String directory) async {
+    calls.add('prepare notes ${projectId ?? 'all'} $directory');
+    // Every note goes as a file only; a project's document is in the message.
+    return projectId == null
+        ? const PreparedHandoff(
+            message: 'Read the file.',
+            prompt: '',
+            files: <HandoffFile>[
+              HandoffFile(
+                  path: '/cache/shared/handoff/All notes.md',
+                  mimeType: 'text/markdown'),
+            ],
+            skipped: 0,
+            documentAttached: true,
+          )
+        : const PreparedHandoff(
+            message: 'Read it.',
+            prompt: '',
+            files: <HandoffFile>[
+              HandoffFile(
+                  path: '/cache/shared/handoff/Launch.md',
+                  mimeType: 'text/markdown'),
+              HandoffFile(
+                  path: '/cache/shared/handoff/plan.pdf',
+                  mimeType: 'application/pdf'),
+            ],
+            skipped: 0,
+          );
   }
 
   @override
@@ -236,15 +250,17 @@ void main() {
     ports.viaBrowser = true;
     final List<HandoffSteps> shown = <HandoffSteps>[];
 
-    final String? problem = await controller.handOffProject('p-1',
-        app: AiApp.chatgpt, confirm: (HandoffSteps steps) async {
-      shown.add(steps);
-      return true;
-    });
+    final String? problem = await controller.handOffNotes(
+        projectId: 'p-1',
+        app: AiApp.chatgpt,
+        confirm: (HandoffSteps steps) async {
+          shown.add(steps);
+          return true;
+        });
 
     expect(problem, isNull);
     expect(ports.calls, <String>[
-      'prepare project p-1 /cache/shared/handoff',
+      'prepare notes p-1 /cache/shared/handoff',
       'share chatgpt 2',
     ]);
     expect(shown.single.purpose, HandoffPurpose.chat);
@@ -253,7 +269,24 @@ void main() {
     expect(ports.clipboard, 'Read it.');
   });
 
-  testWidgets('the chat sheet offers only chats, for a meeting or a project',
+  test('every note goes as a file, so the steps say to drag it in (#126)',
+      () async {
+    ports.viaBrowser = true;
+    final List<HandoffSteps> shown = <HandoffSteps>[];
+
+    await controller.handOffNotes(
+        app: AiApp.claude,
+        confirm: (HandoffSteps steps) async {
+          shown.add(steps);
+          return true;
+        });
+
+    expect(ports.calls.first, 'prepare notes all /cache/shared/handoff');
+    expect(shown.single.hasFiles, isTrue,
+        reason: 'the document itself must be dragged in');
+  });
+
+  testWidgets('the chat sheet offers only chats, for any chat',
       (WidgetTester tester) async {
     ports.apps = <AiApp>[AiApp.chatgpt];
     await controller.loadApps();
@@ -263,13 +296,20 @@ void main() {
           builder: (BuildContext context) => Column(children: <Widget>[
             TextButton(
               onPressed: () => showChatHandoffSheet(context,
-                  controller: controller, projectId: 'p-1'),
+                  controller: controller,
+                  topic: const ChatTopic.project('p-1')),
               child: const Text('Project'),
             ),
             TextButton(
               onPressed: () => showChatHandoffSheet(context,
-                  controller: controller, meetingId: 'm-1'),
+                  controller: controller,
+                  topic: const ChatTopic.meeting('m-1')),
               child: const Text('Meeting'),
+            ),
+            TextButton(
+              onPressed: () => showChatHandoffSheet(context,
+                  controller: controller, topic: const ChatTopic.everything()),
+              child: const Text('Everything'),
             ),
           ]),
         ),
@@ -281,16 +321,22 @@ void main() {
     expect(find.text('Summarize in ChatGPT'), findsNothing);
     await tester.tap(find.text('Chat in ChatGPT'));
     await tester.pumpAndSettle();
-    expect(ports.calls.first, 'prepare project p-1 /cache/shared/handoff');
+    expect(ports.calls.first, 'prepare notes p-1 /cache/shared/handoff');
 
     await tester.tap(find.text('Meeting'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Chat in ChatGPT'));
     await tester.pumpAndSettle();
     expect(ports.calls, contains('prepare m-1 chat /cache/shared/handoff'));
+
+    await tester.tap(find.text('Everything'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Chat in ChatGPT'));
+    await tester.pumpAndSettle();
+    expect(ports.calls, contains('prepare notes all /cache/shared/handoff'));
   });
 
-  testWidgets("a meeting's or a project's chat page offers the own AI app",
+  testWidgets('every chat page offers the own AI app',
       (WidgetTester tester) async {
     Future<void> show(ChatTopic topic, HandoffController? handoff) async {
       await tester.pumpWidget(MaterialApp(
@@ -312,7 +358,7 @@ void main() {
     await show(const ChatTopic.meeting('m-1'), controller);
     expect(action, findsOneWidget);
     await show(const ChatTopic.everything(), controller);
-    expect(action, findsNothing, reason: 'every meeting is too much to send');
+    expect(action, findsOneWidget, reason: 'every note goes as a file');
     await show(const ChatTopic.meeting('m-1'), null);
     expect(action, findsNothing);
   });

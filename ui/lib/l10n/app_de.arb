@@ -714,7 +714,7 @@
   "handoffStepPressEnter": "{site} öffnet sich mit der Besprechung bereits im Nachrichtenfeld. Drück die Eingabetaste, um sie zu senden.",
   "handoffStepSentByItself": "{site} öffnet sich und sendet die Besprechung von selbst. Melde dich zuerst an, falls es danach fragt.",
   "handoffStepPaste": "{site} öffnet sich und Koalino kopiert die Besprechung. Klick ins Nachrichtenfeld, füge sie ein (Strg+V) und drück die Eingabetaste.",
-  "handoffStepDragFiles": "Ein Ordner mit den Fotos und Dateien der Besprechung öffnet sich auch: zieh sie ins Nachrichtenfeld, damit sie als Dateien mitgehen.",
+  "handoffStepDragFiles": "Ein Ordner mit den Dateien öffnet sich ebenfalls: Zieh sie alle in das Nachrichtenfeld, damit sie als Dateien mitgehen.",
   "handoffStepCopyAnswer": "Wenn die Antwort fertig ist, drück die Kopieren-Schaltfläche darunter.",
   "handoffStepComeBack": "Komm zurück zu Koalino: Die Antwort wird zur Zusammenfassung der Besprechung, mit Rückgängig.",
   "handoffStepAskThere": "Stell dann dort deine Fragen zur Besprechung.",

@@ -2712,7 +2712,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'A folder with the meeting\'s photos and files opens too: drag them into the message box, so they go as files.';
+      'A folder with the files opens too: drag them all into the message box, so they go as files.';
 
   @override
   String get handoffStepCopyAnswer =>
