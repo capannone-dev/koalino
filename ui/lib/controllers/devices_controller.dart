@@ -167,6 +167,28 @@ final class DevicesController extends ChangeNotifier {
     return errorMessage ?? 'That did not work. Try again.';
   }
 
+  /// Renames this device (#121); nearby devices see the new name at once.
+  ///
+  /// Inputs: The name as typed; Rust trims and checks it.
+  /// Outputs: `null` once saved, or a message for the owner; nothing changes on failure.
+  /// Side effects: Writes the saved name through the bridge and refreshes. Devices paired before
+  /// keep the name they learned when pairing.
+  Future<String?> renameDevice(String name) async {
+    try {
+      await _bridge.setDeviceName(name);
+    } on P2pException catch (error) {
+      return switch (error.errorCode) {
+        'invalid_device_name' => 'Use 1 to 64 characters, without line breaks.',
+        'storage_failed' => 'The name could not be saved. Try again.',
+        _ => 'That did not work. Try again.',
+      };
+    } on Object {
+      return 'That did not work. Try again.';
+    }
+    await refresh();
+    return null;
+  }
+
   /// Words an invite's refusal for the owner.
   String _inviteRefusal(String errorCode) => switch (errorCode) {
         'invite_expired' =>

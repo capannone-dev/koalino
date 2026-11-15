@@ -1,12 +1,14 @@
 // Shows this device, pairing requests and codes, paired devices, and nearby devices, and
 // forwards the owner's choices to `DevicesController` (Issue #43). It also explains why devices on
-// other networks are not found (Issue #66) and offers pairing invites (Issue #65).
+// other networks are not found (Issue #66) and offers pairing invites (Issue #65). Nearby devices
+// show the name they tell, and this device can be renamed (Issue #121).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/presentation/pairing_invite_dialogs.dart';
+import 'package:note_taker_ui/presentation/rename_device_dialog.dart';
 
 /// The Devices screen; it renders the controller's state and holds no logic of its own.
 ///
@@ -96,6 +98,12 @@ final class _DevicesList extends StatelessWidget {
               'This device\n${describeCapabilities(capabilities)}',
             null => 'This device',
           }),
+          trailing: IconButton(
+            tooltip: 'Rename this device',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => showRenameDeviceDialog(context,
+                controller: controller, currentName: status.deviceName),
+          ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -181,7 +189,12 @@ final class _DevicesList extends StatelessWidget {
         for (final String peerId in status.nearbyPeerIds)
           ListTile(
             leading: const Icon(Icons.wifi),
-            title: Text(shortPeerId(peerId)),
+            // A device tells its name only while it is discoverable (#121).
+            title:
+                Text(status.nearbyDeviceNames[peerId] ?? shortPeerId(peerId)),
+            subtitle: status.nearbyDeviceNames.containsKey(peerId)
+                ? Text(shortPeerId(peerId))
+                : null,
             trailing: FilledButton.tonal(
               onPressed: () => controller.startPairing(peerId),
               child: const Text('Pair'),

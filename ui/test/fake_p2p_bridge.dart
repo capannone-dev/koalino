@@ -41,6 +41,9 @@ final class FakeP2pBridge implements P2pBridge {
     expiresAt: DateTime(2026, 10, 30, 15, 7),
   );
 
+  /// Names passed to `setDeviceName`, in order.
+  final List<String> deviceNames = <String>[];
+
   /// Number of `getStatus` calls.
   int statusRequestCount = 0;
 
@@ -110,6 +113,29 @@ final class FakeP2pBridge implements P2pBridge {
     joinedInvites.add(inviteText);
     return '12D3KooWInviter';
   }
+
+  @override
+  Future<String> setDeviceName(String name) async {
+    deviceNames.add(name);
+    if (nextCommandError case final Object error) {
+      nextCommandError = null;
+      throw error;
+    }
+    final String saved = name.trim();
+    status = P2pStatus(
+      enabled: status.enabled,
+      localPeerId: status.localPeerId,
+      deviceName: saved,
+      capabilities: status.capabilities,
+      pairedDevices: status.pairedDevices,
+      nearbyPeerIds: status.nearbyPeerIds,
+      nearbyDeviceNames: status.nearbyDeviceNames,
+      incomingRequests: status.incomingRequests,
+      outgoingPairings: status.outgoingPairings,
+      network: status.network,
+    );
+    return saved;
+  }
 }
 
 /// A running status with one paired device, one nearby device, one request, and one pairing.
@@ -139,7 +165,13 @@ P2pStatus busyStatus() => P2pStatus(
           pairedAt: DateTime.utc(2026, 10, 27, 18),
         ),
       ],
-      nearbyPeerIds: const <String>['12D3KooWNearbyDevice1234'],
+      nearbyPeerIds: const <String>[
+        '12D3KooWNearbyDevice1234',
+        '12D3KooWQuietDevice5678'
+      ],
+      nearbyDeviceNames: const <String, String>{
+        '12D3KooWNearbyDevice1234': 'Kitchen tablet'
+      },
       incomingRequests: const <IncomingPairingRequest>[
         IncomingPairingRequest(
             peerId: '12D3KooWTablet', deviceName: 'Tablet', code: '639210'),

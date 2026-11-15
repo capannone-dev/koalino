@@ -66,9 +66,11 @@ Devices (Issue #43):
 - `p2p_bridge_test.dart` decodes the status, command answers, and errors, and builds the command
   and configuration JSON.
 - `devices_controller_test.dart` covers each command, the refresh after it, the readable error
-  messages, 2 s polling, and the five-minute discoverable window (with `fake_async`).
+  messages, 2 s polling, the five-minute discoverable window (with `fake_async`), and renaming
+  (#121).
 - `devices_screen_test.dart` covers the sections, the large and spoken codes, Accept and
-  Codes match, the waiting state, the confirmed removal, make discoverable, and sync off.
+  Codes match, the waiting state, the confirmed removal, make discoverable, sync off, nearby
+  names with the peer ID fallback, and renaming this device, including a refused name (#121).
 - `pairing_link_listener_test.dart` covers an invite link the camera opened (#122): asked first,
   Pair finds the device and starts pairing on the Devices screen, Cancel does nothing, and an
   expired invite says so.

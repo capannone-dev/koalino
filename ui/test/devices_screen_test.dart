@@ -36,9 +36,67 @@ void main() {
     await tester.scrollUntilVisible(find.text('Galaxy'), 200);
     expect(find.text('Paired devices'), findsOneWidget);
     expect(find.text('Galaxy'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Pair'), 200);
+    await tester.scrollUntilVisible(find.text('Kitchen tablet'), 200);
     expect(find.text('Nearby devices'), findsOneWidget);
-    expect(find.text('Pair'), findsOneWidget);
+    expect(find.text('Pair'), findsNWidgets(2));
+  });
+
+  testWidgets(
+      'a nearby device shows its name, or its peer ID until it tells one (#121)',
+      (WidgetTester tester) async {
+    final FakeP2pBridge bridge = FakeP2pBridge(status: busyStatus());
+    await pumpDevices(tester, bridge);
+    await tester.scrollUntilVisible(find.text('Kitchen tablet'), 200);
+
+    expect(find.text('Kitchen tablet'), findsOneWidget);
+    expect(find.text(shortPeerId('12D3KooWNearbyDevice1234')), findsOneWidget,
+        reason:
+            'the peer ID stays as a subtitle, to tell same-named devices apart');
+    expect(find.text(shortPeerId('12D3KooWQuietDevice5678')), findsOneWidget);
+
+    await tester.tap(find.text('Pair').first);
+    await tester.pumpAndSettle();
+    expect(bridge.commands.last,
+        (command: 'start_pairing', peerId: '12D3KooWNearbyDevice1234'));
+  });
+
+  testWidgets('renaming this device saves the typed name (#121)',
+      (WidgetTester tester) async {
+    final FakeP2pBridge bridge = FakeP2pBridge(status: busyStatus());
+    await pumpDevices(tester, bridge);
+
+    await tester.tap(find.byTooltip('Rename this device'));
+    await tester.pumpAndSettle();
+    expect(find.text('Rename this device'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Studio laptop'), findsOneWidget,
+        reason: 'the field starts from the current name');
+    await tester.enterText(find.byType(TextField), '  Ettore laptop ');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.deviceNames, <String>['  Ettore laptop ']);
+    expect(find.text('Ettore laptop'), findsOneWidget);
+    expect(find.text('Studio laptop'), findsNothing);
+  });
+
+  testWidgets('a refused name keeps the dialog open and says why (#121)',
+      (WidgetTester tester) async {
+    final FakeP2pBridge bridge = FakeP2pBridge(status: busyStatus())
+      ..nextCommandError = const P2pException('invalid_device_name', 'blank');
+    await pumpDevices(tester, bridge);
+
+    await tester.tap(find.byTooltip('Rename this device'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), ' ');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Rename this device'), findsOneWidget);
+    expect(find.text('Use 1 to 64 characters, without line breaks.'),
+        findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Studio laptop'), findsOneWidget);
   });
 
   testWidgets('shows what each device can run, or that it is not connected',

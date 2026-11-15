@@ -51,7 +51,11 @@ success with a snack bar (Issue #41).
 
 `devices_screen.dart` shows this device, a "Make discoverable" button, incoming requests and
 outgoing pairings with their six-digit codes in large type (read out digit by digit by screen
-readers), paired devices with a confirmed Remove, and nearby devices with Pair. This device and
+readers), paired devices with a confirmed Remove, and nearby devices with Pair. A nearby device
+shows the name it told (only while it is discoverable), with its short peer ID below, or else the
+peer ID alone (#121). The pencil on this device opens `rename_device_dialog.dart`
+(`RenameDeviceDialog`), which saves the name through `DevicesController.renameDevice` and keeps a
+refusal in the dialog. This device and
 each paired device show their manifest in one line (`describeCapabilities`, such as
 "8 CPU cores · Whisper (on device)"), or "Not connected". A disabled P2P
 task shows "Device sync is off" (Issue #43). It opens from Settings (Issue #84).

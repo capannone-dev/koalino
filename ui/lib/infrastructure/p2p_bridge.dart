@@ -99,6 +99,7 @@ final class P2pStatus {
     this.capabilities,
     this.pairedDevices = const <PairedDevice>[],
     this.nearbyPeerIds = const <String>[],
+    this.nearbyDeviceNames = const <String, String>{},
     this.incomingRequests = const <IncomingPairingRequest>[],
     this.outgoingPairings = const <OutgoingPairing>[],
     this.network = const NetworkRoutes(),
@@ -124,6 +125,11 @@ final class P2pStatus {
 
   /// Unpaired devices visible on the local network, by peer ID.
   final List<String> nearbyPeerIds;
+
+  /// Names nearby devices told, by peer ID (#121). A device tells its name only while its pairing
+  /// window is open, so a missing entry is shown as the peer ID. The name is a claim: pairing
+  /// still needs the code.
+  final Map<String, String> nearbyDeviceNames;
 
   /// Requests awaiting an answer.
   final List<IncomingPairingRequest> incomingRequests;
@@ -237,6 +243,14 @@ abstract interface class P2pBridge {
   /// Throws `P2pException` with `invite_malformed`, `invite_expired`, `invite_from_this_device`, or
   /// `already_paired`, changing nothing. No trust is granted.
   Future<String> joinInvite(String inviteText);
+
+  /// Saves the name this device shows to others and applies it at once (#121).
+  ///
+  /// Inputs: The name as typed; Rust trims and checks it.
+  /// Outputs: The saved name. Throws `P2pException` with `invalid_device_name` (blank, over 64
+  /// characters, or holding a control character), `storage_failed`, or `unavailable`.
+  /// Side effects: Writes `<db>.device-name`; devices paired before keep the old name.
+  Future<String> setDeviceName(String name);
 }
 
 /// Builds the JSON request for `note_taker_p2p_command`.
@@ -284,6 +298,12 @@ P2pStatus decodeP2pStatus(String json) {
       nearbyPeerIds: _list(object['nearby_devices'])
           .map((Map<String, Object?> device) => device['peer_id']! as String)
           .toList(growable: false),
+      nearbyDeviceNames: <String, String>{
+        for (final Map<String, Object?> device
+            in _list(object['nearby_devices']))
+          if (device['device_name'] case final String name)
+            device['peer_id']! as String: name,
+      },
       incomingRequests: _list(object['incoming_requests'])
           .map((Map<String, Object?> request) => IncomingPairingRequest(
                 peerId: request['peer_id']! as String,
@@ -358,6 +378,23 @@ String decodeJoinedInvite(String json) {
         'malformed_response', 'The invite answer is incomplete.');
   }
   return peerId;
+}
+
+/// Decodes the answer to `set_device_name`.
+///
+/// Outputs: The saved name. Throws `P2pException` with Rust's error code on refusal, or
+/// `malformed_response` when the answer lacks the name.
+String decodeRenamedDevice(String json) {
+  final Map<String, Object?> object = _decodeObject(json);
+  if (object['ok'] != true) {
+    throw _exceptionFrom(object);
+  }
+  final Object? deviceName = object['device_name'];
+  if (deviceName is! String) {
+    throw const P2pException(
+        'malformed_response', 'The rename answer is incomplete.');
+  }
+  return deviceName;
 }
 
 /// Decodes the routes object; an older core's missing one means nothing is configured.
@@ -461,6 +498,13 @@ final class RustP2pBridge implements P2pBridge {
       decodeJoinedInvite(await _runCommand(jsonEncode(<String, String>{
         'command': 'join_invite',
         'invite': inviteText,
+      })));
+
+  @override
+  Future<String> setDeviceName(String name) async =>
+      decodeRenamedDevice(await _runCommand(jsonEncode(<String, String>{
+        'command': 'set_device_name',
+        'name': name,
       })));
 }
 

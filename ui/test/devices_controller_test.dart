@@ -107,4 +107,24 @@ void main() {
       controller.dispose();
     });
   });
+
+  test('renaming saves the name and refreshes; a refusal is worded (#121)',
+      () async {
+    final FakeP2pBridge bridge = FakeP2pBridge(status: busyStatus());
+    final DevicesController controller = DevicesController(p2pBridge: bridge);
+    await controller.refresh();
+
+    expect(await controller.renameDevice('Ettore laptop'), isNull);
+    expect(bridge.deviceNames, <String>['Ettore laptop']);
+    expect(controller.status?.deviceName, 'Ettore laptop');
+
+    bridge.nextCommandError =
+        const P2pException('invalid_device_name', 'blank');
+    expect(await controller.renameDevice(''),
+        'Use 1 to 64 characters, without line breaks.');
+    bridge.nextCommandError = const P2pException('storage_failed', 'disk');
+    expect(await controller.renameDevice('Desk'),
+        'The name could not be saved. Try again.');
+    expect(controller.status?.deviceName, 'Ettore laptop');
+  });
 }

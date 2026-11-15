@@ -12,7 +12,7 @@ const String runningStatusJson = '''
  "listen_addresses":["/ip4/192.168.1.5/tcp/4001"],
  "capabilities":{"cpu_cores":8,"gpu_vram_megabytes":4096,"transcription_models":["whisper","openai"],"supports_vad":true},
  "trusted_devices":[{"peer_id":"12D3KooWPhone","device_name":"Galaxy","paired_at_ms":1793181121148,"capabilities":null}],
- "nearby_devices":[{"peer_id":"12D3KooWNearby"}],
+ "nearby_devices":[{"peer_id":"12D3KooWNearby","device_name":"Kitchen tablet"},{"peer_id":"12D3KooWQuiet"}],
  "incoming_requests":[{"peer_id":"12D3KooWTablet","device_name":"Tablet","code":"639210"}],
  "outgoing_pairings":[{"peer_id":"12D3KooWDesk","code":"888224","locally_confirmed":true}],
  "recent_updates":[{"kind":"paired","peer_id":"12D3KooWPhone","device_name":"Galaxy"}]}
@@ -37,11 +37,27 @@ void main() {
       expect(status.capabilities?.transcriptionModels,
           <String>['whisper', 'openai']);
       expect(status.pairedDevices.single.capabilities, isNull);
-      expect(status.nearbyPeerIds, <String>['12D3KooWNearby']);
+      expect(status.nearbyPeerIds, <String>['12D3KooWNearby', '12D3KooWQuiet']);
+      expect(status.nearbyDeviceNames,
+          <String, String>{'12D3KooWNearby': 'Kitchen tablet'},
+          reason: 'a device closed to pairing tells no name');
       expect(status.incomingRequests.single.deviceName, 'Tablet');
       expect(status.incomingRequests.single.code, '639210');
       expect(status.outgoingPairings.single.code, '888224');
       expect(status.outgoingPairings.single.locallyConfirmed, isTrue);
+    });
+
+    test('a rename answer carries the saved name', () {
+      expect(decodeRenamedDevice('{"ok":true,"device_name":"Ettore laptop"}'),
+          'Ettore laptop');
+      expect(
+        () => decodeRenamedDevice(
+            '{"ok":false,"error_code":"invalid_device_name","error":"blank"}'),
+        throwsA(isA<P2pException>().having(
+            (P2pException error) => error.errorCode,
+            'errorCode',
+            'invalid_device_name')),
+      );
     });
 
     test('a disabled task has no devices', () {
