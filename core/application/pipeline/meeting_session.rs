@@ -159,6 +159,9 @@ fn text_pieces_of(
 
 /// Least audio, in milliseconds, a review clip keeps after the final pass cuts it (#116).
 const MIN_REVIEW_CLIP_MS: u64 = 1_000;
+/// The shortest turn a live strong voice match names automatically; shorter ones are only
+/// suggested (#61: the readers' measurement on 2026-11-15, 346 live decisions).
+const MIN_TURN_FOR_LIVE_NAME_MS: u64 = 1_500;
 
 /// Longest silence, in milliseconds, inside one speaker's run of windows.
 const MAX_RUN_GAP_MS: u64 = 500;
@@ -1352,6 +1355,37 @@ where
         }
     }
 
+    /// Matches one diarized turn against the saved voices, naming it only when it is long enough.
+    ///
+    /// Inputs: The diarized turn (its times and averaged embedding).
+    /// Outputs: The matcher's result, except that a strong match on a turn shorter than
+    /// `MIN_TURN_FOR_LIVE_NAME_MS` becomes a weak match with the nearest voice's real score (#61):
+    /// in the readers' measurement both wrong live names came from turns of 0.4 s and 1.2 s,
+    /// while every right one came from a longer turn.
+    /// Side effects: Queries the voice-identity port (twice for such a short strong turn).
+    fn live_voice_match(
+        &self,
+        speaker_segment: &SpeakerSegment,
+    ) -> Result<VoiceMatchResult, StorageError> {
+        let result = self
+            .voice_identity_matcher
+            .match_embedding(speaker_segment.embedding())?;
+        let turn_ms = speaker_segment
+            .end_time_ms()
+            .saturating_sub(speaker_segment.start_time_ms());
+        match result {
+            VoiceMatchResult::StrongMatch(identity_id) if turn_ms < MIN_TURN_FOR_LIVE_NAME_MS => {
+                let score = self
+                    .voice_identity_matcher
+                    .best_voice_match(speaker_segment.embedding())?
+                    .filter(|(closest, _)| *closest == identity_id)
+                    .map_or(1.0, |(_, score)| score);
+                Ok(VoiceMatchResult::WeakMatch(identity_id, score))
+            }
+            other => Ok(other),
+        }
+    }
+
     /// Classifies one diarized segment and clusters it when it is not a strong match.
     ///
     /// Inputs: The source chunk and one of its diarized segments.
@@ -1364,10 +1398,25 @@ where
         vad_chunk: &VadAudioChunk,
         speaker_segment: &SpeakerSegment,
     ) -> SpeakerAttribution {
-        match self
-            .voice_identity_matcher
-            .match_embedding(speaker_segment.embedding())
-        {
+        let match_result = self.live_voice_match(speaker_segment);
+        // Where in the meeting each live decision fell, so the per-turn cutoffs can be measured
+        // against who really spoke (#61). Times and the decision only; the score is on the
+        // matcher's own line just before.
+        let chunk_bounds = vad_chunk.chunk_bounds();
+        tracing::debug!(
+            meeting_id = %self.meeting_id.as_str(),
+            chunk_start_ms = chunk_bounds.start_offset_ms(),
+            segment_start_ms = speaker_segment.start_time_ms(),
+            segment_end_ms = speaker_segment.end_time_ms(),
+            decision = match &match_result {
+                Ok(VoiceMatchResult::StrongMatch(_)) => "strong",
+                Ok(VoiceMatchResult::WeakMatch(..)) => "weak",
+                Ok(VoiceMatchResult::NoMatch) => "none",
+                Err(_) => "error",
+            },
+            "Live voice decision"
+        );
+        match match_result {
             Ok(VoiceMatchResult::StrongMatch(identity_id)) => {
                 SpeakerAttribution::Known { identity_id }
             }

@@ -478,6 +478,45 @@ async fn strong_voice_match_attributes_segment_to_known_identity() {
     );
 }
 
+/// Verifies a strong match on a turn shorter than 1.5 s is only suggested (#61): in the readers'
+/// measurement both live names given to the wrong person came from turns of 0.4 s and 1.2 s,
+/// while every right automatic name came from a longer turn.
+#[tokio::test]
+async fn strong_voice_match_on_a_short_turn_is_only_suggested() {
+    let mut fixture = session_fixture(
+        MockTranscriptionEngine::returning(&["yes"]),
+        vec![Ok(vec![SpeakerSegment::new(0, 1_200, vec![1.0])])],
+    );
+
+    let produced_segments = fixture
+        .session
+        .process_vad_chunk(&vad_chunk(1, 0, 1_200))
+        .await
+        .unwrap_or_else(|error| panic!("chunk processing should succeed: {error}"));
+
+    let saved_clips = fixture
+        .session
+        .note_repository()
+        .saved_clips
+        .borrow()
+        .clone();
+    assert_eq!(saved_clips.len(), 1);
+    assert_eq!(
+        saved_clips[0]
+            .weak_match_candidate()
+            .map(|candidate| candidate.identity_id()),
+        Some(fixture.known_identity_id)
+    );
+    assert_eq!(
+        produced_segments[0].attribution(),
+        &SpeakerAttribution::PendingReview {
+            clip_id: Some(saved_clips[0].clip_id()),
+            candidate_identity_id: fixture.known_identity_id,
+            cluster_id: None,
+        }
+    );
+}
+
 /// Verifies a weak match is labelled pending review, persisted unattributed, and clipped for review.
 #[tokio::test]
 async fn weak_voice_match_marks_pending_review_and_saves_clip() {
@@ -748,14 +787,14 @@ async fn voice_matching_failure_marks_unknown_and_continues() {
     let mut fixture = session_fixture(
         MockTranscriptionEngine::returning(&["one two three four"]),
         vec![Ok(vec![
-            SpeakerSegment::new(0, 1_000, vec![-1.0]),
-            SpeakerSegment::new(1_000, 2_000, vec![1.0]),
+            SpeakerSegment::new(0, 1_500, vec![-1.0]),
+            SpeakerSegment::new(1_500, 3_000, vec![1.0]),
         ])],
     );
 
     let produced_segments = fixture
         .session
-        .process_vad_chunk(&vad_chunk(1, 0, 2_000))
+        .process_vad_chunk(&vad_chunk(1, 0, 3_000))
         .await
         .unwrap_or_else(|error| panic!("matching failure should degrade: {error}"));
 

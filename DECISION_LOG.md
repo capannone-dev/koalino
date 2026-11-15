@@ -3592,3 +3592,32 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - the server package's daemon and dashboard;
   - the Windows bundle on win11: it started and was ready to record;
   - `browser-host install` from the desktop folder.
+
+## 2026-11-15 — #61 Live naming: the cutoffs stay, short turns are only suggested
+
+- **Setup:** the #61 readings were recorded again against the enrolled database (Ettore and Renzo
+  saved; Marta and the two Ponte voices unsaved). A new debug line, "Live voice decision",
+  logs each live decision's chunk and turn times (no names, no text). Who really spoke comes from
+  aligning each transcript to its reading script word by word; in Ponte nobody is enrolled.
+  The scorer is `~/eval-work/scripts/live61_score.py`. Same microphone and room for all readers.
+- **346 live decisions:**
+
+  | Who spoke | Turns | Scores against the saved voice chosen | Named live (> 0.80) |
+  | --- | --- | --- | --- |
+  | The saved person chosen | 104 | 0.53–0.90, median 0.70 | 18 |
+  | The other saved person | 33 | 0.13–0.82, median 0.61 | 2 |
+  | Nobody saved (Marta, Ponte) | 209 | up to 0.64, median 0.14 | 0 |
+
+- **0.80 and 0.50 kept:**
+  - Nobody unsaved was named live, and only 1 of 209 turns was even suggested.
+  - At 0.70 the right person would be named live about three times as often (54 of 104), but so
+    would the wrong one (6 of 33).
+  - Most right matches stay suggestions during the meeting, and the final speaker pass names them
+    afterwards: 20 of 20 at 0.60, as measured on 2026-11-14.
+- **New: a live name needs a turn of at least 1.5 s** (`MIN_TURN_FOR_LIVE_NAME_MS`). Both wrong
+  live names came from turns of 0.4 s and 1.2 s, while all 18 right ones came from longer turns.
+  A shorter strong match is now a suggestion carrying the voice's real score.
+  - In these logs that removes both wrong names and keeps all 18 right ones.
+  - This is two errors in one room, so it is a guard, not a tuning.
+- **Still unmeasured:** voices recorded in different rooms or on different devices from their
+  enrollment.
