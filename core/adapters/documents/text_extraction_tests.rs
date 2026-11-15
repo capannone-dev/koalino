@@ -127,16 +127,31 @@ fn slides_come_in_slide_order_with_their_numbers() {
     assert_eq!(text, "Slide 1\nOne\n\nSlide 2\nTwo\n\nSlide 10\nTen");
 }
 
+/// Each sheet's rows, cells separated by tabs: shared strings (also rich ones), inline strings
+/// and numbers, in sheet and row order.
 #[test]
-fn a_spreadsheet_gives_its_text_cells() {
-    let xlsx = zip_with(&[(
-        "xl/sharedStrings.xml",
-        r#"<sst xmlns="x"><si><t>Item</t></si><si><r><t>Pens</t></r><r><t> (blue)</t></r></si></sst>"#,
-    )]);
+fn a_spreadsheet_gives_each_sheets_rows_with_numbers() {
+    let xlsx = zip_with(&[
+        (
+            "xl/sharedStrings.xml",
+            r#"<sst xmlns="x"><si><t>Item</t></si><si><r><t>Pens</t></r><r><t> (blue)</t></r></si></sst>"#,
+        ),
+        (
+            "xl/worksheets/sheet2.xml",
+            r#"<worksheet><sheetData><row><c t="inlineStr"><is><t>Notes</t></is></c></row></sheetData></worksheet>"#,
+        ),
+        (
+            "xl/worksheets/sheet1.xml",
+            r#"<worksheet><sheetData><row><c t="s"><v>0</v></c><c t="inlineStr"><is><t>Cost</t></is></c></row><row><c t="s"><v>1</v></c><c t="n"><v>12.5</v></c><c><f>B2*2</f><v>25</v></c></row></sheetData></worksheet>"#,
+        ),
+    ]);
 
     let text = extract_text(XLSX, "costs.xlsx", &xlsx).unwrap_or_default();
 
-    assert_eq!(text, "Item\nPens (blue)");
+    assert_eq!(
+        text,
+        "Sheet 1\nItem\tCost\nPens (blue)\t12.5\t25\n\nSheet 2\nNotes"
+    );
 }
 
 #[test]

@@ -19,8 +19,11 @@ How each kind is read:
   project files stored as `application/octet-stream`).
 - E-mails: subject, senders and body, through `adapters/email` (`mail-parser`).
 - PDF: page text through the pure-Rust `lopdf` crate, at most 500 pages, under `catch_unwind` so a
-  malformed file cannot take the app down. Scanned PDFs (pictures of pages) have no text.
-- Word (`.docx`), PowerPoint (`.pptx`, slide by slide), Excel (`.xlsx`, its shared strings) and
+  malformed file cannot take the app down. Its extraction is plain: some PDFs lose spaces between
+  words or ligatures such as "fi", which language models read through. Scanned PDFs (pictures of
+  pages) have no text.
+- Word (`.docx`), PowerPoint (`.pptx`, slide by slide), Excel (`.xlsx`, sheet by sheet, each row's
+  cells separated by tabs: shared and inline strings, numbers and formulas' last values) and
   LibreOffice (`.odt`, `.odp`, `.ods`): these are zip archives of XML, read with `zip` (deflate
   only) and `xml-rs`. Any archive member over 32 MiB is skipped, a guard against zip bombs.
 

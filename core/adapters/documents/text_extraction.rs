@@ -5,8 +5,8 @@
 //! kept as `application/octet-stream`. Text-like files are read as UTF-8, e-mails through
 //! `mail-parser`, PDFs through `lopdf`, and Word, PowerPoint, Excel and LibreOffice documents
 //! (zip archives of XML) through `zip` and `xml-rs`. A broken file, or a kind with no text, gives
-//! `None`; nothing here panics on bad input, logs content, or touches the network. The text is
-//! cut at `MAX_EXTRACTED_CHARS`, so one huge file cannot crowd out everything else.
+//! `None`; spreadsheets give each sheet's rows with their numbers. Nothing here panics on bad
+//! input, logs content, or touches the network. The text is cut at `MAX_EXTRACTED_CHARS`, so one huge file cannot crowd out everything else.
 
 use std::io::{Cursor, Read};
 
@@ -100,7 +100,7 @@ pub fn extract_text(mime_type: &str, file_name: &str, contents: &[u8]) -> Option
         Kind::Pdf => pdf_text(contents)?,
         Kind::Word => xml_member_text(contents, "word/document.xml", &["w:t"], &["w:p"])?,
         Kind::Slides => slides_text(contents)?,
-        Kind::Spreadsheet => xml_member_text(contents, "xl/sharedStrings.xml", &["t"], &["si"])?,
+        Kind::Spreadsheet => spreadsheet_text(contents)?,
         Kind::OpenDocument => xml_member_text(
             contents,
             "content.xml",
@@ -183,17 +183,7 @@ fn xml_member_text(
 /// Each slide's text, in slide order, headed by its number.
 fn slides_text(contents: &[u8]) -> Option<String> {
     let mut archive = archive(contents)?;
-    let mut slides: Vec<(u32, String)> = archive
-        .file_names()
-        .filter_map(|name| {
-            let number = name
-                .strip_prefix("ppt/slides/slide")?
-                .strip_suffix(".xml")?
-                .parse::<u32>()
-                .ok()?;
-            Some((number, name.to_owned()))
-        })
-        .collect();
+    let mut slides = numbered_members(&archive, "ppt/slides/slide", ".xml");
     slides.sort();
     let mut parts = Vec::new();
     for (number, name) in slides {
@@ -205,6 +195,139 @@ fn slides_text(contents: &[u8]) -> Option<String> {
         }
     }
     Some(parts.join("\n\n"))
+}
+
+/// Each sheet's rows in sheet order, headed "Sheet N", with cells separated by tabs: shared
+/// strings, inline strings and values (numbers, and formulas' last results).
+fn spreadsheet_text(contents: &[u8]) -> Option<String> {
+    let mut archive = archive(contents)?;
+    // The workbook's strings, by index; a missing table means the sheets hold their own.
+    let shared: Vec<String> = member(&mut archive, "xl/sharedStrings.xml")
+        .and_then(|xml| shared_strings(&xml))
+        .unwrap_or_default();
+    let mut sheets = numbered_members(&archive, "xl/worksheets/sheet", ".xml");
+    sheets.sort();
+    let mut parts = Vec::new();
+    for (number, name) in sheets {
+        let Some(xml) = member(&mut archive, &name) else {
+            continue;
+        };
+        if let Some(rows) = sheet_rows(&xml, &shared).filter(|rows| !rows.is_empty()) {
+            parts.push(format!("Sheet {number}\n{rows}"));
+        }
+    }
+    Some(parts.join("\n\n"))
+}
+
+/// The archive members named `prefix<number>suffix`, with their numbers.
+fn numbered_members(
+    archive: &zip::ZipArchive<Cursor<&[u8]>>,
+    prefix: &str,
+    suffix: &str,
+) -> Vec<(u32, String)> {
+    archive
+        .file_names()
+        .filter_map(|name| {
+            let number = name
+                .strip_prefix(prefix)?
+                .strip_suffix(suffix)?
+                .parse::<u32>()
+                .ok()?;
+            Some((number, name.to_owned()))
+        })
+        .collect()
+}
+
+/// The shared strings table: each `si`'s text, rich runs joined.
+fn shared_strings(xml: &str) -> Option<Vec<String>> {
+    let mut strings = Vec::new();
+    let mut current = String::new();
+    let mut in_text = false;
+    for event in EventReader::new(xml.as_bytes()) {
+        match event.ok()? {
+            XmlEvent::StartElement { name, .. } if name.local_name == "t" => in_text = true,
+            XmlEvent::EndElement { name } => match name.local_name.as_str() {
+                "t" => in_text = false,
+                "si" => strings.push(std::mem::take(&mut current)),
+                _ => {}
+            },
+            XmlEvent::Characters(text) | XmlEvent::CData(text) | XmlEvent::Whitespace(text)
+                if in_text =>
+            {
+                current.push_str(&text);
+            }
+            _ => {}
+        }
+    }
+    Some(strings)
+}
+
+/// One sheet's non-empty rows, cells separated by tabs.
+fn sheet_rows(xml: &str, shared: &[String]) -> Option<String> {
+    let mut rows: Vec<String> = Vec::new();
+    let mut cells: Vec<String> = Vec::new();
+    let mut cell_type = String::new();
+    let mut value = String::new();
+    let mut inline = String::new();
+    // Which text is being read: a `v` value or an inline string's `t`.
+    let (mut in_value, mut in_inline_text) = (false, false);
+    for event in EventReader::new(xml.as_bytes()) {
+        match event.ok()? {
+            XmlEvent::StartElement {
+                name, attributes, ..
+            } => match name.local_name.as_str() {
+                "c" => {
+                    cell_type = attributes
+                        .iter()
+                        .find(|attribute| attribute.name.local_name == "t")
+                        .map(|attribute| attribute.value.clone())
+                        .unwrap_or_default();
+                    value.clear();
+                    inline.clear();
+                }
+                "v" => in_value = true,
+                "t" => in_inline_text = true,
+                _ => {}
+            },
+            XmlEvent::EndElement { name } => match name.local_name.as_str() {
+                "v" => in_value = false,
+                "t" => in_inline_text = false,
+                "c" => {
+                    let text = match cell_type.as_str() {
+                        "s" => value
+                            .trim()
+                            .parse::<usize>()
+                            .ok()
+                            .and_then(|index| shared.get(index))
+                            .cloned()
+                            .unwrap_or_default(),
+                        "inlineStr" => std::mem::take(&mut inline),
+                        _ => std::mem::take(&mut value),
+                    };
+                    cells.push(text.trim().replace(['\t', '\n'], " "));
+                }
+                "row" => {
+                    while cells.last().is_some_and(String::is_empty) {
+                        cells.pop();
+                    }
+                    if !cells.is_empty() {
+                        rows.push(cells.join("\t"));
+                    }
+                    cells.clear();
+                }
+                _ => {}
+            },
+            XmlEvent::Characters(text) | XmlEvent::CData(text) | XmlEvent::Whitespace(text) => {
+                if in_value {
+                    value.push_str(&text);
+                } else if in_inline_text {
+                    inline.push_str(&text);
+                }
+            }
+            _ => {}
+        }
+    }
+    Some(rows.join("\n"))
 }
 
 /// Collects the character data inside `keep` elements, one line per `breaks` element.
