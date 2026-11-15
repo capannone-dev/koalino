@@ -173,7 +173,7 @@ fn the_meetings_own_prompt_wins_and_a_summary_is_kept_in_its_document() {
 
 #[test]
 fn a_hand_off_writes_the_meeting_and_its_files_into_a_fresh_folder() {
-    use crate::application::meeting_handoff::HandoffPurpose;
+    use crate::application::meeting_handoff::{HandoffDelivery, HandoffPurpose};
     let repository = repository();
     let folder = record(&repository);
     let handoff_folder = folder.join("handoff");
@@ -189,6 +189,7 @@ fn a_hand_off_writes_the_meeting_and_its_files_into_a_fresh_folder() {
         None,
         &PromptTemplate::default_summary(),
         HandoffPurpose::Summary,
+        HandoffDelivery::Attached,
         &handoff_folder,
     )
     .unwrap_or_else(|e| panic!("{e}"));

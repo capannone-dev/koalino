@@ -249,8 +249,10 @@ and meeting summaries" below). Keys are write-only.
 - `char *note_taker_set_meeting_summary_prompt(const char *meeting_id, const char *prompt)` sets
   the meeting's own template, or clears it when `prompt` is null or blank.
 - `char *note_taker_handoff_meeting(const char *request_json)` (#114) prepares a meeting for the
-  owner's own AI app. The request is `{"meeting_id","purpose":"summary"|"chat","directory"}`, where
-  `directory` is a folder the app owns for hand-offs. The core empties it, then writes the meeting
+  owner's own AI app. The request is
+  `{"meeting_id","purpose":"summary"|"chat","directory","inline"?}`, where `directory` is a folder
+  the app owns for hand-offs. With `"inline": true` (computers, #126), `message` also carries the
+  meeting's Markdown, for the owner to paste into a website. The core empties it, then writes the meeting
   as Markdown and plain copies of its attachments (at most 20, 50 MiB each, 100 MiB in all).
   The answer is `message` (the summary prompt, or an introduction for a chat), `prompt` (the
   filled-in instructions; empty for a chat), `files` (`path`, `mime_type`; the Markdown first) and

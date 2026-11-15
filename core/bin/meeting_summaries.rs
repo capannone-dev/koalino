@@ -15,7 +15,7 @@ use crate::{
         combined_meetings::{MeetingListing, name_recording_devices, recording_devices_label},
         export_manager::{ExportManager, ExportWriter},
         meeting_crdt::MeetingCrdtService,
-        meeting_handoff::{HandoffPurpose, prepare_handoff},
+        meeting_handoff::{HandoffDelivery, HandoffPurpose, prepare_handoff},
         meeting_summary::{
             SpokenLine, SummaryError, SummaryMaterial, SummaryOutcome, summarize_meeting,
         },
@@ -209,8 +209,8 @@ pub struct WrittenHandoff {
 ///
 /// Inputs: The repositories, the meeting, the glossary, device name and P2P status (for the
 /// prompt's `{{device}}`, see `prepare_summary`), the
-/// owner's default template (the meeting's own wins), the purpose, and a folder the hand-off
-/// owns. Outputs: The message and the files, or why there is nothing to hand off.
+/// owner's default template (the meeting's own wins), the purpose, how the meeting travels
+/// (attached, or pasted with the message, #126), and a folder the hand-off owns. Outputs: The message and the files, or why there is nothing to hand off.
 /// Side effects: Empties `directory` of an earlier hand-off's files, then writes the meeting as
 /// Markdown and plain copies of its attachments (unsealed, #99). They are personal data in
 /// clear: the caller shares them at once and empties the folder again soon.
@@ -224,6 +224,7 @@ pub fn write_handoff<Repository, Voices>(
     p2p: Option<&P2pStatus>,
     default_template: &PromptTemplate,
     purpose: HandoffPurpose,
+    delivery: HandoffDelivery,
     directory: &Path,
 ) -> Result<WrittenHandoff, SummaryError>
 where
@@ -233,7 +234,7 @@ where
     let storage = |error: &dyn std::fmt::Display| SummaryError::Storage(error.to_string());
     let prepared = prepare_summary(repository, voices, meeting_id, glossary, device_name, p2p)?;
     let template = summary_template_for(&prepared, default_template);
-    let handoff = prepare_handoff(&template, &prepared.material, purpose)?;
+    let handoff = prepare_handoff(&template, &prepared.material, purpose, delivery)?;
     empty_folder(directory).map_err(|error| storage(&error))?;
 
     let document_path = directory.join(&handoff.file_name);

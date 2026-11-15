@@ -33,10 +33,20 @@ pub enum HandoffPurpose {
     Chat,
 }
 
+/// How the meeting reaches the other app.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HandoffDelivery {
+    /// As a Markdown file the share attaches; the message names it (Android, #114).
+    Attached,
+    /// Inside the message, which the owner pastes into the website (computers, #126).
+    Pasted,
+}
+
 /// What is handed to the other app.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Handoff {
-    /// The text the share carries: the prompt for a summary, an introduction for a chat.
+    /// The text the share carries: the prompt for a summary, an introduction for a chat; when
+    /// pasted, followed by the document.
     pub message: String,
     /// The attached file's name, such as `Budget review.md`.
     pub file_name: String,
@@ -48,14 +58,16 @@ pub struct Handoff {
 
 /// Builds the hand-off of a meeting.
 ///
-/// Inputs: The summary template (the meeting's own or the default), the meeting's material, and
-/// the purpose. Images in the material are ignored; the caller attaches the files itself.
+/// Inputs: The summary template (the meeting's own or the default), the meeting's material, the
+/// purpose, and how the meeting travels. Images in the material are ignored; the caller attaches
+/// the files itself.
 /// Outputs: The message and document, or `NothingToSummarize` without words or notes.
 /// Side effects: None.
 pub fn prepare_handoff(
     template: &PromptTemplate,
     material: &SummaryMaterial,
     purpose: HandoffPurpose,
+    delivery: HandoffDelivery,
 ) -> Result<Handoff, SummaryError> {
     let notes = material
         .notes
@@ -81,8 +93,20 @@ pub fn prepare_handoff(
              Words may be misheard, especially names, technical terms and people talking at once.\n\n{transcript}\n"
         ));
     }
-    let (message, prompt) = match purpose {
-        HandoffPurpose::Summary => {
+    let (message, prompt) = match (purpose, delivery) {
+        (HandoffPurpose::Summary, HandoffDelivery::Pasted) => {
+            let prompt = template.render(values);
+            (format!("{prompt}\n\n{document}"), prompt)
+        }
+        (HandoffPurpose::Chat, HandoffDelivery::Pasted) => (
+            format!(
+                "Below are the notes and transcript of the meeting \"{}\" ({}). \
+                 Please read them; I will ask you questions about the meeting.\n\n{document}",
+                values.title, values.date
+            ),
+            String::new(),
+        ),
+        (HandoffPurpose::Summary, HandoffDelivery::Attached) => {
             let prompt = template.render(values);
             (
                 format!(
@@ -91,7 +115,7 @@ pub fn prepare_handoff(
                 prompt,
             )
         }
-        HandoffPurpose::Chat => (
+        (HandoffPurpose::Chat, HandoffDelivery::Attached) => (
             format!(
                 "The attached file {file_name} has the notes and transcript of the meeting \"{}\" ({}). \
                  Please read it; I will ask you questions about it.",

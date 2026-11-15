@@ -4,7 +4,8 @@
 use chrono::{TimeZone, Utc};
 
 use super::meeting_handoff::{
-    HandoffPurpose, handoff_file_name, prepare_handoff, restore_summary, store_external_summary,
+    HandoffDelivery, HandoffPurpose, handoff_file_name, prepare_handoff, restore_summary,
+    store_external_summary,
 };
 use super::meeting_summary::{SpokenLine, SummaryError, SummaryMaterial};
 use crate::{
@@ -57,6 +58,7 @@ fn a_summary_hand_off_asks_with_the_owners_prompt_and_attaches_the_meeting() {
             Some("Ask about Q3"),
         ),
         HandoffPurpose::Summary,
+        HandoffDelivery::Attached,
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -86,6 +88,7 @@ fn a_chat_hand_off_attaches_the_meeting_without_the_summary_prompt() {
         &template(),
         &material(vec![spoken("Anna", 0, "Hello.")], None),
         HandoffPurpose::Chat,
+        HandoffDelivery::Attached,
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -99,12 +102,46 @@ fn a_chat_hand_off_attaches_the_meeting_without_the_summary_prompt() {
     );
 }
 
+/// On a computer the message is pasted into a website, so it carries the meeting itself (#126).
+#[test]
+fn a_pasted_hand_off_carries_the_meeting_in_the_message() {
+    let meeting = material(vec![spoken("Anna", 61_000, "We ship on Friday.")], None);
+
+    let summary = prepare_handoff(
+        &template(),
+        &meeting,
+        HandoffPurpose::Summary,
+        HandoffDelivery::Pasted,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let chat = prepare_handoff(
+        &template(),
+        &meeting,
+        HandoffPurpose::Chat,
+        HandoffDelivery::Pasted,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    assert!(
+        summary
+            .message
+            .starts_with("Summarize Budget review in it.\n\n")
+    );
+    assert!(summary.message.ends_with(&summary.document));
+    assert!(!summary.message.contains("attached"), "nothing is attached");
+    assert_eq!(summary.prompt, "Summarize Budget review in it.");
+    assert!(chat.message.contains("questions"));
+    assert!(chat.message.ends_with(&chat.document));
+    assert!(!chat.message.contains("attached"));
+}
+
 #[test]
 fn a_meeting_without_words_or_notes_is_not_handed_off() {
     let refused = prepare_handoff(
         &template(),
         &material(Vec::new(), Some("  ")),
         HandoffPurpose::Chat,
+        HandoffDelivery::Attached,
     );
     assert!(matches!(refused, Err(SummaryError::NothingToSummarize)));
 }

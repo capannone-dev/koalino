@@ -29,8 +29,10 @@ use serde_json::{Value, json};
 use crate::{
     adapters::audio::retained_audio_store::RetainedSpeechIndex,
     application::{
-        combined_meetings::HeldSpeech, meeting_handoff::HandoffPurpose,
-        meeting_summary::SummaryError, meeting_summary_document::read_summary_prompt,
+        combined_meetings::HeldSpeech,
+        meeting_handoff::{HandoffDelivery, HandoffPurpose},
+        meeting_summary::SummaryError,
+        meeting_summary_document::read_summary_prompt,
     },
     auto_summaries::{AutoSummarizer, AutoSummaryHost, AutoSummaryWake},
     domain::{
@@ -166,8 +168,9 @@ pub unsafe extern "C" fn note_taker_summarize_meeting(
 
 /// Writes a meeting's hand-off to the owner's own AI app (#114).
 ///
-/// Inputs: A JSON object: `meeting_id`, `purpose` (`summary` or `chat`) and `directory`, a
-/// folder the app owns for hand-offs (it is emptied first). Outputs: Caller-freed
+/// Inputs: A JSON object: `meeting_id`, `purpose` (`summary` or `chat`), `directory`, a folder
+/// the app owns for hand-offs (it is emptied first), and optional `inline` (true on computers,
+/// #126: the message carries the meeting, to paste into a website). Outputs: Caller-freed
 /// `{"ok":true,"message","prompt","files":[{"path","mime_type"}],"skipped"}` or an error
 /// (`invalid_request`, `nothing_to_summarize`, `storage_failed`, `runtime_unavailable`).
 /// Side effects: Writes the meeting as Markdown and plain copies of its attachments into the
@@ -202,6 +205,12 @@ pub unsafe extern "C" fn note_taker_handoff_meeting(request_json: *const c_char)
             "`meeting_id` and `directory` are required",
         ));
     };
+    // A computer's owner pastes the message into a website, so it carries the meeting (#126).
+    let delivery = if request.get("inline").and_then(Value::as_bool) == Some(true) {
+        HandoffDelivery::Pasted
+    } else {
+        HandoffDelivery::Attached
+    };
     let meeting_id = MeetingId::new(meeting_id);
     let directory = PathBuf::from(directory);
     let answer = handoff_with(&services(), |glossary, device_name, template| {
@@ -215,6 +224,7 @@ pub unsafe extern "C" fn note_taker_handoff_meeting(request_json: *const c_char)
                 p2p,
                 template,
                 purpose,
+                delivery,
                 &directory,
             )
         })

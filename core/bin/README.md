@@ -356,7 +356,8 @@ over after 30 minutes, and at most 10 requests are sent per hour. `ffi_llm.rs` a
 single transcript segments, through `application/meeting_edits.rs` (the same rules as the web).
 It also keeps an answer from the owner's own AI app as the summary (`keep_answer`) and undoes
 that (`restore_summary`, #114). `meeting_summaries.rs`' `write_handoff`, exposed as
-`note_taker_handoff_meeting` in `ffi_llm.rs`, writes the files that hand-off shares.
+`note_taker_handoff_meeting` in `ffi_llm.rs`, writes the files that hand-off shares; with
+`inline` (#126), the message carries the meeting for pasting into a website.
 
 `search_commands.rs` (#100) is the search answer shared by the app (`note_taker_search` in
 `ffi.rs`), the web (`server/search_routes.rs`) and the CLI (`search`): the request's scope, each
