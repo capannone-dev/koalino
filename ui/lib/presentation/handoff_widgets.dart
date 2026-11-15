@@ -1,5 +1,6 @@
 // Hands a meeting to the owner's own AI app (#114) on Android. The sheet offers Summarize and Chat
-// in the Claude or ChatGPT app when installed, or in any app through the share sheet. The listener
+// in the Claude or ChatGPT app when installed, or in any app through the share sheet. On a
+// computer (#126) it offers claude.ai and chatgpt.com in the browser instead. The listener
 // around the app's screens tells the owner when an answer was kept as a summary, with Undo, or
 // how to keep it.
 
@@ -44,34 +45,41 @@ Future<void> showHandoffSheet(
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
-            child: Text(l10n.theMeetingItsNotesAndIts),
+            child: Text(controller.viaBrowser
+                ? l10n.handoffInTheBrowser
+                : l10n.theMeetingItsNotesAndIts),
           ),
           for (final AiApp app in controller.apps) ...<Widget>[
             ListTile(
               leading: const Icon(Icons.summarize_outlined),
-              title: Text(l10n.summarizeIn(app.displayName)),
+              title: Text(l10n.summarizeIn(
+                  controller.viaBrowser ? app.webName : app.displayName)),
               onTap: () => Navigator.of(context)
                   .pop(_HandoffChoice(HandoffPurpose.summary, app)),
             ),
             ListTile(
               leading: const Icon(Icons.forum_outlined),
-              title: Text(l10n.chatIn(app.displayName)),
+              title: Text(l10n.chatIn(
+                  controller.viaBrowser ? app.webName : app.displayName)),
               onTap: () => Navigator.of(context)
                   .pop(_HandoffChoice(HandoffPurpose.chat, app)),
             ),
           ],
-          ListTile(
-            leading: const Icon(Icons.share_outlined),
-            title: Text(l10n.summarizeInAnotherApp),
-            onTap: () => Navigator.of(context)
-                .pop(const _HandoffChoice(HandoffPurpose.summary, null)),
-          ),
-          ListTile(
-            leading: const Icon(Icons.share_outlined),
-            title: Text(l10n.chatInAnotherApp),
-            onTap: () => Navigator.of(context)
-                .pop(const _HandoffChoice(HandoffPurpose.chat, null)),
-          ),
+          // A computer has no share sheet to reach another app.
+          if (!controller.viaBrowser) ...<Widget>[
+            ListTile(
+              leading: const Icon(Icons.share_outlined),
+              title: Text(l10n.summarizeInAnotherApp),
+              onTap: () => Navigator.of(context)
+                  .pop(const _HandoffChoice(HandoffPurpose.summary, null)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.share_outlined),
+              title: Text(l10n.chatInAnotherApp),
+              onTap: () => Navigator.of(context)
+                  .pop(const _HandoffChoice(HandoffPurpose.chat, null)),
+            ),
+          ],
         ],
       ),
     ),
@@ -138,7 +146,9 @@ final class _HandoffReturnListenerState extends State<HandoffReturnListener> {
       case HandoffHint(:final String appName):
         messenger.showSnackBar(SnackBar(
           duration: const Duration(seconds: 6),
-          content: Text(l10n.toKeepTheSummaryCopyS(appName)),
+          content: Text(widget.controller.viaBrowser
+              ? l10n.toKeepTheSummaryCopyTheWebsite(appName)
+              : l10n.toKeepTheSummaryCopyS(appName)),
         ));
       case HandoffFailed(:final String message):
         messenger.showSnackBar(SnackBar(content: Text(message)));

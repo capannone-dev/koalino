@@ -2475,4 +2475,58 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get microphoneSilencedByCall =>
       '另一个应用正在通话中使用麦克风，Android 已将其静音：通话结束前不会录到任何内容。';
+
+  @override
+  String get handoffInTheBrowser =>
+      'Koalino 会复制会议内容和你的提示词，并在浏览器中打开网站（你已用自己的账号登录）。在那里粘贴（Ctrl+V）。如果会议有照片或文件，其文件夹也会打开：把它们拖进去。如需摘要，回答完成后复制它并回到这里：Koalino 会保存它。';
+
+  @override
+  String toKeepTheSummaryCopyTheWebsite(String appName) {
+    return '要保存摘要，请在网站上复制 $appName 的回答，然后回到 Koalino。';
+  }
+
+  @override
+  String get useYourClaudeOrChatgptPlan => '使用你的 Claude 或 ChatGPT 套餐';
+
+  @override
+  String get summariesCanUseYourOwnPlan =>
+      '摘要可以使用你自己的 Claude 或 ChatGPT 订阅，无需 API 密钥。安装 Claude Code 或 Codex 并登录一次，之后 Koalino 会自动撰写摘要。';
+
+  @override
+  String get installClaudeCode => '安装 Claude Code';
+
+  @override
+  String get forAClaudePlanOpensTheGuide => '适用于 Claude 套餐。打开安装指南。';
+
+  @override
+  String get installCodex => '安装 Codex';
+
+  @override
+  String get forAChatgptPlanOpensTheGuide => '适用于 ChatGPT 套餐。打开安装指南。';
+
+  @override
+  String get skipUseTheWebsite => '跳过：使用网站';
+
+  @override
+  String get koalinoCopiesTheMeetingAndOpens =>
+      '无需安装：Koalino 复制会议并打开 claude.ai 或 chatgpt.com，你在那里粘贴即可。';
+
+  @override
+  String get addAConnection => '添加连接';
+
+  @override
+  String get claudeCodeOrCodexAlreadyInstalled =>
+      '已安装 Claude Code 或 Codex，或你网络中的服务器。';
+
+  @override
+  String get noConnectionNeededUseTheWebsite =>
+      '无需连接。在会议中打开“摘要”，选择“使用你自己的 AI 应用…”：Koalino 会复制会议并打开 claude.ai 或 chatgpt.com。';
+
+  @override
+  String get afterInstallingAddTheConnection =>
+      '安装并登录后，回到这里选择“添加连接 → 添加连接 → Claude Code 或 Codex”。';
+
+  @override
+  String get claudeAiOrChatgptComInYourBrowser =>
+      '在浏览器中使用 claude.ai 或 chatgpt.com，使用你的账号';
 }

@@ -101,6 +101,9 @@ final class FakeHandoffPorts implements HandoffCore, HandoffPlatform {
       calls.add('restore $meetingId ${previous?['text']}');
 
   @override
+  bool viaBrowser = false;
+
+  @override
   Future<String> handoffDirectory() async => '/cache/shared/handoff';
 
   @override

@@ -19,14 +19,61 @@ void main() {
     controller = SummariesController(bridge: LlmBridge(call: core.call));
   });
 
-  Future<void> show(WidgetTester tester) async {
+  late List<String> opened;
+
+  Future<void> show(WidgetTester tester, {bool offerPlans = true}) async {
+    opened = <String>[];
     tester.view.physicalSize = const Size(1200, 2000);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-        MaterialApp(home: AiSettingsScreen(controller: controller)));
+    await tester.pumpWidget(MaterialApp(
+        home: AiSettingsScreen(
+      controller: controller,
+      offerPlans: offerPlans,
+      openLink: (String link) async => opened.add(link),
+    )));
     await tester.pumpAndSettle();
   }
+
+  testWidgets(
+      'adding a connection on a computer first offers Claude Code, Codex or the website (#126)',
+      (WidgetTester tester) async {
+    core.answer('command:settings', settings());
+    await show(tester);
+
+    await tester.tap(find.text('Add connection'));
+    await tester.pumpAndSettle();
+    expect(find.text('Use your Claude or ChatGPT plan'), findsOneWidget);
+    await tester.tap(find.text('Install Claude Code'));
+    await tester.pumpAndSettle();
+    expect(opened, <String>['https://code.claude.com/docs/en/setup']);
+    expect(find.text('Use your Claude or ChatGPT plan'), findsNothing);
+
+    await tester.tap(find.text('Add connection'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Install Codex'));
+    await tester.pumpAndSettle();
+    expect(opened.last, 'https://github.com/openai/codex');
+
+    await tester.tap(find.text('Add connection'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Skip: use the website'));
+    await tester.pumpAndSettle();
+    expect(find.text('Save connection'), findsNothing, reason: 'no form');
+    expect(find.textContaining('Use your own AI app'), findsOneWidget);
+    expect(core.commands('save_connection'), isEmpty);
+  });
+
+  testWidgets('a phone goes straight to the connection form',
+      (WidgetTester tester) async {
+    core.answer('command:settings', settings());
+    await show(tester, offerPlans: false);
+
+    await tester.tap(find.text('Add connection'));
+    await tester.pumpAndSettle();
+    expect(find.text('Use your Claude or ChatGPT plan'), findsNothing);
+    expect(find.text('Save connection'), findsOneWidget);
+  });
 
   testWidgets('lists connections with their notes, the prompt and the switch',
       (WidgetTester tester) async {
@@ -54,6 +101,8 @@ void main() {
     await show(tester);
 
     await tester.tap(find.text('Add connection'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add a connection'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(ActionChip, 'Anthropic'), findsNothing);
     expect(find.widgetWithText(ActionChip, 'OpenAI'), findsNothing);
@@ -118,6 +167,8 @@ void main() {
     await show(tester);
 
     await tester.tap(find.text('Add connection'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add a connection'));
     await tester.pumpAndSettle();
     await tester
         .tap(find.widgetWithText(ActionChip, 'Claude Code (Claude plan)'));

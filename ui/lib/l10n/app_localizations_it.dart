@@ -2669,4 +2669,60 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get microphoneSilencedByCall =>
       'Android sta silenziando il microfono mentre un\'altra app lo usa per una chiamata: non viene registrato nulla finché la chiamata non termina.';
+
+  @override
+  String get handoffInTheBrowser =>
+      'Koalino copia la riunione con il tuo prompt e apre il sito nel browser, dove hai effettuato l\'accesso con il tuo account. Incollala lì (Ctrl+V). Se la riunione ha foto o file, si apre anche la loro cartella: trascinali dentro. Per un riassunto, copia la risposta quando è pronta e torna qui: Koalino la conserva.';
+
+  @override
+  String toKeepTheSummaryCopyTheWebsite(String appName) {
+    return 'Per conservare il riassunto, copia la risposta di $appName sul sito e torna su Koalino.';
+  }
+
+  @override
+  String get useYourClaudeOrChatgptPlan => 'Usa il tuo piano Claude o ChatGPT';
+
+  @override
+  String get summariesCanUseYourOwnPlan =>
+      'I riassunti possono usare il tuo abbonamento Claude o ChatGPT, senza chiave API. Installa Claude Code o Codex e accedi una volta: poi Koalino scrive i riassunti da solo.';
+
+  @override
+  String get installClaudeCode => 'Installa Claude Code';
+
+  @override
+  String get forAClaudePlanOpensTheGuide =>
+      'Per un piano Claude. Apre la guida all\'installazione.';
+
+  @override
+  String get installCodex => 'Installa Codex';
+
+  @override
+  String get forAChatgptPlanOpensTheGuide =>
+      'Per un piano ChatGPT. Apre la guida all\'installazione.';
+
+  @override
+  String get skipUseTheWebsite => 'Salta: usa il sito';
+
+  @override
+  String get koalinoCopiesTheMeetingAndOpens =>
+      'Niente da installare: Koalino copia la riunione e apre claude.ai o chatgpt.com, e tu la incolli lì.';
+
+  @override
+  String get addAConnection => 'Aggiungi una connessione';
+
+  @override
+  String get claudeCodeOrCodexAlreadyInstalled =>
+      'Claude Code o Codex già installati, o un server nella tua rete.';
+
+  @override
+  String get noConnectionNeededUseTheWebsite =>
+      'Non serve una connessione. In una riunione apri Riassunto e scegli Usa la tua app di IA…: Koalino copia la riunione e apre claude.ai o chatgpt.com.';
+
+  @override
+  String get afterInstallingAddTheConnection =>
+      'Dopo averlo installato ed effettuato l\'accesso, torna qui e scegli Aggiungi connessione → Aggiungi una connessione → Claude Code o Codex.';
+
+  @override
+  String get claudeAiOrChatgptComInYourBrowser =>
+      'claude.ai o chatgpt.com nel browser, con il tuo account';
 }

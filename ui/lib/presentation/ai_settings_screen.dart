@@ -2,11 +2,13 @@
 // server on this device or the local network, or Claude Code and Codex signed in on this
 // computer), the default one, the summary prompt template, and automatic summaries of finished
 // meetings (#101), and on a computer the connection that writes the summaries paired phones ask
-// for (#107). The app keeps no API keys (#117).
+// for (#107). The app keeps no API keys (#117). On a computer, Add connection first suggests
+// installing Claude Code or Codex, or skipping to the website hand-off (#126).
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/infrastructure/desktop_handoff.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
@@ -26,9 +28,23 @@ const String _notAnswering = '';
 /// Lists the AI connections and edits the summary settings.
 final class AiSettingsScreen extends StatefulWidget {
   /// Creates the page. Side effects: Loads the settings when first shown.
-  const AiSettingsScreen({required this.controller, super.key});
+  ///
+  /// `offerPlans` (computers) makes Add connection first suggest Claude Code or Codex, or the
+  /// website hand-off (#126); `openLink` opens their install guides.
+  AiSettingsScreen(
+      {required this.controller,
+      bool? offerPlans,
+      this.openLink = openWithSystem,
+      super.key})
+      : offerPlans = offerPlans ?? canRunLocalCli;
 
   final SummariesController controller;
+
+  /// Whether Add connection first offers the owner's Claude or ChatGPT plan.
+  final bool offerPlans;
+
+  /// Opens a web address in the browser.
+  final OpenWithSystem openLink;
 
   @override
   State<AiSettingsScreen> createState() => _AiSettingsScreenState();
@@ -51,6 +67,53 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
   void dispose() {
     _template.dispose();
     super.dispose();
+  }
+
+  /// Adds a connection. On a computer it first offers the owner's own Claude or ChatGPT plan
+  /// (#126): install Claude Code or Codex, or skip and hand meetings to the website.
+  ///
+  /// Side effects: May open an install guide in the browser, or the connection form.
+  Future<void> _addConnection() async {
+    if (!widget.offerPlans) {
+      await _editConnection(null);
+      return;
+    }
+    final _PlanChoice? choice = await showDialog<_PlanChoice>(
+      context: context,
+      builder: (BuildContext context) => const _PlanDialog(),
+    );
+    if (!mounted || choice == null) {
+      return;
+    }
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context)
+      ..clearSnackBars();
+    switch (choice) {
+      case _PlanChoice.claudeCode:
+        await _openGuide(claudeCodeGuide, messenger);
+      case _PlanChoice.codex:
+        await _openGuide(codexGuide, messenger);
+      case _PlanChoice.website:
+        messenger.showSnackBar(SnackBar(
+          duration: const Duration(seconds: 10),
+          content: Text(l10n.noConnectionNeededUseTheWebsite),
+        ));
+      case _PlanChoice.connection:
+        await _editConnection(null);
+    }
+  }
+
+  /// Opens an install guide, or says where it is when the browser cannot open.
+  Future<void> _openGuide(
+      String address, ScaffoldMessengerState messenger) async {
+    try {
+      await widget.openLink(address);
+      messenger.showSnackBar(SnackBar(
+        duration: const Duration(seconds: 10),
+        content: Text(l10n.afterInstallingAddTheConnection),
+      ));
+    } on Object {
+      messenger.showSnackBar(SnackBar(content: Text(address)));
+    }
   }
 
   /// Opens the connection form; `existing` edits that connection.
@@ -96,7 +159,7 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
         label: Text(l10n.addConnection),
-        onPressed: () => _editConnection(null),
+        onPressed: _addConnection,
       ),
       body: ListenableBuilder(
         listenable: widget.controller,
@@ -244,6 +307,52 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
 enum _ConnectionAction { makeDefault, test, edit, remove }
 
 /// One connection with its badges and actions.
+/// Claude Code's install guide (#126).
+const String claudeCodeGuide = 'https://code.claude.com/docs/en/setup';
+
+/// Codex's install guide, in its README (#126).
+const String codexGuide = 'https://github.com/openai/codex';
+
+/// What the owner chose in the plan dialog.
+enum _PlanChoice { claudeCode, codex, website, connection }
+
+/// Suggests the owner's own Claude or ChatGPT plan before an API connection (#126).
+final class _PlanDialog extends StatelessWidget {
+  const _PlanDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget option(
+            _PlanChoice choice, IconData icon, String title, String subtitle) =>
+        SimpleDialogOption(
+          onPressed: () => Navigator.of(context).pop(choice),
+          child: ListTile(
+            leading: Icon(icon),
+            title: Text(title),
+            subtitle: Text(subtitle),
+          ),
+        );
+    return SimpleDialog(
+      title: Text(l10n.useYourClaudeOrChatgptPlan),
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+          child: Text(l10n.summariesCanUseYourOwnPlan),
+        ),
+        option(_PlanChoice.claudeCode, Icons.terminal, l10n.installClaudeCode,
+            l10n.forAClaudePlanOpensTheGuide),
+        option(_PlanChoice.codex, Icons.terminal, l10n.installCodex,
+            l10n.forAChatgptPlanOpensTheGuide),
+        option(_PlanChoice.website, Icons.open_in_browser,
+            l10n.skipUseTheWebsite, l10n.koalinoCopiesTheMeetingAndOpens),
+        const Divider(),
+        option(_PlanChoice.connection, Icons.add_link, l10n.addAConnection,
+            l10n.claudeCodeOrCodexAlreadyInstalled),
+      ],
+    );
+  }
+}
+
 final class _ConnectionTile extends StatelessWidget {
   const _ConnectionTile({
     required this.connection,

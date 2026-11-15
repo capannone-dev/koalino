@@ -3663,3 +3663,26 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - **The call app's name in the title.** Android hides which app captures (the configurations
     are anonymized). The audio log names it only for system apps. Reading it would need
     notification access or usage-stats permission.
+
+## 2026-11-15 — #126 Summaries on a computer without Claude Code or Codex
+
+- **Owner's request:** when adding credentials in Settings, Koalino should suggest installing
+  Claude Code or Codex. An owner who skips that should get the same hand-off as on Android.
+- **Decision:**
+  - **Add connection** on a computer first opens "Use your Claude or ChatGPT plan", with four
+    choices: install Claude Code, install Codex (each opens its install guide), skip and use the
+    website, or add a connection. Phones go straight to the form.
+  - **The hand-off on a computer** is the Android flow with the browser in place of the apps.
+    "Use your own AI app…" offers claude.ai and chatgpt.com. Koalino puts the prompt and the
+    meeting's Markdown on the clipboard as one message (`inline`), and opens the site for the
+    owner to paste it. When the meeting has photos or files, their folder opens as well, to drag
+    them in.
+  - **The answer comes back** as on Android: copied text of 80 characters or more becomes the
+    summary when Koalino's window is active again, with Undo. Window focus counts as the app
+    resuming on Linux and Windows.
+- **Why not a URL with the prompt:** `?q=` links to the websites cannot carry a whole transcript.
+  The clipboard has no such limit, and nothing goes through Koalino.
+- **Verified on deb-gui** with an AMI excerpt played in the VM:
+  - the clipboard held the prompt and the transcript;
+  - the browser opened claude.ai;
+  - a copied answer became the summary with Undo when Koalino was focused again.

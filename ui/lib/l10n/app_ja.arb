@@ -692,5 +692,20 @@
   "photosAddedCount": "{count, plural, =1{写真を 1 枚追加しました} other{写真を {count} 枚追加しました}}",
   "moreModels": "その他のモデル（{count}）",
   "moreModelsHint": "少し誤りが増える軽量版、英語専用版、このデバイスでは大きすぎる可能性のあるモデルです。",
-  "microphoneSilencedByCall": "別のアプリが通話でマイクを使用しているため、Android がマイクを無音にしています。通話が終わるまで何も録音されません。"
+  "microphoneSilencedByCall": "別のアプリが通話でマイクを使用しているため、Android がマイクを無音にしています。通話が終わるまで何も録音されません。",
+  "handoffInTheBrowser": "Koalino は会議とプロンプトをコピーし、自分のアカウントでサインインしているブラウザーでウェブサイトを開きます。そこに貼り付けてください（Ctrl+V）。会議に写真やファイルがある場合はそのフォルダーも開くので、ドラッグして入れてください。要約の場合は、回答ができたらコピーして戻ってください。Koalino が保存します。",
+  "toKeepTheSummaryCopyTheWebsite": "要約を保存するには、ウェブサイトで {appName} の回答をコピーして Koalino に戻ってください。",
+  "useYourClaudeOrChatgptPlan": "Claude または ChatGPT のプランを使う",
+  "summariesCanUseYourOwnPlan": "要約には API キーなしで自分の Claude または ChatGPT のサブスクリプションを使えます。Claude Code または Codex をインストールして一度サインインすれば、あとは Koalino が自動で要約を書きます。",
+  "installClaudeCode": "Claude Code をインストール",
+  "forAClaudePlanOpensTheGuide": "Claude のプラン向け。インストールガイドを開きます。",
+  "installCodex": "Codex をインストール",
+  "forAChatgptPlanOpensTheGuide": "ChatGPT のプラン向け。インストールガイドを開きます。",
+  "skipUseTheWebsite": "スキップ：ウェブサイトを使う",
+  "koalinoCopiesTheMeetingAndOpens": "インストール不要：Koalino が会議をコピーして claude.ai または chatgpt.com を開くので、そこに貼り付けます。",
+  "addAConnection": "接続を追加",
+  "claudeCodeOrCodexAlreadyInstalled": "Claude Code または Codex がインストール済み、またはネットワーク上のサーバー。",
+  "noConnectionNeededUseTheWebsite": "接続は不要です。会議で「要約」を開き、「自分の AI アプリを使う…」を選んでください。Koalino が会議をコピーして claude.ai または chatgpt.com を開きます。",
+  "afterInstallingAddTheConnection": "インストールしてサインインしたら、ここに戻って「接続を追加 → 接続を追加 → Claude Code または Codex」を選んでください。",
+  "claudeAiOrChatgptComInYourBrowser": "ブラウザーで claude.ai または chatgpt.com を自分のアカウントで"
 }

@@ -5,7 +5,9 @@
 // is kept as that meeting's summary, and an event offers Undo. The prompt is put on the clipboard
 // when sharing, so an app that drops the shared text can still be given it, and so the clipboard
 // still holding it means nothing was copied. An answer shared back to Koalino as text is offered
-// as the summary too (`keepSharedAnswer`). A chat hand-off leaves nothing pending.
+// as the summary too (`keepSharedAnswer`). A chat hand-off leaves nothing pending. On a computer
+// (#126) the apps are claude.ai and chatgpt.com in the browser, the message carries the meeting
+// for the owner to paste, and the clipboard is read when Koalino's window is active again.
 
 import 'dart:async';
 
@@ -112,6 +114,9 @@ final class HandoffController extends ChangeNotifier
       StreamController<HandoffEvent>.broadcast();
   bool _hinted = false;
   bool _checking = false;
+
+  /// Whether the apps are websites in the browser, where the owner pastes the meeting (#126).
+  bool get viaBrowser => _platform.viaBrowser;
 
   /// The AI apps installed, for direct hand-offs; others go through the share sheet.
   List<AiApp> apps = <AiApp>[];

@@ -173,7 +173,10 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   and automatic summaries (#101). Keys are typed in a hidden field and never shown again. On
   desktops it also offers Claude Code and Codex (#105), which need no address or key and show
   whether the tool is installed. On a computer, "Summaries for my other devices" chooses the
-  connection that writes the summaries paired phones ask for, or Off (#107).
+  connection that writes the summaries paired phones ask for, or Off (#107). On a computer, Add
+  connection first suggests the owner's own plan (#126). "Install Claude Code" and "Install Codex"
+  open their install guides. "Skip: use the website" points to the meeting's Use your own AI app…,
+  which hands the meeting to claude.ai or chatgpt.com. "Add a connection" opens the form.
 - `project_dialogs.dart` holds the name, note and meeting-picker dialogs, and
   `MoveToProjectButton`, which meeting pages show to move a meeting into a project or out.
   `chooseProjectForMeeting` is its chooser, ending in "New project…", which names, creates and

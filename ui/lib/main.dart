@@ -37,6 +37,7 @@ import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
 import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_configuration.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
+import 'package:note_taker_ui/infrastructure/desktop_handoff.dart';
 import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
 import 'package:note_taker_ui/infrastructure/host_key.dart';
 import 'package:note_taker_ui/infrastructure/incoming_share_bridge.dart';
@@ -167,9 +168,7 @@ Future<void> main() async {
     handoff.attach();
     unawaited(handoff.loadApps());
     // Plain copies of an earlier hand-off's meeting are not kept across runs (#114).
-    unawaited(const AndroidHandoffPlatform()
-        .handoffDirectory()
-        .then(clearHandoffFolder));
+    unawaited(_handoffPlatform.handoffDirectory().then(clearHandoffFolder));
   }
   // Starts after the first frame, so the waiting message shows during a keychain prompt.
   unawaited(coreStartupController.start());
@@ -425,16 +424,24 @@ final SummariesController _summariesController = SummariesController(
   asksPairedComputer: Platform.isAndroid,
 );
 
-/// Hands meetings to the owner's own Claude or ChatGPT app and keeps a summary's answer (#114);
-/// Android only. It lives as long as the app, since the answer comes back after a switch of apps.
-final HandoffController? _handoffController = Platform.isAndroid
-    ? HandoffController(
-        core: const RustHandoffCore(),
-        platform: const AndroidHandoffPlatform(),
-        onSummaryChanged: (String meetingId) =>
-            unawaited(_summariesController.loadMeeting(meetingId)),
-      )
-    : null;
+/// Where hand-offs go: the Claude or ChatGPT app on Android (#114), their websites in the
+/// browser on a computer (#126).
+final HandoffPlatform _handoffPlatform = Platform.isAndroid
+    ? const AndroidHandoffPlatform()
+    : const DesktopHandoffPlatform();
+
+/// Hands meetings to the owner's own Claude or ChatGPT and keeps a summary's answer (#114, #126).
+/// It lives as long as the app, since the answer comes back after a switch of apps.
+final HandoffController? _handoffController =
+    Platform.isAndroid || Platform.isLinux || Platform.isWindows
+        ? HandoffController(
+            // On a computer the owner pastes the message, so it carries the meeting.
+            core: RustHandoffCore(inline: !Platform.isAndroid),
+            platform: _handoffPlatform,
+            onSummaryChanged: (String meetingId) =>
+                unawaited(_summariesController.loadMeeting(meetingId)),
+          )
+        : null;
 
 /// The owner's meeting notes and transcript corrections (#96), shared by every meeting view.
 final MeetingEditController _meetingEditController = MeetingEditController();

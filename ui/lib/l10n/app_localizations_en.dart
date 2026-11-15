@@ -2628,4 +2628,60 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get microphoneSilencedByCall =>
       'Android is silencing the microphone while another app uses it for a call: nothing is recorded until the call ends.';
+
+  @override
+  String get handoffInTheBrowser =>
+      'Koalino copies the meeting with your prompt and opens the website in your browser, where you are signed in with your own account. Paste it there (Ctrl+V). If the meeting has photos or files, their folder opens too: drag them in. For a summary, copy the answer when it is ready and come back: Koalino keeps it.';
+
+  @override
+  String toKeepTheSummaryCopyTheWebsite(String appName) {
+    return 'To keep the summary, copy $appName\'s answer on the website and come back to Koalino.';
+  }
+
+  @override
+  String get useYourClaudeOrChatgptPlan => 'Use your Claude or ChatGPT plan';
+
+  @override
+  String get summariesCanUseYourOwnPlan =>
+      'Summaries can use your own Claude or ChatGPT subscription, with no API key. Install Claude Code or Codex and sign in once: Koalino then writes summaries by itself.';
+
+  @override
+  String get installClaudeCode => 'Install Claude Code';
+
+  @override
+  String get forAClaudePlanOpensTheGuide =>
+      'For a Claude plan. Opens the install guide.';
+
+  @override
+  String get installCodex => 'Install Codex';
+
+  @override
+  String get forAChatgptPlanOpensTheGuide =>
+      'For a ChatGPT plan. Opens the install guide.';
+
+  @override
+  String get skipUseTheWebsite => 'Skip: use the website';
+
+  @override
+  String get koalinoCopiesTheMeetingAndOpens =>
+      'Nothing to install: Koalino copies the meeting and opens claude.ai or chatgpt.com, and you paste it there.';
+
+  @override
+  String get addAConnection => 'Add a connection';
+
+  @override
+  String get claudeCodeOrCodexAlreadyInstalled =>
+      'Claude Code or Codex already installed, or a server on your network.';
+
+  @override
+  String get noConnectionNeededUseTheWebsite =>
+      'No connection needed. In a meeting, open Summary and choose Use your own AI app…: Koalino copies the meeting and opens claude.ai or chatgpt.com.';
+
+  @override
+  String get afterInstallingAddTheConnection =>
+      'After installing it and signing in, come back and choose Add connection → Add a connection → Claude Code or Codex.';
+
+  @override
+  String get claudeAiOrChatgptComInYourBrowser =>
+      'claude.ai or chatgpt.com in your browser, with your account';
 }

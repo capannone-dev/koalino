@@ -2682,4 +2682,61 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get microphoneSilencedByCall =>
       'يكتم Android الميكروفون بينما يستخدمه تطبيق آخر في مكالمة: لن يُسجَّل أي شيء حتى تنتهي المكالمة.';
+
+  @override
+  String get handoffInTheBrowser =>
+      'ينسخ Koalino الاجتماع مع موجّهك ويفتح الموقع في متصفحك، حيث سجّلت الدخول بحسابك. الصقه هناك (Ctrl+V). إذا كان للاجتماع صور أو ملفات، يُفتح مجلدها أيضًا: اسحبها إلى هناك. للحصول على ملخص، انسخ الإجابة عندما تجهز وعُد: سيحتفظ بها Koalino.';
+
+  @override
+  String toKeepTheSummaryCopyTheWebsite(String appName) {
+    return 'للاحتفاظ بالملخص، انسخ إجابة $appName من الموقع ثم عُد إلى Koalino.';
+  }
+
+  @override
+  String get useYourClaudeOrChatgptPlan =>
+      'استخدم اشتراكك في Claude أو ChatGPT';
+
+  @override
+  String get summariesCanUseYourOwnPlan =>
+      'يمكن للملخصات استخدام اشتراكك الخاص في Claude أو ChatGPT دون مفتاح API. ثبّت Claude Code أو Codex وسجّل الدخول مرة واحدة: بعدها يكتب Koalino الملخصات بنفسه.';
+
+  @override
+  String get installClaudeCode => 'تثبيت Claude Code';
+
+  @override
+  String get forAClaudePlanOpensTheGuide =>
+      'لاشتراك Claude. يفتح دليل التثبيت.';
+
+  @override
+  String get installCodex => 'تثبيت Codex';
+
+  @override
+  String get forAChatgptPlanOpensTheGuide =>
+      'لاشتراك ChatGPT. يفتح دليل التثبيت.';
+
+  @override
+  String get skipUseTheWebsite => 'تخطٍّ: استخدم الموقع';
+
+  @override
+  String get koalinoCopiesTheMeetingAndOpens =>
+      'لا شيء للتثبيت: ينسخ Koalino الاجتماع ويفتح claude.ai أو chatgpt.com، وتلصقه أنت هناك.';
+
+  @override
+  String get addAConnection => 'إضافة اتصال';
+
+  @override
+  String get claudeCodeOrCodexAlreadyInstalled =>
+      'Claude Code أو Codex مثبّت مسبقًا، أو خادم على شبكتك.';
+
+  @override
+  String get noConnectionNeededUseTheWebsite =>
+      'لا حاجة إلى اتصال. في أي اجتماع، افتح الملخص واختر «استخدام تطبيق الذكاء الاصطناعي الخاص بك…»: ينسخ Koalino الاجتماع ويفتح claude.ai أو chatgpt.com.';
+
+  @override
+  String get afterInstallingAddTheConnection =>
+      'بعد التثبيت وتسجيل الدخول، عُد واختر إضافة اتصال ← إضافة اتصال ← Claude Code أو Codex.';
+
+  @override
+  String get claudeAiOrChatgptComInYourBrowser =>
+      'claude.ai أو chatgpt.com في متصفحك، بحسابك';
 }

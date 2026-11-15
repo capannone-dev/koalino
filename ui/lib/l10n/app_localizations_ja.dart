@@ -2531,4 +2531,58 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get microphoneSilencedByCall =>
       '別のアプリが通話でマイクを使用しているため、Android がマイクを無音にしています。通話が終わるまで何も録音されません。';
+
+  @override
+  String get handoffInTheBrowser =>
+      'Koalino は会議とプロンプトをコピーし、自分のアカウントでサインインしているブラウザーでウェブサイトを開きます。そこに貼り付けてください（Ctrl+V）。会議に写真やファイルがある場合はそのフォルダーも開くので、ドラッグして入れてください。要約の場合は、回答ができたらコピーして戻ってください。Koalino が保存します。';
+
+  @override
+  String toKeepTheSummaryCopyTheWebsite(String appName) {
+    return '要約を保存するには、ウェブサイトで $appName の回答をコピーして Koalino に戻ってください。';
+  }
+
+  @override
+  String get useYourClaudeOrChatgptPlan => 'Claude または ChatGPT のプランを使う';
+
+  @override
+  String get summariesCanUseYourOwnPlan =>
+      '要約には API キーなしで自分の Claude または ChatGPT のサブスクリプションを使えます。Claude Code または Codex をインストールして一度サインインすれば、あとは Koalino が自動で要約を書きます。';
+
+  @override
+  String get installClaudeCode => 'Claude Code をインストール';
+
+  @override
+  String get forAClaudePlanOpensTheGuide => 'Claude のプラン向け。インストールガイドを開きます。';
+
+  @override
+  String get installCodex => 'Codex をインストール';
+
+  @override
+  String get forAChatgptPlanOpensTheGuide => 'ChatGPT のプラン向け。インストールガイドを開きます。';
+
+  @override
+  String get skipUseTheWebsite => 'スキップ：ウェブサイトを使う';
+
+  @override
+  String get koalinoCopiesTheMeetingAndOpens =>
+      'インストール不要：Koalino が会議をコピーして claude.ai または chatgpt.com を開くので、そこに貼り付けます。';
+
+  @override
+  String get addAConnection => '接続を追加';
+
+  @override
+  String get claudeCodeOrCodexAlreadyInstalled =>
+      'Claude Code または Codex がインストール済み、またはネットワーク上のサーバー。';
+
+  @override
+  String get noConnectionNeededUseTheWebsite =>
+      '接続は不要です。会議で「要約」を開き、「自分の AI アプリを使う…」を選んでください。Koalino が会議をコピーして claude.ai または chatgpt.com を開きます。';
+
+  @override
+  String get afterInstallingAddTheConnection =>
+      'インストールしてサインインしたら、ここに戻って「接続を追加 → 接続を追加 → Claude Code または Codex」を選んでください。';
+
+  @override
+  String get claudeAiOrChatgptComInYourBrowser =>
+      'ブラウザーで claude.ai または chatgpt.com を自分のアカウントで';
 }

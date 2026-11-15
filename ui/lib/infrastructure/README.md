@@ -152,7 +152,14 @@ true)` has a paired computer answer from its own copy of the notes (#107).
 `RustHandoffCore` calls `note_taker_handoff_meeting` and the `keep_answer` / `restore_summary`
 edits. `AndroidHandoffPlatform` covers the folder (`cache/shared/handoff`), the installed apps,
 `shareFiles` and the clipboard. `clearHandoffFolder` deletes an earlier hand-off's copies at
-start-up.
+start-up. `RustHandoffCore(inline: true)` asks for a message that carries the meeting itself.
+
+`desktop_handoff.dart` (#126) is the computer's `HandoffPlatform`, for owners who use claude.ai or
+chatgpt.com rather than Claude Code or Codex. Both websites are always offered (`viaBrowser`).
+`share` opens the website with `openWithSystem` (`xdg-open`, or Explorer's URL handler on
+Windows). It also opens the hand-off folder (`<support>/handoff`) when the meeting has photos or
+files to drag in. The controller has already put the message on the clipboard, and it reads the
+answer back when the window is active again.
 
 `clear_copy_bridge.dart` (#99) gives the viewers clear copies of sealed attachments:
 `clearCopyResolver` (replaceable in tests) defaults to `rememberedClearCopy`, which calls

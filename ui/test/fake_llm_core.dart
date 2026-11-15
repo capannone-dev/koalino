@@ -37,6 +37,13 @@ final class FakeLlmCore {
     return jsonEncode(queue.removeAt(0));
   }
 
+  /// The request JSON of every command named `name`, in order.
+  List<Map<String, Object?>> commands(String name) => calls
+      .where((call) => call.$1 == 'note_taker_llm_command')
+      .map((call) => jsonDecode(call.$2.single!) as Map<String, Object?>)
+      .where((request) => request['command'] == name)
+      .toList();
+
   /// The request JSON of the last command named `name`.
   Map<String, Object?> lastCommand(String name) => calls
       .where((call) => call.$1 == 'note_taker_llm_command')

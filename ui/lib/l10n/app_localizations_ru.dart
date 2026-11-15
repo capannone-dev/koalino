@@ -2673,4 +2673,61 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get microphoneSilencedByCall =>
       'Android заглушает микрофон, пока другое приложение использует его для звонка: до конца звонка ничего не записывается.';
+
+  @override
+  String get handoffInTheBrowser =>
+      'Koalino копирует встречу вместе с вашим промптом и открывает сайт в браузере, где вы вошли в свою учётную запись. Вставьте её туда (Ctrl+V). Если у встречи есть фото или файлы, откроется и их папка: перетащите их. Для резюме скопируйте ответ, когда он будет готов, и вернитесь: Koalino его сохранит.';
+
+  @override
+  String toKeepTheSummaryCopyTheWebsite(String appName) {
+    return 'Чтобы сохранить резюме, скопируйте ответ $appName на сайте и вернитесь в Koalino.';
+  }
+
+  @override
+  String get useYourClaudeOrChatgptPlan =>
+      'Использовать ваш тариф Claude или ChatGPT';
+
+  @override
+  String get summariesCanUseYourOwnPlan =>
+      'Резюме может создаваться по вашей подписке Claude или ChatGPT без ключа API. Установите Claude Code или Codex и войдите один раз: дальше Koalino пишет резюме сам.';
+
+  @override
+  String get installClaudeCode => 'Установить Claude Code';
+
+  @override
+  String get forAClaudePlanOpensTheGuide =>
+      'Для тарифа Claude. Открывает инструкцию по установке.';
+
+  @override
+  String get installCodex => 'Установить Codex';
+
+  @override
+  String get forAChatgptPlanOpensTheGuide =>
+      'Для тарифа ChatGPT. Открывает инструкцию по установке.';
+
+  @override
+  String get skipUseTheWebsite => 'Пропустить: использовать сайт';
+
+  @override
+  String get koalinoCopiesTheMeetingAndOpens =>
+      'Ничего не нужно устанавливать: Koalino копирует встречу и открывает claude.ai или chatgpt.com, а вы вставляете её туда.';
+
+  @override
+  String get addAConnection => 'Добавить подключение';
+
+  @override
+  String get claudeCodeOrCodexAlreadyInstalled =>
+      'Claude Code или Codex уже установлены, или сервер в вашей сети.';
+
+  @override
+  String get noConnectionNeededUseTheWebsite =>
+      'Подключение не нужно. Во встрече откройте «Резюме» и выберите «Использовать своё ИИ-приложение…»: Koalino скопирует встречу и откроет claude.ai или chatgpt.com.';
+
+  @override
+  String get afterInstallingAddTheConnection =>
+      'После установки и входа вернитесь и выберите «Добавить подключение» → «Добавить подключение» → Claude Code или Codex.';
+
+  @override
+  String get claudeAiOrChatgptComInYourBrowser =>
+      'claude.ai или chatgpt.com в браузере, под вашей учётной записью';
 }

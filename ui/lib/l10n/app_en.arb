@@ -2169,5 +2169,27 @@
     }
   },
   "moreModelsHint": "Smaller versions that make a few more mistakes, English-only versions, and models that may not fit this device.",
-  "microphoneSilencedByCall": "Android is silencing the microphone while another app uses it for a call: nothing is recorded until the call ends."
+  "microphoneSilencedByCall": "Android is silencing the microphone while another app uses it for a call: nothing is recorded until the call ends.",
+  "handoffInTheBrowser": "Koalino copies the meeting with your prompt and opens the website in your browser, where you are signed in with your own account. Paste it there (Ctrl+V). If the meeting has photos or files, their folder opens too: drag them in. For a summary, copy the answer when it is ready and come back: Koalino keeps it.",
+  "toKeepTheSummaryCopyTheWebsite": "To keep the summary, copy {appName}'s answer on the website and come back to Koalino.",
+  "@toKeepTheSummaryCopyTheWebsite": {
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "useYourClaudeOrChatgptPlan": "Use your Claude or ChatGPT plan",
+  "summariesCanUseYourOwnPlan": "Summaries can use your own Claude or ChatGPT subscription, with no API key. Install Claude Code or Codex and sign in once: Koalino then writes summaries by itself.",
+  "installClaudeCode": "Install Claude Code",
+  "forAClaudePlanOpensTheGuide": "For a Claude plan. Opens the install guide.",
+  "installCodex": "Install Codex",
+  "forAChatgptPlanOpensTheGuide": "For a ChatGPT plan. Opens the install guide.",
+  "skipUseTheWebsite": "Skip: use the website",
+  "koalinoCopiesTheMeetingAndOpens": "Nothing to install: Koalino copies the meeting and opens claude.ai or chatgpt.com, and you paste it there.",
+  "addAConnection": "Add a connection",
+  "claudeCodeOrCodexAlreadyInstalled": "Claude Code or Codex already installed, or a server on your network.",
+  "noConnectionNeededUseTheWebsite": "No connection needed. In a meeting, open Summary and choose Use your own AI app…: Koalino copies the meeting and opens claude.ai or chatgpt.com.",
+  "afterInstallingAddTheConnection": "After installing it and signing in, come back and choose Add connection → Add a connection → Claude Code or Codex.",
+  "claudeAiOrChatgptComInYourBrowser": "claude.ai or chatgpt.com in your browser, with your account"
 }

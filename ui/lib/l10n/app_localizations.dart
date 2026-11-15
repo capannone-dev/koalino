@@ -4275,6 +4275,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Android is silencing the microphone while another app uses it for a call: nothing is recorded until the call ends.'**
   String get microphoneSilencedByCall;
+
+  /// No description provided for @handoffInTheBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'Koalino copies the meeting with your prompt and opens the website in your browser, where you are signed in with your own account. Paste it there (Ctrl+V). If the meeting has photos or files, their folder opens too: drag them in. For a summary, copy the answer when it is ready and come back: Koalino keeps it.'**
+  String get handoffInTheBrowser;
+
+  /// No description provided for @toKeepTheSummaryCopyTheWebsite.
+  ///
+  /// In en, this message translates to:
+  /// **'To keep the summary, copy {appName}\'s answer on the website and come back to Koalino.'**
+  String toKeepTheSummaryCopyTheWebsite(String appName);
+
+  /// No description provided for @useYourClaudeOrChatgptPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your Claude or ChatGPT plan'**
+  String get useYourClaudeOrChatgptPlan;
+
+  /// No description provided for @summariesCanUseYourOwnPlan.
+  ///
+  /// In en, this message translates to:
+  /// **'Summaries can use your own Claude or ChatGPT subscription, with no API key. Install Claude Code or Codex and sign in once: Koalino then writes summaries by itself.'**
+  String get summariesCanUseYourOwnPlan;
+
+  /// No description provided for @installClaudeCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Claude Code'**
+  String get installClaudeCode;
+
+  /// No description provided for @forAClaudePlanOpensTheGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'For a Claude plan. Opens the install guide.'**
+  String get forAClaudePlanOpensTheGuide;
+
+  /// No description provided for @installCodex.
+  ///
+  /// In en, this message translates to:
+  /// **'Install Codex'**
+  String get installCodex;
+
+  /// No description provided for @forAChatgptPlanOpensTheGuide.
+  ///
+  /// In en, this message translates to:
+  /// **'For a ChatGPT plan. Opens the install guide.'**
+  String get forAChatgptPlanOpensTheGuide;
+
+  /// No description provided for @skipUseTheWebsite.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip: use the website'**
+  String get skipUseTheWebsite;
+
+  /// No description provided for @koalinoCopiesTheMeetingAndOpens.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing to install: Koalino copies the meeting and opens claude.ai or chatgpt.com, and you paste it there.'**
+  String get koalinoCopiesTheMeetingAndOpens;
+
+  /// No description provided for @addAConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a connection'**
+  String get addAConnection;
+
+  /// No description provided for @claudeCodeOrCodexAlreadyInstalled.
+  ///
+  /// In en, this message translates to:
+  /// **'Claude Code or Codex already installed, or a server on your network.'**
+  String get claudeCodeOrCodexAlreadyInstalled;
+
+  /// No description provided for @noConnectionNeededUseTheWebsite.
+  ///
+  /// In en, this message translates to:
+  /// **'No connection needed. In a meeting, open Summary and choose Use your own AI app…: Koalino copies the meeting and opens claude.ai or chatgpt.com.'**
+  String get noConnectionNeededUseTheWebsite;
+
+  /// No description provided for @afterInstallingAddTheConnection.
+  ///
+  /// In en, this message translates to:
+  /// **'After installing it and signing in, come back and choose Add connection → Add a connection → Claude Code or Codex.'**
+  String get afterInstallingAddTheConnection;
+
+  /// No description provided for @claudeAiOrChatgptComInYourBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'claude.ai or chatgpt.com in your browser, with your account'**
+  String get claudeAiOrChatgptComInYourBrowser;
 }
 
 class _AppLocalizationsDelegate

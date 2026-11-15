@@ -175,7 +175,9 @@ Future<void> showMeetingSummaryMenu(
             child: ListTile(
               leading: Icon(Icons.open_in_new),
               title: Text(l10n.useYourOwnAiApp2),
-              subtitle: Text(l10n.claudeChatgptOrAnotherAppWith),
+              subtitle: Text(controller.handoff?.viaBrowser ?? false
+                  ? l10n.claudeAiOrChatgptComInYourBrowser
+                  : l10n.claudeChatgptOrAnotherAppWith),
             ),
           ),
         const Divider(),

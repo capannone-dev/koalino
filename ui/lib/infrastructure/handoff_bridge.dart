@@ -18,15 +18,23 @@ enum AiApp {
   claude('com.anthropic.claude', 'Claude'),
 
   /// OpenAI's ChatGPT app.
-  chatgpt('com.openai.chatgpt', 'ChatGPT');
+  chatgpt(
+      'com.openai.chatgpt', 'ChatGPT', 'https://chatgpt.com/', 'chatgpt.com');
 
-  const AiApp(this.packageName, this.displayName);
+  const AiApp(this.packageName, this.displayName,
+      [this.webAddress = 'https://claude.ai/new', this.webName = 'claude.ai']);
 
   /// The Android package.
   final String packageName;
 
   /// The app's name, as shown.
   final String displayName;
+
+  /// Where a computer opens it in the browser, for a new conversation (#126).
+  final String webAddress;
+
+  /// The website's name, as shown on a computer.
+  final String webName;
 
   /// The app with `packageName`, or null.
   static AiApp? fromPackage(Object? packageName) {
@@ -122,8 +130,11 @@ abstract interface class HandoffCore {
   Future<void> restore(String meetingId, Map<String, Object?>? previous);
 }
 
-/// The phone's side of a hand-off: the folder, the apps, the share and the clipboard.
+/// The device's side of a hand-off: the folder, the apps, the share and the clipboard.
 abstract interface class HandoffPlatform {
+  /// Whether the apps are websites in the browser, where the owner pastes the message (#126).
+  bool get viaBrowser;
+
   /// The folder the core writes hand-offs into.
   Future<String> handoffDirectory();
 
@@ -143,9 +154,14 @@ abstract interface class HandoffPlatform {
 /// Calls the core.
 final class RustHandoffCore implements HandoffCore {
   /// Creates the bridge; `call` is replaced in tests.
-  const RustHandoffCore({LlmNativeCall call = callRustLlm}) : _call = call;
+  ///
+  /// `inline` asks for a message that carries the meeting, to paste into a website (#126).
+  const RustHandoffCore({LlmNativeCall call = callRustLlm, bool inline = false})
+      : _call = call,
+        _inline = inline;
 
   final LlmNativeCall _call;
+  final bool _inline;
 
   @override
   Future<PreparedHandoff> prepare(
@@ -156,6 +172,7 @@ final class RustHandoffCore implements HandoffCore {
           'meeting_id': meetingId,
           'purpose': purpose.name,
           'directory': directory,
+          if (_inline) 'inline': true,
         })
       ])));
 
@@ -197,6 +214,9 @@ final class AndroidHandoffPlatform implements HandoffPlatform {
   const AndroidHandoffPlatform();
 
   static const MethodChannel _channel = MethodChannel('note_taker/share');
+
+  @override
+  bool get viaBrowser => false;
 
   /// Under `cache/shared`, the folder Android's `SharedFileProvider` serves.
   @override

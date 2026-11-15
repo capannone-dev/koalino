@@ -2700,4 +2700,61 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get microphoneSilencedByCall =>
       'Android schaltet das Mikrofon stumm, während eine andere App es für einen Anruf nutzt: Bis der Anruf endet, wird nichts aufgenommen.';
+
+  @override
+  String get handoffInTheBrowser =>
+      'Koalino kopiert das Meeting mit deinem Prompt und öffnet die Website im Browser, wo du mit deinem eigenen Konto angemeldet bist. Füge es dort ein (Strg+V). Hat das Meeting Fotos oder Dateien, öffnet sich auch ihr Ordner: zieh sie hinein. Für eine Zusammenfassung kopiere die Antwort, wenn sie fertig ist, und komm zurück: Koalino behält sie.';
+
+  @override
+  String toKeepTheSummaryCopyTheWebsite(String appName) {
+    return 'Um die Zusammenfassung zu behalten, kopiere die Antwort von $appName auf der Website und kehre zu Koalino zurück.';
+  }
+
+  @override
+  String get useYourClaudeOrChatgptPlan =>
+      'Deinen Claude- oder ChatGPT-Plan nutzen';
+
+  @override
+  String get summariesCanUseYourOwnPlan =>
+      'Zusammenfassungen können dein eigenes Claude- oder ChatGPT-Abo nutzen, ohne API-Schlüssel. Installiere Claude Code oder Codex und melde dich einmal an: Danach schreibt Koalino Zusammenfassungen selbst.';
+
+  @override
+  String get installClaudeCode => 'Claude Code installieren';
+
+  @override
+  String get forAClaudePlanOpensTheGuide =>
+      'Für einen Claude-Plan. Öffnet die Installationsanleitung.';
+
+  @override
+  String get installCodex => 'Codex installieren';
+
+  @override
+  String get forAChatgptPlanOpensTheGuide =>
+      'Für einen ChatGPT-Plan. Öffnet die Installationsanleitung.';
+
+  @override
+  String get skipUseTheWebsite => 'Überspringen: Website nutzen';
+
+  @override
+  String get koalinoCopiesTheMeetingAndOpens =>
+      'Nichts zu installieren: Koalino kopiert das Meeting und öffnet claude.ai oder chatgpt.com, und du fügst es dort ein.';
+
+  @override
+  String get addAConnection => 'Verbindung hinzufügen';
+
+  @override
+  String get claudeCodeOrCodexAlreadyInstalled =>
+      'Claude Code oder Codex bereits installiert, oder ein Server in deinem Netzwerk.';
+
+  @override
+  String get noConnectionNeededUseTheWebsite =>
+      'Keine Verbindung nötig. Öffne in einem Meeting Zusammenfassung und wähle Eigene KI-App verwenden…: Koalino kopiert das Meeting und öffnet claude.ai oder chatgpt.com.';
+
+  @override
+  String get afterInstallingAddTheConnection =>
+      'Nach der Installation und Anmeldung komm zurück und wähle Verbindung hinzufügen → Verbindung hinzufügen → Claude Code oder Codex.';
+
+  @override
+  String get claudeAiOrChatgptComInYourBrowser =>
+      'claude.ai oder chatgpt.com im Browser, mit deinem Konto';
 }

@@ -692,5 +692,20 @@
   "photosAddedCount": "{count, plural, =1{1 foto adicionada} other{{count} fotos adicionadas}}",
   "moreModels": "Mais modelos ({count})",
   "moreModelsHint": "Versões mais leves que erram um pouco mais, versões só em inglês e modelos que talvez não caibam neste dispositivo.",
-  "microphoneSilencedByCall": "O Android está silenciando o microfone enquanto outro app o usa para uma chamada: nada é gravado até a chamada terminar."
+  "microphoneSilencedByCall": "O Android está silenciando o microfone enquanto outro app o usa para uma chamada: nada é gravado até a chamada terminar.",
+  "handoffInTheBrowser": "O Koalino copia a reunião com o seu prompt e abre o site no navegador, onde você está conectado com a sua própria conta. Cole-a lá (Ctrl+V). Se a reunião tiver fotos ou arquivos, a pasta deles também abre: arraste-os para lá. Para um resumo, copie a resposta quando estiver pronta e volte: o Koalino a guarda.",
+  "toKeepTheSummaryCopyTheWebsite": "Para guardar o resumo, copie a resposta do {appName} no site e volte ao Koalino.",
+  "useYourClaudeOrChatgptPlan": "Use o seu plano do Claude ou do ChatGPT",
+  "summariesCanUseYourOwnPlan": "Os resumos podem usar a sua própria assinatura do Claude ou do ChatGPT, sem chave de API. Instale o Claude Code ou o Codex e entre uma vez: depois o Koalino escreve os resumos sozinho.",
+  "installClaudeCode": "Instalar o Claude Code",
+  "forAClaudePlanOpensTheGuide": "Para um plano do Claude. Abre o guia de instalação.",
+  "installCodex": "Instalar o Codex",
+  "forAChatgptPlanOpensTheGuide": "Para um plano do ChatGPT. Abre o guia de instalação.",
+  "skipUseTheWebsite": "Pular: usar o site",
+  "koalinoCopiesTheMeetingAndOpens": "Nada para instalar: o Koalino copia a reunião e abre claude.ai ou chatgpt.com, e você cola lá.",
+  "addAConnection": "Adicionar uma conexão",
+  "claudeCodeOrCodexAlreadyInstalled": "Claude Code ou Codex já instalado, ou um servidor na sua rede.",
+  "noConnectionNeededUseTheWebsite": "Não é preciso conexão. Numa reunião, abra Resumo e escolha Usar seu próprio app de IA…: o Koalino copia a reunião e abre claude.ai ou chatgpt.com.",
+  "afterInstallingAddTheConnection": "Depois de instalar e entrar, volte e escolha Adicionar conexão → Adicionar uma conexão → Claude Code ou Codex.",
+  "claudeAiOrChatgptComInYourBrowser": "claude.ai ou chatgpt.com no navegador, com a sua conta"
 }
