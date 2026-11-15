@@ -101,7 +101,8 @@ void main() {
     await pumpMeetingDetail(tester, 'meeting-untitled');
 
     expect(find.text('Meeting 2026-10-26 18:00 UTC'), findsOneWidget);
-    expect(find.text('No transcript is available.'), findsOneWidget);
+    // No duration and no words: nothing was recorded (#129).
+    expect(find.textContaining('No recording.'), findsOneWidget);
     // A meeting recorded before languages were kept shows no language line.
     expect(find.textContaining('Transcription language'), findsNothing);
   });

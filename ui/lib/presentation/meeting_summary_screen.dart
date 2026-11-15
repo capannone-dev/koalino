@@ -541,11 +541,19 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                                     summary.model.isEmpty
                                 ? l10n.writtenByYouOn(
                                     formatMeetingCreatedAt(summary.createdAt))
-                                : l10n.writtenByOn(
-                                    summary.model,
-                                    summary.connectionLabel,
-                                    formatMeetingCreatedAt(summary.createdAt),
-                                    summary.edited ? ' · edited' : ''),
+                                : summary.model.isEmpty
+                                    // An answer from the owner's own AI app
+                                    // or website has no model (#114, #126).
+                                    ? l10n.writtenBySourceOn(
+                                        summary.connectionLabel,
+                                        formatMeetingCreatedAt(
+                                            summary.createdAt))
+                                    : l10n.writtenByOn(
+                                        summary.model,
+                                        summary.connectionLabel,
+                                        formatMeetingCreatedAt(
+                                            summary.createdAt),
+                                        summary.edited ? ' · edited' : ''),
                             style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant),
                           ),

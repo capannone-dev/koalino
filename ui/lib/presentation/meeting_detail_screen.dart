@@ -625,7 +625,10 @@ final class _MeetingContent extends StatelessWidget {
       final String transcript when transcript.trim().isNotEmpty =>
         Text(transcript, style: theme.textTheme.bodyLarge),
       _ => Text(
-          l10n.noTranscriptIsAvailable,
+          // A meeting started by writing has no recording at all (#129).
+          meeting.summary.durationMs == 0
+              ? l10n.noRecordingWriteNotesOrAttach
+              : l10n.noTranscriptIsAvailable,
           style: theme.textTheme.bodyLarge
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),

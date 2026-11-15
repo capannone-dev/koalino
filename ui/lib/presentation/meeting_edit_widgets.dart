@@ -142,6 +142,8 @@ final class _MarkdownEditorScreenState extends State<MarkdownEditorScreen> {
                       : TextField(
                           key: markdownEditorFieldKey,
                           controller: _text,
+                          // The editor opens to be typed in at once.
+                          autofocus: true,
                           maxLines: null,
                           expands: true,
                           textAlignVertical: TextAlignVertical.top,

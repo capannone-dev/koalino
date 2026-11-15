@@ -303,6 +303,34 @@ void main() {
       expect(find.byType(MeetingDetailScreen), findsOneWidget);
     });
 
+    testWidgets('a meeting with no recording says what to add',
+        (WidgetTester tester) async {
+      final MeetingSummary written = MeetingSummary(
+        meetingId: 'meeting-written',
+        title: 'Supplier call',
+        createdAt: DateTime.utc(2026, 11, 15, 16, 17),
+        durationMs: 0,
+      );
+      await pumpMeetingList(
+        tester,
+        FakeMeetingBridge(
+          meetings: <MeetingSummary>[written],
+          details: <String, MeetingDetail>{
+            'meeting-written': MeetingDetail(
+              summary: written,
+              transcript: null,
+              segments: const <MeetingTranscriptSegment>[],
+            ),
+          },
+        ),
+      );
+
+      await tester.tap(find.text('Supplier call'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('No recording. Write notes'), findsOneWidget);
+    });
+
     testWidgets('is offered only when meetings can be edited',
         (WidgetTester tester) async {
       await pumpMeetingList(tester, FakeMeetingBridge());

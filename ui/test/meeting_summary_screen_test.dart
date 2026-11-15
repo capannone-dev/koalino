@@ -81,6 +81,26 @@ void main() {
     expect(core.calls.last.$2, <String?>['m-1', 'c-1']);
   });
 
+  testWidgets('an answer from a website names it, without an empty model',
+      (WidgetTester tester) async {
+    core.answer('command:settings', settings());
+    core.answer('note_taker_get_meeting_summary', <String, Object?>{
+      'ok': true,
+      'summary': <String, Object?>{
+        ...summary,
+        'connection_label': 'chatgpt.com',
+        'model': '',
+        'edited': true,
+      },
+      'meeting_prompt': null,
+    });
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Written by chatgpt.com on'), findsOneWidget);
+    expect(find.textContaining('()'), findsNothing);
+  });
+
   testWidgets('a summary written by hand is saved and shown as yours',
       (WidgetTester tester) async {
     core.answer('command:settings', settings());
