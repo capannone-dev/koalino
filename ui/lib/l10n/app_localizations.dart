@@ -4405,7 +4405,7 @@ abstract class AppLocalizations {
   /// No description provided for @handoffStepDragFiles.
   ///
   /// In en, this message translates to:
-  /// **'A folder with the meeting\'s photos and files opens too: drag them into the conversation.'**
+  /// **'A folder with the meeting\'s photos and files opens too: drag them into the message box, so they go as files.'**
   String get handoffStepDragFiles;
 
   /// No description provided for @handoffStepCopyAnswer.
@@ -4443,6 +4443,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No recording. Write notes or attach files: summaries and chat use them.'**
   String get noRecordingWriteNotesOrAttach;
+
+  /// No description provided for @handoffStepOpensFilled.
+  ///
+  /// In en, this message translates to:
+  /// **'{site} opens with the meeting already in the message box.'**
+  String handoffStepOpensFilled(String site);
+
+  /// No description provided for @handoffStepOpensCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'{site} opens, and Koalino copies the meeting.'**
+  String handoffStepOpensCopied(String site);
+
+  /// No description provided for @handoffStepSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Press Enter to send it.'**
+  String get handoffStepSend;
+
+  /// No description provided for @handoffStepPasteSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Click the message box, paste the meeting (Ctrl+V) and press Enter.'**
+  String get handoffStepPasteSend;
+
+  /// Intro of the sheet that continues a meeting's or a project's chat in the owner's own AI app (#126).
+  ///
+  /// In en, this message translates to:
+  /// **'Ask your questions in your own AI app, with your own account. Koalino gives it the notes and transcripts, and the photos and files go with them as files.'**
+  String get chatHandoffIntro;
 }
 
 class _AppLocalizationsDelegate

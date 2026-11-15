@@ -210,7 +210,8 @@ final class ProjectDetailScreen extends StatelessWidget {
                               )),
                         null => null,
                       },
-                      projectsController: controller),
+                      projectsController: controller,
+                      handoff: summariesController?.handoff),
                 ),
               IconButton(
                 key: const ValueKey<String>('add-project-files'),

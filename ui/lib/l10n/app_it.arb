@@ -714,11 +714,16 @@
   "handoffStepPressEnter": "{site} si apre con la riunione già nella casella del messaggio. Premi Invio per inviarla.",
   "handoffStepSentByItself": "{site} si apre e invia la riunione da solo. Se lo chiede, accedi prima.",
   "handoffStepPaste": "{site} si apre e Koalino copia la riunione. Fai clic nella casella del messaggio, incollala (Ctrl+V) e premi Invio.",
-  "handoffStepDragFiles": "Si apre anche una cartella con le foto e i file della riunione: trascinali nella conversazione.",
+  "handoffStepDragFiles": "Si apre anche una cartella con le foto e i file della riunione: trascinali nella casella del messaggio, così vanno come file.",
   "handoffStepCopyAnswer": "Quando la risposta è completa, premi il pulsante di copia sotto di essa.",
   "handoffStepComeBack": "Torna su Koalino: la risposta diventa il riassunto della riunione, con Annulla.",
   "handoffStepAskThere": "Poi fai lì le tue domande sulla riunione.",
   "openSite": "Apri {site}",
   "writtenBySourceOn": "Scritto da {source} il {createdAt}",
-  "noRecordingWriteNotesOrAttach": "Nessuna registrazione. Scrivi note o allega file: riassunti e chat li usano."
+  "noRecordingWriteNotesOrAttach": "Nessuna registrazione. Scrivi note o allega file: riassunti e chat li usano.",
+  "handoffStepOpensFilled": "{site} si apre con la riunione già nella casella del messaggio.",
+  "handoffStepOpensCopied": "{site} si apre e Koalino copia la riunione.",
+  "handoffStepSend": "Premi Invio per inviarla.",
+  "handoffStepPasteSend": "Fai clic nella casella del messaggio, incolla la riunione (Ctrl+V) e premi Invio.",
+  "chatHandoffIntro": "Fai le tue domande nella tua app di IA, con il tuo account. Koalino le passa note e trascrizioni, e foto e file vanno insieme come file."
 }

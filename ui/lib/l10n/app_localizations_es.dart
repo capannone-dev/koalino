@@ -2743,7 +2743,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'También se abre una carpeta con las fotos y archivos de la reunión: arrástralos a la conversación.';
+      'También se abre una carpeta con las fotos y archivos de la reunión: arrástralos al cuadro de mensaje para que vayan como archivos.';
 
   @override
   String get handoffStepCopyAnswer =>
@@ -2770,4 +2770,25 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get noRecordingWriteNotesOrAttach =>
       'Sin grabación. Escribe notas o adjunta archivos: los resúmenes y el chat los usan.';
+
+  @override
+  String handoffStepOpensFilled(String site) {
+    return '$site se abre con la reunión ya en el cuadro de mensaje.';
+  }
+
+  @override
+  String handoffStepOpensCopied(String site) {
+    return '$site se abre y Koalino copia la reunión.';
+  }
+
+  @override
+  String get handoffStepSend => 'Pulsa Intro para enviarla.';
+
+  @override
+  String get handoffStepPasteSend =>
+      'Haz clic en el cuadro de mensaje, pega la reunión (Ctrl+V) y pulsa Intro.';
+
+  @override
+  String get chatHandoffIntro =>
+      'Haz tus preguntas en tu propia app de IA, con tu propia cuenta. Koalino le pasa las notas y las transcripciones, y las fotos y los archivos van con ellas como archivos.';
 }

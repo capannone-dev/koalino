@@ -714,11 +714,16 @@
   "handoffStepPressEnter": "{site} se abre con la reunión ya en el cuadro de mensaje. Pulsa Intro para enviarla.",
   "handoffStepSentByItself": "{site} se abre y envía la reunión por sí solo. Inicia sesión primero si te lo pide.",
   "handoffStepPaste": "{site} se abre y Koalino copia la reunión. Haz clic en el cuadro de mensaje, pégala (Ctrl+V) y pulsa Intro.",
-  "handoffStepDragFiles": "También se abre una carpeta con las fotos y archivos de la reunión: arrástralos a la conversación.",
+  "handoffStepDragFiles": "También se abre una carpeta con las fotos y archivos de la reunión: arrástralos al cuadro de mensaje para que vayan como archivos.",
   "handoffStepCopyAnswer": "Cuando la respuesta esté completa, pulsa el botón de copiar debajo de ella.",
   "handoffStepComeBack": "Vuelve a Koalino: la respuesta se convierte en el resumen de la reunión, con Deshacer.",
   "handoffStepAskThere": "Luego haz allí tus preguntas sobre la reunión.",
   "openSite": "Abrir {site}",
   "writtenBySourceOn": "Escrito por {source} el {createdAt}",
-  "noRecordingWriteNotesOrAttach": "Sin grabación. Escribe notas o adjunta archivos: los resúmenes y el chat los usan."
+  "noRecordingWriteNotesOrAttach": "Sin grabación. Escribe notas o adjunta archivos: los resúmenes y el chat los usan.",
+  "handoffStepOpensFilled": "{site} se abre con la reunión ya en el cuadro de mensaje.",
+  "handoffStepOpensCopied": "{site} se abre y Koalino copia la reunión.",
+  "handoffStepSend": "Pulsa Intro para enviarla.",
+  "handoffStepPasteSend": "Haz clic en el cuadro de mensaje, pega la reunión (Ctrl+V) y pulsa Intro.",
+  "chatHandoffIntro": "Haz tus preguntas en tu propia app de IA, con tu propia cuenta. Koalino le pasa las notas y las transcripciones, y las fotos y los archivos van con ellas como archivos."
 }

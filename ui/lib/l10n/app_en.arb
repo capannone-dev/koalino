@@ -2204,7 +2204,7 @@
   "@handoffStepSentByItself": {"placeholders": {"site": {"type": "String"}}},
   "handoffStepPaste": "{site} opens and Koalino copies the meeting. Click the message box, paste it (Ctrl+V) and press Enter.",
   "@handoffStepPaste": {"placeholders": {"site": {"type": "String"}}},
-  "handoffStepDragFiles": "A folder with the meeting's photos and files opens too: drag them into the conversation.",
+  "handoffStepDragFiles": "A folder with the meeting's photos and files opens too: drag them into the message box, so they go as files.",
   "@handoffStepDragFiles": {},
   "handoffStepCopyAnswer": "When the answer is complete, press the copy button under it.",
   "@handoffStepCopyAnswer": {},
@@ -2217,5 +2217,17 @@
   "writtenBySourceOn": "Written by {source} on {createdAt}",
   "@writtenBySourceOn": {"placeholders": {"source": {"type": "String"}, "createdAt": {"type": "String"}}},
   "noRecordingWriteNotesOrAttach": "No recording. Write notes or attach files: summaries and chat use them.",
-  "@noRecordingWriteNotesOrAttach": {}
+  "@noRecordingWriteNotesOrAttach": {},
+  "handoffStepOpensFilled": "{site} opens with the meeting already in the message box.",
+  "@handoffStepOpensFilled": {"placeholders": {"site": {"type": "String"}}},
+  "handoffStepOpensCopied": "{site} opens, and Koalino copies the meeting.",
+  "@handoffStepOpensCopied": {"placeholders": {"site": {"type": "String"}}},
+  "handoffStepSend": "Press Enter to send it.",
+  "@handoffStepSend": {},
+  "handoffStepPasteSend": "Click the message box, paste the meeting (Ctrl+V) and press Enter.",
+  "@handoffStepPasteSend": {},
+  "chatHandoffIntro": "Ask your questions in your own AI app, with your own account. Koalino gives it the notes and transcripts, and the photos and files go with them as files.",
+  "@chatHandoffIntro": {
+    "description": "Intro of the sheet that continues a meeting's or a project's chat in the owner's own AI app (#126)."
+  }
 }

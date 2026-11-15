@@ -2712,7 +2712,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'A folder with the meeting\'s photos and files opens too: drag them into the conversation.';
+      'A folder with the meeting\'s photos and files opens too: drag them into the message box, so they go as files.';
 
   @override
   String get handoffStepCopyAnswer =>
@@ -2739,4 +2739,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get noRecordingWriteNotesOrAttach =>
       'No recording. Write notes or attach files: summaries and chat use them.';
+
+  @override
+  String handoffStepOpensFilled(String site) {
+    return '$site opens with the meeting already in the message box.';
+  }
+
+  @override
+  String handoffStepOpensCopied(String site) {
+    return '$site opens, and Koalino copies the meeting.';
+  }
+
+  @override
+  String get handoffStepSend => 'Press Enter to send it.';
+
+  @override
+  String get handoffStepPasteSend =>
+      'Click the message box, paste the meeting (Ctrl+V) and press Enter.';
+
+  @override
+  String get chatHandoffIntro =>
+      'Ask your questions in your own AI app, with your own account. Koalino gives it the notes and transcripts, and the photos and files go with them as files.';
 }

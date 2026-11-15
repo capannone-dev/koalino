@@ -714,11 +714,16 @@
   "handoffStepPressEnter": "{site} が会議をメッセージ欄に入れた状態で開きます。Enter キーを押して送信してください。",
   "handoffStepSentByItself": "{site} が開き、会議を自動で送信します。求められたら先にサインインしてください。",
   "handoffStepPaste": "{site} が開き、Koalino が会議をコピーします。メッセージ欄をクリックして貼り付け（Ctrl+V）、Enter キーを押してください。",
-  "handoffStepDragFiles": "会議の写真とファイルのフォルダーも開きます。会話にドラッグしてください。",
+  "handoffStepDragFiles": "会議の写真とファイルのフォルダーも開きます。メッセージ欄にドラッグすると、ファイルとして送られます。",
   "handoffStepCopyAnswer": "回答が完成したら、その下のコピーボタンを押してください。",
   "handoffStepComeBack": "Koalino に戻ると、回答が会議の要約になります（元に戻せます）。",
   "handoffStepAskThere": "その後、そこで会議について質問してください。",
   "openSite": "{site} を開く",
   "writtenBySourceOn": "{source} が {createdAt} に作成",
-  "noRecordingWriteNotesOrAttach": "録音はありません。メモを書くかファイルを添付してください。要約とチャットで使われます。"
+  "noRecordingWriteNotesOrAttach": "録音はありません。メモを書くかファイルを添付してください。要約とチャットで使われます。",
+  "handoffStepOpensFilled": "{site} が会議をメッセージ欄に入れた状態で開きます。",
+  "handoffStepOpensCopied": "{site} が開き、Koalino が会議をコピーします。",
+  "handoffStepSend": "Enter キーを押して送信します。",
+  "handoffStepPasteSend": "メッセージ欄をクリックし、会議を貼り付けて（Ctrl+V）Enter キーを押します。",
+  "chatHandoffIntro": "自分のアカウントで、自分の AI アプリに質問できます。Koalino がメモと文字起こしを渡し、写真やファイルはファイルのまま一緒に送られます。"
 }

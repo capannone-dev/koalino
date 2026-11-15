@@ -153,6 +153,7 @@ true)` has a paired computer answer from its own copy of the notes (#107).
 edits. `AndroidHandoffPlatform` covers the folder (`cache/shared/handoff`), the installed apps,
 `shareFiles` and the clipboard. `clearHandoffFolder` deletes an earlier hand-off's copies at
 start-up. `RustHandoffCore(inline: true)` asks for a message that carries the meeting itself.
+`prepareProject` (#126) asks for a project's chat hand-off (`project_id`).
 
 `desktop_handoff.dart` (#126) is the computer's `HandoffPlatform`, for owners who use claude.ai or
 chatgpt.com rather than Claude Code or Codex. Both websites are always offered (`viaBrowser`).
@@ -161,7 +162,8 @@ Windows). A message of up to 12,000 characters goes in the address (`AiApp.prefi
 `?q=`): claude.ai fills its message box, and chatgpt.com also sends it. `prefills` tells the
 controller which, so the steps dialog (`showHandoffSteps`) says "press Enter", "it sends by
 itself" or "paste with Ctrl+V". It also opens the hand-off folder (`<support>/handoff`) when the meeting has photos or
-files to drag in. The controller has already put the message on the clipboard, and it reads the
+files to drag in. With files, chatgpt.com is not filled through its address: it would send the
+message before the files are in. The controller has already put the message on the clipboard, and it reads the
 answer back when the window is active again.
 
 `clear_copy_bridge.dart` (#99) gives the viewers clear copies of sealed attachments:

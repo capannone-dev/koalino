@@ -74,6 +74,16 @@ void main() {
     expect(opened.last, '/data/handoff');
   });
 
+  test(
+      'chatgpt.com, which sends at once, is not pre-filled when files must go in first',
+      () async {
+    await platform.share(_handoff(extraFiles: 1), AiApp.chatgpt);
+
+    expect(opened.first, 'https://chatgpt.com/');
+    expect(platform.prefills(_handoff(extraFiles: 1), AiApp.chatgpt), isFalse);
+    expect(platform.prefills(_handoff(extraFiles: 1), AiApp.claude), isTrue);
+  });
+
   test('the core is asked for a message that carries the meeting', () async {
     final List<String?> sent = <String?>[];
     final RustHandoffCore core = RustHandoffCore(

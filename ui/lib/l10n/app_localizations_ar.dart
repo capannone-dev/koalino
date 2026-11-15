@@ -2767,7 +2767,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'يُفتح أيضًا مجلد فيه صور الاجتماع وملفاته: اسحبها إلى المحادثة.';
+      'يُفتح أيضًا مجلد فيه صور الاجتماع وملفاته: اسحبها إلى مربع الرسالة لتُرسل كملفات.';
 
   @override
   String get handoffStepCopyAnswer =>
@@ -2793,4 +2793,25 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get noRecordingWriteNotesOrAttach =>
       'لا يوجد تسجيل. اكتب ملاحظات أو أرفق ملفات: تستخدمها الملخصات والدردشة.';
+
+  @override
+  String handoffStepOpensFilled(String site) {
+    return 'يفتح $site والاجتماع موجود بالفعل في مربع الرسالة.';
+  }
+
+  @override
+  String handoffStepOpensCopied(String site) {
+    return 'يفتح $site وينسخ Koalino الاجتماع.';
+  }
+
+  @override
+  String get handoffStepSend => 'اضغط Enter لإرساله.';
+
+  @override
+  String get handoffStepPasteSend =>
+      'انقر مربع الرسالة والصق الاجتماع (Ctrl+V) ثم اضغط Enter.';
+
+  @override
+  String get chatHandoffIntro =>
+      'اطرح أسئلتك في تطبيق الذكاء الاصطناعي الخاص بك، بحسابك الخاص. يعطيه Koalino الملاحظات والنصوص المفرّغة، وتُرسل الصور والملفات معها كملفات.';
 }

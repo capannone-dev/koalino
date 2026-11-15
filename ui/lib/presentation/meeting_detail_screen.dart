@@ -138,7 +138,8 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                       widget.controller.selectedMeeting?.summary.title ??
                           'meeting'),
                   openMeeting: _openCitedMeeting,
-                  projectsController: widget.projectsController),
+                  projectsController: widget.projectsController,
+                  handoff: widget.summariesController?.handoff),
             ),
           if (widget.summariesController
               case final SummariesController summaries)

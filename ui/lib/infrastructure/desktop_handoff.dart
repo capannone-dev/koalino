@@ -50,16 +50,22 @@ final class DesktopHandoffPlatform implements HandoffPlatform {
     if (app == null) {
       return;
     }
-    await _open(app.prefilledAddress(handoff.message) ?? app.webAddress);
+    await _open((prefills(handoff, app)
+            ? app.prefilledAddress(handoff.message)
+            : null) ??
+        app.webAddress);
     if (handoff.files.length > 1) {
       await _open(await handoffDirectory());
     }
   }
 
-  /// A meeting short enough goes in the website's address, which fills its message box.
+  /// A meeting short enough goes in the website's address, which fills its message box; not
+  /// on a website that would send it before the owner drags its photos and files in.
   @override
   bool prefills(PreparedHandoff handoff, AiApp? app) =>
-      app?.prefilledAddress(handoff.message) != null;
+      app != null &&
+      app.prefilledAddress(handoff.message) != null &&
+      !(app.sendsByItself && handoff.files.length > 1);
 
   @override
   Future<String?> readClipboard() async =>

@@ -32,72 +32,120 @@ Future<void> showHandoffSheet(
   required String title,
 }) async {
   final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-  final _HandoffChoice? choice = await showModalBottomSheet<_HandoffChoice>(
-    context: context,
-    showDragHandle: true,
-    builder: (BuildContext context) => SafeArea(
-      child: ListView(
-        shrinkWrap: true,
-        children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-            child: Text(l10n.useYourOwnAiApp,
-                style: Theme.of(context).textTheme.titleLarge),
-          ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
-            child: Text(controller.viaBrowser
-                ? l10n.handoffInTheBrowser
-                : l10n.theMeetingItsNotesAndIts),
-          ),
-          for (final AiApp app in controller.apps) ...<Widget>[
-            ListTile(
-              leading: const Icon(Icons.summarize_outlined),
-              title: Text(l10n.summarizeIn(
-                  controller.viaBrowser ? app.webName : app.displayName)),
-              onTap: () => Navigator.of(context)
-                  .pop(_HandoffChoice(HandoffPurpose.summary, app)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.forum_outlined),
-              title: Text(l10n.chatIn(
-                  controller.viaBrowser ? app.webName : app.displayName)),
-              onTap: () => Navigator.of(context)
-                  .pop(_HandoffChoice(HandoffPurpose.chat, app)),
-            ),
-          ],
-          // A computer has no share sheet to reach another app.
-          if (!controller.viaBrowser) ...<Widget>[
-            ListTile(
-              leading: const Icon(Icons.share_outlined),
-              title: Text(l10n.summarizeInAnotherApp),
-              onTap: () => Navigator.of(context)
-                  .pop(const _HandoffChoice(HandoffPurpose.summary, null)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.share_outlined),
-              title: Text(l10n.chatInAnotherApp),
-              onTap: () => Navigator.of(context)
-                  .pop(const _HandoffChoice(HandoffPurpose.chat, null)),
-            ),
-          ],
-        ],
-      ),
-    ),
-  );
-  if (choice == null) {
+  final _HandoffChoice? choice =
+      await _pickHandoff(context, controller, purposes: HandoffPurpose.values);
+  if (choice == null || !context.mounted) {
     return;
   }
   final String? problem = await controller.handOff(
       meetingId, title, choice.purpose,
-      app: choice.app,
-      confirm: controller.viaBrowser && context.mounted
-          ? (HandoffSteps steps) => showHandoffSteps(context, steps)
-          : null);
+      app: choice.app, confirm: _stepsFor(context, controller));
   if (problem != null) {
     messenger.showSnackBar(SnackBar(content: Text(problem)));
   }
 }
+
+/// Asks where to continue a chat about a meeting or a project, and hands it over (#126).
+///
+/// Inputs: A context with a `ScaffoldMessenger`, the controller, and `meetingId` or
+/// `projectId`. Side effects: Writes the hand-off (a project's goes with every file of the
+/// project and its meetings) and opens the other app; a failure is shown in a snack bar.
+Future<void> showChatHandoffSheet(
+  BuildContext context, {
+  required HandoffController controller,
+  String? meetingId,
+  String? projectId,
+}) async {
+  final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+  final _HandoffChoice? choice = await _pickHandoff(context, controller,
+      purposes: const <HandoffPurpose>[HandoffPurpose.chat],
+      intro: l10n.chatHandoffIntro);
+  if (choice == null || !context.mounted) {
+    return;
+  }
+  final Future<bool> Function(HandoffSteps steps)? confirm =
+      _stepsFor(context, controller);
+  final String? problem = switch ((meetingId, projectId)) {
+    (final String meetingId, _) => await controller.handOff(
+        meetingId, '', HandoffPurpose.chat,
+        app: choice.app, confirm: confirm),
+    (null, final String projectId) => await controller.handOffProject(projectId,
+        app: choice.app, confirm: confirm),
+    (null, null) => null,
+  };
+  if (problem != null) {
+    messenger.showSnackBar(SnackBar(content: Text(problem)));
+  }
+}
+
+/// On a computer, the steps window shown before the website opens; null on a phone.
+Future<bool> Function(HandoffSteps steps)? _stepsFor(
+        BuildContext context, HandoffController controller) =>
+    controller.viaBrowser
+        ? (HandoffSteps steps) async =>
+            context.mounted && await showHandoffSteps(context, steps)
+        : null;
+
+/// Shows `intro` (or the meeting's), the apps for `purposes`, and the share sheet on a phone.
+///
+/// Outputs: The owner's choice, or null when dismissed. Side effects: None.
+Future<_HandoffChoice?> _pickHandoff(
+  BuildContext context,
+  HandoffController controller, {
+  required List<HandoffPurpose> purposes,
+  String? intro,
+}) =>
+    showModalBottomSheet<_HandoffChoice>(
+      context: context,
+      showDragHandle: true,
+      builder: (BuildContext context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              child: Text(l10n.useYourOwnAiApp,
+                  style: Theme.of(context).textTheme.titleLarge),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+              child: Text(intro ??
+                  (controller.viaBrowser
+                      ? l10n.handoffInTheBrowser
+                      : l10n.theMeetingItsNotesAndIts)),
+            ),
+            for (final AiApp app in controller.apps)
+              for (final HandoffPurpose purpose in purposes)
+                ListTile(
+                  leading: Icon(purpose == HandoffPurpose.summary
+                      ? Icons.summarize_outlined
+                      : Icons.forum_outlined),
+                  title: Text(_appAction(purpose,
+                      controller.viaBrowser ? app.webName : app.displayName)),
+                  onTap: () =>
+                      Navigator.of(context).pop(_HandoffChoice(purpose, app)),
+                ),
+            // A computer has no share sheet to reach another app.
+            if (!controller.viaBrowser)
+              for (final HandoffPurpose purpose in purposes)
+                ListTile(
+                  leading: const Icon(Icons.share_outlined),
+                  title: Text(purpose == HandoffPurpose.summary
+                      ? l10n.summarizeInAnotherApp
+                      : l10n.chatInAnotherApp),
+                  onTap: () =>
+                      Navigator.of(context).pop(_HandoffChoice(purpose, null)),
+                ),
+          ],
+        ),
+      ),
+    );
+
+/// Such as `Summarize in Claude` or `Chat in chatgpt.com`.
+String _appAction(HandoffPurpose purpose, String name) =>
+    purpose == HandoffPurpose.summary
+        ? l10n.summarizeIn(name)
+        : l10n.chatIn(name);
 
 /// Shows what the owner will do in the website, before it opens (#126).
 ///
@@ -106,14 +154,24 @@ Future<void> showHandoffSheet(
 Future<bool> showHandoffSteps(BuildContext context, HandoffSteps steps) async {
   final String site = steps.app?.webName ?? l10n.theOtherApp;
   final bool summary = steps.purpose == HandoffPurpose.summary;
+  // The photos and files go into the message box before the message is sent.
   final List<String> lines = <String>[
-    if (!steps.prefilled)
-      l10n.handoffStepPaste(site)
-    else if (steps.app?.sendsByItself ?? false)
-      l10n.handoffStepSentByItself(site)
-    else
-      l10n.handoffStepPressEnter(site),
-    if (steps.hasFiles) l10n.handoffStepDragFiles,
+    if (!steps.hasFiles) ...<String>[
+      if (!steps.prefilled)
+        l10n.handoffStepPaste(site)
+      else if (steps.app?.sendsByItself ?? false)
+        l10n.handoffStepSentByItself(site)
+      else
+        l10n.handoffStepPressEnter(site),
+    ] else if (steps.prefilled) ...<String>[
+      l10n.handoffStepOpensFilled(site),
+      l10n.handoffStepDragFiles,
+      l10n.handoffStepSend,
+    ] else ...<String>[
+      l10n.handoffStepOpensCopied(site),
+      l10n.handoffStepDragFiles,
+      l10n.handoffStepPasteSend,
+    ],
     if (summary) ...<String>[
       l10n.handoffStepCopyAnswer,
       l10n.handoffStepComeBack,

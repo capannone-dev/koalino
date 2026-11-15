@@ -9,11 +9,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/handoff_controller.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
+import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
 import 'package:note_taker_ui/infrastructure/incoming_share_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
+import 'package:note_taker_ui/presentation/chat_screen.dart';
 import 'package:note_taker_ui/presentation/handoff_widgets.dart';
 import 'package:note_taker_ui/presentation/share_to_project.dart';
 
@@ -71,6 +73,24 @@ final class FakeHandoffPorts implements HandoffCore, HandoffPlatform {
       files: const <HandoffFile>[
         HandoffFile(
             path: '/cache/shared/handoff/Review.md', mimeType: 'text/markdown'),
+      ],
+      skipped: 0,
+    );
+  }
+
+  @override
+  Future<PreparedHandoff> prepareProject(
+      String projectId, String directory) async {
+    calls.add('prepare project $projectId $directory');
+    return const PreparedHandoff(
+      message: 'Read it.',
+      prompt: '',
+      files: <HandoffFile>[
+        HandoffFile(
+            path: '/cache/shared/handoff/Launch.md', mimeType: 'text/markdown'),
+        HandoffFile(
+            path: '/cache/shared/handoff/plan.pdf',
+            mimeType: 'application/pdf'),
       ],
       skipped: 0,
     );
@@ -209,6 +229,92 @@ void main() {
     await controller.checkClipboard();
     expect(
         ports.calls.where((String call) => call.startsWith('keep')), isEmpty);
+  });
+
+  test("a project's chat goes with its files and leaves nothing to keep (#126)",
+      () async {
+    ports.viaBrowser = true;
+    final List<HandoffSteps> shown = <HandoffSteps>[];
+
+    final String? problem = await controller.handOffProject('p-1',
+        app: AiApp.chatgpt, confirm: (HandoffSteps steps) async {
+      shown.add(steps);
+      return true;
+    });
+
+    expect(problem, isNull);
+    expect(ports.calls, <String>[
+      'prepare project p-1 /cache/shared/handoff',
+      'share chatgpt 2',
+    ]);
+    expect(shown.single.purpose, HandoffPurpose.chat);
+    expect(shown.single.hasFiles, isTrue);
+    expect(controller.pending, isNull);
+    expect(ports.clipboard, 'Read it.');
+  });
+
+  testWidgets('the chat sheet offers only chats, for a meeting or a project',
+      (WidgetTester tester) async {
+    ports.apps = <AiApp>[AiApp.chatgpt];
+    await controller.loadApps();
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (BuildContext context) => Column(children: <Widget>[
+            TextButton(
+              onPressed: () => showChatHandoffSheet(context,
+                  controller: controller, projectId: 'p-1'),
+              child: const Text('Project'),
+            ),
+            TextButton(
+              onPressed: () => showChatHandoffSheet(context,
+                  controller: controller, meetingId: 'm-1'),
+              child: const Text('Meeting'),
+            ),
+          ]),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('Project'));
+    await tester.pumpAndSettle();
+    expect(find.text('Summarize in ChatGPT'), findsNothing);
+    await tester.tap(find.text('Chat in ChatGPT'));
+    await tester.pumpAndSettle();
+    expect(ports.calls.first, 'prepare project p-1 /cache/shared/handoff');
+
+    await tester.tap(find.text('Meeting'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Chat in ChatGPT'));
+    await tester.pumpAndSettle();
+    expect(ports.calls, contains('prepare m-1 chat /cache/shared/handoff'));
+  });
+
+  testWidgets("a meeting's or a project's chat page offers the own AI app",
+      (WidgetTester tester) async {
+    Future<void> show(ChatTopic topic, HandoffController? handoff) async {
+      await tester.pumpWidget(MaterialApp(
+        home: ChatScreen(
+          bridge: ChatBridge(
+              call: (String function, List<String?> arguments) async =>
+                  '{"ok":true,"messages":[]}'),
+          topic: topic,
+          title: 'Chat',
+          handoff: handoff,
+        ),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    final Finder action = find.byKey(const ValueKey<String>('chat-handoff'));
+    await show(const ChatTopic.project('p-1'), controller);
+    expect(action, findsOneWidget);
+    await show(const ChatTopic.meeting('m-1'), controller);
+    expect(action, findsOneWidget);
+    await show(const ChatTopic.everything(), controller);
+    expect(action, findsNothing, reason: 'every meeting is too much to send');
+    await show(const ChatTopic.meeting('m-1'), null);
+    expect(action, findsNothing);
   });
 
   test('a short copy or one long after the hand-off is not kept', () async {
@@ -357,8 +463,11 @@ void main() {
 
     await tester.tap(find.text('pasted'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Ctrl+V'), findsOneWidget);
-    expect(find.textContaining('drag them'), findsOneWidget);
+    // The files go in before the message is sent.
+    final double dragAt =
+        tester.getTopLeft(find.textContaining('drag them')).dy;
+    final double pasteAt = tester.getTopLeft(find.textContaining('Ctrl+V')).dy;
+    expect(dragAt, lessThan(pasteAt));
     expect(find.text('Open chatgpt.com'), findsOneWidget);
   });
 

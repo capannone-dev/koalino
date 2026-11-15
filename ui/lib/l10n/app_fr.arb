@@ -714,11 +714,16 @@
   "handoffStepPressEnter": "{site} s'ouvre avec la réunion déjà dans la zone de message. Appuyez sur Entrée pour l'envoyer.",
   "handoffStepSentByItself": "{site} s'ouvre et envoie la réunion tout seul. Connectez-vous d'abord s'il le demande.",
   "handoffStepPaste": "{site} s'ouvre et Koalino copie la réunion. Cliquez dans la zone de message, collez-la (Ctrl+V) et appuyez sur Entrée.",
-  "handoffStepDragFiles": "Un dossier avec les photos et fichiers de la réunion s'ouvre aussi : faites-les glisser dans la conversation.",
+  "handoffStepDragFiles": "Un dossier avec les photos et fichiers de la réunion s'ouvre aussi : faites-les glisser dans la zone de message, pour qu'ils partent comme fichiers.",
   "handoffStepCopyAnswer": "Quand la réponse est terminée, appuyez sur le bouton de copie en dessous.",
   "handoffStepComeBack": "Revenez dans Koalino : la réponse devient le résumé de la réunion, avec Annuler.",
   "handoffStepAskThere": "Posez ensuite vos questions sur la réunion là-bas.",
   "openSite": "Ouvrir {site}",
   "writtenBySourceOn": "Écrit par {source} le {createdAt}",
-  "noRecordingWriteNotesOrAttach": "Pas d'enregistrement. Écrivez des notes ou joignez des fichiers : les résumés et le chat les utilisent."
+  "noRecordingWriteNotesOrAttach": "Pas d'enregistrement. Écrivez des notes ou joignez des fichiers : les résumés et le chat les utilisent.",
+  "handoffStepOpensFilled": "{site} s'ouvre avec la réunion déjà dans la zone de message.",
+  "handoffStepOpensCopied": "{site} s'ouvre et Koalino copie la réunion.",
+  "handoffStepSend": "Appuyez sur Entrée pour l'envoyer.",
+  "handoffStepPasteSend": "Cliquez dans la zone de message, collez la réunion (Ctrl+V) et appuyez sur Entrée.",
+  "chatHandoffIntro": "Pose tes questions dans ta propre app d'IA, avec ton propre compte. Koalino lui donne les notes et les transcriptions, et les photos et fichiers les accompagnent en tant que fichiers."
 }

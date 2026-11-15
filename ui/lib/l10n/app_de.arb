@@ -714,11 +714,16 @@
   "handoffStepPressEnter": "{site} öffnet sich mit der Besprechung bereits im Nachrichtenfeld. Drück die Eingabetaste, um sie zu senden.",
   "handoffStepSentByItself": "{site} öffnet sich und sendet die Besprechung von selbst. Melde dich zuerst an, falls es danach fragt.",
   "handoffStepPaste": "{site} öffnet sich und Koalino kopiert die Besprechung. Klick ins Nachrichtenfeld, füge sie ein (Strg+V) und drück die Eingabetaste.",
-  "handoffStepDragFiles": "Ein Ordner mit den Fotos und Dateien der Besprechung öffnet sich auch: zieh sie in die Unterhaltung.",
+  "handoffStepDragFiles": "Ein Ordner mit den Fotos und Dateien der Besprechung öffnet sich auch: zieh sie ins Nachrichtenfeld, damit sie als Dateien mitgehen.",
   "handoffStepCopyAnswer": "Wenn die Antwort fertig ist, drück die Kopieren-Schaltfläche darunter.",
   "handoffStepComeBack": "Komm zurück zu Koalino: Die Antwort wird zur Zusammenfassung der Besprechung, mit Rückgängig.",
   "handoffStepAskThere": "Stell dann dort deine Fragen zur Besprechung.",
   "openSite": "{site} öffnen",
   "writtenBySourceOn": "Geschrieben von {source} am {createdAt}",
-  "noRecordingWriteNotesOrAttach": "Keine Aufnahme. Schreib Notizen oder hänge Dateien an: Zusammenfassungen und Chat verwenden sie."
+  "noRecordingWriteNotesOrAttach": "Keine Aufnahme. Schreib Notizen oder hänge Dateien an: Zusammenfassungen und Chat verwenden sie.",
+  "handoffStepOpensFilled": "{site} öffnet sich mit der Besprechung bereits im Nachrichtenfeld.",
+  "handoffStepOpensCopied": "{site} öffnet sich, und Koalino kopiert die Besprechung.",
+  "handoffStepSend": "Drück die Eingabetaste, um sie zu senden.",
+  "handoffStepPasteSend": "Klick ins Nachrichtenfeld, füge die Besprechung ein (Strg+V) und drück die Eingabetaste.",
+  "chatHandoffIntro": "Stelle deine Fragen in deiner eigenen KI-App, mit deinem eigenen Konto. Koalino übergibt ihr Notizen und Transkripte, Fotos und Dateien gehen als Dateien mit."
 }

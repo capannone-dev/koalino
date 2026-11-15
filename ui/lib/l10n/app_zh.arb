@@ -714,11 +714,16 @@
   "handoffStepPressEnter": "{site} 打开时会议已在消息框中。按 Enter 发送。",
   "handoffStepSentByItself": "{site} 打开后会自动发送会议。如有提示，请先登录。",
   "handoffStepPaste": "{site} 会打开，Koalino 会复制会议。点击消息框，粘贴（Ctrl+V）后按 Enter。",
-  "handoffStepDragFiles": "还会打开一个包含会议照片和文件的文件夹：把它们拖进对话。",
+  "handoffStepDragFiles": "还会打开一个包含会议照片和文件的文件夹：把它们拖进消息框，作为文件发送。",
   "handoffStepCopyAnswer": "回答完成后，点击其下方的复制按钮。",
   "handoffStepComeBack": "回到 Koalino：回答会成为会议摘要，可撤销。",
   "handoffStepAskThere": "然后在那里提出关于会议的问题。",
   "openSite": "打开 {site}",
   "writtenBySourceOn": "由 {source} 于 {createdAt} 撰写",
-  "noRecordingWriteNotesOrAttach": "没有录音。写笔记或附加文件，摘要和聊天会用到它们。"
+  "noRecordingWriteNotesOrAttach": "没有录音。写笔记或附加文件，摘要和聊天会用到它们。",
+  "handoffStepOpensFilled": "{site} 打开时会议已在消息框中。",
+  "handoffStepOpensCopied": "{site} 会打开，Koalino 会复制会议。",
+  "handoffStepSend": "按 Enter 发送。",
+  "handoffStepPasteSend": "点击消息框，粘贴会议（Ctrl+V）后按 Enter。",
+  "chatHandoffIntro": "用你自己的账号，在你自己的 AI 应用里提问。Koalino 会把笔记和转写交给它，照片和文件以文件形式一并发送。"
 }

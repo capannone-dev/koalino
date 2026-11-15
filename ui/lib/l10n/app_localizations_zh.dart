@@ -2555,7 +2555,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get handoffStepDragFiles => '还会打开一个包含会议照片和文件的文件夹：把它们拖进对话。';
+  String get handoffStepDragFiles => '还会打开一个包含会议照片和文件的文件夹：把它们拖进消息框，作为文件发送。';
 
   @override
   String get handoffStepCopyAnswer => '回答完成后，点击其下方的复制按钮。';
@@ -2578,4 +2578,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noRecordingWriteNotesOrAttach => '没有录音。写笔记或附加文件，摘要和聊天会用到它们。';
+
+  @override
+  String handoffStepOpensFilled(String site) {
+    return '$site 打开时会议已在消息框中。';
+  }
+
+  @override
+  String handoffStepOpensCopied(String site) {
+    return '$site 会打开，Koalino 会复制会议。';
+  }
+
+  @override
+  String get handoffStepSend => '按 Enter 发送。';
+
+  @override
+  String get handoffStepPasteSend => '点击消息框，粘贴会议（Ctrl+V）后按 Enter。';
+
+  @override
+  String get chatHandoffIntro =>
+      '用你自己的账号，在你自己的 AI 应用里提问。Koalino 会把笔记和转写交给它，照片和文件以文件形式一并发送。';
 }

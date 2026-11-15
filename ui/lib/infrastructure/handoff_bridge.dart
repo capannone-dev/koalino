@@ -147,6 +147,10 @@ abstract interface class HandoffCore {
   Future<PreparedHandoff> prepare(
       String meetingId, HandoffPurpose purpose, String directory);
 
+  /// Writes a project's chat hand-off into `directory`: its meetings as one document and every
+  /// file of the project and its meetings (#126). Throws `LlmException`.
+  Future<PreparedHandoff> prepareProject(String projectId, String directory);
+
   /// Keeps an answer as the meeting's summary. Throws `LlmException`.
   Future<KeptAnswer> keepAnswer(String meetingId,
       {required String text, required String source, required String prompt});
@@ -200,6 +204,19 @@ final class RustHandoffCore implements HandoffCore {
         jsonEncode(<String, Object?>{
           'meeting_id': meetingId,
           'purpose': purpose.name,
+          'directory': directory,
+          if (_inline) 'inline': true,
+        })
+      ])));
+
+  @override
+  Future<PreparedHandoff> prepareProject(
+          String projectId, String directory) async =>
+      PreparedHandoff.fromJson(
+          decodeLlmAnswer(await _call('note_taker_handoff_meeting', <String?>[
+        jsonEncode(<String, Object?>{
+          'project_id': projectId,
+          'purpose': HandoffPurpose.chat.name,
           'directory': directory,
           if (_inline) 'inline': true,
         })

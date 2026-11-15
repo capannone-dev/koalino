@@ -2758,7 +2758,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'Также откроется папка с фото и файлами встречи: перетащите их в разговор.';
+      'Также откроется папка с фото и файлами встречи: перетащите их в поле сообщения, чтобы они ушли как файлы.';
 
   @override
   String get handoffStepCopyAnswer =>
@@ -2784,4 +2784,25 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get noRecordingWriteNotesOrAttach =>
       'Записи нет. Напишите заметки или прикрепите файлы: их используют сводки и чат.';
+
+  @override
+  String handoffStepOpensFilled(String site) {
+    return '$site откроется со встречей уже в поле сообщения.';
+  }
+
+  @override
+  String handoffStepOpensCopied(String site) {
+    return '$site откроется, а Koalino скопирует встречу.';
+  }
+
+  @override
+  String get handoffStepSend => 'Нажмите Enter, чтобы отправить.';
+
+  @override
+  String get handoffStepPasteSend =>
+      'Щёлкните в поле сообщения, вставьте встречу (Ctrl+V) и нажмите Enter.';
+
+  @override
+  String get chatHandoffIntro =>
+      'Задавайте вопросы в своём ИИ-приложении, со своей учётной записью. Koalino передаёт ему заметки и расшифровки, а фото и файлы идут вместе с ними как файлы.';
 }

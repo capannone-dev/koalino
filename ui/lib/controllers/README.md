@@ -100,7 +100,8 @@ and Android phones (where `hostUsers` passes the core what Kotlin saw).
 `handoff_controller.dart` (#114) hands a meeting to the owner's own Claude or ChatGPT app.
 
 - **The hand-off:** the core writes the meeting and its files, the prompt also goes on the
-  clipboard, and the app opens.
+  clipboard, and the app opens. `handOffProject` (#126) does the same for a project's chat: all
+  its meetings, the project's files and every meeting's attachments. No answer is awaited.
 - **The answer:** a summary hand-off waits up to an hour. When Koalino comes back, new
   clipboard text of at least 80 characters is kept as that meeting's summary. A `HandoffKept`
   event offers Undo, and `HandoffHint` says to copy the answer (or share it) first. An answer

@@ -2785,7 +2785,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get handoffStepDragFiles =>
-      'Ein Ordner mit den Fotos und Dateien der Besprechung öffnet sich auch: zieh sie in die Unterhaltung.';
+      'Ein Ordner mit den Fotos und Dateien der Besprechung öffnet sich auch: zieh sie ins Nachrichtenfeld, damit sie als Dateien mitgehen.';
 
   @override
   String get handoffStepCopyAnswer =>
@@ -2812,4 +2812,25 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get noRecordingWriteNotesOrAttach =>
       'Keine Aufnahme. Schreib Notizen oder hänge Dateien an: Zusammenfassungen und Chat verwenden sie.';
+
+  @override
+  String handoffStepOpensFilled(String site) {
+    return '$site öffnet sich mit der Besprechung bereits im Nachrichtenfeld.';
+  }
+
+  @override
+  String handoffStepOpensCopied(String site) {
+    return '$site öffnet sich, und Koalino kopiert die Besprechung.';
+  }
+
+  @override
+  String get handoffStepSend => 'Drück die Eingabetaste, um sie zu senden.';
+
+  @override
+  String get handoffStepPasteSend =>
+      'Klick ins Nachrichtenfeld, füge die Besprechung ein (Strg+V) und drück die Eingabetaste.';
+
+  @override
+  String get chatHandoffIntro =>
+      'Stelle deine Fragen in deiner eigenen KI-App, mit deinem eigenen Konto. Koalino übergibt ihr Notizen und Transkripte, Fotos und Dateien gehen als Dateien mit.';
 }

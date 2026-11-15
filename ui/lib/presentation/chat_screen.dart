@@ -2,13 +2,16 @@
 // meeting, summary and project. On the phone, a paired computer answers by default (#107); the
 // "Who answers" menu switches to the phone's own connection. Each answer says what the model was given and what was left out.
 // The chat is kept on this device; it can be deleted from the menu. The places an answer cites
-// are listed under it, and open the meeting at that moment or the file (#110).
+// are listed under it, and open the meeting at that moment or the file (#110). A meeting's or a
+// project's chat can go on in the owner's own AI app instead, with its photos and files (#126).
 
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/handoff_controller.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
+import 'package:note_taker_ui/presentation/handoff_widgets.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
 import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
@@ -22,22 +25,25 @@ const Key chatQuestionFieldKey = ValueKey<String>('chat-question');
 
 /// Opens the chat page.
 ///
-/// Inputs: The bridge, the topic and the page title; optionally how to open a cited meeting and
-/// the projects controller that finds a cited file. A source without its opener is shown but
-/// can't be opened. Side effects: Pushes a page.
+/// Inputs: The bridge, the topic and the page title; optionally how to open a cited meeting, the
+/// projects controller that finds a cited file, and the hand-off controller that continues a
+/// meeting's or a project's chat in the owner's own AI app. A source without its opener is
+/// shown but can't be opened. Side effects: Pushes a page.
 void openChat(BuildContext context,
     {required ChatBridge bridge,
     required ChatTopic topic,
     required String title,
     ChatMeetingOpener? openMeeting,
-    ProjectsController? projectsController}) {
+    ProjectsController? projectsController,
+    HandoffController? handoff}) {
   Navigator.of(context).push(MaterialPageRoute<void>(
     builder: (BuildContext context) => ChatScreen(
         bridge: bridge,
         topic: topic,
         title: title,
         openMeeting: openMeeting,
-        projectsController: projectsController),
+        projectsController: projectsController,
+        handoff: handoff),
   ));
 }
 
@@ -50,6 +56,7 @@ final class ChatScreen extends StatefulWidget {
       required this.title,
       this.openMeeting,
       this.projectsController,
+      this.handoff,
       super.key});
 
   final ChatBridge bridge;
@@ -63,6 +70,10 @@ final class ChatScreen extends StatefulWidget {
 
   /// Finds a cited file; without it, file sources can't be opened.
   final ProjectsController? projectsController;
+
+  /// Continues the chat in the owner's own AI app; without it, or for every meeting, the
+  /// action is not offered.
+  final HandoffController? handoff;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -276,6 +287,20 @@ final class _ChatScreenState extends State<ChatScreen> {
                     checked: !_onComputer,
                     child: Text(l10n.thisPhoneSAiConnection)),
               ],
+            ),
+          if ((widget.handoff, widget.topic)
+              case (
+                final HandoffController handoff,
+                ChatTopic(scope: 'meeting' || 'project', :final String id)
+              ))
+            IconButton(
+              key: const ValueKey<String>('chat-handoff'),
+              tooltip: l10n.useYourOwnAiApp,
+              icon: const Icon(Icons.open_in_new),
+              onPressed: () => showChatHandoffSheet(context,
+                  controller: handoff,
+                  meetingId: widget.topic.scope == 'meeting' ? id : null,
+                  projectId: widget.topic.scope == 'project' ? id : null),
             ),
           IconButton(
             tooltip: l10n.deleteThisChat2,

@@ -2612,7 +2612,8 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get handoffStepDragFiles => '会議の写真とファイルのフォルダーも開きます。会話にドラッグしてください。';
+  String get handoffStepDragFiles =>
+      '会議の写真とファイルのフォルダーも開きます。メッセージ欄にドラッグすると、ファイルとして送られます。';
 
   @override
   String get handoffStepCopyAnswer => '回答が完成したら、その下のコピーボタンを押してください。';
@@ -2636,4 +2637,25 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get noRecordingWriteNotesOrAttach =>
       '録音はありません。メモを書くかファイルを添付してください。要約とチャットで使われます。';
+
+  @override
+  String handoffStepOpensFilled(String site) {
+    return '$site が会議をメッセージ欄に入れた状態で開きます。';
+  }
+
+  @override
+  String handoffStepOpensCopied(String site) {
+    return '$site が開き、Koalino が会議をコピーします。';
+  }
+
+  @override
+  String get handoffStepSend => 'Enter キーを押して送信します。';
+
+  @override
+  String get handoffStepPasteSend =>
+      'メッセージ欄をクリックし、会議を貼り付けて（Ctrl+V）Enter キーを押します。';
+
+  @override
+  String get chatHandoffIntro =>
+      '自分のアカウントで、自分の AI アプリに質問できます。Koalino がメモと文字起こしを渡し、写真やファイルはファイルのまま一緒に送られます。';
 }

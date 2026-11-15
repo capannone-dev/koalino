@@ -215,6 +215,39 @@ final class HandoffController extends ChangeNotifier
     }
   }
 
+  /// Hands a project's chat to `app`, or to one picked in the share sheet (#126).
+  ///
+  /// Inputs: The project, the app, and `confirm` as in `handOff`. Outputs: null once shared or
+  /// cancelled, or a message why not. Side effects: The core writes the project's meetings and
+  /// every file of the project and its meetings to the hand-off folder; the message goes on the
+  /// clipboard; the other app opens with them. Nothing comes back, so no answer is awaited.
+  Future<String?> handOffProject(String projectId,
+      {AiApp? app, Future<bool> Function(HandoffSteps steps)? confirm}) async {
+    try {
+      final PreparedHandoff handoff = await _core.prepareProject(
+          projectId, await _platform.handoffDirectory());
+      if (confirm != null &&
+          !await confirm(HandoffSteps(
+            app: app,
+            purpose: HandoffPurpose.chat,
+            prefilled: _platform.prefills(handoff, app),
+            hasFiles: handoff.files.length > 1,
+          ))) {
+        return null;
+      }
+      await _platform.writeClipboard(handoff.message);
+      await _platform.share(handoff, app);
+      pending = null;
+      _hinted = false;
+      notifyListeners();
+      return null;
+    } on LlmException catch (error) {
+      return error.message;
+    } on PlatformException {
+      return l10n.theOtherAppCouldNotBe;
+    }
+  }
+
   /// Keeps a copied answer as the pending meeting's summary, if there is one.
   ///
   /// Side effects: Reads the clipboard; may write the meeting's summary (which syncs) and add an
