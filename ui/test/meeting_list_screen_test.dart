@@ -1,15 +1,19 @@
 // Defines widget-first requirements for the responsive, title-first meeting list.
 
+import 'dart:convert';
+
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/infrastructure/meeting_edit_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
@@ -22,7 +26,8 @@ Future<void> pumpMeetingList(
     WidgetTester tester, FakeMeetingBridge meetingBridge,
     {Size size = const Size(390, 844),
     MeetingScreenBuilder? speakersScreenBuilder,
-    SummariesController? summariesController}) async {
+    SummariesController? summariesController,
+    MeetingEditController? editController}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = size;
   addTearDown(tester.view.reset);
@@ -32,6 +37,7 @@ Future<void> pumpMeetingList(
         controller: MeetingListController(meetingBridge: meetingBridge),
         speakersScreenBuilder: speakersScreenBuilder,
         summariesController: summariesController,
+        editController: editController,
       ),
     ),
   );
@@ -256,6 +262,52 @@ void main() {
       expect(find.text('Project Sync'), findsOneWidget);
       expect(
           find.textContaining('Unable to delete this meeting'), findsOneWidget);
+    });
+  });
+
+  group('a new meeting without a recording (#129)', () {
+    testWidgets('asks for a title, creates it and opens it',
+        (WidgetTester tester) async {
+      final FakeLlmCore core = FakeLlmCore();
+      core.answer('edit:create_meeting',
+          <String, Object?>{'ok': true, 'meeting_id': 'meeting-new'});
+      core.answer('edit:notes', <String, Object?>{'ok': true, 'notes': null});
+      await pumpMeetingList(
+        tester,
+        FakeMeetingBridge(details: <String, MeetingDetail>{
+          'meeting-new': MeetingDetail(
+            summary: titledMeeting,
+            transcript: null,
+            segments: const <MeetingTranscriptSegment>[],
+          ),
+        }),
+        editController:
+            MeetingEditController(bridge: MeetingEditBridge(call: core.call)),
+      );
+
+      await tester.tap(find.byKey(const ValueKey<String>('new-meeting')));
+      await tester.pumpAndSettle();
+      expect(find.text('New meeting'), findsWidgets);
+      await tester.enterText(find.byType(TextField), 'Supplier call');
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      final Map<String, Object?> request = core.calls
+          .where(((String, List<String?>) call) =>
+              call.$1 == 'note_taker_meeting_edit')
+          .map(((String, List<String?>) call) =>
+              jsonDecode(call.$2.single!) as Map<String, Object?>)
+          .first;
+      expect(request['command'], 'create_meeting');
+      expect(request['title'], 'Supplier call');
+      expect(find.byType(MeetingDetailScreen), findsOneWidget);
+    });
+
+    testWidgets('is offered only when meetings can be edited',
+        (WidgetTester tester) async {
+      await pumpMeetingList(tester, FakeMeetingBridge());
+
+      expect(find.byKey(const ValueKey<String>('new-meeting')), findsNothing);
     });
   });
 

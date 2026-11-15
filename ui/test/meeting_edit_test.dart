@@ -1,6 +1,8 @@
 // Verifies the owner's edits in the app (#96) over a fake core: notes, the summary's text, and
 // correcting or removing a transcript segment in the open meeting without reloading it.
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
@@ -45,6 +47,38 @@ void main() {
         <String, Object?>{'ok': false, 'error_code': 'too_long'});
     expect(await edits.saveNotes('m-1', 'x'), 'The text is too long.');
     expect(edits.notesFor('m-1'), 'More');
+  });
+
+  test('a meeting is created by writing and the list reloads (#129)', () async {
+    final FakeMeetingBridge meetingBridge = FakeMeetingBridge();
+    final MeetingListController meetings =
+        MeetingListController(meetingBridge: meetingBridge);
+    core.answer('edit:create_meeting',
+        <String, Object?>{'ok': true, 'meeting_id': 'meeting-new'});
+
+    final ({String? meetingId, String? error}) created =
+        await edits.createMeeting(meetings, title: 'Supplier call');
+
+    expect(created.meetingId, 'meeting-new');
+    expect(created.error, isNull);
+    final Map<String, Object?> request = core.calls
+        .where(((String, List<String?>) call) =>
+            call.$1 == 'note_taker_meeting_edit')
+        .map(((String, List<String?>) call) =>
+            jsonDecode(call.$2.single!) as Map<String, Object?>)
+        .single;
+    expect(request, <String, Object?>{
+      'command': 'create_meeting',
+      'title': 'Supplier call',
+    });
+    expect(meetingBridge.meetingListRequestCount, 1);
+
+    core.answer('edit:create_meeting',
+        <String, Object?>{'ok': false, 'error_code': 'too_long'});
+    final ({String? meetingId, String? error}) refused =
+        await edits.createMeeting(meetings, title: 'x');
+    expect(refused.meetingId, isNull);
+    expect(refused.error, 'The text is too long.');
   });
 
   test('a corrected segment replaces the open one and a removed one goes',

@@ -2529,4 +2529,13 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get claudeAiOrChatgptComInYourBrowser =>
       '在浏览器中使用 claude.ai 或 chatgpt.com，使用你的账号';
+
+  @override
+  String get newMeeting => '新建会议';
+
+  @override
+  String get newMeetingExplanation => '没有录音的会议。写笔记或添加文件，摘要和聊天会用到它们。';
+
+  @override
+  String get titleOptional => '标题（可选）';
 }

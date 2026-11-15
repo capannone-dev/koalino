@@ -707,5 +707,8 @@
   "claudeCodeOrCodexAlreadyInstalled": "已安装 Claude Code 或 Codex，或你网络中的服务器。",
   "noConnectionNeededUseTheWebsite": "无需连接。在会议中打开“摘要”，选择“使用你自己的 AI 应用…”：Koalino 会复制会议并打开 claude.ai 或 chatgpt.com。",
   "afterInstallingAddTheConnection": "安装并登录后，回到这里选择“添加连接 → 添加连接 → Claude Code 或 Codex”。",
-  "claudeAiOrChatgptComInYourBrowser": "在浏览器中使用 claude.ai 或 chatgpt.com，使用你的账号"
+  "claudeAiOrChatgptComInYourBrowser": "在浏览器中使用 claude.ai 或 chatgpt.com，使用你的账号",
+  "newMeeting": "新建会议",
+  "newMeetingExplanation": "没有录音的会议。写笔记或添加文件，摘要和聊天会用到它们。",
+  "titleOptional": "标题（可选）"
 }

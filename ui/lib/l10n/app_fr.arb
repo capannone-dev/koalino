@@ -707,5 +707,8 @@
   "claudeCodeOrCodexAlreadyInstalled": "Claude Code ou Codex déjà installé, ou un serveur de votre réseau.",
   "noConnectionNeededUseTheWebsite": "Aucune connexion nécessaire. Dans une réunion, ouvrez Résumé et choisissez Utiliser votre propre app d'IA… : Koalino copie la réunion et ouvre claude.ai ou chatgpt.com.",
   "afterInstallingAddTheConnection": "Après l'installation et la connexion, revenez et choisissez Ajouter une connexion → Ajouter une connexion → Claude Code ou Codex.",
-  "claudeAiOrChatgptComInYourBrowser": "claude.ai ou chatgpt.com dans votre navigateur, avec votre compte"
+  "claudeAiOrChatgptComInYourBrowser": "claude.ai ou chatgpt.com dans votre navigateur, avec votre compte",
+  "newMeeting": "Nouvelle réunion",
+  "newMeetingExplanation": "Une réunion sans enregistrement. Écrivez des notes ou ajoutez des fichiers : les résumés et le chat les utilisent.",
+  "titleOptional": "Titre (facultatif)"
 }

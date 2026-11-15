@@ -44,6 +44,10 @@ is one meeting: its list row and detail say "Recorded on Laptop + Pixel". The de
 button (`split_meeting_action.dart`) asks first, then lists the other devices' recordings on their
 own again, for good.
 
+`new_meeting_dialog.dart` holds `NewMeetingDialog`: the list's **New meeting** button asks for an
+optional title, then opens a meeting with no recording, to be filled by writing notes or adding
+files (#129).
+
 `rename_meeting_dialog.dart` holds `RenameMeetingDialog` and `showRenameMeetingDialog`, shared by
 the list's context menu (long-press, right-click, Shift+F10, and a screen-reader action) and the
 detail's pencil button. It validates locally, maps Rust failures to plain messages, and confirms

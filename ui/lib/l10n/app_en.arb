@@ -2191,5 +2191,11 @@
   "claudeCodeOrCodexAlreadyInstalled": "Claude Code or Codex already installed, or a server on your network.",
   "noConnectionNeededUseTheWebsite": "No connection needed. In a meeting, open Summary and choose Use your own AI app…: Koalino copies the meeting and opens claude.ai or chatgpt.com.",
   "afterInstallingAddTheConnection": "After installing it and signing in, come back and choose Add connection → Add a connection → Claude Code or Codex.",
-  "claudeAiOrChatgptComInYourBrowser": "claude.ai or chatgpt.com in your browser, with your account"
+  "claudeAiOrChatgptComInYourBrowser": "claude.ai or chatgpt.com in your browser, with your account",
+  "newMeeting": "New meeting",
+  "@newMeeting": {},
+  "newMeetingExplanation": "A meeting without a recording. Write notes or add files to it: summaries and chat use them.",
+  "@newMeetingExplanation": {},
+  "titleOptional": "Title (optional)",
+  "@titleOptional": {}
 }

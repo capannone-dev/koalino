@@ -2730,4 +2730,14 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get claudeAiOrChatgptComInYourBrowser =>
       'claude.ai или chatgpt.com в браузере, под вашей учётной записью';
+
+  @override
+  String get newMeeting => 'Новая встреча';
+
+  @override
+  String get newMeetingExplanation =>
+      'Встреча без записи. Напишите заметки или добавьте файлы: их используют сводки и чат.';
+
+  @override
+  String get titleOptional => 'Название (необязательно)';
 }

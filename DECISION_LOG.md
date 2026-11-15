@@ -3712,3 +3712,19 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - **Old `.doc`/`.xls`/`.ppt`.** These binary formats need a much larger parser.
 - **Privacy:** files are decrypted in memory only. Their text goes to the connection the owner
   chose, as the transcript does, and is never logged.
+
+## 2026-11-15 — #129 Meetings without a recording
+
+- **Owner's request:** create a new meeting without a recording, just by writing or adding an
+  attachment.
+- **Decision:**
+  - The meetings list gets a **New meeting** button (note icon). It asks for an optional title,
+    then opens the meeting. Notes and files are added there with the existing **Write notes** and
+    **Attach files**.
+  - The core command is `create_meeting` on `note_taker_meeting_edit`. It makes an ordinary
+    `meeting-<uuid>` meeting, which syncs, is sealed and is listed like a recorded one. A blank
+    title leaves it untitled; line breaks in a pasted title become spaces.
+  - Summaries and chat already work from notes and files alone (#128), so such a meeting can be
+    summarized and discussed.
+- **Not done:** a separate **New meeting** inside a project. The meeting can be moved into a
+  project from its page, as any meeting can.

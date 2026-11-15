@@ -2724,4 +2724,14 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get claudeAiOrChatgptComInYourBrowser =>
       'claude.ai ou chatgpt.com dans votre navigateur, avec votre compte';
+
+  @override
+  String get newMeeting => 'Nouvelle réunion';
+
+  @override
+  String get newMeetingExplanation =>
+      'Une réunion sans enregistrement. Écrivez des notes ou ajoutez des fichiers : les résumés et le chat les utilisent.';
+
+  @override
+  String get titleOptional => 'Titre (facultatif)';
 }

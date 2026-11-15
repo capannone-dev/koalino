@@ -19,6 +19,7 @@ import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
+import 'package:note_taker_ui/presentation/new_meeting_dialog.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
@@ -93,6 +94,36 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
     _pushMeeting(context, meeting.meetingId);
   }
 
+  /// Starts a meeting with no recording (#129): asks for its title, creates it, and opens it to
+  /// be filled by writing notes or adding files.
+  ///
+  /// Side effects: Creates the meeting through the core and reloads the list; a refusal shows
+  /// a snack bar.
+  Future<void> _newMeeting(MeetingEditController edits,
+      {required bool isTwoPane}) async {
+    final ScaffoldMessengerState? messenger =
+        ScaffoldMessenger.maybeOf(context);
+    final String? title = await showNewMeetingDialog(context);
+    if (title == null || !mounted) {
+      return;
+    }
+    final ({String? meetingId, String? error}) created =
+        await edits.createMeeting(widget.controller, title: title);
+    if (!mounted) {
+      return;
+    }
+    switch (created) {
+      case (meetingId: final String meetingId, error: _):
+        widget.controller.selectMeeting(meetingId);
+        if (!isTwoPane) {
+          _pushMeeting(context, meetingId);
+        }
+      case (meetingId: null, error: final String? error):
+        messenger?.showSnackBar(
+            SnackBar(content: Text(error ?? l10n.somethingWentWrongTryAgain)));
+    }
+  }
+
   /// Opens the search page over every meeting; a result opens its meeting at the passage.
   void _search(SearchBridge bridge) {
     Navigator.of(context).push(MaterialPageRoute<void>(
@@ -153,6 +184,13 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
           appBar: AppBar(
             title: Text(l10n.meetings),
             actions: <Widget>[
+              if (widget.editController case final MeetingEditController edits)
+                IconButton(
+                  key: const ValueKey<String>('new-meeting'),
+                  tooltip: l10n.newMeeting,
+                  icon: const Icon(Icons.note_add_outlined),
+                  onPressed: () => _newMeeting(edits, isTwoPane: isTwoPane),
+                ),
               if (widget.searchBridge case final SearchBridge bridge)
                 IconButton(
                   tooltip: l10n.searchMeetings,

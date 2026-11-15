@@ -707,5 +707,8 @@
   "claudeCodeOrCodexAlreadyInstalled": "Claude Code أو Codex مثبّت مسبقًا، أو خادم على شبكتك.",
   "noConnectionNeededUseTheWebsite": "لا حاجة إلى اتصال. في أي اجتماع، افتح الملخص واختر «استخدام تطبيق الذكاء الاصطناعي الخاص بك…»: ينسخ Koalino الاجتماع ويفتح claude.ai أو chatgpt.com.",
   "afterInstallingAddTheConnection": "بعد التثبيت وتسجيل الدخول، عُد واختر إضافة اتصال ← إضافة اتصال ← Claude Code أو Codex.",
-  "claudeAiOrChatgptComInYourBrowser": "claude.ai أو chatgpt.com في متصفحك، بحسابك"
+  "claudeAiOrChatgptComInYourBrowser": "claude.ai أو chatgpt.com في متصفحك، بحسابك",
+  "newMeeting": "اجتماع جديد",
+  "newMeetingExplanation": "اجتماع بلا تسجيل. اكتب ملاحظات أو أضف ملفات: تستخدمها الملخصات والدردشة.",
+  "titleOptional": "العنوان (اختياري)"
 }

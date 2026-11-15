@@ -4365,6 +4365,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'claude.ai or chatgpt.com in your browser, with your account'**
   String get claudeAiOrChatgptComInYourBrowser;
+
+  /// No description provided for @newMeeting.
+  ///
+  /// In en, this message translates to:
+  /// **'New meeting'**
+  String get newMeeting;
+
+  /// No description provided for @newMeetingExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'A meeting without a recording. Write notes or add files to it: summaries and chat use them.'**
+  String get newMeetingExplanation;
+
+  /// No description provided for @titleOptional.
+  ///
+  /// In en, this message translates to:
+  /// **'Title (optional)'**
+  String get titleOptional;
 }
 
 class _AppLocalizationsDelegate

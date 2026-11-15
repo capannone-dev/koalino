@@ -1,6 +1,6 @@
 // Owns the owner's edits to meetings in the app (#96): each meeting's notes as last read or saved,
-// and corrections to single transcript segments, which are shown in the open meeting at once
-// instead of reloading it. The core does the work; this keeps the answers and words failures.
+// new meetings with no recording (#129), and corrections to single transcript segments, which
+// are shown in the open meeting at once instead of reloading it. The core does the work; this keeps the answers and words failures.
 
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
@@ -54,6 +54,24 @@ final class MeetingEditController extends ChangeNotifier {
       return null;
     } on MeetingEditException catch (error) {
       return error.message;
+    }
+  }
+
+  /// Creates a meeting with no recording, to be filled by writing or adding files (#129).
+  ///
+  /// Inputs: The shared meeting controller (its list is reloaded) and an optional title.
+  /// Outputs: The new meeting's ID, or why it was not created.
+  /// Side effects: Inserts the meeting through the core; it syncs to paired devices.
+  Future<({String? meetingId, String? error})> createMeeting(
+      MeetingListController meetings,
+      {String? title}) async {
+    try {
+      final String meetingId = await _bridge.createMeeting(title: title);
+      _notes[meetingId] = '';
+      await meetings.loadMeetings();
+      return (meetingId: meetingId, error: null);
+    } on MeetingEditException catch (error) {
+      return (meetingId: null, error: error.message);
     }
   }
 

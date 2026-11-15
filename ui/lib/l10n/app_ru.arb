@@ -707,5 +707,8 @@
   "claudeCodeOrCodexAlreadyInstalled": "Claude Code или Codex уже установлены, или сервер в вашей сети.",
   "noConnectionNeededUseTheWebsite": "Подключение не нужно. Во встрече откройте «Резюме» и выберите «Использовать своё ИИ-приложение…»: Koalino скопирует встречу и откроет claude.ai или chatgpt.com.",
   "afterInstallingAddTheConnection": "После установки и входа вернитесь и выберите «Добавить подключение» → «Добавить подключение» → Claude Code или Codex.",
-  "claudeAiOrChatgptComInYourBrowser": "claude.ai или chatgpt.com в браузере, под вашей учётной записью"
+  "claudeAiOrChatgptComInYourBrowser": "claude.ai или chatgpt.com в браузере, под вашей учётной записью",
+  "newMeeting": "Новая встреча",
+  "newMeetingExplanation": "Встреча без записи. Напишите заметки или добавьте файлы: их используют сводки и чат.",
+  "titleOptional": "Название (необязательно)"
 }

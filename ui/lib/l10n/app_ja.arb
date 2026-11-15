@@ -707,5 +707,8 @@
   "claudeCodeOrCodexAlreadyInstalled": "Claude Code または Codex がインストール済み、またはネットワーク上のサーバー。",
   "noConnectionNeededUseTheWebsite": "接続は不要です。会議で「要約」を開き、「自分の AI アプリを使う…」を選んでください。Koalino が会議をコピーして claude.ai または chatgpt.com を開きます。",
   "afterInstallingAddTheConnection": "インストールしてサインインしたら、ここに戻って「接続を追加 → 接続を追加 → Claude Code または Codex」を選んでください。",
-  "claudeAiOrChatgptComInYourBrowser": "ブラウザーで claude.ai または chatgpt.com を自分のアカウントで"
+  "claudeAiOrChatgptComInYourBrowser": "ブラウザーで claude.ai または chatgpt.com を自分のアカウントで",
+  "newMeeting": "新しい会議",
+  "newMeetingExplanation": "録音のない会議です。メモを書いたりファイルを追加したりすると、要約とチャットで使われます。",
+  "titleOptional": "タイトル（任意）"
 }

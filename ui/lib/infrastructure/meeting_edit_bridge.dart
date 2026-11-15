@@ -1,5 +1,5 @@
-// Calls the core's meeting edit commands (#96): the owner's notes, the summary's text and single
-// transcript segments. Every command goes through `note_taker_meeting_edit` with one JSON request
+// Calls the core's meeting edit commands (#96): the owner's notes, the summary's text, single
+// transcript segments, and new meetings with no recording (#129). Every command goes through `note_taker_meeting_edit` with one JSON request
 // and answers `{"ok":true,...}` or `{"ok":false,"error_code","error"}`; calls run on background
 // isolates so the UI thread never waits on the database. Note text is never logged.
 
@@ -50,6 +50,16 @@ final class MeetingEditBridge {
       throw MeetingEditException(error.code);
     }
   }
+
+  /// Creates a meeting with no recording, to be filled by writing notes or adding files (#129).
+  ///
+  /// Inputs: An optional title; blank leaves the meeting untitled. Outputs: The new meeting's
+  /// ID. Side effects: Inserts the meeting, which syncs to paired devices like any other.
+  Future<String> createMeeting({String? title}) async =>
+      (await _command(<String, Object?>{
+        'command': 'create_meeting',
+        if (title != null && title.trim().isNotEmpty) 'title': title.trim(),
+      }))['meeting_id']! as String;
 
   /// Reads the meeting's notes (Markdown), or null when there are none.
   ///

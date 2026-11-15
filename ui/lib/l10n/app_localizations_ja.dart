@@ -2585,4 +2585,14 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get claudeAiOrChatgptComInYourBrowser =>
       'ブラウザーで claude.ai または chatgpt.com を自分のアカウントで';
+
+  @override
+  String get newMeeting => '新しい会議';
+
+  @override
+  String get newMeetingExplanation =>
+      '録音のない会議です。メモを書いたりファイルを追加したりすると、要約とチャットで使われます。';
+
+  @override
+  String get titleOptional => 'タイトル（任意）';
 }
