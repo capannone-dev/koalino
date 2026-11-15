@@ -1,0 +1,2690 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for German (`de`).
+class AppLocalizationsDe extends AppLocalizations {
+  AppLocalizationsDe([String locale = 'de']) : super(locale);
+
+  @override
+  String get unableToCheckTheAppLock =>
+      'Die App-Sperre konnte nicht geprüft werden. Versuche es erneut.';
+
+  @override
+  String get unableToShowTheUnlockPrompt =>
+      'Die Entsperrabfrage konnte nicht angezeigt werden. Versuche es erneut.';
+
+  @override
+  String get setAScreenLockOnThis =>
+      'Richte zuerst eine Displaysperre auf diesem Gerät ein.';
+
+  @override
+  String get unableToChangeTheAppLock =>
+      'Die App-Sperre konnte nicht geändert werden. Versuche es erneut.';
+
+  @override
+  String get aCallApp => 'Eine Anruf-App';
+
+  @override
+  String get call => 'Anruf';
+
+  @override
+  String call2(Object app) {
+    return '$app-Anruf';
+  }
+
+  @override
+  String theCallEndedSoTheRecording(Object tiedApp) {
+    return 'Der $tiedApp-Anruf ist beendet, daher wurde die Aufnahme gestoppt.';
+  }
+
+  @override
+  String get restartYourBrowserAndCallApps =>
+      'Starte deinen Browser und deine Anruf-Apps einmal neu, damit Koalino lesen kann, wer in Anrufen spricht.';
+
+  @override
+  String get unableToLoadDevices => 'Geräte konnten nicht geladen werden';
+
+  @override
+  String get thisDeviceIsNotOnA =>
+      'Dieses Gerät ist noch in keinem Netzwerk. Verbinde es und versuche es erneut.';
+
+  @override
+  String get thatDidNotWorkTryAgain =>
+      'Das hat nicht funktioniert. Versuche es erneut.';
+
+  @override
+  String get use1To64CharactersWithout =>
+      'Verwende 1 bis 64 Zeichen, ohne Zeilenumbrüche.';
+
+  @override
+  String get theNameCouldNotBeSaved =>
+      'Der Name konnte nicht gespeichert werden. Versuche es erneut.';
+
+  @override
+  String get thisInviteHasExpiredMakeA =>
+      'Diese Einladung ist abgelaufen. Erstelle auf dem anderen Gerät eine neue.';
+
+  @override
+  String get thisInviteWasMadeOnThis =>
+      'Diese Einladung wurde auf diesem Gerät erstellt. Verwende sie auf dem anderen.';
+
+  @override
+  String get thatDeviceIsAlreadyPaired => 'Dieses Gerät ist bereits gekoppelt.';
+
+  @override
+  String get thatIsNotAValidInvite =>
+      'Das ist keine gültige Einladung. Kopiere sie erneut.';
+
+  @override
+  String get deviceSyncIsNotRunning =>
+      'Die Gerätesynchronisierung läuft nicht.';
+
+  @override
+  String get theOtherDeviceIsNoLonger =>
+      'Das andere Gerät koppelt nicht mehr. Versuche es erneut.';
+
+  @override
+  String get theOtherAppCouldNotBe =>
+      'Die andere App konnte nicht geöffnet werden.';
+
+  @override
+  String get theOtherApp => 'die andere App';
+
+  @override
+  String app(Object displayName) {
+    return '$displayName-App';
+  }
+
+  @override
+  String get unableToChangeTheLogLevel =>
+      'Die Protokollstufe konnte nicht geändert werden';
+
+  @override
+  String logsExportedTo(Object filePath) {
+    return 'Protokolle exportiert nach $filePath';
+  }
+
+  @override
+  String get unableToShareTheLogs =>
+      'Die Protokolle konnten nicht geteilt werden';
+
+  @override
+  String get noLogsToExportYet => 'Noch keine Protokolle zum Exportieren';
+
+  @override
+  String get unableToExportTheLogs =>
+      'Die Protokolle konnten nicht exportiert werden';
+
+  @override
+  String couldNotBeAttached(Object attached, Object failedPaths) {
+    return '$attached; $failedPaths konnten nicht angehängt werden';
+  }
+
+  @override
+  String get theFilesCouldNotBeAttached =>
+      'Die Dateien konnten nicht angehängt werden.';
+
+  @override
+  String get unableToShareTheExport => 'Der Export konnte nicht geteilt werden';
+
+  @override
+  String exportedTo(Object filePath) {
+    return 'Exportiert nach $filePath';
+  }
+
+  @override
+  String get exportSaved => 'Export gespeichert';
+
+  @override
+  String get unableToSaveTheExport =>
+      'Der Export konnte nicht gespeichert werden';
+
+  @override
+  String get thisMeetingNoLongerExists => 'Dieses Meeting existiert nicht mehr';
+
+  @override
+  String get exportIsUnavailableUntilTheApp =>
+      'Der Export ist erst verfügbar, wenn die App gestartet ist';
+
+  @override
+  String get unableToExportTheMeeting =>
+      'Das Meeting konnte nicht exportiert werden';
+
+  @override
+  String get unableToLoadMeetings => 'Meetings konnten nicht geladen werden';
+
+  @override
+  String get unableToLoadThisMeeting =>
+      'Dieses Meeting konnte nicht geladen werden';
+
+  @override
+  String get enterATitle => 'Gib einen Titel ein.';
+
+  @override
+  String titlesCanBeAtMostCharacters(
+      Object maxMeetingTitleCharacters, Object runes) {
+    return 'Titel dürfen höchstens $maxMeetingTitleCharacters Zeichen haben (du hast $runes).';
+  }
+
+  @override
+  String get titlesCanTContainLineBreaks =>
+      'Titel dürfen keine Zeilenumbrüche oder Steuerzeichen enthalten.';
+
+  @override
+  String get notPairedYetMakeTheRelay =>
+      'Noch nicht gekoppelt. Mach das Relay sichtbar und kopple es dann unter Geräte in der Nähe in Geräte.';
+
+  @override
+  String get connectingToTheRelay => 'Verbindung zum Relay…';
+
+  @override
+  String get connectedToTheRelayAskingIt =>
+      'Mit dem Relay verbunden. Es wird gebeten, Verbindungen anzunehmen…';
+
+  @override
+  String get connectedYourOtherDevicesCanReach =>
+      'Verbunden. Deine anderen Geräte erreichen dieses über das Relay.';
+
+  @override
+  String get savedThisAppliesNowWithNo =>
+      'Gespeichert. Gilt sofort, ohne Neustart.';
+
+  @override
+  String get thatRelayAddressIsNotValid =>
+      'Diese Relay-Adresse ist ungültig. Sie sieht so aus: /ip4/203.0.113.5/tcp/4001/p2p/12D3Koo…';
+
+  @override
+  String get aDeviceAddressIsNotValid =>
+      'Eine Geräteadresse ist ungültig. Jede endet mit /p2p/ und der Geräte-ID.';
+
+  @override
+  String get unableToSaveTheAddresses =>
+      'Die Adressen konnten nicht gespeichert werden.';
+
+  @override
+  String get thePhotoCouldNotBeSaved =>
+      'Das Foto konnte nicht gespeichert werden.';
+
+  @override
+  String get enterAName => 'Gib einen Namen ein.';
+
+  @override
+  String namesCanBeAtMostCharacters(Object maxMeetingTitleCharacters) {
+    return 'Namen dürfen höchstens $maxMeetingTitleCharacters Zeichen haben.';
+  }
+
+  @override
+  String get namesCanTContainLineBreaks =>
+      'Namen dürfen keine Zeilenumbrüche oder Steuerzeichen enthalten.';
+
+  @override
+  String get unableToLoadProjects => 'Projekte konnten nicht geladen werden';
+
+  @override
+  String get unableToLoadThisProject =>
+      'Dieses Projekt konnte nicht geladen werden';
+
+  @override
+  String get theFilesCouldNotBeAdded =>
+      'Die Dateien konnten nicht hinzugefügt werden.';
+
+  @override
+  String couldNotBeAdded(Object failedPaths) {
+    return '$failedPaths konnten nicht hinzugefügt werden';
+  }
+
+  @override
+  String get unableToStartRecording => 'Aufnahme konnte nicht gestartet werden';
+
+  @override
+  String get unableToPauseRecording => 'Aufnahme konnte nicht pausiert werden';
+
+  @override
+  String get unableToResumeRecording =>
+      'Aufnahme konnte nicht fortgesetzt werden';
+
+  @override
+  String get unableToStopRecording => 'Aufnahme konnte nicht gestoppt werden';
+
+  @override
+  String get recordingSaved => 'Aufnahme gespeichert';
+
+  @override
+  String get microphoneAccessIsNeededToRecord =>
+      'Für die Aufnahme wird Mikrofonzugriff benötigt';
+
+  @override
+  String get keepTheAppOpenAndroidDid =>
+      'Lass die App geöffnet: Android hat die Aufnahme im Hintergrund nicht erlaubt';
+
+  @override
+  String get unableToOpenTheMicrophone =>
+      'Mikrofon konnte nicht geöffnet werden';
+
+  @override
+  String saved(Object label) {
+    return '$label gespeichert.';
+  }
+
+  @override
+  String removed(Object label) {
+    return '$label entfernt.';
+  }
+
+  @override
+  String isNowTheDefault(Object id) {
+    return '$id ist jetzt der Standard.';
+  }
+
+  @override
+  String answered(Object id, Object reply) {
+    return '$id hat geantwortet: $reply';
+  }
+
+  @override
+  String get promptSaved => 'Prompt gespeichert.';
+
+  @override
+  String get theBuiltInPromptIsBack =>
+      'Der integrierte Prompt ist wiederhergestellt.';
+
+  @override
+  String get finishedMeetingsWillBeSummarizedAutomatically =>
+      'Beendete Meetings werden automatisch zusammengefasst.';
+
+  @override
+  String get automaticSummariesAreOff =>
+      'Automatische Zusammenfassungen sind aus.';
+
+  @override
+  String get thisComputerNoLongerWritesSummaries =>
+      'Dieser Computer schreibt keine Zusammenfassungen mehr und beantwortet keine Chats mehr für deine anderen Geräte.';
+
+  @override
+  String nowWritesTheSummariesAndAnswers(Object id) {
+    return '$id schreibt jetzt die Zusammenfassungen und beantwortet die Chats, die deine anderen Geräte anfragen.';
+  }
+
+  @override
+  String get requestCancelled => 'Anfrage abgebrochen.';
+
+  @override
+  String get thisMeetingUsesTheSettingsPrompt =>
+      'Dieses Meeting verwendet wieder den Prompt aus den Einstellungen.';
+
+  @override
+  String get promptSavedForThisMeeting =>
+      'Prompt für dieses Meeting gespeichert.';
+
+  @override
+  String get summarySaved => 'Zusammenfassung gespeichert.';
+
+  @override
+  String get theConnection => 'Die Verbindung';
+
+  @override
+  String get summaryWritten => 'Zusammenfassung geschrieben.';
+
+  @override
+  String theTranscriptWasReadInParts(Object parts) {
+    return ' Das Transkript wurde in $parts Teilen gelesen.';
+  }
+
+  @override
+  String leftOut(Object sent, Object imagesSkipped) {
+    return ' $sent, $imagesSkipped ausgelassen.';
+  }
+
+  @override
+  String get theModelStoppedBeforeTheEnd =>
+      ' Das Modell hat vor dem Ende aufgehört.';
+
+  @override
+  String get waitingForYourComputerItWrites =>
+      'Warte auf deinen Computer. Er schreibt die Zusammenfassung, sobald er an, mit diesem Gerät verbunden und unter Einstellungen → KI-Verbindungen zum Antworten eingerichtet ist.';
+
+  @override
+  String get yourComputerIsWritingTheSummary =>
+      'Dein Computer schreibt die Zusammenfassung…';
+
+  @override
+  String yourComputerCouldNotWriteThe(Object message) {
+    return 'Dein Computer konnte die Zusammenfassung nicht schreiben: $message';
+  }
+
+  @override
+  String get unableToRefreshTelemetry =>
+      'Telemetrie konnte nicht aktualisiert werden';
+
+  @override
+  String get automatic => 'Automatisch';
+
+  @override
+  String get transcriptionLanguage => 'Transkriptionssprache';
+
+  @override
+  String get transcriptionLanguages => 'Transkriptionssprachen';
+
+  @override
+  String get theLanguageCouldNotBeChanged =>
+      'Die Sprache konnte nicht geändert werden.';
+
+  @override
+  String get thisDevice => 'Dieses Gerät';
+
+  @override
+  String get bestAvailable => 'Bestes verfügbares';
+
+  @override
+  String get aRemovedDevice => 'Ein entferntes Gerät';
+
+  @override
+  String get theTranscriptionDeviceCouldNotBe =>
+      'Das Transkriptionsgerät konnte nicht geändert werden. Prüfe, ob es noch gekoppelt ist.';
+
+  @override
+  String get downloadFinishedYouCanNowChoose =>
+      'Download abgeschlossen. Du kannst dieses Modell jetzt wählen.';
+
+  @override
+  String get downloadCancelled => 'Download abgebrochen.';
+
+  @override
+  String get theDownloadStoppedNoConnectionTo =>
+      'Der Download wurde gestoppt: keine Verbindung zum Server. Dein aktuelles Modell funktioniert weiterhin.';
+
+  @override
+  String get theDownloadedFileFailedItsCheck =>
+      'Die heruntergeladene Datei hat die Prüfung nicht bestanden und wurde gelöscht. Dein aktuelles Modell funktioniert weiterhin.';
+
+  @override
+  String get theModelCouldNotBeSaved =>
+      'Das Modell konnte nicht gespeichert werden. Prüfe den freien Speicher. Dein aktuelles Modell funktioniert weiterhin.';
+
+  @override
+  String get theDownloadServerRefusedTheFile =>
+      'Der Download-Server hat die Datei abgelehnt. Dein aktuelles Modell funktioniert weiterhin.';
+
+  @override
+  String get savedTheNextRecordingUsesThis =>
+      'Gespeichert. Die nächste Aufnahme verwendet dieses Modell.';
+
+  @override
+  String get savedTheNextRecordingUsesThis2 =>
+      'Gespeichert. Die nächste Aufnahme verwendet dies.';
+
+  @override
+  String get savedTheNextRecordingUsesThe =>
+      'Gespeichert. Die nächste Aufnahme verwendet die automatische Auswahl.';
+
+  @override
+  String get savedMeetingsRecordedFromNowOn =>
+      'Gespeichert. Ab jetzt aufgenommene Meetings verwenden dies.';
+
+  @override
+  String get savedTheNextRecordingUsesThese =>
+      'Gespeichert. Die nächste Aufnahme verwendet diese Namen und Begriffe.';
+
+  @override
+  String get eachTermCanHaveAtMost =>
+      'Jeder Begriff darf höchstens 60 Zeichen haben, alle zusammen höchstens 500.';
+
+  @override
+  String get chooseAWindowBetween1And =>
+      'Wähle einen Zeitraum zwischen 1 und 60 Tagen.';
+
+  @override
+  String get theDownloadCouldNotStartPlease =>
+      'Der Download konnte nicht starten. Bitte versuche es erneut.';
+
+  @override
+  String get savedTheNextRecordingIsTranscribed =>
+      'Gespeichert. Die nächste Aufnahme wird auf der NPU transkribiert.';
+
+  @override
+  String get savedTheNextRecordingIsTranscribed2 =>
+      'Gespeichert. Die nächste Aufnahme wird auf dem Prozessor transkribiert.';
+
+  @override
+  String get theNpuFilesAreNotAll =>
+      'Die NPU-Dateien sind noch nicht alle heruntergeladen.';
+
+  @override
+  String get theNpuFilesWereRemoved => 'Die NPU-Dateien wurden entfernt.';
+
+  @override
+  String get theNpuFilesCouldNotBe =>
+      'Die NPU-Dateien konnten nicht entfernt werden. Bitte versuche es erneut.';
+
+  @override
+  String get downloadedRecordingsNowTranscribeOnThe =>
+      'Heruntergeladen. Aufnahmen werden jetzt auf der NPU transkribiert.';
+
+  @override
+  String get theDownloadStoppedNoConnectionTo2 =>
+      'Der Download wurde gestoppt: keine Verbindung zum Server.';
+
+  @override
+  String get aDownloadedFileFailedItsCheck =>
+      'Eine heruntergeladene Datei hat die Prüfung nicht bestanden und wurde gelöscht.';
+
+  @override
+  String get theFilesCouldNotBeSaved =>
+      'Die Dateien konnten nicht gespeichert werden. Prüfe den freien Speicher (etwa 800 MB werden benötigt).';
+
+  @override
+  String get theDownloadServerRefusedTheFiles =>
+      'Der Download-Server hat die Dateien abgelehnt.';
+
+  @override
+  String get theNextRecordingTriesTheGraphics =>
+      'Die nächste Aufnahme versucht es erneut mit dem Grafikchip.';
+
+  @override
+  String get thatModelWonTBeProposed =>
+      'Dieses Modell wird nicht mehr vorgeschlagen.';
+
+  @override
+  String get modelRemoved => 'Modell entfernt.';
+
+  @override
+  String get anotherModelIsDownloadingWaitFor =>
+      'Ein anderes Modell wird heruntergeladen. Warte, bis es fertig ist.';
+
+  @override
+  String get thereIsnTEnoughFreeSpace =>
+      'Für dieses Modell ist nicht genug freier Speicher vorhanden.';
+
+  @override
+  String get thatDidnTWorkPleaseTry =>
+      'Das hat nicht funktioniert. Bitte versuche es erneut.';
+
+  @override
+  String get unableToLoadVoiceGallery =>
+      'Stimmengalerie konnte nicht geladen werden';
+
+  @override
+  String get unableToPlayThisVoice =>
+      'Diese Stimme konnte nicht abgespielt werden';
+
+  @override
+  String get unableToDeleteThisVoice =>
+      'Diese Stimme konnte nicht gelöscht werden';
+
+  @override
+  String get voiceDeleted => 'Stimme gelöscht';
+
+  @override
+  String get unableToDeleteThisPerson =>
+      'Diese Person konnte nicht gelöscht werden';
+
+  @override
+  String deleted(Object displayName) {
+    return '$displayName gelöscht';
+  }
+
+  @override
+  String get enterANameBeforeAssigning =>
+      'Gib vor dem Zuordnen einen Namen ein';
+
+  @override
+  String assignedTo(Object identityName) {
+    return '$identityName zugeordnet';
+  }
+
+  @override
+  String assignedToThereWasNotEnough(Object identityName) {
+    return '$identityName zugeordnet. Es gab nicht genug deutliche Sprache, um diese Stimme in künftigen Aufnahmen zu erkennen.';
+  }
+
+  @override
+  String get unableToAssignTheSpeakerCluster =>
+      'Die Sprechergruppe konnte nicht zugeordnet werden';
+
+  @override
+  String get chooseAtLeastOneVoiceTo =>
+      'Wähle mindestens eine Stimme zum Benennen';
+
+  @override
+  String thereWasNotEnoughClearSpeech(Object assigned) {
+    return '$assigned. Es gab nicht genug deutliche Sprache, um diese Stimme in künftigen Aufnahmen zu erkennen.';
+  }
+
+  @override
+  String get theSettingCouldNotBeSaved =>
+      'Die Einstellung konnte nicht gespeichert werden.';
+
+  @override
+  String get theAppIsStillStartingTry =>
+      'Die App startet noch. Versuche es erneut.';
+
+  @override
+  String get somethingWentWrongTryAgain =>
+      'Etwas ist schiefgelaufen. Versuche es erneut.';
+
+  @override
+  String isUsingTheMicrophone(Object app) {
+    return '$app verwendet das Mikrofon';
+  }
+
+  @override
+  String get recordThisCall => 'Diesen Anruf aufnehmen?';
+
+  @override
+  String theAiServerRejectedTheRequest(Object detail) {
+    return 'Der KI-Server hat die Anfrage abgelehnt.\nDer Server meldete: $detail';
+  }
+
+  @override
+  String claudeCodeOrCodexCouldNot(Object detail) {
+    return 'Claude Code oder Codex konnte nicht antworten.\nMeldung: $detail';
+  }
+
+  @override
+  String get typeAQuestion => 'Gib eine Frage ein.';
+
+  @override
+  String get theQuestionIsTooLong => 'Die Frage ist zu lang.';
+
+  @override
+  String get addAnAiConnectionInSettings =>
+      'Füge in den Einstellungen eine KI-Verbindung hinzu oder wähle eine Standardverbindung.';
+
+  @override
+  String get thatAiConnectionNoLongerExists =>
+      'Diese KI-Verbindung existiert nicht mehr.';
+
+  @override
+  String get thereIsNothingToTalkAbout =>
+      'Es gibt noch nichts zu besprechen: kein Transkript, keine Zusammenfassung, keine Notizen oder Dateien.';
+
+  @override
+  String get theAiConnectionSContextIs =>
+      'Der Kontext der KI-Verbindung ist zu klein. Wähle eine mit größerem Kontext.';
+
+  @override
+  String get thatMeetingNoLongerExists =>
+      'Dieses Meeting existiert nicht mehr.';
+
+  @override
+  String get thatProjectNoLongerExists =>
+      'Dieses Projekt existiert nicht mehr.';
+
+  @override
+  String get theAiServerCouldNotBe =>
+      'Der KI-Server war nicht erreichbar. Prüfe die Verbindung.';
+
+  @override
+  String get theAiServerRefusedTheApi =>
+      'Der KI-Server hat den API-Schlüssel abgelehnt.';
+
+  @override
+  String get theAiServerIsBusyTry =>
+      'Der KI-Server ist ausgelastet. Versuche es später erneut.';
+
+  @override
+  String get theModelDeclinedToAnswer =>
+      'Das Modell hat die Antwort verweigert.';
+
+  @override
+  String get claudeCodeOrCodexIsNot =>
+      'Claude Code oder Codex ist auf diesem Computer nicht installiert, oder die App findet es nicht.';
+
+  @override
+  String get theNotesCouldNotBeRead =>
+      'Die Notizen konnten nicht gelesen werden.';
+
+  @override
+  String get noPairedComputerAnsweredOnA =>
+      'Kein gekoppelter Computer hat geantwortet. Öffne auf einem Computer Einstellungen → KI, wähle unter „Zusammenfassungen für meine anderen Geräte“ eine Verbindung und lass ihn eingeschaltet und verbunden.';
+
+  @override
+  String get theComputerTookTooLongTo =>
+      'Der Computer hat zu lange für die Antwort gebraucht.';
+
+  @override
+  String get theComputerDisconnectedBeforeAnsweringTry =>
+      'Der Computer hat die Verbindung vor der Antwort getrennt. Versuche es erneut.';
+
+  @override
+  String get theComputerAnswersAtMost30 =>
+      'Der Computer beantwortet höchstens 30 Fragen pro Stunde. Versuche es später erneut.';
+
+  @override
+  String get theComputerIsAnsweringOtherQuestions =>
+      'Der Computer beantwortet gerade andere Fragen. Versuche es gleich noch einmal.';
+
+  @override
+  String get pairedDevicesAreOffOnThis =>
+      'Gekoppelte Geräte sind auf diesem Telefon ausgeschaltet.';
+
+  @override
+  String get theAiServerCouldNotAnswer =>
+      'Der KI-Server konnte nicht antworten. Versuche es erneut.';
+
+  @override
+  String get exportMeeting => 'Meeting exportieren';
+
+  @override
+  String get openaiCompatibleServer => 'OpenAI-kompatibler Server';
+
+  @override
+  String get localServerOllama => 'Lokaler Server (Ollama)';
+
+  @override
+  String get claudeCodeClaudePlan => 'Claude Code (Claude-Abo)';
+
+  @override
+  String get codexChatgptPlan => 'Codex (ChatGPT-Abo)';
+
+  @override
+  String get checkTheAddressAndModelPlain =>
+      'Prüfe Adresse und Modell. Einfaches http:// funktioniert nur auf diesem Gerät oder im lokalen Netzwerk.';
+
+  @override
+  String get thatConnectionNoLongerExists =>
+      'Diese Verbindung existiert nicht mehr.';
+
+  @override
+  String get addAnAiConnectionInSettings2 =>
+      'Füge zuerst in den Einstellungen eine KI-Verbindung hinzu.';
+
+  @override
+  String get thisMeetingHasNoTranscriptOr =>
+      'Dieses Meeting hat noch kein Transkript und keine Notizen.';
+
+  @override
+  String get thisMeetingIsTooLongFor =>
+      'Dieses Meeting ist zu lang für diese Verbindung. Wähle eine mit größerem Kontext.';
+
+  @override
+  String get theAiServerCouldNotBe2 => 'Der KI-Server war nicht erreichbar.';
+
+  @override
+  String get theAiServerRefusedAccessUse =>
+      'Der KI-Server hat den Zugriff verweigert. Verwende einen Server, der keinen API-Schlüssel braucht.';
+
+  @override
+  String get theAiServerIsBusyOr =>
+      'Der KI-Server ist ausgelastet oder über seinem Limit. Versuche es später erneut.';
+
+  @override
+  String get theAiServerRejectedTheRequest2 =>
+      'Der KI-Server hat die Anfrage abgelehnt. Prüfe den Modellnamen.';
+
+  @override
+  String get theAiServerFailedTryAgain =>
+      'Beim KI-Server ist ein Fehler aufgetreten. Versuche es erneut.';
+
+  @override
+  String get theAiServerSAnswerCould =>
+      'Die Antwort des KI-Servers konnte nicht gelesen werden.';
+
+  @override
+  String get claudeCodeOrCodexCouldNot2 =>
+      'Claude Code oder Codex konnte nicht antworten. Prüfe, ob es angemeldet ist.';
+
+  @override
+  String get theSettingsCouldNotBeSaved =>
+      'Die Einstellungen konnten nicht gespeichert werden.';
+
+  @override
+  String get theMeetingCouldNotBeRead =>
+      'Das Meeting konnte nicht gelesen oder gespeichert werden.';
+
+  @override
+  String get error => 'Fehler';
+
+  @override
+  String get warning => 'Warnung';
+
+  @override
+  String get infoDefault => 'Info (Standard)';
+
+  @override
+  String get debug => 'Debug';
+
+  @override
+  String get trace => 'Trace';
+
+  @override
+  String get thisDevice2 => 'dieses Gerät';
+
+  @override
+  String get anotherDevice => 'ein anderes Gerät';
+
+  @override
+  String notConnected(Object label) {
+    return '$label (nicht verbunden)';
+  }
+
+  @override
+  String itIsKeptEncryptedUntil(Object until) {
+    return ' Sie wird bis $until verschlüsselt aufbewahrt.';
+  }
+
+  @override
+  String get recordedOnThisDeviceOnly => 'Nur auf diesem Gerät aufgenommen.';
+
+  @override
+  String recordedOnThisDeviceOnlyA(Object until) {
+    return 'Nur auf diesem Gerät aufgenommen. Eine Aufnahme davon auf einem anderen Gerät kann noch bis $until kombiniert werden.';
+  }
+
+  @override
+  String combinesTheRecordingsNothingIsLeft(Object combiner) {
+    return '$combiner kombiniert die Aufnahmen; von hier ist nichts mehr zu senden.';
+  }
+
+  @override
+  String waitingForAudioFrom(Object names, Object kept) {
+    return 'Warte auf Audio von $names.$kept';
+  }
+
+  @override
+  String combinesTheRecordingsWaitingForAudio(Object combiner, Object names) {
+    return '$combiner kombiniert die Aufnahmen; warte auf Audio von $names.';
+  }
+
+  @override
+  String get audioFromEveryDeviceIsHere =>
+      'Audio von allen Geräten ist da; das Transkript wird kombiniert, wenn dieses Gerät frei ist.';
+
+  @override
+  String thisDeviceSAudioStillHas(Object combiner, Object kept) {
+    return 'Das Audio dieses Geräts muss noch $combiner erreichen.$kept';
+  }
+
+  @override
+  String get transcriptCombinedFromEveryDevice =>
+      'Transkript aus allen Geräten kombiniert.';
+
+  @override
+  String notCombinedAudioFromDidNot(Object plainNames) {
+    return 'Nicht kombiniert: Audio von $plainNames kam nicht innerhalb von drei Wochen an.';
+  }
+
+  @override
+  String meeting(Object createdAt) {
+    return 'Meeting $createdAt';
+  }
+
+  @override
+  String get writeSomethingFirst => 'Schreib zuerst etwas.';
+
+  @override
+  String get theTextIsTooLong => 'Der Text ist zu lang.';
+
+  @override
+  String get thatPartOfTheTranscriptChanged =>
+      'Dieser Teil des Transkripts hat sich inzwischen geändert. Öffne das Meeting erneut.';
+
+  @override
+  String get theMeetingCouldNotBeSaved =>
+      'Das Meeting konnte nicht gespeichert werden.';
+
+  @override
+  String get chooseAFullFolderPathInside =>
+      'Wähle einen vollständigen Ordnerpfad innerhalb deines Home-Ordners, aber nicht den Home-Ordner selbst.';
+
+  @override
+  String get theFolderCouldNotBeWritten =>
+      'In den Ordner konnte nicht geschrieben werden. Prüfe, ob er existiert und du dort schreiben darfst.';
+
+  @override
+  String get theNotesCouldNotBeRead2 =>
+      'Die Notizen konnten nicht gelesen oder gespeichert werden.';
+
+  @override
+  String get theInviteAnswerIsIncomplete =>
+      'Die Antwort auf die Einladung ist unvollständig.';
+
+  @override
+  String get theRenameAnswerIsIncomplete =>
+      'Die Antwort auf die Umbenennung ist unvollständig.';
+
+  @override
+  String get thisDeviceHasNoCamera => 'Dieses Gerät hat keine Kamera.';
+
+  @override
+  String get theCameraIsNotOpen => 'Die Kamera ist nicht geöffnet.';
+
+  @override
+  String get title => 'Titel';
+
+  @override
+  String get summary => 'Zusammenfassung';
+
+  @override
+  String get notes => 'Notizen';
+
+  @override
+  String get transcript => 'Transkript';
+
+  @override
+  String get projectName => 'Projektname';
+
+  @override
+  String file(Object fileName) {
+    return 'Datei $fileName';
+  }
+
+  @override
+  String get typeWhatToLookFor => 'Gib ein, wonach gesucht werden soll.';
+
+  @override
+  String get typeAtLeastTwoLetters => 'Gib mindestens zwei Buchstaben ein.';
+
+  @override
+  String get theSearchIsTooLong => 'Die Suche ist zu lang.';
+
+  @override
+  String get exportLogs => 'Protokolle exportieren';
+
+  @override
+  String about(Object appName) {
+    return 'Über $appName';
+  }
+
+  @override
+  String get versionLicenseAndTheSoftwareIt =>
+      'Version, Lizenz und verwendete Software.';
+
+  @override
+  String remove(Object label) {
+    return '$label entfernen?';
+  }
+
+  @override
+  String get itsApiKeyIsDeletedFrom =>
+      'Ihr API-Schlüssel wird von diesem Gerät gelöscht. Bereits geschriebene Zusammenfassungen bleiben.';
+
+  @override
+  String get cancel => 'Abbrechen';
+
+  @override
+  String get remove2 => 'Entfernen';
+
+  @override
+  String get aiConnections => 'KI-Verbindungen';
+
+  @override
+  String get addConnection => 'Verbindung hinzufügen';
+
+  @override
+  String get summariesSendTheMeetingSTranscript =>
+      'Zusammenfassungen senden Transkript, Notizen und Fotos des Meetings an den Server der Verbindung. Ein Server in deinem lokalen Netzwerk behält sie dort.';
+
+  @override
+  String get noConnectionsYet => 'Noch keine Verbindungen';
+
+  @override
+  String get addAServerOnYourNetwork =>
+      'Füge einen Server in deinem Netzwerk hinzu (Ollama, LM Studio, llama.cpp) oder Claude Code bzw. Codex auf diesem Computer.';
+
+  @override
+  String get summarizeMeetingsAutomatically =>
+      'Meetings automatisch zusammenfassen';
+
+  @override
+  String get withTheDefaultConnectionWhenA =>
+      'Mit der Standardverbindung, sobald das Transkript eines Meetings endgültig ist.';
+
+  @override
+  String get summariesForMyOtherDevices =>
+      'Zusammenfassungen für meine anderen Geräte';
+
+  @override
+  String get aPairedPhoneCanAskThis =>
+      'Ein gekoppeltes Telefon kann diesen Computer bitten, mit dieser Verbindung eine Zusammenfassung zu schreiben oder einen Chat zu beantworten, anhand der Kopie deiner Notizen auf diesem Computer. Das zählt für dieses Abo; höchstens 10 Zusammenfassungen und 30 Chat-Antworten pro Stunde.';
+
+  @override
+  String get off => 'Aus';
+
+  @override
+  String get summaryPrompt => 'Prompt für Zusammenfassungen';
+
+  @override
+  String placeholdersTheTranscriptIsAlwaysSent(Object placeholders) {
+    return 'Platzhalter: $placeholders. Das Transkript wird immer nach dem Prompt gesendet.';
+  }
+
+  @override
+  String get savePrompt => 'Prompt speichern';
+
+  @override
+  String get resetToBuiltIn => 'Auf integrierten zurücksetzen';
+
+  @override
+  String get defaultLabel => 'Standard';
+
+  @override
+  String get installed => 'Installiert';
+
+  @override
+  String get notFoundOnThisComputer => 'Auf diesem Computer nicht gefunden';
+
+  @override
+  String get unencryptedHttpLocalNetworkOnly =>
+      'Unverschlüsseltes http, nur lokales Netzwerk';
+
+  @override
+  String get runsWithYourPlanSSign =>
+      'Läuft mit der Anmeldung deines Abos auf diesem Computer';
+
+  @override
+  String actionsFor(Object label) {
+    return 'Aktionen für $label';
+  }
+
+  @override
+  String get makeDefault => 'Als Standard festlegen';
+
+  @override
+  String get test => 'Testen';
+
+  @override
+  String get edit => 'Bearbeiten';
+
+  @override
+  String get enterANameAnAddressAnd =>
+      'Gib einen Namen, eine Adresse und ein Modell ein.';
+
+  @override
+  String get theContextIsANumberOf =>
+      'Der Kontext ist eine Anzahl von Tokens, etwa 8192.';
+
+  @override
+  String edit2(Object label) {
+    return '$label bearbeiten';
+  }
+
+  @override
+  String get name => 'Name';
+
+  @override
+  String get protocol => 'Protokoll';
+
+  @override
+  String get runsTheToolInstalledAndSigned =>
+      'Nutzt das auf diesem Computer installierte und angemeldete Tool, sodass dein Claude- oder ChatGPT-Abo die Zusammenfassungen schreibt statt API-Guthaben. Das Meeting geht unter diesem Konto an Anthropic oder OpenAI.';
+
+  @override
+  String get address => 'Adresse';
+
+  @override
+  String get httpsAlwaysHttpOnlyOnThis =>
+      'https:// immer; http:// nur auf diesem Gerät oder im lokalen Netzwerk.';
+
+  @override
+  String get model => 'Modell';
+
+  @override
+  String get leaveEmptyForTheToolS => 'Leer lassen für den Standard des Tools.';
+
+  @override
+  String get contextTokens => 'Kontext (Tokens)';
+
+  @override
+  String get saveConnection => 'Verbindung speichern';
+
+  @override
+  String get koalinoIsLocked => 'Koalino ist gesperrt';
+
+  @override
+  String get unlockWithYourFingerprintFaceOr =>
+      'Entsperre mit Fingerabdruck, Gesicht oder Displaysperre.';
+
+  @override
+  String get unlock => 'Entsperren';
+
+  @override
+  String copied(Object what) {
+    return '$what kopiert';
+  }
+
+  @override
+  String get aiAssistantAccess => 'Zugriff für KI-Assistenten';
+
+  @override
+  String get letYourOwnAiAssistantSuch =>
+      'Lass deinen eigenen KI-Assistenten, etwa Claude Code, Codex oder Claude Desktop, deine Meetings und Projekte lesen: Titel, Zusammenfassungen, Notizen, Transkripte und Projektdateien. Er kann nur lesen; er kann nichts ändern oder löschen.';
+
+  @override
+  String get whatTheAssistantReadsMayBe =>
+      'Was der Assistent liest, kann unter deinem Konto bei diesem Dienst an sein Online-Modell gesendet werden. Schalte dies nur für einen Assistenten ein, dem du deine Meetings anvertraust.';
+
+  @override
+  String get theAssistantServerIsNotInstalled =>
+      'Der Assistenten-Server ist mit dieser Kopie der App nicht installiert.';
+
+  @override
+  String get letMyAiAssistantReadMy =>
+      'Meinen KI-Assistenten meine Notizen lesen lassen';
+
+  @override
+  String get connectYourAssistant => 'Assistenten verbinden';
+
+  @override
+  String get yourNotesAreUnlockedWithA =>
+      'Deine Notizen werden mit einer Passphrase entsperrt, die nie in die Einstellungen eines Assistenten geschrieben wird. Der Server liest sie nur, wenn NOTE_TAKER_ENCRYPTION_PASSPHRASE dort gesetzt ist, wo der Assistent ihn startet.';
+
+  @override
+  String get claudeCodeRunInATerminal =>
+      'Claude Code: in einem Terminal ausführen';
+
+  @override
+  String get command => 'Befehl';
+
+  @override
+  String get claudeDesktopAndOtherMcpClients =>
+      'Claude Desktop und andere MCP-Clients: zu ihren Einstellungen hinzufügen';
+
+  @override
+  String get settings => 'Einstellungen';
+
+  @override
+  String copy(Object title) {
+    return 'Kopieren: $title';
+  }
+
+  @override
+  String isUsingTheMicrophoneRecordThis(Object app) {
+    return '$app verwendet das Mikrofon. Diesen Anruf aufnehmen?';
+  }
+
+  @override
+  String get notNow => 'Nicht jetzt';
+
+  @override
+  String get record => 'Aufnehmen';
+
+  @override
+  String get offerToRecordCalls => 'Aufnahme von Anrufen anbieten';
+
+  @override
+  String get whenTeamsZoomMeetInA =>
+      'Wenn Teams, Zoom, Meet im Browser oder eine andere Anruf-App das Mikrofon nutzt. Nichts wird aufgenommen, bis du auf Aufnehmen tippst.';
+
+  @override
+  String get stopWhenTheCallEnds => 'Beenden, wenn der Anruf endet';
+
+  @override
+  String get onlyForRecordingsStartedFromThe =>
+      'Nur für Aufnahmen, die über das Angebot gestartet wurden, sobald die Anruf-App das Mikrofon 20 Sekunden lang freigegeben hat.';
+
+  @override
+  String get readSpeakerNamesFromTheCall =>
+      'Namen der Sprechenden aus dem Anruffenster lesen';
+
+  @override
+  String get whileRecordingKoalinoReadsWhoTeams =>
+      'Während der Aufnahme liest Koalino, wen Teams, Zoom oder Meet als sprechend anzeigt, um Namen für unbekannte Stimmen vorzuschlagen. Nichts verlässt diesen Computer, und niemand wird benannt, bis du auf Zuordnen tippst.';
+
+  @override
+  String get deleteThisChat => 'Diesen Chat löschen?';
+
+  @override
+  String get itsQuestionsAndAnswersAreDeleted =>
+      'Seine Fragen und Antworten werden von diesem Gerät gelöscht.';
+
+  @override
+  String get delete => 'Löschen';
+
+  @override
+  String get thatFileIsNoLongerIn => 'Diese Datei ist nicht mehr im Projekt.';
+
+  @override
+  String get whoAnswers => 'Wer antwortet';
+
+  @override
+  String get myPairedComputer => 'Mein gekoppelter Computer';
+
+  @override
+  String get thisPhoneSAiConnection => 'Die KI-Verbindung dieses Telefons';
+
+  @override
+  String get deleteThisChat2 => 'Diesen Chat löschen';
+
+  @override
+  String get askAboutYourNotesAnswersCome =>
+      'Frag zu deinen Notizen. Die Antworten kommen von deinem gekoppelten Computer, der seine eigene Kopie deiner Notizen mit der dort für deine anderen Geräte gewählten Verbindung liest.';
+
+  @override
+  String get askAboutYourNotesTheAnswer =>
+      'Frag zu deinen Notizen. Die Antwort kommt von deiner Standard-KI-Verbindung, an die die passenden Notizen gesendet werden.';
+
+  @override
+  String get yourQuestion => 'Deine Frage';
+
+  @override
+  String get ask => 'Fragen';
+
+  @override
+  String get open => 'Öffnen';
+
+  @override
+  String given(Object included) {
+    return 'Übergeben: $included';
+  }
+
+  @override
+  String leftOutForLength(Object omitted) {
+    return 'Aus Platzgründen weggelassen: $omitted';
+  }
+
+  @override
+  String answeredBy(Object connection) {
+    return 'Beantwortet von $connection';
+  }
+
+  @override
+  String get unableToOpenTheKeychain =>
+      'Der Schlüsselbund konnte nicht geöffnet werden';
+
+  @override
+  String get koalinoKeepsTheKeyThatEncrypts =>
+      'Koalino bewahrt den Schlüssel, der deine Stimmprofile und die Geräteidentität verschlüsselt, im Schlüsselbund des Systems auf. Entsperre den Schlüsselbund oder erlaube Koalino, ihn zu nutzen, und versuche es erneut. Hat dieses Gerät keinen Schlüsselbunddienst, installiere oder starte einen und starte Koalino neu.';
+
+  @override
+  String get unableToOpenYourNotes =>
+      'Deine Notizen konnten nicht geöffnet werden';
+
+  @override
+  String get koalinoCouldNotOpenItsDatabase =>
+      'Koalino konnte seine Datenbank nicht öffnen. Prüfe, ob genug freier Speicher vorhanden ist, und versuche es erneut.';
+
+  @override
+  String get unlockingYourNotes => 'Deine Notizen werden entsperrt…';
+
+  @override
+  String get quit => 'Beenden';
+
+  @override
+  String get retry => 'Erneut versuchen';
+
+  @override
+  String delete2(Object title) {
+    return '$title löschen?';
+  }
+
+  @override
+  String get itsTranscriptAttachmentsAndUnknownVoices =>
+      'Transkript, Anhänge und unbekannte Stimmen werden endgültig gelöscht, hier und auf deinen gekoppelten Geräten. Gespeicherte Personen bleiben.';
+
+  @override
+  String get unableToDeleteThisMeetingIf =>
+      'Dieses Meeting konnte nicht gelöscht werden. Wenn es gerade aufgenommen wird, beende zuerst die Aufnahme.';
+
+  @override
+  String get devices => 'Geräte';
+
+  @override
+  String get deviceSyncIsOff => 'Die Gerätesynchronisierung ist aus';
+
+  @override
+  String get meetingsStayOnThisDeviceUntil =>
+      'Meetings bleiben auf diesem Gerät, bis die Synchronisierung eingeschaltet wird.';
+
+  @override
+  String thisDevice3(Object capabilities) {
+    return 'Dieses Gerät\n$capabilities';
+  }
+
+  @override
+  String get renameThisDevice => 'Dieses Gerät umbenennen';
+
+  @override
+  String get discoverableYourOtherDevicesCanAsk =>
+      'Sichtbar: Deine anderen Geräte können einige Minuten lang die Kopplung anfragen.';
+
+  @override
+  String get makeDiscoverable => 'Sichtbar machen';
+
+  @override
+  String get pairingRequests => 'Kopplungsanfragen';
+
+  @override
+  String get acceptOnlyIfTheOtherDevice =>
+      'Nimm nur an, wenn das andere Gerät denselben Code zeigt.';
+
+  @override
+  String get reject => 'Ablehnen';
+
+  @override
+  String get accept => 'Annehmen';
+
+  @override
+  String get pairingInProgress => 'Kopplung läuft';
+
+  @override
+  String get waitingForTheOtherDevice => 'Warte auf das andere Gerät…';
+
+  @override
+  String get checkThatTheOtherDeviceShows =>
+      'Prüfe, ob das andere Gerät denselben Code zeigt.';
+
+  @override
+  String get cancelPairing => 'Kopplung abbrechen';
+
+  @override
+  String get codesMatch => 'Codes stimmen überein';
+
+  @override
+  String get pairedDevices => 'Gekoppelte Geräte';
+
+  @override
+  String get noPairedDevicesYet => 'Noch keine gekoppelten Geräte.';
+
+  @override
+  String paired(Object pairedAt, Object hasRelay) {
+    return 'Gekoppelt am $pairedAt\n$hasRelay';
+  }
+
+  @override
+  String remove3(Object deviceName) {
+    return '$deviceName entfernen';
+  }
+
+  @override
+  String get nearbyDevices => 'Geräte in der Nähe';
+
+  @override
+  String get pair => 'Koppeln';
+
+  @override
+  String get anotherNetwork => 'Ein anderes Netzwerk';
+
+  @override
+  String get showAnInviteHereAndUse =>
+      'Zeige hier eine Einladung und verwende sie auf dem anderen Gerät. Vor dem Koppeln vergleichst du trotzdem einen Code.';
+
+  @override
+  String get showInvite => 'Einladung zeigen';
+
+  @override
+  String get useInvite => 'Einladung verwenden';
+
+  @override
+  String stopsSyncingWithThisDevicePair(Object deviceName) {
+    return '$deviceName synchronisiert nicht mehr mit diesem Gerät. Kopple es erneut, um fortzufahren.';
+  }
+
+  @override
+  String pairingCode(Object split) {
+    return 'Kopplungscode $split';
+  }
+
+  @override
+  String get noOtherDevicesFoundOnThis =>
+      'In diesem Netzwerk wurden keine anderen Geräte gefunden. In der Nähe findet nur Geräte im selben WLAN. Für ein Gerät in einem anderen Netzwerk verwende eine Einladung.';
+
+  @override
+  String get noOtherDevicesFoundOnThis2 =>
+      'In diesem Netzwerk wurden keine anderen Geräte gefunden. In der Nähe findet nur Geräte im selben WLAN. Für ein Gerät in einem anderen Netzwerk verwende eine Einladung oder lege in den Einstellungen ein Relay fest.';
+
+  @override
+  String get notConnectedItReconnectsWhenIt =>
+      'Nicht verbunden. Es verbindet sich wieder, sobald es online ist und dein Relay erreicht.';
+
+  @override
+  String get notConnectedPutBothDevicesOn =>
+      'Nicht verbunden. Bring beide Geräte ins selbe WLAN oder lege in den Einstellungen ein Relay fest.';
+
+  @override
+  String get whisperOnDevice => 'Whisper (auf dem Gerät)';
+
+  @override
+  String get openaiCloud => 'OpenAI (Cloud)';
+
+  @override
+  String gbGpu(Object round) {
+    return '$round GB GPU';
+  }
+
+  @override
+  String mbGpu(Object gpuMegabytes) {
+    return '$gpuMegabytes MB GPU';
+  }
+
+  @override
+  String get noTranscriptionModels => 'Keine Transkriptionsmodelle';
+
+  @override
+  String get useYourOwnAiApp => 'Eigene KI-App verwenden';
+
+  @override
+  String get theMeetingItsNotesAndIts =>
+      'Das Meeting, seine Notizen und Dateien gehen mit deinem eigenen Konto an die App, die du wählst. Für eine Zusammenfassung kopiere dort die Antwort und komm zurück, oder teile sie mit Koalino: Koalino bewahrt sie auf.';
+
+  @override
+  String summarizeIn(Object displayName) {
+    return 'In $displayName zusammenfassen';
+  }
+
+  @override
+  String chatIn(Object displayName) {
+    return 'In $displayName chatten';
+  }
+
+  @override
+  String get summarizeInAnotherApp => 'In einer anderen App zusammenfassen…';
+
+  @override
+  String get chatInAnotherApp => 'In einer anderen App chatten…';
+
+  @override
+  String summaryFromSavedTo(Object appName, Object title) {
+    return 'Zusammenfassung aus $appName in „$title“ gespeichert.';
+  }
+
+  @override
+  String get undo => 'Rückgängig';
+
+  @override
+  String get theEarlierSummaryIsBack =>
+      'Die vorherige Zusammenfassung ist wiederhergestellt.';
+
+  @override
+  String toKeepTheSummaryCopyS(Object appName) {
+    return 'Um die Zusammenfassung zu behalten, kopiere die Antwort von $appName und komm zu Koalino zurück, oder teile die Antwort mit Koalino.';
+  }
+
+  @override
+  String get meetings => 'Meetings';
+
+  @override
+  String get projects => 'Projekte';
+
+  @override
+  String get voices => 'Stimmen';
+
+  @override
+  String get meeting2 => 'Meeting';
+
+  @override
+  String get chatAboutThisMeeting => 'Über dieses Meeting chatten';
+
+  @override
+  String chat(Object meeting) {
+    return 'Chat: $meeting';
+  }
+
+  @override
+  String get thisMeeting => 'dieses Meeting';
+
+  @override
+  String get takePhotos => 'Fotos aufnehmen';
+
+  @override
+  String get attachFiles => 'Dateien anhängen';
+
+  @override
+  String get export => 'Exportieren';
+
+  @override
+  String shareAs(Object label) {
+    return 'Als $label teilen';
+  }
+
+  @override
+  String get nameSpeakers => 'Sprechende benennen';
+
+  @override
+  String get selectAMeetingToSeeIts =>
+      'Wähle ein Meeting, um sein Transkript zu sehen.';
+
+  @override
+  String get renameMeeting => 'Meeting umbenennen';
+
+  @override
+  String get deleteMeeting => 'Meeting löschen';
+
+  @override
+  String recordedOn(Object devices) {
+    return 'Aufgenommen auf $devices';
+  }
+
+  @override
+  String get split => 'Trennen';
+
+  @override
+  String get longPressOrRightClickA =>
+      'Halte eine Passage gedrückt oder klicke sie mit rechts an, um sie zu korrigieren.';
+
+  @override
+  String get noTranscriptIsAvailable => 'Kein Transkript verfügbar.';
+
+  @override
+  String get theSpeakerIsAGuess => 'Die sprechende Person ist geschätzt';
+
+  @override
+  String get peopleTalkedAtOnceHereWords =>
+      'Hier sprachen mehrere gleichzeitig; Wörter können fehlen';
+
+  @override
+  String get overlappingSpeech => 'Überlappende Sprache';
+
+  @override
+  String get someWordsWereUnclear => 'Einige Wörter waren undeutlich';
+
+  @override
+  String get addedAfterTheMeeting => 'Nach dem Meeting hinzugefügt';
+
+  @override
+  String photoOpenFullScreen(Object fileName) {
+    return 'Foto $fileName, im Vollbild öffnen';
+  }
+
+  @override
+  String get save => 'Speichern';
+
+  @override
+  String get preview => 'Vorschau';
+
+  @override
+  String get editNotes => 'Notizen bearbeiten';
+
+  @override
+  String get writeNotes => 'Notizen schreiben';
+
+  @override
+  String get loading => 'Wird geladen…';
+
+  @override
+  String get noNotesYet => 'Noch keine Notizen.';
+
+  @override
+  String textAt(Object startTimeMs) {
+    return 'Text bei $startTimeMs';
+  }
+
+  @override
+  String get removedThisTranscriptWonTBe =>
+      'Entfernt. Dieses Transkript wird nach dem Meeting nicht neu transkribiert.';
+
+  @override
+  String get savedThisTranscriptWonTBe =>
+      'Gespeichert. Dieses Transkript wird nach dem Meeting nicht neu transkribiert.';
+
+  @override
+  String get editText => 'Text bearbeiten';
+
+  @override
+  String get editTheTranscript => 'Transkript bearbeiten';
+
+  @override
+  String get leaveItEmptyToRemoveThis =>
+      'Leer lassen, um diesen Teil zu entfernen.';
+
+  @override
+  String get searchMeetings => 'Meetings durchsuchen';
+
+  @override
+  String get chatWithAllYourNotes => 'Mit allen deinen Notizen chatten';
+
+  @override
+  String get chatWithAllNotes => 'Mit allen Notizen chatten';
+
+  @override
+  String get refresh => 'Aktualisieren';
+
+  @override
+  String get noMeetingsYet => 'Noch keine Meetings';
+
+  @override
+  String get recordingsYouStartAppearHere =>
+      'Aufnahmen, die du startest, erscheinen hier.';
+
+  @override
+  String get rename => 'Umbenennen';
+
+  @override
+  String get addToProject => 'Zu Projekt hinzufügen…';
+
+  @override
+  String get summary2 => 'Zusammenfassung…';
+
+  @override
+  String get addToProject2 => 'Zu Projekt hinzufügen';
+
+  @override
+  String writingTheSummaryOf(Object title) {
+    return 'Zusammenfassung von $title wird geschrieben';
+  }
+
+  @override
+  String summaryOf(Object title) {
+    return 'Zusammenfassung von $title';
+  }
+
+  @override
+  String summarizeWith(Object label) {
+    return 'Mit $label zusammenfassen';
+  }
+
+  @override
+  String defaultLabel2(Object model) {
+    return '$model · Standard';
+  }
+
+  @override
+  String get summarizeOnMyComputer => 'Auf meinem Computer zusammenfassen';
+
+  @override
+  String get withClaudeCodeCodexOrThe =>
+      'Mit Claude Code, Codex oder der dort eingerichteten Verbindung';
+
+  @override
+  String get useYourOwnAiApp2 => 'Eigene KI-App verwenden…';
+
+  @override
+  String get claudeChatgptOrAnotherAppWith =>
+      'Claude, ChatGPT oder eine andere App, mit deinem Konto';
+
+  @override
+  String get openSummary => 'Zusammenfassung öffnen';
+
+  @override
+  String get editPromptForThisMeeting =>
+      'Prompt für dieses Meeting bearbeiten…';
+
+  @override
+  String get useTheSettingsPrompt => 'Prompt aus den Einstellungen verwenden';
+
+  @override
+  String get promptForThisMeeting => 'Prompt für dieses Meeting';
+
+  @override
+  String placeholders(Object placeholders) {
+    return 'Platzhalter: $placeholders';
+  }
+
+  @override
+  String get addAnAiConnectionInSettings3 =>
+      'Füge in den Einstellungen eine KI-Verbindung hinzu, um Zusammenfassungen zu schreiben.';
+
+  @override
+  String get summarizeWith2 => 'Zusammenfassen mit';
+
+  @override
+  String get summarize => 'Zusammenfassen';
+
+  @override
+  String get summarizeAgain => 'Erneut zusammenfassen';
+
+  @override
+  String get editPromptForThisMeeting2 =>
+      'Prompt für dieses Meeting bearbeiten';
+
+  @override
+  String get writingTheSummaryALocalModel =>
+      'Zusammenfassung wird geschrieben… Ein lokales Modell kann einige Minuten brauchen.';
+
+  @override
+  String get noSummaryYet => 'Noch keine Zusammenfassung.';
+
+  @override
+  String get writeASummary => 'Zusammenfassung schreiben';
+
+  @override
+  String writtenByYouOn(Object createdAt) {
+    return 'Von dir geschrieben am $createdAt';
+  }
+
+  @override
+  String writtenByOn(
+      Object model, Object connectionLabel, Object createdAt, Object edited) {
+    return 'Geschrieben von $model ($connectionLabel) am $createdAt$edited';
+  }
+
+  @override
+  String get editSummary => 'Zusammenfassung bearbeiten';
+
+  @override
+  String get tryAgainOnMyComputer => 'Auf meinem Computer erneut versuchen';
+
+  @override
+  String get cancelRequest => 'Anfrage abbrechen';
+
+  @override
+  String get notesFolder => 'Notizordner';
+
+  @override
+  String get keepYourProjectsAndMeetingsAs =>
+      'Halte deine Projekte und Meetings als einfache Dateien in einem Ordner, um sie mit jedem Editor zu lesen und zu bearbeiten. Änderungen an notes.md, summary.md und Projektdateien kommen innerhalb einer halben Minute in die App zurück, und Dateien, die du in einen Projektordner oder den Anhangordner eines Meetings legst, werden hinzugefügt. transcript.md schreibt die App neu: Korrigiere das Transkript in der App.';
+
+  @override
+  String get theFolderIsADecryptedCopy =>
+      'Der Ordner ist eine entschlüsselte Kopie deiner Notizen. Wer ihn lesen kann, kann sie lesen, und Backup- oder Sync-Tools kopieren ihn. Bewahre ihn auf einem verschlüsselten Datenträger in deinem eigenen Benutzerordner auf.';
+
+  @override
+  String get folder => 'Ordner';
+
+  @override
+  String get chooseAFolder => 'Ordner wählen';
+
+  @override
+  String get keepTheNotesFolder => 'Notizordner führen';
+
+  @override
+  String get syncNow => 'Jetzt synchronisieren';
+
+  @override
+  String lastSyncAtFailed(Object at, Object code) {
+    return 'Letzte Synchronisierung um $at fehlgeschlagen: $code';
+  }
+
+  @override
+  String lastSyncAtFilesWrittenEdits(
+      Object at, Object written, Object imported) {
+    return 'Letzte Synchronisierung um $at: $written Dateien geschrieben, $imported Änderungen und Dateien übernommen.';
+  }
+
+  @override
+  String get inviteADevice => 'Ein Gerät einladen';
+
+  @override
+  String get pairingInviteQrCode => 'QR-Code der Kopplungseinladung';
+
+  @override
+  String onTheOtherDeviceOpenDevices(Object hour, Object minute) {
+    return 'Öffne auf dem anderen Gerät Geräte, wähle Einladung verwenden und füge diesen Link ein. Du kannst den Code mit einer Kamera-App scannen, um ihn zu kopieren. Er gilt bis $hour:$minute.';
+  }
+
+  @override
+  String get close => 'Schließen';
+
+  @override
+  String get inviteLinkCopied => 'Einladungslink kopiert';
+
+  @override
+  String get copyLink => 'Link kopieren';
+
+  @override
+  String get deviceFoundChoosePairUnderNearby =>
+      'Gerät gefunden. Wähle Koppeln unter Geräte in der Nähe.';
+
+  @override
+  String get useAnInvite => 'Eine Einladung verwenden';
+
+  @override
+  String get inviteLink => 'Einladungslink';
+
+  @override
+  String get findDevice => 'Gerät suchen';
+
+  @override
+  String get pairWithAnotherDevice => 'Mit einem anderen Gerät koppeln?';
+
+  @override
+  String get youOpenedAPairingInviteKoalino =>
+      'Du hast eine Kopplungseinladung geöffnet. Koalino sucht das Gerät, das sie zeigt, und beide Geräte zeigen einen Code zum Vergleichen, bevor etwas geteilt wird.';
+
+  @override
+  String get pairingStartedCheckThatBothDevices =>
+      'Kopplung gestartet. Prüfe, ob beide Geräte denselben Code zeigen.';
+
+  @override
+  String get done => 'Fertig';
+
+  @override
+  String get photosAreAddedToTheMeeting =>
+      'Fotos werden dem Meeting hinzugefügt, während du sie aufnimmst.';
+
+  @override
+  String get takePhoto => 'Foto aufnehmen';
+
+  @override
+  String get theCameraIsUnavailable => 'Die Kamera ist nicht verfügbar.';
+
+  @override
+  String search(Object name) {
+    return '$name durchsuchen';
+  }
+
+  @override
+  String get noteSaved => 'Notiz gespeichert';
+
+  @override
+  String get theNoteCouldNotBeSaved =>
+      'Die Notiz konnte nicht gespeichert werden.';
+
+  @override
+  String couldNotBeAdded2(Object failed) {
+    return '$failed konnten nicht hinzugefügt werden.';
+  }
+
+  @override
+  String get renameProject => 'Projekt umbenennen';
+
+  @override
+  String get theProjectCouldNotBeRenamed =>
+      'Das Projekt konnte nicht umbenannt werden.';
+
+  @override
+  String delete3(Object project) {
+    return '„$project“ löschen?';
+  }
+
+  @override
+  String get itsFilesNotesAndEMails =>
+      'Seine Dateien, Notizen und E-Mails werden auf allen gekoppelten Geräten gelöscht. Seine Meetings bleiben erhalten, außerhalb jedes Projekts.';
+
+  @override
+  String get theProjectCouldNotBeDeleted =>
+      'Das Projekt konnte nicht gelöscht werden.';
+
+  @override
+  String get itIsDeletedOnEveryPaired =>
+      'Es wird auf allen gekoppelten Geräten gelöscht.';
+
+  @override
+  String get theFileCouldNotBeDeleted =>
+      'Die Datei konnte nicht gelöscht werden.';
+
+  @override
+  String get theMeetingCouldNotBeRemoved =>
+      'Das Meeting konnte nicht aus dem Projekt entfernt werden.';
+
+  @override
+  String get project => 'Projekt';
+
+  @override
+  String get searchThisProject => 'Dieses Projekt durchsuchen';
+
+  @override
+  String get chatAboutThisProject => 'Über dieses Projekt chatten';
+
+  @override
+  String get addFiles => 'Dateien hinzufügen';
+
+  @override
+  String get writeANote => 'Notiz schreiben';
+
+  @override
+  String get addMeetings => 'Meetings hinzufügen';
+
+  @override
+  String get deleteProject => 'Projekt löschen';
+
+  @override
+  String get addThemHereOrFromA =>
+      'Füge sie hier hinzu oder auf der Seite eines Meetings.';
+
+  @override
+  String get removeFromProject => 'Aus Projekt entfernen';
+
+  @override
+  String get filesNotesAndEMails => 'Dateien, Notizen und E-Mails';
+
+  @override
+  String get nothingAddedYet => 'Noch nichts hinzugefügt';
+
+  @override
+  String get addPicturesMarkdownPdfsEMails =>
+      'Füge Bilder, Markdown, PDFs, E-Mails (.eml) oder Dokumente hinzu.';
+
+  @override
+  String get onItsWayFromAPaired => 'Unterwegs von einem gekoppelten Gerät';
+
+  @override
+  String get newNote => 'Neue Notiz';
+
+  @override
+  String get noteMarkdown => 'Notiz (Markdown)';
+
+  @override
+  String get everyMeetingIsAlreadyInA =>
+      'Alle Meetings sind bereits in einem Projekt.';
+
+  @override
+  String get add => 'Hinzufügen';
+
+  @override
+  String get moveToProject => 'In Projekt verschieben';
+
+  @override
+  String get noProject => 'Kein Projekt';
+
+  @override
+  String get newProject => 'Neues Projekt…';
+
+  @override
+  String get newProject2 => 'Neues Projekt';
+
+  @override
+  String get create => 'Erstellen';
+
+  @override
+  String get theProjectCouldNotBeCreated =>
+      'Das Projekt konnte nicht erstellt werden.';
+
+  @override
+  String get theMeetingCouldNotBeMoved =>
+      'Das Meeting konnte nicht verschoben werden.';
+
+  @override
+  String get removedFromItsProject => 'Aus seinem Projekt entfernt';
+
+  @override
+  String movedTo(Object project) {
+    return 'Nach $project verschoben';
+  }
+
+  @override
+  String get searchProjects => 'Projekte durchsuchen';
+
+  @override
+  String get noProjectsYetAProjectGathers =>
+      'Noch keine Projekte. Ein Projekt bündelt Meetings mit den Dateien, Notizen und E-Mails, die zu ihnen gehören.';
+
+  @override
+  String get theRecordingIsStillStartingTry =>
+      'Die Aufnahme startet noch; versuche es erneut.';
+
+  @override
+  String recording(Object title) {
+    return 'Aufnahme von „$title“';
+  }
+
+  @override
+  String get recording2 => 'Aufnahme läuft';
+
+  @override
+  String paused(Object title) {
+    return '„$title“ pausiert';
+  }
+
+  @override
+  String get paused2 => 'Pausiert';
+
+  @override
+  String get finishingTranscription => 'Transkription wird abgeschlossen…';
+
+  @override
+  String get readyToRecord => 'Bereit zur Aufnahme';
+
+  @override
+  String get meetingTitle => 'Meeting-Titel';
+
+  @override
+  String get enterMeetingTitleOptional => 'Meeting-Titel eingeben (optional)';
+
+  @override
+  String get leaveEmptyToNameTheMeeting =>
+      'Leer lassen, um das Meeting nach seiner Startzeit zu benennen';
+
+  @override
+  String get startingRecording => 'Aufnahme wird gestartet';
+
+  @override
+  String get startRecording => 'Aufnahme starten';
+
+  @override
+  String get pause => 'Pausieren';
+
+  @override
+  String get resume => 'Fortsetzen';
+
+  @override
+  String get stop => 'Beenden';
+
+  @override
+  String get language => 'Sprache';
+
+  @override
+  String get aChangeAppliesToWhatIs =>
+      'Eine Änderung gilt für das, was als Nächstes gesagt wird';
+
+  @override
+  String get liveTranscript => 'Live-Transkript';
+
+  @override
+  String get theTranscriptAppearsHereAFew =>
+      'Das Transkript erscheint hier einige Sekunden nach jeder Sprechpause.';
+
+  @override
+  String get nearbyDevicesSeeThisNameWhile =>
+      'Geräte in der Nähe sehen diesen Namen, solange dieses Gerät sichtbar ist. Bereits gekoppelte Geräte behalten den Namen, den sie kennen.';
+
+  @override
+  String get meetingRenamed => 'Meeting umbenannt';
+
+  @override
+  String get thisTitleIsnTAllowed => 'Dieser Titel ist nicht erlaubt.';
+
+  @override
+  String get couldnTSaveTheNewTitle =>
+      'Der neue Titel konnte nicht gespeichert werden. Versuche es erneut.';
+
+  @override
+  String get theNoteTakingEngineIsnT =>
+      'Die Notiz-Engine ist gerade nicht verfügbar.';
+
+  @override
+  String get thisMeetingNoLongerExists2 =>
+      'Dieses Meeting existiert nicht mehr.';
+
+  @override
+  String get couldnTRenameTheMeeting =>
+      'Das Meeting konnte nicht umbenannt werden.';
+
+  @override
+  String get thisFileIsStillOnIts =>
+      'Diese Datei ist noch unterwegs von einem gekoppelten Gerät.';
+
+  @override
+  String get thisPictureCannotBeShown =>
+      'Dieses Bild kann nicht angezeigt werden.';
+
+  @override
+  String get thisKindOfDocumentCanT =>
+      'Diese Art von Dokument kann in der App noch nicht angezeigt werden.';
+
+  @override
+  String get thisFileCannotBeOpened =>
+      'Diese Datei kann nicht geöffnet werden.';
+
+  @override
+  String get thisFileCannotBeRead => 'Diese Datei kann nicht gelesen werden.';
+
+  @override
+  String get thisEMailCannotBeRead => 'Diese E-Mail kann nicht gelesen werden.';
+
+  @override
+  String get noSubject => '(kein Betreff)';
+
+  @override
+  String get from => 'Von';
+
+  @override
+  String get to => 'An';
+
+  @override
+  String get cc => 'Cc';
+
+  @override
+  String get sent => 'Gesendet';
+
+  @override
+  String attachments(Object attachmentNames) {
+    return 'Anhänge: $attachmentNames';
+  }
+
+  @override
+  String get theRestOfThisEMail =>
+      'Der Rest dieser E-Mail ist zu lang zum Anzeigen.';
+
+  @override
+  String get searching => 'Suche läuft…';
+
+  @override
+  String get nothingFound => 'Nichts gefunden.';
+
+  @override
+  String get search2 => 'Suchen';
+
+  @override
+  String get pairYourDevicesAndSeeWhich =>
+      'Kopple deine Geräte und sieh, welche verbunden sind.';
+
+  @override
+  String get transcriptionModel => 'Transkriptionsmodell';
+
+  @override
+  String get chooseTheWhisperModel => 'Wähle das Whisper-Modell.';
+
+  @override
+  String get languageModelsForMeetingSummariesAnd =>
+      'Sprachmodelle für Meeting-Zusammenfassungen und der Prompt dafür.';
+
+  @override
+  String get keepProjectsAndMeetingsAsFiles =>
+      'Halte Projekte und Meetings als Dateien, die du mit jedem Editor bearbeiten kannst.';
+
+  @override
+  String get letYourOwnAssistantSuchAs =>
+      'Lass deinen eigenen Assistenten, etwa Claude Code, deine Notizen lesen.';
+
+  @override
+  String get appLock => 'App-Sperre';
+
+  @override
+  String get defaultLanguage => 'Standardsprache';
+
+  @override
+  String get usedForNewRecordingsAutoDetects =>
+      'Gilt für neue Aufnahmen. Auto erkennt die Sprache, während gesprochen wird.';
+
+  @override
+  String get transcribeOn => 'Transkribieren auf';
+
+  @override
+  String get anotherDeviceReceivesTheRecordingS =>
+      'Ein anderes Gerät erhält das Audio der Aufnahme verschlüsselt und löscht es nach dem Transkribieren. Ist es nicht verfügbar, transkribiert dieses Gerät.';
+
+  @override
+  String get telemetry => 'Telemetrie';
+
+  @override
+  String get howLongTranscriptionTakesOnEach =>
+      'Wie lange die Transkription auf jedem Gerät dauert und ihr geschätzter Energieverbrauch.';
+
+  @override
+  String get logLevel => 'Protokollstufe';
+
+  @override
+  String get howMuchDetailTheAppWrites =>
+      'Wie ausführlich die App protokolliert. Debug und Trace helfen bei der Fehlersuche, schreiben aber mehr.';
+
+  @override
+  String get custom => 'Benutzerdefiniert';
+
+  @override
+  String get shareLogs => 'Protokolle teilen';
+
+  @override
+  String get theLast7DaysOfDiagnostic =>
+      'Die Diagnoseprotokolle der letzten 7 Tage, etwa zum Anhängen an einen Fehlerbericht.';
+
+  @override
+  String get unableToReadTheAppLock =>
+      'Die Einstellung der App-Sperre konnte nicht gelesen werden.';
+
+  @override
+  String get needsAndroid10OrLater => 'Erfordert Android 10 oder neuer.';
+
+  @override
+  String get setAScreenLockInAndroid =>
+      'Richte in den Android-Einstellungen eine Displaysperre ein, um die App-Sperre zu nutzen.';
+
+  @override
+  String askForYourFingerprintFaceOr(Object lockAfterBackground) {
+    return 'Nach Fingerabdruck, Gesicht oder Displaysperre fragen, wenn du nach $lockAfterBackground Sekunden Abwesenheit zu Koalino zurückkehrst. Aufnahme und Synchronisierung laufen weiter, während die App gesperrt ist.';
+  }
+
+  @override
+  String get otherNetworks => 'Andere Netzwerke';
+
+  @override
+  String get aRelayOnYourOwnAlways =>
+      'Ein Relay auf einem eigenen, stets eingeschalteten Gerät lässt deine Geräte einander auch außerhalb desselben WLANs erreichen. Die Synchronisierung im selben Netzwerk funktioniert auch ohne.';
+
+  @override
+  String get relayAddress => 'Relay-Adresse';
+
+  @override
+  String get deviceAddressesOptionalOnePerLine =>
+      'Geräteadressen (optional, eine pro Zeile)';
+
+  @override
+  String get saveAddresses => 'Adressen speichern';
+
+  @override
+  String get nothingThatWasSharedCouldBe =>
+      'Nichts von dem Geteilten konnte gelesen werden.';
+
+  @override
+  String couldNotBeRead(Object message, Object failedCount) {
+    return '$message; $failedCount konnten nicht gelesen werden';
+  }
+
+  @override
+  String saveAsTheSummaryOf(Object title) {
+    return 'Als Zusammenfassung von „$title“ speichern';
+  }
+
+  @override
+  String get addToAProjectInstead => 'Stattdessen zu einem Projekt hinzufügen';
+
+  @override
+  String get splitThisMeeting => 'Dieses Meeting trennen?';
+
+  @override
+  String itWasRecordedOnAndThe(Object devices, Object recordings) {
+    return 'Es wurde auf $devices aufgenommen, und die App hat die Aufnahmen zusammengeführt. Beim Trennen erscheint die andere Aufnahme ($recordings) wieder eigenständig, mit eigenem Transkript, hier und auf deinen gekoppelten Geräten. Sie werden nicht erneut zusammengeführt. Dieses Meeting behält sein Transkript.';
+  }
+
+  @override
+  String get unableToSplitThisMeeting =>
+      'Dieses Meeting konnte nicht getrennt werden.';
+
+  @override
+  String get telemetryDashboard => 'Telemetrie-Dashboard';
+
+  @override
+  String get transcription => 'Transkription';
+
+  @override
+  String get latency => 'Latenz';
+
+  @override
+  String get tasks => 'Aufgaben';
+
+  @override
+  String get power => 'Energie';
+
+  @override
+  String get transcriptionDurationOverTime =>
+      'Transkriptionsdauer im Zeitverlauf';
+
+  @override
+  String get latencyDistribution => 'Latenzverteilung';
+
+  @override
+  String get taskTypeBreakdown => 'Aufschlüsselung nach Aufgabentyp';
+
+  @override
+  String get powerConsumptionEstimate => 'Geschätzter Energieverbrauch';
+
+  @override
+  String get fastestLeastAccurate => 'Am schnellsten, am wenigsten genau';
+
+  @override
+  String get fastManyMistakesTheAppShips =>
+      'Schnell, viele Fehler. Wird mit der App ausgeliefert';
+
+  @override
+  String get goodBalanceOnMostComputers =>
+      'Gute Balance auf den meisten Computern';
+
+  @override
+  String get accurateSlowerNeedsAbout2Gb =>
+      'Genau, langsamer, braucht etwa 2 GB Arbeitsspeicher';
+
+  @override
+  String get olderNeedsAPowerfulComputer =>
+      'Älter, braucht einen leistungsstarken Computer';
+
+  @override
+  String get mostAccurateNeedsAPowerfulComputer =>
+      'Am genauesten, braucht einen leistungsstarken Computer';
+
+  @override
+  String get veryAccurateBestWithAGraphics =>
+      'Sehr genau. Am besten mit einer Grafikkarte';
+
+  @override
+  String get thisModelMayBeTooLarge => 'Dieses Modell ist vielleicht zu groß';
+
+  @override
+  String mayNeedMoreMemoryThanThis(Object model) {
+    return '$model braucht vielleicht mehr Arbeitsspeicher, als dieses Gerät hat, und Aufnahmen könnten fehlschlagen oder langsam laufen.';
+  }
+
+  @override
+  String get downloadAnyway => 'Trotzdem herunterladen';
+
+  @override
+  String get transcriptionSettingsAreUnavailable =>
+      'Die Transkriptionseinstellungen sind nicht verfügbar.';
+
+  @override
+  String get downloadFromQualcomm => 'Von Qualcomm herunterladen?';
+
+  @override
+  String get about360MbIsDownloadedFrom =>
+      'Etwa 360 MB werden von Qualcomm heruntergeladen und belegen etwa 460 MB:\n\n• Qualcomms QNN-Laufzeit, mit der Apps die NPU nutzen können. Sie steht unter Qualcomms AI Stack License, nicht unter der Lizenz der App.\n• Whisper Small, von Qualcomm AI Hub für die NPU dieses Telefons kompiliert.\n\nJede Datei wird vor der Nutzung geprüft. Deine Aufnahmen verlassen nie das Telefon. Mit dem Download akzeptierst du die Bedingungen von Qualcomm.';
+
+  @override
+  String get acceptAndDownload => 'Akzeptieren und herunterladen';
+
+  @override
+  String get downloadingTheNpuFiles => 'NPU-Dateien werden heruntergeladen…';
+
+  @override
+  String get transcribeOnTheNpu => 'Auf der NPU transkribieren';
+
+  @override
+  String get thisPhoneHasAnAiChip =>
+      'Dieses Telefon hat einen KI-Chip (NPU), der Whisper Small ausführen kann und den Prozessor frei lässt: 30 Sekunden Sprache dauern etwa 2 Sekunden. Dafür ist ein Download von Qualcomm nötig.';
+
+  @override
+  String get download => 'Herunterladen';
+
+  @override
+  String get runsWhisperSmallOnThePhone =>
+      'Führt Whisper Small auf dem KI-Chip des Telefons aus, anstelle des oben gewählten Modells, auch für den Durchgang nach dem Meeting, sofern dieser kein eigenes Modell hat. Die Wortzeiten sind ungefähr.';
+
+  @override
+  String get removeTheNpuFiles => 'NPU-Dateien entfernen';
+
+  @override
+  String get alsoRecordTheComputerSSound =>
+      'Auch den Ton des Computers aufnehmen';
+
+  @override
+  String get transcribesWhatTheComputerPlaysSuch =>
+      'Transkribiert, was der Computer wiedergibt, etwa die andere Seite eines Anrufs, neben dem Mikrofon. Hört das Mikrofon auch die Lautsprecher, werden wiederholte Wörter nur einmal behalten.';
+
+  @override
+  String get improveTheTranscriptAfterTheMeeting =>
+      'Transkript nach dem Meeting verbessern';
+
+  @override
+  String get transcribesEachMeetingAgainWithMore =>
+      'Transkribiert jedes Meeting nach dem Ende erneut mit mehr Kontext; ein Telefon wartet, bis es lädt. Bis dahin bleibt die Sprache verschlüsselt, danach wird sie gelöscht.';
+
+  @override
+  String get modelForThisPass => 'Modell für diesen Durchgang';
+
+  @override
+  String get aLargerModelIsSlowerBut =>
+      'Ein größeres Modell ist langsamer, aber genauer, und nach dem Meeting ist Zeit. Lade oben Modelle herunter.';
+
+  @override
+  String get sameAsForRecording => 'Wie bei der Aufnahme';
+
+  @override
+  String get keepSpeechForCombining => 'Sprache zum Kombinieren aufbewahren';
+
+  @override
+  String get whenAMeetingWasAlsoRecorded =>
+      'Wurde ein Meeting auch auf einem anderen Gerät aufgenommen, wartet seine Sprache so lange auf das Kombinieren und wird dann gelöscht.';
+
+  @override
+  String get whisperModel => 'Whisper-Modell';
+
+  @override
+  String get biggerModelsMakeFewerMistakesAnd =>
+      'Größere Modelle machen weniger Fehler und brauchen mehr Zeit und Speicher. Downloads kommen von Hugging Face. Diese Wahl gilt nur für dieses Gerät.';
+
+  @override
+  String automatic2(Object fileName, Object mode) {
+    return 'Automatisch: $fileName$mode';
+  }
+
+  @override
+  String usesUntilIsDownloadedTheBest(
+      Object fileName, Object waiting, Object reason) {
+    return 'Verwendet $fileName, bis $waiting heruntergeladen ist, das für dieses Gerät am besten passt. $reason';
+  }
+
+  @override
+  String picksTheBestModelForThis(Object fileName, Object mode) {
+    return 'Wählt das beste Modell für dieses Gerät: $fileName$mode.';
+  }
+
+  @override
+  String download2(Object sizeBytes) {
+    return '$sizeBytes herunterladen';
+  }
+
+  @override
+  String tryLabel(Object model) {
+    return '$model testen';
+  }
+
+  @override
+  String get use => 'Verwenden';
+
+  @override
+  String suggestedForThisDevice(Object model, Object mode) {
+    return 'Empfohlen für dieses Gerät: $model$mode';
+  }
+
+  @override
+  String get efficientMode => 'Effizienter Modus';
+
+  @override
+  String runsTheSameModelsOnThe(Object gpuName) {
+    return 'Führt dieselben Modelle auf dem Grafikchip ($gpuName) aus, meist schneller. Aus nutzt wie üblich den Prozessor.';
+  }
+
+  @override
+  String get theGraphicsChipStoppedTheApp =>
+      'Der Grafikchip hat die App beim letzten Mal angehalten, daher transkribiert dieses Gerät mit dem Prozessor.';
+
+  @override
+  String get tryTheGraphicsChipAgain => 'Grafikchip erneut versuchen';
+
+  @override
+  String get onThisDevice => 'auf diesem Gerät';
+
+  @override
+  String get usedByAutomatic => 'von Automatisch verwendet';
+
+  @override
+  String get englishOnly => 'Nur Englisch';
+
+  @override
+  String get mayBeTooLargeForThis => 'vielleicht zu groß für dieses Gerät';
+
+  @override
+  String get doesnTMatchYourLanguage => 'passt nicht zu deiner Sprache';
+
+  @override
+  String get notEnoughFreeSpace => 'nicht genug freier Speicher';
+
+  @override
+  String get cancelDownload => 'Download abbrechen';
+
+  @override
+  String get glossary => 'Glossar';
+
+  @override
+  String get namesProjectNamesAndTermsOne =>
+      'Namen, Projektnamen und Begriffe, einer pro Zeile. Die Transkription schreibt sie wie hier.';
+
+  @override
+  String get saveGlossary => 'Glossar speichern';
+
+  @override
+  String get voiceGallery => 'Stimmengalerie';
+
+  @override
+  String get tryAgain => 'Erneut versuchen';
+
+  @override
+  String get unknownVoices => 'Unbekannte Stimmen';
+
+  @override
+  String get noUnknownSpeakersToReview => 'Keine unbekannten Stimmen zu prüfen';
+
+  @override
+  String get savedPeople => 'Gespeicherte Personen';
+
+  @override
+  String get noSavedPeopleYetNameA =>
+      'Noch keine gespeicherten Personen. Benenne eine Stimme, um jemanden hinzuzufügen.';
+
+  @override
+  String delete4(Object displayName) {
+    return '$displayName löschen';
+  }
+
+  @override
+  String get playing => 'Wird abgespielt…';
+
+  @override
+  String get untitledMeeting => 'Meeting ohne Titel';
+
+  @override
+  String get play => 'Abspielen';
+
+  @override
+  String get deleteThisVoice => 'Diese Stimme löschen';
+
+  @override
+  String theCallShowedSpeakingCheckThen(Object suggestedName) {
+    return 'Der Anruf zeigte $suggestedName beim Sprechen. Prüfe es, dann Zuordnen.';
+  }
+
+  @override
+  String get chooseASavedPerson => 'Gespeicherte Person wählen';
+
+  @override
+  String get assign => 'Zuordnen';
+
+  @override
+  String get deleteTheseVoices => 'Diese Stimmen löschen';
+
+  @override
+  String get theseSoundLikeOnePersonUntick =>
+      'Diese klingen nach einer Person. Entferne den Haken bei allen, die jemand anderes sind.';
+
+  @override
+  String itsVoiceSamplesGoForGood(Object voices) {
+    return 'Ihre $voices Stimmproben werden endgültig gelöscht, hier und auf deinen gekoppelten Geräten. Die Transkripte bleiben.';
+  }
+
+  @override
+  String get itsVoiceSampleGoesForGood =>
+      'Ihre Stimmprobe wird endgültig gelöscht, hier und auf deinen gekoppelten Geräten. Das Transkript bleibt.';
+
+  @override
+  String get theirNameAndVoiceSamplesGo =>
+      'Name und Stimmproben werden endgültig gelöscht, hier und auf deinen gekoppelten Geräten. Transkripte bleiben und nummerieren die Person als sprechende Person.';
+
+  @override
+  String unknownSpeaker(Object index) {
+    return 'Unbekannte Stimme $index';
+  }
+
+  @override
+  String attachedFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Dateien angehängt',
+      one: '1 Datei angehängt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String addedFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Dateien hinzugefügt',
+      one: '1 Datei hinzugefügt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String emailAttachmentsLeft(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count E-Mail-Anhänge blieben in der E-Mail',
+      one: '1 E-Mail-Anhang blieb in der E-Mail',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String addedMeetings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Meetings hinzugefügt',
+      one: '1 Meeting hinzugefügt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String otherRecordings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Aufnahmen',
+      one: '1 Aufnahme',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get severalDevices => 'mehreren Geräten';
+
+  @override
+  String meetingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Meetings',
+      one: '1 Meeting',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String fileCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Dateien',
+      one: '1 Datei',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String chunkCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Abschnitte',
+      one: '1 Abschnitt',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String resultCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Ergebnisse',
+      one: '1 Ergebnis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get moreNotShown =>
+      ', weitere nicht angezeigt: füge Wörter hinzu, um einzugrenzen';
+
+  @override
+  String cpuCores(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count CPU-Kerne',
+      one: '1 CPU-Kern',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String dayCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Tage',
+      one: '1 Tag',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String voiceSampleCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Stimmproben',
+      one: '1 Stimmprobe',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String picturesIncluded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Bilder wurden einbezogen',
+      one: '1 Bild wurde einbezogen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String partCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Teile',
+      one: '1 Teil',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String inMeetings(Object parts, Object meetings) {
+    return '$parts in $meetings';
+  }
+
+  @override
+  String assignedVoicesTo(int count, Object name) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Stimmen $name zugeordnet',
+      one: '$name zugeordnet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String addSharedFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count geteilte Dateien zu einem Projekt hinzufügen',
+      one: 'Geteilte Datei zu einem Projekt hinzufügen',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String keepSpeechSaved(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Gespeichert. Sprache wartet jetzt bis zu $count Tage auf das Kombinieren.',
+      one:
+          'Gespeichert. Sprache wartet jetzt bis zu 1 Tag auf das Kombinieren.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String titlesCanBeAtMost(Object max) {
+    return 'Titel dürfen höchstens $max Zeichen haben.';
+  }
+
+  @override
+  String promptUnknownPlaceholder(Object example) {
+    return 'Der Prompt enthält einen unbekannten oder nicht geschlossenen Platzhalter $example.';
+  }
+
+  @override
+  String get live => '● Live';
+
+  @override
+  String get offline => '○ Offline';
+
+  @override
+  String minutesShort(Object minutes) {
+    return '$minutes Min.';
+  }
+
+  @override
+  String get appLanguage => 'App-Sprache';
+
+  @override
+  String get appLanguageDescription =>
+      'Die Sprache der Menüs und Meldungen von Koalino.';
+
+  @override
+  String get systemLanguage => 'Systemsprache';
+
+  @override
+  String photosAddedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Fotos hinzugefügt',
+      one: '1 Foto hinzugefügt',
+    );
+    return '$_temp0';
+  }
+}

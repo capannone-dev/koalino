@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Copies text to the clipboard; replaced in tests.
 typedef CopyText = Future<void> Function(String text);
@@ -65,7 +66,7 @@ final class _AssistantAccessScreenState extends State<AssistantAccessScreen> {
     await widget.copyText(text);
     if (mounted) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('$what copied')));
+          .showSnackBar(SnackBar(content: Text(l10n.copied(what))));
     }
   }
 
@@ -75,36 +76,30 @@ final class _AssistantAccessScreenState extends State<AssistantAccessScreen> {
     final AssistantAccessStatus? status = _status;
     final bool installed = status?.serverPath != null;
     return Scaffold(
-      appBar: AppBar(title: const Text('AI assistant access')),
+      appBar: AppBar(title: Text(l10n.aiAssistantAccess)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
-          const Text(
-              'Let your own AI assistant, such as Claude Code, Codex or Claude Desktop, '
-              'read your meetings and projects: titles, summaries, notes, transcripts and '
-              'project files. It can only read; it cannot change or delete anything.'),
+          Text(l10n.letYourOwnAiAssistantSuch),
           const SizedBox(height: 12),
           Card(
             color: theme.colorScheme.errorContainer,
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Text(
-                'What the assistant reads may be sent to its online model, under your '
-                "account with that service. Turn this on only for an assistant you trust "
-                'with your meetings.',
+                l10n.whatTheAssistantReadsMayBe,
                 style: TextStyle(color: theme.colorScheme.onErrorContainer),
               ),
             ),
           ),
           if (status != null && !installed)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 12),
-              child: Text(
-                  'The assistant server is not installed with this copy of the app.'),
+              child: Text(l10n.theAssistantServerIsNotInstalled),
             ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Let my AI assistant read my notes'),
+            title: Text(l10n.letMyAiAssistantReadMy),
             value: status?.enabled ?? false,
             onChanged: _busy || !installed
                 ? null
@@ -120,27 +115,23 @@ final class _AssistantAccessScreenState extends State<AssistantAccessScreen> {
             ),
           if (status != null && status.enabled && installed) ...<Widget>[
             const SizedBox(height: 12),
-            Text('Connect your assistant', style: theme.textTheme.titleMedium),
+            Text(l10n.connectYourAssistant, style: theme.textTheme.titleMedium),
             if (status.passphraseNeeded)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.only(top: 8),
-                child: Text(
-                    'Your notes are unlocked with a passphrase, which is never written into '
-                    "an assistant's settings. The server reads them only when "
-                    'NOTE_TAKER_ENCRYPTION_PASSPHRASE is set where the assistant starts it.'),
+                child: Text(l10n.yourNotesAreUnlockedWithA),
               ),
             if (status.claudeCode case final String command)
               _Snippet(
-                title: 'Claude Code: run in a terminal',
+                title: l10n.claudeCodeRunInATerminal,
                 text: command,
-                onCopy: () => _copy(command, 'Command'),
+                onCopy: () => _copy(command, l10n.command),
               ),
             if (status.config case final String config)
               _Snippet(
-                title:
-                    'Claude Desktop and other MCP clients: add to their settings',
+                title: l10n.claudeDesktopAndOtherMcpClients,
                 text: config,
-                onCopy: () => _copy(config, 'Settings'),
+                onCopy: () => _copy(config, l10n.settings),
               ),
           ],
         ],
@@ -170,7 +161,7 @@ final class _Snippet extends StatelessWidget {
             children: <Widget>[
               Expanded(child: Text(title, style: theme.textTheme.labelLarge)),
               IconButton(
-                tooltip: 'Copy: $title',
+                tooltip: l10n.copy(title),
                 icon: const Icon(Icons.copy),
                 onPressed: onCopy,
               ),

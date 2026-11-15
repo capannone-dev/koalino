@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// A device paired with this one.
 final class PairedDevice {
@@ -355,8 +356,7 @@ PairingInviteLink decodePairingInvite(String json) {
   final Object? text = object['invite'];
   final Object? expiresAtMs = object['expires_at_ms'];
   if (text is! String || expiresAtMs is! num) {
-    throw const P2pException(
-        'malformed_response', 'The invite answer is incomplete.');
+    throw P2pException('malformed_response', l10n.theInviteAnswerIsIncomplete);
   }
   return PairingInviteLink(
     text: text,
@@ -374,8 +374,7 @@ String decodeJoinedInvite(String json) {
   }
   final Object? peerId = object['peer_id'];
   if (peerId is! String) {
-    throw const P2pException(
-        'malformed_response', 'The invite answer is incomplete.');
+    throw P2pException('malformed_response', l10n.theInviteAnswerIsIncomplete);
   }
   return peerId;
 }
@@ -391,8 +390,7 @@ String decodeRenamedDevice(String json) {
   }
   final Object? deviceName = object['device_name'];
   if (deviceName is! String) {
-    throw const P2pException(
-        'malformed_response', 'The rename answer is incomplete.');
+    throw P2pException('malformed_response', l10n.theRenameAnswerIsIncomplete);
   }
   return deviceName;
 }

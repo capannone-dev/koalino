@@ -6,6 +6,7 @@
 import 'dart:convert';
 
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// The setting and how to connect an assistant.
 final class AssistantAccessStatus {
@@ -57,9 +58,9 @@ final class AssistantAccessException implements Exception {
 
   /// A sentence for people.
   String get message => switch (code) {
-        'storage_failed' => 'The setting could not be saved.',
-        'runtime_unavailable' => 'The app is still starting. Try again.',
-        _ => 'Something went wrong. Try again.',
+        'storage_failed' => l10n.theSettingCouldNotBeSaved,
+        'runtime_unavailable' => l10n.theAppIsStillStartingTry,
+        _ => l10n.somethingWentWrongTryAgain,
       };
 
   @override

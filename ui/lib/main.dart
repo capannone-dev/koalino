@@ -74,6 +74,10 @@ import 'package:note_taker_ui/presentation/settings_screen.dart';
 import 'package:note_taker_ui/presentation/share_to_project.dart';
 import 'package:note_taker_ui/presentation/telemetry_dashboard_screen.dart';
 import 'package:note_taker_ui/presentation/voice_gallery_screen.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
+import 'package:note_taker_ui/controllers/app_language_controller.dart';
+import 'package:note_taker_ui/infrastructure/app_language_store.dart';
+import 'package:note_taker_ui/presentation/app_localization_scope.dart';
 
 /// Configures the Rust core, then starts the Material 3 application over the Rust bridges.
 ///
@@ -139,8 +143,13 @@ Future<void> main() async {
   final AppLockController? appLockController = Platform.isAndroid
       ? AppLockController(appLockBridge: const AndroidAppLockBridge())
       : null;
+  // Read before the first frame, so the app opens in the chosen language (#124).
+  final AppLanguageController appLanguageController =
+      AppLanguageController(store: const FileAppLanguageStore());
+  await appLanguageController.load();
   runApp(NoteTakerApp(
     recordingController: recordingController,
+    appLanguageController: appLanguageController,
     liveTranscriptController: liveTranscriptController,
     activeMeetingId: recordingBridge.activeMeetingId,
     coreStartupController: coreStartupController,
@@ -180,7 +189,8 @@ final class NoteTakerApp extends StatelessWidget {
   /// project once the core is open (Issue #85). `callWatchController`, when given (desktops),
   /// offers to record a call above every screen and adds its switches to Settings (#111).
   /// `pairingLinkBridge`, when given (Android), offers to pair with the device whose invite QR
-  /// code the camera opened in the app (#122).
+  /// code the camera opened in the app (#122). `appLanguageController`, when given, picks the
+  /// app's language and adds Language to Settings (#124); without it the app follows the system.
   /// Outputs: A configured Material application.
   /// Side effects: None.
   const NoteTakerApp({
@@ -193,10 +203,14 @@ final class NoteTakerApp extends StatelessWidget {
     this.incomingShareBridge,
     this.pairingLinkBridge,
     this.callWatchController,
+    this.appLanguageController,
     super.key,
   });
 
   final RecordingController recordingController;
+
+  /// The app's language (#124), when given.
+  final AppLanguageController? appLanguageController;
   final TranscriptionLanguageController? languageController;
   final LiveTranscriptController? liveTranscriptController;
 
@@ -245,6 +259,7 @@ final class NoteTakerApp extends StatelessWidget {
                     openMeetingId: meetingId, openAtMs: startTimeMs),
       ),
       settingsScreenBuilder: (BuildContext context) => _SettingsDestination(
+        appLanguageController: appLanguageController,
         appLockController: appLockController,
         languageController: languageController,
         callWatchController: callWatchController,
@@ -281,21 +296,37 @@ final class NoteTakerApp extends StatelessWidget {
         : CallOfferBanner(controller: callWatch, child: linked);
     final CoreStartupController? startup = coreStartupController;
     final AppLockController? appLock = appLockController;
-    return MaterialApp(
-      title: 'Koalino',
-      theme: noteTakerTheme(Brightness.light),
-      darkTheme: noteTakerTheme(Brightness.dark),
-      // Follows the system's light or dark setting, including changes while the app runs.
-      themeMode: ThemeMode.system,
-      // Wraps the navigator, so pushed screens and dialogs are covered as well.
-      builder: appLock == null
-          ? null
-          : (BuildContext context, Widget? navigator) =>
-              AppLockGate(controller: appLock, child: navigator!),
-      home: startup == null
-          ? offered
-          : CoreStartupGate(controller: startup, onQuit: _quit, child: offered),
-    );
+    final Widget home = startup == null
+        ? offered
+        : CoreStartupGate(controller: startup, onQuit: _quit, child: offered);
+    final AppLanguageController? language = appLanguageController;
+    Widget app(Locale? locale) => MaterialApp(
+          title: 'Koalino',
+          theme: noteTakerTheme(Brightness.light),
+          darkTheme: noteTakerTheme(Brightness.dark),
+          // Follows the system's light or dark setting, including changes while the app runs.
+          themeMode: ThemeMode.system,
+          // The app's text and the Material widgets' own, in the owner's or the system's
+          // language (#124); Arabic lays the screens out right to left.
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: locale,
+          // Wraps the navigator, so pushed screens and dialogs are covered as well.
+          builder: (BuildContext context, Widget? navigator) =>
+              AppLocalizationScope(
+            child: appLock == null
+                ? navigator!
+                : AppLockGate(controller: appLock, child: navigator!),
+          ),
+          home: home,
+        );
+    return language == null
+        ? app(null)
+        : ListenableBuilder(
+            listenable: language,
+            builder: (BuildContext context, Widget? child) =>
+                app(language.locale),
+          );
   }
 }
 
@@ -522,12 +553,16 @@ final class _TelemetryDestinationState extends State<_TelemetryDestination> {
 final class _SettingsDestination extends StatefulWidget {
   const _SettingsDestination({
     required this.appLockController,
+    this.appLanguageController,
     required this.languageController,
     this.callWatchController,
   });
 
   /// Android's app lock, or `null` on platforms without it.
   final AppLockController? appLockController;
+
+  /// The app's language (#124), owned by the app.
+  final AppLanguageController? appLanguageController;
 
   /// The transcription language, owned by the app.
   final TranscriptionLanguageController? languageController;
@@ -543,7 +578,7 @@ final class _SettingsDestination extends StatefulWidget {
 final class _SettingsDestinationState extends State<_SettingsDestination> {
   final LogSettingsController _logSettingsController = LogSettingsController(
     logBridge: const RustLogBridge(),
-    exportSaver: const FilePickerExportSaver(dialogTitle: 'Export logs'),
+    exportSaver: FilePickerExportSaver(dialogTitle: l10n.exportLogs),
     // Android shares from `cache/shared`, the folder `SharedFiles.kt` serves.
     logSharer: Platform.isAndroid ? const AndroidLogSharer() : null,
     sharedDirectory: () async =>
@@ -575,6 +610,7 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
   @override
   Widget build(BuildContext context) => SettingsScreen(
         logSettingsController: _logSettingsController,
+        appLanguageController: widget.appLanguageController,
         appLockController: widget.appLockController,
         telemetryScreenBuilder: (BuildContext context) =>
             const _TelemetryDestination(),

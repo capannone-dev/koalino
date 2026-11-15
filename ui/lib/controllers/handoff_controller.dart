@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Least length of copied text taken for a summary, so a stray word is not kept.
 const int minAnswerCharacters = 80;
@@ -170,7 +171,7 @@ final class HandoffController extends ChangeNotifier
     } on LlmException catch (error) {
       return error.message;
     } on PlatformException {
-      return 'The other app could not be opened.';
+      return l10n.theOtherAppCouldNotBe;
     }
   }
 
@@ -191,7 +192,7 @@ final class HandoffController extends ChangeNotifier
     _checking = true;
     try {
       final String text = (await _platform.readClipboard())?.trim() ?? '';
-      final String appName = waiting.app?.displayName ?? 'the other app';
+      final String appName = waiting.app?.displayName ?? l10n.theOtherApp;
       if (text == waiting.sharedText.trim() || text.isEmpty) {
         if (!_hinted) {
           _hinted = true;
@@ -234,13 +235,13 @@ final class HandoffController extends ChangeNotifier
     try {
       final KeptAnswer kept = await _core.keepAnswer(waiting.meetingId,
           text: text,
-          source: '${waiting.app?.displayName ?? 'Another'} app',
+          source: l10n.app(waiting.app?.displayName ?? 'Another'),
           prompt: waiting.prompt);
       _onSummaryChanged?.call(waiting.meetingId);
       _events.add(HandoffKept(
           meetingId: waiting.meetingId,
           title: waiting.title,
-          appName: waiting.app?.displayName ?? 'the other app',
+          appName: waiting.app?.displayName ?? l10n.theOtherApp,
           previous: kept.previous));
     } on LlmException catch (error) {
       _events.add(HandoffFailed(error.message));

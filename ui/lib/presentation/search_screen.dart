@@ -8,6 +8,7 @@ import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Opens a result: the meeting at its passage, or the file.
 typedef OpenSearchHit = void Function(BuildContext context, SearchHit hit);
@@ -59,7 +60,7 @@ final class _SearchScreenState extends State<SearchScreen> {
   Future<void> _search() async {
     setState(() {
       _searching = true;
-      _status = 'Searching…';
+      _status = l10n.searching;
     });
     SearchResults? results;
     String status;
@@ -68,9 +69,9 @@ final class _SearchScreenState extends State<SearchScreen> {
           .search(_query.text, widget.scope, projectId: widget.projectId);
       final int count = results.hits.length;
       status = count == 0
-          ? 'Nothing found.'
-          : '${count == 1 ? '1 result' : '$count results'}'
-              '${results.truncated ? ', more not shown: add words to narrow it' : ''}';
+          ? l10n.nothingFound
+          : '${l10n.resultCount(count)}'
+              '${results.truncated ? l10n.moreNotShown : ''}';
     } on SearchException catch (error) {
       status = error.message;
     }
@@ -108,7 +109,7 @@ final class _SearchScreenState extends State<SearchScreen> {
                     labelText: widget.title,
                     border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
-                      tooltip: 'Search',
+                      tooltip: l10n.search2,
                       icon: const Icon(Icons.search),
                       onPressed: _searching ? null : _search,
                     ),

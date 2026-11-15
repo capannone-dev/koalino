@@ -13,6 +13,7 @@ import 'package:note_taker_ui/presentation/project_detail_screen.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
 import 'package:note_taker_ui/presentation/search_screen.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Lists projects and opens them.
 final class ProjectsScreen extends StatefulWidget {
@@ -97,7 +98,7 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
       builder: (BuildContext context) => SearchScreen(
         bridge: bridge,
         scope: SearchScope.projects,
-        title: 'Search projects',
+        title: l10n.searchProjects,
         onOpen: (BuildContext context, SearchHit hit) => openProjectSearchHit(
           context,
           hit,
@@ -112,7 +113,7 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
   /// Asks for a name and creates the project, then opens it.
   Future<void> _create() async {
     final String? name = await askProjectName(context,
-        title: 'New project', confirmLabel: 'Create');
+        title: l10n.newProject2, confirmLabel: l10n.create);
     if (name == null || !mounted) {
       return;
     }
@@ -122,7 +123,7 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
     }
     if (created == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('The project could not be created.')));
+          SnackBar(content: Text(l10n.theProjectCouldNotBeCreated)));
       return;
     }
     _open(created.projectId);
@@ -132,16 +133,16 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Projects'),
+        title: Text(l10n.projects),
         actions: <Widget>[
           if (widget.searchBridge case final SearchBridge bridge)
             IconButton(
-              tooltip: 'Search projects',
+              tooltip: l10n.searchProjects,
               icon: const Icon(Icons.search),
               onPressed: () => _search(bridge),
             ),
           IconButton(
-            tooltip: 'Refresh',
+            tooltip: l10n.refresh,
             icon: const Icon(Icons.refresh),
             onPressed: widget.controller.loadProjects,
           ),
@@ -151,7 +152,7 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
         key: const ValueKey<String>('new-project'),
         onPressed: _create,
         icon: const Icon(Icons.create_new_folder_outlined),
-        label: const Text('New project'),
+        label: Text(l10n.newProject2),
       ),
       body: AnimatedBuilder(
         animation: widget.controller,
@@ -164,12 +165,11 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
             return Center(child: Text(message));
           }
           if (controller.projects.isEmpty) {
-            return const Center(
+            return Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
-                  'No projects yet. A project gathers meetings with the files, '
-                  'notes and e-mails that belong to them.',
+                  l10n.noProjectsYetAProjectGathers,
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -195,9 +195,6 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
 }
 
 /// `2 meetings · 3 files`.
-String _counts(ProjectSummary project) {
-  String count(int value, String one, String many) =>
-      '$value ${value == 1 ? one : many}';
-  return '${count(project.meetingCount, 'meeting', 'meetings')} · '
-      '${count(project.resourceCount, 'file', 'files')}';
-}
+String _counts(ProjectSummary project) =>
+    '${l10n.meetingCount(project.meetingCount)} · '
+    '${l10n.fileCount(project.resourceCount)}';

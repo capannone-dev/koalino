@@ -3,6 +3,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Owns the network addresses for Settings.
 final class NetworkSettingsController extends ChangeNotifier {
@@ -38,13 +39,10 @@ final class NetworkSettingsController extends ChangeNotifier {
 
   /// How far this device has got with its relay, in the owner's words, or `null` without one.
   String? get relayStatus => switch (_routes?.relayState) {
-        'not_paired' =>
-          'Not paired yet. Make the relay discoverable, then pair with it under Nearby devices in Devices.',
-        'connecting' => 'Connecting to the relay…',
-        'connected' =>
-          'Connected to the relay. Asking it to accept connections…',
-        'reserved' =>
-          'Connected. Your other devices can reach this one through the relay.',
+        'not_paired' => l10n.notPairedYetMakeTheRelay,
+        'connecting' => l10n.connectingToTheRelay,
+        'connected' => l10n.connectedToTheRelayAskingIt,
+        'reserved' => l10n.connectedYourOtherDevicesCanReach,
         _ => null,
       };
 
@@ -82,19 +80,17 @@ final class NetworkSettingsController extends ChangeNotifier {
         relay: trimmedRelay.isEmpty ? null : trimmedRelay,
         peers: peerList,
       );
-      _message = 'Saved. This applies now, with no restart.';
+      _message = l10n.savedThisAppliesNowWithNo;
       await load();
     } on P2pException catch (error) {
       _message = switch (error.errorCode) {
-        'invalid_relay_address' =>
-          'That relay address is not valid. It looks like /ip4/203.0.113.5/tcp/4001/p2p/12D3Koo…',
-        'invalid_peer_address' =>
-          'A device address is not valid. Each ends in /p2p/ and the device\'s ID.',
-        'unavailable' => 'Device sync is not running.',
-        _ => 'Unable to save the addresses.',
+        'invalid_relay_address' => l10n.thatRelayAddressIsNotValid,
+        'invalid_peer_address' => l10n.aDeviceAddressIsNotValid,
+        'unavailable' => l10n.deviceSyncIsNotRunning,
+        _ => l10n.unableToSaveTheAddresses,
       };
     } on Object {
-      _message = 'Unable to save the addresses.';
+      _message = l10n.unableToSaveTheAddresses;
     }
     _isSaving = false;
     _notify();

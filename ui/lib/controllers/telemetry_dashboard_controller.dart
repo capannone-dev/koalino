@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/telemetry_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 final class TelemetryDashboardController extends ChangeNotifier {
   TelemetryDashboardController({required TelemetryBridge telemetryBridge})
@@ -27,7 +28,7 @@ final class TelemetryDashboardController extends ChangeNotifier {
       errorMessage = null;
     } on Object {
       isLive = false;
-      errorMessage = 'Unable to refresh telemetry';
+      errorMessage = l10n.unableToRefreshTelemetry;
     }
     notifyListeners();
   }

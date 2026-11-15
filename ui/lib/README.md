@@ -5,6 +5,10 @@
 The package exposes the application entry point and separates presentation, controller, and FFI
 infrastructure code. Dart package imports resolve only from this directory.
 
+`l10n/` holds the translations (Issue #124): ten languages, read through the global `l10n` getter.
+`controllers/app_language_controller.dart` keeps the owner's choice and
+`presentation/app_localization_scope.dart` applies it. See `l10n/README.md`.
+
 Meeting attachments (Issue #54) span all three layers:
 - `infrastructure/`:
   - `meeting_attachment_bridge.dart` holds the multi-file picker and `note_taker_attach_files`;

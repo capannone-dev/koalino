@@ -4,6 +4,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// One option in the selector.
 typedef TranscriptionRouteChoice = ({String route, String label});
@@ -42,13 +43,13 @@ final class TranscriptionRouteController extends ChangeNotifier {
         _status?.pairedDevices ?? const <PairedDevice>[];
     final bool routeIsPeer = _route != 'local' && _route != 'auto';
     return <TranscriptionRouteChoice>[
-      (route: 'local', label: 'This device'),
-      (route: 'auto', label: 'Best available'),
+      (route: 'local', label: l10n.thisDevice),
+      (route: 'auto', label: l10n.bestAvailable),
       for (final PairedDevice device in devices)
         (route: device.peerId, label: device.deviceName),
       if (routeIsPeer &&
           !devices.any((PairedDevice device) => device.peerId == _route))
-        (route: _route, label: 'A removed device'),
+        (route: _route, label: l10n.aRemovedDevice),
     ];
   }
 
@@ -77,8 +78,7 @@ final class TranscriptionRouteController extends ChangeNotifier {
       await _p2pBridge.setTranscriptionRoute(chosenRoute);
       _route = chosenRoute;
     } on P2pException {
-      _message = 'The transcription device could not be changed. '
-          'Check that it is still paired.';
+      _message = l10n.theTranscriptionDeviceCouldNotBe;
     }
     _isSaving = false;
     _notify();

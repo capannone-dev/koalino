@@ -15,16 +15,17 @@ import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/infrastructure/call_notifier.dart';
 import 'package:note_taker_ui/infrastructure/call_watch_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Reads the microphone's users on the host, where the core cannot (Android).
 typedef HostMicrophoneUsers = Future<List<HostMicrophoneUser>> Function();
 
 /// The name the core gives a call whose app is unknown (Android).
-const String unnamedCallApp = 'A call app';
+String get unnamedCallApp => l10n.aCallApp;
 
 /// The title of a recording started from the offer for `app`.
 String callRecordingTitle(String app) =>
-    app == unnamedCallApp ? 'Call' : '$app call';
+    app == unnamedCallApp ? l10n.call : l10n.call2(app);
 
 /// Watches for calls and owns the offer.
 final class CallWatchController extends ChangeNotifier {
@@ -136,7 +137,7 @@ final class CallWatchController extends ChangeNotifier {
           if (tiedApp != null && _settings.autoStop && _isRecording) {
             _tiedApp = null;
             await _recording.stopRecording();
-            _message = 'The $tiedApp call ended, so the recording stopped.';
+            _message = l10n.theCallEndedSoTheRecording(tiedApp);
           }
       }
       notifyListeners();
@@ -218,8 +219,7 @@ final class CallWatchController extends ChangeNotifier {
   /// Asks for a restart of call apps once the core turned the desktop's accessibility on (#113).
   void _tellRestartIfNeeded() {
     if (_settings.restartApps) {
-      _message = 'Restart your browser and call apps once, so Koalino can read '
-          'who is speaking in calls.';
+      _message = l10n.restartYourBrowserAndCallApps;
     }
   }
 

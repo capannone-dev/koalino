@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/log_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Owns the log level and log export state for Settings.
 final class LogSettingsController extends ChangeNotifier {
@@ -71,7 +72,7 @@ final class LogSettingsController extends ChangeNotifier {
       _level = level;
       _levelMessage = null;
     } else {
-      _levelMessage = 'Unable to change the log level';
+      _levelMessage = l10n.unableToChangeTheLogLevel;
     }
     notifyListeners();
   }
@@ -114,7 +115,7 @@ final class LogSettingsController extends ChangeNotifier {
       outputPath = null;
     }
     return switch (await _logBridge.exportLogs(outputPath: outputPath)) {
-      LogExportSuccess(:final String filePath) => 'Logs exported to $filePath',
+      LogExportSuccess(:final String filePath) => l10n.logsExportedTo(filePath),
       final LogExportFailure failure => _failureMessage(failure),
     };
   }
@@ -135,7 +136,7 @@ final class LogSettingsController extends ChangeNotifier {
           await logSharer.share(filePath);
           return null;
         } on Object {
-          return 'Unable to share the logs';
+          return l10n.unableToShareTheLogs;
         }
     }
   }
@@ -151,6 +152,6 @@ String _exportFileName(DateTime time) {
 
 /// Words a failure without exposing paths or internal messages.
 String _failureMessage(LogExportFailure failure) => switch (failure.errorCode) {
-      'no_logs' => 'No logs to export yet',
-      _ => 'Unable to export the logs',
+      'no_logs' => l10n.noLogsToExportYet,
+      _ => l10n.unableToExportTheLogs,
     };

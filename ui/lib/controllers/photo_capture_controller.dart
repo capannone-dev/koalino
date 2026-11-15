@@ -9,6 +9,7 @@ import 'package:flutter/widgets.dart';
 import 'package:note_taker_ui/infrastructure/meeting_attachment_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/photo_camera.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Where the camera session is.
 enum PhotoCameraState {
@@ -107,11 +108,11 @@ final class PhotoCaptureController extends ChangeNotifier {
       final AttachFilesResult result = await _attachmentBridge
           .attachFiles(meetingId, <String>[temporaryPath]);
       if (result.attached.isEmpty) {
-        _errorMessage = 'The photo could not be saved.';
+        _errorMessage = l10n.thePhotoCouldNotBeSaved;
       }
       _photos.addAll(result.attached);
     } on Object {
-      _errorMessage = 'The photo could not be saved.';
+      _errorMessage = l10n.thePhotoCouldNotBeSaved;
     } finally {
       if (temporaryPath case final String path) {
         await _deleteTemporaryPhoto(path).catchError((Object _) {});

@@ -12,6 +12,7 @@ import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/presentation/clear_file.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Builds the PDF view; tests replace it, since PDFium is not loaded there.
 typedef PdfViewBuilder = Widget Function(String filePath);
@@ -43,9 +44,9 @@ final class ResourceViewerScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(resource.fileName)),
       body: !resource.isAvailable
-          ? const _Message(
+          ? _Message(
               icon: Icons.sync,
-              text: 'This file is still on its way from a paired device.',
+              text: l10n.thisFileIsStillOnIts,
             )
           : switch (resource.kind) {
               ProjectResourceKind.image => _Clear(
@@ -56,9 +57,9 @@ final class ResourceViewerScreen extends StatelessWidget {
                       child: Image.file(
                         File(path),
                         semanticLabel: resource.fileName,
-                        errorBuilder: (_, __, ___) => const _Message(
+                        errorBuilder: (_, __, ___) => _Message(
                           icon: Icons.broken_image_outlined,
-                          text: 'This picture cannot be shown.',
+                          text: l10n.thisPictureCannotBeShown,
                         ),
                       ),
                     ),
@@ -87,9 +88,9 @@ final class ResourceViewerScreen extends StatelessWidget {
                   load: () =>
                       controller.readEmail(projectId, resource.attachmentId),
                 ),
-              ProjectResourceKind.document => const _Message(
+              ProjectResourceKind.document => _Message(
                   icon: Icons.description_outlined,
-                  text: "This kind of document can't be shown in the app yet.",
+                  text: l10n.thisKindOfDocumentCanT,
                 ),
             },
     );
@@ -108,9 +109,9 @@ final class _Clear extends StatelessWidget {
     return ClearFile(
       attachmentId: resource.attachmentId,
       builder: (BuildContext context, String path) => builder(path),
-      unavailableBuilder: (BuildContext context) => const _Message(
+      unavailableBuilder: (BuildContext context) => _Message(
         icon: Icons.error_outline,
-        text: 'This file cannot be opened.',
+        text: l10n.thisFileCannotBeOpened,
       ),
     );
   }
@@ -133,9 +134,9 @@ final class _FileText extends StatelessWidget {
           switch (snapshot) {
         AsyncSnapshot<String>(hasData: true, :final String data) =>
           builder(data),
-        AsyncSnapshot<String>(hasError: true) => const _Message(
+        AsyncSnapshot<String>(hasError: true) => _Message(
             icon: Icons.error_outline,
-            text: 'This file cannot be read.',
+            text: l10n.thisFileCannotBeRead,
           ),
         _ => const Center(child: CircularProgressIndicator()),
       },
@@ -164,9 +165,9 @@ final class _EmailViewState extends State<_EmailView> {
       future: _email,
       builder: (BuildContext context, AsyncSnapshot<EmailView> snapshot) {
         if (snapshot.hasError) {
-          return const _Message(
+          return _Message(
             icon: Icons.error_outline,
-            text: 'This e-mail cannot be read.',
+            text: l10n.thisEMailCannotBeRead,
           );
         }
         final EmailView? email = snapshot.data;
@@ -179,16 +180,16 @@ final class _EmailViewState extends State<_EmailView> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: <Widget>[
-              Text(email.subject ?? '(no subject)',
+              Text(email.subject ?? l10n.noSubject,
                   style: theme.textTheme.titleLarge),
               const SizedBox(height: 12),
               for (final (String label, String value) in <(String, String)>[
-                ('From', people(email.from)),
-                ('To', people(email.to)),
-                ('Cc', people(email.cc)),
+                (l10n.from, people(email.from)),
+                (l10n.to, people(email.to)),
+                (l10n.cc, people(email.cc)),
                 if (email.sentAt case final DateTime sentAt)
                   (
-                    'Sent',
+                    l10n.sent,
                     MaterialLocalizations.of(context)
                         .formatFullDate(sentAt.toLocal())
                   ),
@@ -208,7 +209,7 @@ final class _EmailViewState extends State<_EmailView> {
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    'Attachments: ${email.attachmentNames.join(', ')}',
+                    l10n.attachments(email.attachmentNames.join(', ')),
                     style: theme.textTheme.bodySmall,
                   ),
                 ),
@@ -217,7 +218,7 @@ final class _EmailViewState extends State<_EmailView> {
               if (email.bodyTruncated)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
-                  child: Text('The rest of this e-mail is too long to show.',
+                  child: Text(l10n.theRestOfThisEMail,
                       style: theme.textTheme.bodySmall),
                 ),
             ],

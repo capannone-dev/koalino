@@ -2,6 +2,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Owns the meeting list, the selected meeting, and their loading and error states.
 ///
@@ -59,7 +60,7 @@ final class MeetingListController extends ChangeNotifier {
     try {
       _meetings = await _meetingBridge.getMeetings();
     } on Object {
-      _errorMessage = 'Unable to load meetings';
+      _errorMessage = l10n.unableToLoadMeetings;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -83,7 +84,7 @@ final class MeetingListController extends ChangeNotifier {
     try {
       loadedMeeting = await _meetingBridge.getMeeting(meetingId);
     } on Object {
-      loadError = 'Unable to load this meeting';
+      loadError = l10n.unableToLoadThisMeeting;
     }
     if (_selectedMeetingId != meetingId) {
       return;

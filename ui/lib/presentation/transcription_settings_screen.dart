@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/transcription_settings_controller.dart';
 import 'package:note_taker_ui/infrastructure/npu_download.dart';
 import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Finds the button applying the proposed model in tests.
 const Key useProposalKey = ValueKey<String>('use-proposal');
@@ -54,16 +55,16 @@ const Key npuRemoveKey = ValueKey<String>('npu-remove');
 const Key glossarySaveKey = ValueKey<String>('glossary-save');
 
 /// Speed and accuracy hints for each size, from measurements on Italian speech (see #67, #69).
-const Map<String, String> _familyHints = <String, String>{
-  'tiny': 'Fastest, least accurate',
-  'base': 'Fast, many mistakes. The app ships with this one',
-  'small': 'Good balance on most computers',
-  'medium': 'Accurate, slower, needs about 2 GB of memory',
-  'large-v1': 'Older, needs a powerful computer',
-  'large-v2': 'Older, needs a powerful computer',
-  'large-v3': 'Most accurate, needs a powerful computer',
-  'large-v3-turbo': 'Very accurate. Best with a graphics card',
-};
+Map<String, String> get _familyHints => <String, String>{
+      'tiny': l10n.fastestLeastAccurate,
+      'base': l10n.fastManyMistakesTheAppShips,
+      'small': l10n.goodBalanceOnMostComputers,
+      'medium': l10n.accurateSlowerNeedsAbout2Gb,
+      'large-v1': l10n.olderNeedsAPowerfulComputer,
+      'large-v2': l10n.olderNeedsAPowerfulComputer,
+      'large-v3': l10n.mostAccurateNeedsAPowerfulComputer,
+      'large-v3-turbo': l10n.veryAccurateBestWithAGraphics,
+    };
 
 /// Formats a size in plain units.
 String formatModelSize(int bytes) => bytes >= 1000000000
@@ -105,17 +106,15 @@ final class _TranscriptionSettingsScreenState
       final bool? confirmed = await showDialog<bool>(
         context: context,
         builder: (BuildContext context) => AlertDialog(
-          title: const Text('This model may be too large'),
-          content:
-              Text('${model.name} may need more memory than this device has, '
-                  'and recordings could fail or run slowly.'),
+          title: Text(l10n.thisModelMayBeTooLarge),
+          content: Text(l10n.mayNeedMoreMemoryThanThis(model.name)),
           actions: <Widget>[
             TextButton(
                 onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel')),
+                child: Text(l10n.cancel)),
             FilledButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Download anyway')),
+                child: Text(l10n.downloadAnyway)),
           ],
         ),
       );
@@ -128,14 +127,14 @@ final class _TranscriptionSettingsScreenState
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Transcription')),
+        appBar: AppBar(title: Text(l10n.transcription)),
         body: ListenableBuilder(
           listenable: widget.controller,
           builder: (BuildContext context, Widget? child) {
             final TranscriptionSettings? settings = widget.controller.settings;
             if (settings == null) {
-              return const Center(
-                  child: Text('Transcription settings are unavailable.'));
+              return Center(
+                  child: Text(l10n.transcriptionSettingsAreUnavailable));
             }
             return ListView(
               children: <Widget>[
@@ -173,26 +172,17 @@ final class _TranscriptionSettingsScreenState
     final bool? accepted = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: const Text('Download from Qualcomm?'),
-        content: const SingleChildScrollView(
-          child: Text(
-              'About 360 MB is downloaded from Qualcomm and needs about '
-              '460 MB of space:\n\n'
-              '• Qualcomm\'s QNN runtime, which lets apps use the NPU. It is '
-              'licensed under Qualcomm\'s AI Stack License, not the app\'s '
-              'licence.\n'
-              '• Whisper Small, compiled by Qualcomm AI Hub for this '
-              'phone\'s NPU.\n\n'
-              'Each file is checked before it is used. Your recordings never '
-              'leave the phone. By downloading, you accept Qualcomm\'s terms.'),
+        title: Text(l10n.downloadFromQualcomm),
+        content: SingleChildScrollView(
+          child: Text(l10n.about360MbIsDownloadedFrom),
         ),
         actions: <Widget>[
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
+              child: Text(l10n.cancel)),
           FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Accept and download')),
+              child: Text(l10n.acceptAndDownload)),
         ],
       ),
     );
@@ -210,14 +200,14 @@ final class _TranscriptionSettingsScreenState
       return <Widget>[
         ListTile(
           leading: icon,
-          title: const Text('Downloading the NPU files…'),
+          title: Text(l10n.downloadingTheNpuFiles),
           subtitle: Padding(
             padding: const EdgeInsets.only(top: 8),
             child: LinearProgressIndicator(value: fraction),
           ),
           trailing: TextButton(
             onPressed: controller.cancelNpuDownload,
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
         ),
       ];
@@ -226,15 +216,12 @@ final class _TranscriptionSettingsScreenState
       return <Widget>[
         ListTile(
           leading: icon,
-          title: const Text('Transcribe on the NPU'),
-          subtitle: const Text(
-              'This phone has an AI chip (NPU) that can run Whisper Small, '
-              'leaving the processor free: 30 seconds of speech take about '
-              '2 seconds. It needs a download from Qualcomm.'),
+          title: Text(l10n.transcribeOnTheNpu),
+          subtitle: Text(l10n.thisPhoneHasAnAiChip),
           trailing: FilledButton.tonal(
             key: npuDownloadKey,
             onPressed: controller.isBusy ? null : _downloadNpu,
-            child: const Text('Download'),
+            child: Text(l10n.download),
           ),
         ),
       ];
@@ -243,10 +230,8 @@ final class _TranscriptionSettingsScreenState
       SwitchListTile(
         key: npuSwitchKey,
         secondary: icon,
-        title: const Text('Transcribe on the NPU'),
-        subtitle: const Text('Runs Whisper Small on the phone\'s AI chip, '
-            'in place of the model chosen above, and for the after-meeting '
-            'pass unless it has its own model. Word times are approximate.'),
+        title: Text(l10n.transcribeOnTheNpu),
+        subtitle: Text(l10n.runsWhisperSmallOnThePhone),
         value: npu.enabled,
         onChanged: controller.isBusy
             ? null
@@ -259,7 +244,7 @@ final class _TranscriptionSettingsScreenState
           child: TextButton(
             key: npuRemoveKey,
             onPressed: controller.isBusy ? null : controller.removeNpu,
-            child: const Text('Remove the NPU files'),
+            child: Text(l10n.removeTheNpuFiles),
           ),
         ),
       ),
@@ -270,11 +255,8 @@ final class _TranscriptionSettingsScreenState
   Widget _computerSoundTile(bool enabled) => SwitchListTile(
         key: computerSoundKey,
         secondary: const Icon(Icons.speaker_outlined),
-        title: const Text("Also record the computer's sound"),
-        subtitle: const Text('Transcribes what the computer plays, such as '
-            'the other side of a call, beside the microphone. When the '
-            'microphone also hears the speakers, the repeated words are '
-            'kept once.'),
+        title: Text(l10n.alsoRecordTheComputerSSound),
+        subtitle: Text(l10n.transcribesWhatTheComputerPlaysSuch),
         value: enabled,
         onChanged: widget.controller.isBusy
             ? null
@@ -287,10 +269,8 @@ final class _TranscriptionSettingsScreenState
   Widget _afterMeetingPassTile(bool enabled) => SwitchListTile(
         key: afterMeetingPassKey,
         secondary: const Icon(Icons.auto_fix_high_outlined),
-        title: const Text('Improve the transcript after the meeting'),
-        subtitle: const Text('Transcribes each meeting again with more '
-            'context once it ends; a phone waits until it is charging. The '
-            'speech is kept encrypted until then, then deleted.'),
+        title: Text(l10n.improveTheTranscriptAfterTheMeeting),
+        subtitle: Text(l10n.transcribesEachMeetingAgainWithMore),
         value: enabled,
         onChanged: widget.controller.isBusy
             ? null
@@ -310,9 +290,8 @@ final class _TranscriptionSettingsScreenState
         : null;
     return ListTile(
       leading: const Icon(Icons.model_training_outlined),
-      title: const Text('Model for this pass'),
-      subtitle: const Text('A larger model is slower but more accurate, and '
-          'the pass has time after the meeting. Download models above.'),
+      title: Text(l10n.modelForThisPass),
+      subtitle: Text(l10n.aLargerModelIsSlowerBut),
       trailing: DropdownButton<String?>(
         key: afterMeetingPassModelKey,
         value: chosen,
@@ -321,8 +300,8 @@ final class _TranscriptionSettingsScreenState
             : (String? fileName) =>
                 widget.controller.setAfterMeetingPassModel(fileName),
         items: <DropdownMenuItem<String?>>[
-          const DropdownMenuItem<String?>(
-              value: null, child: Text('Same as for recording')),
+          DropdownMenuItem<String?>(
+              value: null, child: Text(l10n.sameAsForRecording)),
           for (final WhisperModelInfo model in onDevice)
             DropdownMenuItem<String?>(
                 value: model.fileName, child: Text(model.name)),
@@ -335,10 +314,8 @@ final class _TranscriptionSettingsScreenState
   /// recording of the same meeting before it is deleted (#93).
   Widget _keepSpeechTile(SpeechRetention retention) => ListTile(
         leading: const Icon(Icons.timer_outlined),
-        title: const Text('Keep speech for combining'),
-        subtitle: const Text('When a meeting was also recorded on another '
-            'device, its speech waits this long to be combined, then is '
-            'deleted.'),
+        title: Text(l10n.keepSpeechForCombining),
+        subtitle: Text(l10n.whenAMeetingWasAlsoRecorded),
         trailing: DropdownButton<int>(
           key: keepSpeechKey,
           value: retention.days,
@@ -352,7 +329,7 @@ final class _TranscriptionSettingsScreenState
           items: <DropdownMenuItem<int>>[
             for (final int days in retention.choices)
               DropdownMenuItem<int>(
-                  value: days, child: Text(days == 1 ? '1 day' : '$days days')),
+                  value: days, child: Text(l10n.dayCount(days))),
           ],
         ),
       );
@@ -362,12 +339,9 @@ final class _TranscriptionSettingsScreenState
       BuildContext context, TranscriptionSettings settings) {
     final List<Widget> tiles = <Widget>[
       ListTile(
-        title: Text('Whisper model',
+        title: Text(l10n.whisperModel,
             style: Theme.of(context).textTheme.titleMedium),
-        subtitle: const Text(
-            'Bigger models make fewer mistakes, and need more time and '
-            'memory. Downloads come from Hugging Face. This choice applies '
-            'only to this device.'),
+        subtitle: Text(l10n.biggerModelsMakeFewerMistakesAnd),
       ),
       ..._automaticTiles(settings),
       // A proposal rests on this device's own speed, so it replaces the device-based estimate.
@@ -409,9 +383,9 @@ final class _TranscriptionSettingsScreenState
             row.fileName == automatic.waitingForDownload)
         .firstOrNull;
     final String title = automatic.enabled
-        ? 'Automatic: ${nameOf(automatic.fileName)}'
-            '${automatic.efficient ? ', efficient mode' : ''}'
-        : 'Automatic';
+        ? l10n.automatic2(nameOf(automatic.fileName),
+            automatic.efficient ? ', efficient mode' : '')
+        : l10n.automatic;
     // The suggestion's reason, then how its model ran on this device once timed (#109).
     final String reason = <String>[
       if (settings.suggestion?.reason case final String reason
@@ -420,13 +394,12 @@ final class _TranscriptionSettingsScreenState
       if (automatic.speedCheck case final String speedCheck) speedCheck,
     ].join(' ');
     final String subtitle = waiting != null
-        ? 'Uses ${nameOf(automatic.fileName)} until ${waiting.name} is '
-            'downloaded, the best fit for this device. $reason'
+        ? l10n.usesUntilIsDownloadedTheBest(
+            nameOf(automatic.fileName), waiting.name, reason)
         : automatic.enabled
             ? reason
-            : 'Picks the best model for this device: '
-                '${nameOf(automatic.fileName)}'
-                '${automatic.efficient ? ', efficient mode' : ''}.';
+            : l10n.picksTheBestModelForThis(nameOf(automatic.fileName),
+                automatic.efficient ? ', efficient mode' : '');
     final WhisperDownload download = settings.download;
     final bool downloadingWaiting = waiting != null &&
         download.state == 'downloading' &&
@@ -454,7 +427,7 @@ final class _TranscriptionSettingsScreenState
                 onPressed: controller.isBusy || controller.isDownloading
                     ? null
                     : () => _download(waiting),
-                child: Text('Download ${formatModelSize(waiting.sizeBytes)}'),
+                child: Text(l10n.download2(formatModelSize(waiting.sizeBytes))),
               ),
       ),
     ];
@@ -474,7 +447,7 @@ final class _TranscriptionSettingsScreenState
     return <Widget>[
       ListTile(
         leading: const Icon(Icons.insights_outlined),
-        title: Text('Try ${model.name}'),
+        title: Text(l10n.tryLabel(model.name)),
         subtitle: Text(proposal.reason),
       ),
       Padding(
@@ -489,14 +462,14 @@ final class _TranscriptionSettingsScreenState
                   : () => controller.applyProposal(proposal,
                       onDevice: model.onDevice),
               child: Text(model.onDevice
-                  ? 'Use'
-                  : 'Download ${formatModelSize(model.sizeBytes)}'),
+                  ? l10n.use
+                  : l10n.download2(formatModelSize(model.sizeBytes))),
             ),
             TextButton(
               key: dismissProposalKey,
               onPressed:
                   blocked ? null : () => controller.dismissProposal(proposal),
-              child: const Text('Not now'),
+              child: Text(l10n.notNow),
             ),
           ],
         ),
@@ -519,8 +492,8 @@ final class _TranscriptionSettingsScreenState
     return <Widget>[
       ListTile(
         leading: const Icon(Icons.recommend_outlined),
-        title: Text('Suggested for this device: ${model.name}'
-            '${suggestion.efficient ? ', efficient mode' : ''}'),
+        title: Text(l10n.suggestedForThisDevice(
+            model.name, suggestion.efficient ? ', efficient mode' : '')),
         subtitle: Text(suggestion.reason),
         trailing: inUse
             ? null
@@ -531,8 +504,8 @@ final class _TranscriptionSettingsScreenState
                     : () => controller.applySuggestion(suggestion,
                         onDevice: model.onDevice),
                 child: Text(model.onDevice
-                    ? 'Use'
-                    : 'Download ${formatModelSize(model.sizeBytes)}'),
+                    ? l10n.use
+                    : l10n.download2(formatModelSize(model.sizeBytes))),
               ),
       ),
     ];
@@ -549,10 +522,8 @@ final class _TranscriptionSettingsScreenState
         SwitchListTile(
           key: efficientModeKey,
           secondary: const Icon(Icons.bolt_outlined),
-          title: const Text('Efficient mode'),
-          subtitle:
-              Text('Runs the same models on the graphics chip ($gpuName), '
-                  'usually faster. Off uses the processor, as standard.'),
+          title: Text(l10n.efficientMode),
+          subtitle: Text(l10n.runsTheSameModelsOnThe(gpuName)),
           value: efficient.enabled,
           onChanged: controller.isBusy
               ? null
@@ -561,13 +532,12 @@ final class _TranscriptionSettingsScreenState
       if (efficient.gpuBlocked)
         ListTile(
           leading: const Icon(Icons.warning_amber_outlined),
-          title: const Text('The graphics chip stopped the app last time, so '
-              'this device is transcribing with its processor.'),
+          title: Text(l10n.theGraphicsChipStoppedTheApp),
           subtitle: Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
               onPressed: controller.isBusy ? null : controller.retryGpu,
-              child: const Text('Try the graphics chip again'),
+              child: Text(l10n.tryTheGraphicsChipAgain),
             ),
           ),
         ),
@@ -586,16 +556,16 @@ final class _TranscriptionSettingsScreenState
         widget.languageCode != 'auto';
     final List<String> notes = <String>[
       formatModelSize(model.sizeBytes),
-      if (model.onDevice) 'on this device',
+      if (model.onDevice) l10n.onThisDevice,
       if (settings.automatic.enabled &&
           settings.automatic.fileName == model.fileName)
-        'used by Automatic',
-      if (model.englishOnly) 'English only',
-      if (model.tooLargeForMemory) 'may be too large for this device',
-      if (wrongLanguage) 'doesn\'t match your language',
+        l10n.usedByAutomatic,
+      if (model.englishOnly) l10n.englishOnly,
+      if (model.tooLargeForMemory) l10n.mayBeTooLargeForThis,
+      if (wrongLanguage) l10n.doesnTMatchYourLanguage,
       if ((settings.availableDiskBytes ?? model.sizeBytes) < model.sizeBytes &&
           !model.onDevice)
-        'not enough free space',
+        l10n.notEnoughFreeSpace,
     ];
     return ListTile(
       title: Text(model.name),
@@ -614,13 +584,13 @@ final class _TranscriptionSettingsScreenState
         children: <Widget>[
           if (downloadingThis)
             IconButton(
-              tooltip: 'Cancel download',
+              tooltip: l10n.cancelDownload,
               icon: const Icon(Icons.close),
               onPressed: controller.cancelDownload,
             )
           else if (!model.onDevice)
             IconButton(
-              tooltip: 'Download ${model.name}',
+              tooltip: l10n.download2(model.name),
               icon: const Icon(Icons.download),
               onPressed: controller.isDownloading || controller.isBusy
                   ? null
@@ -628,7 +598,7 @@ final class _TranscriptionSettingsScreenState
             )
           else if (model.removable)
             IconButton(
-              tooltip: 'Remove ${model.name}',
+              tooltip: l10n.remove3(model.name),
               icon: const Icon(Icons.delete_outline),
               onPressed: controller.isBusy
                   ? null
@@ -684,10 +654,9 @@ class _GlossarySectionState extends State<_GlossarySection> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text('Glossary', style: Theme.of(context).textTheme.titleMedium),
+            Text(l10n.glossary, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 4),
-            const Text('Names, project names and terms, one per line. '
-                'Transcription spells them as written here.'),
+            Text(l10n.namesProjectNamesAndTermsOne),
             const SizedBox(height: 8),
             TextField(
               key: glossaryFieldKey,
@@ -711,7 +680,7 @@ class _GlossarySectionState extends State<_GlossarySection> {
                         setState(() => _savedHere = true);
                         widget.controller.setGlossary(_terms.text);
                       },
-                child: const Text('Save glossary'),
+                child: Text(l10n.saveGlossary),
               ),
             ),
             if (_savedHere)

@@ -11,6 +11,7 @@ import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
 import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Opens a meeting's page at `atMs` (null for the top).
 typedef ChatMeetingOpener = void Function(
@@ -157,16 +158,15 @@ final class _ChatScreenState extends State<ChatScreen> {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: const Text('Delete this chat?'),
-        content: const Text(
-            'Its questions and answers are deleted from this device.'),
+        title: Text(l10n.deleteThisChat),
+        content: Text(l10n.itsQuestionsAndAnswersAreDeleted),
         actions: <Widget>[
           TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel')),
+              child: Text(l10n.cancel)),
           FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Delete')),
+              child: Text(l10n.delete)),
         ],
       ),
     );
@@ -213,8 +213,8 @@ final class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     if (resource == null) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('That file is no longer in the project.')));
+      messenger
+          .showSnackBar(SnackBar(content: Text(l10n.thatFileIsNoLongerIn)));
       return;
     }
     await navigator.push(MaterialPageRoute<void>(
@@ -258,7 +258,7 @@ final class _ChatScreenState extends State<ChatScreen> {
         actions: <Widget>[
           if (widget.bridge.canAskPairedComputer)
             PopupMenuButton<bool>(
-              tooltip: 'Who answers',
+              tooltip: l10n.whoAnswers,
               icon: Icon(_onComputer
                   ? Icons.computer_outlined
                   : Icons.smartphone_outlined),
@@ -270,15 +270,15 @@ final class _ChatScreenState extends State<ChatScreen> {
                 CheckedPopupMenuItem<bool>(
                     value: true,
                     checked: _onComputer,
-                    child: const Text('My paired computer')),
+                    child: Text(l10n.myPairedComputer)),
                 CheckedPopupMenuItem<bool>(
                     value: false,
                     checked: !_onComputer,
-                    child: const Text("This phone's AI connection")),
+                    child: Text(l10n.thisPhoneSAiConnection)),
               ],
             ),
           IconButton(
-            tooltip: 'Delete this chat',
+            tooltip: l10n.deleteThisChat2,
             icon: const Icon(Icons.delete_sweep_outlined),
             onPressed: _messages.isEmpty || _asking ? null : _clear,
           ),
@@ -299,11 +299,8 @@ final class _ChatScreenState extends State<ChatScreen> {
                               padding: const EdgeInsets.all(24),
                               child: Text(
                                 _onComputer
-                                    ? 'Ask about your notes. Answers come from your paired '
-                                        'computer, which reads its own copy of your notes '
-                                        'with the connection chosen there for your other devices.'
-                                    : 'Ask about your notes. The answer comes from your '
-                                        'default AI connection, which is sent the notes that fit.',
+                                    ? l10n.askAboutYourNotesAnswersCome
+                                    : l10n.askAboutYourNotesTheAnswer,
                                 textAlign: TextAlign.center,
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                     color: theme.colorScheme.onSurfaceVariant),
@@ -337,10 +334,10 @@ final class _ChatScreenState extends State<ChatScreen> {
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _ask(),
                   decoration: InputDecoration(
-                    labelText: 'Your question',
+                    labelText: l10n.yourQuestion,
                     border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
-                      tooltip: 'Ask',
+                      tooltip: l10n.ask,
                       icon: const Icon(Icons.send),
                       onPressed: _asking ? null : _ask,
                     ),
@@ -406,7 +403,7 @@ final class _Bubble extends StatelessWidget {
                                   ? Icons.event_note_outlined
                                   : Icons.description_outlined),
                               label: Text(sourceLabel(source)),
-                              tooltip: 'Open',
+                              tooltip: l10n.open,
                               onPressed: open,
                             ),
                           null => Chip(label: Text(sourceLabel(source))),
@@ -416,13 +413,13 @@ final class _Bubble extends StatelessWidget {
                 ],
                 if (!mine && message.included.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 8),
-                  Text('Given: ${message.included.join('; ')}', style: small),
+                  Text(l10n.given(message.included.join('; ')), style: small),
                 ],
                 if (!mine && message.omitted.isNotEmpty)
-                  Text('Left out for length: ${message.omitted.join('; ')}',
+                  Text(l10n.leftOutForLength(message.omitted.join('; ')),
                       style: small),
-                if (!mine && message.connection != null)
-                  Text('Answered by ${message.connection}', style: small),
+                if (message.connection case final String connection when !mine)
+                  Text(l10n.answeredBy(connection), style: small),
               ],
             ),
           ),

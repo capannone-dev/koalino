@@ -17,10 +17,15 @@ dependencies:
   file_picker: ^8.1.7
   flutter:
     sdk: flutter
+  # Translations of the app's text and the Material widgets' own (Issue #124).
+  flutter_localizations:
+    sdk: flutter
   flutter_riverpod: ^2.6.1
   # Shows Markdown project resources inside the app (Issue #85; pure Dart, approved by the owner).
   markdown: ^7.3.1
   fl_chart: ^0.69.2
+  # Formats the translated messages (Issue #124); the version flutter_localizations pins.
+  intl: any
   path_provider: ^2.1.5
   # Shows PDF project resources inside the app with PDFium (Issue #85; approved by the owner).
   pdfrx: ^2.11.0
@@ -35,3 +40,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Generates AppLocalizations from lib/l10n/*.arb (l10n.yaml, Issue #124).
+  generate: true

@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/handoff_controller.dart';
 import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// One choice of the hand-off sheet.
 final class _HandoffChoice {
@@ -38,39 +39,36 @@ Future<void> showHandoffSheet(
         children: <Widget>[
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-            child: Text('Use your own AI app',
+            child: Text(l10n.useYourOwnAiApp,
                 style: Theme.of(context).textTheme.titleLarge),
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
-            child: Text(
-                'The meeting, its notes and its files go to the app you pick, '
-                'with your own account. For a summary, copy the answer there and '
-                'come back, or share it to Koalino: Koalino keeps it.'),
+            child: Text(l10n.theMeetingItsNotesAndIts),
           ),
           for (final AiApp app in controller.apps) ...<Widget>[
             ListTile(
               leading: const Icon(Icons.summarize_outlined),
-              title: Text('Summarize in ${app.displayName}'),
+              title: Text(l10n.summarizeIn(app.displayName)),
               onTap: () => Navigator.of(context)
                   .pop(_HandoffChoice(HandoffPurpose.summary, app)),
             ),
             ListTile(
               leading: const Icon(Icons.forum_outlined),
-              title: Text('Chat in ${app.displayName}'),
+              title: Text(l10n.chatIn(app.displayName)),
               onTap: () => Navigator.of(context)
                   .pop(_HandoffChoice(HandoffPurpose.chat, app)),
             ),
           ],
           ListTile(
             leading: const Icon(Icons.share_outlined),
-            title: const Text('Summarize in another app…'),
+            title: Text(l10n.summarizeInAnotherApp),
             onTap: () => Navigator.of(context)
                 .pop(const _HandoffChoice(HandoffPurpose.summary, null)),
           ),
           ListTile(
             leading: const Icon(Icons.share_outlined),
-            title: const Text('Chat in another app…'),
+            title: Text(l10n.chatInAnotherApp),
             onTap: () => Navigator.of(context)
                 .pop(const _HandoffChoice(HandoffPurpose.chat, null)),
           ),
@@ -127,22 +125,20 @@ final class _HandoffReturnListenerState extends State<HandoffReturnListener> {
       case HandoffKept(:final String title, :final String appName):
         messenger.showSnackBar(SnackBar(
           duration: const Duration(seconds: 8),
-          content: Text('Summary from $appName saved to "$title".'),
+          content: Text(l10n.summaryFromSavedTo(appName, title)),
           action: SnackBarAction(
-            label: 'Undo',
+            label: l10n.undo,
             onPressed: () async {
               final String? problem = await widget.controller.undo(event);
               messenger.showSnackBar(SnackBar(
-                  content: Text(problem ?? 'The earlier summary is back.')));
+                  content: Text(problem ?? l10n.theEarlierSummaryIsBack)));
             },
           ),
         ));
       case HandoffHint(:final String appName):
         messenger.showSnackBar(SnackBar(
           duration: const Duration(seconds: 6),
-          content: Text(
-              'To keep the summary, copy $appName\'s answer and come back to Koalino, '
-              'or share the answer to Koalino.'),
+          content: Text(l10n.toKeepTheSummaryCopyS(appName)),
         ));
       case HandoffFailed(:final String message):
         messenger.showSnackBar(SnackBar(content: Text(message)));

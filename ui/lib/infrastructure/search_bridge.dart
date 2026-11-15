@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// What to search.
 enum SearchScope {
@@ -120,14 +121,14 @@ final class SearchHit {
 
   /// Where in its meeting or project the hit is, such as `1:01 · Anna` or `In plan.md`.
   String get placeLabel => switch (place) {
-        SearchPlace.meetingTitle => 'Title',
-        SearchPlace.summary => 'Summary',
-        SearchPlace.notes => 'Notes',
+        SearchPlace.meetingTitle => l10n.title,
+        SearchPlace.summary => l10n.summary,
+        SearchPlace.notes => l10n.notes,
         SearchPlace.transcript =>
           '${formatMeetingDuration(startTimeMs ?? 0)} · ${speaker ?? ''}',
-        SearchPlace.transcriptText => 'Transcript',
-        SearchPlace.projectName => 'Project name',
-        SearchPlace.resourceName => 'File ${fileName ?? ''}',
+        SearchPlace.transcriptText => l10n.transcript,
+        SearchPlace.projectName => l10n.projectName,
+        SearchPlace.resourceName => l10n.file(fileName ?? ''),
         SearchPlace.resourceText => 'In ${fileName ?? ''}',
       };
 }
@@ -152,13 +153,13 @@ final class SearchException implements Exception {
 
   /// A sentence for people; the core's own text is not shown.
   String get message => switch (code) {
-        'empty' => 'Type what to look for.',
-        'too_short' => 'Type at least two letters.',
-        'too_long' => 'The search is too long.',
-        'project_not_found' => 'That project no longer exists.',
-        'storage_failed' => 'The notes could not be read.',
-        'runtime_unavailable' => 'The app is still starting. Try again.',
-        _ => 'Something went wrong. Try again.',
+        'empty' => l10n.typeWhatToLookFor,
+        'too_short' => l10n.typeAtLeastTwoLetters,
+        'too_long' => l10n.theSearchIsTooLong,
+        'project_not_found' => l10n.thatProjectNoLongerExists,
+        'storage_failed' => l10n.theNotesCouldNotBeRead,
+        'runtime_unavailable' => l10n.theAppIsStillStartingTry,
+        _ => l10n.somethingWentWrongTryAgain,
       };
 
   @override

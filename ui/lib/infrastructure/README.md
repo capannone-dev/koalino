@@ -105,6 +105,10 @@ Rust's `error_code`), the pure decoders `decodeP2pStatus` and `decodeP2pCommandR
 `p2pCommandJson`. `RustP2pBridge` calls `note_taker_p2p_status` and `note_taker_p2p_command` on
 background isolates; a command blocks its isolate until the P2P task answers (Issue #43).
 
+`app_language_store.dart` (Issue #124) keeps the chosen app language in the `ui-language` file
+in the app's data directory (`FileAppLanguageStore`). A missing or empty file means "follow the
+system".
+
 `app_lock_bridge.dart` defines `AppLockStatus` (supported, device secure, enabled) and the
 `AppLockBridge` interface. `AndroidAppLockBridge` calls Kotlin's `AppLock` on the
 `note_taker/app_lock` channel: `status`, `authenticate` (the system prompt; false when

@@ -3493,3 +3493,26 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
     retried at the next meeting.
 - **Verified** on deb-gui: the Linux app alone (no daemon) recorded a fixture call from Firefox,
   resumed it across a page reload, and listed one meeting with its transcript.
+
+## 2026-11-15 — #124 The Flutter app in ten languages
+
+- **Owner's choice:** app, web and extension in English, Italian, Spanish, French, German,
+  Portuguese, Simplified Chinese, Japanese, Russian and Arabic. The app follows the system
+  language, with an override in Settings.
+- **Decision:** Flutter's own `gen-l10n` with ARB files (`ui/lib/l10n`). It needs only
+  `flutter_localizations` and `intl`, both part of the Flutter SDK's ecosystem.
+  - **A global accessor:** text is read through a global `l10n` getter, not through
+    `AppLocalizations.of(context)`. About 690 messages live in controllers, top-level constants
+    and helpers that have no `BuildContext`. `AppLocalizationScope` in `MaterialApp.builder`
+    sets it, and rebuilds every element when the language changes. Widgets tested without the
+    scope stay English, so existing tests did not change.
+  - **Where the choice lives:** the language choice is a UI preference. It is kept in the app's
+    data directory (`ui-language`), not in the Rust core, and is not synced between devices.
+  - **Kept in English:**
+    - the GPL licence notice, whose wording matters legally;
+    - Whisper's transcription-language names;
+    - messages the core returns for developers;
+    - brand and product names.
+- **Translations** are machine-made and need review by native speakers. A test checks that every
+  language has every message with the same declared placeholders.
+- **Still to come under #124:** the web UI and the browser extension.

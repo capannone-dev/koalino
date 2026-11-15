@@ -4,6 +4,7 @@
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Shows `child` only while the app is unlocked, and reports app visibility to the controller.
 final class AppLockGate extends StatefulWidget {
@@ -107,10 +108,11 @@ final class _LockScreen extends StatelessWidget {
                 Icon(Icons.lock_outline,
                     size: 56, color: theme.colorScheme.primary),
                 const SizedBox(height: 16),
-                Text('Koalino is locked', style: theme.textTheme.headlineSmall),
+                Text(l10n.koalinoIsLocked,
+                    style: theme.textTheme.headlineSmall),
                 const SizedBox(height: 8),
-                const Text(
-                  'Unlock with your fingerprint, face, or screen lock.',
+                Text(
+                  l10n.unlockWithYourFingerprintFaceOr,
                   textAlign: TextAlign.center,
                 ),
                 if (controller.message case final String message) ...<Widget>[
@@ -124,7 +126,7 @@ final class _LockScreen extends StatelessWidget {
                   onPressed:
                       controller.isAuthenticating ? null : controller.unlock,
                   icon: const Icon(Icons.fingerprint),
-                  label: const Text('Unlock'),
+                  label: Text(l10n.unlock),
                 ),
               ],
             ),

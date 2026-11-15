@@ -111,6 +111,10 @@ and Android phones (where `hostUsers` passes the core what Kotlin saw).
 transcript corrections; `MeetingListController.replaceSegment` then shows the corrected (or
 removed) passage in the open meeting without reloading it.
 
+`app_language_controller.dart` (Issue #124) lists the ten app languages by their own names
+(`appLanguages`) and holds the owner's choice: `null` follows the system. `load()` reads it at
+start-up and `choose()` saves it through an `AppLanguageStore`.
+
 `transcription_language_controller.dart` holds the default language and the language of the next or
 current recording, and returns to the default when a recording ends (Issue #62).
 `describeTranscriptionLanguages` names a meeting's languages for its detail screen.

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
 import 'package:note_taker_ui/infrastructure/pairing_link_bridge.dart';
 import 'package:note_taker_ui/presentation/devices_screen.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Builds the controller the Devices screen opened by a link uses; tests give a fake bridge.
 typedef DevicesControllerFactory = DevicesController Function();
@@ -82,18 +83,16 @@ final class _PairingLinkListenerState extends State<PairingLinkListener> {
     final bool? pair = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        title: const Text('Pair with another device?'),
-        content: const Text(
-            'You opened a pairing invite. Koalino will find the device that shows it, and both '
-            'devices will show a code to compare before anything is shared.'),
+        title: Text(l10n.pairWithAnotherDevice),
+        content: Text(l10n.youOpenedAPairingInviteKoalino),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Pair'),
+            child: Text(l10n.pair),
           ),
         ],
       ),
@@ -139,8 +138,7 @@ final class _DevicesPairingPageState extends State<_DevicesPairingPage> {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(refusal ??
-            'Pairing started. Check that both devices show the same code.')));
+        content: Text(refusal ?? l10n.pairingStartedCheckThatBothDevices)));
   }
 
   @override

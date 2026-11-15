@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/controllers/meeting_title_validation.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Checks a project name with the rules Rust applies (those of meeting titles).
 ///
@@ -13,11 +14,23 @@ import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 String? projectNameError(String rawName) =>
     switch (validateMeetingTitle(rawName).error) {
       null => null,
-      MeetingTitleError.empty => 'Enter a name.',
+      MeetingTitleError.empty => l10n.enterAName,
       MeetingTitleError.tooLong =>
-        'Names can be at most $maxMeetingTitleCharacters characters.',
-      MeetingTitleError.controlCharacter =>
-        "Names can't contain line breaks or control characters.",
+        l10n.namesCanBeAtMostCharacters(maxMeetingTitleCharacters),
+      MeetingTitleError.controlCharacter => l10n.namesCanTContainLineBreaks,
+    };
+
+/// Checks a project note's title with the same rules, worded for a title (#124).
+///
+/// Inputs: The title as typed. Outputs: A message to show under the field, or `null` when the
+/// title is valid. Side effects: None.
+String? noteTitleError(String rawTitle) =>
+    switch (validateMeetingTitle(rawTitle).error) {
+      null => null,
+      MeetingTitleError.empty => l10n.enterATitle,
+      MeetingTitleError.tooLong =>
+        l10n.titlesCanBeAtMost(maxMeetingTitleCharacters),
+      MeetingTitleError.controlCharacter => l10n.titlesCanTContainLineBreaks,
     };
 
 /// Lists projects, opens one, and changes them.
@@ -79,7 +92,7 @@ final class ProjectsController extends ChangeNotifier {
     try {
       _projects = await _projectBridge.listProjects();
     } on Object {
-      _errorMessage = 'Unable to load projects';
+      _errorMessage = l10n.unableToLoadProjects;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -110,7 +123,7 @@ final class ProjectsController extends ChangeNotifier {
     try {
       loaded = await _projectBridge.projectDetail(projectId);
     } on Object {
-      loadError = 'Unable to load this project';
+      loadError = l10n.unableToLoadThisProject;
     }
     if (_openProjectId != projectId) {
       return;
@@ -191,7 +204,7 @@ final class ProjectsController extends ChangeNotifier {
       }
       return await addPaths(projectId, filePaths);
     } on Object {
-      return 'The files could not be added.';
+      return l10n.theFilesCouldNotBeAdded;
     } finally {
       _setBusy(false);
     }
@@ -208,17 +221,15 @@ final class ProjectsController extends ChangeNotifier {
       await refresh();
       final int addedCount = result.added.length;
       final List<String> parts = <String>[
-        'Added $addedCount ${addedCount == 1 ? 'file' : 'files'}',
+        l10n.addedFiles(addedCount),
         if (result.failedPaths.isNotEmpty)
-          '${result.failedPaths.length} could not be added',
+          l10n.couldNotBeAdded(result.failedPaths.length),
         if (result.skippedAttachments > 0)
-          '${result.skippedAttachments} e-mail '
-              '${result.skippedAttachments == 1 ? 'attachment was' : 'attachments were'} '
-              'left in the e-mail',
+          l10n.emailAttachmentsLeft(result.skippedAttachments),
       ];
       return parts.join('; ');
     } on Object {
-      return 'The files could not be added.';
+      return l10n.theFilesCouldNotBeAdded;
     }
   }
 

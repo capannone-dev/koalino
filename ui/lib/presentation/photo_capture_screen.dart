@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/photo_capture_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Size of each thumbnail in the strip of photos taken, in logical pixels.
 const double _thumbnailSize = 56;
@@ -42,11 +43,11 @@ final class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
         final int photoCount = controller.photos.length;
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Take photos'),
+            title: Text(l10n.takePhotos),
             actions: <Widget>[
               TextButton(
                 onPressed: () => Navigator.of(context).pop(photoCount),
-                child: const Text('Done'),
+                child: Text(l10n.done),
               ),
             ],
           ),
@@ -69,10 +70,8 @@ final class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
                         ),
                       Text(
                         switch (photoCount) {
-                          0 =>
-                            'Photos are added to the meeting as you take them.',
-                          1 => '1 photo added',
-                          _ => '$photoCount photos added',
+                          0 => l10n.photosAreAddedToTheMeeting,
+                          _ => l10n.photosAddedCount(photoCount),
                         },
                         textAlign: TextAlign.center,
                       ),
@@ -82,7 +81,7 @@ final class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
                           Expanded(child: _thumbnails(controller.photos)),
                           if (controller.state == PhotoCameraState.ready)
                             IconButton.filled(
-                              tooltip: 'Take photo',
+                              tooltip: l10n.takePhoto,
                               iconSize: 40,
                               onPressed: controller.isTakingPhoto
                                   ? null
@@ -112,11 +111,11 @@ final class _PhotoCaptureScreenState extends State<PhotoCaptureScreen> {
       switch (controller.state) {
         PhotoCameraState.opening =>
           const Center(child: CircularProgressIndicator()),
-        PhotoCameraState.unavailable => const Center(
+        PhotoCameraState.unavailable => Center(
             child: Padding(
               padding: EdgeInsets.all(24),
               child: Text(
-                'The camera is unavailable.',
+                l10n.theCameraIsUnavailable,
                 textAlign: TextAlign.center,
               ),
             ),

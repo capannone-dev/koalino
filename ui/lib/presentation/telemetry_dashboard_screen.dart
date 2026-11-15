@@ -3,6 +3,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 final class TelemetryDashboardScreen extends StatefulWidget {
   const TelemetryDashboardScreen({required this.controller, super.key});
@@ -22,11 +23,10 @@ final class _TelemetryDashboardScreenState
 
   @override
   Widget build(BuildContext context) => Scaffold(
-      appBar:
-          AppBar(title: const Text('Telemetry Dashboard'), actions: <Widget>[
+      appBar: AppBar(title: Text(l10n.telemetryDashboard), actions: <Widget>[
         Padding(
             padding: const EdgeInsets.all(16),
-            child: Text(widget.controller.isLive ? '● Live' : '○ Offline'))
+            child: Text(widget.controller.isLive ? l10n.live : l10n.offline))
       ]),
       body: AnimatedBuilder(
           animation: widget.controller,
@@ -51,12 +51,15 @@ final class _TelemetryDashboardScreenState
                         physics: const NeverScrollableScrollPhysics(),
                         childAspectRatio: 2.2,
                         children: <Widget>[
-                          Stat('Transcription',
-                              '${(summary.transcriptionMs / 60000).toStringAsFixed(1)} min'),
-                          Stat('Latency',
+                          Stat(
+                              l10n.transcription,
+                              l10n.minutesShort(
+                                  (summary.transcriptionMs / 60000)
+                                      .toStringAsFixed(1))),
+                          Stat(l10n.latency,
                               '${(summary.latencyMs / 1000).toStringAsFixed(2)} s'),
-                          Stat('Tasks', '${summary.tasks}'),
-                          Stat('Power',
+                          Stat(l10n.tasks, '${summary.tasks}'),
+                          Stat(l10n.power,
                               '${(summary.powerMwh / 1000).toStringAsFixed(2)} Wh')
                         ]),
                     const SizedBox(height: 16),
@@ -74,7 +77,7 @@ final class _TelemetryDashboardScreenState
                             .toList()),
                     const SizedBox(height: 16),
                     ChartCard(
-                        title: 'Transcription Duration Over Time',
+                        title: l10n.transcriptionDurationOverTime,
                         chart: LineChart(LineChartData(
                             lineBarsData: controller.metrics.entries
                                 .map((entry) => LineChartBarData(
@@ -87,7 +90,7 @@ final class _TelemetryDashboardScreenState
                                         .toList()))
                                 .toList()))),
                     ChartCard(
-                        title: 'Latency Distribution',
+                        title: l10n.latencyDistribution,
                         chart: BarChart(BarChartData(
                             barGroups: <int>[0, 100, 500, 1000]
                                 .asMap()
@@ -105,11 +108,11 @@ final class _TelemetryDashboardScreenState
                                         ]))
                                 .toList()))),
                     ChartCard(
-                        title: 'Task Type Breakdown',
+                        title: l10n.taskTypeBreakdown,
                         chart: PieChart(
                             PieChartData(sections: _tasks(allMetrics)))),
                     ChartCard(
-                        title: 'Power Consumption Estimate',
+                        title: l10n.powerConsumptionEstimate,
                         chart: BarChart(BarChartData(
                             barGroups: controller.metrics.entries
                                 .toList()

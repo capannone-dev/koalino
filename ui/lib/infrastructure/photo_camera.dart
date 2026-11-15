@@ -7,6 +7,7 @@ import 'dart:io';
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Whether this platform has a camera implementation.
 bool get isCameraSupported =>
@@ -46,7 +47,7 @@ final class PluginPhotoCamera implements PhotoCamera {
   Future<void> open() async {
     final List<CameraDescription> cameras = await availableCameras();
     if (cameras.isEmpty) {
-      throw StateError('This device has no camera.');
+      throw StateError(l10n.thisDeviceHasNoCamera);
     }
     final CameraDescription camera = cameras.firstWhere(
       (CameraDescription camera) =>
@@ -70,7 +71,7 @@ final class PluginPhotoCamera implements PhotoCamera {
   Future<String> takePicture() async {
     final CameraController? cameraController = _cameraController;
     if (cameraController == null) {
-      throw StateError('The camera is not open.');
+      throw StateError(l10n.theCameraIsNotOpen);
     }
     return (await cameraController.takePicture()).path;
   }

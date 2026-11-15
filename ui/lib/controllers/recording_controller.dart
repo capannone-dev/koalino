@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recording_notifier.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Describes the recording status rendered by the Flutter presentation layer.
 enum RecordingUiState {
@@ -124,7 +125,7 @@ final class RecordingController extends ChangeNotifier {
       }
     } else {
       _state = RecordingUiState.idle;
-      _errorMessage = _startErrorMessage(outcome, 'Unable to start recording');
+      _errorMessage = _startErrorMessage(outcome, l10n.unableToStartRecording);
       unawaited(_recordingNotifier.show(RecordingNotificationState.idle));
     }
     notifyListeners();
@@ -149,7 +150,7 @@ final class RecordingController extends ChangeNotifier {
       unawaited(_recordingNotifier.show(RecordingNotificationState.paused,
           title: _activeTitle));
     } else {
-      _errorMessage = 'Unable to pause recording';
+      _errorMessage = l10n.unableToPauseRecording;
     }
     notifyListeners();
   }
@@ -185,7 +186,7 @@ final class RecordingController extends ChangeNotifier {
         _errorMessage = backgroundRecordingRefusedMessage;
       }
     } else {
-      _errorMessage = _startErrorMessage(outcome, 'Unable to resume recording');
+      _errorMessage = _startErrorMessage(outcome, l10n.unableToResumeRecording);
       unawaited(_recordingNotifier.show(RecordingNotificationState.paused,
           title: _activeTitle));
     }
@@ -218,7 +219,7 @@ final class RecordingController extends ChangeNotifier {
       unawaited(_recordingNotifier.show(RecordingNotificationState.idle));
     } else {
       _state = stateBeforeStop;
-      _errorMessage = 'Unable to stop recording';
+      _errorMessage = l10n.unableToStopRecording;
       unawaited(_recordingNotifier.show(
           stateBeforeStop == RecordingUiState.paused
               ? RecordingNotificationState.paused
@@ -232,7 +233,7 @@ final class RecordingController extends ChangeNotifier {
   void _finishStop() {
     _state = RecordingUiState.idle;
     _activeTitle = null;
-    _completionMessage = 'Recording saved';
+    _completionMessage = l10n.recordingSaved;
   }
 
   /// Follows a change the owner made from the notification or lock screen.
@@ -272,12 +273,11 @@ final class RecordingController extends ChangeNotifier {
 }
 
 /// Shown when the owner refuses microphone access.
-const String _permissionDeniedMessage = 'Microphone access is needed to record';
+String get _permissionDeniedMessage => l10n.microphoneAccessIsNeededToRecord;
 
 /// Shown while recording when Android refused the foreground service: leaving the app would
 /// silence the microphone.
-const String backgroundRecordingRefusedMessage =
-    'Keep the app open: Android did not allow recording in the background';
+String get backgroundRecordingRefusedMessage => l10n.keepTheAppOpenAndroidDid;
 
 /// The error for a start or resume that did not record.
 ///
@@ -285,5 +285,5 @@ const String backgroundRecordingRefusedMessage =
 /// Side effects: None.
 String _startErrorMessage(RecordingStartOutcome outcome, String fallback) =>
     outcome == RecordingStartOutcome.microphoneUnavailable
-        ? 'Unable to open the microphone'
+        ? l10n.unableToOpenTheMicrophone
         : fallback;

@@ -12,6 +12,7 @@ import 'package:ffi/ffi.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// The formats the core exports.
 enum MeetingExportFormat {
@@ -159,9 +160,13 @@ abstract interface class ExportSaver {
 /// The save dialogs of `file_picker`.
 final class FilePickerExportSaver implements ExportSaver {
   /// Creates the saver; `dialogTitle` names the dialog (the meeting export's by default).
-  const FilePickerExportSaver({this.dialogTitle = 'Export meeting'});
+  const FilePickerExportSaver({String? dialogTitle})
+      : _dialogTitle = dialogTitle;
 
-  final String dialogTitle;
+  final String? _dialogTitle;
+
+  /// The dialog's title, in the app's language unless one was given.
+  String get dialogTitle => _dialogTitle ?? l10n.exportMeeting;
 
   @override
   bool get savesBytes => Platform.isAndroid || Platform.isIOS;

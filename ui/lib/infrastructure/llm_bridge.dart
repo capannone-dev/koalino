@@ -11,28 +11,33 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// The protocols a connection speaks, as the core names them.
 enum LlmKind {
   /// OpenAI's Chat Completions, spoken by Ollama, llama.cpp, LM Studio and vLLM servers.
-  openAiCompatible('open_ai_compatible', 'OpenAI-compatible server'),
+  openAiCompatible('open_ai_compatible'),
 
   /// Claude Code installed and signed in on this computer, so a Claude plan answers (#105).
-  claudeCode('claude_code', 'Claude Code'),
+  claudeCode('claude_code'),
 
   /// Codex installed and signed in on this computer, so a ChatGPT plan answers (#105).
-  codex('codex', 'Codex');
+  codex('codex');
 
-  const LlmKind(this.wire, this.label);
+  const LlmKind(this.wire);
+
+  /// The protocol's name in the connection form, in the app's language (#124).
+  String get label => switch (this) {
+        LlmKind.openAiCompatible => l10n.openaiCompatibleServer,
+        LlmKind.claudeCode => 'Claude Code',
+        LlmKind.codex => 'Codex',
+      };
 
   /// Whether it runs a tool on this computer: no address, desktop only.
   bool get isLocalCli => this == claudeCode || this == codex;
 
   /// The name in the core's JSON.
   final String wire;
-
-  /// The name shown.
-  final String label;
 
   /// Reads the core's name; unknown names are OpenAI-compatible.
   static LlmKind fromWire(Object? wire) => LlmKind.values.firstWhere(
@@ -141,14 +146,14 @@ List<LlmPreset> get availableLlmPresets => <LlmPreset>[
     ];
 
 /// The presets offered when adding a connection, matching the web's.
-const List<LlmPreset> llmPresets = <LlmPreset>[
-  LlmPreset('Local server (Ollama)', LlmKind.openAiCompatible,
-      'http://192.168.1.10:11434/v1', 'llama3.1:8b', 8192),
-  LlmPreset('LM Studio', LlmKind.openAiCompatible,
-      'http://192.168.1.10:1234/v1', 'qwen3-8b', 32768),
-  LlmPreset('Claude Code (Claude plan)', LlmKind.claudeCode, '', '', 200000),
-  LlmPreset('Codex (ChatGPT plan)', LlmKind.codex, '', '', 200000),
-];
+List<LlmPreset> get llmPresets => <LlmPreset>[
+      LlmPreset(l10n.localServerOllama, LlmKind.openAiCompatible,
+          'http://192.168.1.10:11434/v1', 'llama3.1:8b', 8192),
+      LlmPreset('LM Studio', LlmKind.openAiCompatible,
+          'http://192.168.1.10:1234/v1', 'qwen3-8b', 32768),
+      LlmPreset(l10n.claudeCodeClaudePlan, LlmKind.claudeCode, '', '', 200000),
+      LlmPreset(l10n.codexChatgptPlan, LlmKind.codex, '', '', 200000),
+    ];
 
 /// The AI settings.
 final class LlmSettings {
@@ -341,42 +346,33 @@ final class LlmException implements Exception {
   /// rejection with the server's reason shows that reason instead of a guess.
   String get message => switch ((code, detail)) {
         ('llm_rejected', final String detail) =>
-          'The AI server rejected the request.\nThe server said: $detail',
+          l10n.theAiServerRejectedTheRequest(detail),
         ('llm_tool_failed', final String detail) =>
-          'Claude Code or Codex could not answer.\nIt said: $detail',
+          l10n.claudeCodeOrCodexCouldNot(detail),
         _ => _sentence,
       };
 
   String get _sentence => switch (code) {
-        'invalid_connection' =>
-          'Check the address and model. Plain http:// works only on this device or the local network.',
-        'invalid_template' =>
-          'The prompt has an unknown or unclosed {{placeholder}}.',
-        'connection_not_found' => 'That connection no longer exists.',
-        'meeting_not_found' => 'That meeting no longer exists.',
-        'no_connection' => 'Add an AI connection in Settings first.',
-        'nothing_to_summarize' =>
-          'This meeting has no transcript or notes yet.',
-        'too_long' =>
-          'This meeting is too long for this connection. Choose one with a larger context.',
-        'llm_unreachable' => 'The AI server could not be reached.',
-        'llm_unauthorized' =>
-          'The AI server refused access. Use a server that needs no API key.',
-        'llm_rate_limited' =>
-          'The AI server is busy or over its limit. Try again later.',
-        'llm_rejected' =>
-          'The AI server rejected the request. Check the model name.',
-        'llm_failed' => 'The AI server failed. Try again.',
-        'llm_refused' => 'The model declined to answer.',
-        'llm_invalid_response' => "The AI server's answer could not be read.",
-        'llm_tool_missing' =>
-          'Claude Code or Codex is not installed on this computer, or the app cannot find it.',
-        'llm_tool_failed' =>
-          'Claude Code or Codex could not answer. Check that it is signed in.',
-        'save_failed' => 'The settings could not be saved.',
-        'storage_failed' => 'The meeting could not be read or saved.',
-        'runtime_unavailable' => 'The app is still starting. Try again.',
-        _ => 'Something went wrong. Try again.',
+        'invalid_connection' => l10n.checkTheAddressAndModelPlain,
+        'invalid_template' => l10n.promptUnknownPlaceholder('{{placeholder}}'),
+        'connection_not_found' => l10n.thatConnectionNoLongerExists,
+        'meeting_not_found' => l10n.thatMeetingNoLongerExists,
+        'no_connection' => l10n.addAnAiConnectionInSettings2,
+        'nothing_to_summarize' => l10n.thisMeetingHasNoTranscriptOr,
+        'too_long' => l10n.thisMeetingIsTooLongFor,
+        'llm_unreachable' => l10n.theAiServerCouldNotBe2,
+        'llm_unauthorized' => l10n.theAiServerRefusedAccessUse,
+        'llm_rate_limited' => l10n.theAiServerIsBusyOr,
+        'llm_rejected' => l10n.theAiServerRejectedTheRequest2,
+        'llm_failed' => l10n.theAiServerFailedTryAgain,
+        'llm_refused' => l10n.theModelDeclinedToAnswer,
+        'llm_invalid_response' => l10n.theAiServerSAnswerCould,
+        'llm_tool_missing' => l10n.claudeCodeOrCodexIsNot,
+        'llm_tool_failed' => l10n.claudeCodeOrCodexCouldNot2,
+        'save_failed' => l10n.theSettingsCouldNotBeSaved,
+        'storage_failed' => l10n.theMeetingCouldNotBeRead,
+        'runtime_unavailable' => l10n.theAppIsStillStartingTry,
+        _ => l10n.somethingWentWrongTryAgain,
       };
 
   @override

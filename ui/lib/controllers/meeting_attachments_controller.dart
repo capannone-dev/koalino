@@ -4,6 +4,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/meeting_attachment_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Picks files and attaches them to a meeting.
 final class MeetingAttachmentsController extends ChangeNotifier {
@@ -41,13 +42,12 @@ final class MeetingAttachmentsController extends ChangeNotifier {
       final AttachFilesResult result =
           await _attachmentBridge.attachFiles(meetingId, filePaths);
       final int attachedCount = result.attached.length;
-      final String attached =
-          'Attached $attachedCount ${attachedCount == 1 ? 'file' : 'files'}';
+      final String attached = l10n.attachedFiles(attachedCount);
       return result.failedPaths.isEmpty
           ? attached
-          : '$attached; ${result.failedPaths.length} could not be attached';
+          : l10n.couldNotBeAttached(attached, result.failedPaths.length);
     } on Object {
-      return 'The files could not be attached.';
+      return l10n.theFilesCouldNotBeAttached;
     } finally {
       _isAttaching = false;
       notifyListeners();

@@ -2,6 +2,7 @@
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Shows a dialog naming what will be deleted.
 ///
@@ -21,7 +22,7 @@ Future<bool> confirmDelete(
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(dialogContext).pop(false),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           style: FilledButton.styleFrom(
@@ -29,7 +30,7 @@ Future<bool> confirmDelete(
             foregroundColor: Theme.of(dialogContext).colorScheme.onError,
           ),
           onPressed: () => Navigator.of(dialogContext).pop(true),
-          child: const Text('Delete'),
+          child: Text(l10n.delete),
         ),
       ],
     ),

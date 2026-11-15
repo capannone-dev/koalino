@@ -9,6 +9,7 @@ import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Key of the Markdown editor's text field, for tests.
 const Key markdownEditorFieldKey = ValueKey<String>('markdown-editor-field');
@@ -95,7 +96,7 @@ final class _MarkdownEditorScreenState extends State<MarkdownEditorScreen> {
         title: Text(widget.title),
         actions: <Widget>[
           IconButton(
-            tooltip: 'Save',
+            tooltip: l10n.save,
             icon: const Icon(Icons.check),
             onPressed: _saving ? null : _save,
           ),
@@ -111,14 +112,14 @@ final class _MarkdownEditorScreenState extends State<MarkdownEditorScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 SegmentedButton<bool>(
-                  segments: const <ButtonSegment<bool>>[
+                  segments: <ButtonSegment<bool>>[
                     ButtonSegment<bool>(
                         value: false,
-                        label: Text('Edit'),
+                        label: Text(l10n.edit),
                         icon: Icon(Icons.edit_outlined)),
                     ButtonSegment<bool>(
                         value: true,
-                        label: Text('Preview'),
+                        label: Text(l10n.preview),
                         icon: Icon(Icons.visibility_outlined)),
                   ],
                   selected: <bool>{_preview},
@@ -215,17 +216,17 @@ final class _MeetingNotesSectionState extends State<MeetingNotesSection> {
                 Expanded(
                   child: Semantics(
                     header: true,
-                    child: Text('Notes', style: theme.textTheme.titleMedium),
+                    child: Text(l10n.notes, style: theme.textTheme.titleMedium),
                   ),
                 ),
                 TextButton.icon(
                   icon: const Icon(Icons.edit_note),
-                  label: Text(hasNotes ? 'Edit notes' : 'Write notes'),
+                  label: Text(hasNotes ? l10n.editNotes : l10n.writeNotes),
                   onPressed: notes == null && error == null
                       ? null
                       : () => showMarkdownEditor(
                             context,
-                            title: 'Notes',
+                            title: l10n.notes,
                             initialText: notes ?? '',
                             onSave: (String text) => widget.controller
                                 .saveNotes(widget.meetingId, text),
@@ -237,12 +238,12 @@ final class _MeetingNotesSectionState extends State<MeetingNotesSection> {
             if (error != null)
               Text(error)
             else if (notes == null)
-              const Text('Loading…')
+              Text(l10n.loading)
             else if (hasNotes)
               SelectionArea(
                   child: MarkdownView(markdownText: notes, embedded: true))
             else
-              Text('No notes yet.',
+              Text(l10n.noNotesYet,
                   style: theme.textTheme.bodyMedium
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
           ],
@@ -280,7 +281,7 @@ final class EditableSegment extends StatelessWidget {
     final String? text = await showDialog<String>(
       context: context,
       builder: (BuildContext context) => _SegmentEditDialog(
-        label: 'Text at ${formatMeetingDuration(segment.startTimeMs)}',
+        label: l10n.textAt(formatMeetingDuration(segment.startTimeMs)),
         initialText: segment.text,
       ),
     );
@@ -292,8 +293,8 @@ final class EditableSegment extends StatelessWidget {
     messenger?.showSnackBar(SnackBar(
       content: Text(error ??
           (text.trim().isEmpty
-              ? "Removed. This transcript won't be re-transcribed after the meeting."
-              : "Saved. This transcript won't be re-transcribed after the meeting.")),
+              ? l10n.removedThisTranscriptWonTBe
+              : l10n.savedThisTranscriptWonTBe)),
     ));
   }
 
@@ -301,7 +302,7 @@ final class EditableSegment extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
-        const CustomSemanticsAction(label: 'Edit text'): () => _edit(context),
+        CustomSemanticsAction(label: l10n.editText): () => _edit(context),
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -337,7 +338,7 @@ final class _SegmentEditDialogState extends State<_SegmentEditDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Edit the transcript'),
+      title: Text(l10n.editTheTranscript),
       content: SizedBox(
         width: 560,
         child: TextField(
@@ -348,18 +349,18 @@ final class _SegmentEditDialogState extends State<_SegmentEditDialog> {
           maxLines: 8,
           decoration: InputDecoration(
             labelText: widget.label,
-            helperText: 'Leave it empty to remove this part.',
+            helperText: l10n.leaveItEmptyToRemoveThis,
           ),
         ),
       ),
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(_text.text),
-          child: const Text('Save'),
+          child: Text(l10n.save),
         ),
       ],
     );

@@ -1,0 +1,2163 @@
+{
+  "@@locale": "en",
+  "unableToCheckTheAppLock": "Unable to check the app lock. Try again.",
+  "@unableToCheckTheAppLock": {},
+  "unableToShowTheUnlockPrompt": "Unable to show the unlock prompt. Try again.",
+  "@unableToShowTheUnlockPrompt": {},
+  "setAScreenLockOnThis": "Set a screen lock on this device first.",
+  "@setAScreenLockOnThis": {},
+  "unableToChangeTheAppLock": "Unable to change the app lock. Try again.",
+  "@unableToChangeTheAppLock": {},
+  "aCallApp": "A call app",
+  "@aCallApp": {},
+  "call": "Call",
+  "@call": {},
+  "call2": "{app} call",
+  "@call2": {
+    "placeholders": {
+      "app": {
+        "type": "Object"
+      }
+    }
+  },
+  "theCallEndedSoTheRecording": "The {tiedApp} call ended, so the recording stopped.",
+  "@theCallEndedSoTheRecording": {
+    "placeholders": {
+      "tiedApp": {
+        "type": "Object"
+      }
+    }
+  },
+  "restartYourBrowserAndCallApps": "Restart your browser and call apps once, so Koalino can read who is speaking in calls.",
+  "@restartYourBrowserAndCallApps": {},
+  "unableToLoadDevices": "Unable to load devices",
+  "@unableToLoadDevices": {},
+  "thisDeviceIsNotOnA": "This device is not on a network yet. Connect it and try again.",
+  "@thisDeviceIsNotOnA": {},
+  "thatDidNotWorkTryAgain": "That did not work. Try again.",
+  "@thatDidNotWorkTryAgain": {},
+  "use1To64CharactersWithout": "Use 1 to 64 characters, without line breaks.",
+  "@use1To64CharactersWithout": {},
+  "theNameCouldNotBeSaved": "The name could not be saved. Try again.",
+  "@theNameCouldNotBeSaved": {},
+  "thisInviteHasExpiredMakeA": "This invite has expired. Make a new one on the other device.",
+  "@thisInviteHasExpiredMakeA": {},
+  "thisInviteWasMadeOnThis": "This invite was made on this device. Use it on the other one.",
+  "@thisInviteWasMadeOnThis": {},
+  "thatDeviceIsAlreadyPaired": "That device is already paired.",
+  "@thatDeviceIsAlreadyPaired": {},
+  "thatIsNotAValidInvite": "That is not a valid invite. Copy it again.",
+  "@thatIsNotAValidInvite": {},
+  "deviceSyncIsNotRunning": "Device sync is not running.",
+  "@deviceSyncIsNotRunning": {},
+  "theOtherDeviceIsNoLonger": "The other device is no longer pairing. Try again.",
+  "@theOtherDeviceIsNoLonger": {},
+  "theOtherAppCouldNotBe": "The other app could not be opened.",
+  "@theOtherAppCouldNotBe": {},
+  "theOtherApp": "the other app",
+  "@theOtherApp": {},
+  "app": "{displayName} app",
+  "@app": {
+    "placeholders": {
+      "displayName": {
+        "type": "Object"
+      }
+    }
+  },
+  "unableToChangeTheLogLevel": "Unable to change the log level",
+  "@unableToChangeTheLogLevel": {},
+  "logsExportedTo": "Logs exported to {filePath}",
+  "@logsExportedTo": {
+    "placeholders": {
+      "filePath": {
+        "type": "Object"
+      }
+    }
+  },
+  "unableToShareTheLogs": "Unable to share the logs",
+  "@unableToShareTheLogs": {},
+  "noLogsToExportYet": "No logs to export yet",
+  "@noLogsToExportYet": {},
+  "unableToExportTheLogs": "Unable to export the logs",
+  "@unableToExportTheLogs": {},
+  "couldNotBeAttached": "{attached}; {failedPaths} could not be attached",
+  "@couldNotBeAttached": {
+    "placeholders": {
+      "attached": {
+        "type": "Object"
+      },
+      "failedPaths": {
+        "type": "Object"
+      }
+    }
+  },
+  "theFilesCouldNotBeAttached": "The files could not be attached.",
+  "@theFilesCouldNotBeAttached": {},
+  "unableToShareTheExport": "Unable to share the export",
+  "@unableToShareTheExport": {},
+  "exportedTo": "Exported to {filePath}",
+  "@exportedTo": {
+    "placeholders": {
+      "filePath": {
+        "type": "Object"
+      }
+    }
+  },
+  "exportSaved": "Export saved",
+  "@exportSaved": {},
+  "unableToSaveTheExport": "Unable to save the export",
+  "@unableToSaveTheExport": {},
+  "thisMeetingNoLongerExists": "This meeting no longer exists",
+  "@thisMeetingNoLongerExists": {},
+  "exportIsUnavailableUntilTheApp": "Export is unavailable until the app has started",
+  "@exportIsUnavailableUntilTheApp": {},
+  "unableToExportTheMeeting": "Unable to export the meeting",
+  "@unableToExportTheMeeting": {},
+  "unableToLoadMeetings": "Unable to load meetings",
+  "@unableToLoadMeetings": {},
+  "unableToLoadThisMeeting": "Unable to load this meeting",
+  "@unableToLoadThisMeeting": {},
+  "enterATitle": "Enter a title.",
+  "@enterATitle": {},
+  "titlesCanBeAtMostCharacters": "Titles can be at most {maxMeetingTitleCharacters} characters (you have {runes}).",
+  "@titlesCanBeAtMostCharacters": {
+    "placeholders": {
+      "maxMeetingTitleCharacters": {
+        "type": "Object"
+      },
+      "runes": {
+        "type": "Object"
+      }
+    }
+  },
+  "titlesCanTContainLineBreaks": "Titles can't contain line breaks or control characters.",
+  "@titlesCanTContainLineBreaks": {},
+  "notPairedYetMakeTheRelay": "Not paired yet. Make the relay discoverable, then pair with it under Nearby devices in Devices.",
+  "@notPairedYetMakeTheRelay": {},
+  "connectingToTheRelay": "Connecting to the relay…",
+  "@connectingToTheRelay": {},
+  "connectedToTheRelayAskingIt": "Connected to the relay. Asking it to accept connections…",
+  "@connectedToTheRelayAskingIt": {},
+  "connectedYourOtherDevicesCanReach": "Connected. Your other devices can reach this one through the relay.",
+  "@connectedYourOtherDevicesCanReach": {},
+  "savedThisAppliesNowWithNo": "Saved. This applies now, with no restart.",
+  "@savedThisAppliesNowWithNo": {},
+  "thatRelayAddressIsNotValid": "That relay address is not valid. It looks like /ip4/203.0.113.5/tcp/4001/p2p/12D3Koo…",
+  "@thatRelayAddressIsNotValid": {},
+  "aDeviceAddressIsNotValid": "A device address is not valid. Each ends in /p2p/ and the device's ID.",
+  "@aDeviceAddressIsNotValid": {},
+  "unableToSaveTheAddresses": "Unable to save the addresses.",
+  "@unableToSaveTheAddresses": {},
+  "thePhotoCouldNotBeSaved": "The photo could not be saved.",
+  "@thePhotoCouldNotBeSaved": {},
+  "enterAName": "Enter a name.",
+  "@enterAName": {},
+  "namesCanBeAtMostCharacters": "Names can be at most {maxMeetingTitleCharacters} characters.",
+  "@namesCanBeAtMostCharacters": {
+    "placeholders": {
+      "maxMeetingTitleCharacters": {
+        "type": "Object"
+      }
+    }
+  },
+  "namesCanTContainLineBreaks": "Names can't contain line breaks or control characters.",
+  "@namesCanTContainLineBreaks": {},
+  "unableToLoadProjects": "Unable to load projects",
+  "@unableToLoadProjects": {},
+  "unableToLoadThisProject": "Unable to load this project",
+  "@unableToLoadThisProject": {},
+  "theFilesCouldNotBeAdded": "The files could not be added.",
+  "@theFilesCouldNotBeAdded": {},
+  "couldNotBeAdded": "{failedPaths} could not be added",
+  "@couldNotBeAdded": {
+    "placeholders": {
+      "failedPaths": {
+        "type": "Object"
+      }
+    }
+  },
+  "unableToStartRecording": "Unable to start recording",
+  "@unableToStartRecording": {},
+  "unableToPauseRecording": "Unable to pause recording",
+  "@unableToPauseRecording": {},
+  "unableToResumeRecording": "Unable to resume recording",
+  "@unableToResumeRecording": {},
+  "unableToStopRecording": "Unable to stop recording",
+  "@unableToStopRecording": {},
+  "recordingSaved": "Recording saved",
+  "@recordingSaved": {},
+  "microphoneAccessIsNeededToRecord": "Microphone access is needed to record",
+  "@microphoneAccessIsNeededToRecord": {},
+  "keepTheAppOpenAndroidDid": "Keep the app open: Android did not allow recording in the background",
+  "@keepTheAppOpenAndroidDid": {},
+  "unableToOpenTheMicrophone": "Unable to open the microphone",
+  "@unableToOpenTheMicrophone": {},
+  "saved": "Saved {label}.",
+  "@saved": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "removed": "Removed {label}.",
+  "@removed": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "isNowTheDefault": "{id} is now the default.",
+  "@isNowTheDefault": {
+    "placeholders": {
+      "id": {
+        "type": "Object"
+      }
+    }
+  },
+  "answered": "{id} answered: {reply}",
+  "@answered": {
+    "placeholders": {
+      "id": {
+        "type": "Object"
+      },
+      "reply": {
+        "type": "Object"
+      }
+    }
+  },
+  "promptSaved": "Prompt saved.",
+  "@promptSaved": {},
+  "theBuiltInPromptIsBack": "The built-in prompt is back.",
+  "@theBuiltInPromptIsBack": {},
+  "finishedMeetingsWillBeSummarizedAutomatically": "Finished meetings will be summarized automatically.",
+  "@finishedMeetingsWillBeSummarizedAutomatically": {},
+  "automaticSummariesAreOff": "Automatic summaries are off.",
+  "@automaticSummariesAreOff": {},
+  "thisComputerNoLongerWritesSummaries": "This computer no longer writes summaries or answers chats for your other devices.",
+  "@thisComputerNoLongerWritesSummaries": {},
+  "nowWritesTheSummariesAndAnswers": "{id} now writes the summaries and answers the chats your other devices ask for.",
+  "@nowWritesTheSummariesAndAnswers": {
+    "placeholders": {
+      "id": {
+        "type": "Object"
+      }
+    }
+  },
+  "requestCancelled": "Request cancelled.",
+  "@requestCancelled": {},
+  "thisMeetingUsesTheSettingsPrompt": "This meeting uses the Settings prompt again.",
+  "@thisMeetingUsesTheSettingsPrompt": {},
+  "promptSavedForThisMeeting": "Prompt saved for this meeting.",
+  "@promptSavedForThisMeeting": {},
+  "summarySaved": "Summary saved.",
+  "@summarySaved": {},
+  "theConnection": "The connection",
+  "@theConnection": {},
+  "summaryWritten": "Summary written.",
+  "@summaryWritten": {},
+  "theTranscriptWasReadInParts": " The transcript was read in {parts} parts.",
+  "@theTranscriptWasReadInParts": {
+    "placeholders": {
+      "parts": {
+        "type": "Object"
+      }
+    }
+  },
+  "leftOut": " {sent}, {imagesSkipped} left out.",
+  "@leftOut": {
+    "placeholders": {
+      "sent": {
+        "type": "Object"
+      },
+      "imagesSkipped": {
+        "type": "Object"
+      }
+    }
+  },
+  "theModelStoppedBeforeTheEnd": " The model stopped before the end.",
+  "@theModelStoppedBeforeTheEnd": {},
+  "waitingForYourComputerItWrites": "Waiting for your computer. It writes the summary once it is on, connected to this device, and set to answer in Settings → AI connections.",
+  "@waitingForYourComputerItWrites": {},
+  "yourComputerIsWritingTheSummary": "Your computer is writing the summary…",
+  "@yourComputerIsWritingTheSummary": {},
+  "yourComputerCouldNotWriteThe": "Your computer could not write the summary: {message}",
+  "@yourComputerCouldNotWriteThe": {
+    "placeholders": {
+      "message": {
+        "type": "Object"
+      }
+    }
+  },
+  "unableToRefreshTelemetry": "Unable to refresh telemetry",
+  "@unableToRefreshTelemetry": {},
+  "automatic": "Automatic",
+  "@automatic": {},
+  "transcriptionLanguage": "Transcription language",
+  "@transcriptionLanguage": {},
+  "transcriptionLanguages": "Transcription languages",
+  "@transcriptionLanguages": {},
+  "theLanguageCouldNotBeChanged": "The language could not be changed.",
+  "@theLanguageCouldNotBeChanged": {},
+  "thisDevice": "This device",
+  "@thisDevice": {},
+  "bestAvailable": "Best available",
+  "@bestAvailable": {},
+  "aRemovedDevice": "A removed device",
+  "@aRemovedDevice": {},
+  "theTranscriptionDeviceCouldNotBe": "The transcription device could not be changed. Check that it is still paired.",
+  "@theTranscriptionDeviceCouldNotBe": {},
+  "downloadFinishedYouCanNowChoose": "Download finished. You can now choose this model.",
+  "@downloadFinishedYouCanNowChoose": {},
+  "downloadCancelled": "Download cancelled.",
+  "@downloadCancelled": {},
+  "theDownloadStoppedNoConnectionTo": "The download stopped: no connection to the server. Your current model still works.",
+  "@theDownloadStoppedNoConnectionTo": {},
+  "theDownloadedFileFailedItsCheck": "The downloaded file failed its check and was deleted. Your current model still works.",
+  "@theDownloadedFileFailedItsCheck": {},
+  "theModelCouldNotBeSaved": "The model could not be saved. Check the free space. Your current model still works.",
+  "@theModelCouldNotBeSaved": {},
+  "theDownloadServerRefusedTheFile": "The download server refused the file. Your current model still works.",
+  "@theDownloadServerRefusedTheFile": {},
+  "savedTheNextRecordingUsesThis": "Saved. The next recording uses this model.",
+  "@savedTheNextRecordingUsesThis": {},
+  "savedTheNextRecordingUsesThis2": "Saved. The next recording uses this.",
+  "@savedTheNextRecordingUsesThis2": {},
+  "savedTheNextRecordingUsesThe": "Saved. The next recording uses the automatic choice.",
+  "@savedTheNextRecordingUsesThe": {},
+  "savedMeetingsRecordedFromNowOn": "Saved. Meetings recorded from now on use this.",
+  "@savedMeetingsRecordedFromNowOn": {},
+  "savedTheNextRecordingUsesThese": "Saved. The next recording uses these names and terms.",
+  "@savedTheNextRecordingUsesThese": {},
+  "eachTermCanHaveAtMost": "Each term can have at most 60 characters, and all of them together at most 500.",
+  "@eachTermCanHaveAtMost": {},
+  "chooseAWindowBetween1And": "Choose a window between 1 and 60 days.",
+  "@chooseAWindowBetween1And": {},
+  "theDownloadCouldNotStartPlease": "The download could not start. Please try again.",
+  "@theDownloadCouldNotStartPlease": {},
+  "savedTheNextRecordingIsTranscribed": "Saved. The next recording is transcribed on the NPU.",
+  "@savedTheNextRecordingIsTranscribed": {},
+  "savedTheNextRecordingIsTranscribed2": "Saved. The next recording is transcribed on the processor.",
+  "@savedTheNextRecordingIsTranscribed2": {},
+  "theNpuFilesAreNotAll": "The NPU files are not all downloaded yet.",
+  "@theNpuFilesAreNotAll": {},
+  "theNpuFilesWereRemoved": "The NPU files were removed.",
+  "@theNpuFilesWereRemoved": {},
+  "theNpuFilesCouldNotBe": "The NPU files could not be removed. Please try again.",
+  "@theNpuFilesCouldNotBe": {},
+  "downloadedRecordingsNowTranscribeOnThe": "Downloaded. Recordings now transcribe on the NPU.",
+  "@downloadedRecordingsNowTranscribeOnThe": {},
+  "theDownloadStoppedNoConnectionTo2": "The download stopped: no connection to the server.",
+  "@theDownloadStoppedNoConnectionTo2": {},
+  "aDownloadedFileFailedItsCheck": "A downloaded file failed its check and was deleted.",
+  "@aDownloadedFileFailedItsCheck": {},
+  "theFilesCouldNotBeSaved": "The files could not be saved. Check the free space (about 800 MB is needed).",
+  "@theFilesCouldNotBeSaved": {},
+  "theDownloadServerRefusedTheFiles": "The download server refused the files.",
+  "@theDownloadServerRefusedTheFiles": {},
+  "theNextRecordingTriesTheGraphics": "The next recording tries the graphics chip again.",
+  "@theNextRecordingTriesTheGraphics": {},
+  "thatModelWonTBeProposed": "That model won't be proposed again.",
+  "@thatModelWonTBeProposed": {},
+  "modelRemoved": "Model removed.",
+  "@modelRemoved": {},
+  "anotherModelIsDownloadingWaitFor": "Another model is downloading. Wait for it to finish.",
+  "@anotherModelIsDownloadingWaitFor": {},
+  "thereIsnTEnoughFreeSpace": "There isn't enough free space for this model.",
+  "@thereIsnTEnoughFreeSpace": {},
+  "thatDidnTWorkPleaseTry": "That didn't work. Please try again.",
+  "@thatDidnTWorkPleaseTry": {},
+  "unableToLoadVoiceGallery": "Unable to load Voice Gallery",
+  "@unableToLoadVoiceGallery": {},
+  "unableToPlayThisVoice": "Unable to play this voice",
+  "@unableToPlayThisVoice": {},
+  "unableToDeleteThisVoice": "Unable to delete this voice",
+  "@unableToDeleteThisVoice": {},
+  "voiceDeleted": "Voice deleted",
+  "@voiceDeleted": {},
+  "unableToDeleteThisPerson": "Unable to delete this person",
+  "@unableToDeleteThisPerson": {},
+  "deleted": "{displayName} deleted",
+  "@deleted": {
+    "placeholders": {
+      "displayName": {
+        "type": "Object"
+      }
+    }
+  },
+  "enterANameBeforeAssigning": "Enter a name before assigning",
+  "@enterANameBeforeAssigning": {},
+  "assignedTo": "Assigned to {identityName}",
+  "@assignedTo": {
+    "placeholders": {
+      "identityName": {
+        "type": "Object"
+      }
+    }
+  },
+  "assignedToThereWasNotEnough": "Assigned to {identityName}. There was not enough clear speech to recognize this voice in future recordings.",
+  "@assignedToThereWasNotEnough": {
+    "placeholders": {
+      "identityName": {
+        "type": "Object"
+      }
+    }
+  },
+  "unableToAssignTheSpeakerCluster": "Unable to assign the speaker cluster",
+  "@unableToAssignTheSpeakerCluster": {},
+  "chooseAtLeastOneVoiceTo": "Choose at least one voice to name",
+  "@chooseAtLeastOneVoiceTo": {},
+  "thereWasNotEnoughClearSpeech": "{assigned}. There was not enough clear speech to recognize this voice in future recordings.",
+  "@thereWasNotEnoughClearSpeech": {
+    "placeholders": {
+      "assigned": {
+        "type": "Object"
+      }
+    }
+  },
+  "theSettingCouldNotBeSaved": "The setting could not be saved.",
+  "@theSettingCouldNotBeSaved": {},
+  "theAppIsStillStartingTry": "The app is still starting. Try again.",
+  "@theAppIsStillStartingTry": {},
+  "somethingWentWrongTryAgain": "Something went wrong. Try again.",
+  "@somethingWentWrongTryAgain": {},
+  "isUsingTheMicrophone": "{app} is using the microphone",
+  "@isUsingTheMicrophone": {
+    "placeholders": {
+      "app": {
+        "type": "Object"
+      }
+    }
+  },
+  "recordThisCall": "Record this call?",
+  "@recordThisCall": {},
+  "theAiServerRejectedTheRequest": "The AI server rejected the request.\nThe server said: {detail}",
+  "@theAiServerRejectedTheRequest": {
+    "placeholders": {
+      "detail": {
+        "type": "Object"
+      }
+    }
+  },
+  "claudeCodeOrCodexCouldNot": "Claude Code or Codex could not answer.\nIt said: {detail}",
+  "@claudeCodeOrCodexCouldNot": {
+    "placeholders": {
+      "detail": {
+        "type": "Object"
+      }
+    }
+  },
+  "typeAQuestion": "Type a question.",
+  "@typeAQuestion": {},
+  "theQuestionIsTooLong": "The question is too long.",
+  "@theQuestionIsTooLong": {},
+  "addAnAiConnectionInSettings": "Add an AI connection in Settings, or choose a default one.",
+  "@addAnAiConnectionInSettings": {},
+  "thatAiConnectionNoLongerExists": "That AI connection no longer exists.",
+  "@thatAiConnectionNoLongerExists": {},
+  "thereIsNothingToTalkAbout": "There is nothing to talk about yet: no transcript, summary, notes or files.",
+  "@thereIsNothingToTalkAbout": {},
+  "theAiConnectionSContextIs": "The AI connection's context is too small. Choose one with a larger context.",
+  "@theAiConnectionSContextIs": {},
+  "thatMeetingNoLongerExists": "That meeting no longer exists.",
+  "@thatMeetingNoLongerExists": {},
+  "thatProjectNoLongerExists": "That project no longer exists.",
+  "@thatProjectNoLongerExists": {},
+  "theAiServerCouldNotBe": "The AI server could not be reached. Check the connection.",
+  "@theAiServerCouldNotBe": {},
+  "theAiServerRefusedTheApi": "The AI server refused the API key.",
+  "@theAiServerRefusedTheApi": {},
+  "theAiServerIsBusyTry": "The AI server is busy. Try again later.",
+  "@theAiServerIsBusyTry": {},
+  "theModelDeclinedToAnswer": "The model declined to answer.",
+  "@theModelDeclinedToAnswer": {},
+  "claudeCodeOrCodexIsNot": "Claude Code or Codex is not installed on this computer, or the app cannot find it.",
+  "@claudeCodeOrCodexIsNot": {},
+  "theNotesCouldNotBeRead": "The notes could not be read.",
+  "@theNotesCouldNotBeRead": {},
+  "noPairedComputerAnsweredOnA": "No paired computer answered. On a computer, open Settings → AI and choose a connection under \"Summaries for my other devices\", then keep it on and connected.",
+  "@noPairedComputerAnsweredOnA": {},
+  "theComputerTookTooLongTo": "The computer took too long to answer.",
+  "@theComputerTookTooLongTo": {},
+  "theComputerDisconnectedBeforeAnsweringTry": "The computer disconnected before answering. Try again.",
+  "@theComputerDisconnectedBeforeAnsweringTry": {},
+  "theComputerAnswersAtMost30": "The computer answers at most 30 questions an hour. Try again later.",
+  "@theComputerAnswersAtMost30": {},
+  "theComputerIsAnsweringOtherQuestions": "The computer is answering other questions. Try again shortly.",
+  "@theComputerIsAnsweringOtherQuestions": {},
+  "pairedDevicesAreOffOnThis": "Paired devices are off on this phone.",
+  "@pairedDevicesAreOffOnThis": {},
+  "theAiServerCouldNotAnswer": "The AI server could not answer. Try again.",
+  "@theAiServerCouldNotAnswer": {},
+  "exportMeeting": "Export meeting",
+  "@exportMeeting": {},
+  "openaiCompatibleServer": "OpenAI-compatible server",
+  "@openaiCompatibleServer": {},
+  "localServerOllama": "Local server (Ollama)",
+  "@localServerOllama": {},
+  "claudeCodeClaudePlan": "Claude Code (Claude plan)",
+  "@claudeCodeClaudePlan": {},
+  "codexChatgptPlan": "Codex (ChatGPT plan)",
+  "@codexChatgptPlan": {},
+  "checkTheAddressAndModelPlain": "Check the address and model. Plain http:// works only on this device or the local network.",
+  "@checkTheAddressAndModelPlain": {},
+  "thatConnectionNoLongerExists": "That connection no longer exists.",
+  "@thatConnectionNoLongerExists": {},
+  "addAnAiConnectionInSettings2": "Add an AI connection in Settings first.",
+  "@addAnAiConnectionInSettings2": {},
+  "thisMeetingHasNoTranscriptOr": "This meeting has no transcript or notes yet.",
+  "@thisMeetingHasNoTranscriptOr": {},
+  "thisMeetingIsTooLongFor": "This meeting is too long for this connection. Choose one with a larger context.",
+  "@thisMeetingIsTooLongFor": {},
+  "theAiServerCouldNotBe2": "The AI server could not be reached.",
+  "@theAiServerCouldNotBe2": {},
+  "theAiServerRefusedAccessUse": "The AI server refused access. Use a server that needs no API key.",
+  "@theAiServerRefusedAccessUse": {},
+  "theAiServerIsBusyOr": "The AI server is busy or over its limit. Try again later.",
+  "@theAiServerIsBusyOr": {},
+  "theAiServerRejectedTheRequest2": "The AI server rejected the request. Check the model name.",
+  "@theAiServerRejectedTheRequest2": {},
+  "theAiServerFailedTryAgain": "The AI server failed. Try again.",
+  "@theAiServerFailedTryAgain": {},
+  "theAiServerSAnswerCould": "The AI server's answer could not be read.",
+  "@theAiServerSAnswerCould": {},
+  "claudeCodeOrCodexCouldNot2": "Claude Code or Codex could not answer. Check that it is signed in.",
+  "@claudeCodeOrCodexCouldNot2": {},
+  "theSettingsCouldNotBeSaved": "The settings could not be saved.",
+  "@theSettingsCouldNotBeSaved": {},
+  "theMeetingCouldNotBeRead": "The meeting could not be read or saved.",
+  "@theMeetingCouldNotBeRead": {},
+  "error": "Error",
+  "@error": {},
+  "warning": "Warning",
+  "@warning": {},
+  "infoDefault": "Info (default)",
+  "@infoDefault": {},
+  "debug": "Debug",
+  "@debug": {},
+  "trace": "Trace",
+  "@trace": {},
+  "thisDevice2": "this device",
+  "@thisDevice2": {},
+  "anotherDevice": "another device",
+  "@anotherDevice": {},
+  "notConnected": "{label} (not connected)",
+  "@notConnected": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "itIsKeptEncryptedUntil": " It is kept encrypted until {until}.",
+  "@itIsKeptEncryptedUntil": {
+    "placeholders": {
+      "until": {
+        "type": "Object"
+      }
+    }
+  },
+  "recordedOnThisDeviceOnly": "Recorded on this device only.",
+  "@recordedOnThisDeviceOnly": {},
+  "recordedOnThisDeviceOnlyA": "Recorded on this device only. A recording of it made on another device can still be combined until {until}.",
+  "@recordedOnThisDeviceOnlyA": {
+    "placeholders": {
+      "until": {
+        "type": "Object"
+      }
+    }
+  },
+  "combinesTheRecordingsNothingIsLeft": "{combiner} combines the recordings; nothing is left to send from here.",
+  "@combinesTheRecordingsNothingIsLeft": {
+    "placeholders": {
+      "combiner": {
+        "type": "Object"
+      }
+    }
+  },
+  "waitingForAudioFrom": "Waiting for audio from {names}.{kept}",
+  "@waitingForAudioFrom": {
+    "placeholders": {
+      "names": {
+        "type": "Object"
+      },
+      "kept": {
+        "type": "Object"
+      }
+    }
+  },
+  "combinesTheRecordingsWaitingForAudio": "{combiner} combines the recordings; waiting for audio from {names}.",
+  "@combinesTheRecordingsWaitingForAudio": {
+    "placeholders": {
+      "combiner": {
+        "type": "Object"
+      },
+      "names": {
+        "type": "Object"
+      }
+    }
+  },
+  "audioFromEveryDeviceIsHere": "Audio from every device is here; the transcript is combined when this device is free.",
+  "@audioFromEveryDeviceIsHere": {},
+  "thisDeviceSAudioStillHas": "This device's audio still has to reach {combiner}.{kept}",
+  "@thisDeviceSAudioStillHas": {
+    "placeholders": {
+      "combiner": {
+        "type": "Object"
+      },
+      "kept": {
+        "type": "Object"
+      }
+    }
+  },
+  "transcriptCombinedFromEveryDevice": "Transcript combined from every device.",
+  "@transcriptCombinedFromEveryDevice": {},
+  "notCombinedAudioFromDidNot": "Not combined: audio from {plainNames} did not arrive within three weeks.",
+  "@notCombinedAudioFromDidNot": {
+    "placeholders": {
+      "plainNames": {
+        "type": "Object"
+      }
+    }
+  },
+  "meeting": "Meeting {createdAt}",
+  "@meeting": {
+    "placeholders": {
+      "createdAt": {
+        "type": "Object"
+      }
+    }
+  },
+  "writeSomethingFirst": "Write something first.",
+  "@writeSomethingFirst": {},
+  "theTextIsTooLong": "The text is too long.",
+  "@theTextIsTooLong": {},
+  "thatPartOfTheTranscriptChanged": "That part of the transcript changed meanwhile. Reopen the meeting.",
+  "@thatPartOfTheTranscriptChanged": {},
+  "theMeetingCouldNotBeSaved": "The meeting could not be saved.",
+  "@theMeetingCouldNotBeSaved": {},
+  "chooseAFullFolderPathInside": "Choose a full folder path, inside your home folder but not the home folder itself.",
+  "@chooseAFullFolderPathInside": {},
+  "theFolderCouldNotBeWritten": "The folder could not be written. Check that it exists and you can write there.",
+  "@theFolderCouldNotBeWritten": {},
+  "theNotesCouldNotBeRead2": "The notes could not be read or saved.",
+  "@theNotesCouldNotBeRead2": {},
+  "theInviteAnswerIsIncomplete": "The invite answer is incomplete.",
+  "@theInviteAnswerIsIncomplete": {},
+  "theRenameAnswerIsIncomplete": "The rename answer is incomplete.",
+  "@theRenameAnswerIsIncomplete": {},
+  "thisDeviceHasNoCamera": "This device has no camera.",
+  "@thisDeviceHasNoCamera": {},
+  "theCameraIsNotOpen": "The camera is not open.",
+  "@theCameraIsNotOpen": {},
+  "title": "Title",
+  "@title": {},
+  "summary": "Summary",
+  "@summary": {},
+  "notes": "Notes",
+  "@notes": {},
+  "transcript": "Transcript",
+  "@transcript": {},
+  "projectName": "Project name",
+  "@projectName": {},
+  "file": "File {fileName}",
+  "@file": {
+    "placeholders": {
+      "fileName": {
+        "type": "Object"
+      }
+    }
+  },
+  "typeWhatToLookFor": "Type what to look for.",
+  "@typeWhatToLookFor": {},
+  "typeAtLeastTwoLetters": "Type at least two letters.",
+  "@typeAtLeastTwoLetters": {},
+  "theSearchIsTooLong": "The search is too long.",
+  "@theSearchIsTooLong": {},
+  "exportLogs": "Export logs",
+  "@exportLogs": {},
+  "about": "About {appName}",
+  "@about": {
+    "placeholders": {
+      "appName": {
+        "type": "Object"
+      }
+    }
+  },
+  "versionLicenseAndTheSoftwareIt": "Version, license and the software it uses.",
+  "@versionLicenseAndTheSoftwareIt": {},
+  "remove": "Remove {label}?",
+  "@remove": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "itsApiKeyIsDeletedFrom": "Its API key is deleted from this device. Summaries already written stay.",
+  "@itsApiKeyIsDeletedFrom": {},
+  "cancel": "Cancel",
+  "@cancel": {},
+  "remove2": "Remove",
+  "@remove2": {},
+  "aiConnections": "AI connections",
+  "@aiConnections": {},
+  "addConnection": "Add connection",
+  "@addConnection": {},
+  "summariesSendTheMeetingSTranscript": "Summaries send the meeting's transcript, notes and photos to the connection's server. A server on your local network keeps them there.",
+  "@summariesSendTheMeetingSTranscript": {},
+  "noConnectionsYet": "No connections yet",
+  "@noConnectionsYet": {},
+  "addAServerOnYourNetwork": "Add a server on your network (Ollama, LM Studio, llama.cpp), or Claude Code or Codex on this computer.",
+  "@addAServerOnYourNetwork": {},
+  "summarizeMeetingsAutomatically": "Summarize meetings automatically",
+  "@summarizeMeetingsAutomatically": {},
+  "withTheDefaultConnectionWhenA": "With the default connection, when a meeting's transcript is final.",
+  "@withTheDefaultConnectionWhenA": {},
+  "summariesForMyOtherDevices": "Summaries for my other devices",
+  "@summariesForMyOtherDevices": {},
+  "aPairedPhoneCanAskThis": "A paired phone can ask this computer to write a summary or answer a chat with this connection, from this computer's copy of your notes. It counts against that plan; at most 10 summaries and 30 chat answers an hour.",
+  "@aPairedPhoneCanAskThis": {},
+  "off": "Off",
+  "@off": {},
+  "summaryPrompt": "Summary prompt",
+  "@summaryPrompt": {},
+  "placeholdersTheTranscriptIsAlwaysSent": "Placeholders: {placeholders}. The transcript is always sent after the prompt.",
+  "@placeholdersTheTranscriptIsAlwaysSent": {
+    "placeholders": {
+      "placeholders": {
+        "type": "Object"
+      }
+    }
+  },
+  "savePrompt": "Save prompt",
+  "@savePrompt": {},
+  "resetToBuiltIn": "Reset to built-in",
+  "@resetToBuiltIn": {},
+  "defaultLabel": "Default",
+  "@defaultLabel": {},
+  "installed": "Installed",
+  "@installed": {},
+  "notFoundOnThisComputer": "Not found on this computer",
+  "@notFoundOnThisComputer": {},
+  "unencryptedHttpLocalNetworkOnly": "Unencrypted http, local network only",
+  "@unencryptedHttpLocalNetworkOnly": {},
+  "runsWithYourPlanSSign": "Runs with your plan's sign-in on this computer",
+  "@runsWithYourPlanSSign": {},
+  "actionsFor": "Actions for {label}",
+  "@actionsFor": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "makeDefault": "Make default",
+  "@makeDefault": {},
+  "test": "Test",
+  "@test": {},
+  "edit": "Edit",
+  "@edit": {},
+  "enterANameAnAddressAnd": "Enter a name, an address and a model.",
+  "@enterANameAnAddressAnd": {},
+  "theContextIsANumberOf": "The context is a number of tokens, such as 8192.",
+  "@theContextIsANumberOf": {},
+  "edit2": "Edit {label}",
+  "@edit2": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "name": "Name",
+  "@name": {},
+  "protocol": "Protocol",
+  "@protocol": {},
+  "runsTheToolInstalledAndSigned": "Runs the tool installed and signed in on this computer, so your Claude or ChatGPT plan writes the summaries instead of API credit. The meeting goes to Anthropic or OpenAI under that account.",
+  "@runsTheToolInstalledAndSigned": {},
+  "address": "Address",
+  "@address": {},
+  "httpsAlwaysHttpOnlyOnThis": "https:// always; http:// only on this device or the local network.",
+  "@httpsAlwaysHttpOnlyOnThis": {},
+  "model": "Model",
+  "@model": {},
+  "leaveEmptyForTheToolS": "Leave empty for the tool's own default.",
+  "@leaveEmptyForTheToolS": {},
+  "contextTokens": "Context (tokens)",
+  "@contextTokens": {},
+  "saveConnection": "Save connection",
+  "@saveConnection": {},
+  "koalinoIsLocked": "Koalino is locked",
+  "@koalinoIsLocked": {},
+  "unlockWithYourFingerprintFaceOr": "Unlock with your fingerprint, face, or screen lock.",
+  "@unlockWithYourFingerprintFaceOr": {},
+  "unlock": "Unlock",
+  "@unlock": {},
+  "copied": "{what} copied",
+  "@copied": {
+    "placeholders": {
+      "what": {
+        "type": "Object"
+      }
+    }
+  },
+  "aiAssistantAccess": "AI assistant access",
+  "@aiAssistantAccess": {},
+  "letYourOwnAiAssistantSuch": "Let your own AI assistant, such as Claude Code, Codex or Claude Desktop, read your meetings and projects: titles, summaries, notes, transcripts and project files. It can only read; it cannot change or delete anything.",
+  "@letYourOwnAiAssistantSuch": {},
+  "whatTheAssistantReadsMayBe": "What the assistant reads may be sent to its online model, under your account with that service. Turn this on only for an assistant you trust with your meetings.",
+  "@whatTheAssistantReadsMayBe": {},
+  "theAssistantServerIsNotInstalled": "The assistant server is not installed with this copy of the app.",
+  "@theAssistantServerIsNotInstalled": {},
+  "letMyAiAssistantReadMy": "Let my AI assistant read my notes",
+  "@letMyAiAssistantReadMy": {},
+  "connectYourAssistant": "Connect your assistant",
+  "@connectYourAssistant": {},
+  "yourNotesAreUnlockedWithA": "Your notes are unlocked with a passphrase, which is never written into an assistant's settings. The server reads them only when NOTE_TAKER_ENCRYPTION_PASSPHRASE is set where the assistant starts it.",
+  "@yourNotesAreUnlockedWithA": {},
+  "claudeCodeRunInATerminal": "Claude Code: run in a terminal",
+  "@claudeCodeRunInATerminal": {},
+  "command": "Command",
+  "@command": {},
+  "claudeDesktopAndOtherMcpClients": "Claude Desktop and other MCP clients: add to their settings",
+  "@claudeDesktopAndOtherMcpClients": {},
+  "settings": "Settings",
+  "@settings": {},
+  "copy": "Copy: {title}",
+  "@copy": {
+    "placeholders": {
+      "title": {
+        "type": "Object"
+      }
+    }
+  },
+  "isUsingTheMicrophoneRecordThis": "{app} is using the microphone. Record this call?",
+  "@isUsingTheMicrophoneRecordThis": {
+    "placeholders": {
+      "app": {
+        "type": "Object"
+      }
+    }
+  },
+  "notNow": "Not now",
+  "@notNow": {},
+  "record": "Record",
+  "@record": {},
+  "offerToRecordCalls": "Offer to record calls",
+  "@offerToRecordCalls": {},
+  "whenTeamsZoomMeetInA": "When Teams, Zoom, Meet in a browser or another call app starts using the microphone. Nothing records until you tap Record.",
+  "@whenTeamsZoomMeetInA": {},
+  "stopWhenTheCallEnds": "Stop when the call ends",
+  "@stopWhenTheCallEnds": {},
+  "onlyForRecordingsStartedFromThe": "Only for recordings started from the offer, once the call app has left the microphone for 20 seconds.",
+  "@onlyForRecordingsStartedFromThe": {},
+  "readSpeakerNamesFromTheCall": "Read speaker names from the call window",
+  "@readSpeakerNamesFromTheCall": {},
+  "whileRecordingKoalinoReadsWhoTeams": "While recording, Koalino reads who Teams, Zoom or Meet shows as speaking, to suggest names for unknown voices. Nothing leaves this computer, and nothing is named until you tap Assign.",
+  "@whileRecordingKoalinoReadsWhoTeams": {},
+  "deleteThisChat": "Delete this chat?",
+  "@deleteThisChat": {},
+  "itsQuestionsAndAnswersAreDeleted": "Its questions and answers are deleted from this device.",
+  "@itsQuestionsAndAnswersAreDeleted": {},
+  "delete": "Delete",
+  "@delete": {},
+  "thatFileIsNoLongerIn": "That file is no longer in the project.",
+  "@thatFileIsNoLongerIn": {},
+  "whoAnswers": "Who answers",
+  "@whoAnswers": {},
+  "myPairedComputer": "My paired computer",
+  "@myPairedComputer": {},
+  "thisPhoneSAiConnection": "This phone's AI connection",
+  "@thisPhoneSAiConnection": {},
+  "deleteThisChat2": "Delete this chat",
+  "@deleteThisChat2": {},
+  "askAboutYourNotesAnswersCome": "Ask about your notes. Answers come from your paired computer, which reads its own copy of your notes with the connection chosen there for your other devices.",
+  "@askAboutYourNotesAnswersCome": {},
+  "askAboutYourNotesTheAnswer": "Ask about your notes. The answer comes from your default AI connection, which is sent the notes that fit.",
+  "@askAboutYourNotesTheAnswer": {},
+  "yourQuestion": "Your question",
+  "@yourQuestion": {},
+  "ask": "Ask",
+  "@ask": {},
+  "open": "Open",
+  "@open": {},
+  "given": "Given: {included}",
+  "@given": {
+    "placeholders": {
+      "included": {
+        "type": "Object"
+      }
+    }
+  },
+  "leftOutForLength": "Left out for length: {omitted}",
+  "@leftOutForLength": {
+    "placeholders": {
+      "omitted": {
+        "type": "Object"
+      }
+    }
+  },
+  "answeredBy": "Answered by {connection}",
+  "@answeredBy": {
+    "placeholders": {
+      "connection": {
+        "type": "Object"
+      }
+    }
+  },
+  "unableToOpenTheKeychain": "Unable to open the keychain",
+  "@unableToOpenTheKeychain": {},
+  "koalinoKeepsTheKeyThatEncrypts": "Koalino keeps the key that encrypts your voice profiles and device identity in the system keychain. Unlock the keychain, or allow Koalino to use it, then try again. If this device has no keychain service, install or start one and restart Koalino.",
+  "@koalinoKeepsTheKeyThatEncrypts": {},
+  "unableToOpenYourNotes": "Unable to open your notes",
+  "@unableToOpenYourNotes": {},
+  "koalinoCouldNotOpenItsDatabase": "Koalino could not open its database. Check that there is free space and try again.",
+  "@koalinoCouldNotOpenItsDatabase": {},
+  "unlockingYourNotes": "Unlocking your notes…",
+  "@unlockingYourNotes": {},
+  "quit": "Quit",
+  "@quit": {},
+  "retry": "Retry",
+  "@retry": {},
+  "delete2": "Delete {title}?",
+  "@delete2": {
+    "placeholders": {
+      "title": {
+        "type": "Object"
+      }
+    }
+  },
+  "itsTranscriptAttachmentsAndUnknownVoices": "Its transcript, attachments and unknown voices go for good, here and on your paired devices. People you saved stay.",
+  "@itsTranscriptAttachmentsAndUnknownVoices": {},
+  "unableToDeleteThisMeetingIf": "Unable to delete this meeting. If it is being recorded, stop the recording first.",
+  "@unableToDeleteThisMeetingIf": {},
+  "devices": "Devices",
+  "@devices": {},
+  "deviceSyncIsOff": "Device sync is off",
+  "@deviceSyncIsOff": {},
+  "meetingsStayOnThisDeviceUntil": "Meetings stay on this device until sync is turned on.",
+  "@meetingsStayOnThisDeviceUntil": {},
+  "thisDevice3": "This device\n{capabilities}",
+  "@thisDevice3": {
+    "placeholders": {
+      "capabilities": {
+        "type": "Object"
+      }
+    }
+  },
+  "renameThisDevice": "Rename this device",
+  "@renameThisDevice": {},
+  "discoverableYourOtherDevicesCanAsk": "Discoverable: your other devices can ask to pair for a few minutes.",
+  "@discoverableYourOtherDevicesCanAsk": {},
+  "makeDiscoverable": "Make discoverable",
+  "@makeDiscoverable": {},
+  "pairingRequests": "Pairing requests",
+  "@pairingRequests": {},
+  "acceptOnlyIfTheOtherDevice": "Accept only if the other device shows the same code.",
+  "@acceptOnlyIfTheOtherDevice": {},
+  "reject": "Reject",
+  "@reject": {},
+  "accept": "Accept",
+  "@accept": {},
+  "pairingInProgress": "Pairing in progress",
+  "@pairingInProgress": {},
+  "waitingForTheOtherDevice": "Waiting for the other device…",
+  "@waitingForTheOtherDevice": {},
+  "checkThatTheOtherDeviceShows": "Check that the other device shows the same code.",
+  "@checkThatTheOtherDeviceShows": {},
+  "cancelPairing": "Cancel pairing",
+  "@cancelPairing": {},
+  "codesMatch": "Codes match",
+  "@codesMatch": {},
+  "pairedDevices": "Paired devices",
+  "@pairedDevices": {},
+  "noPairedDevicesYet": "No paired devices yet.",
+  "@noPairedDevicesYet": {},
+  "paired": "Paired {pairedAt}\n{hasRelay}",
+  "@paired": {
+    "placeholders": {
+      "pairedAt": {
+        "type": "Object"
+      },
+      "hasRelay": {
+        "type": "Object"
+      }
+    }
+  },
+  "remove3": "Remove {deviceName}",
+  "@remove3": {
+    "placeholders": {
+      "deviceName": {
+        "type": "Object"
+      }
+    }
+  },
+  "nearbyDevices": "Nearby devices",
+  "@nearbyDevices": {},
+  "pair": "Pair",
+  "@pair": {},
+  "anotherNetwork": "Another network",
+  "@anotherNetwork": {},
+  "showAnInviteHereAndUse": "Show an invite here and use it on the other device. You still compare a code before they pair.",
+  "@showAnInviteHereAndUse": {},
+  "showInvite": "Show invite",
+  "@showInvite": {},
+  "useInvite": "Use invite",
+  "@useInvite": {},
+  "stopsSyncingWithThisDevicePair": "{deviceName} stops syncing with this device. Pair again to resume.",
+  "@stopsSyncingWithThisDevicePair": {
+    "placeholders": {
+      "deviceName": {
+        "type": "Object"
+      }
+    }
+  },
+  "pairingCode": "Pairing code {split}",
+  "@pairingCode": {
+    "placeholders": {
+      "split": {
+        "type": "Object"
+      }
+    }
+  },
+  "noOtherDevicesFoundOnThis": "No other devices found on this network. Nearby only finds devices on the same Wi-Fi. For a device on another network, use an invite.",
+  "@noOtherDevicesFoundOnThis": {},
+  "noOtherDevicesFoundOnThis2": "No other devices found on this network. Nearby only finds devices on the same Wi-Fi. For a device on another network, use an invite or set a relay in Settings.",
+  "@noOtherDevicesFoundOnThis2": {},
+  "notConnectedItReconnectsWhenIt": "Not connected. It reconnects when it is online and can reach your relay.",
+  "@notConnectedItReconnectsWhenIt": {},
+  "notConnectedPutBothDevicesOn": "Not connected. Put both devices on the same Wi-Fi, or set a relay in Settings.",
+  "@notConnectedPutBothDevicesOn": {},
+  "whisperOnDevice": "Whisper (on device)",
+  "@whisperOnDevice": {},
+  "openaiCloud": "OpenAI (cloud)",
+  "@openaiCloud": {},
+  "gbGpu": "{round} GB GPU",
+  "@gbGpu": {
+    "placeholders": {
+      "round": {
+        "type": "Object"
+      }
+    }
+  },
+  "mbGpu": "{gpuMegabytes} MB GPU",
+  "@mbGpu": {
+    "placeholders": {
+      "gpuMegabytes": {
+        "type": "Object"
+      }
+    }
+  },
+  "noTranscriptionModels": "No transcription models",
+  "@noTranscriptionModels": {},
+  "useYourOwnAiApp": "Use your own AI app",
+  "@useYourOwnAiApp": {},
+  "theMeetingItsNotesAndIts": "The meeting, its notes and its files go to the app you pick, with your own account. For a summary, copy the answer there and come back, or share it to Koalino: Koalino keeps it.",
+  "@theMeetingItsNotesAndIts": {},
+  "summarizeIn": "Summarize in {displayName}",
+  "@summarizeIn": {
+    "placeholders": {
+      "displayName": {
+        "type": "Object"
+      }
+    }
+  },
+  "chatIn": "Chat in {displayName}",
+  "@chatIn": {
+    "placeholders": {
+      "displayName": {
+        "type": "Object"
+      }
+    }
+  },
+  "summarizeInAnotherApp": "Summarize in another app…",
+  "@summarizeInAnotherApp": {},
+  "chatInAnotherApp": "Chat in another app…",
+  "@chatInAnotherApp": {},
+  "summaryFromSavedTo": "Summary from {appName} saved to \"{title}\".",
+  "@summaryFromSavedTo": {
+    "placeholders": {
+      "appName": {
+        "type": "Object"
+      },
+      "title": {
+        "type": "Object"
+      }
+    }
+  },
+  "undo": "Undo",
+  "@undo": {},
+  "theEarlierSummaryIsBack": "The earlier summary is back.",
+  "@theEarlierSummaryIsBack": {},
+  "toKeepTheSummaryCopyS": "To keep the summary, copy {appName}'s answer and come back to Koalino, or share the answer to Koalino.",
+  "@toKeepTheSummaryCopyS": {
+    "placeholders": {
+      "appName": {
+        "type": "Object"
+      }
+    }
+  },
+  "meetings": "Meetings",
+  "@meetings": {},
+  "projects": "Projects",
+  "@projects": {},
+  "voices": "Voices",
+  "@voices": {},
+  "meeting2": "Meeting",
+  "@meeting2": {},
+  "chatAboutThisMeeting": "Chat about this meeting",
+  "@chatAboutThisMeeting": {},
+  "chat": "Chat: {meeting}",
+  "@chat": {
+    "placeholders": {
+      "meeting": {
+        "type": "Object"
+      }
+    }
+  },
+  "thisMeeting": "this meeting",
+  "@thisMeeting": {},
+  "takePhotos": "Take photos",
+  "@takePhotos": {},
+  "attachFiles": "Attach files",
+  "@attachFiles": {},
+  "export": "Export",
+  "@export": {},
+  "shareAs": "Share as {label}",
+  "@shareAs": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "nameSpeakers": "Name speakers",
+  "@nameSpeakers": {},
+  "selectAMeetingToSeeIts": "Select a meeting to see its transcript.",
+  "@selectAMeetingToSeeIts": {},
+  "renameMeeting": "Rename meeting",
+  "@renameMeeting": {},
+  "deleteMeeting": "Delete meeting",
+  "@deleteMeeting": {},
+  "recordedOn": "Recorded on {devices}",
+  "@recordedOn": {
+    "placeholders": {
+      "devices": {
+        "type": "Object"
+      }
+    }
+  },
+  "split": "Split",
+  "@split": {},
+  "longPressOrRightClickA": "Long-press or right-click a passage to correct it.",
+  "@longPressOrRightClickA": {},
+  "noTranscriptIsAvailable": "No transcript is available.",
+  "@noTranscriptIsAvailable": {},
+  "theSpeakerIsAGuess": "The speaker is a guess",
+  "@theSpeakerIsAGuess": {},
+  "peopleTalkedAtOnceHereWords": "People talked at once here; words may be missing",
+  "@peopleTalkedAtOnceHereWords": {},
+  "overlappingSpeech": "Overlapping speech",
+  "@overlappingSpeech": {},
+  "someWordsWereUnclear": "Some words were unclear",
+  "@someWordsWereUnclear": {},
+  "addedAfterTheMeeting": "Added after the meeting",
+  "@addedAfterTheMeeting": {},
+  "photoOpenFullScreen": "Photo {fileName}, open full screen",
+  "@photoOpenFullScreen": {
+    "placeholders": {
+      "fileName": {
+        "type": "Object"
+      }
+    }
+  },
+  "save": "Save",
+  "@save": {},
+  "preview": "Preview",
+  "@preview": {},
+  "editNotes": "Edit notes",
+  "@editNotes": {},
+  "writeNotes": "Write notes",
+  "@writeNotes": {},
+  "loading": "Loading…",
+  "@loading": {},
+  "noNotesYet": "No notes yet.",
+  "@noNotesYet": {},
+  "textAt": "Text at {startTimeMs}",
+  "@textAt": {
+    "placeholders": {
+      "startTimeMs": {
+        "type": "Object"
+      }
+    }
+  },
+  "removedThisTranscriptWonTBe": "Removed. This transcript won't be re-transcribed after the meeting.",
+  "@removedThisTranscriptWonTBe": {},
+  "savedThisTranscriptWonTBe": "Saved. This transcript won't be re-transcribed after the meeting.",
+  "@savedThisTranscriptWonTBe": {},
+  "editText": "Edit text",
+  "@editText": {},
+  "editTheTranscript": "Edit the transcript",
+  "@editTheTranscript": {},
+  "leaveItEmptyToRemoveThis": "Leave it empty to remove this part.",
+  "@leaveItEmptyToRemoveThis": {},
+  "searchMeetings": "Search meetings",
+  "@searchMeetings": {},
+  "chatWithAllYourNotes": "Chat with all your notes",
+  "@chatWithAllYourNotes": {},
+  "chatWithAllNotes": "Chat with all notes",
+  "@chatWithAllNotes": {},
+  "refresh": "Refresh",
+  "@refresh": {},
+  "noMeetingsYet": "No meetings yet",
+  "@noMeetingsYet": {},
+  "recordingsYouStartAppearHere": "Recordings you start appear here.",
+  "@recordingsYouStartAppearHere": {},
+  "rename": "Rename",
+  "@rename": {},
+  "addToProject": "Add to project…",
+  "@addToProject": {},
+  "summary2": "Summary…",
+  "@summary2": {},
+  "addToProject2": "Add to project",
+  "@addToProject2": {},
+  "writingTheSummaryOf": "Writing the summary of {title}",
+  "@writingTheSummaryOf": {
+    "placeholders": {
+      "title": {
+        "type": "Object"
+      }
+    }
+  },
+  "summaryOf": "Summary of {title}",
+  "@summaryOf": {
+    "placeholders": {
+      "title": {
+        "type": "Object"
+      }
+    }
+  },
+  "summarizeWith": "Summarize with {label}",
+  "@summarizeWith": {
+    "placeholders": {
+      "label": {
+        "type": "Object"
+      }
+    }
+  },
+  "defaultLabel2": "{model} · default",
+  "@defaultLabel2": {
+    "placeholders": {
+      "model": {
+        "type": "Object"
+      }
+    }
+  },
+  "summarizeOnMyComputer": "Summarize on my computer",
+  "@summarizeOnMyComputer": {},
+  "withClaudeCodeCodexOrThe": "With Claude Code, Codex or the connection set up there",
+  "@withClaudeCodeCodexOrThe": {},
+  "useYourOwnAiApp2": "Use your own AI app…",
+  "@useYourOwnAiApp2": {},
+  "claudeChatgptOrAnotherAppWith": "Claude, ChatGPT or another app, with your account",
+  "@claudeChatgptOrAnotherAppWith": {},
+  "openSummary": "Open summary",
+  "@openSummary": {},
+  "editPromptForThisMeeting": "Edit prompt for this meeting…",
+  "@editPromptForThisMeeting": {},
+  "useTheSettingsPrompt": "Use the Settings prompt",
+  "@useTheSettingsPrompt": {},
+  "promptForThisMeeting": "Prompt for this meeting",
+  "@promptForThisMeeting": {},
+  "placeholders": "Placeholders: {placeholders}",
+  "@placeholders": {
+    "placeholders": {
+      "placeholders": {
+        "type": "Object"
+      }
+    }
+  },
+  "addAnAiConnectionInSettings3": "Add an AI connection in Settings to write summaries.",
+  "@addAnAiConnectionInSettings3": {},
+  "summarizeWith2": "Summarize with",
+  "@summarizeWith2": {},
+  "summarize": "Summarize",
+  "@summarize": {},
+  "summarizeAgain": "Summarize again",
+  "@summarizeAgain": {},
+  "editPromptForThisMeeting2": "Edit prompt for this meeting",
+  "@editPromptForThisMeeting2": {},
+  "writingTheSummaryALocalModel": "Writing the summary… A local model can take a few minutes.",
+  "@writingTheSummaryALocalModel": {},
+  "noSummaryYet": "No summary yet.",
+  "@noSummaryYet": {},
+  "writeASummary": "Write a summary",
+  "@writeASummary": {},
+  "writtenByYouOn": "Written by you on {createdAt}",
+  "@writtenByYouOn": {
+    "placeholders": {
+      "createdAt": {
+        "type": "Object"
+      }
+    }
+  },
+  "writtenByOn": "Written by {model} ({connectionLabel}) on {createdAt}{edited}",
+  "@writtenByOn": {
+    "placeholders": {
+      "model": {
+        "type": "Object"
+      },
+      "connectionLabel": {
+        "type": "Object"
+      },
+      "createdAt": {
+        "type": "Object"
+      },
+      "edited": {
+        "type": "Object"
+      }
+    }
+  },
+  "editSummary": "Edit summary",
+  "@editSummary": {},
+  "tryAgainOnMyComputer": "Try again on my computer",
+  "@tryAgainOnMyComputer": {},
+  "cancelRequest": "Cancel request",
+  "@cancelRequest": {},
+  "notesFolder": "Notes folder",
+  "@notesFolder": {},
+  "keepYourProjectsAndMeetingsAs": "Keep your projects and meetings as plain files in a folder, to read and edit them with any editor. Edits to notes.md, summary.md and project files come back into the app within half a minute, and files you drop into a project folder or a meeting's attachments folder are added. transcript.md is rewritten by the app: correct the transcript in the app.",
+  "@keepYourProjectsAndMeetingsAs": {},
+  "theFolderIsADecryptedCopy": "The folder is a decrypted copy of your notes. Anyone who can read it can read them, and backup or sync tools will copy it. Keep it on an encrypted disk, inside your own user folder.",
+  "@theFolderIsADecryptedCopy": {},
+  "folder": "Folder",
+  "@folder": {},
+  "chooseAFolder": "Choose a folder",
+  "@chooseAFolder": {},
+  "keepTheNotesFolder": "Keep the notes folder",
+  "@keepTheNotesFolder": {},
+  "syncNow": "Sync now",
+  "@syncNow": {},
+  "lastSyncAtFailed": "Last sync at {at} failed: {code}",
+  "@lastSyncAtFailed": {
+    "placeholders": {
+      "at": {
+        "type": "Object"
+      },
+      "code": {
+        "type": "Object"
+      }
+    }
+  },
+  "lastSyncAtFilesWrittenEdits": "Last sync at {at}: {written} files written, {imported} edits and files taken in.",
+  "@lastSyncAtFilesWrittenEdits": {
+    "placeholders": {
+      "at": {
+        "type": "Object"
+      },
+      "written": {
+        "type": "Object"
+      },
+      "imported": {
+        "type": "Object"
+      }
+    }
+  },
+  "inviteADevice": "Invite a device",
+  "@inviteADevice": {},
+  "pairingInviteQrCode": "Pairing invite QR code",
+  "@pairingInviteQrCode": {},
+  "onTheOtherDeviceOpenDevices": "On the other device, open Devices, choose Use invite, and paste this link. You can scan the code with a camera app to copy it. It works until {hour}:{minute}.",
+  "@onTheOtherDeviceOpenDevices": {
+    "placeholders": {
+      "hour": {
+        "type": "Object"
+      },
+      "minute": {
+        "type": "Object"
+      }
+    }
+  },
+  "close": "Close",
+  "@close": {},
+  "inviteLinkCopied": "Invite link copied",
+  "@inviteLinkCopied": {},
+  "copyLink": "Copy link",
+  "@copyLink": {},
+  "deviceFoundChoosePairUnderNearby": "Device found. Choose Pair under Nearby devices.",
+  "@deviceFoundChoosePairUnderNearby": {},
+  "useAnInvite": "Use an invite",
+  "@useAnInvite": {},
+  "inviteLink": "Invite link",
+  "@inviteLink": {},
+  "findDevice": "Find device",
+  "@findDevice": {},
+  "pairWithAnotherDevice": "Pair with another device?",
+  "@pairWithAnotherDevice": {},
+  "youOpenedAPairingInviteKoalino": "You opened a pairing invite. Koalino will find the device that shows it, and both devices will show a code to compare before anything is shared.",
+  "@youOpenedAPairingInviteKoalino": {},
+  "pairingStartedCheckThatBothDevices": "Pairing started. Check that both devices show the same code.",
+  "@pairingStartedCheckThatBothDevices": {},
+  "done": "Done",
+  "@done": {},
+  "photosAreAddedToTheMeeting": "Photos are added to the meeting as you take them.",
+  "@photosAreAddedToTheMeeting": {},
+  "takePhoto": "Take photo",
+  "@takePhoto": {},
+  "theCameraIsUnavailable": "The camera is unavailable.",
+  "@theCameraIsUnavailable": {},
+  "search": "Search {name}",
+  "@search": {
+    "placeholders": {
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "noteSaved": "Note saved",
+  "@noteSaved": {},
+  "theNoteCouldNotBeSaved": "The note could not be saved.",
+  "@theNoteCouldNotBeSaved": {},
+  "couldNotBeAdded2": "{failed} could not be added.",
+  "@couldNotBeAdded2": {
+    "placeholders": {
+      "failed": {
+        "type": "Object"
+      }
+    }
+  },
+  "renameProject": "Rename project",
+  "@renameProject": {},
+  "theProjectCouldNotBeRenamed": "The project could not be renamed.",
+  "@theProjectCouldNotBeRenamed": {},
+  "delete3": "Delete \"{project}\"?",
+  "@delete3": {
+    "placeholders": {
+      "project": {
+        "type": "Object"
+      }
+    }
+  },
+  "itsFilesNotesAndEMails": "Its files, notes and e-mails are deleted on every paired device. Its meetings are kept, outside any project.",
+  "@itsFilesNotesAndEMails": {},
+  "theProjectCouldNotBeDeleted": "The project could not be deleted.",
+  "@theProjectCouldNotBeDeleted": {},
+  "itIsDeletedOnEveryPaired": "It is deleted on every paired device.",
+  "@itIsDeletedOnEveryPaired": {},
+  "theFileCouldNotBeDeleted": "The file could not be deleted.",
+  "@theFileCouldNotBeDeleted": {},
+  "theMeetingCouldNotBeRemoved": "The meeting could not be removed from the project.",
+  "@theMeetingCouldNotBeRemoved": {},
+  "project": "Project",
+  "@project": {},
+  "searchThisProject": "Search this project",
+  "@searchThisProject": {},
+  "chatAboutThisProject": "Chat about this project",
+  "@chatAboutThisProject": {},
+  "addFiles": "Add files",
+  "@addFiles": {},
+  "writeANote": "Write a note",
+  "@writeANote": {},
+  "addMeetings": "Add meetings",
+  "@addMeetings": {},
+  "deleteProject": "Delete project",
+  "@deleteProject": {},
+  "addThemHereOrFromA": "Add them here, or from a meeting's page.",
+  "@addThemHereOrFromA": {},
+  "removeFromProject": "Remove from project",
+  "@removeFromProject": {},
+  "filesNotesAndEMails": "Files, notes and e-mails",
+  "@filesNotesAndEMails": {},
+  "nothingAddedYet": "Nothing added yet",
+  "@nothingAddedYet": {},
+  "addPicturesMarkdownPdfsEMails": "Add pictures, Markdown, PDFs, e-mails (.eml) or documents.",
+  "@addPicturesMarkdownPdfsEMails": {},
+  "onItsWayFromAPaired": "On its way from a paired device",
+  "@onItsWayFromAPaired": {},
+  "newNote": "New note",
+  "@newNote": {},
+  "noteMarkdown": "Note (Markdown)",
+  "@noteMarkdown": {},
+  "everyMeetingIsAlreadyInA": "Every meeting is already in a project.",
+  "@everyMeetingIsAlreadyInA": {},
+  "add": "Add",
+  "@add": {},
+  "moveToProject": "Move to project",
+  "@moveToProject": {},
+  "noProject": "No project",
+  "@noProject": {},
+  "newProject": "New project…",
+  "@newProject": {},
+  "newProject2": "New project",
+  "@newProject2": {},
+  "create": "Create",
+  "@create": {},
+  "theProjectCouldNotBeCreated": "The project could not be created.",
+  "@theProjectCouldNotBeCreated": {},
+  "theMeetingCouldNotBeMoved": "The meeting could not be moved.",
+  "@theMeetingCouldNotBeMoved": {},
+  "removedFromItsProject": "Removed from its project",
+  "@removedFromItsProject": {},
+  "movedTo": "Moved to {project}",
+  "@movedTo": {
+    "placeholders": {
+      "project": {
+        "type": "Object"
+      }
+    }
+  },
+  "searchProjects": "Search projects",
+  "@searchProjects": {},
+  "noProjectsYetAProjectGathers": "No projects yet. A project gathers meetings with the files, notes and e-mails that belong to them.",
+  "@noProjectsYetAProjectGathers": {},
+  "theRecordingIsStillStartingTry": "The recording is still starting; try again.",
+  "@theRecordingIsStillStartingTry": {},
+  "recording": "Recording \"{title}\"",
+  "@recording": {
+    "placeholders": {
+      "title": {
+        "type": "Object"
+      }
+    }
+  },
+  "recording2": "Recording",
+  "@recording2": {},
+  "paused": "Paused \"{title}\"",
+  "@paused": {
+    "placeholders": {
+      "title": {
+        "type": "Object"
+      }
+    }
+  },
+  "paused2": "Paused",
+  "@paused2": {},
+  "finishingTranscription": "Finishing transcription…",
+  "@finishingTranscription": {},
+  "readyToRecord": "Ready to record",
+  "@readyToRecord": {},
+  "meetingTitle": "Meeting title",
+  "@meetingTitle": {},
+  "enterMeetingTitleOptional": "Enter meeting title (optional)",
+  "@enterMeetingTitleOptional": {},
+  "leaveEmptyToNameTheMeeting": "Leave empty to name the meeting by its start time",
+  "@leaveEmptyToNameTheMeeting": {},
+  "startingRecording": "Starting recording",
+  "@startingRecording": {},
+  "startRecording": "Start recording",
+  "@startRecording": {},
+  "pause": "Pause",
+  "@pause": {},
+  "resume": "Resume",
+  "@resume": {},
+  "stop": "Stop",
+  "@stop": {},
+  "language": "Language",
+  "@language": {},
+  "aChangeAppliesToWhatIs": "A change applies to what is said next",
+  "@aChangeAppliesToWhatIs": {},
+  "liveTranscript": "Live transcript",
+  "@liveTranscript": {},
+  "theTranscriptAppearsHereAFew": "The transcript appears here a few seconds after each pause in speech.",
+  "@theTranscriptAppearsHereAFew": {},
+  "nearbyDevicesSeeThisNameWhile": "Nearby devices see this name while this device is discoverable. Devices already paired keep the name they learned.",
+  "@nearbyDevicesSeeThisNameWhile": {},
+  "meetingRenamed": "Meeting renamed",
+  "@meetingRenamed": {},
+  "thisTitleIsnTAllowed": "This title isn't allowed.",
+  "@thisTitleIsnTAllowed": {},
+  "couldnTSaveTheNewTitle": "Couldn't save the new title. Try again.",
+  "@couldnTSaveTheNewTitle": {},
+  "theNoteTakingEngineIsnT": "The note-taking engine isn't available right now.",
+  "@theNoteTakingEngineIsnT": {},
+  "thisMeetingNoLongerExists2": "This meeting no longer exists.",
+  "@thisMeetingNoLongerExists2": {},
+  "couldnTRenameTheMeeting": "Couldn't rename the meeting.",
+  "@couldnTRenameTheMeeting": {},
+  "thisFileIsStillOnIts": "This file is still on its way from a paired device.",
+  "@thisFileIsStillOnIts": {},
+  "thisPictureCannotBeShown": "This picture cannot be shown.",
+  "@thisPictureCannotBeShown": {},
+  "thisKindOfDocumentCanT": "This kind of document can't be shown in the app yet.",
+  "@thisKindOfDocumentCanT": {},
+  "thisFileCannotBeOpened": "This file cannot be opened.",
+  "@thisFileCannotBeOpened": {},
+  "thisFileCannotBeRead": "This file cannot be read.",
+  "@thisFileCannotBeRead": {},
+  "thisEMailCannotBeRead": "This e-mail cannot be read.",
+  "@thisEMailCannotBeRead": {},
+  "noSubject": "(no subject)",
+  "@noSubject": {},
+  "from": "From",
+  "@from": {},
+  "to": "To",
+  "@to": {},
+  "cc": "Cc",
+  "@cc": {},
+  "sent": "Sent",
+  "@sent": {},
+  "attachments": "Attachments: {attachmentNames}",
+  "@attachments": {
+    "placeholders": {
+      "attachmentNames": {
+        "type": "Object"
+      }
+    }
+  },
+  "theRestOfThisEMail": "The rest of this e-mail is too long to show.",
+  "@theRestOfThisEMail": {},
+  "searching": "Searching…",
+  "@searching": {},
+  "nothingFound": "Nothing found.",
+  "@nothingFound": {},
+  "search2": "Search",
+  "@search2": {},
+  "pairYourDevicesAndSeeWhich": "Pair your devices and see which ones are connected.",
+  "@pairYourDevicesAndSeeWhich": {},
+  "transcriptionModel": "Transcription model",
+  "@transcriptionModel": {},
+  "chooseTheWhisperModel": "Choose the Whisper model.",
+  "@chooseTheWhisperModel": {},
+  "languageModelsForMeetingSummariesAnd": "Language models for meeting summaries, and the summary prompt.",
+  "@languageModelsForMeetingSummariesAnd": {},
+  "keepProjectsAndMeetingsAsFiles": "Keep projects and meetings as files you can edit with any editor.",
+  "@keepProjectsAndMeetingsAsFiles": {},
+  "letYourOwnAssistantSuchAs": "Let your own assistant, such as Claude Code, read your notes.",
+  "@letYourOwnAssistantSuchAs": {},
+  "appLock": "App lock",
+  "@appLock": {},
+  "defaultLanguage": "Default language",
+  "@defaultLanguage": {},
+  "usedForNewRecordingsAutoDetects": "Used for new recordings. Auto detects the language as people speak.",
+  "@usedForNewRecordingsAutoDetects": {},
+  "transcribeOn": "Transcribe on",
+  "@transcribeOn": {},
+  "anotherDeviceReceivesTheRecordingS": "Another device receives the recording's audio, encrypted, and deletes it once transcribed. If it is unavailable, this device transcribes instead.",
+  "@anotherDeviceReceivesTheRecordingS": {},
+  "telemetry": "Telemetry",
+  "@telemetry": {},
+  "howLongTranscriptionTakesOnEach": "How long transcription takes on each device, and its estimated energy use.",
+  "@howLongTranscriptionTakesOnEach": {},
+  "logLevel": "Log level",
+  "@logLevel": {},
+  "howMuchDetailTheAppWrites": "How much detail the app writes to its logs. Debug and Trace help diagnose problems but write more.",
+  "@howMuchDetailTheAppWrites": {},
+  "custom": "Custom",
+  "@custom": {},
+  "shareLogs": "Share logs",
+  "@shareLogs": {},
+  "theLast7DaysOfDiagnostic": "The last 7 days of diagnostic logs, for example to attach to a bug report.",
+  "@theLast7DaysOfDiagnostic": {},
+  "unableToReadTheAppLock": "Unable to read the app lock setting.",
+  "@unableToReadTheAppLock": {},
+  "needsAndroid10OrLater": "Needs Android 10 or later.",
+  "@needsAndroid10OrLater": {},
+  "setAScreenLockInAndroid": "Set a screen lock in Android settings to use App lock.",
+  "@setAScreenLockInAndroid": {},
+  "askForYourFingerprintFaceOr": "Ask for your fingerprint, face, or screen lock when you return to Koalino after {lockAfterBackground} seconds away. Recording and sync keep running while it is locked.",
+  "@askForYourFingerprintFaceOr": {
+    "placeholders": {
+      "lockAfterBackground": {
+        "type": "Object"
+      }
+    }
+  },
+  "otherNetworks": "Other networks",
+  "@otherNetworks": {},
+  "aRelayOnYourOwnAlways": "A relay on your own always-on device lets your devices reach each other away from the same Wi-Fi. Syncing on the same network keeps working without it.",
+  "@aRelayOnYourOwnAlways": {},
+  "relayAddress": "Relay address",
+  "@relayAddress": {},
+  "deviceAddressesOptionalOnePerLine": "Device addresses (optional, one per line)",
+  "@deviceAddressesOptionalOnePerLine": {},
+  "saveAddresses": "Save addresses",
+  "@saveAddresses": {},
+  "nothingThatWasSharedCouldBe": "Nothing that was shared could be read.",
+  "@nothingThatWasSharedCouldBe": {},
+  "couldNotBeRead": "{message}; {failedCount} could not be read",
+  "@couldNotBeRead": {
+    "placeholders": {
+      "message": {
+        "type": "Object"
+      },
+      "failedCount": {
+        "type": "Object"
+      }
+    }
+  },
+  "saveAsTheSummaryOf": "Save as the summary of \"{title}\"",
+  "@saveAsTheSummaryOf": {
+    "placeholders": {
+      "title": {
+        "type": "Object"
+      }
+    }
+  },
+  "addToAProjectInstead": "Add to a project instead",
+  "@addToAProjectInstead": {},
+  "splitThisMeeting": "Split this meeting?",
+  "@splitThisMeeting": {},
+  "itWasRecordedOnAndThe": "It was recorded on {devices}, and the app joined the recordings. Splitting lists the other {recordings} on its own again, with its own transcript, here and on your paired devices. They are not joined again. This meeting keeps its transcript.",
+  "@itWasRecordedOnAndThe": {
+    "placeholders": {
+      "devices": {
+        "type": "Object"
+      },
+      "recordings": {
+        "type": "Object"
+      }
+    }
+  },
+  "unableToSplitThisMeeting": "Unable to split this meeting.",
+  "@unableToSplitThisMeeting": {},
+  "telemetryDashboard": "Telemetry Dashboard",
+  "@telemetryDashboard": {},
+  "transcription": "Transcription",
+  "@transcription": {},
+  "latency": "Latency",
+  "@latency": {},
+  "tasks": "Tasks",
+  "@tasks": {},
+  "power": "Power",
+  "@power": {},
+  "transcriptionDurationOverTime": "Transcription Duration Over Time",
+  "@transcriptionDurationOverTime": {},
+  "latencyDistribution": "Latency Distribution",
+  "@latencyDistribution": {},
+  "taskTypeBreakdown": "Task Type Breakdown",
+  "@taskTypeBreakdown": {},
+  "powerConsumptionEstimate": "Power Consumption Estimate",
+  "@powerConsumptionEstimate": {},
+  "fastestLeastAccurate": "Fastest, least accurate",
+  "@fastestLeastAccurate": {},
+  "fastManyMistakesTheAppShips": "Fast, many mistakes. The app ships with this one",
+  "@fastManyMistakesTheAppShips": {},
+  "goodBalanceOnMostComputers": "Good balance on most computers",
+  "@goodBalanceOnMostComputers": {},
+  "accurateSlowerNeedsAbout2Gb": "Accurate, slower, needs about 2 GB of memory",
+  "@accurateSlowerNeedsAbout2Gb": {},
+  "olderNeedsAPowerfulComputer": "Older, needs a powerful computer",
+  "@olderNeedsAPowerfulComputer": {},
+  "mostAccurateNeedsAPowerfulComputer": "Most accurate, needs a powerful computer",
+  "@mostAccurateNeedsAPowerfulComputer": {},
+  "veryAccurateBestWithAGraphics": "Very accurate. Best with a graphics card",
+  "@veryAccurateBestWithAGraphics": {},
+  "thisModelMayBeTooLarge": "This model may be too large",
+  "@thisModelMayBeTooLarge": {},
+  "mayNeedMoreMemoryThanThis": "{model} may need more memory than this device has, and recordings could fail or run slowly.",
+  "@mayNeedMoreMemoryThanThis": {
+    "placeholders": {
+      "model": {
+        "type": "Object"
+      }
+    }
+  },
+  "downloadAnyway": "Download anyway",
+  "@downloadAnyway": {},
+  "transcriptionSettingsAreUnavailable": "Transcription settings are unavailable.",
+  "@transcriptionSettingsAreUnavailable": {},
+  "downloadFromQualcomm": "Download from Qualcomm?",
+  "@downloadFromQualcomm": {},
+  "about360MbIsDownloadedFrom": "About 360 MB is downloaded from Qualcomm and needs about 460 MB of space:\n\n• Qualcomm's QNN runtime, which lets apps use the NPU. It is licensed under Qualcomm's AI Stack License, not the app's licence.\n• Whisper Small, compiled by Qualcomm AI Hub for this phone's NPU.\n\nEach file is checked before it is used. Your recordings never leave the phone. By downloading, you accept Qualcomm's terms.",
+  "@about360MbIsDownloadedFrom": {},
+  "acceptAndDownload": "Accept and download",
+  "@acceptAndDownload": {},
+  "downloadingTheNpuFiles": "Downloading the NPU files…",
+  "@downloadingTheNpuFiles": {},
+  "transcribeOnTheNpu": "Transcribe on the NPU",
+  "@transcribeOnTheNpu": {},
+  "thisPhoneHasAnAiChip": "This phone has an AI chip (NPU) that can run Whisper Small, leaving the processor free: 30 seconds of speech take about 2 seconds. It needs a download from Qualcomm.",
+  "@thisPhoneHasAnAiChip": {},
+  "download": "Download",
+  "@download": {},
+  "runsWhisperSmallOnThePhone": "Runs Whisper Small on the phone's AI chip, in place of the model chosen above, and for the after-meeting pass unless it has its own model. Word times are approximate.",
+  "@runsWhisperSmallOnThePhone": {},
+  "removeTheNpuFiles": "Remove the NPU files",
+  "@removeTheNpuFiles": {},
+  "alsoRecordTheComputerSSound": "Also record the computer's sound",
+  "@alsoRecordTheComputerSSound": {},
+  "transcribesWhatTheComputerPlaysSuch": "Transcribes what the computer plays, such as the other side of a call, beside the microphone. When the microphone also hears the speakers, the repeated words are kept once.",
+  "@transcribesWhatTheComputerPlaysSuch": {},
+  "improveTheTranscriptAfterTheMeeting": "Improve the transcript after the meeting",
+  "@improveTheTranscriptAfterTheMeeting": {},
+  "transcribesEachMeetingAgainWithMore": "Transcribes each meeting again with more context once it ends; a phone waits until it is charging. The speech is kept encrypted until then, then deleted.",
+  "@transcribesEachMeetingAgainWithMore": {},
+  "modelForThisPass": "Model for this pass",
+  "@modelForThisPass": {},
+  "aLargerModelIsSlowerBut": "A larger model is slower but more accurate, and the pass has time after the meeting. Download models above.",
+  "@aLargerModelIsSlowerBut": {},
+  "sameAsForRecording": "Same as for recording",
+  "@sameAsForRecording": {},
+  "keepSpeechForCombining": "Keep speech for combining",
+  "@keepSpeechForCombining": {},
+  "whenAMeetingWasAlsoRecorded": "When a meeting was also recorded on another device, its speech waits this long to be combined, then is deleted.",
+  "@whenAMeetingWasAlsoRecorded": {},
+  "whisperModel": "Whisper model",
+  "@whisperModel": {},
+  "biggerModelsMakeFewerMistakesAnd": "Bigger models make fewer mistakes, and need more time and memory. Downloads come from Hugging Face. This choice applies only to this device.",
+  "@biggerModelsMakeFewerMistakesAnd": {},
+  "automatic2": "Automatic: {fileName}{mode}",
+  "@automatic2": {
+    "placeholders": {
+      "fileName": {
+        "type": "Object"
+      },
+      "mode": {
+        "type": "Object"
+      }
+    }
+  },
+  "usesUntilIsDownloadedTheBest": "Uses {fileName} until {waiting} is downloaded, the best fit for this device. {reason}",
+  "@usesUntilIsDownloadedTheBest": {
+    "placeholders": {
+      "fileName": {
+        "type": "Object"
+      },
+      "waiting": {
+        "type": "Object"
+      },
+      "reason": {
+        "type": "Object"
+      }
+    }
+  },
+  "picksTheBestModelForThis": "Picks the best model for this device: {fileName}{mode}.",
+  "@picksTheBestModelForThis": {
+    "placeholders": {
+      "fileName": {
+        "type": "Object"
+      },
+      "mode": {
+        "type": "Object"
+      }
+    }
+  },
+  "download2": "Download {sizeBytes}",
+  "@download2": {
+    "placeholders": {
+      "sizeBytes": {
+        "type": "Object"
+      }
+    }
+  },
+  "tryLabel": "Try {model}",
+  "@tryLabel": {
+    "placeholders": {
+      "model": {
+        "type": "Object"
+      }
+    }
+  },
+  "use": "Use",
+  "@use": {},
+  "suggestedForThisDevice": "Suggested for this device: {model}{mode}",
+  "@suggestedForThisDevice": {
+    "placeholders": {
+      "model": {
+        "type": "Object"
+      },
+      "mode": {
+        "type": "Object"
+      }
+    }
+  },
+  "efficientMode": "Efficient mode",
+  "@efficientMode": {},
+  "runsTheSameModelsOnThe": "Runs the same models on the graphics chip ({gpuName}), usually faster. Off uses the processor, as standard.",
+  "@runsTheSameModelsOnThe": {
+    "placeholders": {
+      "gpuName": {
+        "type": "Object"
+      }
+    }
+  },
+  "theGraphicsChipStoppedTheApp": "The graphics chip stopped the app last time, so this device is transcribing with its processor.",
+  "@theGraphicsChipStoppedTheApp": {},
+  "tryTheGraphicsChipAgain": "Try the graphics chip again",
+  "@tryTheGraphicsChipAgain": {},
+  "onThisDevice": "on this device",
+  "@onThisDevice": {},
+  "usedByAutomatic": "used by Automatic",
+  "@usedByAutomatic": {},
+  "englishOnly": "English only",
+  "@englishOnly": {},
+  "mayBeTooLargeForThis": "may be too large for this device",
+  "@mayBeTooLargeForThis": {},
+  "doesnTMatchYourLanguage": "doesn't match your language",
+  "@doesnTMatchYourLanguage": {},
+  "notEnoughFreeSpace": "not enough free space",
+  "@notEnoughFreeSpace": {},
+  "cancelDownload": "Cancel download",
+  "@cancelDownload": {},
+  "glossary": "Glossary",
+  "@glossary": {},
+  "namesProjectNamesAndTermsOne": "Names, project names and terms, one per line. Transcription spells them as written here.",
+  "@namesProjectNamesAndTermsOne": {},
+  "saveGlossary": "Save glossary",
+  "@saveGlossary": {},
+  "voiceGallery": "Voice Gallery",
+  "@voiceGallery": {},
+  "tryAgain": "Try again",
+  "@tryAgain": {},
+  "unknownVoices": "Unknown voices",
+  "@unknownVoices": {},
+  "noUnknownSpeakersToReview": "No unknown speakers to review",
+  "@noUnknownSpeakersToReview": {},
+  "savedPeople": "Saved people",
+  "@savedPeople": {},
+  "noSavedPeopleYetNameA": "No saved people yet. Name a voice to add someone.",
+  "@noSavedPeopleYetNameA": {},
+  "delete4": "Delete {displayName}",
+  "@delete4": {
+    "placeholders": {
+      "displayName": {
+        "type": "Object"
+      }
+    }
+  },
+  "playing": "Playing…",
+  "@playing": {},
+  "untitledMeeting": "Untitled meeting",
+  "@untitledMeeting": {},
+  "play": "Play",
+  "@play": {},
+  "deleteThisVoice": "Delete this voice",
+  "@deleteThisVoice": {},
+  "theCallShowedSpeakingCheckThen": "The call showed {suggestedName} speaking. Check, then Assign.",
+  "@theCallShowedSpeakingCheckThen": {
+    "placeholders": {
+      "suggestedName": {
+        "type": "Object"
+      }
+    }
+  },
+  "chooseASavedPerson": "Choose a saved person",
+  "@chooseASavedPerson": {},
+  "assign": "Assign",
+  "@assign": {},
+  "deleteTheseVoices": "Delete these voices",
+  "@deleteTheseVoices": {},
+  "theseSoundLikeOnePersonUntick": "These sound like one person. Untick any that is someone else.",
+  "@theseSoundLikeOnePersonUntick": {},
+  "itsVoiceSamplesGoForGood": "Its {voices} voice samples go for good, here and on your paired devices. The transcripts stay.",
+  "@itsVoiceSamplesGoForGood": {
+    "placeholders": {
+      "voices": {
+        "type": "Object"
+      }
+    }
+  },
+  "itsVoiceSampleGoesForGood": "Its voice sample goes for good, here and on your paired devices. The transcript stays.",
+  "@itsVoiceSampleGoesForGood": {},
+  "theirNameAndVoiceSamplesGo": "Their name and voice samples go for good, here and on your paired devices. Transcripts stay and number them as a speaker.",
+  "@theirNameAndVoiceSamplesGo": {},
+  "unknownSpeaker": "Unknown speaker {index}",
+  "@unknownSpeaker": {
+    "placeholders": {
+      "index": {
+        "type": "Object"
+      }
+    }
+  },
+  "attachedFiles": "{count, plural, =1{Attached 1 file} other{Attached {count} files}}",
+  "@attachedFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "addedFiles": "{count, plural, =1{Added 1 file} other{Added {count} files}}",
+  "@addedFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "emailAttachmentsLeft": "{count, plural, =1{1 e-mail attachment was left in the e-mail} other{{count} e-mail attachments were left in the e-mail}}",
+  "@emailAttachmentsLeft": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "addedMeetings": "{count, plural, =1{Added 1 meeting} other{Added {count} meetings}}",
+  "@addedMeetings": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "otherRecordings": "{count, plural, =1{recording} other{{count} recordings}}",
+  "@otherRecordings": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    },
+    "description": "Fills {recordings} in itWasRecordedOnAndThe."
+  },
+  "severalDevices": "several devices",
+  "@severalDevices": {},
+  "meetingCount": "{count, plural, =1{1 meeting} other{{count} meetings}}",
+  "@meetingCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "fileCount": "{count, plural, =1{1 file} other{{count} files}}",
+  "@fileCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chunkCount": "{count, plural, =1{1 chunk} other{{count} chunks}}",
+  "@chunkCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "resultCount": "{count, plural, =1{1 result} other{{count} results}}",
+  "@resultCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "moreNotShown": ", more not shown: add words to narrow it",
+  "@moreNotShown": {},
+  "cpuCores": "{count, plural, =1{1 CPU core} other{{count} CPU cores}}",
+  "@cpuCores": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "dayCount": "{count, plural, =1{1 day} other{{count} days}}",
+  "@dayCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "voiceSampleCount": "{count, plural, =1{1 voice sample} other{{count} voice samples}}",
+  "@voiceSampleCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "picturesIncluded": "{count, plural, =1{1 picture was included} other{{count} pictures were included}}",
+  "@picturesIncluded": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "partCount": "{count, plural, =1{1 part} other{{count} parts}}",
+  "@partCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "inMeetings": "{parts} in {meetings}",
+  "@inMeetings": {
+    "placeholders": {
+      "parts": {
+        "type": "Object"
+      },
+      "meetings": {
+        "type": "Object"
+      }
+    },
+    "description": "{meetings} is meetingCount."
+  },
+  "assignedVoicesTo": "{count, plural, =1{Assigned to {name}} other{Assigned {count} voices to {name}}}",
+  "@assignedVoicesTo": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "name": {
+        "type": "Object"
+      }
+    }
+  },
+  "addSharedFiles": "{count, plural, =1{Add the shared file to a project} other{Add {count} shared files to a project}}",
+  "@addSharedFiles": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "keepSpeechSaved": "{count, plural, =1{Saved. Speech now waits up to 1 day to be combined.} other{Saved. Speech now waits up to {count} days to be combined.}}",
+  "@keepSpeechSaved": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "titlesCanBeAtMost": "Titles can be at most {max} characters.",
+  "@titlesCanBeAtMost": {
+    "placeholders": {
+      "max": {
+        "type": "Object"
+      }
+    }
+  },
+  "promptUnknownPlaceholder": "The prompt has an unknown or unclosed {example}.",
+  "@promptUnknownPlaceholder": {
+    "placeholders": {
+      "example": {
+        "type": "Object"
+      }
+    },
+    "description": "{example} is the literal text {{placeholder}}."
+  },
+  "live": "● Live",
+  "@live": {},
+  "offline": "○ Offline",
+  "@offline": {},
+  "minutesShort": "{minutes} min",
+  "@minutesShort": {
+    "placeholders": {
+      "minutes": {
+        "type": "Object"
+      }
+    }
+  },
+  "appLanguage": "App language",
+  "@appLanguage": {},
+  "appLanguageDescription": "The language of Koalino's menus and messages.",
+  "@appLanguageDescription": {},
+  "systemLanguage": "System default",
+  "@systemLanguage": {},
+  "photosAddedCount": "{count, plural, =1{1 photo added} other{{count} photos added}}",
+  "@photosAddedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
+}

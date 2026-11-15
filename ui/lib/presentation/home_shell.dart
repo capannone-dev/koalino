@@ -3,6 +3,7 @@
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Hosts the Record, Meetings and Voices destinations, plus Projects (Issue #85, between Meetings
 /// and Voices) and Settings (Issue #46) when given their builders, as the app always does.
@@ -59,33 +60,33 @@ final class _HomeShellState extends State<HomeShell> {
             (
               icon: Icons.mic_none,
               selectedIcon: Icons.mic,
-              label: 'Record',
+              label: l10n.record,
               builder: widget.recordingScreenBuilder,
             ),
             (
               icon: Icons.event_note_outlined,
               selectedIcon: Icons.event_note,
-              label: 'Meetings',
+              label: l10n.meetings,
               builder: widget.meetingsScreenBuilder,
             ),
             if (widget.projectsScreenBuilder case final WidgetBuilder builder)
               (
                 icon: Icons.folder_outlined,
                 selectedIcon: Icons.folder,
-                label: 'Projects',
+                label: l10n.projects,
                 builder: builder,
               ),
             (
               icon: Icons.record_voice_over_outlined,
               selectedIcon: Icons.record_voice_over,
-              label: 'Voices',
+              label: l10n.voices,
               builder: widget.voicesScreenBuilder,
             ),
             if (widget.settingsScreenBuilder case final WidgetBuilder builder)
               (
                 icon: Icons.settings_outlined,
                 selectedIcon: Icons.settings,
-                label: 'Settings',
+                label: l10n.settings,
                 builder: builder,
               ),
           ];

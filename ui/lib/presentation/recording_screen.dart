@@ -10,6 +10,7 @@ import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Longest title Rust accepts, in characters (`MeetingTitle::MAX_CHARACTERS`).
 const int _maxMeetingTitleLength = 200;
@@ -100,8 +101,8 @@ final class _RecordingScreenState extends State<RecordingScreen> {
       return null;
     }
     if (meetingId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('The recording is still starting; try again.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.theRecordingIsStillStartingTry)));
     }
     return meetingId;
   }
@@ -176,14 +177,14 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                           : null;
                   final String statusLabel = switch ((state, activeTitle)) {
                     (RecordingUiState.recording, final String title) =>
-                      'Recording "$title"',
-                    (RecordingUiState.recording, null) => 'Recording',
+                      l10n.recording(title),
+                    (RecordingUiState.recording, null) => l10n.recording2,
                     (RecordingUiState.paused, final String title) =>
-                      'Paused "$title"',
-                    (RecordingUiState.paused, null) => 'Paused',
+                      l10n.paused(title),
+                    (RecordingUiState.paused, null) => l10n.paused2,
                     (RecordingUiState.stopping, _) =>
-                      'Finishing transcription…',
-                    _ => 'Ready to record',
+                      l10n.finishingTranscription,
+                    _ => l10n.readyToRecord,
                   };
 
                   return Column(
@@ -197,11 +198,10 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                         textCapitalization: TextCapitalization.sentences,
                         textInputAction: TextInputAction.done,
                         onSubmitted: (_) => _startRecording(),
-                        decoration: const InputDecoration(
-                          labelText: 'Meeting title',
-                          hintText: 'Enter meeting title (optional)',
-                          helperText:
-                              'Leave empty to name the meeting by its start time',
+                        decoration: InputDecoration(
+                          labelText: l10n.meetingTitle,
+                          hintText: l10n.enterMeetingTitleOptional,
+                          helperText: l10n.leaveEmptyToNameTheMeeting,
                           prefixIcon: Icon(Icons.title),
                           border: OutlineInputBorder(),
                         ),
@@ -255,20 +255,20 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                               onPressed: isBusy ? null : _startRecording,
                               icon: const Icon(Icons.fiber_manual_record),
                               label: Text(isStarting
-                                  ? 'Starting recording'
-                                  : 'Start recording'),
+                                  ? l10n.startingRecording
+                                  : l10n.startRecording),
                             ),
                           if (state == RecordingUiState.recording)
                             FilledButton.tonalIcon(
                               onPressed: recordingController.pauseRecording,
                               icon: const Icon(Icons.pause),
-                              label: const Text('Pause'),
+                              label: Text(l10n.pause),
                             ),
                           if (state == RecordingUiState.paused)
                             FilledButton.icon(
                               onPressed: recordingController.resumeRecording,
                               icon: const Icon(Icons.play_arrow),
-                              label: const Text('Resume'),
+                              label: Text(l10n.resume),
                             ),
                           if (state == RecordingUiState.recording ||
                               state == RecordingUiState.paused ||
@@ -276,7 +276,7 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                             OutlinedButton.icon(
                               onPressed: isStopping ? null : _stopRecording,
                               icon: const Icon(Icons.stop),
-                              label: const Text('Stop'),
+                              label: Text(l10n.stop),
                             ),
                           if (activeMeetingId != null &&
                               photoScreenBuilder != null)
@@ -284,7 +284,7 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                               onPressed: () => _takePhotos(
                                   photoScreenBuilder, activeMeetingId),
                               icon: const Icon(Icons.photo_camera_outlined),
-                              label: const Text('Take photos'),
+                              label: Text(l10n.takePhotos),
                             ),
                           if (activeMeetingId != null &&
                               attachmentsController != null)
@@ -292,7 +292,7 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                               onPressed: () => _attachFiles(
                                   attachmentsController, activeMeetingId),
                               icon: const Icon(Icons.attach_file),
-                              label: const Text('Attach files'),
+                              label: Text(l10n.attachFiles),
                             ),
                         ],
                       ),
@@ -328,10 +328,8 @@ final class _LanguageSelector extends StatelessWidget {
         listenable: controller,
         builder: (BuildContext context, Widget? child) => InputDecorator(
           decoration: InputDecoration(
-            labelText: 'Language',
-            helperText: isRecordingActive
-                ? 'A change applies to what is said next'
-                : null,
+            labelText: l10n.language,
+            helperText: isRecordingActive ? l10n.aChangeAppliesToWhatIs : null,
             errorText: controller.message,
             prefixIcon: const Icon(Icons.translate),
             border: const OutlineInputBorder(),
@@ -411,7 +409,7 @@ final class _LiveTranscriptState extends State<_LiveTranscript> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Text('Live transcript', style: theme.textTheme.titleMedium),
+                Text(l10n.liveTranscript, style: theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
                 DecoratedBox(
                   decoration: BoxDecoration(
@@ -425,8 +423,7 @@ final class _LiveTranscriptState extends State<_LiveTranscript> {
                         ? Padding(
                             padding: const EdgeInsets.all(16),
                             child: Text(
-                              'The transcript appears here a few seconds after '
-                              'each pause in speech.',
+                              l10n.theTranscriptAppearsHereAFew,
                               style: theme.textTheme.bodyMedium?.copyWith(
                                   color: theme.colorScheme.onSurfaceVariant),
                             ),

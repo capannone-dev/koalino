@@ -25,6 +25,7 @@ import 'package:note_taker_ui/presentation/meeting_timeline.dart';
 import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
 import 'package:note_taker_ui/presentation/split_meeting_action.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Builds a screen about one meeting, such as the voice gallery for its unknown speakers.
 typedef MeetingScreenBuilder = Widget Function(
@@ -124,17 +125,18 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Meeting'),
+        title: Text(l10n.meeting2),
         actions: <Widget>[
           if (widget.chatBridge case final ChatBridge bridge)
             IconButton(
-              tooltip: 'Chat about this meeting',
+              tooltip: l10n.chatAboutThisMeeting,
               icon: const Icon(Icons.chat_outlined),
               onPressed: () => openChat(context,
                   bridge: bridge,
                   topic: ChatTopic.meeting(widget.meetingId),
-                  title:
-                      'Chat: ${widget.controller.selectedMeeting?.summary.title ?? 'meeting'}',
+                  title: l10n.chat(
+                      widget.controller.selectedMeeting?.summary.title ??
+                          'meeting'),
                   openMeeting: _openCitedMeeting,
                   projectsController: widget.projectsController),
             ),
@@ -147,7 +149,7 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
                 controller: summaries,
                 meetingId: widget.meetingId,
                 title: widget.controller.selectedMeeting?.summary.title ??
-                    'this meeting',
+                    l10n.thisMeeting,
               ),
             ),
           if (widget.speakersScreenBuilder
@@ -214,7 +216,7 @@ final class TakePhotosButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      tooltip: 'Take photos',
+      tooltip: l10n.takePhotos,
       icon: const Icon(Icons.photo_camera_outlined),
       onPressed: () async {
         await Navigator.of(context).push(MaterialPageRoute<void>(
@@ -250,7 +252,7 @@ final class AttachFilesButton extends StatelessWidget {
     return ListenableBuilder(
       listenable: attachmentsController,
       builder: (BuildContext context, Widget? child) => IconButton(
-        tooltip: 'Attach files',
+        tooltip: l10n.attachFiles,
         icon: const Icon(Icons.attach_file),
         onPressed: attachmentsController.isAttaching
             ? null
@@ -298,7 +300,7 @@ final class ExportMeetingButton extends StatelessWidget {
       listenable: exportController,
       builder: (BuildContext context, Widget? child) =>
           PopupMenuButton<(MeetingExportFormat, bool)>(
-        tooltip: 'Export',
+        tooltip: l10n.export,
         enabled: !exportController.isExporting,
         icon: exportController.isExporting
             ? const SizedBox.square(
@@ -317,7 +319,7 @@ final class ExportMeetingButton extends StatelessWidget {
             for (final MeetingExportFormat format in MeetingExportFormat.values)
               PopupMenuItem<(MeetingExportFormat, bool)>(
                   value: (format, true),
-                  child: Text('Share as ${format.label}')),
+                  child: Text(l10n.shareAs(format.label))),
           ],
         ],
       ),
@@ -363,7 +365,7 @@ final class NameSpeakersButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      tooltip: 'Name speakers',
+      tooltip: l10n.nameSpeakers,
       icon: const Icon(Icons.record_voice_over_outlined),
       onPressed: () async {
         await Navigator.of(context).push(MaterialPageRoute<void>(
@@ -413,8 +415,7 @@ final class MeetingDetailView extends StatelessWidget {
               meeting: meeting,
               editController: editController,
               focusStartMs: focusStartMs),
-          null => const Center(
-              child: Text('Select a meeting to see its transcript.')),
+          null => Center(child: Text(l10n.selectAMeetingToSeeIts)),
         };
       },
     );
@@ -481,7 +482,7 @@ final class _MeetingContent extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  tooltip: 'Rename meeting',
+                  tooltip: l10n.renameMeeting,
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: () => showRenameMeetingDialog(
                     context,
@@ -491,7 +492,7 @@ final class _MeetingContent extends StatelessWidget {
                 ),
                 IconButton(
                   key: const ValueKey<String>('delete-open-meeting'),
-                  tooltip: 'Delete meeting',
+                  tooltip: l10n.deleteMeeting,
                   icon: const Icon(Icons.delete_outline),
                   onPressed: () async {
                     final NavigatorState navigator = Navigator.of(context);
@@ -530,7 +531,7 @@ final class _MeetingContent extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Recorded on $devices',
+                      l10n.recordedOn(devices),
                       style: theme.textTheme.bodyMedium
                           ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
@@ -538,7 +539,7 @@ final class _MeetingContent extends StatelessWidget {
                   TextButton.icon(
                     key: const ValueKey<String>('split-open-meeting'),
                     icon: const Icon(Icons.call_split),
-                    label: const Text('Split'),
+                    label: Text(l10n.split),
                     onPressed: () => splitMeetingAfterAsking(
                       context,
                       controller: controller,
@@ -579,10 +580,10 @@ final class _MeetingContent extends StatelessWidget {
                   controller: edits, meetingId: summary.meetingId),
               const Divider(height: 32),
             ],
-            Text('Transcript', style: theme.textTheme.titleMedium),
+            Text(l10n.transcript, style: theme.textTheme.titleMedium),
             if (editController != null && meeting.segments.isNotEmpty)
               Text(
-                'Long-press or right-click a passage to correct it.',
+                l10n.longPressOrRightClickA,
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
@@ -624,7 +625,7 @@ final class _MeetingContent extends StatelessWidget {
       final String transcript when transcript.trim().isNotEmpty =>
         Text(transcript, style: theme.textTheme.bodyLarge),
       _ => Text(
-          'No transcript is available.',
+          l10n.noTranscriptIsAvailable,
           style: theme.textTheme.bodyLarge
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
@@ -664,7 +665,7 @@ final class _MeetingContent extends StatelessWidget {
           crossAxisAlignment: WrapCrossAlignment.center,
           children: <Widget>[
             _withTooltip(
-              segment.uncertainSpeaker ? 'The speaker is a guess' : null,
+              segment.uncertainSpeaker ? l10n.theSpeakerIsAGuess : null,
               Text(
                 '$speaker · ${formatMeetingDuration(segment.startTimeMs)}',
                 style: theme.textTheme.labelLarge
@@ -673,9 +674,9 @@ final class _MeetingContent extends StatelessWidget {
             ),
             if (segment.overlappingSpeech)
               Tooltip(
-                message: 'People talked at once here; words may be missing',
+                message: l10n.peopleTalkedAtOnceHereWords,
                 child: Text(
-                  'Overlapping speech',
+                  l10n.overlappingSpeech,
                   style: theme.textTheme.labelSmall
                       ?.copyWith(color: theme.colorScheme.tertiary),
                 ),
@@ -706,7 +707,7 @@ final class _MeetingContent extends StatelessWidget {
     );
     return Semantics(
       label: segment.text,
-      hint: 'Some words were unclear',
+      hint: l10n.someWordsWereUnclear,
       child: Text.rich(
         TextSpan(
           children: <TextSpan>[
@@ -782,7 +783,7 @@ final class MeetingAttachmentView extends StatelessWidget {
     final String placement = switch (attachment.meetingTimeMs) {
       final int meetingTimeMs => '${attachment.isImage ? 'Photo' : 'File'} · '
           '${formatMeetingDuration(meetingTimeMs)}',
-      null => 'Added after the meeting',
+      null => l10n.addedAfterTheMeeting,
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -794,7 +795,7 @@ final class MeetingAttachmentView extends StatelessWidget {
         if (attachment.isImage)
           Semantics(
             button: true,
-            label: 'Photo ${attachment.fileName}, open full screen',
+            label: l10n.photoOpenFullScreen(attachment.fileName),
             child: InkWell(
               onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (BuildContext context) =>

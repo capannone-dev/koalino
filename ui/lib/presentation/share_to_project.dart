@@ -12,6 +12,7 @@ import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/infrastructure/incoming_share_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// What the sheet answers: an existing project, or a request for a new one.
 sealed class _ShareTarget {
@@ -97,8 +98,8 @@ final class _IncomingShareListenerState extends State<IncomingShareListener> {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     try {
       if (share.filePaths.isEmpty) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('Nothing that was shared could be read.')));
+        messenger.showSnackBar(
+            SnackBar(content: Text(l10n.nothingThatWasSharedCouldBe)));
         return;
       }
       if (await _keptAsSummary(share) || !mounted) {
@@ -130,7 +131,7 @@ final class _IncomingShareListenerState extends State<IncomingShareListener> {
       }
       String message = await controller.addPaths(projectId, share.filePaths);
       if (share.failedCount > 0) {
-        message = '$message; ${share.failedCount} could not be read';
+        message = l10n.couldNotBeRead(message, share.failedCount);
       }
       messenger.showSnackBar(SnackBar(content: Text(message)));
     } finally {
@@ -162,12 +163,12 @@ final class _IncomingShareListenerState extends State<IncomingShareListener> {
           children: <Widget>[
             ListTile(
               leading: const Icon(Icons.summarize_outlined),
-              title: Text('Save as the summary of "${waiting.title}"'),
+              title: Text(l10n.saveAsTheSummaryOf(waiting.title)),
               onTap: () => Navigator.of(context).pop(true),
             ),
             ListTile(
               leading: const Icon(Icons.folder_outlined),
-              title: const Text('Add to a project instead'),
+              title: Text(l10n.addToAProjectInstead),
               onTap: () => Navigator.of(context).pop(false),
             ),
           ],
@@ -183,7 +184,7 @@ final class _IncomingShareListenerState extends State<IncomingShareListener> {
   /// Asks for a name and creates the project; `null` when cancelled or refused.
   Future<String?> _createProject() async {
     final String? name = await askProjectName(context,
-        title: 'New project', confirmLabel: 'Create');
+        title: l10n.newProject2, confirmLabel: l10n.create);
     if (name == null || !mounted) {
       return null;
     }
@@ -191,7 +192,7 @@ final class _IncomingShareListenerState extends State<IncomingShareListener> {
         await widget.projectsController.createProject(name);
     if (created == null && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('The project could not be created.')));
+          SnackBar(content: Text(l10n.theProjectCouldNotBeCreated)));
     }
     return created?.projectId;
   }
@@ -209,9 +210,7 @@ final class _ChooseProjectSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String heading = fileCount == 1
-        ? 'Add the shared file to a project'
-        : 'Add $fileCount shared files to a project';
+    final String heading = l10n.addSharedFiles(fileCount);
     return SafeArea(
       child: ConstrainedBox(
         constraints:
@@ -230,7 +229,7 @@ final class _ChooseProjectSheet extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.create_new_folder_outlined),
-              title: const Text('New project'),
+              title: Text(l10n.newProject2),
               onTap: () => Navigator.of(context).pop(const _NewProject()),
             ),
             const Divider(height: 1),

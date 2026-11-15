@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Makes an invite and shows it; a failure appears in the Devices screen's error line.
 ///
@@ -45,7 +46,7 @@ final class _InviteDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final String minute = invite.expiresAt.minute.toString().padLeft(2, '0');
     return AlertDialog(
-      title: const Text('Invite a device'),
+      title: Text(l10n.inviteADevice),
       content: SizedBox(
         width: 320,
         child: SingleChildScrollView(
@@ -58,14 +59,12 @@ final class _InviteDialog extends StatelessWidget {
                 child: QrImageView(
                   data: invite.text,
                   size: 240,
-                  semanticsLabel: 'Pairing invite QR code',
+                  semanticsLabel: l10n.pairingInviteQrCode,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
-                'On the other device, open Devices, choose Use invite, and paste this link. '
-                'You can scan the code with a camera app to copy it. '
-                'It works until ${invite.expiresAt.hour}:$minute.',
+                l10n.onTheOtherDeviceOpenDevices(invite.expiresAt.hour, minute),
               ),
               const SizedBox(height: 12),
               SelectableText(invite.text,
@@ -77,18 +76,18 @@ final class _InviteDialog extends StatelessWidget {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(l10n.close),
         ),
         FilledButton.icon(
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: invite.text));
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Invite link copied')));
+              ScaffoldMessenger.of(context)
+                  .showSnackBar(SnackBar(content: Text(l10n.inviteLinkCopied)));
             }
           },
           icon: const Icon(Icons.copy),
-          label: const Text('Copy link'),
+          label: Text(l10n.copyLink),
         ),
       ],
     );
@@ -125,8 +124,8 @@ final class _JoinInviteDialogState extends State<_JoinInviteDialog> {
     }
     if (refusal == null) {
       Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Device found. Choose Pair under Nearby devices.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.deviceFoundChoosePairUnderNearby)));
     } else {
       setState(() => _errorText = refusal);
     }
@@ -134,14 +133,14 @@ final class _JoinInviteDialogState extends State<_JoinInviteDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Use an invite'),
+        title: Text(l10n.useAnInvite),
         content: TextField(
           controller: _inviteField,
           autofocus: true,
           minLines: 2,
           maxLines: 5,
           decoration: InputDecoration(
-            labelText: 'Invite link',
+            labelText: l10n.inviteLink,
             border: const OutlineInputBorder(),
             errorText: _errorText,
             errorMaxLines: 3,
@@ -150,9 +149,9 @@ final class _JoinInviteDialogState extends State<_JoinInviteDialog> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
-          FilledButton(onPressed: _submit, child: const Text('Find device')),
+          FilledButton(onPressed: _submit, child: Text(l10n.findDevice)),
         ],
       );
 }

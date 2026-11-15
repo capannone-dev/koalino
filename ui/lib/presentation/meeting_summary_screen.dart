@@ -15,6 +15,7 @@ import 'package:note_taker_ui/controllers/handoff_controller.dart';
 import 'package:note_taker_ui/presentation/handoff_widgets.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
 import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Finds the "Summarize with" selector in tests.
 const Key summaryConnectionSelectorKey = ValueKey<String>('summary-connection');
@@ -61,8 +62,8 @@ final class MeetingSummaryButton extends StatelessWidget {
         builder: (BuildContext context, Widget? child) => IconButton(
           key: ValueKey<String>('summary-$meetingId'),
           tooltip: controller.isSummarizing(meetingId)
-              ? 'Writing the summary of $title'
-              : 'Summary of $title',
+              ? l10n.writingTheSummaryOf(title)
+              : l10n.summaryOf(title),
           icon: controller.isSummarizing(meetingId)
               ? const SizedBox.square(
                   dimension: 20,
@@ -132,12 +133,12 @@ Future<void> showMeetingSummaryMenu(
   final _SummaryMenuChoice? choice = await showDialog<_SummaryMenuChoice>(
     context: context,
     builder: (BuildContext context) => SimpleDialog(
-      title: Text('Summary of ${meeting.title}'),
+      title: Text(l10n.summaryOf(meeting.title)),
       children: <Widget>[
         if (controller.connections.isEmpty)
-          const ListTile(
+          ListTile(
             leading: Icon(Icons.info_outline),
-            title: Text('Add an AI connection in Settings first.'),
+            title: Text(l10n.addAnAiConnectionInSettings2),
           ),
         for (final LlmConnection connection in controller.connections)
           SimpleDialogOption(
@@ -145,53 +146,51 @@ Future<void> showMeetingSummaryMenu(
                 Navigator.of(context).pop(_SummarizeWith(connection.id)),
             child: ListTile(
               leading: const Icon(Icons.auto_awesome_outlined),
-              title: Text('Summarize with ${connection.label}'),
+              title: Text(l10n.summarizeWith(connection.label)),
               subtitle: Text(connection.isDefault
-                  ? '${connection.model} · default'
+                  ? l10n.defaultLabel2(connection.model)
                   : connection.model),
             ),
           ),
         if (controller.asksPairedComputer)
           SimpleDialogOption(
             onPressed: () => Navigator.of(context).pop(const _AskComputer()),
-            child: const ListTile(
+            child: ListTile(
               leading: Icon(Icons.computer_outlined),
-              title: Text('Summarize on my computer'),
-              subtitle: Text(
-                  'With Claude Code, Codex or the connection set up there'),
+              title: Text(l10n.summarizeOnMyComputer),
+              subtitle: Text(l10n.withClaudeCodeCodexOrThe),
             ),
           ),
         if (controller.handoff != null)
           SimpleDialogOption(
             onPressed: () => Navigator.of(context).pop(const _UseOwnApp()),
-            child: const ListTile(
+            child: ListTile(
               leading: Icon(Icons.open_in_new),
-              title: Text('Use your own AI app…'),
-              subtitle:
-                  Text('Claude, ChatGPT or another app, with your account'),
+              title: Text(l10n.useYourOwnAiApp2),
+              subtitle: Text(l10n.claudeChatgptOrAnotherAppWith),
             ),
           ),
         const Divider(),
         SimpleDialogOption(
           onPressed: () => Navigator.of(context).pop(const _OpenSummary()),
-          child: const ListTile(
+          child: ListTile(
             leading: Icon(Icons.summarize_outlined),
-            title: Text('Open summary'),
+            title: Text(l10n.openSummary),
           ),
         ),
         SimpleDialogOption(
           onPressed: () => Navigator.of(context).pop(const _EditPrompt()),
-          child: const ListTile(
+          child: ListTile(
             leading: Icon(Icons.edit_note),
-            title: Text('Edit prompt for this meeting…'),
+            title: Text(l10n.editPromptForThisMeeting),
           ),
         ),
         if (state?.meetingPrompt != null)
           SimpleDialogOption(
             onPressed: () => Navigator.of(context).pop(const _ResetPrompt()),
-            child: const ListTile(
+            child: ListTile(
               leading: Icon(Icons.restore),
-              title: Text('Use the Settings prompt'),
+              title: Text(l10n.useTheSettingsPrompt),
             ),
           ),
       ],
@@ -287,7 +286,7 @@ final class _MeetingPromptDialogState extends State<_MeetingPromptDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('Prompt for this meeting'),
+        title: Text(l10n.promptForThisMeeting),
         content: SizedBox(
           width: 560,
           child: Column(
@@ -299,8 +298,8 @@ final class _MeetingPromptDialogState extends State<_MeetingPromptDialog> {
                 controller: _field,
                 minLines: 6,
                 maxLines: 14,
-                decoration: const InputDecoration(
-                  labelText: 'Prompt for this meeting',
+                decoration: InputDecoration(
+                  labelText: l10n.promptForThisMeeting,
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -308,7 +307,9 @@ final class _MeetingPromptDialogState extends State<_MeetingPromptDialog> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'Placeholders: ${widget.placeholders.map((String name) => '{{$name}}').join(' ')}',
+                    l10n.placeholders(widget.placeholders
+                        .map((String name) => '{{$name}}')
+                        .join(' ')),
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -318,11 +319,11 @@ final class _MeetingPromptDialogState extends State<_MeetingPromptDialog> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(_field.text),
-            child: const Text('Save prompt'),
+            child: Text(l10n.savePrompt),
           ),
         ],
       );
@@ -385,7 +386,7 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
   /// Opens the Markdown editor on `text` and saves the result as the summary (#96).
   Future<void> _editText(String text) => showMarkdownEditor(
         context,
-        title: 'Summary',
+        title: l10n.summary,
         initialText: text,
         onSave: (String edited) =>
             widget.controller.editSummary(widget.meetingId, edited),
@@ -395,7 +396,7 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Summary')),
+      appBar: AppBar(title: Text(l10n.summary)),
       body: ListenableBuilder(
         listenable: widget.controller,
         builder: (BuildContext context, Widget? child) {
@@ -432,8 +433,7 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                   ],
                   if (connections.isEmpty)
                     if (!controller.asksPairedComputer)
-                      const Text(
-                          'Add an AI connection in Settings to write summaries.')
+                      Text(l10n.addAnAiConnectionInSettings3)
                     else
                       const SizedBox.shrink()
                   else
@@ -444,7 +444,7 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                       children: <Widget>[
                         DropdownMenu<String>(
                           key: summaryConnectionSelectorKey,
-                          label: const Text('Summarize with'),
+                          label: Text(l10n.summarizeWith2),
                           initialSelection: chosen,
                           enabled: !writing,
                           onSelected: (String? id) =>
@@ -460,8 +460,8 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                         FilledButton.icon(
                           icon: const Icon(Icons.auto_awesome_outlined),
                           label: Text(summary == null
-                              ? 'Summarize'
-                              : 'Summarize again'),
+                              ? l10n.summarize
+                              : l10n.summarizeAgain),
                           onPressed: writing
                               ? null
                               : () => controller.summarize(widget.meetingId,
@@ -475,7 +475,7 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                     children: <Widget>[
                       TextButton.icon(
                         icon: const Icon(Icons.edit_note),
-                        label: const Text('Edit prompt for this meeting'),
+                        label: Text(l10n.editPromptForThisMeeting2),
                         onPressed: () => editMeetingPrompt(context,
                             controller: controller,
                             meetingId: widget.meetingId),
@@ -483,7 +483,7 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                       if (state?.meetingPrompt != null)
                         TextButton.icon(
                           icon: const Icon(Icons.restore),
-                          label: const Text('Use the Settings prompt'),
+                          label: Text(l10n.useTheSettingsPrompt),
                           onPressed: () => controller.setMeetingPrompt(
                               widget.meetingId, null),
                         ),
@@ -491,7 +491,7 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                           case final HandoffController handoff)
                         TextButton.icon(
                           icon: const Icon(Icons.open_in_new),
-                          label: const Text('Use your own AI app'),
+                          label: Text(l10n.useYourOwnAiApp),
                           onPressed: () => showHandoffSheet(context,
                               controller: handoff,
                               meetingId: widget.meetingId,
@@ -503,8 +503,7 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                     const SizedBox(height: 12),
                     const LinearProgressIndicator(),
                     const SizedBox(height: 8),
-                    const Text(
-                        'Writing the summary… A local model can take a few minutes.'),
+                    Text(l10n.writingTheSummaryALocalModel),
                   ],
                   if (controller.meetingMessage(widget.meetingId)
                       case final String message) ...<Widget>[
@@ -513,13 +512,13 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                   ],
                   const Divider(height: 32),
                   if (summary == null) ...<Widget>[
-                    Text(state == null ? 'Loading…' : 'No summary yet.'),
+                    Text(state == null ? l10n.loading : l10n.noSummaryYet),
                     if (state != null)
                       Align(
                         alignment: Alignment.centerLeft,
                         child: TextButton.icon(
                           icon: const Icon(Icons.edit_outlined),
-                          label: const Text('Write a summary'),
+                          label: Text(l10n.writeASummary),
                           onPressed: () => _editText(''),
                         ),
                       ),
@@ -530,18 +529,20 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                           child: Text(
                             summary.connectionLabel.isEmpty &&
                                     summary.model.isEmpty
-                                ? 'Written by you on '
-                                    '${formatMeetingCreatedAt(summary.createdAt)}'
-                                : 'Written by ${summary.model} (${summary.connectionLabel}) on '
-                                    '${formatMeetingCreatedAt(summary.createdAt)}'
-                                    '${summary.edited ? ' · edited' : ''}',
+                                ? l10n.writtenByYouOn(
+                                    formatMeetingCreatedAt(summary.createdAt))
+                                : l10n.writtenByOn(
+                                    summary.model,
+                                    summary.connectionLabel,
+                                    formatMeetingCreatedAt(summary.createdAt),
+                                    summary.edited ? ' · edited' : ''),
                             style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant),
                           ),
                         ),
                         TextButton.icon(
                           icon: const Icon(Icons.edit_outlined),
-                          label: const Text('Edit summary'),
+                          label: Text(l10n.editSummary),
                           onPressed:
                               writing ? null : () => _editText(summary.text),
                         ),
@@ -585,8 +586,8 @@ final class _PairedComputerPanel extends StatelessWidget {
           FilledButton.tonalIcon(
             icon: const Icon(Icons.computer_outlined),
             label: Text(request == null
-                ? 'Summarize on my computer'
-                : 'Try again on my computer'),
+                ? l10n.summarizeOnMyComputer
+                : l10n.tryAgainOnMyComputer),
             onPressed: onAsk,
           ),
         if (request != null) ...<Widget>[
@@ -602,7 +603,7 @@ final class _PairedComputerPanel extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: TextButton(
                 onPressed: onCancel,
-                child: const Text('Cancel request'),
+                child: Text(l10n.cancelRequest),
               ),
             ),
         ],

@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// What the owner did with the notification.
 enum CallNotificationAnswer {
@@ -64,10 +65,10 @@ final class NotifySendCallNotifier implements CallNotifier {
         '--app-name=Koalino',
         '--icon=audio-input-microphone',
         '--expire-time=120000',
-        '--action=record=Record',
-        '--action=dismiss=Not now',
-        '$app is using the microphone',
-        'Record this call?',
+        '--action=record=${l10n.record}',
+        '--action=dismiss=${l10n.notNow}',
+        l10n.isUsingTheMicrophone(app),
+        l10n.recordThisCall,
       ];
 
   /// Side effects: Starts `notify-send` and waits for its answer; a missing tool, or one that

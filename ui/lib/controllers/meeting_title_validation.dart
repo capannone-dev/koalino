@@ -1,3 +1,4 @@
+import 'package:note_taker_ui/l10n/l10n.dart';
 // Validates meeting titles in Dart with the same rules Rust's `MeetingTitle::parse` enforces.
 
 /// Longest title Rust accepts, in Unicode characters (`MeetingTitle::MAX_CHARACTERS`).
@@ -31,12 +32,10 @@ final class MeetingTitleValidation {
   /// A message to show under the title field, or `null` when the title is valid.
   String? get errorMessage => switch (error) {
         null => null,
-        MeetingTitleError.empty => 'Enter a title.',
-        MeetingTitleError.tooLong =>
-          'Titles can be at most $maxMeetingTitleCharacters characters '
-              '(you have ${trimmedTitle.runes.length}).',
-        MeetingTitleError.controlCharacter =>
-          "Titles can't contain line breaks or control characters.",
+        MeetingTitleError.empty => l10n.enterATitle,
+        MeetingTitleError.tooLong => l10n.titlesCanBeAtMostCharacters(
+            maxMeetingTitleCharacters, trimmedTitle.runes.length),
+        MeetingTitleError.controlCharacter => l10n.titlesCanTContainLineBreaks,
       };
 }
 

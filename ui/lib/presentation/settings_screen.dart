@@ -5,6 +5,7 @@
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/controllers/app_language_controller.dart';
 import 'package:note_taker_ui/controllers/app_lock_controller.dart';
 import 'package:note_taker_ui/controllers/network_settings_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
@@ -25,9 +26,13 @@ import 'package:note_taker_ui/presentation/assistant_access_screen.dart';
 import 'package:note_taker_ui/presentation/call_offer_banner.dart';
 import 'package:note_taker_ui/presentation/notes_folder_screen.dart';
 import 'package:note_taker_ui/presentation/transcription_settings_screen.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Finds the default language selector in tests.
 const Key defaultLanguageSelectorKey = Key('default-language-selector');
+
+/// Finds the app language selector in tests (#124).
+const Key appLanguageSelectorKey = Key('app-language-selector');
 
 /// Finds the relay address field in tests.
 const Key relayAddressFieldKey = ValueKey<String>('relay-address');
@@ -49,6 +54,7 @@ final class SettingsScreen extends StatelessWidget {
   /// Side effects: None; the controls ask their controllers, and Telemetry pushes its page.
   const SettingsScreen({
     required this.logSettingsController,
+    this.appLanguageController,
     this.appLockController,
     this.telemetryScreenBuilder,
     this.devicesScreenBuilder,
@@ -64,6 +70,9 @@ final class SettingsScreen extends StatelessWidget {
   });
 
   final LogSettingsController logSettingsController;
+
+  /// Adds the app language selector (#124) when given.
+  final AppLanguageController? appLanguageController;
   final AppLockController? appLockController;
   final WidgetBuilder? telemetryScreenBuilder;
 
@@ -95,11 +104,12 @@ final class SettingsScreen extends StatelessWidget {
     final TranscriptionLanguageController? language = languageController;
     final NetworkSettingsController? network = networkSettingsController;
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(l10n.settings)),
       body: ListenableBuilder(
         listenable: Listenable.merge(<Listenable?>[
           logSettingsController,
           appLock,
+          appLanguageController,
           route,
           language,
           network,
@@ -110,13 +120,17 @@ final class SettingsScreen extends StatelessWidget {
                 case final WidgetBuilder devicesScreen) ...<Widget>[
               ListTile(
                 leading: const Icon(Icons.devices_outlined),
-                title: const Text('Devices'),
-                subtitle: const Text(
-                    'Pair your devices and see which ones are connected.'),
+                title: Text(l10n.devices),
+                subtitle: Text(l10n.pairYourDevicesAndSeeWhich),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context)
                     .push(MaterialPageRoute<void>(builder: devicesScreen)),
               ),
+              const Divider(),
+            ],
+            if (appLanguageController
+                case final AppLanguageController appLanguage) ...<Widget>[
+              _appLanguageTile(appLanguage),
               const Divider(),
             ],
             if (appLock != null) ...<Widget>[
@@ -130,8 +144,8 @@ final class SettingsScreen extends StatelessWidget {
             if (transcriptionSettingsBridge != null) ...<Widget>[
               ListTile(
                 leading: const Icon(Icons.record_voice_over_outlined),
-                title: const Text('Transcription model'),
-                subtitle: const Text('Choose the Whisper model.'),
+                title: Text(l10n.transcriptionModel),
+                subtitle: Text(l10n.chooseTheWhisperModel),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -148,9 +162,8 @@ final class SettingsScreen extends StatelessWidget {
                 case final SummariesController summaries) ...<Widget>[
               ListTile(
                 leading: const Icon(Icons.auto_awesome_outlined),
-                title: const Text('AI connections'),
-                subtitle: const Text(
-                    'Language models for meeting summaries, and the summary prompt.'),
+                title: Text(l10n.aiConnections),
+                subtitle: Text(l10n.languageModelsForMeetingSummariesAnd),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (BuildContext context) =>
@@ -163,9 +176,8 @@ final class SettingsScreen extends StatelessWidget {
                 case final NotesFolderBridge notesFolder) ...<Widget>[
               ListTile(
                 leading: const Icon(Icons.folder_copy_outlined),
-                title: const Text('Notes folder'),
-                subtitle: const Text(
-                    'Keep projects and meetings as files you can edit with any editor.'),
+                title: Text(l10n.notesFolder),
+                subtitle: Text(l10n.keepProjectsAndMeetingsAsFiles),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (BuildContext context) =>
@@ -178,9 +190,8 @@ final class SettingsScreen extends StatelessWidget {
                 case final AssistantAccessBridge assistantAccess) ...<Widget>[
               ListTile(
                 leading: const Icon(Icons.smart_toy_outlined),
-                title: const Text('AI assistant access'),
-                subtitle: const Text(
-                    'Let your own assistant, such as Claude Code, read your notes.'),
+                title: Text(l10n.aiAssistantAccess),
+                subtitle: Text(l10n.letYourOwnAssistantSuchAs),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                   builder: (BuildContext context) =>
@@ -206,6 +217,25 @@ final class SettingsScreen extends StatelessWidget {
     );
   }
 
+  /// The app language selector (#124): the system's, or one of [appLanguages] by its own name.
+  Widget _appLanguageTile(AppLanguageController appLanguage) => ListTile(
+        leading: const Icon(Icons.language),
+        title: Text(l10n.appLanguage),
+        subtitle: Text(l10n.appLanguageDescription),
+        trailing: DropdownButton<String?>(
+          key: appLanguageSelectorKey,
+          value: appLanguage.languageCode,
+          underline: const SizedBox.shrink(),
+          onChanged: appLanguage.choose,
+          items: <DropdownMenuItem<String?>>[
+            DropdownMenuItem<String?>(child: Text(l10n.systemLanguage)),
+            for (final AppLanguage language in appLanguages)
+              DropdownMenuItem<String?>(
+                  value: language.code, child: Text(language.nativeName)),
+          ],
+        ),
+      );
+
   /// The App lock switch and its message.
   List<Widget> _appLockTiles(BuildContext context, AppLockController appLock) {
     final AppLockStatus? status = appLock.status;
@@ -216,7 +246,7 @@ final class SettingsScreen extends StatelessWidget {
     return <Widget>[
       SwitchListTile(
         secondary: const Icon(Icons.lock_outline),
-        title: const Text('App lock'),
+        title: Text(l10n.appLock),
         subtitle: Text(_appLockDescription(status)),
         value: status?.locks ?? false,
         onChanged: available ? appLock.setEnabled : null,
@@ -231,9 +261,8 @@ final class SettingsScreen extends StatelessWidget {
     return <Widget>[
       ListTile(
         leading: const Icon(Icons.translate),
-        title: const Text('Default language'),
-        subtitle: const Text('Used for new recordings. '
-            'Auto detects the language as people speak.'),
+        title: Text(l10n.defaultLanguage),
+        subtitle: Text(l10n.usedForNewRecordingsAutoDetects),
         trailing: DropdownButton<String>(
           key: defaultLanguageSelectorKey,
           value: language.defaultLanguage,
@@ -263,10 +292,8 @@ final class SettingsScreen extends StatelessWidget {
     return <Widget>[
       ListTile(
         leading: const Icon(Icons.devices_outlined),
-        title: const Text('Transcribe on'),
-        subtitle: const Text('Another device receives the recording\'s audio, '
-            'encrypted, and deletes it once transcribed. '
-            'If it is unavailable, this device transcribes instead.'),
+        title: Text(l10n.transcribeOn),
+        subtitle: Text(l10n.anotherDeviceReceivesTheRecordingS),
         trailing: DropdownButton<String>(
           value: route.route,
           underline: const SizedBox.shrink(),
@@ -296,21 +323,19 @@ final class SettingsScreen extends StatelessWidget {
       if (telemetryScreen != null)
         ListTile(
           leading: const Icon(Icons.insights_outlined),
-          title: const Text('Telemetry'),
-          subtitle: const Text('How long transcription takes on each device, '
-              'and its estimated energy use.'),
+          title: Text(l10n.telemetry),
+          subtitle: Text(l10n.howLongTranscriptionTakesOnEach),
           trailing: const Icon(Icons.chevron_right),
           onTap: () => Navigator.of(context)
               .push(MaterialPageRoute<void>(builder: telemetryScreen)),
         ),
       ListTile(
         leading: const Icon(Icons.tune),
-        title: const Text('Log level'),
-        subtitle: const Text('How much detail the app writes to its logs. '
-            'Debug and Trace help diagnose problems but write more.'),
+        title: Text(l10n.logLevel),
+        subtitle: Text(l10n.howMuchDetailTheAppWrites),
         trailing: DropdownButton<LogLevel>(
           value: logs.level,
-          hint: const Text('Custom'),
+          hint: Text(l10n.custom),
           underline: const SizedBox.shrink(),
           onChanged: (LogLevel? level) {
             if (level != null) {
@@ -329,9 +354,8 @@ final class SettingsScreen extends StatelessWidget {
       ListTile(
         leading: Icon(
             logs.shares ? Icons.share_outlined : Icons.file_download_outlined),
-        title: Text(logs.shares ? 'Share logs' : 'Export logs'),
-        subtitle: const Text('The last 7 days of diagnostic logs, '
-            'for example to attach to a bug report.'),
+        title: Text(logs.shares ? l10n.shareLogs : l10n.exportLogs),
+        subtitle: Text(l10n.theLast7DaysOfDiagnostic),
         trailing: logs.isExporting
             ? const SizedBox.square(
                 dimension: 24, child: CircularProgressIndicator())
@@ -351,13 +375,10 @@ final class SettingsScreen extends StatelessWidget {
 
   /// Explains what the App lock switch does, or why it is unavailable.
   static String _appLockDescription(AppLockStatus? status) => switch (status) {
-        null => 'Unable to read the app lock setting.',
-        AppLockStatus(supported: false) => 'Needs Android 10 or later.',
-        AppLockStatus(deviceSecure: false) =>
-          'Set a screen lock in Android settings to use App lock.',
-        _ => 'Ask for your fingerprint, face, or screen lock when you return '
-            'to Koalino after ${lockAfterBackground.inSeconds} seconds '
-            'away. Recording and sync keep running while it is locked.',
+        null => l10n.unableToReadTheAppLock,
+        AppLockStatus(supported: false) => l10n.needsAndroid10OrLater,
+        AppLockStatus(deviceSecure: false) => l10n.setAScreenLockInAndroid,
+        _ => l10n.askForYourFingerprintFaceOr(lockAfterBackground.inSeconds),
       };
 }
 
@@ -412,18 +433,16 @@ final class _NetworkAddressesSectionState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text('Other networks',
+          Text(l10n.otherNetworks,
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 4),
-          const Text(
-              'A relay on your own always-on device lets your devices reach each other away '
-              'from the same Wi-Fi. Syncing on the same network keeps working without it.'),
+          Text(l10n.aRelayOnYourOwnAlways),
           const SizedBox(height: 12),
           TextField(
             key: relayAddressFieldKey,
             controller: _relayField,
-            decoration: const InputDecoration(
-              labelText: 'Relay address',
+            decoration: InputDecoration(
+              labelText: l10n.relayAddress,
               hintText: '/ip4/203.0.113.5/tcp/4001/p2p/12D3Koo…',
               border: OutlineInputBorder(),
             ),
@@ -439,8 +458,8 @@ final class _NetworkAddressesSectionState
             controller: _peersField,
             minLines: 2,
             maxLines: 5,
-            decoration: const InputDecoration(
-              labelText: 'Device addresses (optional, one per line)',
+            decoration: InputDecoration(
+              labelText: l10n.deviceAddressesOptionalOnePerLine,
               border: OutlineInputBorder(),
             ),
           ),
@@ -452,7 +471,7 @@ final class _NetworkAddressesSectionState
                       relay: _relayField.text,
                       peers: _peersField.text,
                     ),
-            child: const Text('Save addresses'),
+            child: Text(l10n.saveAddresses),
           ),
           if (controller.message case final String message)
             Padding(

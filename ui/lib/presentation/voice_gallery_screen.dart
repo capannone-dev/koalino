@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
 import 'package:note_taker_ui/presentation/confirm_delete_dialog.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Displays the voice gallery using controller-owned state.
 final class VoiceGalleryScreen extends StatefulWidget {
@@ -45,7 +46,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Voice Gallery')),
+      appBar: AppBar(title: Text(l10n.voiceGallery)),
       body: AnimatedBuilder(
         animation: widget.voiceGalleryController,
         builder: (BuildContext context, Widget? child) {
@@ -65,7 +66,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                   const SizedBox(height: 12),
                   OutlinedButton(
                     onPressed: controller.load,
-                    child: const Text('Try again'),
+                    child: Text(l10n.tryAgain),
                   ),
                 ],
               ),
@@ -85,11 +86,11 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                     style: Theme.of(context).textTheme.bodyLarge,
                   ),
                 ),
-              if (showsSavedPeople) _sectionTitle(context, 'Unknown voices'),
+              if (showsSavedPeople) _sectionTitle(context, l10n.unknownVoices),
               if (controller.clusters.isEmpty)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('No unknown speakers to review'),
+                  child: Text(l10n.noUnknownSpeakersToReview),
                 ),
               for (final (int index, UnknownVoiceGroup group)
                   in controller.groups.indexed)
@@ -99,25 +100,23 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                 else
                   _buildGroupCard(context, controller, index, group),
               if (showsSavedPeople) ...<Widget>[
-                _sectionTitle(context, 'Saved people'),
+                _sectionTitle(context, l10n.savedPeople),
                 if (controller.savedPeople.isEmpty)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text(
-                        'No saved people yet. Name a voice to add someone.'),
+                    child: Text(l10n.noSavedPeopleYetNameA),
                   ),
                 for (final SavedPerson person in controller.savedPeople)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.person_outline),
                     title: Text(person.displayName),
-                    subtitle: Text(person.voiceVariantCount == 1
-                        ? '1 voice sample'
-                        : '${person.voiceVariantCount} voice samples'),
+                    subtitle:
+                        Text(l10n.voiceSampleCount(person.voiceVariantCount)),
                     trailing: IconButton(
                       key: ValueKey<String>(
                           'delete-person-${person.identityId}'),
-                      tooltip: 'Delete ${person.displayName}',
+                      tooltip: l10n.delete4(person.displayName),
                       icon: const Icon(Icons.delete_outline),
                       onPressed: () =>
                           _confirmDeletePerson(context, controller, person),
@@ -172,13 +171,13 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   if (isPlaying)
-                    Text('Playing…',
+                    Text(l10n.playing,
                         style: TextStyle(
                             color: colors.onPrimaryContainer,
                             fontWeight: FontWeight.bold)),
                   Text(_formatSummary(cluster)),
                   if (controller.meetingId == null)
-                    Text(cluster.meetingTitle ?? 'Untitled meeting'),
+                    Text(cluster.meetingTitle ?? l10n.untitledMeeting),
                   if (cluster.suggestedName != null)
                     _suggestionLine(cluster.clusterId, cluster.suggestedName!),
                 ],
@@ -190,11 +189,11 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                     TextButton(
                       key: ValueKey<String>('play-${cluster.clusterId}'),
                       onPressed: () => controller.play(cluster),
-                      child: Text(isPlaying ? 'Stop' : 'Play'),
+                      child: Text(isPlaying ? l10n.stop : l10n.play),
                     ),
                   IconButton(
                     key: ValueKey<String>('delete-${cluster.clusterId}'),
-                    tooltip: 'Delete this voice',
+                    tooltip: l10n.deleteThisVoice,
                     icon: const Icon(Icons.delete_outline),
                     onPressed: () => _confirmDeleteVoice(
                         context, controller, index, cluster),
@@ -222,8 +221,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
           const Icon(Icons.badge_outlined, size: 16),
           const SizedBox(width: 4),
           Flexible(
-            child: Text(
-                'The call showed $suggestedName speaking. Check, then Assign.'),
+            child: Text(l10n.theCallShowedSpeakingCheckThen(suggestedName)),
           ),
         ],
       );
@@ -244,12 +242,12 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
             key: ValueKey<String>('identity-name-$keyId'),
             controller: nameController,
             decoration: InputDecoration(
-              labelText: 'Name',
+              labelText: l10n.name,
               border: const OutlineInputBorder(),
               suffixIcon: controller.savedPeople.isEmpty
                   ? null
                   : PopupMenuButton<String>(
-                      tooltip: 'Choose a saved person',
+                      tooltip: l10n.chooseASavedPerson,
                       icon: const Icon(Icons.people_outline),
                       onSelected: (String name) => nameController.text = name,
                       itemBuilder: (BuildContext context) =>
@@ -271,7 +269,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
           key: ValueKey<String>('assign-$keyId'),
           onPressed:
               controller.isLoading ? null : () => onAssign(nameController.text),
-          child: const Text('Assign'),
+          child: Text(l10n.assign),
         ),
       ],
     );
@@ -293,13 +291,13 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
         group.voices.any((UnknownSpeakerCluster voice) => voice.hasReviewClip);
     final ColorScheme colors = Theme.of(context).colorScheme;
     final int meetingCount = group.meetingIds.length;
-    final String partsLabel = '${group.voices.length} parts';
+    final String partsLabel = l10n.partCount(group.voices.length);
     final String coverage = meetingCount == 1
         ? partsLabel
-        : '$partsLabel in $meetingCount meetings';
+        : l10n.inMeetings(partsLabel, l10n.meetingCount(meetingCount));
     final List<String> meetingTitles = <String>{
       for (final UnknownSpeakerCluster voice in group.voices)
-        voice.meetingTitle ?? 'Untitled meeting',
+        voice.meetingTitle ?? l10n.untitledMeeting,
     }.toList(growable: false);
     return Card(
       key: ValueKey<String>('card-${group.groupId}'),
@@ -320,7 +318,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   if (isPlaying)
-                    Text('Playing…',
+                    Text(l10n.playing,
                         style: TextStyle(
                             color: colors.onPrimaryContainer,
                             fontWeight: FontWeight.bold)),
@@ -338,11 +336,11 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                     TextButton(
                       key: ValueKey<String>('play-group-${group.groupId}'),
                       onPressed: () => controller.playGroup(group),
-                      child: Text(isPlaying ? 'Stop' : 'Play'),
+                      child: Text(isPlaying ? l10n.stop : l10n.play),
                     ),
                   IconButton(
                     key: ValueKey<String>('delete-${group.groupId}'),
-                    tooltip: 'Delete these voices',
+                    tooltip: l10n.deleteTheseVoices,
                     icon: const Icon(Icons.delete_outline),
                     onPressed: () =>
                         _confirmDeleteGroup(context, controller, index, group),
@@ -354,8 +352,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
               key: ValueKey<String>('parts-${group.groupId}'),
               tilePadding: EdgeInsets.zero,
               title: Text(partsLabel),
-              subtitle: const Text('These sound like one person. '
-                  'Untick any that is someone else.'),
+              subtitle: Text(l10n.theseSoundLikeOnePersonUntick),
               children: <Widget>[
                 for (final UnknownSpeakerCluster voice in group.voices)
                   _buildPartRow(controller, voice),
@@ -397,7 +394,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
           TextButton(
             key: ValueKey<String>('play-${voice.clusterId}'),
             onPressed: () => controller.play(voice),
-            child: Text(isPlaying ? 'Stop' : 'Play'),
+            child: Text(isPlaying ? l10n.stop : l10n.play),
           ),
       ],
     );
@@ -412,9 +409,8 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   ) async {
     if (await confirmDelete(
       context,
-      title: 'Delete ${_groupTitle(group, index)}?',
-      message: 'Its ${group.voices.length} voice samples go for good, here '
-          'and on your paired devices. The transcripts stay.',
+      title: l10n.delete2(_groupTitle(group, index)),
+      message: l10n.itsVoiceSamplesGoForGood(group.voices.length),
     )) {
       await controller.deleteGroup(group);
     }
@@ -429,9 +425,8 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   ) async {
     if (await confirmDelete(
       context,
-      title: 'Delete ${_voiceTitle(cluster, index)}?',
-      message: 'Its voice sample goes for good, here and on your paired '
-          'devices. The transcript stays.',
+      title: l10n.delete2(_voiceTitle(cluster, index)),
+      message: l10n.itsVoiceSampleGoesForGood,
     )) {
       await controller.deleteUnknownVoice(cluster);
     }
@@ -445,9 +440,8 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   ) async {
     if (await confirmDelete(
       context,
-      title: 'Delete ${person.displayName}?',
-      message: 'Their name and voice samples go for good, here and on your '
-          'paired devices. Transcripts stay and number them as a speaker.',
+      title: l10n.delete2(person.displayName),
+      message: l10n.theirNameAndVoiceSamplesGo,
     )) {
       await controller.deleteSavedPerson(person);
     }
@@ -480,7 +474,7 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   /// Names an unknown voice as its meeting's transcript does ("Speaker 2", #118); an older core
   /// without labels falls back to its place in the list.
   String _voiceTitle(UnknownSpeakerCluster cluster, int index) =>
-      cluster.speakerLabel ?? 'Unknown speaker ${index + 1}';
+      cluster.speakerLabel ?? l10n.unknownSpeaker(index + 1);
 
   /// Names a group of voices by their transcripts' labels, each once ("Speaker 1 / Speaker 3"
   /// when the voice was numbered differently in different meetings).
@@ -489,14 +483,13 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
       for (final UnknownSpeakerCluster voice in group.voices)
         if (voice.speakerLabel != null) voice.speakerLabel!,
     }.toList(growable: false);
-    return labels.isEmpty ? 'Unknown speaker ${index + 1}' : labels.join(' / ');
+    return labels.isEmpty ? l10n.unknownSpeaker(index + 1) : labels.join(' / ');
   }
 
   /// Formats total speech time (seconds, one decimal) and chunk count, e.g. `12.5 s · 3 chunks`.
   String _formatSummary(UnknownSpeakerCluster cluster) {
-    final String chunkLabel = cluster.chunkCount == 1 ? 'chunk' : 'chunks';
     return '${_formatSeconds(cluster.totalDurationMs)} · '
-        '${cluster.chunkCount} $chunkLabel';
+        '${l10n.chunkCount(cluster.chunkCount)}';
   }
 
   /// Formats milliseconds as seconds with one decimal, e.g. `12.5 s`.

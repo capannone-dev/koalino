@@ -6,6 +6,7 @@
 import 'dart:convert';
 
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// A refused or failed edit, with the core's stable error code.
 final class MeetingEditException implements Exception {
@@ -17,14 +18,13 @@ final class MeetingEditException implements Exception {
 
   /// A sentence for people; the core's own text is not shown.
   String get message => switch (code) {
-        'empty' => 'Write something first.',
-        'too_long' => 'The text is too long.',
-        'meeting_not_found' => 'That meeting no longer exists.',
-        'segment_not_found' =>
-          'That part of the transcript changed meanwhile. Reopen the meeting.',
-        'storage_failed' => 'The meeting could not be saved.',
-        'runtime_unavailable' => 'The app is still starting. Try again.',
-        _ => 'Something went wrong. Try again.',
+        'empty' => l10n.writeSomethingFirst,
+        'too_long' => l10n.theTextIsTooLong,
+        'meeting_not_found' => l10n.thatMeetingNoLongerExists,
+        'segment_not_found' => l10n.thatPartOfTheTranscriptChanged,
+        'storage_failed' => l10n.theMeetingCouldNotBeSaved,
+        'runtime_unavailable' => l10n.theAppIsStillStartingTry,
+        _ => l10n.somethingWentWrongTryAgain,
       };
 
   @override

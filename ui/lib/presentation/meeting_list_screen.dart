@@ -20,6 +20,7 @@ import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Window width from which the list and the detail are shown side by side (Material 3
 /// "expanded" window class).
@@ -98,7 +99,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
       builder: (BuildContext context) => SearchScreen(
         bridge: bridge,
         scope: SearchScope.meetings,
-        title: 'Search meetings',
+        title: l10n.searchMeetings,
         onOpen: (BuildContext context, SearchHit hit) {
           if (hit.meetingId case final String meetingId) {
             widget.controller.selectMeeting(meetingId);
@@ -150,22 +151,22 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         );
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Meetings'),
+            title: Text(l10n.meetings),
             actions: <Widget>[
               if (widget.searchBridge case final SearchBridge bridge)
                 IconButton(
-                  tooltip: 'Search meetings',
+                  tooltip: l10n.searchMeetings,
                   icon: const Icon(Icons.search),
                   onPressed: () => _search(bridge),
                 ),
               if (widget.chatBridge case final ChatBridge bridge)
                 IconButton(
-                  tooltip: 'Chat with all your notes',
+                  tooltip: l10n.chatWithAllYourNotes,
                   icon: const Icon(Icons.forum_outlined),
                   onPressed: () => openChat(context,
                       bridge: bridge,
                       topic: const ChatTopic.everything(),
-                      title: 'Chat with all notes',
+                      title: l10n.chatWithAllNotes,
                       openMeeting: _openCitedMeeting,
                       projectsController: widget.projectsController),
                 ),
@@ -176,13 +177,13 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                     builder: (BuildContext context, Widget? child) =>
                         switch (widget.controller.selectedMeeting) {
                       final MeetingDetail meeting => IconButton(
-                          tooltip: 'Chat about this meeting',
+                          tooltip: l10n.chatAboutThisMeeting,
                           icon: const Icon(Icons.chat_outlined),
                           onPressed: () => openChat(context,
                               bridge: bridge,
                               topic:
                                   ChatTopic.meeting(meeting.summary.meetingId),
-                              title: 'Chat: ${meeting.summary.title}',
+                              title: l10n.chat(meeting.summary.title),
                               openMeeting: _openCitedMeeting,
                               projectsController: widget.projectsController),
                         ),
@@ -190,7 +191,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
                     },
                   ),
               IconButton(
-                tooltip: 'Refresh',
+                tooltip: l10n.refresh,
                 icon: const Icon(Icons.refresh),
                 onPressed: widget.controller.loadMeetings,
               ),
@@ -340,7 +341,7 @@ final class _MeetingList extends StatelessWidget {
                 const SizedBox(height: 12),
                 FilledButton.tonal(
                   onPressed: controller.loadMeetings,
-                  child: const Text('Retry'),
+                  child: Text(l10n.retry),
                 ),
               ],
             ),
@@ -354,9 +355,9 @@ final class _MeetingList extends StatelessWidget {
                 Icon(Icons.event_note,
                     size: 48, color: theme.colorScheme.onSurfaceVariant),
                 const SizedBox(height: 12),
-                Text('No meetings yet', style: theme.textTheme.titleMedium),
+                Text(l10n.noMeetingsYet, style: theme.textTheme.titleMedium),
                 const SizedBox(height: 4),
-                const Text('Recordings you start appear here.'),
+                Text(l10n.recordingsYouStartAppearHere),
               ],
             ),
           );
@@ -402,7 +403,7 @@ final class _MeetingList extends StatelessWidget {
                         ),
                       IconButton(
                         key: ValueKey<String>('delete-${meeting.meetingId}'),
-                        tooltip: 'Delete meeting',
+                        tooltip: l10n.deleteMeeting,
                         icon: const Icon(Icons.delete_outline),
                         onPressed: () => deleteMeetingAfterAsking(
                           context,
@@ -482,27 +483,27 @@ final class _MeetingRow extends StatelessWidget {
       position: RelativeRect.fromRect(
           overlayPosition & Size.zero, Offset.zero & overlay.size),
       items: <PopupMenuEntry<_MeetingRowAction>>[
-        const PopupMenuItem<_MeetingRowAction>(
+        PopupMenuItem<_MeetingRowAction>(
           value: _MeetingRowAction.rename,
           child: ListTile(
             leading: Icon(Icons.edit_outlined),
-            title: Text('Rename'),
+            title: Text(l10n.rename),
           ),
         ),
         if (projectsController != null)
-          const PopupMenuItem<_MeetingRowAction>(
+          PopupMenuItem<_MeetingRowAction>(
             value: _MeetingRowAction.addToProject,
             child: ListTile(
               leading: Icon(Icons.drive_file_move_outline),
-              title: Text('Add to project…'),
+              title: Text(l10n.addToProject),
             ),
           ),
         if (summariesController != null)
-          const PopupMenuItem<_MeetingRowAction>(
+          PopupMenuItem<_MeetingRowAction>(
             value: _MeetingRowAction.summary,
             child: ListTile(
               leading: Icon(Icons.summarize_outlined),
-              title: Text('Summary…'),
+              title: Text(l10n.summary2),
             ),
           ),
       ],
@@ -557,14 +558,13 @@ final class _MeetingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
-        const CustomSemanticsAction(label: 'Rename'): () => _rename(context),
+        CustomSemanticsAction(label: l10n.rename): () => _rename(context),
         if (projectsController != null)
-          const CustomSemanticsAction(label: 'Add to project'): () =>
+          CustomSemanticsAction(label: l10n.addToProject2): () =>
               _addToProject(context),
         if (summariesController != null)
-          const CustomSemanticsAction(label: 'Summary'): () =>
-              _summary(context),
-        const CustomSemanticsAction(label: 'Delete'): () =>
+          CustomSemanticsAction(label: l10n.summary): () => _summary(context),
+        CustomSemanticsAction(label: l10n.delete): () =>
             deleteMeetingAfterAsking(
               context,
               controller: controller,

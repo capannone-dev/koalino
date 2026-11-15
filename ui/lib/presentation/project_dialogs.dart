@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Asks for a project name, checked as Rust checks it.
 ///
@@ -69,7 +70,7 @@ final class _ProjectNameDialogState extends State<_ProjectNameDialog> {
           controller: _name,
           autofocus: true,
           decoration: InputDecoration(
-            labelText: 'Name',
+            labelText: l10n.name,
             errorText: _showError ? projectNameError(_name.text) : null,
           ),
           onChanged: (_) {
@@ -82,7 +83,7 @@ final class _ProjectNameDialogState extends State<_ProjectNameDialog> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(onPressed: _submit, child: Text(widget.confirmLabel)),
         ],
@@ -120,7 +121,7 @@ final class _NoteDialogState extends State<_NoteDialog> {
   }
 
   void _submit() {
-    if (projectNameError(_title.text) != null) {
+    if (noteTitleError(_title.text) != null) {
       setState(() => _showError = true);
       return;
     }
@@ -129,7 +130,7 @@ final class _NoteDialogState extends State<_NoteDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-        title: const Text('New note'),
+        title: Text(l10n.newNote),
         content: SizedBox(
           width: 480,
           child: Column(
@@ -140,12 +141,8 @@ final class _NoteDialogState extends State<_NoteDialog> {
                 controller: _title,
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: 'Title',
-                  errorText: _showError
-                      ? projectNameError(_title.text)
-                          ?.replaceFirst('a name', 'a title')
-                          .replaceFirst('Names', 'Titles')
-                      : null,
+                  labelText: l10n.title,
+                  errorText: _showError ? noteTitleError(_title.text) : null,
                 ),
               ),
               const SizedBox(height: 12),
@@ -154,8 +151,8 @@ final class _NoteDialogState extends State<_NoteDialog> {
                 controller: _text,
                 minLines: 6,
                 maxLines: 12,
-                decoration: const InputDecoration(
-                  labelText: 'Note (Markdown)',
+                decoration: InputDecoration(
+                  labelText: l10n.noteMarkdown,
                   alignLabelWithHint: true,
                   border: OutlineInputBorder(),
                 ),
@@ -166,9 +163,9 @@ final class _NoteDialogState extends State<_NoteDialog> {
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
-          FilledButton(onPressed: _submit, child: const Text('Save')),
+          FilledButton(onPressed: _submit, child: Text(l10n.save)),
         ],
       );
 }
@@ -203,11 +200,11 @@ final class _MeetingPickerState extends State<_MeetingPicker> {
     final MaterialLocalizations localizations =
         MaterialLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Add meetings'),
+      title: Text(l10n.addMeetings),
       content: SizedBox(
         width: 480,
         child: widget.meetings.isEmpty
-            ? const Text('Every meeting is already in a project.')
+            ? Text(l10n.everyMeetingIsAlreadyInA)
             : ListView(
                 shrinkWrap: true,
                 children: <Widget>[
@@ -231,13 +228,13 @@ final class _MeetingPickerState extends State<_MeetingPicker> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(const <String>[]),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
         FilledButton(
           onPressed: _chosen.isEmpty
               ? null
               : () => Navigator.of(context).pop(_chosen.toList()),
-          child: const Text('Add'),
+          child: Text(l10n.add),
         ),
       ],
     );
@@ -262,7 +259,7 @@ final class MoveToProjectButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton(
         key: const ValueKey<String>('move-to-project'),
-        tooltip: 'Move to project',
+        tooltip: l10n.moveToProject,
         icon: const Icon(Icons.drive_file_move_outline),
         onPressed: () => chooseProjectForMeeting(context,
             controller: controller, meetingId: meetingId),
@@ -293,7 +290,7 @@ Future<void> chooseProjectForMeeting(
   String? chosen = await showDialog<String>(
     context: context,
     builder: (BuildContext context) => SimpleDialog(
-      title: const Text('Project'),
+      title: Text(l10n.project),
       children: <Widget>[
         RadioGroup<String>(
           groupValue: current,
@@ -301,9 +298,9 @@ Future<void> chooseProjectForMeeting(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              const RadioListTile<String>(
+              RadioListTile<String>(
                 value: _noProject,
-                title: Text('No project'),
+                title: Text(l10n.noProject),
               ),
               for (final ProjectSummary project in controller.projects)
                 RadioListTile<String>(
@@ -316,7 +313,7 @@ Future<void> chooseProjectForMeeting(
         ListTile(
           key: const ValueKey<String>('choose-new-project'),
           leading: const Icon(Icons.create_new_folder_outlined),
-          title: const Text('New project…'),
+          title: Text(l10n.newProject),
           onTap: () => Navigator.of(context).pop(_newProject),
         ),
       ],
@@ -327,14 +324,14 @@ Future<void> chooseProjectForMeeting(
       return;
     }
     final String? name = await askProjectName(context,
-        title: 'New project', confirmLabel: 'Create');
+        title: l10n.newProject2, confirmLabel: l10n.create);
     if (name == null) {
       return;
     }
     final ProjectSummary? created = await controller.createProject(name);
     if (created == null) {
       messenger.showSnackBar(
-          const SnackBar(content: Text('The project could not be created.')));
+          SnackBar(content: Text(l10n.theProjectCouldNotBeCreated)));
       return;
     }
     chosen = created.projectId;
@@ -351,9 +348,9 @@ Future<void> chooseProjectForMeeting(
       .firstOrNull;
   messenger.showSnackBar(SnackBar(
     content: Text(!moved
-        ? 'The meeting could not be moved.'
+        ? l10n.theMeetingCouldNotBeMoved
         : target == _noProject
-            ? 'Removed from its project'
-            : 'Moved to ${targetName ?? 'the project'}'),
+            ? l10n.removedFromItsProject
+            : l10n.movedTo(targetName ?? 'the project')),
   ));
 }

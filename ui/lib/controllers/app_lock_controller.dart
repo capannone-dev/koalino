@@ -4,6 +4,7 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// How long the app may be out of sight before it locks again, so a quick switch to another
 /// app (or the file picker) does not ask again.
@@ -70,7 +71,7 @@ final class AppLockController extends ChangeNotifier {
       _lock(when: _status?.locks ?? false);
     } on Object {
       _status = null;
-      _message = 'Unable to check the app lock. Try again.';
+      _message = l10n.unableToCheckTheAppLock;
       _lock(when: true);
     }
     notifyListeners();
@@ -107,7 +108,7 @@ final class AppLockController extends ChangeNotifier {
         _phase = AppLockPhase.unlocked;
       }
     } on Object {
-      _message = 'Unable to show the unlock prompt. Try again.';
+      _message = l10n.unableToShowTheUnlockPrompt;
     } finally {
       _isAuthenticating = false;
       _hiddenAt = null;
@@ -153,7 +154,7 @@ final class AppLockController extends ChangeNotifier {
       return;
     }
     if (!current.supported || !current.deviceSecure) {
-      _message = 'Set a screen lock on this device first.';
+      _message = l10n.setAScreenLockOnThis;
       notifyListeners();
       return;
     }
@@ -166,7 +167,7 @@ final class AppLockController extends ChangeNotifier {
         _status = await _appLockBridge.status();
       }
     } on Object {
-      _message = 'Unable to change the app lock. Try again.';
+      _message = l10n.unableToChangeTheAppLock;
     } finally {
       _isAuthenticating = false;
       _hiddenAt = null;

@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Finds the summary prompt field in tests.
 const Key summaryTemplateFieldKey = ValueKey<String>('summary-template');
@@ -68,17 +69,16 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        title: Text('Remove ${connection.label}?'),
-        content: const Text(
-            'Its API key is deleted from this device. Summaries already written stay.'),
+        title: Text(l10n.remove(connection.label)),
+        content: Text(l10n.itsApiKeyIsDeletedFrom),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
+            child: Text(l10n.remove2),
           ),
         ],
       ),
@@ -92,10 +92,10 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('AI connections')),
+      appBar: AppBar(title: Text(l10n.aiConnections)),
       floatingActionButton: FloatingActionButton.extended(
         icon: const Icon(Icons.add),
-        label: const Text('Add connection'),
+        label: Text(l10n.addConnection),
         onPressed: () => _editConnection(null),
       ),
       body: ListenableBuilder(
@@ -110,11 +110,10 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
           return ListView(
             padding: const EdgeInsets.only(bottom: 96),
             children: <Widget>[
-              const Padding(
+              Padding(
                 padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: Text(
-                  'Summaries send the meeting\'s transcript, notes and photos to the '
-                  'connection\'s server. A server on your local network keeps them there.',
+                  l10n.summariesSendTheMeetingSTranscript,
                 ),
               ),
               if (controller.isBusy) const LinearProgressIndicator(),
@@ -133,12 +132,10 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                 ),
               if (settings != null) ...<Widget>[
                 if (settings.connections.isEmpty)
-                  const ListTile(
+                  ListTile(
                     leading: Icon(Icons.cloud_off_outlined),
-                    title: Text('No connections yet'),
-                    subtitle: Text(
-                        'Add a server on your network (Ollama, LM Studio, llama.cpp), or '
-                        'Claude Code or Codex on this computer.'),
+                    title: Text(l10n.noConnectionsYet),
+                    subtitle: Text(l10n.addAServerOnYourNetwork),
                   ),
                 for (final LlmConnection connection in settings.connections)
                   _ConnectionTile(
@@ -152,9 +149,8 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                 const Divider(height: 32),
                 SwitchListTile(
                   key: autoSummarizeSwitchKey,
-                  title: const Text('Summarize meetings automatically'),
-                  subtitle: const Text(
-                      'With the default connection, when a meeting\'s transcript is final.'),
+                  title: Text(l10n.summarizeMeetingsAutomatically),
+                  subtitle: Text(l10n.withTheDefaultConnectionWhenA),
                   value: settings.autoSummarize,
                   onChanged: controller.isBusy
                       ? null
@@ -164,11 +160,8 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                 if (!controller.asksPairedComputer &&
                     settings.connections.isNotEmpty)
                   ListTile(
-                    title: const Text('Summaries for my other devices'),
-                    subtitle: const Text(
-                        'A paired phone can ask this computer to write a summary or answer a '
-                        'chat with this connection, from this computer\'s copy of your notes. It '
-                        'counts against that plan; at most 10 summaries and 30 chat answers an hour.'),
+                    title: Text(l10n.summariesForMyOtherDevices),
+                    subtitle: Text(l10n.aPairedPhoneCanAskThis),
                     trailing: DropdownButton<String>(
                       key: pairedSummaryConnectionKey,
                       value: settings.pairedSummaryConnection ?? _notAnswering,
@@ -180,9 +173,9 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                                       ? null
                                       : id),
                       items: <DropdownMenuItem<String>>[
-                        const DropdownMenuItem<String>(
+                        DropdownMenuItem<String>(
                           value: _notAnswering,
-                          child: Text('Off'),
+                          child: Text(l10n.off),
                         ),
                         for (final LlmConnection connection
                             in settings.connections)
@@ -201,8 +194,8 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                     controller: _template,
                     minLines: 6,
                     maxLines: 16,
-                    decoration: const InputDecoration(
-                      labelText: 'Summary prompt',
+                    decoration: InputDecoration(
+                      labelText: l10n.summaryPrompt,
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -210,8 +203,10 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                   child: Text(
-                    'Placeholders: ${settings.placeholders.map((String name) => '{{$name}}').join(' ')}. '
-                    'The transcript is always sent after the prompt.',
+                    l10n.placeholdersTheTranscriptIsAlwaysSent(settings
+                        .placeholders
+                        .map((String name) => '{{$name}}')
+                        .join(' ')),
                     style: theme.textTheme.bodySmall,
                   ),
                 ),
@@ -224,14 +219,14 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                         onPressed: controller.isBusy
                             ? null
                             : () => controller.saveTemplate(_template.text),
-                        child: const Text('Save prompt'),
+                        child: Text(l10n.savePrompt),
                       ),
                       if (settings.customTemplate)
                         TextButton(
                           onPressed: controller.isBusy
                               ? null
                               : controller.resetTemplate,
-                          child: const Text('Reset to built-in'),
+                          child: Text(l10n.resetToBuiltIn),
                         ),
                     ],
                   ),
@@ -271,14 +266,12 @@ final class _ConnectionTile extends StatelessWidget {
     final bool tool = connection.kind.isLocalCli;
     final List<String> notes = <String>[
       '${connection.kind.label} · ${connection.model.isEmpty ? 'default model' : connection.model}',
-      if (connection.isDefault) 'Default',
+      if (connection.isDefault) l10n.defaultLabel,
       if (tool)
-        connection.toolInstalled ? 'Installed' : 'Not found on this computer',
-      if (connection.plainHttp) 'Unencrypted http, local network only',
+        connection.toolInstalled ? l10n.installed : l10n.notFoundOnThisComputer,
+      if (connection.plainHttp) l10n.unencryptedHttpLocalNetworkOnly,
     ];
-    final String where = tool
-        ? 'Runs with your plan\'s sign-in on this computer'
-        : connection.baseUrl;
+    final String where = tool ? l10n.runsWithYourPlanSSign : connection.baseUrl;
     return ListTile(
       leading:
           Icon(connection.isDefault ? Icons.star : Icons.auto_awesome_outlined),
@@ -286,7 +279,7 @@ final class _ConnectionTile extends StatelessWidget {
       subtitle: Text('${notes.join(' · ')}\n$where'),
       isThreeLine: true,
       trailing: PopupMenuButton<_ConnectionAction>(
-        tooltip: 'Actions for ${connection.label}',
+        tooltip: l10n.actionsFor(connection.label),
         enabled: !busy,
         onSelected: (_ConnectionAction action) => switch (action) {
           _ConnectionAction.makeDefault => onMakeDefault(),
@@ -297,21 +290,21 @@ final class _ConnectionTile extends StatelessWidget {
         itemBuilder: (BuildContext context) =>
             <PopupMenuEntry<_ConnectionAction>>[
           if (!connection.isDefault)
-            const PopupMenuItem<_ConnectionAction>(
+            PopupMenuItem<_ConnectionAction>(
               value: _ConnectionAction.makeDefault,
-              child: Text('Make default'),
+              child: Text(l10n.makeDefault),
             ),
-          const PopupMenuItem<_ConnectionAction>(
+          PopupMenuItem<_ConnectionAction>(
             value: _ConnectionAction.test,
-            child: Text('Test'),
+            child: Text(l10n.test),
           ),
-          const PopupMenuItem<_ConnectionAction>(
+          PopupMenuItem<_ConnectionAction>(
             value: _ConnectionAction.edit,
-            child: Text('Edit'),
+            child: Text(l10n.edit),
           ),
-          const PopupMenuItem<_ConnectionAction>(
+          PopupMenuItem<_ConnectionAction>(
             value: _ConnectionAction.remove,
-            child: Text('Remove'),
+            child: Text(l10n.remove2),
           ),
         ],
       ),
@@ -372,18 +365,17 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
     final int? contextTokens = int.tryParse(_context.text.trim());
     if (_kind.isLocalCli) {
       if (_label.text.trim().isEmpty) {
-        setState(() => _error = 'Enter a name.');
+        setState(() => _error = l10n.enterAName);
         return;
       }
     } else if (_label.text.trim().isEmpty ||
         _baseUrl.text.trim().isEmpty ||
         _model.text.trim().isEmpty) {
-      setState(() => _error = 'Enter a name, an address and a model.');
+      setState(() => _error = l10n.enterANameAnAddressAnd);
       return;
     }
     if (contextTokens == null || contextTokens <= 0) {
-      setState(
-          () => _error = 'The context is a number of tokens, such as 8192.');
+      setState(() => _error = l10n.theContextIsANumberOf);
       return;
     }
     Navigator.of(context).pop(LlmConnectionInput(
@@ -400,8 +392,8 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
   Widget build(BuildContext context) {
     final LlmConnection? existing = widget.existing;
     return AlertDialog(
-      title:
-          Text(existing == null ? 'Add connection' : 'Edit ${existing.label}'),
+      title: Text(
+          existing == null ? l10n.addConnection : l10n.edit2(existing.label)),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -425,13 +417,13 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
               ],
               TextField(
                 controller: _label,
-                decoration: const InputDecoration(labelText: 'Name'),
+                decoration: InputDecoration(labelText: l10n.name),
               ),
               DropdownButtonFormField<LlmKind>(
                 // Rebuilt when a preset changes the protocol, since the field keeps its own value.
                 key: ValueKey<LlmKind>(_kind),
                 initialValue: _kind,
-                decoration: const InputDecoration(labelText: 'Protocol'),
+                decoration: InputDecoration(labelText: l10n.protocol),
                 items: <DropdownMenuItem<LlmKind>>[
                   for (final LlmKind kind in LlmKind.values)
                     if (!kind.isLocalCli || canRunLocalCli || kind == _kind)
@@ -442,37 +434,31 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
                     setState(() => _kind = kind ?? _kind),
               ),
               if (_kind.isLocalCli)
-                const Padding(
+                Padding(
                   padding: EdgeInsets.only(top: 12),
-                  child: Text(
-                      'Runs the tool installed and signed in on this computer, so your '
-                      'Claude or ChatGPT plan writes the summaries instead of API credit. '
-                      'The meeting goes to Anthropic or OpenAI under that account.'),
+                  child: Text(l10n.runsTheToolInstalledAndSigned),
                 ),
               if (!_kind.isLocalCli)
                 TextField(
                   controller: _baseUrl,
                   keyboardType: TextInputType.url,
-                  decoration: const InputDecoration(
-                    labelText: 'Address',
-                    helperText:
-                        'https:// always; http:// only on this device or the local network.',
+                  decoration: InputDecoration(
+                    labelText: l10n.address,
+                    helperText: l10n.httpsAlwaysHttpOnlyOnThis,
                   ),
                 ),
               TextField(
                 controller: _model,
                 decoration: InputDecoration(
-                  labelText: 'Model',
-                  helperText: _kind.isLocalCli
-                      ? 'Leave empty for the tool\'s own default.'
-                      : null,
+                  labelText: l10n.model,
+                  helperText:
+                      _kind.isLocalCli ? l10n.leaveEmptyForTheToolS : null,
                 ),
               ),
               TextField(
                 controller: _context,
                 keyboardType: TextInputType.number,
-                decoration:
-                    const InputDecoration(labelText: 'Context (tokens)'),
+                decoration: InputDecoration(labelText: l10n.contextTokens),
               ),
               if (_error case final String error)
                 Padding(
@@ -488,9 +474,9 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
       actions: <Widget>[
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l10n.cancel),
         ),
-        FilledButton(onPressed: _save, child: const Text('Save connection')),
+        FilledButton(onPressed: _save, child: Text(l10n.saveConnection)),
       ],
     );
   }

@@ -5,6 +5,7 @@
 import 'dart:convert';
 
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// What a chat is about.
 final class ChatTopic {
@@ -137,47 +138,37 @@ final class ChatException implements Exception {
   /// reason shows that reason.
   String get message => switch ((code, detail)) {
         ('llm_rejected', final String detail) =>
-          'The AI server rejected the request.\nThe server said: $detail',
+          l10n.theAiServerRejectedTheRequest(detail),
         ('llm_tool_failed', final String detail) =>
-          'Claude Code or Codex could not answer.\nIt said: $detail',
+          l10n.claudeCodeOrCodexCouldNot(detail),
         _ => _sentence,
       };
 
   String get _sentence => switch (code) {
-        'empty' => 'Type a question.',
-        'too_long' => 'The question is too long.',
-        'no_connection' =>
-          'Add an AI connection in Settings, or choose a default one.',
-        'connection_not_found' => 'That AI connection no longer exists.',
-        'nothing_to_chat' =>
-          'There is nothing to talk about yet: no transcript, summary, notes or files.',
-        'context_too_small' =>
-          'The AI connection\'s context is too small. Choose one with a larger context.',
-        'meeting_not_found' => 'That meeting no longer exists.',
-        'project_not_found' => 'That project no longer exists.',
-        'llm_unreachable' =>
-          'The AI server could not be reached. Check the connection.',
-        'llm_unauthorized' => 'The AI server refused the API key.',
-        'llm_rate_limited' => 'The AI server is busy. Try again later.',
-        'llm_refused' => 'The model declined to answer.',
-        'llm_tool_missing' =>
-          'Claude Code or Codex is not installed on this computer, or the app cannot find it.',
-        'storage_failed' => 'The notes could not be read.',
-        'no_paired_computer' =>
-          'No paired computer answered. On a computer, open Settings → AI and choose a '
-              'connection under "Summaries for my other devices", then keep it on and connected.',
-        'paired_computer_timeout' => 'The computer took too long to answer.',
+        'empty' => l10n.typeAQuestion,
+        'too_long' => l10n.theQuestionIsTooLong,
+        'no_connection' => l10n.addAnAiConnectionInSettings,
+        'connection_not_found' => l10n.thatAiConnectionNoLongerExists,
+        'nothing_to_chat' => l10n.thereIsNothingToTalkAbout,
+        'context_too_small' => l10n.theAiConnectionSContextIs,
+        'meeting_not_found' => l10n.thatMeetingNoLongerExists,
+        'project_not_found' => l10n.thatProjectNoLongerExists,
+        'llm_unreachable' => l10n.theAiServerCouldNotBe,
+        'llm_unauthorized' => l10n.theAiServerRefusedTheApi,
+        'llm_rate_limited' => l10n.theAiServerIsBusyTry,
+        'llm_refused' => l10n.theModelDeclinedToAnswer,
+        'llm_tool_missing' => l10n.claudeCodeOrCodexIsNot,
+        'storage_failed' => l10n.theNotesCouldNotBeRead,
+        'no_paired_computer' => l10n.noPairedComputerAnsweredOnA,
+        'paired_computer_timeout' => l10n.theComputerTookTooLongTo,
         'paired_computer_left' =>
-          'The computer disconnected before answering. Try again.',
-        'rate_limited' =>
-          'The computer answers at most 30 questions an hour. Try again later.',
-        'busy' =>
-          'The computer is answering other questions. Try again shortly.',
-        'p2p_unavailable' => 'Paired devices are off on this phone.',
-        'runtime_unavailable' => 'The app is still starting. Try again.',
-        _ when code.startsWith('llm_') =>
-          'The AI server could not answer. Try again.',
-        _ => 'Something went wrong. Try again.',
+          l10n.theComputerDisconnectedBeforeAnsweringTry,
+        'rate_limited' => l10n.theComputerAnswersAtMost30,
+        'busy' => l10n.theComputerIsAnsweringOtherQuestions,
+        'p2p_unavailable' => l10n.pairedDevicesAreOffOnThis,
+        'runtime_unavailable' => l10n.theAppIsStillStartingTry,
+        _ when code.startsWith('llm_') => l10n.theAiServerCouldNotAnswer,
+        _ => l10n.somethingWentWrongTryAgain,
       };
 
   @override

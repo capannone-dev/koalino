@@ -3,6 +3,7 @@
 // the app is built on. The Rust crates and AI models are listed in THIRD_PARTY_NOTICES.md.
 
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// The app's visible name.
 const String appName = 'Koalino';
@@ -10,7 +11,8 @@ const String appName = 'Koalino';
 /// The version shown in About; keep in step with `pubspec.yaml`.
 const String appVersion = '0.1.0';
 
-/// The license notice, as the GPL asks interactive programs to show it.
+/// The license notice, as the GPL asks interactive programs to show it. It stays in English, the
+/// language of the license itself (#124).
 const String licenseNotice =
     'Koalino is free software: you can redistribute it and/or modify it under the terms of '
     'the GNU General Public License as published by the Free Software Foundation, either '
@@ -28,8 +30,8 @@ final class AboutKoalinoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListTile(
         leading: const Icon(Icons.info_outline),
-        title: const Text('About $appName'),
-        subtitle: const Text('Version, license and the software it uses.'),
+        title: Text(l10n.about(appName)),
+        subtitle: Text(l10n.versionLicenseAndTheSoftwareIt),
         onTap: () => showAboutDialog(
           context: context,
           applicationName: appName,

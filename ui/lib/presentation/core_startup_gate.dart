@@ -4,6 +4,7 @@
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/core_startup_controller.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Replaces `child` with start-up feedback until `controller` is `ready`.
 final class CoreStartupGate extends StatelessWidget {
@@ -30,20 +31,14 @@ final class CoreStartupGate extends StatelessWidget {
           CoreStartupState.ready => child,
           CoreStartupState.starting => const _StartingMessage(),
           CoreStartupState.keychainUnavailable => _StartupFailure(
-              title: 'Unable to open the keychain',
-              explanation:
-                  'Koalino keeps the key that encrypts your voice profiles and device '
-                  'identity in the system keychain. Unlock the keychain, or allow Koalino to '
-                  'use it, then try again. If this device has no keychain service, install or '
-                  'start one and restart Koalino.',
+              title: l10n.unableToOpenTheKeychain,
+              explanation: l10n.koalinoKeepsTheKeyThatEncrypts,
               onRetry: controller.start,
               onQuit: onQuit,
             ),
           CoreStartupState.failed => _StartupFailure(
-              title: 'Unable to open your notes',
-              explanation:
-                  'Koalino could not open its database. Check that there is free space '
-                  'and try again.',
+              title: l10n.unableToOpenYourNotes,
+              explanation: l10n.koalinoCouldNotOpenItsDatabase,
               onRetry: controller.start,
               onQuit: onQuit,
             ),
@@ -56,14 +51,14 @@ final class _StartingMessage extends StatelessWidget {
   const _StartingMessage();
 
   @override
-  Widget build(BuildContext context) => const Scaffold(
+  Widget build(BuildContext context) => Scaffold(
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
               CircularProgressIndicator(),
               SizedBox(height: 16),
-              Text('Unlocking your notes…'),
+              Text(l10n.unlockingYourNotes),
             ],
           ),
         ),
@@ -111,9 +106,8 @@ final class _StartupFailure extends StatelessWidget {
                   alignment: MainAxisAlignment.end,
                   spacing: 8,
                   children: <Widget>[
-                    TextButton(onPressed: onQuit, child: const Text('Quit')),
-                    FilledButton(
-                        onPressed: onRetry, child: const Text('Retry')),
+                    TextButton(onPressed: onQuit, child: Text(l10n.quit)),
+                    FilledButton(onPressed: onRetry, child: Text(l10n.retry)),
                   ],
                 ),
               ],

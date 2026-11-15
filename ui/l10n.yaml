@@ -1,0 +1,7 @@
+# Configures `flutter gen-l10n` (Issue #124): the English template and its translations live in
+# lib/l10n, and the generated AppLocalizations is written next to them.
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-dir: lib/l10n
+nullable-getter: false

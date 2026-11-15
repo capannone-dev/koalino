@@ -7,6 +7,7 @@ import 'package:note_taker_ui/controllers/handoff_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_edit_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// AI settings and each meeting's summary, as last read from the core.
 final class SummariesController extends ChangeNotifier {
@@ -96,7 +97,7 @@ final class SummariesController extends ChangeNotifier {
       _change(() async {
         final LlmConnection saved = await _bridge.saveConnection(input, id: id);
         _settings = await _bridge.settings();
-        return 'Saved ${saved.label}.';
+        return l10n.saved(saved.label);
       });
 
   /// Removes a connection and its key. Outputs: Whether it was removed.
@@ -104,13 +105,13 @@ final class SummariesController extends ChangeNotifier {
         final String label = _labelOf(id);
         await _bridge.deleteConnection(id);
         _settings = await _bridge.settings();
-        return 'Removed $label.';
+        return l10n.removed(label);
       });
 
   /// Makes `id` the default connection. Outputs: Whether it was saved.
   Future<bool> makeDefault(String id) => _change(() async {
         _settings = await _bridge.update(defaultConnection: id);
-        return '${_labelOf(id)} is now the default.';
+        return l10n.isNowTheDefault(_labelOf(id));
       });
 
   /// Asks the connection a fixed one-line question, holding no meeting content.
@@ -118,27 +119,27 @@ final class SummariesController extends ChangeNotifier {
   /// Side effects: One request to the connection's server; `message` reports the reply.
   Future<bool> testConnection(String id) => _change(() async {
         final String reply = await _bridge.testConnection(id);
-        return '${_labelOf(id)} answered: $reply';
+        return l10n.answered(_labelOf(id), reply);
       });
 
   /// Saves the summary prompt template. Outputs: Whether it was accepted.
   Future<bool> saveTemplate(String template) => _change(() async {
         _settings = await _bridge.update(template: template);
-        return 'Prompt saved.';
+        return l10n.promptSaved;
       });
 
   /// Restores the built-in prompt template.
   Future<bool> resetTemplate() => _change(() async {
         _settings = await _bridge.update(resetTemplate: true);
-        return 'The built-in prompt is back.';
+        return l10n.theBuiltInPromptIsBack;
       });
 
   /// Turns automatic summaries of finished meetings on or off (#101).
   Future<bool> setAutoSummarize({required bool enabled}) => _change(() async {
         _settings = await _bridge.update(autoSummarize: enabled);
         return enabled
-            ? 'Finished meetings will be summarized automatically.'
-            : 'Automatic summaries are off.';
+            ? l10n.finishedMeetingsWillBeSummarizedAutomatically
+            : l10n.automaticSummariesAreOff;
       });
 
   /// Chooses the connection that writes the summaries paired devices ask for, or stops this
@@ -148,8 +149,8 @@ final class SummariesController extends ChangeNotifier {
             ? await _bridge.update(stopAnsweringPairedDevices: true)
             : await _bridge.update(pairedSummaryConnection: id);
         return id == null
-            ? 'This computer no longer writes summaries or answers chats for your other devices.'
-            : '${_labelOf(id)} now writes the summaries and answers the chats your other devices ask for.';
+            ? l10n.thisComputerNoLongerWritesSummaries
+            : l10n.nowWritesTheSummariesAndAnswers(_labelOf(id));
       });
 
   /// Asks a paired computer to write the meeting's summary (#107); a failed request is replaced.
@@ -177,7 +178,7 @@ final class SummariesController extends ChangeNotifier {
         request: request,
       );
       if (cancel) {
-        _meetingMessages[meetingId] = 'Request cancelled.';
+        _meetingMessages[meetingId] = l10n.requestCancelled;
       } else {
         _meetingMessages.remove(meetingId);
       }
@@ -247,8 +248,8 @@ final class SummariesController extends ChangeNotifier {
         request: _meetings[meetingId]?.request,
       );
       _meetingMessages[meetingId] = prompt == null
-          ? 'This meeting uses the Settings prompt again.'
-          : 'Prompt saved for this meeting.';
+          ? l10n.thisMeetingUsesTheSettingsPrompt
+          : l10n.promptSavedForThisMeeting;
       saved = true;
     } on LlmException catch (error) {
       _meetingMessages[meetingId] = error.message;
@@ -271,7 +272,7 @@ final class SummariesController extends ChangeNotifier {
         meetingPrompt: _meetings[meetingId]?.meetingPrompt,
         request: _meetings[meetingId]?.request,
       );
-      _meetingMessages[meetingId] = 'Summary saved.';
+      _meetingMessages[meetingId] = l10n.summarySaved;
       _notify();
       return null;
     } on MeetingEditException catch (error) {
@@ -308,7 +309,7 @@ final class SummariesController extends ChangeNotifier {
         return connection.label;
       }
     }
-    return 'The connection';
+    return l10n.theConnection;
   }
 
   void _notify() {
@@ -328,20 +329,18 @@ final class SummariesController extends ChangeNotifier {
 ///
 /// Inputs: The core's result. Outputs: One or more sentences. Side effects: None.
 String describeSummaryResult(SummaryResult result) {
-  final StringBuffer text = StringBuffer('Summary written.');
+  final StringBuffer text = StringBuffer(l10n.summaryWritten);
   if (result.parts > 1) {
-    text.write(' The transcript was read in ${result.parts} parts.');
+    text.write(l10n.theTranscriptWasReadInParts(result.parts));
   }
   if (result.imagesSent > 0 || result.imagesSkipped > 0) {
-    final String sent = result.imagesSent == 1
-        ? '1 picture was included'
-        : '${result.imagesSent} pictures were included';
+    final String sent = l10n.picturesIncluded(result.imagesSent);
     text.write(result.imagesSkipped == 0
         ? ' $sent.'
-        : ' $sent, ${result.imagesSkipped} left out.');
+        : l10n.leftOut(sent, result.imagesSkipped));
   }
   if (result.summary.truncated) {
-    text.write(' The model stopped before the end.');
+    text.write(l10n.theModelStoppedBeforeTheEnd);
   }
   return text.toString();
 }
@@ -352,10 +351,8 @@ String describeSummaryResult(SummaryResult result) {
 /// as on the computer. Side effects: None.
 String describePairedRequest(PairedSummaryRequest request) =>
     switch (request.state) {
-      PairedRequestState.waiting =>
-        'Waiting for your computer. It writes the summary once it is on, connected to this '
-            'device, and set to answer in Settings → AI connections.',
-      PairedRequestState.working => 'Your computer is writing the summary…',
-      PairedRequestState.failed => 'Your computer could not write the summary: '
-          '${LlmException(request.errorCode ?? 'unknown').message}',
+      PairedRequestState.waiting => l10n.waitingForYourComputerItWrites,
+      PairedRequestState.working => l10n.yourComputerIsWritingTheSummary,
+      PairedRequestState.failed => l10n.yourComputerCouldNotWriteThe(
+          LlmException(request.errorCode ?? 'unknown').message),
     };

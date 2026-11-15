@@ -6,6 +6,7 @@
 import 'dart:convert';
 
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// The folder's settings and last round.
 final class NotesFolderStatus {
@@ -65,13 +66,11 @@ final class NotesFolderException implements Exception {
 
 /// Words an error code, such as the last round's.
 String notesFolderErrorMessage(String code) => switch (code) {
-      'invalid_folder' =>
-        'Choose a full folder path, inside your home folder but not the home folder itself.',
-      'folder_failed' =>
-        'The folder could not be written. Check that it exists and you can write there.',
-      'storage_failed' => 'The notes could not be read or saved.',
-      'runtime_unavailable' => 'The app is still starting. Try again.',
-      _ => 'Something went wrong. Try again.',
+      'invalid_folder' => l10n.chooseAFullFolderPathInside,
+      'folder_failed' => l10n.theFolderCouldNotBeWritten,
+      'storage_failed' => l10n.theNotesCouldNotBeRead2,
+      'runtime_unavailable' => l10n.theAppIsStillStartingTry,
+      _ => l10n.somethingWentWrongTryAgain,
     };
 
 /// Keeps the notes folder through the core.

@@ -3,6 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/call_watch_controller.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Puts the call offer above `child`.
 final class CallOfferBanner extends StatefulWidget {
@@ -55,17 +56,16 @@ final class _CallOfferBannerState extends State<CallOfferBanner> {
                 leading: const Icon(Icons.call),
                 content: Semantics(
                   liveRegion: true,
-                  child:
-                      Text('$app is using the microphone. Record this call?'),
+                  child: Text(l10n.isUsingTheMicrophoneRecordThis(app)),
                 ),
                 actions: <Widget>[
                   TextButton(
                     onPressed: widget.controller.dismissOffer,
-                    child: const Text('Not now'),
+                    child: Text(l10n.notNow),
                   ),
                   FilledButton.icon(
                     icon: const Icon(Icons.fiber_manual_record),
-                    label: const Text('Record'),
+                    label: Text(l10n.record),
                     onPressed: widget.controller.acceptOffer,
                   ),
                 ],
@@ -97,30 +97,23 @@ final class CallWatchSettingsTiles extends StatelessWidget {
             children: <Widget>[
               SwitchListTile(
                 secondary: const Icon(Icons.call),
-                title: const Text('Offer to record calls'),
-                subtitle: const Text(
-                    'When Teams, Zoom, Meet in a browser or another call app starts using '
-                    'the microphone. Nothing records until you tap Record.'),
+                title: Text(l10n.offerToRecordCalls),
+                subtitle: Text(l10n.whenTeamsZoomMeetInA),
                 value: controller.settings.offer,
                 onChanged: (bool offer) => controller.setSettings(offer: offer),
               ),
               SwitchListTile(
                 secondary: const Icon(Icons.call_end),
-                title: const Text('Stop when the call ends'),
-                subtitle: const Text(
-                    'Only for recordings started from the offer, once the call app has left '
-                    'the microphone for 20 seconds.'),
+                title: Text(l10n.stopWhenTheCallEnds),
+                subtitle: Text(l10n.onlyForRecordingsStartedFromThe),
                 value: controller.settings.autoStop,
                 onChanged: (bool autoStop) =>
                     controller.setSettings(autoStop: autoStop),
               ),
               SwitchListTile(
                 secondary: const Icon(Icons.badge_outlined),
-                title: const Text('Read speaker names from the call window'),
-                subtitle: const Text(
-                    'While recording, Koalino reads who Teams, Zoom or Meet shows as '
-                    'speaking, to suggest names for unknown voices. Nothing leaves this '
-                    'computer, and nothing is named until you tap Assign.'),
+                title: Text(l10n.readSpeakerNamesFromTheCall),
+                subtitle: Text(l10n.whileRecordingKoalinoReadsWhoTeams),
                 value: controller.settings.readNames,
                 onChanged: (bool readNames) =>
                     controller.setSettings(readNames: readNames),

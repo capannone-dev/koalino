@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/npu_download.dart';
 import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Owns the transcription settings for its page.
 final class TranscriptionSettingsController extends ChangeNotifier {
@@ -79,16 +80,12 @@ final class TranscriptionSettingsController extends ChangeNotifier {
       return;
     }
     _message = switch ((download.state, download.error)) {
-      ('done', _) => 'Download finished. You can now choose this model.',
-      ('cancelled', _) => 'Download cancelled.',
-      ('failed', 'no_network') =>
-        'The download stopped: no connection to the server. Your current model still works.',
-      ('failed', 'corrupted') =>
-        'The downloaded file failed its check and was deleted. Your current model still works.',
-      ('failed', 'storage') =>
-        'The model could not be saved. Check the free space. Your current model still works.',
-      ('failed', _) =>
-        'The download server refused the file. Your current model still works.',
+      ('done', _) => l10n.downloadFinishedYouCanNowChoose,
+      ('cancelled', _) => l10n.downloadCancelled,
+      ('failed', 'no_network') => l10n.theDownloadStoppedNoConnectionTo,
+      ('failed', 'corrupted') => l10n.theDownloadedFileFailedItsCheck,
+      ('failed', 'storage') => l10n.theModelCouldNotBeSaved,
+      ('failed', _) => l10n.theDownloadServerRefusedTheFile,
       _ => _message,
     };
   }
@@ -98,41 +95,41 @@ final class TranscriptionSettingsController extends ChangeNotifier {
   /// Inputs: A file name on this device. Side effects: Stores the choice and reloads.
   Future<void> selectModel(String fileName) =>
       _run(() => _bridge.selectModel(fileName),
-          success: 'Saved. The next recording uses this model.');
+          success: l10n.savedTheNextRecordingUsesThis);
 
   /// Turns efficient mode on or off.
   ///
   /// Inputs: The new state. Side effects: Stores the choice and reloads.
   Future<void> setEfficientGpu({required bool enabled}) =>
       _run(() => _bridge.setEfficientGpu(enabled: enabled),
-          success: 'Saved. The next recording uses this.');
+          success: l10n.savedTheNextRecordingUsesThis2);
 
   /// Chooses "Automatic", the model suggested for this device.
   ///
   /// Side effects: Forgets the hand-picked model and reloads.
   Future<void> useAutomaticModel() => _run(_bridge.useAutomaticModel,
-      success: 'Saved. The next recording uses the automatic choice.');
+      success: l10n.savedTheNextRecordingUsesThe);
 
   /// Turns the after-meeting pass on or off.
   ///
   /// Inputs: The new state. Side effects: Stores the choice and reloads.
   Future<void> setAfterMeetingPass({required bool enabled}) =>
       _run(() => _bridge.setAfterMeetingPass(enabled: enabled),
-          success: 'Saved. The next recording uses this.');
+          success: l10n.savedTheNextRecordingUsesThis2);
 
   /// Chooses the after-meeting pass's model (#87), or `null` for the recording model.
   ///
   /// Inputs: A model on this device, or `null`. Side effects: Stores the choice and reloads.
   Future<void> setAfterMeetingPassModel(String? fileName) =>
       _run(() => _bridge.setAfterMeetingPassModel(fileName),
-          success: 'Saved. Meetings recorded from now on use this.');
+          success: l10n.savedMeetingsRecordedFromNowOn);
 
   /// Turns recording the computer's sound (#108) on or off.
   ///
   /// Inputs: The new state. Side effects: Stores the choice and reloads.
   Future<void> setComputerSound({required bool enabled}) =>
       _run(() => _bridge.setComputerSound(enabled: enabled),
-          success: 'Saved. The next recording uses this.');
+          success: l10n.savedTheNextRecordingUsesThis2);
 
   /// Saves the glossary from text holding one term per line.
   ///
@@ -145,9 +142,8 @@ final class TranscriptionSettingsController extends ChangeNotifier {
         .where((String line) => line.isNotEmpty)
         .toList(growable: false);
     return _run(() => _bridge.setGlossary(terms),
-        success: 'Saved. The next recording uses these names and terms.',
-        invalid: 'Each term can have at most 60 characters, and all of them '
-            'together at most 500.');
+        success: l10n.savedTheNextRecordingUsesThese,
+        invalid: l10n.eachTermCanHaveAtMost);
   }
 
   /// Sets how many days a recording's speech waits to be combined (#93).
@@ -155,10 +151,8 @@ final class TranscriptionSettingsController extends ChangeNotifier {
   /// Inputs: The days. Side effects: Stores the window and reloads.
   Future<void> setKeepSpeechDays(int days) =>
       _run(() => _bridge.setKeepSpeechDays(days),
-          success: days == 1
-              ? 'Saved. Speech now waits up to 1 day to be combined.'
-              : 'Saved. Speech now waits up to $days days to be combined.',
-          invalid: 'Choose a window between 1 and 60 days.');
+          success: l10n.keepSpeechSaved(days),
+          invalid: l10n.chooseAWindowBetween1And);
 
   /// Downloads the NPU files, then turns the NPU on (#75).
   ///
@@ -176,7 +170,7 @@ final class TranscriptionSettingsController extends ChangeNotifier {
       await _npuDownloader.download(directory);
     } on Object {
       _npuProgress = null;
-      _message = 'The download could not start. Please try again.';
+      _message = l10n.theDownloadCouldNotStartPlease;
       _notify();
       return;
     }
@@ -192,9 +186,9 @@ final class TranscriptionSettingsController extends ChangeNotifier {
   Future<void> setNpuWhisper({required bool enabled}) =>
       _run(() => _bridge.setNpuWhisper(enabled: enabled),
           success: enabled
-              ? 'Saved. The next recording is transcribed on the NPU.'
-              : 'Saved. The next recording is transcribed on the processor.',
-          invalid: 'The NPU files are not all downloaded yet.');
+              ? l10n.savedTheNextRecordingIsTranscribed
+              : l10n.savedTheNextRecordingIsTranscribed2,
+          invalid: l10n.theNpuFilesAreNotAll);
 
   /// Turns the NPU off and deletes its files.
   ///
@@ -211,9 +205,8 @@ final class TranscriptionSettingsController extends ChangeNotifier {
     } on Object {
       removed = false;
     }
-    _message = removed
-        ? 'The NPU files were removed.'
-        : 'The NPU files could not be removed. Please try again.';
+    _message =
+        removed ? l10n.theNpuFilesWereRemoved : l10n.theNpuFilesCouldNotBe;
     await load();
   }
 
@@ -265,19 +258,16 @@ final class TranscriptionSettingsController extends ChangeNotifier {
     _npuProgress = null;
     if (progress.state == 'done') {
       await setNpuWhisper(enabled: true);
-      _message = 'Downloaded. Recordings now transcribe on the NPU.';
+      _message = l10n.downloadedRecordingsNowTranscribeOnThe;
       _notify();
       return;
     }
     _message = switch ((progress.state, progress.error)) {
-      ('cancelled', _) => 'Download cancelled.',
-      ('failed', 'no_network') =>
-        'The download stopped: no connection to the server.',
-      ('failed', 'corrupted') =>
-        'A downloaded file failed its check and was deleted.',
-      ('failed', 'storage') =>
-        'The files could not be saved. Check the free space (about 800 MB is needed).',
-      _ => 'The download server refused the files.',
+      ('cancelled', _) => l10n.downloadCancelled,
+      ('failed', 'no_network') => l10n.theDownloadStoppedNoConnectionTo2,
+      ('failed', 'corrupted') => l10n.aDownloadedFileFailedItsCheck,
+      ('failed', 'storage') => l10n.theFilesCouldNotBeSaved,
+      _ => l10n.theDownloadServerRefusedTheFiles,
     };
     await load();
   }
@@ -285,8 +275,8 @@ final class TranscriptionSettingsController extends ChangeNotifier {
   /// Lets the GPU be tried again after a crash stopped it.
   ///
   /// Side effects: Clears the core's record and reloads.
-  Future<void> retryGpu() => _run(_bridge.retryGpu,
-      success: 'The next recording tries the graphics chip again.');
+  Future<void> retryGpu() =>
+      _run(_bridge.retryGpu, success: l10n.theNextRecordingTriesTheGraphics);
 
   /// Applies the suggestion: chooses it when on this device, or starts its download.
   ///
@@ -321,7 +311,7 @@ final class TranscriptionSettingsController extends ChangeNotifier {
   /// Side effects: Stores the dismissal and reloads.
   Future<void> dismissProposal(WhisperProposal proposal) => _run(
         () => _bridge.dismissProposal(proposal.fileName),
-        success: 'That model won\'t be proposed again.',
+        success: l10n.thatModelWonTBeProposed,
       );
 
   /// Starts downloading a model.
@@ -342,7 +332,7 @@ final class TranscriptionSettingsController extends ChangeNotifier {
   ///
   /// Inputs: A file name. Side effects: Deletes the file and reloads.
   Future<void> removeModel(String fileName) =>
-      _run(() => _bridge.removeModel(fileName), success: 'Model removed.');
+      _run(() => _bridge.removeModel(fileName), success: l10n.modelRemoved);
 
   /// Runs one change, reports the result, and reloads.
   Future<void> _run(Future<int> Function() change,
@@ -359,11 +349,9 @@ final class TranscriptionSettingsController extends ChangeNotifier {
     _message = switch (status) {
       transcriptionStatusOk => success,
       transcriptionStatusInvalid when invalid != null => invalid,
-      transcriptionStatusBusy =>
-        'Another model is downloading. Wait for it to finish.',
-      transcriptionStatusNoSpace =>
-        'There isn\'t enough free space for this model.',
-      _ => 'That didn\'t work. Please try again.',
+      transcriptionStatusBusy => l10n.anotherModelIsDownloadingWaitFor,
+      transcriptionStatusNoSpace => l10n.thereIsnTEnoughFreeSpace,
+      _ => l10n.thatDidnTWorkPleaseTry,
     };
     _isBusy = false;
     await load();

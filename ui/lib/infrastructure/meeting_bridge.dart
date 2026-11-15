@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// A device that recorded a meeting (#88), as Rust names it.
 final class RecordingDevice {
@@ -31,11 +32,12 @@ final class RecordingDevice {
   final bool? connected;
 
   /// The name to show: its own, else "this device" or "another device".
-  String get label => name ?? (thisDevice ? 'this device' : 'another device');
+  String get label =>
+      name ?? (thisDevice ? l10n.thisDevice2 : l10n.anotherDevice);
 
   /// The label, with "(not connected)" for a paired device that is away.
   String get labelWithConnection =>
-      connected == false ? '$label (not connected)' : label;
+      connected == false ? l10n.notConnected(label) : label;
 
   /// Decodes one element of `recorded_on`.
   factory RecordingDevice.fromJson(Map<String, Object?> json) {
@@ -116,29 +118,26 @@ final class MeetingCombining {
         .join(', ');
     final String plainNames =
         waitingFor.map((RecordingDevice device) => device.label).join(', ');
-    final String combiner = combineOn?.labelWithConnection ?? 'another device';
+    final String combiner =
+        combineOn?.labelWithConnection ?? l10n.anotherDevice;
     final DateTime? until = keptUntil;
     final String kept = until == null
         ? ''
-        : ' It is kept encrypted until ${formatCalendarDay(until)}.';
+        : l10n.itIsKeptEncryptedUntil(formatCalendarDay(until));
     return switch (state) {
       CombiningState.oneDevice => until == null
-          ? 'Recorded on this device only.'
-          : 'Recorded on this device only. A recording of it made on another device '
-              'can still be combined until ${formatCalendarDay(until)}.',
+          ? l10n.recordedOnThisDeviceOnly
+          : l10n.recordedOnThisDeviceOnlyA(formatCalendarDay(until)),
       CombiningState.waiting when waitingFor.isEmpty =>
-        '$combiner combines the recordings; nothing is left to send from here.',
+        l10n.combinesTheRecordingsNothingIsLeft(combiner),
       CombiningState.waiting when combineOn?.thisDevice ?? false =>
-        'Waiting for audio from $names.$kept',
+        l10n.waitingForAudioFrom(names, kept),
       CombiningState.waiting =>
-        '$combiner combines the recordings; waiting for audio from $names.',
-      CombiningState.readyToCombine =>
-        'Audio from every device is here; the transcript is combined when this device is free.',
-      CombiningState.sending =>
-        'This device\'s audio still has to reach $combiner.$kept',
-      CombiningState.combined => 'Transcript combined from every device.',
-      CombiningState.notCombined =>
-        'Not combined: audio from $plainNames did not arrive within three weeks.',
+        l10n.combinesTheRecordingsWaitingForAudio(combiner, names),
+      CombiningState.readyToCombine => l10n.audioFromEveryDeviceIsHere,
+      CombiningState.sending => l10n.thisDeviceSAudioStillHas(combiner, kept),
+      CombiningState.combined => l10n.transcriptCombinedFromEveryDevice,
+      CombiningState.notCombined => l10n.notCombinedAudioFromDidNot(plainNames),
     };
   }
 
@@ -384,7 +383,7 @@ final class MeetingDetail {
 /// Outputs: The same fallback `MeetingMetadata::display_title` produces in Rust.
 /// Side effects: None.
 String fallbackMeetingTitle(DateTime createdAt) =>
-    'Meeting ${formatMeetingCreatedAt(createdAt)}';
+    l10n.meeting(formatMeetingCreatedAt(createdAt));
 
 /// Formats a creation instant as `YYYY-MM-DD HH:MM UTC`.
 String formatMeetingCreatedAt(DateTime createdAt) {

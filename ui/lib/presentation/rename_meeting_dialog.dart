@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/meeting_list_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_title_validation.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Preferred width of the title field, in logical pixels.
 const double _preferredFieldWidth = 400;
@@ -33,7 +34,7 @@ Future<void> showRenameMeetingDialog(
         RenameMeetingDialog(controller: controller, meeting: meeting),
   );
   if (renamed ?? false) {
-    messenger?.showSnackBar(const SnackBar(content: Text('Meeting renamed')));
+    messenger?.showSnackBar(SnackBar(content: Text(l10n.meetingRenamed)));
   }
 }
 
@@ -143,7 +144,7 @@ final class _RenameMeetingDialogState extends State<RenameMeetingDialog> {
     return PopScope(
       canPop: !_isSaving,
       child: AlertDialog(
-        title: const Text('Rename meeting'),
+        title: Text(l10n.renameMeeting),
         content: SizedBox(
           width: fieldWidth,
           child: TextField(
@@ -155,7 +156,7 @@ final class _RenameMeetingDialogState extends State<RenameMeetingDialog> {
             onChanged: (_) => setState(() => _saveErrorMessage = null),
             onSubmitted: (_) => _save(),
             decoration: InputDecoration(
-              labelText: 'Title',
+              labelText: l10n.title,
               border: const OutlineInputBorder(),
               errorText: validationMessage ?? _saveErrorMessage,
               errorMaxLines: 3,
@@ -168,7 +169,7 @@ final class _RenameMeetingDialogState extends State<RenameMeetingDialog> {
         actions: <Widget>[
           TextButton(
             onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: _isSaving ? null : _save,
@@ -177,7 +178,7 @@ final class _RenameMeetingDialogState extends State<RenameMeetingDialog> {
                     dimension: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save'),
+                : Text(l10n.save),
           ),
         ],
       ),
@@ -187,11 +188,9 @@ final class _RenameMeetingDialogState extends State<RenameMeetingDialog> {
 
 /// Describes why Rust rejected a rename, without exposing Rust's internal error details.
 String _renameFailureMessage(MeetingRenameFailure failure) => switch (failure) {
-      MeetingRenameFailure.invalidTitle => "This title isn't allowed.",
-      MeetingRenameFailure.storageFailure =>
-        "Couldn't save the new title. Try again.",
-      MeetingRenameFailure.runtimeUnavailable =>
-        "The note-taking engine isn't available right now.",
-      MeetingRenameFailure.meetingNotFound => 'This meeting no longer exists.',
-      MeetingRenameFailure.unknown => "Couldn't rename the meeting.",
+      MeetingRenameFailure.invalidTitle => l10n.thisTitleIsnTAllowed,
+      MeetingRenameFailure.storageFailure => l10n.couldnTSaveTheNewTitle,
+      MeetingRenameFailure.runtimeUnavailable => l10n.theNoteTakingEngineIsnT,
+      MeetingRenameFailure.meetingNotFound => l10n.thisMeetingNoLongerExists2,
+      MeetingRenameFailure.unknown => l10n.couldnTRenameTheMeeting,
     };

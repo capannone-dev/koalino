@@ -70,6 +70,11 @@ which may wait on a keychain unlock prompt. On a keychain or storage failure it 
 problem and offers Retry and Quit, instead of the app. There is no key-file fallback
 (`DECISION_LOG.md`).
 
+`app_localization_scope.dart` (`AppLocalizationScope`, Issue #124) sits first in
+`MaterialApp.builder`. It points the global `l10n` at the resolved locale's translations and,
+when the language changes, rebuilds every element so text read without a `BuildContext`
+updates too. Settings → *App language* picks the language (`settings_screen.dart`).
+
 `app_lock_gate.dart` (`AppLockGate`, Android) wraps the navigator through `MaterialApp.builder`,
 so pushed screens and dialogs are covered too. While locked it shows "Koalino is locked" with
 Unlock; the app's widgets stay mounted but hidden (not painted, tapped, or read by screen

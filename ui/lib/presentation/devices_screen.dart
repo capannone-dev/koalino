@@ -9,6 +9,7 @@ import 'package:note_taker_ui/controllers/devices_controller.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
 import 'package:note_taker_ui/presentation/pairing_invite_dialogs.dart';
 import 'package:note_taker_ui/presentation/rename_device_dialog.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// The Devices screen; it renders the controller's state and holds no logic of its own.
 ///
@@ -23,7 +24,7 @@ final class DevicesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Devices')),
+        appBar: AppBar(title: Text(l10n.devices)),
         body: ListenableBuilder(
           listenable: controller,
           builder: (BuildContext context, Widget? child) {
@@ -58,11 +59,11 @@ final class _SyncOffMessage extends StatelessWidget {
               Icon(Icons.sync_disabled,
                   size: 48, color: Theme.of(context).colorScheme.outline),
               const SizedBox(height: 16),
-              Text('Device sync is off',
+              Text(l10n.deviceSyncIsOff,
                   style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 8),
-              const Text(
-                'Meetings stay on this device until sync is turned on.',
+              Text(
+                l10n.meetingsStayOnThisDeviceUntil,
                 textAlign: TextAlign.center,
               ),
             ],
@@ -95,11 +96,11 @@ final class _DevicesList extends StatelessWidget {
           title: Text(status.deviceName),
           subtitle: Text(switch (status.capabilities) {
             final DeviceCapabilities capabilities =>
-              'This device\n${describeCapabilities(capabilities)}',
-            null => 'This device',
+              l10n.thisDevice3(describeCapabilities(capabilities)),
+            null => l10n.thisDevice,
           }),
           trailing: IconButton(
-            tooltip: 'Rename this device',
+            tooltip: l10n.renameThisDevice,
             icon: const Icon(Icons.edit_outlined),
             onPressed: () => showRenameDeviceDialog(context,
                 controller: controller, currentName: status.deviceName),
@@ -109,7 +110,7 @@ final class _DevicesList extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: controller.discoverable
               ? Text(
-                  'Discoverable: your other devices can ask to pair for a few minutes.',
+                  l10n.discoverableYourOtherDevicesCanAsk,
                   style: textTheme.bodyMedium,
                 )
               : Align(
@@ -117,73 +118,72 @@ final class _DevicesList extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: controller.makeDiscoverable,
                     icon: const Icon(Icons.wifi_tethering),
-                    label: const Text('Make discoverable'),
+                    label: Text(l10n.makeDiscoverable),
                   ),
                 ),
         ),
         if (status.incomingRequests.isNotEmpty) ...<Widget>[
-          const _SectionTitle('Pairing requests'),
+          _SectionTitle(l10n.pairingRequests),
           for (final IncomingPairingRequest request in status.incomingRequests)
             _CodeCard(
               title: request.deviceName,
               code: request.code,
-              instructions:
-                  'Accept only if the other device shows the same code.',
+              instructions: l10n.acceptOnlyIfTheOtherDevice,
               actions: <Widget>[
                 TextButton(
                   onPressed: () => controller.rejectRequest(request.peerId),
-                  child: const Text('Reject'),
+                  child: Text(l10n.reject),
                 ),
                 FilledButton(
                   onPressed: () => controller.acceptRequest(request.peerId),
-                  child: const Text('Accept'),
+                  child: Text(l10n.accept),
                 ),
               ],
             ),
         ],
         if (status.outgoingPairings.isNotEmpty) ...<Widget>[
-          const _SectionTitle('Pairing in progress'),
+          _SectionTitle(l10n.pairingInProgress),
           for (final OutgoingPairing pairing in status.outgoingPairings)
             _CodeCard(
               title: shortPeerId(pairing.peerId),
               code: pairing.code,
               instructions: pairing.locallyConfirmed
-                  ? 'Waiting for the other device…'
-                  : 'Check that the other device shows the same code.',
+                  ? l10n.waitingForTheOtherDevice
+                  : l10n.checkThatTheOtherDeviceShows,
               actions: <Widget>[
                 TextButton(
                   onPressed: () => controller.cancelPairing(pairing.peerId),
-                  child: const Text('Cancel pairing'),
+                  child: Text(l10n.cancelPairing),
                 ),
                 if (!pairing.locallyConfirmed)
                   FilledButton(
                     onPressed: () => controller.confirmCode(pairing.peerId),
-                    child: const Text('Codes match'),
+                    child: Text(l10n.codesMatch),
                   ),
               ],
             ),
         ],
-        const _SectionTitle('Paired devices'),
-        if (status.pairedDevices.isEmpty)
-          const _EmptyText('No paired devices yet.'),
+        _SectionTitle(l10n.pairedDevices),
+        if (status.pairedDevices.isEmpty) _EmptyText(l10n.noPairedDevicesYet),
         for (final PairedDevice device in status.pairedDevices)
           ListTile(
             leading: const Icon(Icons.verified_user_outlined),
             title: Text(device.deviceName),
-            subtitle: Text('Paired ${formatPairedDate(device.pairedAt)}\n'
-                '${switch (device.capabilities) {
-              final DeviceCapabilities capabilities =>
-                describeCapabilities(capabilities),
-              null =>
-                describeDisconnectedDevice(hasRelay: status.network.hasRelay),
-            }}'),
+            subtitle: Text(l10n.paired(
+                formatPairedDate(device.pairedAt),
+                switch (device.capabilities) {
+                  final DeviceCapabilities capabilities =>
+                    describeCapabilities(capabilities),
+                  null => describeDisconnectedDevice(
+                      hasRelay: status.network.hasRelay),
+                })),
             trailing: IconButton(
-              tooltip: 'Remove ${device.deviceName}',
+              tooltip: l10n.remove3(device.deviceName),
               icon: const Icon(Icons.delete_outline),
               onPressed: () => _confirmRemoval(context, device),
             ),
           ),
-        const _SectionTitle('Nearby devices'),
+        _SectionTitle(l10n.nearbyDevices),
         if (status.nearbyPeerIds.isEmpty)
           _EmptyText(describeEmptyNearby(hasRelay: status.network.hasRelay)),
         for (final String peerId in status.nearbyPeerIds)
@@ -197,13 +197,11 @@ final class _DevicesList extends StatelessWidget {
                 : null,
             trailing: FilledButton.tonal(
               onPressed: () => controller.startPairing(peerId),
-              child: const Text('Pair'),
+              child: Text(l10n.pair),
             ),
           ),
-        const _SectionTitle('Another network'),
-        const _EmptyText(
-            'Show an invite here and use it on the other device. You still compare a code '
-            'before they pair.'),
+        _SectionTitle(l10n.anotherNetwork),
+        _EmptyText(l10n.showAnInviteHereAndUse),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Wrap(
@@ -213,12 +211,12 @@ final class _DevicesList extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: () => showInviteDialog(context, controller),
                 icon: const Icon(Icons.qr_code_2),
-                label: const Text('Show invite'),
+                label: Text(l10n.showInvite),
               ),
               OutlinedButton.icon(
                 onPressed: () => showJoinInviteDialog(context, controller),
                 icon: const Icon(Icons.link),
-                label: const Text('Use invite'),
+                label: Text(l10n.useInvite),
               ),
             ],
           ),
@@ -233,17 +231,16 @@ final class _DevicesList extends StatelessWidget {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext dialogContext) => AlertDialog(
-        title: Text('Remove ${device.deviceName}?'),
-        content: Text(
-            '${device.deviceName} stops syncing with this device. Pair again to resume.'),
+        title: Text(l10n.remove(device.deviceName)),
+        content: Text(l10n.stopsSyncingWithThisDevicePair(device.deviceName)),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Remove'),
+            child: Text(l10n.remove2),
           ),
         ],
       ),
@@ -280,7 +277,7 @@ final class _CodeCard extends StatelessWidget {
           children: <Widget>[
             Text(title, style: textTheme.titleMedium),
             Semantics(
-              label: 'Pairing code ${code.split('').join(' ')}',
+              label: l10n.pairingCode(code.split('').join(' ')),
               excludeSemantics: true,
               child: Text(
                 formatPairingCode(code),
@@ -339,18 +336,15 @@ final class _EmptyText extends StatelessWidget {
 /// Explains an empty Nearby list: it only covers this network, and what to do otherwise.
 ///
 /// Inputs: Whether a relay is set. Outputs: The message. Side effects: None.
-String describeEmptyNearby({required bool hasRelay}) => hasRelay
-    ? 'No other devices found on this network. Nearby only finds devices on the same Wi-Fi. '
-        'For a device on another network, use an invite.'
-    : 'No other devices found on this network. Nearby only finds devices on the same Wi-Fi. '
-        'For a device on another network, use an invite or set a relay in Settings.';
+String describeEmptyNearby({required bool hasRelay}) =>
+    hasRelay ? l10n.noOtherDevicesFoundOnThis : l10n.noOtherDevicesFoundOnThis2;
 
 /// Explains what a paired device that is not connected needs to reconnect.
 ///
 /// Inputs: Whether a relay is set. Outputs: The message. Side effects: None.
 String describeDisconnectedDevice({required bool hasRelay}) => hasRelay
-    ? 'Not connected. It reconnects when it is online and can reach your relay.'
-    : 'Not connected. Put both devices on the same Wi-Fi, or set a relay in Settings.';
+    ? l10n.notConnectedItReconnectsWhenIt
+    : l10n.notConnectedPutBothDevicesOn;
 
 /// Splits a six-digit code into two groups of three, such as `639 210`, for reading aloud.
 ///
@@ -368,40 +362,35 @@ String shortPeerId(String peerId) => peerId.length <= 16
     : '${peerId.substring(0, 7)}…${peerId.substring(peerId.length - 6)}';
 
 /// Display names of known transcription model labels; others are shown as given.
-const Map<String, String> _modelNames = <String, String>{
-  'whisper': 'Whisper (on device)',
-  'openai': 'OpenAI (cloud)',
-};
+Map<String, String> get _modelNames => <String, String>{
+      'whisper': l10n.whisperOnDevice,
+      'openai': l10n.openaiCloud,
+    };
 
 /// Summarizes a device's manifest as `8 CPU cores · 4 GB GPU · Whisper (on device)`.
 ///
 /// Inputs: The advertised capabilities. Outputs: One line of text. Side effects: None.
 String describeCapabilities(DeviceCapabilities capabilities) {
   final List<String> parts = <String>[
-    '${capabilities.cpuCores} CPU ${capabilities.cpuCores == 1 ? 'core' : 'cores'}',
+    l10n.cpuCores(capabilities.cpuCores),
   ];
   final int gpuMegabytes = capabilities.gpuVramMegabytes;
   if (gpuMegabytes > 0) {
     parts.add(gpuMegabytes >= 1024
-        ? '${(gpuMegabytes / 1024).round()} GB GPU'
-        : '$gpuMegabytes MB GPU');
+        ? l10n.gbGpu((gpuMegabytes / 1024).round())
+        : l10n.mbGpu(gpuMegabytes));
   }
   parts.add(capabilities.transcriptionModels.isEmpty
-      ? 'No transcription models'
+      ? l10n.noTranscriptionModels
       : capabilities.transcriptionModels
           .map((String model) => _modelNames[model] ?? model)
           .join(', '));
   return parts.join(' · ');
 }
 
-/// Formats a pairing date in local time as `28 Oct 2026`.
+/// Formats a pairing date in local time, as `28 Oct 2026` in English.
 ///
-/// Inputs: The UTC pairing time. Outputs: The day, month name, and year. Side effects: None.
-String formatPairedDate(DateTime pairedAt) {
-  const List<String> monthNames = <String>[
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-  ];
-  final DateTime local = pairedAt.toLocal();
-  return '${local.day} ${monthNames[local.month - 1]} ${local.year}';
-}
+/// Inputs: The UTC pairing time. Outputs: The day, abbreviated month and year in the app's
+/// language (#124). Side effects: None.
+String formatPairedDate(DateTime pairedAt) =>
+    formatDatePattern(pairedAt.toLocal(), 'd MMM y');

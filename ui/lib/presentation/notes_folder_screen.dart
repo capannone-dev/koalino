@@ -4,6 +4,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Finds the folder field in tests.
 const Key notesFolderPathFieldKey = ValueKey<String>('notes-folder-path');
@@ -13,7 +14,7 @@ typedef FolderPicker = Future<String?> Function();
 
 /// Opens the system's folder dialog.
 Future<String?> pickFolderWithDialog() =>
-    FilePicker.platform.getDirectoryPath(dialogTitle: 'Notes folder');
+    FilePicker.platform.getDirectoryPath(dialogTitle: l10n.notesFolder);
 
 /// Shows and changes the notes folder.
 final class NotesFolderScreen extends StatefulWidget {
@@ -96,25 +97,18 @@ final class _NotesFolderScreenState extends State<NotesFolderScreen> {
     final NotesFolderStatus? status = _status;
     final bool enabled = status?.enabled ?? false;
     return Scaffold(
-      appBar: AppBar(title: const Text('Notes folder')),
+      appBar: AppBar(title: Text(l10n.notesFolder)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: <Widget>[
-          const Text(
-              'Keep your projects and meetings as plain files in a folder, to read and '
-              'edit them with any editor. Edits to notes.md, summary.md and project files '
-              'come back into the app within half a minute, and files you drop into a '
-              'project folder or a meeting\'s attachments folder are added. '
-              'transcript.md is rewritten by the app: correct the transcript in the app.'),
+          Text(l10n.keepYourProjectsAndMeetingsAs),
           const SizedBox(height: 12),
           Card(
             color: theme.colorScheme.errorContainer,
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Text(
-                'The folder is a decrypted copy of your notes. Anyone who can read it can '
-                'read them, and backup or sync tools will copy it. Keep it on an encrypted '
-                'disk, inside your own user folder.',
+                l10n.theFolderIsADecryptedCopy,
                 style: TextStyle(color: theme.colorScheme.onErrorContainer),
               ),
             ),
@@ -125,10 +119,10 @@ final class _NotesFolderScreenState extends State<NotesFolderScreen> {
             controller: _path,
             enabled: !_busy,
             decoration: InputDecoration(
-              labelText: 'Folder',
+              labelText: l10n.folder,
               border: const OutlineInputBorder(),
               suffixIcon: IconButton(
-                tooltip: 'Choose a folder',
+                tooltip: l10n.chooseAFolder,
                 icon: const Icon(Icons.folder_open_outlined),
                 onPressed: _busy ? null : _choose,
               ),
@@ -136,7 +130,7 @@ final class _NotesFolderScreenState extends State<NotesFolderScreen> {
           ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Keep the notes folder'),
+            title: Text(l10n.keepTheNotesFolder),
             value: enabled,
             onChanged: _busy || status == null ? null : _turn,
           ),
@@ -145,7 +139,7 @@ final class _NotesFolderScreenState extends State<NotesFolderScreen> {
               alignment: Alignment.centerLeft,
               child: OutlinedButton.icon(
                 icon: const Icon(Icons.sync),
-                label: const Text('Sync now'),
+                label: Text(l10n.syncNow),
                 onPressed: _busy ? null : () => _run(widget.bridge.syncNow),
               ),
             ),
@@ -163,11 +157,10 @@ final class _NotesFolderScreenState extends State<NotesFolderScreen> {
                 liveRegion: true,
                 child: Text(
                   switch (status?.lastError) {
-                    final String code =>
-                      'Last sync at ${_clock(at)} failed: ${notesFolderErrorMessage(code)}',
-                    null =>
-                      'Last sync at ${_clock(at)}: ${status?.written ?? 0} files written, '
-                          '${status?.imported ?? 0} edits and files taken in.',
+                    final String code => l10n.lastSyncAtFailed(
+                        _clock(at), notesFolderErrorMessage(code)),
+                    null => l10n.lastSyncAtFilesWrittenEdits(_clock(at),
+                        status?.written ?? 0, status?.imported ?? 0),
                   },
                   style: theme.textTheme.bodySmall,
                 ),

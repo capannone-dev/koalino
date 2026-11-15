@@ -6,6 +6,7 @@ import 'dart:math' as math;
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Preferred width of the name field, in logical pixels.
 const double _preferredFieldWidth = 400;
@@ -112,7 +113,7 @@ final class _RenameDeviceDialogState extends State<RenameDeviceDialog> {
     return PopScope(
       canPop: !_isSaving,
       child: AlertDialog(
-        title: const Text('Rename this device'),
+        title: Text(l10n.renameThisDevice),
         content: SizedBox(
           width: fieldWidth,
           child: Column(
@@ -128,7 +129,7 @@ final class _RenameDeviceDialogState extends State<RenameDeviceDialog> {
                 onChanged: (_) => setState(() => _refusal = null),
                 onSubmitted: (_) => _save(),
                 decoration: InputDecoration(
-                  labelText: 'Name',
+                  labelText: l10n.name,
                   border: const OutlineInputBorder(),
                   errorText: _refusal,
                   errorMaxLines: 3,
@@ -139,8 +140,7 @@ final class _RenameDeviceDialogState extends State<RenameDeviceDialog> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Nearby devices see this name while this device is discoverable. Devices '
-                'already paired keep the name they learned.',
+                l10n.nearbyDevicesSeeThisNameWhile,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],
@@ -149,7 +149,7 @@ final class _RenameDeviceDialogState extends State<RenameDeviceDialog> {
         actions: <Widget>[
           TextButton(
             onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
+            child: Text(l10n.cancel),
           ),
           FilledButton(
             onPressed: _isSaving ? null : _save,
@@ -158,7 +158,7 @@ final class _RenameDeviceDialogState extends State<RenameDeviceDialog> {
                     dimension: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Save'),
+                : Text(l10n.save),
           ),
         ],
       ),

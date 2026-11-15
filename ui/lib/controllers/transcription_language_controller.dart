@@ -5,6 +5,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
 import 'package:note_taker_ui/infrastructure/language_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// One option in the selectors.
 typedef LanguageChoice = ({String code, String label});
@@ -25,15 +26,16 @@ String? describeTranscriptionLanguages(List<String> codes) {
   final List<String> names = <String>[
     for (final String code in codes)
       code == autoLanguageCode
-          ? 'Automatic'
+          ? l10n.automatic
           : transcriptionLanguageChoices
                   .where((LanguageChoice choice) => choice.code == code)
                   .firstOrNull
                   ?.label ??
               code,
   ];
-  final String heading =
-      codes.length == 1 ? 'Transcription language' : 'Transcription languages';
+  final String heading = codes.length == 1
+      ? l10n.transcriptionLanguage
+      : l10n.transcriptionLanguages;
   return '$heading: ${names.join(', ')}';
 }
 
@@ -222,7 +224,7 @@ final class TranscriptionLanguageController extends ChangeNotifier {
     if (await change()) {
       apply();
     } else {
-      _message = 'The language could not be changed.';
+      _message = l10n.theLanguageCouldNotBeChanged;
     }
     _isSaving = false;
     _notify();

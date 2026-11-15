@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Supplies a composition-root configured controller to Riverpod consumers.
 final voiceGalleryControllerProvider = ChangeNotifierProvider.autoDispose
@@ -102,7 +103,7 @@ final class VoiceGalleryController extends ChangeNotifier {
           (UnknownSpeakerCluster cluster) => cluster.clusterId == clusterId));
       _savedPeople = library.savedPeople;
     } on Object {
-      _errorMessage = 'Unable to load Voice Gallery';
+      _errorMessage = l10n.unableToLoadVoiceGallery;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -133,7 +134,7 @@ final class VoiceGalleryController extends ChangeNotifier {
       await _voiceGalleryBridge.playLocalFile(clipPath);
     } on Object {
       _playingClusterId = null;
-      _statusMessage = 'Unable to play this voice';
+      _statusMessage = l10n.unableToPlayThisVoice;
       notifyListeners();
     }
   }
@@ -176,11 +177,11 @@ final class VoiceGalleryController extends ChangeNotifier {
       }
       await _voiceGalleryBridge.deleteUnknownVoice(cluster.clusterId);
     } on Object {
-      _statusMessage = 'Unable to delete this voice';
+      _statusMessage = l10n.unableToDeleteThisVoice;
       notifyListeners();
       return;
     }
-    _statusMessage = 'Voice deleted';
+    _statusMessage = l10n.voiceDeleted;
     await load();
   }
 
@@ -199,11 +200,11 @@ final class VoiceGalleryController extends ChangeNotifier {
         await _voiceGalleryBridge.deleteUnknownVoice(voice.clusterId);
       }
     } on Object {
-      _statusMessage = 'Unable to delete this voice';
+      _statusMessage = l10n.unableToDeleteThisVoice;
       await load();
       return;
     }
-    _statusMessage = 'Voice deleted';
+    _statusMessage = l10n.voiceDeleted;
     await load();
   }
 
@@ -215,11 +216,11 @@ final class VoiceGalleryController extends ChangeNotifier {
     try {
       await _voiceGalleryBridge.deleteSavedPerson(person.identityId);
     } on Object {
-      _statusMessage = 'Unable to delete this person';
+      _statusMessage = l10n.unableToDeleteThisPerson;
       notifyListeners();
       return;
     }
-    _statusMessage = '${person.displayName} deleted';
+    _statusMessage = l10n.deleted(person.displayName);
     await load();
   }
 
@@ -231,7 +232,7 @@ final class VoiceGalleryController extends ChangeNotifier {
       UnknownSpeakerCluster cluster, String identityName) async {
     final String trimmedName = identityName.trim();
     if (trimmedName.isEmpty) {
-      _statusMessage = 'Enter a name before assigning';
+      _statusMessage = l10n.enterANameBeforeAssigning;
       notifyListeners();
       return;
     }
@@ -242,11 +243,10 @@ final class VoiceGalleryController extends ChangeNotifier {
         identityName: trimmedName,
       );
       _statusMessage = result.variantsStored > 0
-          ? 'Assigned to ${result.identityName}'
-          : 'Assigned to ${result.identityName}. There was not enough clear '
-              'speech to recognize this voice in future recordings.';
+          ? l10n.assignedTo(result.identityName)
+          : l10n.assignedToThereWasNotEnough(result.identityName);
     } on Object {
-      _statusMessage = 'Unable to assign the speaker cluster';
+      _statusMessage = l10n.unableToAssignTheSpeakerCluster;
       notifyListeners();
       return;
     }
@@ -263,7 +263,7 @@ final class VoiceGalleryController extends ChangeNotifier {
     }
     final String trimmedName = identityName.trim();
     if (trimmedName.isEmpty) {
-      _statusMessage = 'Enter a name before assigning';
+      _statusMessage = l10n.enterANameBeforeAssigning;
       notifyListeners();
       return;
     }
@@ -272,7 +272,7 @@ final class VoiceGalleryController extends ChangeNotifier {
         if (isIncluded(voice)) voice.clusterId,
     ];
     if (clusterIds.isEmpty) {
-      _statusMessage = 'Choose at least one voice to name';
+      _statusMessage = l10n.chooseAtLeastOneVoiceTo;
       notifyListeners();
       return;
     }
@@ -283,15 +283,12 @@ final class VoiceGalleryController extends ChangeNotifier {
         identityName: trimmedName,
       );
       final int named = result.assignedClusterIds.length;
-      final String assigned = named == 1
-          ? 'Assigned to ${result.identityName}'
-          : 'Assigned $named voices to ${result.identityName}';
+      final String assigned = l10n.assignedVoicesTo(named, result.identityName);
       _statusMessage = result.variantsStored > 0
           ? assigned
-          : '$assigned. There was not enough clear speech to recognize this '
-              'voice in future recordings.';
+          : l10n.thereWasNotEnoughClearSpeech(assigned);
     } on Object {
-      _statusMessage = 'Unable to assign the speaker cluster';
+      _statusMessage = l10n.unableToAssignTheSpeakerCluster;
       notifyListeners();
       return;
     }

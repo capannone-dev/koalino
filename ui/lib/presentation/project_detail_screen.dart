@@ -17,6 +17,7 @@ import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
 import 'package:note_taker_ui/presentation/chat_screen.dart';
 import 'package:note_taker_ui/presentation/search_screen.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Shows and changes one project.
 final class ProjectDetailScreen extends StatelessWidget {
@@ -57,7 +58,7 @@ final class ProjectDetailScreen extends StatelessWidget {
         bridge: bridge,
         scope: SearchScope.project,
         projectId: projectId,
-        title: 'Search $name',
+        title: l10n.search(name),
         onOpen: (BuildContext context, SearchHit hit) => openProjectSearchHit(
           context,
           hit,
@@ -88,7 +89,7 @@ final class ProjectDetailScreen extends StatelessWidget {
     }
     final bool saved = await controller.addNote(projectId, note.$1, note.$2);
     if (context.mounted) {
-      _tell(context, saved ? 'Note saved' : 'The note could not be saved.');
+      _tell(context, saved ? l10n.noteSaved : l10n.theNoteCouldNotBeSaved);
     }
   }
 
@@ -109,30 +110,29 @@ final class ProjectDetailScreen extends StatelessWidget {
       _tell(
           context,
           failed == 0
-              ? 'Added ${chosen.length} ${chosen.length == 1 ? 'meeting' : 'meetings'}'
-              : '$failed could not be added.');
+              ? l10n.addedMeetings(chosen.length)
+              : l10n.couldNotBeAdded2(failed));
     }
   }
 
   Future<void> _rename(BuildContext context, ProjectSummary project) async {
     final String? name = await askProjectName(context,
-        title: 'Rename project',
-        confirmLabel: 'Rename',
+        title: l10n.renameProject,
+        confirmLabel: l10n.rename,
         initialName: project.name);
     if (name == null || name == project.name) {
       return;
     }
     if (!await controller.renameProject(projectId, name) && context.mounted) {
-      _tell(context, 'The project could not be renamed.');
+      _tell(context, l10n.theProjectCouldNotBeRenamed);
     }
   }
 
   Future<void> _delete(BuildContext context, ProjectSummary project) async {
     final bool confirmed = await confirmDelete(
       context,
-      title: 'Delete "${project.name}"?',
-      message: 'Its files, notes and e-mails are deleted on every paired '
-          'device. Its meetings are kept, outside any project.',
+      title: l10n.delete3(project.name),
+      message: l10n.itsFilesNotesAndEMails,
     );
     if (!confirmed || !context.mounted) {
       return;
@@ -142,7 +142,7 @@ final class ProjectDetailScreen extends StatelessWidget {
         Navigator.of(context).pop();
       }
     } else if (context.mounted) {
-      _tell(context, 'The project could not be deleted.');
+      _tell(context, l10n.theProjectCouldNotBeDeleted);
     }
   }
 
@@ -150,13 +150,13 @@ final class ProjectDetailScreen extends StatelessWidget {
       BuildContext context, ProjectResource resource) async {
     final bool confirmed = await confirmDelete(
       context,
-      title: 'Delete "${resource.fileName}"?',
-      message: 'It is deleted on every paired device.',
+      title: l10n.delete3(resource.fileName),
+      message: l10n.itIsDeletedOnEveryPaired,
     );
     if (confirmed &&
         !await controller.deleteResource(projectId, resource.attachmentId) &&
         context.mounted) {
-      _tell(context, 'The file could not be deleted.');
+      _tell(context, l10n.theFileCouldNotBeDeleted);
     }
   }
 
@@ -164,7 +164,7 @@ final class ProjectDetailScreen extends StatelessWidget {
       BuildContext context, MeetingSummary meeting) async {
     if (!await controller.moveMeeting(meeting.meetingId, null) &&
         context.mounted) {
-      _tell(context, 'The meeting could not be removed from the project.');
+      _tell(context, l10n.theMeetingCouldNotBeRemoved);
     }
   }
 
@@ -179,7 +179,7 @@ final class ProjectDetailScreen extends StatelessWidget {
         final ProjectSummary? project = detail?.project;
         return Scaffold(
           appBar: AppBar(
-            title: Text(project?.name ?? 'Project'),
+            title: Text(project?.name ?? l10n.project),
             actions: <Widget>[
               if ((searchBridge, project)
                   case (
@@ -187,19 +187,19 @@ final class ProjectDetailScreen extends StatelessWidget {
                     final ProjectSummary project
                   ))
                 IconButton(
-                  tooltip: 'Search this project',
+                  tooltip: l10n.searchThisProject,
                   icon: const Icon(Icons.search),
                   onPressed: () => _search(context, bridge, project.name),
                 ),
               if ((chatBridge, project)
                   case (final ChatBridge bridge, final ProjectSummary project))
                 IconButton(
-                  tooltip: 'Chat about this project',
+                  tooltip: l10n.chatAboutThisProject,
                   icon: const Icon(Icons.chat_outlined),
                   onPressed: () => openChat(context,
                       bridge: bridge,
                       topic: ChatTopic.project(projectId),
-                      title: 'Chat: ${project.name}',
+                      title: l10n.chat(project.name),
                       openMeeting: switch (meetingMomentBuilder) {
                         final MeetingMomentBuilder builder =>
                           (BuildContext context, String meetingId, int? atMs) =>
@@ -214,7 +214,7 @@ final class ProjectDetailScreen extends StatelessWidget {
                 ),
               IconButton(
                 key: const ValueKey<String>('add-project-files'),
-                tooltip: 'Add files',
+                tooltip: l10n.addFiles,
                 icon: const Icon(Icons.attach_file),
                 onPressed: controller.isBusy || detail == null
                     ? null
@@ -222,7 +222,7 @@ final class ProjectDetailScreen extends StatelessWidget {
               ),
               IconButton(
                 key: const ValueKey<String>('add-project-note'),
-                tooltip: 'Write a note',
+                tooltip: l10n.writeANote,
                 icon: const Icon(Icons.note_add_outlined),
                 onPressed: controller.isBusy || detail == null
                     ? null
@@ -230,7 +230,7 @@ final class ProjectDetailScreen extends StatelessWidget {
               ),
               IconButton(
                 key: const ValueKey<String>('add-project-meetings'),
-                tooltip: 'Add meetings',
+                tooltip: l10n.addMeetings,
                 icon: const Icon(Icons.playlist_add),
                 onPressed: detail == null ? null : () => _addMeetings(context),
               ),
@@ -242,11 +242,11 @@ final class ProjectDetailScreen extends StatelessWidget {
                     _ => _delete(context, project),
                   },
                   itemBuilder: (BuildContext context) =>
-                      const <PopupMenuEntry<String>>[
+                      <PopupMenuEntry<String>>[
                     PopupMenuItem<String>(
-                        value: 'rename', child: Text('Rename')),
+                        value: 'rename', child: Text(l10n.rename)),
                     PopupMenuItem<String>(
-                        value: 'delete', child: Text('Delete project')),
+                        value: 'delete', child: Text(l10n.deleteProject)),
                   ],
                 ),
             ],
@@ -282,7 +282,7 @@ final class _ProjectBody extends StatelessWidget {
         controller: summaries, meeting: meeting);
     return Semantics(
       customSemanticsActions: <CustomSemanticsAction, VoidCallback>{
-        const CustomSemanticsAction(label: 'Summary'): open,
+        CustomSemanticsAction(label: l10n.summary): open,
       },
       child: GestureDetector(
         onLongPress: open,
@@ -307,11 +307,11 @@ final class _ProjectBody extends StatelessWidget {
       onRefresh: screen.controller.refresh,
       child: ListView(
         children: <Widget>[
-          header('Meetings'),
+          header(l10n.meetings),
           if (detail.meetings.isEmpty)
-            const ListTile(
-              title: Text('No meetings yet'),
-              subtitle: Text('Add them here, or from a meeting\'s page.'),
+            ListTile(
+              title: Text(l10n.noMeetingsYet),
+              subtitle: Text(l10n.addThemHereOrFromA),
             ),
           for (final MeetingSummary meeting in detail.meetings)
             _withSummaryMenu(
@@ -345,7 +345,7 @@ final class _ProjectBody extends StatelessWidget {
                         title: meeting.title,
                       ),
                     IconButton(
-                      tooltip: 'Remove from project',
+                      tooltip: l10n.removeFromProject,
                       icon: const Icon(Icons.remove_circle_outline),
                       onPressed: () => screen._removeMeeting(context, meeting),
                     ),
@@ -353,12 +353,11 @@ final class _ProjectBody extends StatelessWidget {
                 ),
               ),
             ),
-          header('Files, notes and e-mails'),
+          header(l10n.filesNotesAndEMails),
           if (detail.resources.isEmpty)
-            const ListTile(
-              title: Text('Nothing added yet'),
-              subtitle: Text(
-                  'Add pictures, Markdown, PDFs, e-mails (.eml) or documents.'),
+            ListTile(
+              title: Text(l10n.nothingAddedYet),
+              subtitle: Text(l10n.addPicturesMarkdownPdfsEMails),
             ),
           for (final ProjectResource resource in detail.resources)
             ListTile(
@@ -369,7 +368,7 @@ final class _ProjectBody extends StatelessWidget {
               subtitle: Text(resource.isAvailable
                   ? '${localizations.formatMediumDate(resource.addedAt.toLocal())}'
                       ' · ${_size(resource.sizeBytes ?? 0)}'
-                  : 'On its way from a paired device'),
+                  : l10n.onItsWayFromAPaired),
               onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                 builder: (BuildContext context) => ResourceViewerScreen(
                   controller: screen.controller,
@@ -379,7 +378,7 @@ final class _ProjectBody extends StatelessWidget {
                 ),
               )),
               trailing: IconButton(
-                tooltip: 'Delete',
+                tooltip: l10n.delete,
                 icon: const Icon(Icons.delete_outline),
                 onPressed: () => screen._deleteResource(context, resource),
               ),

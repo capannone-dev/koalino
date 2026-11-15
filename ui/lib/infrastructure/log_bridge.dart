@@ -9,22 +9,29 @@ import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// The levels Settings offers, from least to most detail.
 enum LogLevel {
-  error('error', 'Error'),
-  warn('warn', 'Warning'),
-  info('info', 'Info (default)'),
-  debug('debug', 'Debug'),
-  trace('trace', 'Trace');
+  error('error'),
+  warn('warn'),
+  info('info'),
+  debug('debug'),
+  trace('trace');
 
-  const LogLevel(this.directive, this.label);
+  const LogLevel(this.directive);
 
   /// The `tracing` directive the core stores.
   final String directive;
 
-  /// The name shown in Settings.
-  final String label;
+  /// The name shown in Settings, in the app's language (#124).
+  String get label => switch (this) {
+        LogLevel.error => l10n.error,
+        LogLevel.warn => l10n.warning,
+        LogLevel.info => l10n.infoDefault,
+        LogLevel.debug => l10n.debug,
+        LogLevel.trace => l10n.trace,
+      };
 
   /// Maps a stored directive to its level.
   ///

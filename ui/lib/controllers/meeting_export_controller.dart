@@ -9,6 +9,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/export_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Owns export state for the meeting screens.
 final class MeetingExportController extends ChangeNotifier {
@@ -101,7 +102,7 @@ final class MeetingExportController extends ChangeNotifier {
           return null;
       }
     } on Object {
-      return 'Unable to share the export';
+      return l10n.unableToShareTheExport;
     } finally {
       _isExporting = false;
       notifyListeners();
@@ -149,7 +150,7 @@ final class MeetingExportController extends ChangeNotifier {
     final MeetingExportResult result = await _exportBridge
         .exportMeeting(meetingId, format, outputPath: outputPath);
     return switch (result) {
-      MeetingExportSuccess(:final String filePath) => 'Exported to $filePath',
+      MeetingExportSuccess(:final String filePath) => l10n.exportedTo(filePath),
       final MeetingExportFailure failure => _failureMessage(failure),
     };
   }
@@ -168,9 +169,9 @@ final class MeetingExportController extends ChangeNotifier {
         try {
           final Uint8List bytes = await exportedFile.readAsBytes();
           final bool saved = await _exportSaver.saveBytes(suggestedName, bytes);
-          return saved ? 'Export saved' : null;
+          return saved ? l10n.exportSaved : null;
         } on Object {
-          return 'Unable to save the export';
+          return l10n.unableToSaveTheExport;
         } finally {
           if (await exportedFile.exists()) {
             await exportedFile.delete();
@@ -208,10 +209,9 @@ Future<void> emptyShareFolder(Directory folder) async {
 /// Words a failure without exposing paths or internal messages.
 String _failureMessage(MeetingExportFailure failure) =>
     switch (failure.errorCode) {
-      'meeting_not_found' => 'This meeting no longer exists',
-      'runtime_unavailable' =>
-        'Export is unavailable until the app has started',
-      _ => 'Unable to export the meeting',
+      'meeting_not_found' => l10n.thisMeetingNoLongerExists,
+      'runtime_unavailable' => l10n.exportIsUnavailableUntilTheApp,
+      _ => l10n.unableToExportTheMeeting,
     };
 
 /// Suggests the export's file name from the meeting title.

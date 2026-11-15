@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
+import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// How long `make_pairable` keeps this device open to pairing requests; matches Rust's window.
 const Duration pairingWindow = Duration(minutes: 5);
@@ -52,7 +53,7 @@ final class DevicesController extends ChangeNotifier {
       status = latest;
       errorMessage = null;
     } on Object {
-      errorMessage = 'Unable to load devices';
+      errorMessage = l10n.unableToLoadDevices;
     }
     _notify();
   }
@@ -118,10 +119,10 @@ final class DevicesController extends ChangeNotifier {
       return invite;
     } on P2pException catch (error) {
       errorMessage = error.errorCode == 'no_addresses'
-          ? 'This device is not on a network yet. Connect it and try again.'
-          : 'That did not work. Try again.';
+          ? l10n.thisDeviceIsNotOnA
+          : l10n.thatDidNotWorkTryAgain;
     } on Object {
-      errorMessage = 'That did not work. Try again.';
+      errorMessage = l10n.thatDidNotWorkTryAgain;
     }
     _notify();
     return null;
@@ -138,7 +139,7 @@ final class DevicesController extends ChangeNotifier {
     } on P2pException catch (error) {
       return _inviteRefusal(error.errorCode);
     } on Object {
-      return 'That did not work. Try again.';
+      return l10n.thatDidNotWorkTryAgain;
     }
     await refresh();
     return null;
@@ -158,13 +159,13 @@ final class DevicesController extends ChangeNotifier {
     } on P2pException catch (error) {
       return _inviteRefusal(error.errorCode);
     } on Object {
-      return 'That did not work. Try again.';
+      return l10n.thatDidNotWorkTryAgain;
     }
     if (await _run('start_pairing', peerId: peerId)) {
       await refresh();
       return null;
     }
-    return errorMessage ?? 'That did not work. Try again.';
+    return errorMessage ?? l10n.thatDidNotWorkTryAgain;
   }
 
   /// Renames this device (#121); nearby devices see the new name at once.
@@ -178,12 +179,12 @@ final class DevicesController extends ChangeNotifier {
       await _bridge.setDeviceName(name);
     } on P2pException catch (error) {
       return switch (error.errorCode) {
-        'invalid_device_name' => 'Use 1 to 64 characters, without line breaks.',
-        'storage_failed' => 'The name could not be saved. Try again.',
-        _ => 'That did not work. Try again.',
+        'invalid_device_name' => l10n.use1To64CharactersWithout,
+        'storage_failed' => l10n.theNameCouldNotBeSaved,
+        _ => l10n.thatDidNotWorkTryAgain,
       };
     } on Object {
-      return 'That did not work. Try again.';
+      return l10n.thatDidNotWorkTryAgain;
     }
     await refresh();
     return null;
@@ -191,14 +192,12 @@ final class DevicesController extends ChangeNotifier {
 
   /// Words an invite's refusal for the owner.
   String _inviteRefusal(String errorCode) => switch (errorCode) {
-        'invite_expired' =>
-          'This invite has expired. Make a new one on the other device.',
-        'invite_from_this_device' =>
-          'This invite was made on this device. Use it on the other one.',
-        'already_paired' => 'That device is already paired.',
-        'invite_malformed' => 'That is not a valid invite. Copy it again.',
-        'unavailable' => 'Device sync is not running.',
-        _ => 'That did not work. Try again.',
+        'invite_expired' => l10n.thisInviteHasExpiredMakeA,
+        'invite_from_this_device' => l10n.thisInviteWasMadeOnThis,
+        'already_paired' => l10n.thatDeviceIsAlreadyPaired,
+        'invite_malformed' => l10n.thatIsNotAValidInvite,
+        'unavailable' => l10n.deviceSyncIsNotRunning,
+        _ => l10n.thatDidNotWorkTryAgain,
       };
 
   /// Runs a peer command and refreshes when it succeeds.
@@ -219,12 +218,12 @@ final class DevicesController extends ChangeNotifier {
       return true;
     } on P2pException catch (error) {
       errorMessage = switch (error.errorCode) {
-        'refused' => 'The other device is no longer pairing. Try again.',
-        'unavailable' => 'Device sync is not running.',
-        _ => 'That did not work. Try again.',
+        'refused' => l10n.theOtherDeviceIsNoLonger,
+        'unavailable' => l10n.deviceSyncIsNotRunning,
+        _ => l10n.thatDidNotWorkTryAgain,
       };
     } on Object {
-      errorMessage = 'That did not work. Try again.';
+      errorMessage = l10n.thatDidNotWorkTryAgain;
     }
     _notify();
     return false;
