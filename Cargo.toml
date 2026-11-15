@@ -84,6 +84,14 @@ protobuf = "=3.7.2"
 # printpdf already uses, made direct to check glyph coverage and measure text widths.
 printpdf = { version = "0.7.0", features = ["embedded_images", "font_subsetting"] }
 owned_ttf_parser = "=0.19.0"
+# Reads the text of attached PDFs for summaries, chat and search (#128). The same version printpdf
+# already pulls in, made direct.
+lopdf = "=0.31.0"
+# Reads attached Word, PowerPoint, Excel and LibreOffice documents (#128): they are zip archives
+# of XML. MIT; deflate only (its zopfli encoder is Apache-2.0), no encryption or other codecs.
+# `xml-rs` (already in the tree) parses their XML.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+xml-rs = "0.8.29"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
 serde = { version = "1.0.228", features = ["derive"] }

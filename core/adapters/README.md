@@ -24,6 +24,9 @@ collect the status of a process the core started (`ECHILD`). `reaped_elsewhere` 
 case. The microphone-user probe (#111) and the Claude Code / Codex runner (#105) then keep the
 output they read and treat the status as unknown, instead of reporting a failure.
 
+`documents/` reads the text of attached files (PDF, Word, PowerPoint, Excel, LibreOffice, e-mails,
+text) for summaries, chat, hand-offs and search (#128). See `documents/README.md`.
+
 `email/` implements the `EmailReader` port with the pure-Rust `mail-parser` crate, for e-mails kept in projects
 (#85). See `email/README.md`.
 

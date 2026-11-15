@@ -8,6 +8,8 @@ pub mod ai;
 pub mod audio;
 /// Waits for child processes that the Flutter engine may reap first.
 pub mod child_process;
+/// Reads the text of attached documents for summaries, chat and search (#128).
+pub mod documents;
 /// Reads imported e-mails with `mail-parser` behind the e-mail port (Issue #85).
 pub mod email;
 /// Implements portable meeting export renderers behind the export port.

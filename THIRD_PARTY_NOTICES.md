@@ -92,6 +92,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | anstyle-wincon | 3.0.11 | MIT OR Apache-2.0 |
 | anyhow | 1.0.104 | MIT OR Apache-2.0 |
 | apple-native-keyring-store | 1.0.2 | MIT OR Apache-2.0 |
+| arbitrary | 1.5.0 | MIT OR Apache-2.0 |
 | argon2 | 0.5.3 | MIT OR Apache-2.0 |
 | arrayref | 0.3.9 | BSD-2-Clause |
 | asn1-rs | 0.7.2 | MIT OR Apache-2.0 |
@@ -176,6 +177,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | crc32fast | 1.5.3 | MIT OR Apache-2.0 |
 | critical-section | 1.2.0 | MIT OR Apache-2.0 |
 | crossbeam-channel | 0.5.17 | MIT OR Apache-2.0 |
+| crossbeam-deque | 0.8.8 | MIT OR Apache-2.0 |
 | crossbeam-epoch | 0.9.21 | MIT OR Apache-2.0 |
 | crossbeam-utils | 0.8.23 | MIT OR Apache-2.0 |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 |
@@ -192,6 +194,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | der | 0.8.3 | Apache-2.0 OR MIT |
 | der-parser | 10.0.0 | MIT OR Apache-2.0 |
 | deranged | 0.5.9 | MIT OR Apache-2.0 |
+| derive_arbitrary | 1.5.0 | MIT OR Apache-2.0 |
 | digest | 0.10.7 | MIT OR Apache-2.0 |
 | digest | 0.11.3 | MIT OR Apache-2.0 |
 | dispatch2 | 0.3.1 | Zlib OR Apache-2.0 OR MIT |
@@ -469,6 +472,8 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | rand_pcg | 0.10.2 | MIT OR Apache-2.0 |
 | rand_xoshiro | 0.6.0 | MIT OR Apache-2.0 |
 | rawpointer | 0.2.1 | MIT/Apache-2.0 |
+| rayon | 1.12.0 | MIT OR Apache-2.0 |
+| rayon-core | 1.13.0 | MIT OR Apache-2.0 |
 | rcgen | 0.13.2 | MIT OR Apache-2.0 |
 | redox_syscall | 0.5.18 | MIT |
 | regex | 1.13.1 | MIT OR Apache-2.0 |
@@ -668,8 +673,10 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | zerotrie | 0.2.5 | Unicode-3.0 |
 | zerovec | 0.11.9 | Unicode-3.0 |
 | zerovec-derive | 0.11.7 | Unicode-3.0 |
+| zip | 2.6.1 | MIT |
 | zlib-rs | 0.6.8 | Zlib |
 | zmij | 1.0.23 | MIT |
+| zopfli | 0.8.4 | Apache-2.0 |
 | zvariant | 5.15.1 | MIT |
 | zvariant_derive | 5.15.1 | MIT |
 | zvariant_utils | 4.2.0 | MIT |
