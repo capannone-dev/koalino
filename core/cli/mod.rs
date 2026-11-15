@@ -511,6 +511,13 @@ pub enum DevicesCommand {
         /// The device's peer ID, or its name when no other paired device shares it.
         device: String,
     },
+    /// Names this device as nearby and newly paired devices see it (#121), instead of the host
+    /// name. A running daemon or app on this database uses it from its next start.
+    Rename {
+        /// The new name, up to 64 characters.
+        #[arg(required = true)]
+        name: Vec<String>,
+    },
 }
 
 /// Defines glossary actions.
@@ -663,6 +670,10 @@ pub trait CliService {
     fn list_paired_devices(&self) -> Result<Vec<PairedDeviceRow>, String>;
     /// Removes the paired device whose peer ID, or unique name, is `device`, and describes it.
     fn revoke_device(&mut self, device: &str) -> Result<String, String>;
+    /// Saves the name this device gives nearby and newly paired devices (#121).
+    fn rename_device(&mut self, _name: &str) -> Result<String, String> {
+        Err(String::from("renaming is not available here"))
+    }
     /// Loads the saved glossary's terms, in order.
     fn glossary(&self) -> Result<Vec<String>, String>;
     /// Saves the glossary's terms, already validated; an empty list clears it.
@@ -830,6 +841,9 @@ pub fn dispatch(command: CliCommand, cli_service: &mut impl CliService) -> Resul
         CliCommand::Devices(DevicesArgs {
             command: DevicesCommand::Revoke { device },
         }) => cli_service.revoke_device(&device),
+        CliCommand::Devices(DevicesArgs {
+            command: DevicesCommand::Rename { name },
+        }) => cli_service.rename_device(&name.join(" ")),
         CliCommand::Glossary(GlossaryArgs { command }) => edit_glossary(command, cli_service),
         CliCommand::KeepSpeech { days } => keep_speech(days, cli_service),
         CliCommand::MeetingVoices { choice } => meeting_voices(choice, cli_service),
@@ -2273,6 +2287,23 @@ where
         let settings_file = self.settings_file()?;
         crate::transcription_settings::save_keep_meeting_voices(settings_file, keep)
             .map_err(|error| format!("the choice could not be saved: {error}"))
+    }
+    fn rename_device(&mut self, name: &str) -> Result<String, String> {
+        let database_path = self
+            .settings_file()?
+            .to_str()
+            .and_then(|path| path.strip_suffix(".transcription-settings.json"))
+            .map(std::path::PathBuf::from)
+            .ok_or_else(|| String::from("renaming is not available here"))?;
+        crate::device_name_settings::save_device_name(&database_path, name)
+            .map(|saved| {
+                format!(
+                    "This device is now \"{}\". A running daemon or app on this database uses \
+                     the name from its next start.",
+                    saved.as_str()
+                )
+            })
+            .map_err(|error| error.to_string())
     }
     fn revoke_device(&mut self, device: &str) -> Result<String, String> {
         let trusted_peer_store = self.trusted_peer_store()?;

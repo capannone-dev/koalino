@@ -167,6 +167,9 @@ impl request_response::Codec for SyncPayloadCodec {
 use crate::domain::network_addresses::RelayState;
 use crate::{
     adapters::network::{
+        device_name_behaviour::{
+            DeviceNameAnswer, DeviceNameCodec, DeviceNameQuestion, new_device_name_behaviour,
+        },
         file_transfer_behaviour::{
             self, FileTransferFrame, FileTransferRequestPayload, FileTransferResponsePayload,
         },
@@ -200,6 +203,8 @@ struct NoteTakerBehaviour {
     file_transfers: request_response::Behaviour<file_transfer_behaviour::FileTransferCodec>,
     /// Carries the pairing exchange, the only protocol an unpaired peer may use.
     pairing: request_response::Behaviour<PairingCodec>,
+    /// Asks a nearby device its name, and answers that question (#121).
+    device_names: request_response::Behaviour<DeviceNameCodec>,
     /// Forwards encrypted circuits between paired devices, on the node chosen as relay.
     relay_server: Toggle<relay::Behaviour>,
     /// Holds a reservation on the owner's relay and opens circuits through it.
@@ -221,6 +226,8 @@ enum NoteTakerBehaviourEvent {
     FileTransfer(request_response::Event<FileTransferRequestPayload, FileTransferResponsePayload>),
     /// Carries a pairing request, answer, or failure.
     Pairing(request_response::Event<PairingRequest, PairingResponse>),
+    /// Carries a device-name question or answer (#121).
+    DeviceName(request_response::Event<DeviceNameQuestion, DeviceNameAnswer>),
     /// Carries what the relay service did for a client.
     RelayServer(Box<relay::Event>),
     /// Carries the state of this node's reservation and circuits.
@@ -256,6 +263,15 @@ impl From<identify::Event> for NoteTakerBehaviourEvent {
     /// Wraps an Identify event.
     fn from(_identify_event: identify::Event) -> Self {
         Self::Identify
+    }
+}
+
+impl From<request_response::Event<DeviceNameQuestion, DeviceNameAnswer>>
+    for NoteTakerBehaviourEvent
+{
+    /// Wraps a device-name event.
+    fn from(event: request_response::Event<DeviceNameQuestion, DeviceNameAnswer>) -> Self {
+        Self::DeviceName(event)
     }
 }
 
@@ -374,6 +390,13 @@ pub struct Libp2pNetworkAdapter {
     pending_file_transfer_events: VecDeque<FileTransferEvent>,
     /// Unpaired peers advertising themselves on the LAN, offered as pairing candidates.
     nearby_unpaired_peer_ids: HashSet<DeviceId>,
+    /// The names nearby unpaired peers gave when asked (#121).
+    nearby_peer_names: HashMap<DeviceId, DeviceName>,
+    /// When each nearby peer was last asked its name, so it is asked at most every
+    /// `NAME_PROBE_INTERVAL`.
+    name_probed_at: HashMap<DeviceId, std::time::Instant>,
+    /// The name this device gives when asked; `None` answers nothing.
+    local_device_name: Option<DeviceName>,
     /// Pairing requests awaiting the owner's answer, by requesting peer.
     pending_pairing_answers: HashMap<PeerId, request_response::ResponseChannel<PairingResponse>>,
     /// Pairing events not yet taken by the application.
@@ -396,6 +419,9 @@ struct RelayRoute {
     /// The relay accepted the reservation, so peers can reach this device through it.
     reservation_active: bool,
 }
+
+/// Least time between two name questions to the same nearby device (#121).
+const NAME_PROBE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// How long a connection with nothing keeping it open survives; libp2p's own default.
 #[cfg(test)]
@@ -471,6 +497,7 @@ impl Libp2pNetworkAdapter {
                     sync_payloads: Self::sync_payload_behaviour(),
                     file_transfers: file_transfer_behaviour::new_file_transfer_behaviour(),
                     pairing: new_pairing_behaviour(),
+                    device_names: new_device_name_behaviour(),
                     relay_server: Toggle::from(relay_server.then(|| {
                         relay::Behaviour::new(
                             local_peer_id,
@@ -506,6 +533,9 @@ impl Libp2pNetworkAdapter {
             pending_network_events: VecDeque::new(),
             pending_file_transfer_events: VecDeque::new(),
             nearby_unpaired_peer_ids: HashSet::new(),
+            nearby_peer_names: HashMap::new(),
+            name_probed_at: HashMap::new(),
+            local_device_name: None,
             pending_pairing_answers: HashMap::new(),
             pending_pairing_events: VecDeque::new(),
             relay: None,
@@ -639,6 +669,101 @@ impl Libp2pNetworkAdapter {
     /// Side effects: Updates the nearby list; mDNS or a static address may list the peer again.
     pub fn forget_nearby_peer(&mut self, peer_device_id: &DeviceId) {
         self.nearby_unpaired_peer_ids.remove(peer_device_id);
+        self.nearby_peer_names.remove(peer_device_id);
+        self.name_probed_at.remove(peer_device_id);
+        if let Ok(peer_id) = Self::peer_id_from_device_id(peer_device_id) {
+            self.swarm
+                .behaviour_mut()
+                .peer_gate
+                .forget_name_probe(&peer_id);
+        }
+    }
+
+    /// Asks each nearby unpaired device whose name is unknown for it (#121), each at most every
+    /// `NAME_PROBE_INTERVAL`. The P2P task calls it periodically.
+    ///
+    /// Side effects: Allows and dials a connection to each such peer; the peer admits it only
+    /// while its pairing window is open, and then answers with its name. Nothing is synced.
+    pub fn probe_nearby_names(&mut self) {
+        let now = std::time::Instant::now();
+        let due: Vec<DeviceId> = self
+            .nearby_unpaired_peer_ids
+            .iter()
+            .filter(|peer| !self.nearby_peer_names.contains_key(*peer))
+            .filter(|peer| {
+                self.name_probed_at
+                    .get(*peer)
+                    .is_none_or(|asked_at| now.duration_since(*asked_at) >= NAME_PROBE_INTERVAL)
+            })
+            .cloned()
+            .collect();
+        for peer_device_id in due {
+            let Ok(peer_id) = Self::peer_id_from_device_id(&peer_device_id) else {
+                continue;
+            };
+            self.name_probed_at.insert(peer_device_id, now);
+            self.swarm
+                .behaviour_mut()
+                .peer_gate
+                .allow_name_probe(peer_id);
+            self.swarm
+                .behaviour_mut()
+                .device_names
+                .send_request(&peer_id, DeviceNameQuestion::default());
+        }
+    }
+
+    /// The name a nearby unpaired device gave, if it answered.
+    pub fn nearby_peer_name(&self, peer_device_id: &DeviceId) -> Option<DeviceName> {
+        self.nearby_peer_names.get(peer_device_id).cloned()
+    }
+
+    /// Sets the name this device answers with.
+    pub fn set_local_name(&mut self, local_name: &DeviceName) {
+        self.local_device_name = Some(local_name.clone());
+    }
+
+    /// Answers name questions and keeps the names nearby devices give (#121).
+    ///
+    /// Side effects: Sends this device's name to a peer the gate admitted; records a valid name
+    /// from a peer still listed as nearby. Invalid names and failures are dropped.
+    fn translate_device_name_event(
+        &mut self,
+        event: request_response::Event<DeviceNameQuestion, DeviceNameAnswer>,
+    ) {
+        match event {
+            request_response::Event::Message {
+                message: request_response::Message::Request { channel, .. },
+                ..
+            } => {
+                if let Some(local_name) = &self.local_device_name {
+                    let answer = DeviceNameAnswer::new(local_name.as_str());
+                    if self
+                        .swarm
+                        .behaviour_mut()
+                        .device_names
+                        .send_response(channel, answer)
+                        .is_err()
+                    {
+                        tracing::debug!("a device-name answer could not be sent");
+                    }
+                }
+            }
+            request_response::Event::Message {
+                peer,
+                message: request_response::Message::Response { response, .. },
+                ..
+            } => {
+                let peer_device_id = Self::device_id_from_peer_id(peer);
+                if !self.nearby_unpaired_peer_ids.contains(&peer_device_id) {
+                    return;
+                }
+                if let Ok(name) = DeviceName::parse(&response.device_name) {
+                    self.nearby_peer_names.insert(peer_device_id, name);
+                }
+            }
+            _ => {}
+        }
     }
 
     /// Lists addresses another device could use to reach this one, for an invite.
@@ -1025,6 +1150,9 @@ impl Libp2pNetworkAdapter {
                 NoteTakerBehaviourEvent::Pairing(pairing_event) => {
                     self.translate_pairing_event(pairing_event);
                 }
+                NoteTakerBehaviourEvent::DeviceName(device_name_event) => {
+                    self.translate_device_name_event(device_name_event);
+                }
                 NoteTakerBehaviourEvent::RelayServer(relay_event) => {
                     self.translate_relay_server_event(*relay_event);
                 }
@@ -1297,8 +1425,7 @@ impl Libp2pNetworkAdapter {
     /// Side effects: Removes it from the nearby unpaired peers. Reachability of paired peers
     /// follows their connections instead, so an open connection outlives a stale announcement.
     fn record_expired_peer(&mut self, peer_id: PeerId) {
-        self.nearby_unpaired_peer_ids
-            .remove(&Self::device_id_from_peer_id(peer_id));
+        self.forget_nearby_peer(&Self::device_id_from_peer_id(peer_id));
     }
 
     /// Converts a libp2p peer identity into the opaque device identifier used by the port.
@@ -1376,6 +1503,7 @@ impl Libp2pNetworkAdapter {
                 sync_payloads: Self::sync_payload_behaviour(),
                 file_transfers: file_transfer_behaviour::new_file_transfer_behaviour(),
                 pairing: new_pairing_behaviour(),
+                device_names: new_device_name_behaviour(),
                 relay_server: Toggle::from(None),
                 relay_client: Toggle::from(None),
                 hole_punching: Toggle::from(None),
@@ -1598,6 +1726,14 @@ impl PairingTransport for Libp2pNetworkAdapter {
         Libp2pNetworkAdapter::nearby_unpaired_peers(self)
     }
 
+    fn nearby_peer_name(&self, peer_id: &DeviceId) -> Option<DeviceName> {
+        Libp2pNetworkAdapter::nearby_peer_name(self, peer_id)
+    }
+
+    fn set_local_name(&mut self, local_name: &DeviceName) {
+        Libp2pNetworkAdapter::set_local_name(self, local_name);
+    }
+
     /// Allows the dial and sends the request; libp2p dials using addresses mDNS provided.
     fn request_pairing(
         &mut self,
@@ -1680,7 +1816,11 @@ mod tests {
     use crate::{
         adapters::storage::sqlite_peer_store::SqlitePeerStore,
         application::crypto::voice_encryptor::ephemeral_cipher,
-        domain::{errors::StorageError, models::FileChunk, peer_trust::DeviceName},
+        domain::{
+            errors::StorageError,
+            models::{DeviceId, FileChunk},
+            peer_trust::DeviceName,
+        },
         ports::{
             file_transfer::{FileTransferEvent, FileTransferNetwork},
             network::{NetworkEvent, P2pNetwork},
@@ -1738,6 +1878,67 @@ mod tests {
             .listen_on_memory(address.clone())
             .unwrap_or_else(|error| panic!("adapter must listen: {error}"));
         (first, second, address)
+    }
+
+    /// Lists `other` as a nearby unpaired device of `adapter` at `address`, as mDNS would.
+    fn list_as_nearby(adapter: &mut Libp2pNetworkAdapter, other: &DeviceId, address: &Multiaddr) {
+        let peer_id = Libp2pNetworkAdapter::peer_id_from_device_id(other)
+            .unwrap_or_else(|error| panic!("peer ID must parse: {error}"));
+        adapter.swarm.add_peer_address(peer_id, address.clone());
+        adapter.record_discovered_peer(peer_id);
+    }
+
+    /// A nearby device with its pairing window open tells its name before pairing (#121).
+    #[tokio::test]
+    async fn a_nearby_device_open_to_pairing_tells_its_name() {
+        let (mut asker, mut laptop, address) = listening_pair("/memory/9341");
+        let laptop_id = laptop.local_device_id();
+        laptop.set_local_name(&device_name("Laptop"));
+        laptop.open_pairing_window(Duration::from_secs(60));
+        list_as_nearby(&mut asker, &laptop_id, &address);
+        assert_eq!(asker.nearby_peer_name(&laptop_id), None);
+
+        asker.probe_nearby_names();
+        let named = drive_until(
+            &mut asker,
+            &mut laptop,
+            Duration::from_secs(5),
+            |asker, _| asker.nearby_peer_name(&laptop_id).is_some(),
+        )
+        .await;
+
+        assert!(named, "the name must arrive");
+        assert_eq!(
+            asker.nearby_peer_name(&laptop_id),
+            Some(device_name("Laptop"))
+        );
+        assert!(
+            !laptop.swarm.behaviour().peer_gate.is_trusted(
+                &Libp2pNetworkAdapter::peer_id_from_device_id(&asker.local_device_id())
+                    .unwrap_or_else(|error| panic!("{error}"))
+            ),
+            "asking grants no trust"
+        );
+    }
+
+    /// A device that is not open to pairing refuses the question, so its name stays unknown.
+    #[tokio::test]
+    async fn a_device_not_open_to_pairing_keeps_its_name() {
+        let (mut asker, mut laptop, address) = listening_pair("/memory/9342");
+        let laptop_id = laptop.local_device_id();
+        laptop.set_local_name(&device_name("Laptop"));
+        list_as_nearby(&mut asker, &laptop_id, &address);
+
+        asker.probe_nearby_names();
+        let named = drive_until(
+            &mut asker,
+            &mut laptop,
+            Duration::from_secs(2),
+            |asker, _| asker.nearby_peer_name(&laptop_id).is_some(),
+        )
+        .await;
+
+        assert!(!named);
     }
 
     /// Without pairing, a dial to an unknown node is refused: no connection, no payload.

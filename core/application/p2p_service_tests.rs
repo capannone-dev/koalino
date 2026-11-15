@@ -297,6 +297,24 @@ async fn status_names_the_device_and_unknown_pairings_are_refused() {
     assert!(refused.is_err());
 }
 
+/// Renaming changes the name the status shows at once (#121).
+#[tokio::test]
+async fn renaming_changes_the_announced_name() {
+    let adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut laptop = service("Laptop", adapter);
+    let new_name = crate::domain::peer_trust::DeviceName::parse("Studio laptop")
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(
+        run(&mut laptop, P2pCommand::Rename(new_name)),
+        P2pCommandOutcome::Done
+    );
+
+    assert_eq!(laptop.status().device_name.as_str(), "Studio laptop");
+    assert!(laptop.status().nearby_device_names.is_empty());
+}
+
 /// The phone accepts first and syncs its meeting at once, while the laptop, which has not
 /// confirmed yet, still drops those messages. Once the laptop confirms, the phone's retry
 /// delivers the meeting.

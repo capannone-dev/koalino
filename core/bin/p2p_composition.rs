@@ -538,9 +538,13 @@ pub fn spawn_p2p_task(
     database_path: &Path,
     device_id: DeviceId,
     embedding_cipher: Arc<dyn EmbeddingCipher>,
-    config: P2pConfig,
+    mut config: P2pConfig,
     hosted_pipeline: Option<PipelineConfig>,
 ) -> Result<P2pHandle> {
+    // The name the owner chose wins over the host name and the app's default (#121).
+    if let Some(saved_name) = crate::device_name_settings::load_saved_device_name(database_path) {
+        config.device_name = saved_name;
+    }
     let (startup_sender, startup_receiver) = std::sync::mpsc::sync_channel(1);
     let (command_sender, command_receiver) = mpsc::channel(COMMAND_QUEUE_CAPACITY);
     let (network_sender, network_receiver) = mpsc::channel(COMMAND_QUEUE_CAPACITY);
@@ -783,7 +787,11 @@ async fn run_service(
                 service.poll_trust_changes();
                 settle_invites(service, network_routes);
             }
-            _ = paired_peer_redial.tick() => service.transport_mut().redial_paired_peers(),
+            _ = paired_peer_redial.tick() => {
+                service.transport_mut().redial_paired_peers();
+                // Nearby devices open to pairing say their name (#121).
+                service.transport_mut().probe_nearby_names();
+            }
             swarm_result = service.transport_mut().drive_next_swarm_event() => {
                 if let Err(error) = swarm_result {
                     tracing::error!(error = %error, "the P2P swarm stopped");

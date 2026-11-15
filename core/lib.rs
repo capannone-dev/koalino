@@ -34,6 +34,12 @@ pub mod cli_recording;
 /// Resolves the acquisition device ID shared by the CLI, daemon, and FFI composition roots.
 #[path = "bin/device_identity.rs"]
 pub mod device_identity;
+/// Keeps the name the owner gave this device, shown to nearby and paired devices (#121).
+#[path = "bin/device_name_settings.rs"]
+pub mod device_name_settings;
+#[cfg(test)]
+#[path = "bin/device_name_settings_tests.rs"]
+mod device_name_settings_tests;
 /// Reads free disk space and total memory.
 #[path = "bin/device_resources.rs"]
 pub mod device_resources;

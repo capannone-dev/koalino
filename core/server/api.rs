@@ -247,6 +247,16 @@ impl ServerAppState {
         self.settings_file.as_deref().cloned()
     }
 
+    /// The database the attached settings file belongs to, for other files kept beside it, such
+    /// as the device name (#121); `None` without a settings file.
+    pub(super) fn database_path(&self) -> Option<std::path::PathBuf> {
+        let settings_file = self.settings_file.as_deref()?;
+        settings_file
+            .to_str()?
+            .strip_suffix(".transcription-settings.json")
+            .map(std::path::PathBuf::from)
+    }
+
     /// Attaches the process's log control, which the Settings routes use.
     ///
     /// Side effects: None; without it those routes answer 503.

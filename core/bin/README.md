@@ -147,7 +147,12 @@ HTTP runtime.
   - `note_taker_p2p_status` returns the `GET /api/p2p/status` JSON.
   - `note_taker_p2p_command` takes one JSON command and answers `{"ok":...}`. The commands are
     `make_pairable`, `start_pairing`, `confirm_code`, `cancel_pairing`, `accept_request`,
-    `reject_request` and `revoke`; `ffi_p2p.rs` has the table.
+    `reject_request`, `revoke`, and (#121) `set_device_name`; `ffi_p2p.rs` has the table.
+- **Device name (#121):** `device_name_settings.rs` saves the owner's name for this device in
+  `<db>.device-name` (atomically, through a temporary file). `spawn_p2p_task` lets a saved name
+  override `NOTE_TAKER_DEVICE_NAME`, and `set_device_name` (FFI), `PUT /api/p2p/device-name` and
+  `cli devices rename` save it and send `P2pCommand::Rename` to a running task. The 10-second
+  tick also calls `probe_nearby_names`, so nearby devices open to pairing show their names.
   - A command waits for the task without holding the runtime lock.
 
 ## Projects (`project_commands.rs`, Issue #85)

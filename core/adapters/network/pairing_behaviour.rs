@@ -18,7 +18,7 @@ const MAX_PAIRING_MESSAGE_BYTES: usize = 4 * 1024;
 pub const PAIRING_RESPONSE_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Wire-format version of both messages.
-const PAIRING_MESSAGE_VERSION: u32 = 1;
+pub(super) const PAIRING_MESSAGE_VERSION: u32 = 1;
 
 /// Names the pairing protocol.
 #[derive(Clone)]
@@ -78,7 +78,7 @@ impl PairingCodec {
     ///
     /// Outputs: The message, or `InvalidData` for an oversized frame, malformed JSON, or another
     /// version. Side effects: Consumes bytes from the stream.
-    async fn read_message<Message, Stream>(stream: &mut Stream) -> io::Result<Message>
+    pub(super) async fn read_message<Message, Stream>(stream: &mut Stream) -> io::Result<Message>
     where
         Message: for<'de> Deserialize<'de> + HasVersion,
         Stream: AsyncRead + Unpin + Send,
@@ -103,7 +103,7 @@ impl PairingCodec {
     ///
     /// Outputs: Success, or `InvalidInput` for a message over the size limit.
     /// Side effects: Writes to the stream.
-    async fn write_message<Message, Stream>(
+    pub(super) async fn write_message<Message, Stream>(
         stream: &mut Stream,
         message: &Message,
     ) -> io::Result<()>
@@ -129,7 +129,7 @@ impl PairingCodec {
 }
 
 /// Exposes a message's wire-format version for validation.
-trait HasVersion {
+pub(super) trait HasVersion {
     /// The message's declared version.
     fn version(&self) -> u32;
 }

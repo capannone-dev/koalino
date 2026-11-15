@@ -181,6 +181,10 @@ impl CliService for MockCliService {
         self.revoked_devices.push(device.to_owned());
         Ok(String::from("device removed"))
     }
+    fn rename_device(&mut self, name: &str) -> Result<String, String> {
+        self.revoked_devices.push(format!("rename {name}"));
+        Ok(String::from("renamed"))
+    }
     fn glossary(&self) -> Result<Vec<String>, String> {
         Ok(self.glossary.clone())
     }
@@ -1326,6 +1330,19 @@ fn devices_revoke_is_dispatched_with_its_selector() {
     assert_eq!(output, Ok(String::from("device removed")));
     assert_eq!(cli_service.revoked_devices, ["Phone"]);
     assert!(Cli::try_parse_from(["note-taker", "devices", "revoke"]).is_err());
+}
+
+/// Verifies `devices rename <name>` is dispatched, with words joined (#121).
+#[test]
+fn devices_rename_is_dispatched_with_the_name() {
+    let parsed_cli = Cli::try_parse_from(["note-taker", "devices", "rename", "Studio", "laptop"])
+        .unwrap_or_else(|error| panic!("devices rename must parse: {error}"));
+    let mut cli_service = MockCliService::default();
+
+    let output = dispatch(parsed_cli.command, &mut cli_service);
+
+    assert_eq!(output, Ok(String::from("renamed")));
+    assert_eq!(cli_service.revoked_devices, ["rename Studio laptop"]);
 }
 
 /// Builds a core service whose allowlist holds the given `(peer ID, name, paired at ms)` peers.

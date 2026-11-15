@@ -787,6 +787,7 @@ fn laptop_status() -> crate::application::p2p_service::P2pStatus {
             TrustedPeer::new(DeviceId::new("peer-tablet"), name("Tablet"), 2),
         ],
         nearby_devices: Vec::new(),
+        nearby_device_names: Vec::new(),
         incoming_requests: Vec::new(),
         outgoing_pairings: Vec::new(),
         recent_updates: Vec::new(),

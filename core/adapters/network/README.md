@@ -61,6 +61,15 @@ length-prefixed frames. The initiator sends `PairingRequest { device_name }`. Th
 `PairingResponse { accepted_as: Some(name) | None }` once its owner has compared the codes. The
 request timeout is two minutes, to leave time for that.
 
+`device_name_behaviour.rs` defines `/note-taker/device-name/1` (Issue #121), framed like the
+pairing protocol. A `DeviceNameQuestion` gets a `DeviceNameAnswer { device_name }`, with a
+10-second timeout. Every `NAME_PROBE_INTERVAL` (30 s) the adapter asks each nearby, unpaired device
+it has no name for; `peer_gate.rs` admits outbound dials to those probe targets. The other device
+answers only over connections its own gate admits, so only while its pairing window is open. A
+name that fails `DeviceName::parse` is dropped. `nearby_peer_name` reads the learned name;
+forgetting or expiring a nearby peer drops it. `set_local_name` changes the name this device
+answers with and puts in its pairing requests.
+
 The adapter implements `PairingTransport` as follows:
 
 - An incoming request with a valid name becomes `PairingEvent::Requested`, and its response

@@ -3440,3 +3440,21 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   that meeting (Marta here, one of the two Ponte voices).
 - **Not measured:** the live per-turn cutoffs (0.80 automatic, 0.50 suggestion) in
   `voice_identity_manager.rs`.
+
+## 2026-11-15 — #121 Nearby devices show their names, and the owner names this device
+
+- **Problem:** Nearby devices were listed by a peer ID until pairing began, so two phones looked
+  alike, and a device's name came from the host name ("Android device" on a phone) with no way to
+  change it.
+- **Decision:** a new request-response protocol, `/note-taker/device-name/1`, asks a nearby,
+  unpaired device for its name at most every 30 seconds. A new protocol, not a field on the
+  pairing request, keeps older versions from taking the question for a pairing request. The
+  owner's name is saved per device in `<db>.device-name` and overrides `NOTE_TAKER_DEVICE_NAME`.
+  It can be set from the Devices screen (Flutter and web), `PUT /api/p2p/device-name`, and
+  `cli devices rename`. A running task takes the new name at once.
+- **Privacy:** a device answers only over connections its peer gate admits, so a stranger on
+  the same Wi-Fi learns the name only while the owner keeps the pairing window open, the same
+  exposure the pairing request already had. The name is a claim: pairing still needs the code.
+- **Not done:** devices paired before a rename keep the name they learned while pairing. Telling
+  paired devices about a rename would need a change to the trust store; it waits until someone
+  asks for it.

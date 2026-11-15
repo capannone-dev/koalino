@@ -72,7 +72,8 @@ pub(crate) fn services() -> Arc<LlmServices> {
             app_setting("NOTE_TAKER_DEVICE_NAME").unwrap_or_else(|| String::from("this device"));
         Arc::new(
             LlmServices::new(llm_settings_file_for(&database), &device_name)
-                .with_transcription_settings(paths.settings_file),
+                .with_transcription_settings(paths.settings_file)
+                .with_saved_device_name(&database),
         )
     }))
 }

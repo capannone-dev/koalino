@@ -42,6 +42,16 @@ The initial public contracts are Rust traits, not a network protocol:
   `invite_expired`, `invite_from_this_device`, `already_paired`, or `no_addresses` (HTTP `400`,
   `{"error_code"}`). The text is `note-taker-invite:1;<peer id>;<expires at ms>;<address>,<address>`,
   has no secret in it, and grants no trust: pairing still needs the numeric code.
+- **Device names (Issue #121).** Each entry of `nearby_devices` may carry `device_name`, the name
+  that device told over `/note-taker/device-name/1`. A device answers only over connections its
+  peer gate admits, so only while its pairing window is open; until then the entry has
+  `"device_name":null`. The name is a claim, as in a pairing request: pairing still needs the code.
+  `PUT /api/p2p/device-name` (body `{"name"}`) and the FFI command `set_device_name` (`name`) save
+  this device's name in `<db>.device-name` and announce it at once. They answer
+  `{"device_name"}` (the trimmed name), or refuse with HTTP `400` / `invalid_device_name` (blank,
+  over 64 characters, or a control character), `503` / `unavailable` (no database), or
+  `storage_failed`. The saved name overrides `NOTE_TAKER_DEVICE_NAME`. The CLI has
+  `devices rename <name>`. Devices paired before keep the name they learned while pairing.
 - `PUT /api/p2p/transcription-route` (body `{"route": ...}`) and the FFI command
   `set_transcription_route` choose where chunks are transcribed: `local`, `auto`, or a paired
   device's peer ID. `transcription_route` in the P2P status shows the choice.

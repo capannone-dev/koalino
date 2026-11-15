@@ -161,6 +161,9 @@ pub enum P2pCommand {
     LocalChange(MeetingId),
     /// Chooses where this device's chunks are transcribed.
     SetTranscriptionRoute(ComputePreference),
+    /// Renames this device for later pairings and nearby devices that ask (#121); the caller
+    /// saves the name.
+    Rename(DeviceName),
 }
 
 /// The result of one `P2pCommand`.
@@ -324,6 +327,9 @@ pub struct P2pStatus {
     pub trusted_devices: Vec<TrustedPeer>,
     /// Unpaired devices visible on the local network.
     pub nearby_devices: Vec<DeviceId>,
+    /// The names nearby devices gave when asked (#121), only for those that answered; a name is
+    /// the other device's claim.
+    pub nearby_device_names: Vec<(DeviceId, DeviceName)>,
     /// Requests awaiting the owner's answer.
     pub incoming_requests: Vec<IncomingPairingRequest>,
     /// Pairings this device started that have not finished.
@@ -2056,6 +2062,10 @@ where
         command: P2pCommand,
     ) -> Result<P2pCommandOutcome, P2pServiceError> {
         match command {
+            P2pCommand::Rename(device_name) => {
+                self.pairing_manager.rename(device_name);
+                Ok(P2pCommandOutcome::Done)
+            }
             P2pCommand::MakePairable => {
                 self.pairing_manager.make_pairable(PAIRING_WINDOW);
                 Ok(P2pCommandOutcome::Done)
@@ -2119,6 +2129,16 @@ where
             transcription_route: self.transcription_route.clone(),
             trusted_devices: self.trusted_devices.clone(),
             nearby_devices: self.pairing_manager.nearby_devices(),
+            nearby_device_names: self
+                .pairing_manager
+                .nearby_devices()
+                .into_iter()
+                .filter_map(|peer_id| {
+                    self.pairing_manager
+                        .nearby_device_name(&peer_id)
+                        .map(|name| (peer_id, name))
+                })
+                .collect(),
             incoming_requests: self.pairing_manager.incoming_requests(),
             outgoing_pairings: self.pairing_manager.outgoing_pairings(),
             recent_updates: self.recent_updates.iter().cloned().collect(),

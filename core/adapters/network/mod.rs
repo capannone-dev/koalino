@@ -3,6 +3,8 @@
 /// The browser extension's native messaging host: JSON from the browser to the Teams bridge
 /// (Issue #102).
 pub mod browser_host;
+/// Asks a nearby device for its name before pairing (Issue #121).
+pub mod device_name_behaviour;
 /// Defines the attachment-only request-response protocol and its framing codec.
 pub mod file_transfer_behaviour;
 /// Configures a Noise-encrypted, Yamux-multiplexed libp2p swarm with mDNS discovery.

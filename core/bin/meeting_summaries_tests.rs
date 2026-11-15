@@ -240,6 +240,7 @@ fn computer_paired_with_the_recording_phone() -> crate::application::p2p_service
                 .with_storage_device_id(Some(DeviceId::new("in-memory-test-device"))),
         ],
         nearby_devices: Vec::new(),
+        nearby_device_names: Vec::new(),
         incoming_requests: Vec::new(),
         outgoing_pairings: Vec::new(),
         recent_updates: Vec::new(),

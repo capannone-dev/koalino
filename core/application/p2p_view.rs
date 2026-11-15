@@ -111,6 +111,9 @@ impl From<&DeviceManifest> for CapabilitiesView {
 #[derive(Serialize)]
 pub struct NearbyDeviceView {
     pub peer_id: String,
+    /// The name the device gave when asked (#121); `None` until it answers, which it does only
+    /// while its pairing window is open.
+    pub device_name: Option<String>,
 }
 
 /// A request awaiting the owner's answer.
@@ -231,6 +234,11 @@ pub fn status_view(snapshot: Option<&P2pSnapshot>) -> P2pStatusView {
                 .iter()
                 .map(|peer_id| NearbyDeviceView {
                     peer_id: peer_id.as_str().to_owned(),
+                    device_name: status
+                        .nearby_device_names
+                        .iter()
+                        .find(|(named, _)| named == peer_id)
+                        .map(|(_, name)| name.as_str().to_owned()),
                 })
                 .collect(),
             incoming_requests: status

@@ -28,6 +28,8 @@ const LOCAL_PEER: &str = "peer-local";
 #[derive(Default)]
 struct ScriptedTransport {
     calls: Vec<String>,
+    /// The name nearby devices that ask are given.
+    answered_name: Option<String>,
     events: VecDeque<PairingEvent>,
     trusted: Vec<DeviceId>,
 }
@@ -45,6 +47,12 @@ impl PairingTransport for ScriptedTransport {
     }
     fn nearby_unpaired_peers(&self) -> Vec<DeviceId> {
         vec![DeviceId::new("peer-nearby")]
+    }
+    fn nearby_peer_name(&self, peer_id: &DeviceId) -> Option<DeviceName> {
+        (peer_id.as_str() == "peer-nearby").then(|| name("Studio desktop"))
+    }
+    fn set_local_name(&mut self, local_name: &DeviceName) {
+        self.answered_name = Some(local_name.as_str().to_owned());
     }
     fn request_pairing(
         &mut self,
@@ -542,4 +550,40 @@ fn a_device_being_paired_is_not_listed_as_nearby() {
         .cancel(&nearby)
         .unwrap_or_else(|error| panic!("request must be declined: {error}"));
     assert_eq!(pairing.nearby_devices(), vec![nearby]);
+}
+
+/// The transport answers nearby devices with this device's name, also after a rename (#121).
+#[test]
+fn the_transport_knows_the_name_and_a_rename_applies_at_once() {
+    let mut pairing = manager();
+    assert_eq!(pairing.transport().answered_name.as_deref(), Some("Laptop"));
+
+    pairing.rename(name("Ettore's laptop"));
+
+    assert_eq!(pairing.local_name(), &name("Ettore's laptop"));
+    assert_eq!(
+        pairing.transport().answered_name.as_deref(),
+        Some("Ettore's laptop")
+    );
+    pairing
+        .start_pairing(&DeviceId::new("peer-nearby"))
+        .unwrap_or_else(|error| panic!("pairing must start: {error}"));
+    assert!(
+        pairing
+            .transport()
+            .calls
+            .contains(&String::from("request peer-nearby as Ettore's laptop")),
+        "a pairing request announces the new name"
+    );
+}
+
+/// Nearby devices are listed with the names they gave (#121).
+#[test]
+fn nearby_devices_carry_the_names_they_gave() {
+    let pairing = manager();
+    assert_eq!(
+        pairing.nearby_device_name(&DeviceId::new("peer-nearby")),
+        Some(name("Studio desktop"))
+    );
+    assert_eq!(pairing.nearby_device_name(&DeviceId::new("other")), None);
 }

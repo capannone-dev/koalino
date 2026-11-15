@@ -173,6 +173,17 @@ pub trait PairingTransport {
     /// Lists unpaired devices currently visible on the local network.
     fn nearby_unpaired_peers(&self) -> Vec<DeviceId>;
 
+    /// The name a nearby unpaired device gave when asked (#121), or `None` while unknown: it
+    /// answers only while its pairing window is open. The name is a claim, never trust.
+    fn nearby_peer_name(&self, _peer_id: &DeviceId) -> Option<DeviceName> {
+        None
+    }
+
+    /// Sets the name this device gives nearby devices that ask (#121).
+    ///
+    /// Side effects: Later answers carry it.
+    fn set_local_name(&mut self, _local_name: &DeviceName) {}
+
     /// Asks `peer_id` to pair, announcing `local_name`.
     ///
     /// Outputs: Success once the request is queued; the outcome arrives as a `PairingEvent`.

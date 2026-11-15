@@ -61,15 +61,28 @@ pub struct LlmServices {
     settings_file: PathBuf,
     engines: EngineFactory,
     device_name: String,
+    /// The database whose saved device name (#121) wins over `device_name`, read each time so a
+    /// rename shows at once.
+    saved_name_database: Option<PathBuf>,
     transcription_settings: Option<PathBuf>,
     /// Serializes changes to the settings file within this process.
     writing: Mutex<()>,
 }
 
 impl LlmServices {
-    /// This device's name, as paired devices see it in labels ("Claude Code on Laptop").
-    pub fn device_name(&self) -> &str {
-        &self.device_name
+    /// This device's name, as paired devices see it in labels ("Claude Code on Laptop"): the
+    /// name the owner saved (#121), else the one given at start.
+    pub fn device_name(&self) -> String {
+        self.saved_name_database
+            .as_deref()
+            .and_then(super::device_name_settings::load_saved_device_name)
+            .map_or_else(|| self.device_name.clone(), |name| name.as_str().to_owned())
+    }
+
+    /// Prefers the device name saved beside `database_path` (#121). Side effects: None.
+    pub fn with_saved_device_name(mut self, database_path: &std::path::Path) -> Self {
+        self.saved_name_database = Some(database_path.to_path_buf());
+        self
     }
 
     /// Creates the services with the real model adapters.
@@ -81,6 +94,7 @@ impl LlmServices {
             settings_file,
             engines: Arc::new(engine_for),
             device_name: device_name.to_owned(),
+            saved_name_database: None,
             transcription_settings: None,
             writing: Mutex::new(()),
         }
@@ -111,6 +125,7 @@ impl LlmServices {
         .with_transcription_settings(super::transcription_settings::settings_file_for(
             database_path,
         ))
+        .with_saved_device_name(database_path)
     }
 
     /// Reads the glossary from the transcription settings file. Side effects: None.
@@ -486,7 +501,7 @@ pub fn handoff_with(
     ) -> Result<crate::meeting_summaries::WrittenHandoff, SummaryError>,
 ) -> Value {
     let template = services.settings().template();
-    match write(&services.glossary(), &services.device_name, &template) {
+    match write(&services.glossary(), &services.device_name(), &template) {
         Ok(written) => json!({
             "ok": true,
             "message": written.message,
@@ -543,7 +558,7 @@ pub fn summarize_for_paired_device(
         |summary: &MeetingSummary| {
             let mut labelled = summary.clone();
             labelled.connection_label =
-                format!("{} on {}", summary.connection_label, services.device_name);
+                format!("{} on {}", summary.connection_label, services.device_name());
             store(&labelled)
         },
     )
@@ -572,7 +587,7 @@ fn summarize_meeting_with(
             })?,
         };
         let engine = services.engine(connection)?;
-        let prepared = prepare(&services.glossary(), &services.device_name)?;
+        let prepared = prepare(&services.glossary(), &services.device_name())?;
         let outcome = run_summary(
             engine.as_ref(),
             connection,

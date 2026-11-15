@@ -135,13 +135,15 @@ where
     /// Creates a manager with no pairing in progress.
     ///
     /// Inputs: The transport, the allowlist, this device's name, and a millisecond clock.
-    /// Outputs: The manager. Side effects: None.
+    /// Outputs: The manager. Side effects: Tells the transport the name it answers nearby
+    /// devices with (#121).
     pub fn new(
-        transport: Transport,
+        mut transport: Transport,
         store: Store,
         local_name: DeviceName,
         clock: Box<dyn Fn() -> u64 + Send + Sync>,
     ) -> Self {
+        transport.set_local_name(&local_name);
         Self {
             transport,
             store,
@@ -240,6 +242,20 @@ where
     /// This device's announced name.
     pub fn local_name(&self) -> &DeviceName {
         &self.local_name
+    }
+
+    /// Renames this device (#121): later pairing requests and answers, and nearby devices that
+    /// ask, get the new name. Devices already paired keep the name they were given.
+    ///
+    /// Side effects: Updates the transport's answer.
+    pub fn rename(&mut self, local_name: DeviceName) {
+        self.transport.set_local_name(&local_name);
+        self.local_name = local_name;
+    }
+
+    /// The name a nearby unpaired device gave (#121), or `None` while it has not.
+    pub fn nearby_device_name(&self, peer_id: &DeviceId) -> Option<DeviceName> {
+        self.transport.nearby_peer_name(peer_id)
     }
 
     /// Lists requests awaiting the owner's answer, ordered by peer ID.

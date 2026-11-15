@@ -10,6 +10,7 @@
 //! | `POST /api/p2p/requests/{peer_id}/accept` | `AcceptIncoming` | 200, the pairing update |
 //! | `POST /api/p2p/requests/{peer_id}/reject` | `RejectIncoming` | 204 |
 //! | `DELETE /api/p2p/devices/{peer_id}` | `Revoke` | 204, or 404 when not paired |
+//! | `PUT /api/p2p/device-name` `{"name"}` | saves it, then `Rename` (#121) | 200 `{"device_name"}`, 400 |
 //!
 //! Failures:
 //!
@@ -55,6 +56,7 @@ pub(super) fn routes() -> Router<ServerAppState> {
         .route("/api/p2p/requests/{peer_id}/reject", post(reject_request))
         .route("/api/p2p/devices/{peer_id}", delete(revoke_device))
         .route("/api/p2p/transcription-route", put(set_transcription_route))
+        .route("/api/p2p/device-name", put(set_device_name))
         .route("/api/p2p/invites", post(create_invite))
         .route("/api/p2p/invites/join", post(join_invite))
 }
@@ -202,6 +204,53 @@ struct StartPairingRequest {
 struct PairingCodeResponse {
     /// The six-digit code both devices show.
     code: String,
+}
+
+/// Body of `PUT /api/p2p/device-name`.
+#[derive(Deserialize)]
+struct DeviceNameRequest {
+    /// The name as typed.
+    name: String,
+}
+
+/// Saves the name the owner gave this device and renames the running task (#121).
+///
+/// Outputs: 200 `{"device_name"}`; 400 `{"error"}` for a blank, too long or control-character
+/// name; 503 without a database to save beside. Without P2P the name applies when it starts.
+/// Side effects: Writes `<db>.device-name`.
+async fn set_device_name(
+    State(application_state): State<ServerAppState>,
+    Json(request): Json<DeviceNameRequest>,
+) -> Response {
+    let Some(database_path) = application_state.database_path() else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let saved = tokio::task::spawn_blocking(move || {
+        crate::device_name_settings::save_device_name(&database_path, &request.name)
+    })
+    .await;
+    let device_name = match saved {
+        Ok(Ok(device_name)) => device_name,
+        Ok(Err(crate::device_name_settings::DeviceNameSettingsError::Invalid(error))) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: error.to_string(),
+                }),
+            )
+                .into_response();
+        }
+        _ => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+    if let Some(control) = application_state.p2p_control()
+        && control
+            .command(P2pCommand::Rename(device_name.clone()))
+            .await
+            .is_err()
+    {
+        tracing::warn!("the running sync kept the old device name until it restarts");
+    }
+    Json(serde_json::json!({ "device_name": device_name.as_str() })).into_response()
 }
 
 /// Body of `PUT /api/p2p/transcription-route`.

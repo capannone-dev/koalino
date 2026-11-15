@@ -4,7 +4,8 @@
 //! identity of the remote key, not a claim. Its rules are:
 //!
 //! - **Inbound:** admit a trusted peer, or any peer while the owner keeps a pairing window open.
-//! - **Outbound:** admit a trusted peer, or the one peer the owner chose to pair with.
+//! - **Outbound:** admit a trusted peer, the one peer the owner chose to pair with, or a nearby
+//!   peer asked for its name (#121), which the other side admits only during its own window.
 //! - **Revocation, and the end of pairing:** close connections to peers that are not trusted.
 //! - **Keep-alive:** a connection to a trusted peer stays open while idle, so a change reaches it
 //!   at once; other connections close after the swarm's idle timeout.
@@ -45,6 +46,9 @@ pub(super) struct PeerGate {
     pairing_window_ends_at: Option<Instant>,
     /// Unknown peers this node may dial because the owner started pairing with them.
     pairing_dial_targets: HashSet<PeerId>,
+    /// Nearby unknown peers this node may dial to ask their name (#121); they admit the
+    /// connection only while their own pairing window is open.
+    name_probe_targets: HashSet<PeerId>,
     /// Open connections by peer, so untrusted ones can be closed and newly trusted ones kept.
     connections: HashMap<PeerId, HashSet<ConnectionId>>,
     /// Swarm actions `poll` must emit: disconnects and keep-alive changes.
@@ -113,6 +117,16 @@ impl PeerGate {
     /// Lets this node dial the unknown `peer` to pair with it.
     pub(super) fn allow_pairing_dial(&mut self, peer: PeerId) {
         self.pairing_dial_targets.insert(peer);
+    }
+
+    /// Lets this node dial the nearby unknown `peer` to ask its name (#121).
+    pub(super) fn allow_name_probe(&mut self, peer: PeerId) {
+        self.name_probe_targets.insert(peer);
+    }
+
+    /// Stops dialing `peer` for its name: it left the network or was paired.
+    pub(super) fn forget_name_probe(&mut self, peer: &PeerId) {
+        self.name_probe_targets.remove(peer);
     }
 
     /// Ends pairing: closes the window, forgets dial targets, and disconnects untrusted peers.
@@ -235,7 +249,8 @@ impl NetworkBehaviour for PeerGate {
         }
     }
 
-    /// Admits a trusted peer, or the peer the owner chose to pair with.
+    /// Admits a trusted peer, the peer the owner chose to pair with, or a nearby peer asked for its
+    /// name.
     fn handle_established_outbound_connection(
         &mut self,
         _: ConnectionId,
@@ -244,7 +259,10 @@ impl NetworkBehaviour for PeerGate {
         _: Endpoint,
         _: PortUse,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        if self.is_trusted(&peer) || self.pairing_dial_targets.contains(&peer) {
+        if self.is_trusted(&peer)
+            || self.pairing_dial_targets.contains(&peer)
+            || self.name_probe_targets.contains(&peer)
+        {
             Ok(PairedKeepAlive {
                 keep_alive: self.is_trusted(&peer),
             })

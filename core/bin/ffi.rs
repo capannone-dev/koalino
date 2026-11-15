@@ -51,7 +51,7 @@ use crate::{
         whisper_proposal::{TranscriptionMeasurement, propose_from_measurements},
     },
     ffi_language::default_language,
-    ffi_p2p::{p2p_command_json, p2p_status_json},
+    ffi_p2p::{p2p_command_json_at, p2p_status_json},
     ffi_settings::{APP_SETTINGS, ConfiguredSettings, SettingsError, app_setting},
     p2p_composition::{P2pConfig, P2pHandle, spawn_p2p_task},
     pipeline_composition::{PipelineConfig, spawn_recording_controller},
@@ -2513,8 +2513,12 @@ pub unsafe extern "C" fn note_taker_p2p_command(request_json: *const c_char) -> 
     let response_json = match unsafe { ffi_string(request_json) } {
         None => export_error_json("invalid_request", "the request must be a UTF-8 C string"),
         Some(request_json) => match runtime_p2p() {
-            Ok(p2p) => p2p_command_json(
+            Ok(p2p) => p2p_command_json_at(
                 p2p.as_deref().map(|handle| handle as &dyn P2pControl),
+                Some(&PathBuf::from(
+                    crate::ffi_settings::app_setting("NOTE_TAKER_DATABASE_PATH")
+                        .unwrap_or_else(|| String::from("note_taker.sqlite3")),
+                )),
                 request_json,
             ),
             Err(_) => export_error_json("runtime_unavailable", "the native runtime is unavailable"),

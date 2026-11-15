@@ -84,6 +84,7 @@ fn snapshot() -> P2pSnapshot {
             device_name: name("Laptop"),
             trusted_devices: vec![TrustedPeer::new(phone.clone(), name("Phone"), 1_700)],
             nearby_devices: vec![tablet.clone()],
+            nearby_device_names: vec![(tablet.clone(), name("Tablet"))],
             incoming_requests: vec![IncomingPairingRequest {
                 peer_id: tablet.clone(),
                 device_name: name("Tablet"),
@@ -231,7 +232,7 @@ async fn status_lists_devices_pairings_and_updates() {
                 "peers": [],
                 "offers_relay": false,
             },
-            "nearby_devices": [{ "peer_id": "12D3KooWTablet" }],
+            "nearby_devices": [{ "peer_id": "12D3KooWTablet", "device_name": "Tablet" }],
             "incoming_requests": [
                 { "peer_id": "12D3KooWTablet", "device_name": "Tablet", "code": tablet_code.as_str() }
             ],
@@ -485,4 +486,58 @@ async fn meeting_writes_are_reported_to_the_p2p_task() {
             MeetingId::new(meeting_id)
         ]
     );
+}
+
+/// Renaming saves the name beside the database and renames the running task (#121).
+#[tokio::test]
+async fn renaming_saves_the_name_and_tells_the_task() {
+    let folder = std::env::temp_dir().join(format!("p2p-rename-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
+    let database_path = folder.join("nt.sqlite3");
+    let control = Arc::new(FakeControl {
+        commands: Mutex::new(Vec::new()),
+        local_changes: Mutex::new(Vec::new()),
+        script: Box::new(|_| Ok(P2pCommandOutcome::Done)),
+    });
+    let repository = SqliteNoteRepository::open_in_memory(ephemeral_cipher())
+        .unwrap_or_else(|error| panic!("test SQLite repository must initialize: {error}"));
+    let state = ServerAppState::new(repository, InMemoryVoiceVectorDB::new())
+        .with_p2p_control(Arc::clone(&control) as Arc<dyn P2pControl>)
+        .with_settings_file(crate::transcription_settings::settings_file_for(
+            &database_path,
+        ));
+    let router = build_router(state);
+
+    let (refused, _) = send(
+        router.clone(),
+        "PUT",
+        "/api/p2p/device-name",
+        Some(r#"{"name":"  "}"#),
+    )
+    .await;
+    let (renamed, body) = send(
+        router,
+        "PUT",
+        "/api/p2p/device-name",
+        Some(r#"{"name":"Studio laptop"}"#),
+    )
+    .await;
+
+    assert_eq!(refused, StatusCode::BAD_REQUEST);
+    assert_eq!(renamed, StatusCode::OK);
+    assert_eq!(body["device_name"], "Studio laptop");
+    assert_eq!(
+        crate::device_name_settings::load_saved_device_name(&database_path)
+            .map(|name| name.as_str().to_owned()),
+        Some(String::from("Studio laptop"))
+    );
+    assert!(matches!(
+        control
+            .commands
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_slice(),
+        [P2pCommand::Rename(name)] if name.as_str() == "Studio laptop"
+    ));
+    drop(std::fs::remove_dir_all(folder));
 }

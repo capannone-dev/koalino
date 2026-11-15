@@ -8,7 +8,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::{p2p_command_json, p2p_status_json};
+use super::{p2p_command_json, p2p_command_json_at, p2p_status_json};
 use crate::{
     adapters::storage::{
         attachment_file_store::AttachmentFileStore, sqlite_voice_vector_db::SqliteVoiceVectorDB,
@@ -883,4 +883,63 @@ fn a_meeting_recorded_on_laptop_and_phone_becomes_one_transcript() {
         .and_then(|recording| recording.combined_into.clone())
         .unwrap_or_else(|| panic!("the phone's recording must be folded"));
     assert_eq!(fold.combine_on, DeviceId::new("device-laptop"));
+}
+
+/// Renaming saves the name, shows it at once, and keeps it for the next start (#121).
+#[test]
+fn renaming_saves_the_name_and_the_task_uses_it_at_once_and_after_a_restart() {
+    let folder = std::env::temp_dir().join(format!("ffi-p2p-rename-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
+    let database_path = folder.join("nt.sqlite3");
+    let handle = start_task_at(&database_path, "Laptop", &[]);
+
+    let refused = json(&p2p_command_json_at(
+        Some(&handle as &dyn P2pControl),
+        Some(&database_path),
+        r#"{"command":"set_device_name","name":"   "}"#,
+    ));
+    assert_eq!(refused["error_code"], "invalid_device_name");
+    let renamed = json(&p2p_command_json_at(
+        Some(&handle as &dyn P2pControl),
+        Some(&database_path),
+        r#"{"command":"set_device_name","name":" Studio laptop "}"#,
+    ));
+    assert_eq!(renamed["ok"], true);
+    assert_eq!(renamed["device_name"], "Studio laptop");
+    let status = wait_for_status(&handle, |status| status["device_name"] == "Studio laptop");
+    assert_eq!(status["device_name"], "Studio laptop");
+    drop(handle);
+
+    let restarted = start_task_at(&database_path, "Laptop", &[]);
+    let status = wait_for_status(&restarted, |status| {
+        status["device_name"] == "Studio laptop"
+    });
+    assert_eq!(
+        status["device_name"], "Studio laptop",
+        "the saved name wins"
+    );
+    drop(restarted);
+    drop(std::fs::remove_dir_all(folder));
+}
+
+/// Without sync running the name is still saved, for the next start.
+#[test]
+fn a_name_is_saved_even_while_sync_is_off() {
+    let folder = std::env::temp_dir().join(format!("ffi-p2p-rename-off-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
+    let database_path = folder.join("nt.sqlite3");
+
+    let renamed = json(&p2p_command_json_at(
+        None,
+        Some(&database_path),
+        r#"{"command":"set_device_name","name":"Phone"}"#,
+    ));
+
+    assert_eq!(renamed["ok"], true);
+    assert_eq!(
+        crate::device_name_settings::load_saved_device_name(&database_path)
+            .map(|name| name.as_str().to_owned()),
+        Some(String::from("Phone"))
+    );
+    drop(std::fs::remove_dir_all(folder));
 }

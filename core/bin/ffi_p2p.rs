@@ -18,6 +18,7 @@
 //! | `set_network_addresses` | `relay` (optional), `peers` | `{"ok":true}` |
 //! | `create_invite` | none | `{"ok":true,"invite":"note-taker-invite:…","expires_at_ms":…}` |
 //! | `join_invite` | `invite` | `{"ok":true,"peer_id":…}` |
+//! | `set_device_name` | `name` | `{"ok":true,"device_name":…}`, saved and applied at once (#121) |
 //!
 //! Failures are `{"ok":false,"error_code":...,"error":...}`, where `error_code` is
 //! `invalid_request` (unreadable JSON, an unknown command or field, a missing `peer_id`),
@@ -76,6 +77,9 @@ enum CommandRequest {
     JoinInvite {
         invite: String,
     },
+    SetDeviceName {
+        name: String,
+    },
 }
 
 /// Builds the failure object.
@@ -102,15 +106,62 @@ pub fn p2p_status_json(control: Option<&dyn P2pControl>) -> String {
 /// Side effects: Those of the command (opening pairing, sending pairing messages, changing the
 /// paired-device list). Blocks until the task answers.
 pub fn p2p_command_json(control: Option<&dyn P2pControl>, request: &str) -> String {
-    run_command(control, request).to_string()
+    p2p_command_json_at(control, None, request)
+}
+
+/// Like `p2p_command_json`, with the database the device name is saved beside (#121).
+///
+/// Inputs: The task, if any; the database path (`None` refuses `set_device_name` as
+/// `unavailable`); and the request.
+/// Outputs: As `p2p_command_json`; `set_device_name` answers `{"ok":true,"device_name"}` or
+/// `invalid_device_name`. Side effects: `set_device_name` saves the name, then renames the
+/// running task; without a task the name applies when sync starts.
+pub fn p2p_command_json_at(
+    control: Option<&dyn P2pControl>,
+    database_path: Option<&std::path::Path>,
+    request: &str,
+) -> String {
+    run_command(control, database_path, request).to_string()
+}
+
+/// Saves the owner's name for this device and applies it to the running task.
+fn set_device_name(
+    control: Option<&dyn P2pControl>,
+    database_path: Option<&std::path::Path>,
+    name: &str,
+) -> Value {
+    let Some(database_path) = database_path else {
+        return failure("unavailable", "the device name cannot be saved here");
+    };
+    let device_name = match crate::device_name_settings::save_device_name(database_path, name) {
+        Ok(device_name) => device_name,
+        Err(crate::device_name_settings::DeviceNameSettingsError::Invalid(error)) => {
+            return failure("invalid_device_name", &error.to_string());
+        }
+        Err(error) => return failure("storage_failed", &error.to_string()),
+    };
+    if let Some(control) = control
+        && futures::executor::block_on(control.command(P2pCommand::Rename(device_name.clone())))
+            .is_err()
+    {
+        tracing::warn!("the running sync kept the old device name until it restarts");
+    }
+    json!({ "ok": true, "device_name": device_name.as_str() })
 }
 
 /// Parses, validates, and runs `request`.
-fn run_command(control: Option<&dyn P2pControl>, request: &str) -> Value {
+fn run_command(
+    control: Option<&dyn P2pControl>,
+    database_path: Option<&std::path::Path>,
+    request: &str,
+) -> Value {
     let request: CommandRequest = match serde_json::from_str(request) {
         Ok(request) => request,
         Err(_) => return failure("invalid_request", "the request is not a known P2P command"),
     };
+    if let CommandRequest::SetDeviceName { name } = &request {
+        return set_device_name(control, database_path, name);
+    }
     if let Some(command) = network_command_for(&request) {
         let Some(control) = control else {
             return failure("unavailable", "P2P sync is not running");
@@ -160,7 +211,8 @@ fn command_for(request: CommandRequest) -> Option<P2pCommand> {
         // `network_command_for` takes these first, so they never get here.
         CommandRequest::SetNetworkAddresses { .. }
         | CommandRequest::CreateInvite {}
-        | CommandRequest::JoinInvite { .. } => return None,
+        | CommandRequest::JoinInvite { .. }
+        | CommandRequest::SetDeviceName { .. } => return None,
     })
 }
 
