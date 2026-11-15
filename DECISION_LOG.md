@@ -3473,3 +3473,23 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   resumes it within two minutes, so a closed tab still gets its after-meeting pass.
 - **Kept simple:** the captions and live transcript come as two files, before and after the
   reload. Only the same tab continues a meeting; a rejoin in another tab is a new meeting.
+
+## 2026-11-15 — #123 The desktop app receives browser meetings itself
+
+- **Problem:** the browser extension talks to the daemon's Teams bridge, but on a desktop the
+  owner runs the Koalino app, which had no bridge. Installing the extension there did nothing.
+- **Decision:** the desktop app (Linux, Windows) hosts the same loopback bridge, on its own
+  thread and Tokio runtime, when its runtime opens. Browser meetings land in the app's database
+  through the app's own pipeline.
+  - **On by default** on desktops; `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=false` turns it off. Android
+    never starts it.
+  - **Never without a secret:** the app creates the keychain's `teams-bridge-secret` when none
+    exists (the one the browser host reads), so no install step is needed for it. If the keychain
+    cannot keep one and none is configured, the bridge stays off rather than accept any local
+    program.
+  - **No model while idle:** the bridge gets a pipeline builder, run when the first browser
+    meeting starts (the same pipeline a microphone recording uses). An app that never records
+    from the browser loads nothing for it. A failed build drops that meeting's media and is
+    retried at the next meeting.
+- **Verified** on deb-gui: the Linux app alone (no daemon) recorded a fixture call from Firefox,
+  resumed it across a page reload, and listed one meeting with its transcript.

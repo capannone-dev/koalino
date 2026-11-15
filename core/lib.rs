@@ -85,6 +85,9 @@ pub mod ffi_p2p;
 /// Holds the settings the Flutter app passes to `note_taker_configure`, over the environment.
 #[path = "bin/ffi_settings.rs"]
 pub mod ffi_settings;
+/// The desktop app's Teams bridge for the browser extension (#123).
+#[path = "bin/ffi_teams_bridge.rs"]
+pub mod ffi_teams_bridge;
 /// Settings' Whisper model controls over the C ABI.
 #[path = "bin/ffi_transcription.rs"]
 pub mod ffi_transcription;

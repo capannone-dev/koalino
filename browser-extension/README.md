@@ -51,8 +51,9 @@ for access to `*.sharepoint.com`. It acts there only in frames a Teams page open
 
 Browsers cannot open the bridge's WebSocket themselves (it refuses an `Origin` header), so the
 native messaging host `browser-host` (`core/bin/browser_host.rs`,
-`core/adapters/network/browser_host/`) carries the messages. The daemon must run with
-`NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
+`core/adapters/network/browser_host/`) carries the messages. On a desktop the Koalino app itself
+receives them (#123): its bridge is on unless `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=false`. On a server,
+start the daemon with `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
 
 ## Layout
 
@@ -82,7 +83,8 @@ node build.mjs        # dist/firefox and dist/chromium
    `target/release/browser-host install`. This writes the manifests for Firefox, Chrome,
    Chromium and Edge (on Windows also the `HKCU` registry keys), and creates the bridge secret in
    the keychain when there is one.
-2. Start the daemon with `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
+2. Start the Koalino desktop app (or, on a server, the daemon with
+   `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`).
 3. Load the extension:
    - Chrome or Edge: Extensions → Developer mode → Load unpacked → `dist/chromium`. The ID must
      be `dgmaacilnokmfecfdcajdjadeboemnpd`.

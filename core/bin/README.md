@@ -221,7 +221,14 @@ the owner keeps a pairing window open, and even then they cannot sync.
 
 ## Teams bot bridge (Issue #33)
 
-`teams_bridge_composition.rs` composes the bridge for the daemon. `TeamsBridgeConfig` reads
+`teams_bridge_composition.rs` composes the bridge for the daemon and the desktop app (#123).
+The daemon hands it a ready pipeline (`BridgePipeline::ready`). The app's
+`ffi_teams_bridge.rs` starts it on a `teams-bridge` thread when the runtime opens on Linux or
+Windows, with `BridgePipeline::on_first_meeting`: the pipeline (and its model) is built when the
+first browser meeting starts, and a failed build is retried at the next one.
+`app_bridge_config` turns the bridge on unless `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=false` and
+keeps it off without a secret: it creates the keychain's `teams-bridge-secret` when none exists,
+so the browser host and the app agree without an install step. `TeamsBridgeConfig` reads
 `NOTE_TAKER_TEAMS_BRIDGE_ENABLED` (default `false`), `_PORT` (`8765`, always on 127.0.0.1),
 `_SECRET` (redacted from `Debug`), `_BUFFER_SECONDS` (`10`, range 1–300), and `_SLIDE_DIR`
 (default: `slides` next to the database). When the bridge is enabled and the pipeline is

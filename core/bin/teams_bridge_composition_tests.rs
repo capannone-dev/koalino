@@ -280,8 +280,10 @@ async fn five_audio_chunks_are_processed_by_the_meeting_session() {
     let service = start_teams_bridge(
         &config,
         TeamsBridgePorts {
-            recording_manager: Arc::clone(&recording_manager),
-            chunk_audio_store: Arc::clone(&chunk_audio_store),
+            pipeline: super::BridgePipeline::ready(
+                Arc::clone(&recording_manager),
+                Arc::clone(&chunk_audio_store),
+            ),
             identity_mapper: Arc::new(TeamsIdentityMapper::new(std::sync::Mutex::new(voice_store))),
             slide_workflow: {
                 let note_repository = installation.note_repository();

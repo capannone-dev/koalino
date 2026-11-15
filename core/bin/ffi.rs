@@ -280,6 +280,9 @@ struct FfiRuntime {
     /// Starts the thread that drains the microphone into the recording (a no-op in tests,
     /// which drain by hand).
     spawn_microphone_ticker: fn(),
+    /// What the app's Teams bridge (#123) opens its stores with: the database and the unlocked
+    /// cipher. Taken once the runtime is in place; `None` in tests.
+    teams_bridge_stores: Option<(PathBuf, Arc<dyn crate::ports::crypto::EmbeddingCipher>)>,
 }
 
 /// How often the ticker moves microphone audio into the recording.
@@ -434,9 +437,18 @@ impl FfiRuntime {
     fn new() -> Result<Self, c_int> {
         // First, so failures while opening the stores reach the log file (Issue #46).
         crate::ffi_logging::start_app_logging();
-        let runtime = Self::from_settings(&app_setting)?;
+        let mut runtime = Self::from_settings(&app_setting)?;
         // Its thread waits for this runtime's lock, which the caller releases after this call.
         crate::ffi_llm::start_auto_summaries(runtime.note_repository.device_id().clone());
+        if let Some((database_path, embedding_cipher)) = runtime.teams_bridge_stores.take() {
+            crate::ffi_teams_bridge::start_app_teams_bridge(
+                &database_path,
+                runtime.note_repository.device_id().clone(),
+                embedding_cipher,
+                app_setting,
+                runtime_pipeline,
+            );
+        }
         if let Some(p2p) = &runtime.p2p {
             crate::ffi_chat::answer_paired_chats(p2p);
         }
@@ -503,6 +515,7 @@ impl FfiRuntime {
         let pipeline_config = PipelineConfig::from_lookup(setting);
         let transcription_paths = TranscriptionPaths::from_lookup(setting);
         let pipeline_database_path = database_path.clone();
+        let bridge_cipher = Arc::clone(&embedding_cipher);
         let remote_gateway = p2p.clone();
         let recording_controller_builder: RecordingControllerBuilder = Box::new(move || {
             spawn_recording_controller(
@@ -531,6 +544,7 @@ impl FfiRuntime {
             ExportWriter::new(default_exporters(), export_directory),
         );
         runtime.p2p = p2p;
+        runtime.teams_bridge_stores = Some((database_path.clone(), bridge_cipher));
         runtime.retained_speech = Some(RetainedSpeechIndex::new(
             crate::refinement_worker::retained_audio_directory(&database_path),
         ));
@@ -610,6 +624,7 @@ impl FfiRuntime {
             microphone_ticker_running: false,
             recording_language: None,
             spawn_microphone_ticker: || {},
+            teams_bridge_stores: None,
         }
     }
 
@@ -2612,14 +2627,14 @@ fn with_runtime(operation: impl FnOnce(&mut FfiRuntime) -> c_int) -> c_int {
     }
 }
 
-/// Runs an FFI operation that returns owned JSON while keeping the runtime lock scoped to the call.
+/// Runs an FFI operation (most return owned JSON) while keeping the runtime lock scoped to the call.
 ///
 /// Inputs: `operation` receives the process-local runtime after successful initialization.
 /// Outputs: Serialized metadata or a documented C status.
 /// Side effects: May initialize persistent adapter state and execute the supplied operation.
-fn with_runtime_json(
-    operation: impl FnOnce(&mut FfiRuntime) -> Result<String, c_int>,
-) -> Result<String, c_int> {
+fn with_runtime_json<Output>(
+    operation: impl FnOnce(&mut FfiRuntime) -> Result<Output, c_int>,
+) -> Result<Output, c_int> {
     let runtime_mutex = FFI_RUNTIME.get_or_init(|| Mutex::new(None));
     let mut runtime_guard = runtime_mutex.lock().map_err(|_| FFI_RUNTIME_UNAVAILABLE)?;
     if runtime_guard.is_none() {
@@ -2629,6 +2644,22 @@ fn with_runtime_json(
         Some(runtime) => operation(runtime),
         None => Err(FFI_RUNTIME_UNAVAILABLE),
     }
+}
+
+/// Returns the app's pipeline worker and chunk audio store for the Teams bridge (#123),
+/// building the pipeline on first use as a recording start would.
+///
+/// Outputs: The worker and store, or an error when the runtime or the pipeline is unavailable.
+/// Side effects: Takes the runtime lock; the first call may load a transcription model.
+fn runtime_pipeline() -> anyhow::Result<crate::teams_bridge_composition::PipelineHandles> {
+    with_runtime_json(|runtime| {
+        let controller = runtime.recording_controller()?;
+        Ok((
+            controller.shared_recording_manager(),
+            controller.shared_chunk_audio_store(),
+        ))
+    })
+    .map_err(|status| anyhow::anyhow!("the meeting pipeline is unavailable (status {status})"))
 }
 
 /// Returns the meeting being recorded, if any, for automatic summaries (#101).
