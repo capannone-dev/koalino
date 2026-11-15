@@ -21,6 +21,8 @@ import {
   isLocalCli,
   type LlmSettings
 } from "@/lib/llm-api";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n";
 
 const fieldClass =
   "min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30";
@@ -31,8 +33,8 @@ const buttonClass =
 type Draft = LlmConnectionInput & { id?: string };
 
 /** An empty form, starting from the first preset. */
-function emptyDraft(): Draft {
-  return { label: "", ...connectionPresets[0].input };
+function emptyDraft(t: Translate): Draft {
+  return { label: "", ...connectionPresets(t)[0].input };
 }
 
 export type AiSettingsProps = {
@@ -48,12 +50,13 @@ export type AiSettingsProps = {
  * Side effects: calls the `/api/settings/llm` routes; "Test" sends one line, no meeting content.
  */
 export function AiSettings({ initial }: AiSettingsProps) {
+  const t = useT();
   const [settings, setSettings] = useState<LlmSettings | null>(initial);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [template, setTemplate] = useState(initial?.template ?? "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(
-    initial === null ? "Can't read the AI settings. Check that the note-taking server is running." : null
+    initial === null ? t("cantReadTheAiSettings") : null
   );
   const templateId = useId();
   const autoId = useId();
@@ -62,7 +65,7 @@ export function AiSettings({ initial }: AiSettingsProps) {
   if (settings === null) {
     return (
       <div className="card max-w-2xl space-y-2">
-        <h2 className="font-semibold">AI connections</h2>
+        <h2 className="font-semibold">{t("aiConnections")}</h2>
         <p role="status">{message}</p>
       </div>
     );
@@ -76,7 +79,7 @@ export function AiSettings({ initial }: AiSettingsProps) {
       const done = await action();
       if (done) setMessage(done);
     } catch (error) {
-      setMessage(llmErrorMessage(error));
+      setMessage(llmErrorMessage(error, t));
     } finally {
       setBusy(false);
     }
@@ -111,7 +114,7 @@ export function AiSettings({ initial }: AiSettingsProps) {
       const refreshed = await getLlmSettings().catch(() => null);
       setSettings((current) => refreshed ?? (current ? withConnection(current, saved) : current));
       setDraft(null);
-      return `Saved ${saved.label}.`;
+      return t("saved", { label: saved.label });
     });
   }
 
@@ -119,36 +122,30 @@ export function AiSettings({ initial }: AiSettingsProps) {
   return (
     <div className="card max-w-2xl space-y-4">
       <div className="space-y-1">
-        <h2 className="font-semibold">AI connections</h2>
-        <p className="text-sm text-muted">
-          Summaries are written by a language model. A cloud service receives the meeting&apos;s transcript, notes and
-          photos; a server on your local network keeps them in the office.
-        </p>
+        <h2 className="font-semibold">{t("aiConnections")}</h2>
+        <p className="text-sm text-muted">{t("summariesAreWrittenByA")}</p>
       </div>
 
-      {current.connections.length === 0 ? <p className="text-muted">No connection yet.</p> : null}
+      {current.connections.length === 0 ? <p className="text-muted">{t("noConnectionYet")}</p> : null}
       <ul className="space-y-2">
         {current.connections.map((connection) => (
           <li key={connection.id} className="rounded-lg border border-line p-3">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold">{connection.label}</span>
-              {connection.is_default ? <span className="text-sm text-success">Default</span> : null}
+              {connection.is_default ? <span className="text-sm text-success">{t("default")}</span> : null}
               <span className="text-sm text-muted">
                 {isLocalCli(connection.kind)
-                  ? `${connection.kind === "codex" ? "Codex" : "Claude Code"} · ${connection.model || "default model"}`
+                  ? `${connection.kind === "codex" ? "Codex" : "Claude Code"} · ${connection.model || t("defaultModel")}`
                   : connection.model}
               </span>
             </div>
             {isLocalCli(connection.kind) ? (
-              <p className="text-sm text-muted">
-                {connection.tool_installed ? "Installed on the server's computer" : "Not found on the server's computer"}; runs with
-                that computer&apos;s signed-in plan.
-              </p>
+              <p className="text-sm text-muted">{t("runsWithThatComputersSigned", { status: connection.tool_installed ? t("installedOnTheServersComputer") : t("notFoundOnTheServers") })}</p>
             ) : (
               <>
                 <p className="text-sm break-all text-muted">{connection.base_url}</p>
                 {connection.plain_http ? (
-                  <p className="text-sm text-warning">Unencrypted http: use it only on a network you trust.</p>
+                  <p className="text-sm text-warning">{t("unencryptedHttpUseItOnly")}</p>
                 ) : null}
               </>
             )}
@@ -161,12 +158,10 @@ export function AiSettings({ initial }: AiSettingsProps) {
                   onClick={() =>
                     void run(async () => {
                       setSettings(await updateLlmSettings({ default_connection: connection.id }));
-                      return `${connection.label} is now the default.`;
+                      return t("isNowTheDefault", { label: connection.label });
                     })
                   }
-                >
-                  Make default
-                </button>
+                >{t("makeDefault")}</button>
               )}
               <button
                 type="button"
@@ -175,17 +170,13 @@ export function AiSettings({ initial }: AiSettingsProps) {
                 onClick={() =>
                   void run(async () => `${connection.label} answered: ${await testLlmConnection(connection.id)}`)
                 }
-              >
-                Test
-              </button>
+              >{t("test")}</button>
               <button
                 type="button"
                 className={buttonClass}
                 disabled={busy}
                 onClick={() => setDraft({ id: connection.id, label: connection.label, kind: connection.kind, base_url: connection.base_url, model: connection.model, context_tokens: connection.context_tokens })}
-              >
-                Edit
-              </button>
+              >{t("edit")}</button>
               <button
                 type="button"
                 className={`${buttonClass} text-danger`}
@@ -198,12 +189,10 @@ export function AiSettings({ initial }: AiSettingsProps) {
                         ? { ...settingsNow, connections: settingsNow.connections.filter((item) => item.id !== connection.id) }
                         : settingsNow
                     );
-                    return `Removed ${connection.label}.`;
+                    return t("removed", { label: connection.label });
                   })
                 }
-              >
-                Remove
-              </button>
+              >{t("remove")}</button>
             </div>
           </li>
         ))}
@@ -212,19 +201,12 @@ export function AiSettings({ initial }: AiSettingsProps) {
       {draft ? (
         <ConnectionForm draft={draft} busy={busy} onChange={setDraft} onSubmit={submit} onCancel={() => setDraft(null)} />
       ) : (
-        <button type="button" className={buttonClass} onClick={() => setDraft(emptyDraft())}>
-          Add connection
-        </button>
+        <button type="button" className={buttonClass} onClick={() => setDraft(emptyDraft(t))}>{t("addConnection")}</button>
       )}
 
       <div className="space-y-1">
-        <label htmlFor={templateId} className="block font-semibold">
-          Summary prompt
-        </label>
-        <p className="text-sm text-muted">
-          Placeholders: {current.placeholders.map((name) => `{{${name}}}`).join(", ")}. The transcript is always sent
-          after it.
-        </p>
+        <label htmlFor={templateId} className="block font-semibold">{t("summaryPrompt")}</label>
+        <p className="text-sm text-muted">{t("placeholdersTheTranscriptIsAlways", { placeholders: current.placeholders.map((name) => `{{${name}}}`).join(", ") })}</p>
         <textarea
           id={templateId}
           className={`${fieldClass} min-h-40 py-2`}
@@ -240,12 +222,10 @@ export function AiSettings({ initial }: AiSettingsProps) {
               void run(async () => {
                 const saved = await updateLlmSettings({ template });
                 setSettings(saved);
-                return "Prompt saved.";
+                return t("promptSaved");
               })
             }
-          >
-            Save prompt
-          </button>
+          >{t("savePrompt")}</button>
           <button
             type="button"
             className={buttonClass}
@@ -255,12 +235,10 @@ export function AiSettings({ initial }: AiSettingsProps) {
                 const saved = await updateLlmSettings({ template: null });
                 setSettings(saved);
                 setTemplate(saved.template);
-                return "Back to the built-in prompt.";
+                return t("backToTheBuiltIn");
               })
             }
-          >
-            Reset to built-in
-          </button>
+          >{t("resetToBuiltIn")}</button>
         </div>
       </div>
 
@@ -275,16 +253,16 @@ export function AiSettings({ initial }: AiSettingsProps) {
             const enabled = event.target.checked;
             void run(async () => {
               setSettings(await updateLlmSettings({ auto_summarize: enabled }));
-              return enabled ? "Meetings will be summarized automatically." : "Automatic summaries are off.";
+              return enabled ? t("meetingsWillBeSummarizedAutomatically") : t("automaticSummariesAreOff");
             });
           }}
         />
-        <label htmlFor={autoId}>Summarize meetings automatically with the default connection</label>
+        <label htmlFor={autoId}>{t("summarizeMeetingsAutomaticallyWithThe")}</label>
       </div>
 
       {current.connections.length > 0 && (
         <div className="flex flex-col gap-1">
-          <label htmlFor={pairedId}>Summaries for my other devices</label>
+          <label htmlFor={pairedId}>{t("summariesForMyOtherDevices")}</label>
           <select
             id={pairedId}
             className="w-full max-w-sm rounded border px-2 py-2"
@@ -296,23 +274,19 @@ export function AiSettings({ initial }: AiSettingsProps) {
               void run(async () => {
                 setSettings(await updateLlmSettings({ paired_summary_connection: id }));
                 return id === null
-                  ? "This computer no longer writes summaries or answers chats for your other devices."
-                  : `${label ?? "The connection"} now writes the summaries and answers the chats your other devices ask for.`;
+                  ? t("thisComputerNoLongerWrites")
+                  : t("nowWritesTheSummariesAnd", { label: label ?? "The connection" });
               });
             }}
           >
-            <option value="">Off</option>
+            <option value="">{t("off")}</option>
             {current.connections.map((connection) => (
               <option key={connection.id} value={connection.id}>
                 {connection.label}
               </option>
             ))}
           </select>
-          <p className="text-sm opacity-80">
-            A paired phone can ask this computer to write a summary or answer a chat with this
-            connection, from this computer&apos;s copy of your notes. It counts against that plan; at
-            most 10 summaries and 30 chat answers an hour.
-          </p>
+          <p className="text-sm opacity-80">{t("aPairedPhoneCanAsk")}</p>
         </div>
       )}
 
@@ -337,76 +311,62 @@ function ConnectionForm({
   onSubmit: (event: FormEvent) => void;
   onCancel: () => void;
 }) {
+  const t = useT();
   const ids = { preset: useId(), label: useId(), kind: useId(), url: useId(), model: useId(), context: useId() };
   return (
     <form className="space-y-3 rounded-lg border border-line p-3" onSubmit={onSubmit}>
-      <h3 className="font-semibold">{draft.id ? "Edit connection" : "New connection"}</h3>
+      <h3 className="font-semibold">{draft.id ? t("editConnection") : t("newConnection")}</h3>
       {draft.id ? null : (
         <div>
-          <label htmlFor={ids.preset} className="block text-sm font-semibold">
-            Start from
-          </label>
+          <label htmlFor={ids.preset} className="block text-sm font-semibold">{t("startFrom")}</label>
           <select
             id={ids.preset}
             className={fieldClass}
-            defaultValue={connectionPresets[0].name}
+            defaultValue={connectionPresets(t)[0].name}
             onChange={(event) => {
-              const preset = connectionPresets.find((candidate) => candidate.name === event.target.value);
+              const preset = connectionPresets(t).find((candidate) => candidate.name === event.target.value);
               if (preset) onChange({ ...draft, ...preset.input });
             }}
           >
-            {connectionPresets.map((preset) => (
+            {connectionPresets(t).map((preset) => (
               <option key={preset.name}>{preset.name}</option>
             ))}
           </select>
         </div>
       )}
       <div>
-        <label htmlFor={ids.label} className="block text-sm font-semibold">
-          Name
-        </label>
+        <label htmlFor={ids.label} className="block text-sm font-semibold">{t("name")}</label>
         <input id={ids.label} className={fieldClass} required value={draft.label} onChange={(event) => onChange({ ...draft, label: event.target.value })} />
       </div>
       <div>
-        <label htmlFor={ids.kind} className="block text-sm font-semibold">
-          Protocol
-        </label>
+        <label htmlFor={ids.kind} className="block text-sm font-semibold">{t("protocol")}</label>
         <select id={ids.kind} className={fieldClass} value={draft.kind} onChange={(event) => onChange({ ...draft, kind: event.target.value as LlmKind })}>
-          <option value="open_ai_compatible">OpenAI-compatible server (Ollama, LM Studio, llama.cpp…)</option>
-          <option value="claude_code">Claude Code on the server&apos;s computer (Claude plan)</option>
-          <option value="codex">Codex on the server&apos;s computer (ChatGPT plan)</option>
+          <option value="open_ai_compatible">{t("openaiCompatibleServerOllamaLm")}</option>
+          <option value="claude_code">{t("claudeCodeOnTheServers")}</option>
+          <option value="codex">{t("codexOnTheServersComputer")}</option>
         </select>
       </div>
       {isLocalCli(draft.kind) ? (
-        <p className="text-sm text-muted">
-          Runs the tool installed and signed in on the computer running Koalino, so that plan writes the summaries instead
-          of API credit. The meeting goes to Anthropic or OpenAI under that account.
-        </p>
+        <p className="text-sm text-muted">{t("runsTheToolInstalledAnd")}</p>
       ) : (
         <div>
-          <label htmlFor={ids.url} className="block text-sm font-semibold">
-            Address
-          </label>
+          <label htmlFor={ids.url} className="block text-sm font-semibold">{t("address")}</label>
           <input id={ids.url} className={fieldClass} required value={draft.base_url} onChange={(event) => onChange({ ...draft, base_url: event.target.value })} />
         </div>
       )}
       <div>
-        <label htmlFor={ids.model} className="block text-sm font-semibold">
-          Model
-        </label>
+        <label htmlFor={ids.model} className="block text-sm font-semibold">{t("model")}</label>
         <input
           id={ids.model}
           className={fieldClass}
           required={!isLocalCli(draft.kind)}
-          placeholder={isLocalCli(draft.kind) ? "Empty: the tool's own default" : undefined}
+          placeholder={isLocalCli(draft.kind) ? t("emptyTheToolsOwnDefault") : undefined}
           value={draft.model}
           onChange={(event) => onChange({ ...draft, model: event.target.value })}
         />
       </div>
       <div>
-        <label htmlFor={ids.context} className="block text-sm font-semibold">
-          Context size (tokens)
-        </label>
+        <label htmlFor={ids.context} className="block text-sm font-semibold">{t("contextSizeTokens")}</label>
         <input
           id={ids.context}
           type="number"
@@ -419,12 +379,8 @@ function ConnectionForm({
         />
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="submit" className={buttonClass} disabled={busy}>
-          Save connection
-        </button>
-        <button type="button" className={buttonClass} onClick={onCancel}>
-          Cancel
-        </button>
+        <button type="submit" className={buttonClass} disabled={busy}>{t("saveConnection")}</button>
+        <button type="button" className={buttonClass} onClick={onCancel}>{t("cancel")}</button>
       </div>
     </form>
   );

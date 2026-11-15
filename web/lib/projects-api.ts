@@ -3,6 +3,7 @@
 
 import { apiBaseUrl } from "@/lib/api";
 import { maxMeetingTitleCharacters, validateMeetingTitle } from "@/lib/meeting-title";
+import { englishT, type Translate } from "@/lib/i18n";
 
 /** A project list entry; times are RFC 3339, `latest_meeting_at` null without meetings. */
 export type ProjectSummary = {
@@ -94,38 +95,38 @@ export class ProjectApiError extends Error {
  *
  * Outputs: the message to show, or `null` when the name is valid. Side effects: None.
  */
-export function projectNameError(rawName: string): string | null {
-  const { trimmedTitle, error } = validateMeetingTitle(rawName);
+export function projectNameError(rawName: string, t: Translate = englishT): string | null {
+  const { trimmedTitle, error } = validateMeetingTitle(rawName, t);
   if (error === null) return null;
-  if (trimmedTitle.length === 0) return "Enter a name.";
+  if (trimmedTitle.length === 0) return t("enterAName");
   if (Array.from(trimmedTitle).length > maxMeetingTitleCharacters) {
-    return `Names can be at most ${maxMeetingTitleCharacters} characters.`;
+    return t("namesCanBeAtMost", { maxMeetingTitleCharacters });
   }
-  return "Names can't contain line breaks or control characters.";
+  return t("namesCantContainLineBreaks");
 }
 
 /** A plain message for each failure kind, safe to show. */
-export function projectErrorMessage(error: unknown): string {
-  if (!(error instanceof ProjectApiError)) return "Something went wrong. Try again.";
+export function projectErrorMessage(error: unknown, t: Translate = englishT): string {
+  if (!(error instanceof ProjectApiError)) return t("somethingWentWrongTryAgain");
   switch (error.kind) {
     case "invalid_name":
-      return "That name isn't valid: use 1–200 characters on one line.";
+      return t("thatNameIsntValidUse");
     case "project_not_found":
-      return "This project no longer exists.";
+      return t("thisProjectNoLongerExists");
     case "meeting_not_found":
-      return "That meeting no longer exists.";
+      return t("thatMeetingNoLongerExists");
     case "resource_not_found":
-      return "That file is gone, or hasn't synced to this device yet.";
+      return t("thatFileIsGoneOr");
     case "rejected":
-      return "That file type can't be added, or the file is larger than 100 MB.";
+      return t("thatFileTypeCantBe");
     case "not_an_email":
-      return "That file isn't an e-mail.";
+      return t("thatFileIsntAnE");
     case "unavailable":
-      return "This server doesn't store project files.";
+      return t("thisServerDoesntStoreProject");
     case "network":
-      return "The Koalino server can't be reached.";
+      return t("theKoalinoServerCantBe");
     default:
-      return "Something went wrong. Try again.";
+      return t("somethingWentWrongTryAgain");
   }
 }
 

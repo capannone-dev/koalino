@@ -2,6 +2,7 @@
 // meetings and projects, with links back to the moment or the file. Queries are never logged.
 
 import { apiBaseUrl } from "@/lib/api";
+import { englishT, type Translate } from "@/lib/i18n";
 
 /** What to search: every meeting, every project, or one project. */
 export type SearchScope = "meetings" | "projects" | "project";
@@ -47,23 +48,23 @@ export class SearchApiError extends Error {
 }
 
 /** Plain messages per error code; server text is not shown. */
-const messages: Record<string, string> = {
-  network: "Can't reach the note-taking server. Check that it is running.",
-  empty: "Type what to look for.",
-  too_short: "Type at least two letters.",
-  too_long: "The search is too long.",
-  project_not_found: "That project no longer exists.",
-  storage_failed: "The notes could not be read."
-};
+const messages = (t: Translate) : Record<string, string> => ({
+  network: t("cantReachTheNoteTaking"),
+  empty: t("typeWhatToLookFor"),
+  too_short: t("typeAtLeastTwoLetters"),
+  too_long: t("theSearchIsTooLong"),
+  project_not_found: t("thatProjectNoLongerExists"),
+  storage_failed: t("theNotesCouldNotBe")
+});
 
 /**
  * Words a search failure for people.
  *
  * Inputs: any thrown value. Outputs: a sentence. Side effects: none.
  */
-export function searchErrorMessage(error: unknown): string {
-  if (error instanceof SearchApiError) return messages[error.code] ?? "Something went wrong on the server. Try again.";
-  return "Something went wrong. Try again.";
+export function searchErrorMessage(error: unknown, t: Translate = englishT): string {
+  if (error instanceof SearchApiError) return messages(t)[error.code] ?? t("somethingWentWrongOnThe");
+  return t("somethingWentWrongTryAgain");
 }
 
 /**
@@ -128,23 +129,23 @@ export function hitHref(hit: SearchHit): string {
 }
 
 /** Says where in its meeting or project a hit is, such as `1:01 · Anna` or `In plan.md`. */
-export function hitPlaceLabel(hit: SearchHit): string {
+export function hitPlaceLabel(hit: SearchHit, t: Translate = englishT): string {
   switch (hit.place) {
     case "meeting_title":
-      return "Title";
+      return t("title");
     case "summary":
-      return "Summary";
+      return t("summary");
     case "notes":
-      return "Notes";
+      return t("notes");
     case "transcript":
       return `${formatOffset(hit.start_time_ms ?? 0)} · ${hit.speaker ?? ""}`;
     case "transcript_text":
-      return "Transcript";
+      return t("transcript");
     case "project_name":
-      return "Project name";
+      return t("projectName");
     case "resource_name":
-      return `File ${hit.resource?.file_name ?? ""}`;
+      return t("file", { fileName: hit.resource?.file_name ?? "" });
     case "resource_text":
-      return `In ${hit.resource?.file_name ?? ""}`;
+      return t("in", { place: hit.resource?.file_name ?? "" });
   }
 }

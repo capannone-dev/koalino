@@ -2,12 +2,14 @@
 // the default AI connection with the notes that fit.
 
 import { ChatPanel } from "@/components/chat-panel";
+import { getT } from "@/lib/i18n/server";
 
-export default function ChatPage() {
+export default async function ChatPage() {
+  const t = await getT();
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-bold sm:text-3xl">Chat</h1>
-      <ChatPanel topic={{ scope: "all" }} heading="Chat with all your notes" />
+      <h1 className="text-2xl font-bold sm:text-3xl">{t("chat")}</h1>
+      <ChatPanel topic={{ scope: "all" }} heading={t("chatWithAllYourNotes")} />
     </section>
   );
 }

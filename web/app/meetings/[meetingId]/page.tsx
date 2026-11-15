@@ -15,8 +15,10 @@ import { describeTranscriptionLanguages, formatMeetingCreatedAt } from "@/lib/me
 import { getMeetingNotes } from "@/lib/edits-api";
 import { getLlmSettings, getMeetingSummary } from "@/lib/llm-api";
 import { getProjects, type ProjectSummary } from "@/lib/projects-api";
+import { getT } from "@/lib/i18n/server";
 
 export default async function MeetingDetailPage({ params }: { params: Promise<{ meetingId: string }> }) {
+  const t = await getT();
   const { meetingId } = await params;
   const meeting = await getMeeting(meetingId);
   // The project picker is extra: an older daemon without projects still shows the meeting.
@@ -27,7 +29,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
     getMeetingSummary(meetingId).catch(() => ({ summary: null, meeting_prompt: null })),
     getMeetingNotes(meetingId).catch(() => null)
   ]);
-  const languages = describeTranscriptionLanguages(meeting.transcription_languages);
+  const languages = describeTranscriptionLanguages(meeting.transcription_languages, t);
   const projectId = summaries.find((summary) => summary.meeting_id === meetingId)?.project_id ?? null;
   return (
     <section>
@@ -40,7 +42,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       </p>
       {languages === null ? null : <p className="text-muted">{languages}</p>}
       <MeetingRecordedOn meeting={meeting} />
-      <p>Meeting {meeting.meeting_id}</p>
+      <p>{t("meeting", { meetingId: meeting.meeting_id })}</p>
       <MeetingSummaryPanel
         meetingId={meeting.meeting_id}
         summary={summaryState.summary}
@@ -49,10 +51,10 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
         defaultTemplate={llmSettings?.template ?? ""}
       />
       <MeetingNotes meetingId={meeting.meeting_id} notes={notes} />
-      <ChatPanel topic={{ scope: "meeting", id: meeting.meeting_id }} heading="Chat about this meeting" />
-      <h2>Transcript</h2>
+      <ChatPanel topic={{ scope: "meeting", id: meeting.meeting_id }} heading={t("chatAboutThisMeeting")} />
+      <h2>{t("transcript")}</h2>
       <MeetingTranscript meetingId={meeting.meeting_id} segments={meeting.segments} transcript={meeting.transcript} />
-      <h2>Attachments</h2>
+      <h2>{t("attachments")}</h2>
       <ul>
         {meeting.attachments.map((attachment) => (
           <li key={attachment.attachment_id}>{attachment.file_path} ({attachment.mime_type})</li>

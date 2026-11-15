@@ -14,6 +14,7 @@ import {
   type LlmConnection,
   type StoredSummary
 } from "@/lib/llm-api";
+import { useT } from "@/lib/i18n/client";
 
 const buttonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong px-4 hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus disabled:text-faint";
@@ -47,6 +48,7 @@ export function MeetingSummaryPanel({
   connections,
   defaultTemplate
 }: MeetingSummaryPanelProps) {
+  const t = useT();
   const [current, setCurrent] = useState(summary);
   const [connectionId, setConnectionId] = useState(
     connections?.find((connection) => connection.is_default)?.id ?? connections?.[0]?.id ?? ""
@@ -63,17 +65,17 @@ export function MeetingSummaryPanel({
   /** Writes the summary with the chosen connection. */
   async function summarize() {
     setBusy(true);
-    setMessage("Writing the summary… This can take a few minutes with a local model.");
+    setMessage(t("writingTheSummaryThisCan"));
     try {
       const result = await summarizeMeeting(meetingId, connectionId || undefined);
       setCurrent(result.summary);
       const notes = [
-        result.parts > 1 ? `The transcript was read in ${result.parts} parts.` : null,
-        result.images_skipped > 0 ? `${result.images_skipped} picture(s) could not be sent.` : null
+        result.parts > 1 ? t("theTranscriptWasReadIn", { parts: result.parts }) : null,
+        result.images_skipped > 0 ? t("picturesNotSent", { count: result.images_skipped }) : null
       ].filter(Boolean);
-      setMessage(["Summary written.", ...notes].join(" "));
+      setMessage([t("summaryWritten"), ...notes].join(" "));
     } catch (error) {
-      setMessage(llmErrorMessage(error));
+      setMessage(llmErrorMessage(error, t));
     } finally {
       setBusy(false);
     }
@@ -86,9 +88,9 @@ export function MeetingSummaryPanel({
     try {
       setCurrent(await editSummaryText(meetingId, text));
       setEditingText(null);
-      setMessage("Summary saved.");
+      setMessage(t("summarySaved"));
     } catch (error) {
-      setMessage(editErrorMessage(error));
+      setMessage(editErrorMessage(error, t));
     } finally {
       setBusy(false);
     }
@@ -102,9 +104,9 @@ export function MeetingSummaryPanel({
       await setMeetingPrompt(meetingId, text);
       setPrompt(text);
       setEditingPrompt(null);
-      setMessage(text === null ? "This meeting uses the Settings prompt again." : "Prompt saved for this meeting.");
+      setMessage(text === null ? t("thisMeetingUsesTheSettings") : t("promptSavedForThisMeeting"));
     } catch (error) {
-      setMessage(llmErrorMessage(error));
+      setMessage(llmErrorMessage(error, t));
     } finally {
       setBusy(false);
     }
@@ -114,12 +116,10 @@ export function MeetingSummaryPanel({
   const noConnection = connections !== null && connections.length === 0;
   return (
     <section id="summary" aria-labelledby={`${meetingId}-summary-heading`} className="card space-y-3">
-      <h2 id={`${meetingId}-summary-heading`}>Summary</h2>
+      <h2 id={`${meetingId}-summary-heading`}>{t("summary")}</h2>
       {editingText !== null ? (
         <div className="space-y-2">
-          <label htmlFor={textFieldId} className="block font-semibold">
-            Summary (Markdown)
-          </label>
+          <label htmlFor={textFieldId} className="block font-semibold">{t("summaryMarkdown")}</label>
           <textarea
             id={textFieldId}
             className={`${fieldClass} min-h-60 py-2 font-mono`}
@@ -127,12 +127,8 @@ export function MeetingSummaryPanel({
             onChange={(event) => setEditingText(event.target.value)}
           />
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={buttonClass} disabled={busy} onClick={() => void saveText(editingText)}>
-              Save summary
-            </button>
-            <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText(null)}>
-              Cancel
-            </button>
+            <button type="button" className={buttonClass} disabled={busy} onClick={() => void saveText(editingText)}>{t("saveSummary")}</button>
+            <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText(null)}>{t("cancel")}</button>
           </div>
         </div>
       ) : current ? (
@@ -140,35 +136,25 @@ export function MeetingSummaryPanel({
           <div className="whitespace-pre-wrap break-words">{current.text}</div>
           <p className="text-sm text-muted">
             {current.connection_label === "" && current.model === "" ? (
-              "Written by you."
+              t("writtenByYou")
             ) : (
-              <>
-                Written by {current.model} ({current.connection_label})
-                {current.edited ? ", edited" : ""}
-                {current.truncated ? ". The model stopped early, so the end may be missing" : ""}.
-              </>
+              <>{t("writtenBy", { model: current.model, connectionLabel: current.connection_label, edited: current.edited ? t("edited") : "", stopped: current.truncated ? t("modelStoppedEarly") : "" })}</>
             )}
           </p>
-          <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText(current.text)}>
-            Edit summary
-          </button>
+          <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText(current.text)}>{t("editSummary")}</button>
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-muted">No summary yet.</p>
-          <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText("")}>
-            Write a summary
-          </button>
+          <p className="text-muted">{t("noSummaryYet")}</p>
+          <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText("")}>{t("writeASummary")}</button>
         </div>
       )}
-      {unavailable ? <p className="text-muted">AI connections are unavailable on this server.</p> : null}
-      {noConnection ? <p className="text-muted">Add an AI connection in Settings to write summaries.</p> : null}
+      {unavailable ? <p className="text-muted">{t("aiConnectionsAreUnavailableOn")}</p> : null}
+      {noConnection ? <p className="text-muted">{t("addAnAiConnectionIn")}</p> : null}
       {connections && connections.length > 0 ? (
         <div className="flex flex-wrap items-end gap-2">
           <div>
-            <label htmlFor={connectionFieldId} className="block text-sm font-semibold">
-              Summarize with
-            </label>
+            <label htmlFor={connectionFieldId} className="block text-sm font-semibold">{t("summarizeWith")}</label>
             <select
               id={connectionFieldId}
               className={fieldClass}
@@ -184,29 +170,23 @@ export function MeetingSummaryPanel({
             </select>
           </div>
           <button type="button" className={buttonClass} disabled={busy} onClick={() => void summarize()}>
-            {current ? "Summarize again" : "Summarize"}
+            {current ? t("summarizeAgain") : t("summarize")}
           </button>
         </div>
       ) : null}
       {editingPrompt === null ? (
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm text-muted">
-            {prompt === null ? "Uses the prompt from Settings." : "Uses its own prompt."}
+            {prompt === null ? t("usesThePromptFromSettings") : t("usesItsOwnPrompt")}
           </p>
-          <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingPrompt(prompt ?? defaultTemplate)}>
-            Edit prompt for this meeting
-          </button>
+          <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingPrompt(prompt ?? defaultTemplate)}>{t("editPromptForThisMeeting")}</button>
           {prompt === null ? null : (
-            <button type="button" className={buttonClass} disabled={busy} onClick={() => void savePrompt(null)}>
-              Use the Settings prompt
-            </button>
+            <button type="button" className={buttonClass} disabled={busy} onClick={() => void savePrompt(null)}>{t("useTheSettingsPrompt")}</button>
           )}
         </div>
       ) : (
         <div className="space-y-2">
-          <label htmlFor={promptFieldId} className="block font-semibold">
-            Prompt for this meeting
-          </label>
+          <label htmlFor={promptFieldId} className="block font-semibold">{t("promptForThisMeeting")}</label>
           <textarea
             id={promptFieldId}
             className={`${fieldClass} min-h-40 py-2`}
@@ -214,12 +194,8 @@ export function MeetingSummaryPanel({
             onChange={(event) => setEditingPrompt(event.target.value)}
           />
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={buttonClass} disabled={busy} onClick={() => void savePrompt(editingPrompt)}>
-              Save prompt
-            </button>
-            <button type="button" className={buttonClass} onClick={() => setEditingPrompt(null)}>
-              Cancel
-            </button>
+            <button type="button" className={buttonClass} disabled={busy} onClick={() => void savePrompt(editingPrompt)}>{t("savePrompt")}</button>
+            <button type="button" className={buttonClass} onClick={() => setEditingPrompt(null)}>{t("cancel")}</button>
           </div>
         </div>
       )}

@@ -12,6 +12,7 @@ import {
   projectNameError,
   type ProjectSummary
 } from "@/lib/projects-api";
+import { useT } from "@/lib/i18n/client";
 
 /** The selector's value for "New project…". */
 const newProjectValue = "__new__";
@@ -33,6 +34,7 @@ export function MeetingProjectPicker({
   projectId: string | null;
   projects: ProjectSummary[];
 }) {
+  const t = useT();
   const [currentProjectId, setCurrentProjectId] = useState(projectId);
   const [knownProjects, setKnownProjects] = useState(projects);
   const [isNaming, setIsNaming] = useState(false);
@@ -53,11 +55,11 @@ export function MeetingProjectPicker({
     try {
       await moveMeetingToProject(meetingId, target);
       setIsFailure(false);
-      setMessage(target === null ? "Removed from the project" : `Moved to ${targetName ?? "the project"}`);
+      setMessage(target === null ? t("removedFromTheProject") : t("movedTo", { project: targetName ?? "the project" }));
     } catch (error) {
       setCurrentProjectId(previous);
       setIsFailure(true);
-      setMessage(projectErrorMessage(error));
+      setMessage(projectErrorMessage(error, t));
     } finally {
       setIsMoving(false);
     }
@@ -78,7 +80,7 @@ export function MeetingProjectPicker({
   /** Creates the named project and moves the meeting into it. */
   async function createAndMove(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const error = projectNameError(newName);
+    const error = projectNameError(newName, t);
     setNameError(error);
     if (error !== null) return;
     setIsMoving(true);
@@ -90,16 +92,14 @@ export function MeetingProjectPicker({
       await moveTo(created.project_id, created.name);
     } catch (failure) {
       setIsFailure(true);
-      setMessage(projectErrorMessage(failure));
+      setMessage(projectErrorMessage(failure, t));
       setIsMoving(false);
     }
   }
 
   return (
     <div className="my-3 max-w-md">
-      <label htmlFor={selectId} className="block text-sm font-medium">
-        Project
-      </label>
+      <label htmlFor={selectId} className="block text-sm font-medium">{t("project")}</label>
       <select
         id={selectId}
         value={isNaming ? newProjectValue : (currentProjectId ?? "")}
@@ -107,20 +107,18 @@ export function MeetingProjectPicker({
         onChange={(event) => choose(event.target.value)}
         className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30"
       >
-        <option value="">No project</option>
+        <option value="">{t("noProject")}</option>
         {knownProjects.map((project) => (
           <option key={project.project_id} value={project.project_id}>
             {project.name}
           </option>
         ))}
-        <option value={newProjectValue}>New project…</option>
+        <option value={newProjectValue}>{t("newProject")}</option>
       </select>
       {isNaming ? (
         <form onSubmit={createAndMove} noValidate className="mt-2 flex flex-wrap items-end gap-2">
           <div className="min-w-0 flex-1">
-            <label htmlFor={nameId} className="block text-sm font-medium">
-              New project name
-            </label>
+            <label htmlFor={nameId} className="block text-sm font-medium">{t("newProjectName")}</label>
             <input
               id={nameId}
               type="text"
@@ -139,9 +137,7 @@ export function MeetingProjectPicker({
             type="submit"
             disabled={isMoving}
             className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled"
-          >
-            Create and move
-          </button>
+          >{t("createAndMove")}</button>
           <p role="alert" className="w-full text-sm text-danger">
             {nameError}
           </p>

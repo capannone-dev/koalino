@@ -86,6 +86,11 @@ Projects (Issue #85), over `lib/projects-api.ts`:
 - `meeting-project-picker.tsx` is the meeting page's Project selector; a failed move puts the
   previous choice back. Its last option, "New project…", asks for a name, creates the project
   and moves the meeting into it in one step (#94).
+`language-settings.tsx` (#124) is the Settings card choosing the dashboard's language: "Same as the
+browser" or one of the ten, kept in this browser's `koalino-language` cookie. A change refreshes the
+page, so the server renders it in the new language. Every component reads its text through `useT()`
+(`lib/i18n`).
+
 `telemetry-entry.tsx` is the Settings card linking to `/settings/telemetry` (Issue #53).
 
 `telemetry-dashboard.tsx` owns the responsive Recharts visualizations and bounded WebSocket refresh

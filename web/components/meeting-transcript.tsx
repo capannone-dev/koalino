@@ -10,6 +10,7 @@
 import { useEffect, useId, useState } from "react";
 import type { TranscriptSegment } from "@/lib/api";
 import { editErrorMessage, editSegment } from "@/lib/edits-api";
+import { useT } from "@/lib/i18n/client";
 
 const buttonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong px-3 hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus disabled:text-faint";
@@ -27,6 +28,7 @@ function formatOffset(milliseconds: number): string {
 
 /** Shows a segment's words, the unclear ones in italics with a tooltip. */
 function SegmentText({ segment }: { segment: TranscriptSegment }) {
+  const t = useT();
   const unclear = new Set(segment.uncertain_words ?? []);
   if (unclear.size === 0) {
     return <p>{segment.text}</p>;
@@ -38,7 +40,7 @@ function SegmentText({ segment }: { segment: TranscriptSegment }) {
         <span key={position}>
           {position > 0 ? " " : null}
           {unclear.has(position) ? (
-            <em className="text-muted" title="Unclear word">
+            <em className="text-muted" title={t("unclearWord")}>
               {word}
             </em>
           ) : (
@@ -71,6 +73,7 @@ export function MeetingTranscript({
   transcript: string | null;
   meetingId?: string;
 }) {
+  const t = useT();
   const [current, setCurrent] = useState(segments ?? []);
   const [editing, setEditing] = useState<{ key: string; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -107,18 +110,18 @@ export function MeetingTranscript({
       setEditing(null);
       setMessage(
         saved === null
-          ? "Removed. This meeting won't be re-transcribed, so your corrections stay."
-          : "Saved. This meeting won't be re-transcribed, so your corrections stay."
+          ? t("removedThisMeetingWontBe")
+          : t("savedThisMeetingWontBe")
       );
     } catch (error) {
-      setMessage(editErrorMessage(error));
+      setMessage(editErrorMessage(error, t));
     } finally {
       setBusy(false);
     }
   }
 
   if (current.length === 0) {
-    return <p id="transcript">{transcript ?? "No transcript is available."}</p>;
+    return <p id="transcript">{transcript ?? t("noTranscriptIsAvailable")}</p>;
   }
   return (
     <>
@@ -131,17 +134,15 @@ export function MeetingTranscript({
           return (
             <li key={key} id={`t-${segment.start_time_ms}`} className="scroll-mt-20">
               <p className="text-sm font-medium text-accent-text">
-                <span title={segment.uncertain_speaker ? "The speaker is a guess" : undefined}>{`${speaker} · ${at}`}</span>
+                <span title={segment.uncertain_speaker ? t("theSpeakerIsAGuess") : undefined}>{`${speaker} · ${at}`}</span>
                 {segment.overlapping_speech ? (
-                  <span className="ml-2 text-xs text-warning" title="People talked at once here; words may be missing">
-                    Overlapping speech
-                  </span>
+                  <span className="ml-2 text-xs text-warning" title={t("peopleTalkedAtOnceHere")}>{t("overlappingSpeech")}</span>
                 ) : null}
               </p>
               {editing?.key === key ? (
                 <div className="space-y-2">
                   <label htmlFor={fieldId} className="sr-only">
-                    {`Text at ${at}`}
+                    {t("textAt", { at })}
                   </label>
                   <textarea
                     id={fieldId}
@@ -150,14 +151,10 @@ export function MeetingTranscript({
                     onChange={(event) => setEditing({ key, text: event.target.value })}
                   />
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" className={buttonClass} disabled={busy} onClick={() => void save(segment, editing.text)}>
-                      Save
-                    </button>
-                    <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditing(null)}>
-                      Cancel
-                    </button>
+                    <button type="button" className={buttonClass} disabled={busy} onClick={() => void save(segment, editing.text)}>{t("save")}</button>
+                    <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditing(null)}>{t("cancel")}</button>
                   </div>
-                  <p className="text-sm text-muted">Leave it empty to remove this part.</p>
+                  <p className="text-sm text-muted">{t("leaveItEmptyToRemove")}</p>
                 </div>
               ) : (
                 <div className="flex items-start gap-2">
@@ -168,8 +165,8 @@ export function MeetingTranscript({
                     <button
                       type="button"
                       className={buttonClass}
-                      aria-label={`Edit the text at ${at}`}
-                      title="Correct this text"
+                      aria-label={t("editTheTextAt", { at })}
+                      title={t("correctThisText")}
                       disabled={busy}
                       onClick={() => setEditing({ key, text: segment.text })}
                     >

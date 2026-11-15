@@ -2,6 +2,7 @@
 // on the daemon's computer, turned on and off from Settings.
 
 import { apiBaseUrl } from "@/lib/api";
+import { englishT, type Translate } from "@/lib/i18n";
 
 /** The folder's settings and how its last round went, as the daemon describes them. */
 export type NotesFolderStatus = {
@@ -26,17 +27,17 @@ export class NotesFolderError extends Error {
 }
 
 /** Plain messages per error code; server text is not shown. */
-const messages: Record<string, string> = {
-  network: "Can't reach the note-taking server. Check that it is running.",
-  invalid_folder: "Choose a full folder path, inside your home folder but not the home folder itself.",
-  folder_failed: "The folder could not be written. Check that it exists and the server can write there.",
-  storage_failed: "The notes could not be read or saved.",
-  unavailable: "This server keeps no notes folder."
-};
+const messages = (t: Translate) : Record<string, string> => ({
+  network: t("cantReachTheNoteTaking"),
+  invalid_folder: t("chooseAFullFolderPath"),
+  folder_failed: t("theFolderCouldNotBe"),
+  storage_failed: t("theNotesCouldNotBe2"),
+  unavailable: t("thisServerKeepsNoNotes")
+});
 
 /** Words an error code for people. */
-export function notesFolderMessage(code: string): string {
-  return messages[code] ?? "Something went wrong on the server. Try again.";
+export function notesFolderMessage(code: string, t: Translate = englishT): string {
+  return messages(t)[code] ?? t("somethingWentWrongOnThe");
 }
 
 /** Sends one request, mapping failures to `NotesFolderError`. */

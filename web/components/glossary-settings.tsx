@@ -5,14 +5,16 @@
 
 import { useId, useState } from "react";
 import { GlossaryError, setGlossary, type GlossaryFailureKind } from "@/lib/api";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n";
 
 /** Plain messages per failure; server text is never shown because it can contain internal details. */
-const failureMessages: Record<GlossaryFailureKind, string> = {
-  invalid_glossary: "Each term can have at most 60 characters, and all of them together at most 500.",
-  unavailable: "This server has no glossary.",
-  server: "Something went wrong on the server. Try again.",
-  network: "Can't reach the note-taking server. Check that it is running."
-};
+const failureMessages = (t: Translate) : Record<GlossaryFailureKind, string> => ({
+  invalid_glossary: t("eachTermCanHaveAt"),
+  unavailable: t("thisServerHasNoGlossary"),
+  server: t("somethingWentWrongOnThe"),
+  network: t("cantReachTheNoteTaking")
+});
 
 export type GlossarySettingsProps = {
   /** The saved terms, or `null` when they could not be read. */
@@ -27,10 +29,11 @@ export type GlossarySettingsProps = {
  * text the server refuses stays in the field to correct.
  */
 export function GlossarySettings({ initialTerms }: GlossarySettingsProps) {
+  const t = useT();
   const [text, setText] = useState((initialTerms ?? []).join("\n"));
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(
-    initialTerms === null ? "Can't read the glossary. Check that the note-taking server is running." : null
+    initialTerms === null ? t("cantReadTheGlossaryCheck") : null
   );
   const fieldId = useId();
   const hintId = useId();
@@ -46,9 +49,9 @@ export function GlossarySettings({ initialTerms }: GlossarySettingsProps) {
     try {
       const saved = await setGlossary(terms);
       setText(saved.join("\n"));
-      setMessage("Saved. The next recording uses these names and terms.");
+      setMessage(t("savedTheNextRecordingUses"));
     } catch (error) {
-      setMessage(failureMessages[error instanceof GlossaryError ? error.kind : "server"]);
+      setMessage(failureMessages(t)[error instanceof GlossaryError ? error.kind : "server"]);
     } finally {
       setIsSaving(false);
     }
@@ -57,12 +60,8 @@ export function GlossarySettings({ initialTerms }: GlossarySettingsProps) {
   return (
     <div className="card max-w-2xl space-y-3">
       <div className="space-y-1">
-        <label htmlFor={fieldId} className="block font-semibold">
-          Glossary
-        </label>
-        <p id={hintId} className="text-sm text-muted">
-          Names, project names and terms, one per line. Transcription spells them as written here.
-        </p>
+        <label htmlFor={fieldId} className="block font-semibold">{t("glossary")}</label>
+        <p id={hintId} className="text-sm text-muted">{t("namesProjectNamesAndTerms")}</p>
         <textarea
           id={fieldId}
           aria-describedby={hintId}
@@ -79,7 +78,7 @@ export function GlossarySettings({ initialTerms }: GlossarySettingsProps) {
         disabled={initialTerms === null || isSaving}
         onClick={save}
       >
-        {isSaving ? "Saving…" : "Save glossary"}
+        {isSaving ? t("saving") : t("saveGlossary")}
       </button>
       <p role="status" aria-live="polite">
         {message}

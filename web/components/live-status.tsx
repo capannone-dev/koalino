@@ -4,15 +4,17 @@
 
 import { useEffect, useState } from "react";
 import { webSocketUrl } from "@/lib/api";
+import { useT } from "@/lib/i18n/client";
 
 export function LiveStatus() {
-  const [status, setStatus] = useState("Connecting to live updates…");
+  const t = useT();
+  const [status, setStatus] = useState(t("connectingToLiveUpdates"));
   useEffect(() => {
     const socket = new WebSocket(webSocketUrl());
-    socket.onopen = () => setStatus("Connected for live updates.");
-    socket.onmessage = (event) => setStatus(`Update: ${event.data}`);
-    socket.onerror = () => setStatus("Live updates are unavailable.");
+    socket.onopen = () => setStatus(t("connectedForLiveUpdates"));
+    socket.onmessage = (event) => setStatus(t("update", { data: event.data }));
+    socket.onerror = () => setStatus(t("liveUpdatesAreUnavailable"));
     return () => socket.close();
-  }, []);
+  }, [t]);
   return <p aria-live="polite">{status}</p>;
 }

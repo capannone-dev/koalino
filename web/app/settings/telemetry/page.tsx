@@ -4,13 +4,15 @@
 import Link from "next/link";
 import { TelemetryDashboard } from "@/components/telemetry-dashboard";
 import { getDeviceTelemetry, getDevices, getTelemetrySummary } from "@/lib/api";
+import { getT } from "@/lib/i18n/server";
 
 export default async function TelemetryPage() {
+  const t = await getT();
   const devicesResponse = await getDevices();
   const series = await Promise.all(devicesResponse.devices.map(async (device) => getDeviceTelemetry(device.device_id).catch(() => ({ device_id: device.device_id, metrics: [] }))));
   return (
     <div className="space-y-4">
-      <Link href="/settings" className="text-sm text-muted hover:text-ink">← Settings</Link>
+      <Link href="/settings" className="text-sm text-muted hover:text-ink">{t("settings2")}</Link>
       <TelemetryDashboard initialData={{ devices: devicesResponse.devices, summary: await getTelemetrySummary(), series }} />
     </div>
   );

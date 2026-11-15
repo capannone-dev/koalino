@@ -6,6 +6,7 @@
 
 import { useId, useState } from "react";
 import { editErrorMessage, saveMeetingNotes } from "@/lib/edits-api";
+import { useT } from "@/lib/i18n/client";
 
 const buttonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong px-4 hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus disabled:text-faint";
@@ -19,6 +20,7 @@ const fieldClass =
  * field while editing, and a status line. Side effects: "Save notes" writes them to the meeting.
  */
 export function MeetingNotes({ meetingId, notes }: { meetingId: string; notes: string | null }) {
+  const t = useT();
   const [current, setCurrent] = useState(notes);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -33,9 +35,9 @@ export function MeetingNotes({ meetingId, notes }: { meetingId: string; notes: s
       await saveMeetingNotes(meetingId, text);
       setCurrent(text);
       setEditing(null);
-      setMessage("Notes saved.");
+      setMessage(t("notesSaved"));
     } catch (error) {
-      setMessage(editErrorMessage(error));
+      setMessage(editErrorMessage(error, t));
     } finally {
       setBusy(false);
     }
@@ -44,31 +46,25 @@ export function MeetingNotes({ meetingId, notes }: { meetingId: string; notes: s
   const hasNotes = current !== null && current.trim().length > 0;
   return (
     <section id="notes" aria-labelledby={`${meetingId}-notes-heading`} className="card scroll-mt-20 space-y-3">
-      <h2 id={`${meetingId}-notes-heading`}>Notes</h2>
+      <h2 id={`${meetingId}-notes-heading`}>{t("notes")}</h2>
       {editing === null ? (
         <>
           {hasNotes ? (
             <div className="whitespace-pre-wrap break-words">{current}</div>
           ) : (
-            <p className="text-muted">No notes yet.</p>
+            <p className="text-muted">{t("noNotesYet")}</p>
           )}
           <button type="button" className={buttonClass} onClick={() => setEditing(current ?? "")}>
-            {hasNotes ? "Edit notes" : "Write notes"}
+            {hasNotes ? t("editNotes") : t("writeNotes")}
           </button>
         </>
       ) : (
         <div className="space-y-2">
-          <label htmlFor={fieldId} className="block font-semibold">
-            Notes (Markdown)
-          </label>
+          <label htmlFor={fieldId} className="block font-semibold">{t("notesMarkdown")}</label>
           <textarea id={fieldId} className={fieldClass} value={editing} onChange={(event) => setEditing(event.target.value)} />
           <div className="flex flex-wrap gap-2">
-            <button type="button" className={buttonClass} disabled={busy} onClick={() => void save(editing)}>
-              Save notes
-            </button>
-            <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditing(null)}>
-              Cancel
-            </button>
+            <button type="button" className={buttonClass} disabled={busy} onClick={() => void save(editing)}>{t("saveNotes")}</button>
+            <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditing(null)}>{t("cancel")}</button>
           </div>
         </div>
       )}

@@ -8,6 +8,7 @@ import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { RenameMeetingDialog } from "@/components/rename-meeting-dialog";
 import type { MeetingSummary } from "@/lib/api";
 import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion-messages";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Shows `meeting.title` as the page's `h1`, with a pencil button opening the rename dialog.
@@ -17,6 +18,7 @@ import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion
  * the new title immediately, without reloading the page.
  */
 export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
+  const t = useT();
   const [currentMeeting, setCurrentMeeting] = useState(meeting);
   const [isRenaming, setIsRenaming] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -37,8 +39,8 @@ export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
         <button
           ref={pencilRef}
           type="button"
-          aria-label="Rename meeting"
-          title="Rename meeting"
+          aria-label={t("renameMeeting")}
+          title={t("renameMeeting")}
           onClick={() => {
             setStatusMessage("");
             setIsRenaming(true);
@@ -49,8 +51,8 @@ export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
         </button>
         <button
           type="button"
-          aria-label="Delete meeting"
-          title="Delete meeting"
+          aria-label={t("deleteMeeting")}
+          title={t("deleteMeeting")}
           onClick={() => setIsDeleting(true)}
           className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-danger hover:bg-surface-muted"
         >
@@ -62,11 +64,11 @@ export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
       </p>
       {isDeleting ? (
         <ConfirmDeleteDialog
-          title={`Delete ${currentMeeting.title}?`}
-          message={meetingDeletionMessage}
+          title={t("delete2", { title: currentMeeting.title })}
+          message={meetingDeletionMessage(t)}
           onClose={() => setIsDeleting(false)}
           onConfirm={async () => {
-            await deleteMeetingWithMessage(currentMeeting.meeting_id);
+            await deleteMeetingWithMessage(currentMeeting.meeting_id, t);
             router.push("/meetings");
             router.refresh();
           }}
@@ -78,7 +80,7 @@ export function MeetingTitleHeader({ meeting }: { meeting: MeetingSummary }) {
           onClose={closeDialog}
           onRenamed={(summary) => {
             setCurrentMeeting(summary);
-            setStatusMessage("Meeting renamed");
+            setStatusMessage(t("meetingRenamed"));
             closeDialog();
           }}
         />

@@ -5,15 +5,17 @@
 import { FormEvent, KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { MeetingRenameError, renameMeeting, type MeetingRenameFailureKind, type MeetingSummary } from "@/lib/api";
 import { maxMeetingTitleCharacters, validateMeetingTitle } from "@/lib/meeting-title";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n";
 
 /** Plain messages per failure; server text is never shown because it can contain internal details. */
-const renameFailureMessages: Record<MeetingRenameFailureKind, string> = {
-  invalid_title: "This title isn't allowed.",
-  not_found: "This meeting no longer exists.",
-  server: "Couldn't save the new title. Try again.",
-  network: "Can't reach the note-taking server. Check that it is running.",
-  unexpected: "Couldn't rename the meeting."
-};
+const renameFailureMessages = (t: Translate) : Record<MeetingRenameFailureKind, string> => ({
+  invalid_title: t("thisTitleIsntAllowed"),
+  not_found: t("thisMeetingNoLongerExists"),
+  server: t("couldntSaveTheNewTitle"),
+  network: t("cantReachTheNoteTaking"),
+  unexpected: t("couldntRenameTheMeeting")
+});
 
 export type RenameMeetingDialogProps = {
   /** The meeting being renamed; its title pre-fills the field. */
@@ -33,6 +35,7 @@ export type RenameMeetingDialogProps = {
  * and restore focus to the control that opened it.
  */
 export function RenameMeetingDialog({ meeting, onRenamed, onClose }: RenameMeetingDialogProps) {
+  const t = useT();
   const [typedTitle, setTypedTitle] = useState(meeting.title);
   const [hasAttemptedSave, setHasAttemptedSave] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -48,7 +51,7 @@ export function RenameMeetingDialog({ meeting, onRenamed, onClose }: RenameMeeti
     titleInputRef.current?.select();
   }, []);
 
-  const validation = validateMeetingTitle(typedTitle);
+  const validation = validateMeetingTitle(typedTitle, t);
   // Validation errors appear after the first Save, so clearing the field to retype does not flash one.
   const errorMessage = (hasAttemptedSave ? validation.error : null) ?? saveErrorMessage;
   const characterCount = Array.from(validation.trimmedTitle).length;
@@ -68,7 +71,7 @@ export function RenameMeetingDialog({ meeting, onRenamed, onClose }: RenameMeeti
     try {
       onRenamed(await renameMeeting(meeting.meeting_id, validation.trimmedTitle));
     } catch (error) {
-      setSaveErrorMessage(renameFailureMessages[error instanceof MeetingRenameError ? error.kind : "unexpected"]);
+      setSaveErrorMessage(renameFailureMessages(t)[error instanceof MeetingRenameError ? error.kind : "unexpected"]);
       setIsSaving(false);
     }
   }
@@ -108,13 +111,9 @@ export function RenameMeetingDialog({ meeting, onRenamed, onClose }: RenameMeeti
         onKeyDown={handleKeyDown}
         className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl"
       >
-        <h2 id={headingId} className="text-lg font-semibold">
-          Rename meeting
-        </h2>
+        <h2 id={headingId} className="text-lg font-semibold">{t("renameMeeting")}</h2>
         <form onSubmit={save} noValidate className="mt-4">
-          <label htmlFor={`${headingId}-title`} className="block text-sm font-medium text-ink-soft">
-            Title
-          </label>
+          <label htmlFor={`${headingId}-title`} className="block text-sm font-medium text-ink-soft">{t("title")}</label>
           <input
             ref={titleInputRef}
             id={`${headingId}-title`}
@@ -144,15 +143,13 @@ export function RenameMeetingDialog({ meeting, onRenamed, onClose }: RenameMeeti
               disabled={isSaving}
               onClick={onClose}
               className="min-h-11 rounded-lg px-4 font-medium text-accent-text hover:bg-accent-soft disabled:text-faint"
-            >
-              Cancel
-            </button>
+            >{t("cancel")}</button>
             <button
               type="submit"
               disabled={isSaving}
               className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled"
             >
-              {isSaving ? "Saving…" : "Save"}
+              {isSaving ? t("saving") : t("save")}
             </button>
           </div>
         </form>

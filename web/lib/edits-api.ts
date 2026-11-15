@@ -3,6 +3,7 @@
 
 import { apiBaseUrl } from "@/lib/api";
 import type { StoredSummary } from "@/lib/llm-api";
+import { englishT, type Translate } from "@/lib/i18n";
 
 /** A failed edit: the daemon's error code (or `network`) and the HTTP status. */
 export class EditApiError extends Error {
@@ -16,23 +17,23 @@ export class EditApiError extends Error {
 }
 
 /** Plain messages per error code; server text is not shown. */
-const messages: Record<string, string> = {
-  network: "Can't reach the note-taking server. Check that it is running.",
-  empty: "Write something first.",
-  too_long: "The text is too long.",
-  meeting_not_found: "That meeting no longer exists.",
-  segment_not_found: "That part of the transcript changed. Reload the page.",
-  storage_failed: "The change could not be saved."
-};
+const messages = (t: Translate) : Record<string, string> => ({
+  network: t("cantReachTheNoteTaking"),
+  empty: t("writeSomethingFirst"),
+  too_long: t("theTextIsTooLong"),
+  meeting_not_found: t("thatMeetingNoLongerExists"),
+  segment_not_found: t("thatPartOfTheTranscript"),
+  storage_failed: t("theChangeCouldNotBe")
+});
 
 /**
  * Words an edit failure for people.
  *
  * Inputs: any thrown value. Outputs: a sentence. Side effects: none.
  */
-export function editErrorMessage(error: unknown): string {
-  if (error instanceof EditApiError) return messages[error.code] ?? "Something went wrong on the server. Try again.";
-  return "Something went wrong. Try again.";
+export function editErrorMessage(error: unknown, t: Translate = englishT): string {
+  if (error instanceof EditApiError) return messages(t)[error.code] ?? t("somethingWentWrongOnThe");
+  return t("somethingWentWrongTryAgain");
 }
 
 /** Sends one request and returns its JSON, mapping failures to `EditApiError`. */

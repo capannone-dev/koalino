@@ -11,13 +11,15 @@ import {
   type MeetingVoices,
   type MeetingVoicesFailureKind
 } from "@/lib/meeting-voices-api";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n";
 
 /** Plain messages per failure; server text is never shown. */
-const failureMessages: Record<MeetingVoicesFailureKind, string> = {
-  unavailable: "This server can't keep meeting voices.",
-  server: "Something went wrong on the server. Try again.",
-  network: "Can't reach the note-taking server. Check that it is running."
-};
+const failureMessages = (t: Translate) : Record<MeetingVoicesFailureKind, string> => ({
+  unavailable: t("thisServerCantKeepMeeting"),
+  server: t("somethingWentWrongOnThe"),
+  network: t("cantReachTheNoteTaking")
+});
 
 export type MeetingVoicesSettingsProps = {
   /** The saved choice, or `null` when it could not be read. */
@@ -32,10 +34,11 @@ export type MeetingVoicesSettingsProps = {
  * switched; a failed save goes back to the saved choice.
  */
 export function MeetingVoicesSettings({ initial }: MeetingVoicesSettingsProps) {
+  const t = useT();
   const [keep, setKeep] = useState(initial?.keep ?? false);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(
-    initial === null ? "Can't read whether meeting voices are kept. Check that the note-taking server is running." : null
+    initial === null ? t("cantReadWhetherMeetingVoices") : null
   );
   const hintId = useId();
 
@@ -48,11 +51,11 @@ export function MeetingVoicesSettings({ initial }: MeetingVoicesSettingsProps) {
       setKeep(saved.keep);
       setMessage(
         saved.keep
-          ? "Saved. Participants' voices will be kept after enough speech of one voice."
-          : "Saved. Participants' voices will no longer be kept; voices kept earlier stay in the gallery."
+          ? t("savedParticipantsVoicesWillBe")
+          : t("savedParticipantsVoicesWillNo")
       );
     } catch (error) {
-      setMessage(failureMessages[error instanceof MeetingVoicesError ? error.kind : "server"]);
+      setMessage(failureMessages(t)[error instanceof MeetingVoicesError ? error.kind : "server"]);
     } finally {
       setIsSaving(false);
     }
@@ -68,14 +71,8 @@ export function MeetingVoicesSettings({ initial }: MeetingVoicesSettingsProps) {
           checked={keep}
           disabled={initial === null || isSaving}
           onChange={(event) => void choose(event.target.checked)}
-        />
-        Keep meeting participants&apos; voices
-      </label>
-      <p id={hintId} className="text-sm text-muted">
-        In online meetings, a participant who spoke alone for about 30 seconds gets their voice in the voice gallery,
-        so they are recognised later, also in the room. A meeting room or a shared computer, with several voices, is
-        never kept. Voice prints are biometric data: tell participants, and remove a voice in the gallery when asked.
-      </p>
+        />{t("keepMeetingParticipantsVoices")}</label>
+      <p id={hintId} className="text-sm text-muted">{t("inOnlineMeetingsAParticipant")}</p>
       <p role="status" aria-live="polite">
         {message}
       </p>

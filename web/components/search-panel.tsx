@@ -15,6 +15,7 @@ import {
   type SearchResults,
   type SearchScope
 } from "@/lib/search-api";
+import { useT } from "@/lib/i18n/client";
 
 const buttonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong px-4 hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus disabled:text-faint";
@@ -36,6 +37,7 @@ export type SearchPanelProps = {
  * Side effects: one request per search; nothing is stored.
  */
 export function SearchPanel({ scope, label, projectId }: SearchPanelProps) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResults | null>(null);
   const [busy, setBusy] = useState(false);
@@ -46,19 +48,19 @@ export function SearchPanel({ scope, label, projectId }: SearchPanelProps) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
-    setMessage("Searching…");
+    setMessage(t("searching"));
     try {
       const found = await searchNotes(query, scope, projectId);
       setResults(found);
       const count = found.hits.length;
       setMessage(
         count === 0
-          ? "Nothing found."
-          : `${count === 1 ? "1 result" : `${count} results`}${found.truncated ? ", more not shown: add words to narrow it" : ""}.`
+          ? t("nothingFound")
+          : `${t("resultCount", { count })}${found.truncated ? t("moreNotShownAddWords") : ""}.`
       );
     } catch (error) {
       setResults(null);
-      setMessage(searchErrorMessage(error));
+      setMessage(searchErrorMessage(error, t));
     } finally {
       setBusy(false);
     }
@@ -79,9 +81,7 @@ export function SearchPanel({ scope, label, projectId }: SearchPanelProps) {
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
-        <button type="submit" className={buttonClass} disabled={busy}>
-          Search
-        </button>
+        <button type="submit" className={buttonClass} disabled={busy}>{t("search")}</button>
       </form>
       {/* A live region without the status role, so the page's own status line stays the only one. */}
       <p aria-live="polite" className="text-sm text-muted">
@@ -95,7 +95,7 @@ export function SearchPanel({ scope, label, projectId }: SearchPanelProps) {
                 <Link href={hitHref(hit)} className="font-semibold text-accent-text underline-offset-2 hover:underline">
                   {hit.meeting ? hit.meeting.title : (hit.project?.name ?? "")}
                 </Link>
-                <span className="text-sm text-muted">{hitPlaceLabel(hit)}</span>
+                <span className="text-sm text-muted">{hitPlaceLabel(hit, t)}</span>
               </p>
               <p className="break-words">
                 {hit.snippet.map((part, position) =>

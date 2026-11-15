@@ -29,63 +29,65 @@ import {
   type PairingUpdate,
   type TrustedDevice
 } from "@/lib/p2p-api";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n";
 
 /** How often the status is read again, in milliseconds. */
 const statusPollIntervalMs = 2_000;
 /** How long the daemon accepts pairing requests after Make discoverable (`PAIRING_WINDOW`). */
 const pairingWindowMs = 5 * 60 * 1_000;
 /** Shown whenever the daemon cannot be reached. */
-const unreachableMessage = "Can't reach the note-taking server. Check that it is running.";
+const unreachableMessage = (t: Translate) => t("cantReachTheNoteTaking");
 
 /** Plain messages per failure kind. */
-const failureMessages: Record<P2pFailureKind, string> = {
-  refused: "The other device is no longer pairing. Try again.",
-  unavailable: "Device sync is not running.",
-  network: unreachableMessage,
-  invalid_peer: "That did not work. Try again.",
-  not_found: "That did not work. Try again.",
-  server: "That did not work. Try again."
-};
+const failureMessages = (t: Translate) : Record<P2pFailureKind, string> => ({
+  refused: t("theOtherDeviceIsNo"),
+  unavailable: t("deviceSyncIsNotRunning"),
+  network: unreachableMessage(t),
+  invalid_peer: t("thatDidNotWorkTry"),
+  not_found: t("thatDidNotWorkTry"),
+  server: t("thatDidNotWorkTry")
+});
 
 /** Plain messages per invite refusal. */
-const inviteMessages: Record<InviteFailureCode, string> = {
-  invite_malformed: "That is not a valid invite. Copy it again.",
-  invite_expired: "This invite has expired. Make a new one on the other device.",
-  invite_from_this_device: "This invite was made on this device. Use it on the other one.",
-  already_paired: "That device is already paired.",
-  no_addresses: "This server is not on a network yet. Connect it and try again.",
-  unavailable: "Device sync is not running.",
-  other: "That did not work. Try again."
-};
+const inviteMessages = (t: Translate) : Record<InviteFailureCode, string> => ({
+  invite_malformed: t("thatIsNotAValid"),
+  invite_expired: t("thisInviteHasExpiredMake"),
+  invite_from_this_device: t("thisInviteWasMadeOn"),
+  already_paired: t("thatDeviceIsAlreadyPaired"),
+  no_addresses: t("thisServerIsNotOn"),
+  unavailable: t("deviceSyncIsNotRunning"),
+  other: t("thatDidNotWorkTry")
+});
 
 /** Explains an empty Nearby list: it only covers this network, and what to do otherwise. */
-export function describeEmptyNearby(hasRelay: boolean): string {
-  const nextStep = hasRelay ? "use an invite." : "use an invite, or give this server a relay with NOTE_TAKER_P2P_RELAY.";
-  return `No other devices found on this network. Nearby only finds devices on the same Wi-Fi. For a device on another network, ${nextStep}`;
+export function describeEmptyNearby(t: Translate, hasRelay: boolean): string {
+  const nextStep = hasRelay ? t("useAnInvite") : t("useAnInviteOrGive");
+  return t("noOtherDevicesFoundOn", { nextStep });
 }
 
 /** Explains what a paired device that is not connected needs to reconnect. */
-export function describeDisconnectedDevice(hasRelay: boolean): string {
+export function describeDisconnectedDevice(t: Translate, hasRelay: boolean): string {
   return hasRelay
-    ? "Not connected. It reconnects when it is online and can reach your relay."
-    : "Not connected. Put both devices on the same Wi-Fi, or give this server a relay with NOTE_TAKER_P2P_RELAY.";
+    ? t("notConnectedItReconnectsWhen")
+    : t("notConnectedPutBothDevices");
 }
 
 /** Words any thrown value as a failure message. */
-function failureMessage(error: unknown): string {
-  if (error instanceof InviteError) return inviteMessages[error.code];
-  return failureMessages[error instanceof P2pRequestError ? error.kind : "server"];
+function failureMessage(t: Translate, error: unknown): string {
+  if (error instanceof InviteError) return inviteMessages(t)[error.code];
+  return failureMessages(t)[error instanceof P2pRequestError ? error.kind : "server"];
 }
 
 /** Words the result of confirming or accepting a pairing; `null` while it is still under way. */
-function pairingResultMessage(update: PairingUpdate): string | null {
+function pairingResultMessage(t: Translate, update: PairingUpdate): string | null {
   switch (update.kind) {
     case "paired":
-      return `Paired with ${update.device_name}.`;
+      return t("pairedWith", { deviceName: update.device_name });
     case "rejected":
-      return "The other device rejected the pairing.";
+      return t("theOtherDeviceRejectedThe");
     case "failed":
-      return "Pairing failed. Try again.";
+      return t("pairingFailedTryAgain");
     default:
       return null;
   }
@@ -107,19 +109,19 @@ export function formatPairedDate(pairedAtMs: number): string {
 }
 
 /** Display names of known transcription model labels; others are shown as given. */
-const modelNames: Record<string, string> = { whisper: "Whisper (on device)", openai: "OpenAI (cloud)" };
+const modelNames = (t: Translate) : Record<string, string> => ({ whisper: t("whisperOnDevice"), openai: t("openaiCloud") });
 
 /** Summarizes a device's manifest as `8 CPU cores · 4 GB GPU · Whisper (on device)`. */
-export function describeCapabilities(capabilities: DeviceCapabilities): string {
+export function describeCapabilities(t: Translate, capabilities: DeviceCapabilities): string {
   const parts = [`${capabilities.cpu_cores} CPU ${capabilities.cpu_cores === 1 ? "core" : "cores"}`];
   const gpuMegabytes = capabilities.gpu_vram_megabytes;
   if (gpuMegabytes > 0) {
-    parts.push(gpuMegabytes >= 1_024 ? `${Math.round(gpuMegabytes / 1_024)} GB GPU` : `${gpuMegabytes} MB GPU`);
+    parts.push(gpuMegabytes >= 1_024 ? t("gbGpu", { gigabytes: Math.round(gpuMegabytes / 1_024) }) : t("mbGpu", { gpuMegabytes }));
   }
   parts.push(
     capabilities.transcription_models.length === 0
-      ? "No transcription models"
-      : capabilities.transcription_models.map((model) => modelNames[model] ?? model).join(", ")
+      ? t("noTranscriptionModels")
+      : capabilities.transcription_models.map((model) => modelNames(t)[model] ?? model).join(", ")
   );
   return parts.join(" · ");
 }
@@ -140,6 +142,7 @@ export type DevicesPanelProps = {
  * calls the pairing routes when the owner acts; each action is followed by a status read.
  */
 export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
+  const t = useT();
   const [status, setStatus] = useState(initialStatus);
   const [isReachable, setIsReachable] = useState(initialStatus !== null);
   const [message, setMessage] = useState<string | null>(null);
@@ -173,7 +176,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
     try {
       setMessage(await step());
     } catch (error) {
-      setMessage(failureMessage(error));
+      setMessage(failureMessage(t, error));
     } finally {
       setIsBusy(false);
     }
@@ -190,7 +193,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
       setMessage(null);
     } catch (error) {
       setRenameRefusal(
-        error instanceof P2pRequestError && error.kind === "invalid_peer" ? "Use 1 to 64 characters, without line breaks." : failureMessage(error)
+        error instanceof P2pRequestError && error.kind === "invalid_peer" ? t("use1To64Characters") : failureMessage(t, error)
       );
       setIsBusy(false);
       return;
@@ -201,7 +204,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
 
   const statusLine = (
     <p role="status" aria-live="polite">
-      {isReachable ? message : unreachableMessage}
+      {isReachable ? message : unreachableMessage(t)}
     </p>
   );
 
@@ -209,8 +212,8 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
   if (!status.enabled) {
     return (
       <div className="card max-w-2xl space-y-2">
-        <h2 className="text-lg font-semibold">Device sync is off</h2>
-        <p className="text-muted">Meetings stay on this server until sync is turned on.</p>
+        <h2 className="text-lg font-semibold">{t("deviceSyncIsOff")}</h2>
+        <p className="text-muted">{t("meetingsStayOnThisServer")}</p>
         {statusLine}
       </div>
     );
@@ -226,22 +229,20 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="font-semibold">{status.device_name}</p>
-            <p className="text-sm text-muted">This device</p>
-            <p className="text-sm text-muted">{describeCapabilities(status.capabilities)}</p>
+            <p className="text-sm text-muted">{t("thisDevice")}</p>
+            <p className="text-sm text-muted">{describeCapabilities(t, status.capabilities)}</p>
           </div>
           {draftName === null && (
             <button
               type="button"
               className={secondaryButton}
-              aria-label="Rename this device"
+              aria-label={t("renameThisDevice")}
               disabled={isBusy}
               onClick={() => {
                 setRenameRefusal(null);
                 setDraftName(status.device_name);
               }}
-            >
-              Rename
-            </button>
+            >{t("rename")}</button>
           )}
         </div>
         {draftName !== null && (
@@ -252,9 +253,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
               void saveName(draftName);
             }}
           >
-            <label className="block">
-              Device name
-              <input
+            <label className="block">{t("deviceName")}<input
                 className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30"
                 type="text"
                 autoComplete="off"
@@ -269,20 +268,16 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
               />
             </label>
             <p id="device-name-help" className={renameRefusal ? "text-sm text-danger" : "text-sm text-muted"}>
-              {renameRefusal ?? "Nearby devices see this name while this server is discoverable. Devices already paired keep the name they learned."}
+              {renameRefusal ?? t("nearbyDevicesSeeThisName")}
             </p>
             <div className="flex gap-2">
-              <button type="submit" className={primaryButton} disabled={isBusy}>
-                Save
-              </button>
-              <button type="button" className={secondaryButton} disabled={isBusy} onClick={() => setDraftName(null)}>
-                Cancel
-              </button>
+              <button type="submit" className={primaryButton} disabled={isBusy}>{t("save")}</button>
+              <button type="button" className={secondaryButton} disabled={isBusy} onClick={() => setDraftName(null)}>{t("cancel")}</button>
             </div>
           </form>
         )}
         {isDiscoverable ? (
-          <p>Discoverable: your other devices can ask to pair for a few minutes.</p>
+          <p>{t("discoverableYourOtherDevicesCan")}</p>
         ) : (
           <button
             type="button"
@@ -295,72 +290,58 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
                 return null;
               })
             }
-          >
-            Make discoverable
-          </button>
+          >{t("makeDiscoverable")}</button>
         )}
       </div>
 
       {status.incoming_requests.length > 0 && (
-        <DeviceSection title="Pairing requests">
+        <DeviceSection title={t("pairingRequests")}>
           {status.incoming_requests.map((request) => (
-            <CodeCard key={request.peer_id} title={request.device_name} code={request.code} instructions="Accept only if the other device shows the same code.">
-              <button type="button" className={secondaryButton} disabled={isBusy} onClick={() => void runStep(async () => (await rejectPairingRequest(request.peer_id), null))}>
-                Reject
-              </button>
-              <button type="button" className={primaryButton} disabled={isBusy} onClick={() => void runStep(async () => pairingResultMessage(await acceptPairingRequest(request.peer_id)))}>
-                Accept
-              </button>
+            <CodeCard key={request.peer_id} title={request.device_name} code={request.code} instructions={t("acceptOnlyIfTheOther")}>
+              <button type="button" className={secondaryButton} disabled={isBusy} onClick={() => void runStep(async () => (await rejectPairingRequest(request.peer_id), null))}>{t("reject")}</button>
+              <button type="button" className={primaryButton} disabled={isBusy} onClick={() => void runStep(async () => pairingResultMessage(t, await acceptPairingRequest(request.peer_id)))}>{t("accept")}</button>
             </CodeCard>
           ))}
         </DeviceSection>
       )}
 
       {status.outgoing_pairings.length > 0 && (
-        <DeviceSection title="Pairing in progress">
+        <DeviceSection title={t("pairingInProgress")}>
           {status.outgoing_pairings.map((pairing) => (
             <CodeCard
               key={pairing.peer_id}
               title={shortPeerId(pairing.peer_id)}
               code={pairing.code}
-              instructions={pairing.locally_confirmed ? "Waiting for the other device…" : "Check that the other device shows the same code."}
+              instructions={pairing.locally_confirmed ? t("waitingForTheOtherDevice") : t("checkThatTheOtherDevice")}
             >
-              <button type="button" className={secondaryButton} disabled={isBusy} onClick={() => void runStep(async () => (await cancelPairing(pairing.peer_id), null))}>
-                Cancel pairing
-              </button>
+              <button type="button" className={secondaryButton} disabled={isBusy} onClick={() => void runStep(async () => (await cancelPairing(pairing.peer_id), null))}>{t("cancelPairing")}</button>
               {!pairing.locally_confirmed && (
-                <button type="button" className={primaryButton} disabled={isBusy} onClick={() => void runStep(async () => pairingResultMessage(await confirmPairingCode(pairing.peer_id)))}>
-                  Codes match
-                </button>
+                <button type="button" className={primaryButton} disabled={isBusy} onClick={() => void runStep(async () => pairingResultMessage(t, await confirmPairingCode(pairing.peer_id)))}>{t("codesMatch")}</button>
               )}
             </CodeCard>
           ))}
         </DeviceSection>
       )}
 
-      <DeviceSection title="Paired devices">
-        {status.trusted_devices.length === 0 && <p className="text-muted">No paired devices yet.</p>}
+      <DeviceSection title={t("pairedDevices")}>
+        {status.trusted_devices.length === 0 && <p className="text-muted">{t("noPairedDevicesYet")}</p>}
         {status.trusted_devices.map((device) => (
           <div key={device.peer_id} className="card space-y-2">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="font-semibold">{device.device_name}</p>
-                <p className="text-sm text-muted">{`Paired ${formatPairedDate(device.paired_at_ms)}`}</p>
-                <p className="text-sm text-muted">{device.capabilities ? describeCapabilities(device.capabilities) : describeDisconnectedDevice(hasRelay)}</p>
+                <p className="text-sm text-muted">{t("paired", { pairedDate: formatPairedDate(device.paired_at_ms) })}</p>
+                <p className="text-sm text-muted">{device.capabilities ? describeCapabilities(t, device.capabilities) : describeDisconnectedDevice(t, hasRelay)}</p>
               </div>
               {deviceToRemove?.peer_id !== device.peer_id && (
-                <button type="button" className={secondaryButton} aria-label={`Remove ${device.device_name}`} disabled={isBusy} onClick={() => setDeviceToRemove(device)}>
-                  Remove
-                </button>
+                <button type="button" className={secondaryButton} aria-label={t("remove2", { deviceName: device.device_name })} disabled={isBusy} onClick={() => setDeviceToRemove(device)}>{t("remove")}</button>
               )}
             </div>
             {deviceToRemove?.peer_id === device.peer_id && (
               <div className="space-y-2">
-                <p>{`${device.device_name} stops syncing with this server. Pair again to resume.`}</p>
+                <p>{t("stopsSyncingWithThisServer", { deviceName: device.device_name })}</p>
                 <div className="flex justify-end gap-2">
-                  <button type="button" className={secondaryButton} onClick={() => setDeviceToRemove(null)}>
-                    Cancel
-                  </button>
+                  <button type="button" className={secondaryButton} onClick={() => setDeviceToRemove(null)}>{t("cancel")}</button>
                   <button
                     type="button"
                     className={primaryButton}
@@ -372,9 +353,7 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
                         return null;
                       })
                     }
-                  >
-                    Remove
-                  </button>
+                  >{t("remove")}</button>
                 </div>
               </div>
             )}
@@ -382,9 +361,9 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
         ))}
       </DeviceSection>
 
-      <DeviceSection title="Nearby devices">
+      <DeviceSection title={t("nearbyDevices")}>
         {status.nearby_devices.length === 0 && (
-          <p className="text-muted">{describeEmptyNearby(hasRelay)}</p>
+          <p className="text-muted">{describeEmptyNearby(t, hasRelay)}</p>
         )}
         {status.nearby_devices.map((device) => (
           <div key={device.peer_id} className="card flex items-center justify-between gap-4">
@@ -396,15 +375,13 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
             ) : (
               <p className="font-mono">{shortPeerId(device.peer_id)}</p>
             )}
-            <button type="button" className={primaryButton} disabled={isBusy} onClick={() => void runStep(async () => (await startPairing(device.peer_id), null))}>
-              Pair
-            </button>
+            <button type="button" className={primaryButton} disabled={isBusy} onClick={() => void runStep(async () => (await startPairing(device.peer_id), null))}>{t("pair")}</button>
           </div>
         ))}
       </DeviceSection>
 
-      <DeviceSection title="Another network">
-        <p className="text-muted">Show an invite here and use it on the other device. You still compare a code before they pair.</p>
+      <DeviceSection title={t("anotherNetwork")}>
+        <p className="text-muted">{t("showAnInviteHereAnd")}</p>
         <button
           type="button"
           className={secondaryButton}
@@ -417,16 +394,12 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
               return null;
             })
           }
-        >
-          Show invite
-        </button>
+        >{t("showInvite")}</button>
         {invite && (
           <div className="card space-y-2">
             <p className="break-all font-mono text-sm">{invite.invite}</p>
-            <p className="text-sm text-muted">{`Works until ${new Date(invite.expires_at_ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}.`}</p>
-            <button type="button" className={secondaryButton} onClick={() => void navigator.clipboard?.writeText(invite.invite)}>
-              Copy link
-            </button>
+            <p className="text-sm text-muted">{t("worksUntil", { time: new Date(invite.expires_at_ms).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) })}</p>
+            <button type="button" className={secondaryButton} onClick={() => void navigator.clipboard?.writeText(invite.invite)}>{t("copyLink")}</button>
           </div>
         )}
         <form
@@ -436,17 +409,13 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
             void runStep(async () => {
               await joinInvite(inviteText);
               setInviteText("");
-              return "Device found. Choose Pair under Nearby devices.";
+              return t("deviceFoundChoosePairUnder");
             });
           }}
         >
-          <label className="block">
-            Invite from another device
-            <input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" type="text" autoComplete="off" value={inviteText} onChange={(event) => setInviteText(event.target.value)} />
+          <label className="block">{t("inviteFromAnotherDevice")}<input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" type="text" autoComplete="off" value={inviteText} onChange={(event) => setInviteText(event.target.value)} />
           </label>
-          <button type="submit" className={secondaryButton} disabled={isBusy || inviteText.trim() === ""}>
-            Find device
-          </button>
+          <button type="submit" className={secondaryButton} disabled={isBusy || inviteText.trim() === ""}>{t("findDevice")}</button>
         </form>
       </DeviceSection>
     </div>
@@ -468,10 +437,11 @@ function DeviceSection({ title, children }: { title: string; children: React.Rea
 
 /** A card with a device name, a pairing code in large type, instructions, and actions. */
 function CodeCard({ title, code, instructions, children }: { title: string; code: string; instructions: string; children: React.ReactNode }) {
+  const t = useT();
   return (
     <div className="card space-y-2">
       <p className="font-semibold">{title}</p>
-      <p className="text-3xl font-semibold tabular-nums tracking-widest" aria-label={`Pairing code ${code.split("").join(" ")}`}>
+      <p className="text-3xl font-semibold tabular-nums tracking-widest" aria-label={t("pairingCode", { code: code.split("").join(" ") })}>
         {formatPairingCode(code)}
       </p>
       <p>{instructions}</p>

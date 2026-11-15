@@ -3516,3 +3516,31 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Translations** are machine-made and need review by native speakers. A test checks that every
   language has every message with the same declared placeholders.
 - **Still to come under #124:** the web UI and the browser extension.
+
+## 2026-11-15 — #124 The web dashboard in the same ten languages
+
+- **Decision:** no i18n library. JSON dictionaries in `web/lib/i18n/messages` and a small
+  `translator` (placeholders, plus plurals through `Intl.PluralRules`) cover the dashboard's 470
+  messages.
+- **Which language:** the owner's choice in Settings → *Language*, kept in a `koalino-language`
+  cookie of that browser; without one, the browser's `Accept-Language`; else English. A cookie
+  rather than a server setting, because the browser is what a dashboard viewer chooses with, and
+  the server can read it while rendering.
+- **No global language:**
+  - the root layout resolves the language per request and hands it to a React context;
+  - server components call `await getT()`;
+  - helpers in `lib/` take a `t` argument, which defaults to English.
+
+  A module-level "current language" would be shared by concurrent requests on the server, and
+  server and browser could then disagree during hydration.
+- **Consequences:**
+  - every page renders per request; the dashboard already fetched live data per request;
+  - tests that render components without the provider stay English;
+  - 241 messages reuse the app's translations word for word.
+- **Kept in English, as in the app:**
+  - Whisper's language names;
+  - brand names;
+  - developer error text that is never shown.
+
+  Translations are machine-made and need a native review. Portuguese follows the app's
+  Brazilian wording.

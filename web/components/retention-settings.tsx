@@ -6,14 +6,16 @@
 
 import { useId, useState } from "react";
 import { RetentionError, setRetention, type RetentionFailureKind, type SpeechRetention } from "@/lib/api";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n";
 
 /** Plain messages per failure; server text is never shown because it can contain internal details. */
-const failureMessages: Record<RetentionFailureKind, string> = {
-  invalid_window: "Choose a window between 1 and 60 days.",
-  unavailable: "This server keeps no speech for combining.",
-  server: "Something went wrong on the server. Try again.",
-  network: "Can't reach the note-taking server. Check that it is running."
-};
+const failureMessages = (t: Translate) : Record<RetentionFailureKind, string> => ({
+  invalid_window: t("chooseAWindowBetween1"),
+  unavailable: t("thisServerKeepsNoSpeech"),
+  server: t("somethingWentWrongOnThe"),
+  network: t("cantReachTheNoteTaking")
+});
 
 /** Common windows, in days, offered between the bounds. */
 const commonWindows = [3, 7, 14, 21, 30, 45];
@@ -47,10 +49,11 @@ export type RetentionSettingsProps = {
  * chosen; a refused choice goes back to the saved window.
  */
 export function RetentionSettings({ initial }: RetentionSettingsProps) {
+  const t = useT();
   const [retention, setRetentionState] = useState<SpeechRetention>(initial ?? { days: 21, min_days: 1, max_days: 60 });
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(
-    initial === null ? "Can't read how long speech is kept. Check that the note-taking server is running." : null
+    initial === null ? t("cantReadHowLongSpeech") : null
   );
   const fieldId = useId();
   const hintId = useId();
@@ -62,9 +65,9 @@ export function RetentionSettings({ initial }: RetentionSettingsProps) {
     try {
       const saved = await setRetention(days);
       setRetentionState(saved);
-      setMessage(`Saved. Speech now waits up to ${saved.days} ${saved.days === 1 ? "day" : "days"} to be combined.`);
+      setMessage(t("savedSpeechWaits", { count: saved.days }));
     } catch (error) {
-      setMessage(failureMessages[error instanceof RetentionError ? error.kind : "server"]);
+      setMessage(failureMessages(t)[error instanceof RetentionError ? error.kind : "server"]);
     } finally {
       setIsSaving(false);
     }
@@ -73,13 +76,8 @@ export function RetentionSettings({ initial }: RetentionSettingsProps) {
   return (
     <div className="card max-w-2xl space-y-3">
       <div className="space-y-1">
-        <label htmlFor={fieldId} className="block font-semibold">
-          Keep speech for combining
-        </label>
-        <p id={hintId} className="text-sm text-muted">
-          When a meeting was also recorded on another device, its speech waits this long to be combined, then is
-          deleted.
-        </p>
+        <label htmlFor={fieldId} className="block font-semibold">{t("keepSpeechForCombining")}</label>
+        <p id={hintId} className="text-sm text-muted">{t("whenAMeetingWasAlso")}</p>
         <select
           id={fieldId}
           aria-describedby={hintId}
@@ -90,7 +88,7 @@ export function RetentionSettings({ initial }: RetentionSettingsProps) {
         >
           {retentionChoices(retention).map((days) => (
             <option key={days} value={String(days)}>
-              {days === 1 ? "1 day" : `${days} days`}
+              {t("dayCount", { count: days })}
             </option>
           ))}
         </select>

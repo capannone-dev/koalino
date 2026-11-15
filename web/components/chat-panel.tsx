@@ -17,6 +17,7 @@ import {
   type ChatMessage,
   type ChatTopic
 } from "@/lib/chat-api";
+import { useT } from "@/lib/i18n/client";
 
 const buttonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong px-4 hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus disabled:text-faint";
@@ -36,6 +37,7 @@ export type ChatPanelProps = {
  * Side effects: reads the chat on mount; asking and deleting call the daemon.
  */
 export function ChatPanel({ topic, heading }: ChatPanelProps) {
+  const t = useT();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
@@ -53,7 +55,7 @@ export function ChatPanel({ topic, heading }: ChatPanelProps) {
       })
       .catch((error: unknown) => {
         if (current) {
-          setStatus(chatErrorMessage(error));
+          setStatus(chatErrorMessage(error, t));
         }
       });
     return () => {
@@ -66,33 +68,33 @@ export function ChatPanel({ topic, heading }: ChatPanelProps) {
   async function ask(event: FormEvent) {
     event.preventDefault();
     if (!question.trim()) {
-      setStatus("Type a question.");
+      setStatus(t("typeAQuestion"));
       return;
     }
     setBusy(true);
-    setStatus("Waiting for the answer…");
+    setStatus(t("waitingForTheAnswer"));
     try {
       const kept = await askChat(topic, question);
       setMessages((earlier) => [...earlier, kept.question, kept.answer]);
       setQuestion("");
       setStatus(null);
     } catch (error) {
-      setStatus(chatErrorMessage(error));
+      setStatus(chatErrorMessage(error, t));
     } finally {
       setBusy(false);
     }
   }
 
   async function clear() {
-    if (!window.confirm("Delete this chat? Its questions and answers are deleted from the server.")) {
+    if (!window.confirm(t("deleteThisChatItsQuestions"))) {
       return;
     }
     try {
       await clearChat(topic);
       setMessages([]);
-      setStatus("Chat deleted.");
+      setStatus(t("chatDeleted"));
     } catch (error) {
-      setStatus(chatErrorMessage(error));
+      setStatus(chatErrorMessage(error, t));
     }
   }
 
@@ -101,15 +103,11 @@ export function ChatPanel({ topic, heading }: ChatPanelProps) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-xl font-semibold">{heading}</h2>
         {messages.length > 0 ? (
-          <button type="button" className={buttonClass} disabled={busy} onClick={() => void clear()}>
-            Delete chat
-          </button>
+          <button type="button" className={buttonClass} disabled={busy} onClick={() => void clear()}>{t("deleteChat")}</button>
         ) : null}
       </div>
       {messages.length === 0 ? (
-        <p className="text-sm text-muted">
-          Ask about your notes. The answer comes from your default AI connection, which is sent the notes that fit.
-        </p>
+        <p className="text-sm text-muted">{t("askAboutYourNotesThe")}</p>
       ) : (
         <ol className="space-y-3">
           {messages.map((message, index) => (
@@ -121,10 +119,10 @@ export function ChatPanel({ topic, heading }: ChatPanelProps) {
                   : "max-w-[85%] rounded-lg border border-line px-3 py-2"
               }
             >
-              <p className="sr-only">{message.role === "user" ? "You asked:" : "Answer:"}</p>
+              <p className="sr-only">{message.role === "user" ? t("youAsked") : t("answer")}</p>
               <div className="whitespace-pre-wrap break-words">{message.text}</div>
               {message.role === "assistant" && message.sources && message.sources.length > 0 ? (
-                <ul className="mt-2 flex flex-wrap gap-2" aria-label="Sources">
+                <ul className="mt-2 flex flex-wrap gap-2" aria-label={t("sources")}>
                   {message.sources.map((source) => {
                     const href = sourceHref(source);
                     return (
@@ -142,13 +140,13 @@ export function ChatPanel({ topic, heading }: ChatPanelProps) {
                 </ul>
               ) : null}
               {message.role === "assistant" && message.included.length > 0 ? (
-                <p className="mt-2 text-sm text-muted">Given: {message.included.join("; ")}</p>
+                <p className="mt-2 text-sm text-muted">{t("given", { included: message.included.join("; ") })}</p>
               ) : null}
               {message.role === "assistant" && message.omitted.length > 0 ? (
-                <p className="text-sm text-muted">Left out for length: {message.omitted.join("; ")}</p>
+                <p className="text-sm text-muted">{t("leftOutForLength", { omitted: message.omitted.join("; ") })}</p>
               ) : null}
               {message.role === "assistant" && message.connection ? (
-                <p className="text-sm text-muted">Answered by {message.connection}</p>
+                <p className="text-sm text-muted">{t("answeredBy", { connection: message.connection })}</p>
               ) : null}
             </li>
           ))}
@@ -156,9 +154,7 @@ export function ChatPanel({ topic, heading }: ChatPanelProps) {
       )}
       <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => void ask(event)}>
         <div className="min-w-60 flex-1">
-          <label htmlFor={fieldId} className="block text-sm font-semibold">
-            Your question
-          </label>
+          <label htmlFor={fieldId} className="block text-sm font-semibold">{t("yourQuestion")}</label>
           <textarea
             id={fieldId}
             rows={2}
@@ -168,9 +164,7 @@ export function ChatPanel({ topic, heading }: ChatPanelProps) {
             onChange={(event) => setQuestion(event.target.value)}
           />
         </div>
-        <button type="submit" className={buttonClass} disabled={busy}>
-          Ask
-        </button>
+        <button type="submit" className={buttonClass} disabled={busy}>{t("ask")}</button>
       </form>
       <p aria-live="polite" className="text-sm text-muted">
         {status}

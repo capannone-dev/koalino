@@ -7,6 +7,7 @@ import { KeyboardEvent, useEffect, useId, useState } from "react";
 import { MeetingProjectPicker } from "@/components/meeting-project-picker";
 import type { MeetingSummary } from "@/lib/api";
 import { getProjects, projectErrorMessage, type ProjectSummary } from "@/lib/projects-api";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * Lets the person choose the project of one meeting from the list.
@@ -16,6 +17,7 @@ import { getProjects, projectErrorMessage, type ProjectSummary } from "@/lib/pro
  * the picker moves the meeting. Closes on Escape, the backdrop, or Done.
  */
 export function MeetingProjectDialog({ meeting, onClose }: { meeting: MeetingSummary; onClose: () => void }) {
+  const t = useT();
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const headingId = useId();
@@ -27,12 +29,12 @@ export function MeetingProjectDialog({ meeting, onClose }: { meeting: MeetingSum
         if (isCurrent) setProjects(loaded);
       })
       .catch((error: unknown) => {
-        if (isCurrent) setLoadError(projectErrorMessage(error));
+        if (isCurrent) setLoadError(projectErrorMessage(error, t));
       });
     return () => {
       isCurrent = false;
     };
-  }, []);
+  }, [t]);
 
   /** Closes on Escape. */
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -56,13 +58,11 @@ export function MeetingProjectDialog({ meeting, onClose }: { meeting: MeetingSum
         onKeyDown={handleKeyDown}
         className="w-full max-w-md rounded-2xl bg-surface p-6 shadow-xl"
       >
-        <h2 id={headingId} className="text-lg font-semibold">
-          Add {meeting.title} to a project
-        </h2>
+        <h2 id={headingId} className="text-lg font-semibold">{t("addToAProject", { title: meeting.title })}</h2>
         {projects !== null ? (
           <MeetingProjectPicker meetingId={meeting.meeting_id} projectId={meeting.project_id ?? null} projects={projects} />
         ) : (
-          <p className="my-3 text-muted">{loadError ?? "Loading projects…"}</p>
+          <p className="my-3 text-muted">{loadError ?? t("loadingProjects")}</p>
         )}
         <div className="mt-4 flex justify-end">
           <button
@@ -70,9 +70,7 @@ export function MeetingProjectDialog({ meeting, onClose }: { meeting: MeetingSum
             autoFocus
             onClick={onClose}
             className="min-h-11 rounded-lg border border-line-strong px-4 font-medium hover:bg-surface-muted"
-          >
-            Done
-          </button>
+          >{t("done")}</button>
         </div>
       </div>
     </div>

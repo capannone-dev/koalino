@@ -2,6 +2,7 @@
 // meeting, summary and project. Questions and answers are never logged.
 
 import { apiBaseUrl } from "@/lib/api";
+import { englishT, type Translate } from "@/lib/i18n";
 
 /** What a chat is about. */
 export type ChatTopic = { scope: "meeting" | "project"; id: string } | { scope: "all" };
@@ -78,33 +79,33 @@ export class ChatApiError extends Error {
 }
 
 /** Plain messages per error code; server text is not shown. */
-const messages: Record<string, string> = {
-  network: "Can't reach the note-taking server. Check that it is running.",
-  empty: "Type a question.",
-  too_long: "The question is too long.",
-  no_connection: "Add an AI connection in Settings, or choose a default one.",
-  connection_not_found: "That AI connection no longer exists.",
-  nothing_to_chat: "There is nothing to talk about yet: no transcript, summary, notes or files.",
-  context_too_small: "The AI connection's context is too small. Choose one with a larger context.",
-  meeting_not_found: "That meeting no longer exists.",
-  project_not_found: "That project no longer exists.",
-  llm_unreachable: "The AI server could not be reached. Check the connection.",
-  llm_unauthorized: "The AI server refused access. Use a server that needs no API key.",
-  llm_rate_limited: "The AI server is busy. Try again later.",
-  unavailable: "This server has no AI connections.",
-  storage_failed: "The notes could not be read."
-};
+const messages = (t: Translate) : Record<string, string> => ({
+  network: t("cantReachTheNoteTaking"),
+  empty: t("typeAQuestion"),
+  too_long: t("theQuestionIsTooLong"),
+  no_connection: t("addAnAiConnectionIn2"),
+  connection_not_found: t("thatAiConnectionNoLonger"),
+  nothing_to_chat: t("thereIsNothingToTalk"),
+  context_too_small: t("theAiConnectionsContextIs"),
+  meeting_not_found: t("thatMeetingNoLongerExists"),
+  project_not_found: t("thatProjectNoLongerExists"),
+  llm_unreachable: t("theAiServerCouldNot"),
+  llm_unauthorized: t("theAiServerRefusedAccess"),
+  llm_rate_limited: t("theAiServerIsBusy"),
+  unavailable: t("thisServerHasNoAi"),
+  storage_failed: t("theNotesCouldNotBe")
+});
 
 /** Words a failure for people. */
-export function chatErrorMessage(error: unknown): string {
+export function chatErrorMessage(error: unknown, t: Translate = englishT): string {
   if (error instanceof ChatApiError && error.code === "llm_rejected" && error.detail) {
-    return `The AI server rejected the request. The server said: ${error.detail}`;
+    return t("theAiServerRejectedThe", { detail: error.detail });
   }
   if (error instanceof ChatApiError && error.code === "llm_tool_failed" && error.detail) {
-    return `Claude Code or Codex could not answer. It said: ${error.detail}`;
+    return t("claudeCodeOrCodexCould", { detail: error.detail });
   }
   const code = error instanceof ChatApiError ? error.code : "server";
-  return messages[code] ?? (code.startsWith("llm_") ? "The AI server could not answer. Try again." : "Something went wrong. Try again.");
+  return messages(t)[code] ?? (code.startsWith("llm_") ? t("theAiServerCouldNot2") : t("somethingWentWrongTryAgain"));
 }
 
 /** The query string naming a chat. */

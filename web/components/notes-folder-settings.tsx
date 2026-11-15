@@ -11,6 +11,8 @@ import {
   syncNotesFolder,
   type NotesFolderStatus
 } from "@/lib/notes-folder-api";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n";
 
 export type NotesFolderSettingsProps = {
   /** The saved status, or `null` when it could not be read. */
@@ -18,14 +20,14 @@ export type NotesFolderSettingsProps = {
 };
 
 /** Words the last round, or `null` before one. */
-function lastRound(status: NotesFolderStatus): string | null {
+function lastRound(t: Translate, status: NotesFolderStatus): string | null {
   if (!status.last_round_at) {
     return null;
   }
   const at = new Date(status.last_round_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   return status.last_error
-    ? `Last sync at ${at} failed: ${notesFolderMessage(status.last_error)}`
-    : `Last sync at ${at}: ${status.written} files written, ${status.imported} edits and files taken in.`;
+    ? `Last sync at ${at} failed: ${notesFolderMessage(status.last_error, t)}`
+    : t("lastSyncAtFilesWritten", { at, written: status.written, imported: status.imported });
 }
 
 /**
@@ -36,11 +38,12 @@ function lastRound(status: NotesFolderStatus): string | null {
  * on the switch, `POST /api/settings/notes-folder/sync` on Sync now.
  */
 export function NotesFolderSettings({ initial }: NotesFolderSettingsProps) {
+  const t = useT();
   const [status, setStatus] = useState<NotesFolderStatus | null>(initial);
   const [path, setPath] = useState(initial?.path ?? initial?.suggested_path ?? "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(
-    initial === null ? "Can't read the notes folder setting. Check that the note-taking server is running." : null
+    initial === null ? t("cantReadTheNotesFolder") : null
   );
   const fieldId = useId();
   const hintId = useId();
@@ -54,9 +57,9 @@ export function NotesFolderSettings({ initial }: NotesFolderSettingsProps) {
       if (saved.path) {
         setPath(saved.path);
       }
-      setMessage(lastRound(saved));
+      setMessage(lastRound(t, saved));
     } catch (error) {
-      setMessage(notesFolderMessage(error instanceof NotesFolderError ? error.code : "server"));
+      setMessage(notesFolderMessage(error instanceof NotesFolderError ? error.code : "server", t));
     } finally {
       setBusy(false);
     }
@@ -66,21 +69,11 @@ export function NotesFolderSettings({ initial }: NotesFolderSettingsProps) {
   return (
     <div className="card max-w-2xl space-y-3">
       <div className="space-y-1">
-        <h2 className="font-semibold">Notes folder</h2>
-        <p id={hintId} className="text-sm text-muted">
-          Keep projects and meetings as plain files on the server&apos;s computer, to read and edit them with any
-          editor. Edits to notes.md, summary.md and project files come back within half a minute, and files dropped
-          into a project folder or a meeting&apos;s attachments folder are added. transcript.md is rewritten: correct
-          the transcript here.
-        </p>
-        <p className="rounded-lg border border-line-strong p-2 text-sm">
-          The folder is a decrypted copy of your notes: anyone who can read it can read them, and backup or sync tools
-          will copy it. Keep it on an encrypted disk, inside your own user folder.
-        </p>
+        <h2 className="font-semibold">{t("notesFolder")}</h2>
+        <p id={hintId} className="text-sm text-muted">{t("keepProjectsAndMeetingsAs")}</p>
+        <p className="rounded-lg border border-line-strong p-2 text-sm">{t("theFolderIsADecrypted")}</p>
       </div>
-      <label htmlFor={fieldId} className="block text-sm font-semibold">
-        Folder on the server
-      </label>
+      <label htmlFor={fieldId} className="block text-sm font-semibold">{t("folderOnTheServer")}</label>
       <input
         id={fieldId}
         aria-describedby={hintId}
@@ -97,19 +90,15 @@ export function NotesFolderSettings({ initial }: NotesFolderSettingsProps) {
             checked={enabled}
             disabled={status === null || busy}
             onChange={(event) => void run(() => setNotesFolder(event.target.checked, path.trim() || null))}
-          />
-          Keep the notes folder
-        </label>
+          />{t("keepTheNotesFolder")}</label>
         {enabled ? (
           <button type="button" className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled"
             disabled={busy}
-            onClick={() => void run(syncNotesFolder)}>
-            Sync now
-          </button>
+            onClick={() => void run(syncNotesFolder)}>{t("syncNow")}</button>
         ) : null}
       </div>
       <p role="status" aria-live="polite">
-        {message ?? (status ? lastRound(status) : null)}
+        {message ?? (status ? lastRound(t, status) : null)}
       </p>
     </div>
   );

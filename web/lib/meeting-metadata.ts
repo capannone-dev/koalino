@@ -2,6 +2,7 @@
 // chosen while recording it, and the devices it was recorded on, worded as the apps word them.
 
 import type { Combining, RecordedOn, RecordingDevice } from "@/lib/api";
+import { englishT, type Translate } from "@/lib/i18n";
 
 /**
  * Formats an RFC 3339 instant as `YYYY-MM-DD HH:MM UTC`, as the apps and untitled meetings' titles do.
@@ -27,8 +28,8 @@ const whisperOnlyNames: Record<string, string> = { jw: "Javanese" };
  *
  * Side effects: none.
  */
-export function transcriptionLanguageName(code: string): string {
-  if (code === "auto") return "Automatic";
+export function transcriptionLanguageName(code: string, t: Translate = englishT): string {
+  if (code === "auto") return t("automatic");
   const whisperOnlyName = whisperOnlyNames[code];
   if (whisperOnlyName !== undefined) return whisperOnlyName;
   try {
@@ -46,10 +47,10 @@ export function transcriptionLanguageName(code: string): string {
  * Outputs: `Transcription language: Italian` or `Transcription languages: Italian, English`;
  * `null` when none was recorded. Side effects: none.
  */
-export function describeTranscriptionLanguages(codes: readonly string[] | undefined): string | null {
+export function describeTranscriptionLanguages(codes: readonly string[] | undefined, t: Translate = englishT): string | null {
   if (codes === undefined || codes.length === 0) return null;
-  const heading = codes.length === 1 ? "Transcription language" : "Transcription languages";
-  return `${heading}: ${codes.map(transcriptionLanguageName).join(", ")}`;
+  const heading = codes.length === 1 ? t("transcriptionLanguage") : t("transcriptionLanguages");
+  return `${heading}: ${codes.map((code) => transcriptionLanguageName(code, t)).join(", ")}`;
 }
 
 /**
@@ -59,16 +60,16 @@ export function describeTranscriptionLanguages(codes: readonly string[] | undefi
  * Outputs: `Recorded on Laptop + Pixel` (an unknown device is `this device` or `another device`);
  * `null` for a meeting no other recording was combined into. Side effects: none.
  */
-export function describeRecordedOn(meeting: RecordedOn): string | null {
+export function describeRecordedOn(meeting: RecordedOn, t: Translate = englishT): string | null {
   if (!meeting.combined_recordings?.length || !meeting.recorded_on?.length) return null;
-  const names = meeting.recorded_on.map((device) => device.name ?? (device.this_device ? "this device" : "another device"));
-  return `Recorded on ${names.join(" + ")}`;
+  const names = meeting.recorded_on.map((device) => device.name ?? (device.this_device ? t("thisDevice2") : t("anotherDevice")));
+  return t("recordedOn", { names: names.join(" + ") });
 }
 
 /** A device's name with "(not connected)" when a paired device is away (#88). */
-function deviceLabel(device: RecordingDevice, withConnection: boolean): string {
-  const name = device.name ?? (device.this_device ? "this device" : "another device");
-  return withConnection && device.connected === false ? `${name} (not connected)` : name;
+function deviceLabel(device: RecordingDevice, withConnection: boolean, t: Translate = englishT): string {
+  const name = device.name ?? (device.this_device ? t("thisDevice2") : t("anotherDevice"));
+  return withConnection && device.connected === false ? t("notConnected", { name }) : name;
 }
 
 /** The UTC calendar day of an RFC 3339 instant, as `YYYY-MM-DD`. */
@@ -82,28 +83,28 @@ function calendarDay(instant: string): string {
  * Inputs: the meeting's `combining`, absent from older daemons. Outputs: one or two sentences,
  * or null without a status. Side effects: none.
  */
-export function describeCombining(combining: Combining | undefined): string | null {
+export function describeCombining(combining: Combining | undefined, t: Translate = englishT): string | null {
   if (combining === undefined) return null;
-  const names = combining.waiting_for.map((device) => deviceLabel(device, true)).join(", ");
-  const plainNames = combining.waiting_for.map((device) => deviceLabel(device, false)).join(", ");
-  const combiner = combining.combine_on === null ? "another device" : deviceLabel(combining.combine_on, true);
-  const kept = combining.kept_until === null ? "" : ` It is kept encrypted until ${calendarDay(combining.kept_until)}.`;
+  const names = combining.waiting_for.map((device) => deviceLabel(device, true, t)).join(", ");
+  const plainNames = combining.waiting_for.map((device) => deviceLabel(device, false, t)).join(", ");
+  const combiner = combining.combine_on === null ? t("anotherDevice") : deviceLabel(combining.combine_on, true, t);
+  const kept = combining.kept_until === null ? "" : t("itIsKeptEncryptedUntil", { calendarDay: calendarDay(combining.kept_until) });
   switch (combining.state) {
     case "one_device":
       return combining.kept_until === null
-        ? "Recorded on this device only."
-        : `Recorded on this device only. A recording of it made on another device can still be combined until ${calendarDay(combining.kept_until)}.`;
+        ? t("recordedOnThisDeviceOnly")
+        : t("recordedOnThisDeviceOnly2", { calendarDay: calendarDay(combining.kept_until) });
     case "waiting":
-      if (combining.waiting_for.length === 0) return `${combiner} combines the recordings; nothing is left to send from here.`;
-      if (combining.combine_on?.this_device) return `Waiting for audio from ${names}.${kept}`;
-      return `${combiner} combines the recordings; waiting for audio from ${names}.`;
+      if (combining.waiting_for.length === 0) return t("combinesTheRecordingsNothingIs", { combiner });
+      if (combining.combine_on?.this_device) return t("waitingForAudioFrom", { names, kept });
+      return t("combinesTheRecordingsWaitingFor", { combiner, names });
     case "ready_to_combine":
-      return "Audio from every device is here; the transcript is combined when this device is free.";
+      return t("audioFromEveryDeviceIs");
     case "sending":
-      return `This device's audio still has to reach ${combiner}.${kept}`;
+      return t("thisDevicesAudioStillHas", { combiner, kept });
     case "combined":
-      return "Transcript combined from every device.";
+      return t("transcriptCombinedFromEveryDevice");
     case "not_combined":
-      return `Not combined: audio from ${plainNames} did not arrive within three weeks.`;
+      return t("notCombinedAudioFromDid", { plainNames });
   }
 }

@@ -5,6 +5,7 @@
 
 import { ChangeEvent, useId, useState } from "react";
 import { setTranscriptionRoute } from "@/lib/p2p-api";
+import { useT } from "@/lib/i18n/client";
 
 export type TranscriptionRouteSettingsProps = {
   /** The route in effect: `local`, `auto`, or a device's peer ID. */
@@ -21,6 +22,7 @@ export type TranscriptionRouteSettingsProps = {
  * the old choice.
  */
 export function TranscriptionRouteSettings({ initialRoute, devices }: TranscriptionRouteSettingsProps) {
+  const t = useT();
   const [route, setRoute] = useState(initialRoute);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export function TranscriptionRouteSettings({ initialRoute, devices }: Transcript
       await setTranscriptionRoute(chosen);
       setRoute(chosen);
     } catch {
-      setMessage("The transcription device could not be changed. Check that it is still paired.");
+      setMessage(t("theTranscriptionDeviceCouldNot"));
     } finally {
       setIsSaving(false);
     }
@@ -44,22 +46,17 @@ export function TranscriptionRouteSettings({ initialRoute, devices }: Transcript
 
   return (
     <div className="card max-w-2xl space-y-2">
-      <label htmlFor={selectId} className="block font-semibold">
-        Transcribe on
-      </label>
-      <p className="text-sm text-muted">
-        Another device receives the recording&apos;s audio, encrypted, and deletes it once transcribed. If it is
-        unavailable, this device transcribes instead.
-      </p>
+      <label htmlFor={selectId} className="block font-semibold">{t("transcribeOn")}</label>
+      <p className="text-sm text-muted">{t("anotherDeviceReceivesTheRecordings")}</p>
       <select id={selectId} value={route} disabled={isSaving} onChange={changeRoute}>
-        <option value="local">This device</option>
-        <option value="auto">Best available</option>
+        <option value="local">{t("thisDevice")}</option>
+        <option value="auto">{t("bestAvailable")}</option>
         {devices.map((device) => (
           <option key={device.peerId} value={device.peerId}>
             {device.name}
           </option>
         ))}
-        {isRemoved ? <option value={route}>A removed device</option> : null}
+        {isRemoved ? <option value={route}>{t("aRemovedDevice")}</option> : null}
       </select>
       <p role="status" className="text-sm">
         {message}

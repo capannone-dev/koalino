@@ -31,6 +31,8 @@ import {
   type ProjectDetail,
   type ProjectResource
 } from "@/lib/projects-api";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n";
 
 const inputClass =
   "mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30";
@@ -38,8 +40,8 @@ const primaryButtonClass = "min-h-11 rounded-lg bg-accent px-4 font-medium text-
 const secondaryButtonClass = "min-h-11 rounded-lg border border-line-strong px-4 hover:bg-surface-hover disabled:text-disabled";
 
 /** "12 KB", "3.4 MB", or "Syncing…" for a file not on the daemon yet. */
-export function describeSize(sizeBytes: number | null): string {
-  if (sizeBytes === null) return "Syncing…";
+export function describeSize(t: Translate, sizeBytes: number | null): string {
+  if (sizeBytes === null) return t("syncing");
   if (sizeBytes < 1024) return `${sizeBytes} B`;
   if (sizeBytes < 1024 * 1024) return `${Math.round(sizeBytes / 1024)} KB`;
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -67,6 +69,7 @@ type Preview =
  * project after each change; deleting the project returns to `/projects`.
  */
 export function ProjectView({ initialDetail, allMeetings }: { initialDetail: ProjectDetail; allMeetings: MeetingSummary[] }) {
+  const t = useT();
   const router = useRouter();
   const [detail, setDetail] = useState(initialDetail);
   const [meetings, setMeetings] = useState(allMeetings);
@@ -93,7 +96,7 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
       setDetail(await getProject(projectId));
       setStatusMessage(typeof success === "string" ? success : success(result));
     } catch (error) {
-      setErrorMessage(projectErrorMessage(error));
+      setErrorMessage(projectErrorMessage(error, t));
     } finally {
       setIsBusy(false);
     }
@@ -115,20 +118,20 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
       return { added, skipped };
     }, (result) => {
       const { added, skipped } = result as { added: number; skipped: number };
-      const message = `Added ${added} ${added === 1 ? "file" : "files"}`;
-      return skipped > 0 ? `${message}; ${skipped} e-mail attachments were left in the e-mail` : message;
+      const message = t("addedFiles", { count: added });
+      return skipped > 0 ? t("eMailAttachmentsWereLeft", { message, skipped }) : message;
     });
   }
 
   /** Saves the typed note as a Markdown file. */
   async function saveNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const titleError = projectNameError(noteTitle);
+    const titleError = projectNameError(noteTitle, t);
     if (titleError !== null) {
       setErrorMessage(titleError.replace("name", "title").replace("Names", "Titles"));
       return;
     }
-    await change(() => addProjectNote(projectId, noteTitle.trim(), noteText), "Note saved");
+    await change(() => addProjectNote(projectId, noteTitle.trim(), noteText), t("noteSaved"));
     setIsWritingNote(false);
     setNoteTitle("");
     setNoteText("");
@@ -138,19 +141,19 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
   async function saveName(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = renameValue ?? "";
-    const nameError = projectNameError(name);
+    const nameError = projectNameError(name, t);
     if (nameError !== null) {
       setErrorMessage(nameError);
       return;
     }
-    await change(() => renameProject(projectId, name.trim()), "Project renamed");
+    await change(() => renameProject(projectId, name.trim()), t("projectRenamed"));
     setRenameValue(null);
     router.refresh();
   }
 
   /** Moves a meeting into this project, or out of it with `null`. */
   async function moveMeeting(meetingId: string, target: string | null) {
-    await change(() => moveMeetingToProject(meetingId, target), target === null ? "Meeting removed from the project" : "Meeting added");
+    await change(() => moveMeetingToProject(meetingId, target), target === null ? t("meetingRemovedFromTheProject") : t("meetingAdded"));
     setMeetings((current) => current.map((meeting) => (meeting.meeting_id === meetingId ? { ...meeting, project_id: target } : meeting)));
     setMeetingToAdd("");
   }
@@ -174,7 +177,7 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
         setPreview({ kind: "text", attachmentId, text: await getProjectResourceText(projectId, attachmentId) });
       }
     } catch (error) {
-      setPreview({ kind: "failed", attachmentId, message: projectErrorMessage(error) });
+      setPreview({ kind: "failed", attachmentId, message: projectErrorMessage(error, t) });
     }
   }
 
@@ -184,25 +187,15 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
         {renameValue === null ? (
           <div className="flex flex-wrap items-start gap-2">
             <h1 className="min-w-0 flex-1 text-2xl font-bold break-words sm:text-3xl">{detail.project.name}</h1>
-            <button type="button" className={secondaryButtonClass} onClick={() => setRenameValue(detail.project.name)}>
-              Rename
-            </button>
-            <button type="button" className={`${secondaryButtonClass} text-danger`} onClick={() => setPendingDeletion({ kind: "project" })}>
-              Delete
-            </button>
+            <button type="button" className={secondaryButtonClass} onClick={() => setRenameValue(detail.project.name)}>{t("rename")}</button>
+            <button type="button" className={`${secondaryButtonClass} text-danger`} onClick={() => setPendingDeletion({ kind: "project" })}>{t("delete")}</button>
           </div>
         ) : (
           <form onSubmit={saveName} className="flex flex-col gap-2 sm:flex-row sm:items-end" noValidate>
-            <label className="block min-w-0 flex-1 text-sm font-medium">
-              Project name
-              <input autoFocus value={renameValue} onChange={(event) => setRenameValue(event.target.value)} className={inputClass} />
+            <label className="block min-w-0 flex-1 text-sm font-medium">{t("projectName")}<input autoFocus value={renameValue} onChange={(event) => setRenameValue(event.target.value)} className={inputClass} />
             </label>
-            <button type="submit" disabled={isBusy} className={primaryButtonClass}>
-              Save
-            </button>
-            <button type="button" className={secondaryButtonClass} onClick={() => setRenameValue(null)}>
-              Cancel
-            </button>
+            <button type="submit" disabled={isBusy} className={primaryButtonClass}>{t("save")}</button>
+            <button type="button" className={secondaryButtonClass} onClick={() => setRenameValue(null)}>{t("cancel")}</button>
           </form>
         )}
         <p role="status" aria-live="polite" className="text-sm text-success">
@@ -213,32 +206,26 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
         </p>
       </header>
 
-      <SearchPanel scope="project" projectId={projectId} label="Search this project" />
-      <ChatPanel topic={{ scope: "project", id: projectId }} heading="Chat about this project" />
+      <SearchPanel scope="project" projectId={projectId} label={t("searchThisProject")} />
+      <ChatPanel topic={{ scope: "project", id: projectId }} heading={t("chatAboutThisProject")} />
 
       <section aria-labelledby="project-meetings" className="space-y-3">
-        <h2 id="project-meetings" className="text-xl font-semibold">
-          Meetings
-        </h2>
-        {detail.meetings.length === 0 ? <p className="text-muted">No meetings in this project yet.</p> : null}
+        <h2 id="project-meetings" className="text-xl font-semibold">{t("meetings")}</h2>
+        {detail.meetings.length === 0 ? <p className="text-muted">{t("noMeetingsInThisProject")}</p> : null}
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface empty:hidden">
           {detail.meetings.map((meeting) => (
             <li key={meeting.meeting_id} className="flex items-center gap-2 px-4 py-2">
               <Link href={`/meetings/${encodeURIComponent(meeting.meeting_id)}`} className="min-w-0 flex-1 break-words py-1 font-medium hover:underline">
                 {meeting.title}
               </Link>
-              <button type="button" disabled={isBusy} className={secondaryButtonClass} onClick={() => moveMeeting(meeting.meeting_id, null)} aria-label={`Remove ${meeting.title} from the project`}>
-                Remove
-              </button>
+              <button type="button" disabled={isBusy} className={secondaryButtonClass} onClick={() => moveMeeting(meeting.meeting_id, null)} aria-label={t("removeFromTheProject", { title: meeting.title })}>{t("remove")}</button>
             </li>
           ))}
         </ul>
         {meetingsOutside.length > 0 ? (
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <label className="block min-w-0 flex-1 text-sm font-medium">
-              Add a meeting
-              <select value={meetingToAdd} onChange={(event) => setMeetingToAdd(event.target.value)} className={inputClass}>
-                <option value="">Choose a meeting…</option>
+            <label className="block min-w-0 flex-1 text-sm font-medium">{t("addAMeeting")}<select value={meetingToAdd} onChange={(event) => setMeetingToAdd(event.target.value)} className={inputClass}>
+                <option value="">{t("chooseAMeeting")}</option>
                 {meetingsOutside.map((meeting) => (
                   <option key={meeting.meeting_id} value={meeting.meeting_id}>
                     {meeting.title}
@@ -246,42 +233,28 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
                 ))}
               </select>
             </label>
-            <button type="button" disabled={isBusy || meetingToAdd === ""} className={primaryButtonClass} onClick={() => moveMeeting(meetingToAdd, projectId)}>
-              Add
-            </button>
+            <button type="button" disabled={isBusy || meetingToAdd === ""} className={primaryButtonClass} onClick={() => moveMeeting(meetingToAdd, projectId)}>{t("add")}</button>
           </div>
         ) : null}
       </section>
 
       <section aria-labelledby="project-files" className="space-y-3">
-        <h2 id="project-files" className="text-xl font-semibold">
-          Files, notes and e-mails
-        </h2>
+        <h2 id="project-files" className="text-xl font-semibold">{t("filesNotesAndEMails")}</h2>
         <div className="flex flex-wrap gap-2">
-          <label className={`${primaryButtonClass} inline-flex cursor-pointer items-center focus-within:outline-2 focus-within:outline-focus`}>
-            Add files
-            <input type="file" multiple onChange={upload} disabled={isBusy} className="sr-only" />
+          <label className={`${primaryButtonClass} inline-flex cursor-pointer items-center focus-within:outline-2 focus-within:outline-focus`}>{t("addFiles")}<input type="file" multiple onChange={upload} disabled={isBusy} className="sr-only" />
           </label>
-          <button type="button" className={secondaryButtonClass} onClick={() => setIsWritingNote((open) => !open)} aria-expanded={isWritingNote}>
-            Write a note
-          </button>
+          <button type="button" className={secondaryButtonClass} onClick={() => setIsWritingNote((open) => !open)} aria-expanded={isWritingNote}>{t("writeANote")}</button>
         </div>
         {isWritingNote ? (
           <form onSubmit={saveNote} className="space-y-2 rounded-xl border border-line bg-surface p-4" noValidate>
-            <label className="block text-sm font-medium">
-              Title
-              <input value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} className={inputClass} />
+            <label className="block text-sm font-medium">{t("title")}<input value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} className={inputClass} />
             </label>
-            <label className="block text-sm font-medium">
-              Note (Markdown)
-              <textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} rows={6} className={`${inputClass} py-2`} />
+            <label className="block text-sm font-medium">{t("noteMarkdown")}<textarea value={noteText} onChange={(event) => setNoteText(event.target.value)} rows={6} className={`${inputClass} py-2`} />
             </label>
-            <button type="submit" disabled={isBusy} className={primaryButtonClass}>
-              Save note
-            </button>
+            <button type="submit" disabled={isBusy} className={primaryButtonClass}>{t("saveNote")}</button>
           </form>
         ) : null}
-        {detail.resources.length === 0 ? <p className="text-muted">No files yet. Add PDFs, pictures, Markdown, or e-mails saved as .eml.</p> : null}
+        {detail.resources.length === 0 ? <p className="text-muted">{t("noFilesYetAddPdfs")}</p> : null}
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface empty:hidden">
           {detail.resources.map((resource) => (
             <li key={resource.attachment_id} id={`file-${resource.attachment_id}`} className="scroll-mt-20 space-y-2 px-4 py-3">
@@ -289,7 +262,7 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
                 <div className="min-w-0 flex-1">
                   <span className="block font-medium break-words">{resource.file_name}</span>
                   <span className="block text-sm text-muted">
-                    {resource.kind} · {describeSize(resource.size_bytes)}
+                    {resource.kind} · {describeSize(t, resource.size_bytes)}
                   </span>
                 </div>
                 <ResourceActions
@@ -308,14 +281,14 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
 
       {pendingDeletion?.kind === "project" ? (
         <ConfirmDeleteDialog
-          title={`Delete ${detail.project.name}?`}
-          message="Its files, notes and e-mails are deleted on every paired device. Its meetings are kept."
+          title={t("delete3", { name: detail.project.name })}
+          message={t("itsFilesNotesAndE")}
           onClose={() => setPendingDeletion(null)}
           onConfirm={async () => {
             try {
               await deleteProject(projectId);
             } catch (error) {
-              throw new Error(projectErrorMessage(error));
+              throw new Error(projectErrorMessage(error, t));
             }
             router.push("/projects");
             router.refresh();
@@ -324,19 +297,19 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
       ) : null}
       {pendingDeletion?.kind === "resource" ? (
         <ConfirmDeleteDialog
-          title={`Delete ${pendingDeletion.resource.file_name}?`}
-          message="It is deleted from this project on every paired device."
+          title={t("delete4", { fileName: pendingDeletion.resource.file_name })}
+          message={t("itIsDeletedFromThis")}
           onClose={() => setPendingDeletion(null)}
           onConfirm={async () => {
             try {
               await deleteProjectResource(projectId, pendingDeletion.resource.attachment_id);
             } catch (error) {
-              throw new Error(projectErrorMessage(error));
+              throw new Error(projectErrorMessage(error, t));
             }
             setPendingDeletion(null);
             setPreview(null);
             setDetail(await getProject(projectId).catch(() => detail));
-            setStatusMessage("File deleted");
+            setStatusMessage(t("fileDeleted"));
           }}
         />
       ) : null}
@@ -358,38 +331,34 @@ function ResourceActions({
   onToggle: () => void;
   onDelete: () => void;
 }) {
+  const t = useT();
   const fileUrl = projectResourceFileUrl(projectId, resource.attachment_id);
   const isSynced = resource.size_bytes !== null;
   const opensInPage = resource.kind === "image" || resource.kind === "markdown" || resource.kind === "text" || resource.kind === "email";
   return (
     <div className="flex flex-wrap gap-2">
       {isSynced && opensInPage ? (
-        <button type="button" className={secondaryButtonClass} onClick={onToggle} aria-expanded={isOpen} aria-label={`${isOpen ? "Close" : "View"} ${resource.file_name}`}>
-          {isOpen ? "Close" : "View"}
+        <button type="button" className={secondaryButtonClass} onClick={onToggle} aria-expanded={isOpen} aria-label={`${isOpen ? t("close") : t("view")} ${resource.file_name}`}>
+          {isOpen ? t("close") : t("view")}
         </button>
       ) : null}
       {isSynced && resource.kind === "pdf" ? (
-        <a href={fileUrl} target="_blank" rel="noopener noreferrer" className={`${secondaryButtonClass} inline-flex items-center`} aria-label={`Open ${resource.file_name}`}>
-          Open
-        </a>
+        <a href={fileUrl} target="_blank" rel="noopener noreferrer" className={`${secondaryButtonClass} inline-flex items-center`} aria-label={t("open", { fileName: resource.file_name })}>{t("open2")}</a>
       ) : null}
       {isSynced ? (
-        <a href={fileUrl} download={resource.file_name} className={`${secondaryButtonClass} inline-flex items-center`} aria-label={`Download ${resource.file_name}`}>
-          Download
-        </a>
+        <a href={fileUrl} download={resource.file_name} className={`${secondaryButtonClass} inline-flex items-center`} aria-label={t("download", { fileName: resource.file_name })}>{t("download2")}</a>
       ) : null}
-      <button type="button" className={`${secondaryButtonClass} text-danger`} onClick={onDelete} aria-label={`Delete ${resource.file_name}`}>
-        Delete
-      </button>
+      <button type="button" className={`${secondaryButtonClass} text-danger`} onClick={onDelete} aria-label={t("delete5", { fileName: resource.file_name })}>{t("delete")}</button>
     </div>
   );
 }
 
 /** The open resource: a picture, plain text (Markdown is not rendered), or an e-mail. */
 function ResourcePreview({ projectId, resource, preview }: { projectId: string; resource: ProjectResource; preview: Preview }) {
+  const t = useT();
   switch (preview.kind) {
     case "loading":
-      return <p className="text-muted">Loading…</p>;
+      return <p className="text-muted">{t("loading")}</p>;
     case "failed":
       return <p className="text-danger">{preview.message}</p>;
     case "image":
@@ -406,15 +375,16 @@ function ResourcePreview({ projectId, resource, preview }: { projectId: string; 
 
 /** An e-mail's headers, its text, and the attachments that came with it. */
 function EmailPreview({ email }: { email: EmailView }) {
+  const t = useT();
   const rows: [string, string][] = [
-    ["From", email.from.map(describePerson).join(", ")],
-    ["To", email.to.map(describePerson).join(", ")],
+    [t("from"), email.from.map(describePerson).join(", ")],
+    [t("to"), email.to.map(describePerson).join(", ")],
     ["Cc", email.cc.map(describePerson).join(", ")],
-    ["Date", email.sent_at ? new Date(email.sent_at).toLocaleString() : ""]
+    [t("date"), email.sent_at ? new Date(email.sent_at).toLocaleString() : ""]
   ];
   return (
     <article className="space-y-2 rounded-lg bg-surface-muted p-3">
-      <h3 className="font-semibold break-words">{email.subject ?? "(no subject)"}</h3>
+      <h3 className="font-semibold break-words">{email.subject ?? t("noSubject")}</h3>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 text-sm">
         {rows
           .filter(([, value]) => value !== "")
@@ -426,9 +396,9 @@ function EmailPreview({ email }: { email: EmailView }) {
           ))}
       </dl>
       <pre className="max-h-[60vh] overflow-auto text-sm whitespace-pre-wrap break-words">{email.body_text}</pre>
-      {email.body_truncated ? <p className="text-sm text-muted">The text was shortened.</p> : null}
+      {email.body_truncated ? <p className="text-sm text-muted">{t("theTextWasShortened")}</p> : null}
       {email.attachments.length > 0 ? (
-        <p className="text-sm text-muted">Attachments: {email.attachments.map((attachment) => attachment.file_name).join(", ")}</p>
+        <p className="text-sm text-muted">{t("attachments2", { names: email.attachments.map((attachment) => attachment.file_name).join(", ") })}</p>
       ) : null}
     </article>
   );

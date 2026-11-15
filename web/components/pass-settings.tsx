@@ -5,14 +5,16 @@
 
 import { useId, useState } from "react";
 import { PassError, setAfterMeetingPass, type AfterMeetingPass, type PassFailureKind } from "@/lib/pass-api";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n";
 
 /** Plain messages per failure; server text is never shown because it can contain internal details. */
-const failureMessages: Record<PassFailureKind, string> = {
-  invalid_model: "That model is not on the server's computer. Download it in the app first.",
-  unavailable: "This server can't change the after-meeting pass.",
-  server: "Something went wrong on the server. Try again.",
-  network: "Can't reach the note-taking server. Check that it is running."
-};
+const failureMessages = (t: Translate) : Record<PassFailureKind, string> => ({
+  invalid_model: t("thatModelIsNotOn"),
+  unavailable: t("thisServerCantChangeThe"),
+  server: t("somethingWentWrongOnThe"),
+  network: t("cantReachTheNoteTaking")
+});
 
 /** The menu value standing for the recording model. */
 const sameAsRecording = "";
@@ -30,10 +32,11 @@ export type PassSettingsProps = {
  * /api/settings/after-meeting-pass` on each change.
  */
 export function PassSettings({ initial }: PassSettingsProps) {
+  const t = useT();
   const [pass, setPass] = useState<AfterMeetingPass>(initial ?? { enabled: true, model: null, models: [] });
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(
-    initial === null ? "Can't read the after-meeting pass. Check that the note-taking server is running." : null
+    initial === null ? t("cantReadTheAfterMeeting") : null
   );
   const switchId = useId();
   const menuId = useId();
@@ -45,9 +48,9 @@ export function PassSettings({ initial }: PassSettingsProps) {
     setMessage(null);
     try {
       setPass(await setAfterMeetingPass(change));
-      setMessage("Saved. Meetings recorded from now on use this.");
+      setMessage(t("savedMeetingsRecordedFromNow"));
     } catch (error) {
-      setMessage(failureMessages[error instanceof PassError ? error.kind : "server"]);
+      setMessage(failureMessages(t)[error instanceof PassError ? error.kind : "server"]);
     } finally {
       setIsSaving(false);
     }
@@ -67,20 +70,13 @@ export function PassSettings({ initial }: PassSettingsProps) {
           onChange={(event) => void save({ enabled: event.target.checked })}
         />
         <div className="space-y-1">
-          <label htmlFor={switchId} className="block font-semibold">
-            Improve the transcript after the meeting
-          </label>
-          <p id={hintId} className="text-sm text-muted">
-            Transcribes each meeting again with more context once it ends. The speech is kept encrypted until then, then
-            deleted.
-          </p>
+          <label htmlFor={switchId} className="block font-semibold">{t("improveTheTranscriptAfterThe")}</label>
+          <p id={hintId} className="text-sm text-muted">{t("transcribesEachMeetingAgainWith")}</p>
         </div>
       </div>
       {pass.enabled ? (
         <div className="space-y-1">
-          <label htmlFor={menuId} className="block font-semibold">
-            Model for this pass
-          </label>
+          <label htmlFor={menuId} className="block font-semibold">{t("modelForThisPass")}</label>
           <select
             id={menuId}
             className="min-h-11 rounded-lg border border-line-strong bg-surface px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30 disabled:text-faint"
@@ -88,7 +84,7 @@ export function PassSettings({ initial }: PassSettingsProps) {
             disabled={disabled}
             onChange={(event) => void save({ model: event.target.value === sameAsRecording ? null : event.target.value })}
           >
-            <option value={sameAsRecording}>Same as for recording</option>
+            <option value={sameAsRecording}>{t("sameAsForRecording")}</option>
             {pass.models.map((model) => (
               <option key={model.file_name} value={model.file_name}>
                 {model.name}

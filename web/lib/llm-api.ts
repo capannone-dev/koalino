@@ -2,6 +2,7 @@
 // API keys (#117): connections are servers on the network, or Claude Code and Codex.
 
 import { apiBaseUrl } from "@/lib/api";
+import { englishT, type Translate } from "@/lib/i18n";
 
 /** The protocol a connection speaks; `claude_code` and `codex` run the signed-in tool on the server's computer (#105). */
 export type LlmKind = "open_ai_compatible" | "claude_code" | "codex";
@@ -83,44 +84,44 @@ export class LlmApiError extends Error {
 }
 
 /** Plain messages per error code; server text is not shown, since it can hold internal details. */
-const messages: Record<string, string> = {
-  network: "Can't reach the note-taking server. Check that it is running.",
-  unavailable: "This server has no AI connections.",
-  invalid_connection: "Check the address and model. Plain http:// works only on this computer or the local network.",
-  invalid_template: "The prompt has an unknown or unclosed {{placeholder}}.",
-  invalid_request: "The request was not understood.",
-  connection_not_found: "That connection no longer exists.",
-  meeting_not_found: "That meeting no longer exists.",
-  no_connection: "Add an AI connection in Settings first.",
-  nothing_to_summarize: "This meeting has no transcript or notes yet.",
-  too_long: "This meeting is too long for this connection. Choose one with a larger context.",
-  llm_unreachable: "The AI server could not be reached.",
-  llm_unauthorized: "The AI server refused access. Use a server that needs no API key.",
-  llm_rate_limited: "The AI server is busy or over its limit. Try again later.",
-  llm_rejected: "The AI server rejected the request. Check the model name.",
-  llm_failed: "The AI server failed. Try again.",
-  llm_refused: "The model declined to answer.",
-  llm_invalid_response: "The AI server's answer could not be read.",
-  llm_tool_missing: "Claude Code or Codex is not installed on the server's computer, or it cannot be found.",
-  llm_tool_failed: "Claude Code or Codex could not answer. Check that it is signed in.",
-  save_failed: "The settings could not be saved.",
-  storage_failed: "The meeting could not be read or saved."
-};
+const messages = (t: Translate) : Record<string, string> => ({
+  network: t("cantReachTheNoteTaking"),
+  unavailable: t("thisServerHasNoAi"),
+  invalid_connection: t("checkTheAddressAndModel"),
+  invalid_template: t("thePromptHasAnUnknown"),
+  invalid_request: t("theRequestWasNotUnderstood"),
+  connection_not_found: t("thatConnectionNoLongerExists"),
+  meeting_not_found: t("thatMeetingNoLongerExists"),
+  no_connection: t("addAnAiConnectionIn3"),
+  nothing_to_summarize: t("thisMeetingHasNoTranscript"),
+  too_long: t("thisMeetingIsTooLong"),
+  llm_unreachable: t("theAiServerCouldNot3"),
+  llm_unauthorized: t("theAiServerRefusedAccess"),
+  llm_rate_limited: t("theAiServerIsBusy2"),
+  llm_rejected: t("theAiServerRejectedThe2"),
+  llm_failed: t("theAiServerFailedTry"),
+  llm_refused: t("theModelDeclinedToAnswer"),
+  llm_invalid_response: t("theAiServersAnswerCould"),
+  llm_tool_missing: t("claudeCodeOrCodexIs"),
+  llm_tool_failed: t("claudeCodeOrCodexCould2"),
+  save_failed: t("theSettingsCouldNotBe"),
+  storage_failed: t("theMeetingCouldNotBe")
+});
 
 /**
  * Words an AI failure for people.
  *
  * Inputs: any thrown value. Outputs: a sentence. Side effects: none.
  */
-export function llmErrorMessage(error: unknown): string {
+export function llmErrorMessage(error: unknown, t: Translate = englishT): string {
   if (error instanceof LlmApiError && error.code === "llm_rejected" && error.detail) {
-    return `The AI server rejected the request. The server said: ${error.detail}`;
+    return t("theAiServerRejectedThe", { detail: error.detail });
   }
   if (error instanceof LlmApiError && error.code === "llm_tool_failed" && error.detail) {
-    return `Claude Code or Codex could not answer. It said: ${error.detail}`;
+    return t("claudeCodeOrCodexCould", { detail: error.detail });
   }
-  if (error instanceof LlmApiError) return messages[error.code] ?? "Something went wrong on the server. Try again.";
-  return "Something went wrong. Try again.";
+  if (error instanceof LlmApiError) return messages(t)[error.code] ?? t("somethingWentWrongOnThe");
+  return t("somethingWentWrongTryAgain");
 }
 
 /** Sends one request and returns its JSON, mapping failures to `LlmApiError`. */
@@ -207,9 +208,9 @@ export async function setMeetingPrompt(meetingId: string, prompt: string | null)
 }
 
 /** Ready-made connections the Settings form can start from. */
-export const connectionPresets: { name: string; input: Omit<LlmConnectionInput, "label"> }[] = [
-  { name: "Local server (Ollama)", input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:11434/v1", model: "llama3.1:8b", context_tokens: 8192 } },
+export const connectionPresets = (t: Translate) : { name: string; input: Omit<LlmConnectionInput, "label"> }[] => [
+  { name: t("localServerOllama"), input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:11434/v1", model: "llama3.1:8b", context_tokens: 8192 } },
   { name: "LM Studio", input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:1234/v1", model: "qwen3-8b", context_tokens: 32768 } },
-  { name: "Claude Code (Claude plan)", input: { kind: "claude_code", base_url: "", model: "", context_tokens: 200000 } },
-  { name: "Codex (ChatGPT plan)", input: { kind: "codex", base_url: "", model: "", context_tokens: 200000 } }
+  { name: t("claudeCodeClaudePlan"), input: { kind: "claude_code", base_url: "", model: "", context_tokens: 200000 } },
+  { name: t("codexChatgptPlan"), input: { kind: "codex", base_url: "", model: "", context_tokens: 200000 } }
 ];

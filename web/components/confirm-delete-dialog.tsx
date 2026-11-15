@@ -3,6 +3,7 @@
 "use client";
 
 import { KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { useT } from "@/lib/i18n/client";
 
 export type ConfirmDeleteDialogProps = {
   /** The question, naming what goes. */
@@ -22,6 +23,7 @@ export type ConfirmDeleteDialogProps = {
  * on Delete. Callers unmount it once `onConfirm` resolves.
  */
 export function ConfirmDeleteDialog({ title, message, onConfirm, onClose }: ConfirmDeleteDialogProps) {
+  const t = useT();
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -40,7 +42,7 @@ export function ConfirmDeleteDialog({ title, message, onConfirm, onClose }: Conf
     try {
       await onConfirm();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Couldn't delete this.");
+      setErrorMessage(error instanceof Error ? error.message : t("couldntDeleteThis"));
       setIsDeleting(false);
     }
   }
@@ -87,18 +89,14 @@ export function ConfirmDeleteDialog({ title, message, onConfirm, onClose }: Conf
             disabled={isDeleting}
             onClick={onClose}
             className="min-h-11 rounded-lg px-4 font-medium text-accent-text hover:bg-accent-soft disabled:text-faint"
-          >
-            Cancel
-          </button>
+          >{t("cancel")}</button>
           <button
             ref={deleteRef}
             type="button"
             disabled={isDeleting}
             onClick={confirm}
             className="min-h-11 rounded-lg bg-danger px-4 font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
-          >
-            Delete
-          </button>
+          >{t("delete")}</button>
         </div>
       </div>
     </div>

@@ -2,6 +2,10 @@
 
 # API client
 
+`i18n/` holds the dashboard's translations (#124); see `i18n/README.md`. Helpers here that word
+text for the owner (error messages, meeting metadata, title rules) take a `t: Translate` argument,
+which defaults to English.
+
 This directory centralizes typed calls to the local Axum server. Server pages use cached-disabled
 fetch calls for current local state; client components reuse the same contract for assignments and
 WebSocket URL construction.
@@ -10,8 +14,8 @@ WebSocket URL construction.
 distinguishes an invalid title (400), an unknown meeting (404), server errors (5xx), other statuses,
 and network failures. `meeting-title.ts` validates titles with the same rules as Rust's
 `MeetingTitle::parse` (Issue #42). `meeting-metadata.ts` words the meeting page's creation time
-(`YYYY-MM-DD HH:MM UTC`, as the apps show it) and transcription languages, named in English with
-`Intl.DisplayNames`.
+(`YYYY-MM-DD HH:MM UTC`, as the apps show it) and transcription languages (language names stay English, as in the
+app) with `Intl.DisplayNames`.
 
 `getLogLevel`, `setLogLevel`, and `fetchLogExport` (Issue #46) reach the Settings routes and throw
 `LogSettingsError`, whose `kind` is `invalid_level`, `no_logs`, `unavailable` (503), `server`, or

@@ -1,3 +1,4 @@
+import { englishT, type Translate } from "@/lib/i18n";
 // Validates meeting titles in the browser with the same rules Rust's `MeetingTitle::parse` enforces.
 
 /** Longest title Rust accepts, in Unicode characters (`MeetingTitle::MAX_CHARACTERS`). */
@@ -17,16 +18,16 @@ const controlCharacterPattern = /\p{Cc}/u;
  * too long (counted in code points, so an emoji counts once, as Rust counts `char`s), control
  * character. Side effects: none.
  */
-export function validateMeetingTitle(rawTitle: string): MeetingTitleValidation {
+export function validateMeetingTitle(rawTitle: string, t: Translate = englishT): MeetingTitleValidation {
   const trimmedTitle = rawTitle.trim();
   const characterCount = Array.from(trimmedTitle).length;
   let error: string | null = null;
   if (trimmedTitle.length === 0) {
-    error = "Enter a title.";
+    error = t("enterATitle");
   } else if (characterCount > maxMeetingTitleCharacters) {
-    error = `Titles can be at most ${maxMeetingTitleCharacters} characters (you have ${characterCount}).`;
+    error = t("titlesCanBeAtMost", { maxMeetingTitleCharacters, characterCount });
   } else if (controlCharacterPattern.test(trimmedTitle)) {
-    error = "Titles can't contain line breaks or control characters.";
+    error = t("titlesCantContainLineBreaks");
   }
   return { trimmedTitle, error };
 }

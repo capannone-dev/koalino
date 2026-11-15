@@ -11,6 +11,7 @@ import { RenameMeetingDialog } from "@/components/rename-meeting-dialog";
 import type { MeetingSummary } from "@/lib/api";
 import { deleteMeetingWithMessage, meetingDeletionMessage } from "@/lib/deletion-messages";
 import { describeRecordedOn } from "@/lib/meeting-metadata";
+import { useT } from "@/lib/i18n/client";
 
 /** The row whose actions menu is open; `position` is set when it was opened by right-click. */
 type OpenMenu = { meetingId: string; position: { x: number; y: number } | null };
@@ -24,6 +25,7 @@ type OpenMenu = { meetingId: string; position: { x: number; y: number } | null }
  * dialog and replaces the row's title from the server response, without reloading the page.
  */
 export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
+  const t = useT();
   const [currentMeetings, setCurrentMeetings] = useState(meetings);
   const [openMenu, setOpenMenu] = useState<OpenMenu | null>(null);
   const [renamingMeeting, setRenamingMeeting] = useState<MeetingSummary | null>(null);
@@ -73,7 +75,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
         <p role="status" aria-live="polite" className="text-sm text-success">
           {statusMessage}
         </p>
-        <p className="text-muted">No meetings yet.</p>
+        <p className="text-muted">{t("noMeetingsYet")}</p>
       </>
     );
   }
@@ -104,14 +106,14 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                   {meeting.title}
                 </Link>
                 <small className="block truncate text-muted">{meeting.meeting_id}</small>
-                {describeRecordedOn(meeting) === null ? null : (
-                  <small className="block truncate text-muted">{describeRecordedOn(meeting)}</small>
+                {describeRecordedOn(meeting, t) === null ? null : (
+                  <small className="block truncate text-muted">{describeRecordedOn(meeting, t)}</small>
                 )}
               </div>
               <Link
                 href={`/meetings/${encodeURIComponent(meeting.meeting_id)}#summary`}
-                aria-label={`Summary of ${meeting.title}`}
-                title="Summary"
+                aria-label={t("summaryOf", { title: meeting.title })}
+                title={t("summary")}
                 className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
               >
                 <SummaryIcon />
@@ -122,7 +124,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                   else actionButtons.current.delete(meeting.meeting_id);
                 }}
                 type="button"
-                aria-label={`Actions for ${meeting.title}`}
+                aria-label={t("actionsFor", { title: meeting.title })}
                 aria-haspopup="menu"
                 aria-expanded={isMenuOpen}
                 aria-controls={isMenuOpen ? menuId : undefined}
@@ -136,7 +138,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                   ref={menuRef}
                   id={menuId}
                   role="menu"
-                  aria-label={`Actions for ${meeting.title}`}
+                  aria-label={t("actionsFor", { title: meeting.title })}
                   onKeyDown={(event) => handleMenuKeyDown(event, meeting.meeting_id)}
                   style={openMenu.position ? { left: openMenu.position.x, top: openMenu.position.y } : undefined}
                   className={`z-40 min-w-40 rounded-lg border border-line bg-surface py-1 shadow-lg ${
@@ -152,9 +154,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                       setRenamingMeeting(meeting);
                     }}
                     className="flex min-h-11 w-full items-center px-4 text-left hover:bg-surface-muted focus:bg-surface-muted focus:outline-none"
-                  >
-                    Rename
-                  </button>
+                  >{t("rename")}</button>
                   <button
                     type="button"
                     role="menuitem"
@@ -164,16 +164,12 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                       setMovingMeeting(meeting);
                     }}
                     className="flex min-h-11 w-full items-center px-4 text-left hover:bg-surface-muted focus:bg-surface-muted focus:outline-none"
-                  >
-                    Add to project…
-                  </button>
+                  >{t("addToProject")}</button>
                   <Link
                     role="menuitem"
                     href={`/meetings/${encodeURIComponent(meeting.meeting_id)}#summary`}
                     className="flex min-h-11 w-full items-center px-4 text-left hover:bg-surface-muted focus:bg-surface-muted focus:outline-none"
-                  >
-                    Summary and prompt…
-                  </Link>
+                  >{t("summaryAndPrompt")}</Link>
                   <button
                     type="button"
                     role="menuitem"
@@ -183,9 +179,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
                       setDeletingMeeting(meeting);
                     }}
                     className="flex min-h-11 w-full items-center px-4 text-left text-danger hover:bg-surface-muted"
-                  >
-                    Delete
-                  </button>
+                  >{t("delete")}</button>
                 </div>
               ) : null}
             </li>
@@ -194,18 +188,18 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
       </ul>
       {deletingMeeting ? (
         <ConfirmDeleteDialog
-          title={`Delete ${deletingMeeting.title}?`}
-          message={meetingDeletionMessage}
+          title={t("delete2", { title: deletingMeeting.title })}
+          message={meetingDeletionMessage(t)}
           onClose={() => {
             focusActionsButton(deletingMeeting.meeting_id);
             setDeletingMeeting(null);
           }}
           onConfirm={async () => {
-            await deleteMeetingWithMessage(deletingMeeting.meeting_id);
+            await deleteMeetingWithMessage(deletingMeeting.meeting_id, t);
             setCurrentMeetings((current) =>
               current.filter((candidate) => candidate.meeting_id !== deletingMeeting.meeting_id)
             );
-            setStatusMessage("Meeting deleted");
+            setStatusMessage(t("meetingDeleted"));
             setDeletingMeeting(null);
           }}
         />
@@ -227,7 +221,7 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
             setCurrentMeetings((current) =>
               current.map((candidate) => (candidate.meeting_id === summary.meeting_id ? summary : candidate))
             );
-            setStatusMessage("Meeting renamed");
+            setStatusMessage(t("meetingRenamed"));
             closeDialog(summary.meeting_id);
           }}
         />

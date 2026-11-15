@@ -7,6 +7,8 @@
 import { FormEvent, useState } from "react";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { DeletionError, assignCluster, assignVoiceGroup, deleteSavedPerson, deleteUnknownVoice, reviewClipUrl, type LibraryCluster, type VoiceIdentity } from "@/lib/api";
+import { useT } from "@/lib/i18n/client";
+import type { Translate } from "@/lib/i18n";
 
 /** A deletion waiting for the owner's answer. */
 type PendingDeletion = { title: string; message: string; run: () => Promise<void> };
@@ -15,10 +17,10 @@ type PendingDeletion = { title: string; message: string; run: () => Promise<void
 type VoiceGroup = { groupId: string; voices: LibraryCluster[] };
 
 /** A plain message for a failed voice deletion; server text is not shown. */
-function deletionFailureMessage(error: unknown): string {
+function deletionFailureMessage(t: Translate, error: unknown): string {
   return error instanceof DeletionError && error.kind === "recording"
-    ? "This voice's meeting is being recorded. Stop the recording first."
-    : "Couldn't delete this. Check that the note-taking server is running.";
+    ? t("thisVoicesMeetingIsBeing")
+    : t("couldntDeleteThisCheckThat");
 }
 
 /** Formats milliseconds as seconds with one decimal, e.g. `12.5 s`. */
@@ -47,19 +49,20 @@ function groupVoices(clusters: LibraryCluster[]): VoiceGroup[] {
 }
 
 /** Says what a group covers, e.g. `134.0 s · 2 parts in 2 meetings`. */
-function formatGroupSummary(group: VoiceGroup): string {
+function formatGroupSummary(t: Translate, group: VoiceGroup): string {
   const totalMs = group.voices.reduce((sum, voice) => sum + voice.total_duration_ms, 0);
   const meetingCount = new Set(group.voices.map((voice) => voice.meeting_id)).size;
-  const parts = `${group.voices.length} parts`;
-  return `${formatSeconds(totalMs)} · ${meetingCount === 1 ? parts : `${parts} in ${meetingCount} meetings`}`;
+  const parts = t("partCount", { count: group.voices.length });
+  return `${formatSeconds(totalMs)} · ${meetingCount === 1 ? parts : t("inMeetings", { parts, meetings: t("meetingCount", { count: meetingCount }) })}`;
 }
 
 /** Labels one voice of a group by meeting and length, e.g. `Lunch · 105.0 s`. */
-function partLabel(voice: LibraryCluster): string {
-  return `${voice.meeting_title ?? "Untitled meeting"} · ${formatSeconds(voice.total_duration_ms)}`;
+function partLabel(t: Translate, voice: LibraryCluster): string {
+  return `${voice.meeting_title ?? t("untitledMeeting")} · ${formatSeconds(voice.total_duration_ms)}`;
 }
 
 export function VoiceGallery({ clusters, people: initialPeople }: { clusters: LibraryCluster[]; people: VoiceIdentity[] }) {
+  const t = useT();
   const [pendingClusters, setPendingClusters] = useState(clusters);
   const [people, setPeople] = useState(initialPeople);
   const [message, setMessage] = useState("");
@@ -71,17 +74,17 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
   function askToDeleteGroup(group: VoiceGroup, speakerLabel: string) {
     const count = group.voices.length;
     setPendingDeletion({
-      title: `Delete ${speakerLabel}?`,
+      title: t("delete6", { speakerLabel }),
       message:
         count === 1
-          ? "Its voice sample goes for good, here and on your paired devices. The transcript stays."
-          : `Its ${count} voice samples go for good, here and on your paired devices. The transcripts stay.`,
+          ? t("itsVoiceSampleGoesFor")
+          : t("itsVoiceSamplesGoFor", { count }),
       run: async () => {
         for (const voice of group.voices) {
           await deleteUnknownVoice(voice.cluster_id);
           setPendingClusters((current) => current.filter((candidate) => candidate.cluster_id !== voice.cluster_id));
         }
-        setMessage("Voice deleted.");
+        setMessage(t("voiceDeleted"));
       }
     });
   }
@@ -89,8 +92,8 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
   /** Asks before deleting a saved person, then removes them from the list. */
   function askToDeletePerson(person: VoiceIdentity) {
     setPendingDeletion({
-      title: `Delete ${person.display_name}?`,
-      message: "Their name and voice samples go for good, here and on your paired devices. Transcripts stay and number them as a speaker.",
+      title: t("delete7", { displayName: person.display_name }),
+      message: t("theirNameAndVoiceSamples"),
       run: async () => {
         await deleteSavedPerson(person.identity_id);
         setPeople((current) => current.filter((candidate) => candidate.identity_id !== person.identity_id));
@@ -127,29 +130,29 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
     event.preventDefault();
     const identityName = String(new FormData(event.currentTarget).get("identityName") ?? "").trim();
     if (!identityName) {
-      setMessage("Enter a name before assigning.");
+      setMessage(t("enterANameBeforeAssigning"));
       return;
     }
-    const noVoiceNote = " There was not enough clear speech to recognize this voice in future recordings.";
+    const noVoiceNote = t("thereWasNotEnoughClear");
     try {
       if (group.voices.length === 1) {
         const assignment = await assignCluster(group.voices[0].cluster_id, identityName);
         recordNaming([assignment.cluster_id], assignment.identity_id, assignment.identity_name, assignment.variants_stored);
-        setMessage(`Assigned to ${assignment.identity_name}.${assignment.variants_stored > 0 ? "" : noVoiceNote}`);
+        setMessage(`${t("assignedTo2", { identityName: assignment.identity_name })}${assignment.variants_stored > 0 ? "" : noVoiceNote}`);
         return;
       }
       const included = group.voices.filter((voice) => !leftOut.has(voice.cluster_id)).map((voice) => voice.cluster_id);
       if (included.length === 0) {
-        setMessage("Choose at least one voice to name.");
+        setMessage(t("chooseAtLeastOneVoice"));
         return;
       }
       const assignment = await assignVoiceGroup(included, identityName);
       recordNaming(assignment.assigned_cluster_ids, assignment.identity_id, assignment.identity_name, assignment.variants_stored);
       const named = assignment.assigned_cluster_ids.length;
-      const assigned = named === 1 ? `Assigned to ${assignment.identity_name}.` : `Assigned ${named} voices to ${assignment.identity_name}.`;
+      const assigned = named === 1 ? t("assignedTo2", { identityName: assignment.identity_name }) : t("assignedVoicesTo", { count: named, identityName: assignment.identity_name });
       setMessage(`${assigned}${assignment.variants_stored > 0 ? "" : noVoiceNote}`);
     } catch {
-      setMessage("Unable to assign the speaker cluster.");
+      setMessage(t("unableToAssignTheSpeaker"));
     }
   }
 
@@ -157,17 +160,17 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
 
   return (
     <section className="space-y-4">
-      <h1 className="text-3xl font-bold">Voice gallery</h1>
+      <h1 className="text-3xl font-bold">{t("voiceGallery")}</h1>
       <datalist id="saved-people">
         {people.map((person) => <option key={person.identity_id} value={person.display_name} />)}
       </datalist>
-      <h2 className="text-lg font-semibold">Unknown speakers</h2>
-      {groups.length === 0 ? <p>No unknown speakers to review.</p> : null}
+      <h2 className="text-lg font-semibold">{t("unknownSpeakers")}</h2>
+      {groups.length === 0 ? <p>{t("noUnknownSpeakersToReview")}</p> : null}
       {groups.map((group, index) => {
         // The voice's label in its meeting's transcript ("Speaker 2", #118), each once; older
         // servers without labels fall back to the place in the list.
         const transcriptLabels = [...new Set(group.voices.map((voice) => voice.speaker_label).filter((label): label is string => Boolean(label)))];
-        const speakerLabel = transcriptLabels.length > 0 ? transcriptLabels.join(" / ") : `Unknown speaker ${index + 1}`;
+        const speakerLabel = transcriptLabels.length > 0 ? transcriptLabels.join(" / ") : t("unknownSpeaker", { number: index + 1 });
         const lone = group.voices.length === 1 ? group.voices[0] : null;
         const longestPlayable = group.voices.filter((voice) => voice.has_review_clip).sort((first, second) => second.total_duration_ms - first.total_duration_ms)[0];
         // The name a call window showed while one of these voices spoke (#113); only offered.
@@ -178,58 +181,53 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
               <h3 className="font-semibold">{speakerLabel}</h3>
               <button
                 type="button"
-                aria-label={`Delete ${speakerLabel}`}
+                aria-label={t("delete8", { speakerLabel })}
                 onClick={() => askToDeleteGroup(group, speakerLabel)}
                 className="min-h-11 rounded-lg px-3 font-medium text-danger hover:bg-surface-muted"
-              >
-                Delete
-              </button>
+              >{t("delete")}</button>
             </div>
-            <p>{lone ? formatSummary(lone) : formatGroupSummary(group)}</p>
-            <p>{lone ? lone.meeting_title ?? "Untitled meeting" : [...new Set(group.voices.map((voice) => voice.meeting_title ?? "Untitled meeting"))].join(", ")}</p>
-            {longestPlayable ? <audio controls preload="none" src={reviewClipUrl(longestPlayable.cluster_id)} aria-label={`Listen to ${speakerLabel.toLowerCase()}`} /> : null}
+            <p>{lone ? formatSummary(lone) : formatGroupSummary(t, group)}</p>
+            <p>{lone ? lone.meeting_title ?? t("untitledMeeting") : [...new Set(group.voices.map((voice) => voice.meeting_title ?? t("untitledMeeting")))].join(", ")}</p>
+            {longestPlayable ? <audio controls preload="none" src={reviewClipUrl(longestPlayable.cluster_id)} aria-label={t("listenTo", { speakerLabel: speakerLabel.toLowerCase() })} /> : null}
             {lone ? null : (
               <details className="rounded-lg border border-line-strong px-3 py-2">
-                <summary className="min-h-11 cursor-pointer py-2 font-medium">{group.voices.length} parts</summary>
-                <p className="text-sm">These sound like one person. Untick any that is someone else.</p>
+                <summary className="min-h-11 cursor-pointer py-2 font-medium">{t("partCount", { count: group.voices.length })}</summary>
+                <p className="text-sm">{t("theseSoundLikeOnePerson")}</p>
                 <ul className="space-y-2 pt-2">
                   {group.voices.map((voice) => (
                     <li key={voice.cluster_id} className="flex flex-wrap items-center gap-2">
                       <label className="flex min-h-11 items-center gap-2">
-                        <input type="checkbox" className="h-5 w-5" checked={!leftOut.has(voice.cluster_id)} onChange={(event) => setIncluded(voice.cluster_id, event.target.checked)} aria-label={`Include ${partLabel(voice)}`} />
-                        <span>{partLabel(voice)}</span>
+                        <input type="checkbox" className="h-5 w-5" checked={!leftOut.has(voice.cluster_id)} onChange={(event) => setIncluded(voice.cluster_id, event.target.checked)} aria-label={t("include", { partLabel: partLabel(t, voice) })} />
+                        <span>{partLabel(t, voice)}</span>
                       </label>
-                      {voice.has_review_clip ? <audio controls preload="none" src={reviewClipUrl(voice.cluster_id)} aria-label={`Listen to ${partLabel(voice)}`} className="max-w-full" /> : null}
+                      {voice.has_review_clip ? <audio controls preload="none" src={reviewClipUrl(voice.cluster_id)} aria-label={t("listenTo2", { partLabel: partLabel(t, voice) })} className="max-w-full" /> : null}
                     </li>
                   ))}
                 </ul>
               </details>
             )}
-            {suggestedName ? <p className="text-sm">The call showed {suggestedName} speaking. Check, then Assign.</p> : null}
+            {suggestedName ? <p className="text-sm">{t("theCallShowedSpeakingCheck", { suggestedName })}</p> : null}
             <form className="space-y-2" onSubmit={(event) => submitAssignment(event, group)}>
-              <label className="block">Name
-                <input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" name="identityName" type="text" aria-label={`Name for ${speakerLabel.toLowerCase()}`} autoComplete="off" list="saved-people" defaultValue={suggestedName ?? undefined} />
+              <label className="block">{t("name")}<input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" name="identityName" type="text" aria-label={t("nameFor", { speakerLabel: speakerLabel.toLowerCase() })} autoComplete="off" list="saved-people" defaultValue={suggestedName ?? undefined} />
               </label>
-              <button className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong" type="submit">Assign</button>
+              <button className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong" type="submit">{t("assign")}</button>
             </form>
           </article>
         );
       })}
       <p aria-live="polite">{message}</p>
-      <h2 className="text-lg font-semibold">Saved people</h2>
-      {people.length === 0 ? <p>No saved people yet. Name a voice to add someone.</p> : null}
+      <h2 className="text-lg font-semibold">{t("savedPeople")}</h2>
+      {people.length === 0 ? <p>{t("noSavedPeopleYetName")}</p> : null}
       <ul>
         {people.map((person) => (
           <li key={person.identity_id} className="flex items-center justify-between gap-2">
-            <span>{person.display_name}: {person.voice_variant_count} voice {person.voice_variant_count === 1 ? "sample" : "samples"}</span>
+            <span>{t("personVoiceSamples", { name: person.display_name, count: person.voice_variant_count })}</span>
             <button
               type="button"
-              aria-label={`Delete ${person.display_name}`}
+              aria-label={t("delete9", { displayName: person.display_name })}
               onClick={() => askToDeletePerson(person)}
               className="min-h-11 rounded-lg px-3 font-medium text-danger hover:bg-surface-muted"
-            >
-              Delete
-            </button>
+            >{t("delete")}</button>
           </li>
         ))}
       </ul>
@@ -242,7 +240,7 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
             try {
               await pendingDeletion.run();
             } catch (error) {
-              throw new Error(deletionFailureMessage(error));
+              throw new Error(deletionFailureMessage(t, error));
             }
             setPendingDeletion(null);
           }}
