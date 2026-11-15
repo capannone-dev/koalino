@@ -357,7 +357,12 @@ single transcript segments, through `application/meeting_edits.rs` (the same rul
 It also keeps an answer from the owner's own AI app as the summary (`keep_answer`) and undoes
 that (`restore_summary`, #114), and creates a meeting with no recording (`create_meeting`, #129). `meeting_summaries.rs`' `write_handoff`, exposed as
 `note_taker_handoff_meeting` in `ffi_llm.rs`, writes the files that hand-off shares; with
-`inline` (#126), the message carries the meeting for pasting into a website.
+`inline` (#126), the message carries the meeting for pasting into a website. Its
+`copy_handoff_files` copies the attachments, which always go as files, never as their text.
+`project_handoff.rs`' `write_project_handoff` (#126) does the same for a project's chat: one
+Markdown file with every meeting (summary, notes, transcript, oldest first) and copies of the
+project's files and each meeting's attachments. `note_taker_handoff_meeting` takes it with
+`project_id`; `project_handoff_tests.rs` specifies it.
 
 `search_commands.rs` (#100) is the search answer shared by the app (`note_taker_search` in
 `ffi.rs`), the web (`server/search_routes.rs`) and the CLI (`search`): the request's scope, each

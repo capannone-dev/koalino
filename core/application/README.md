@@ -540,7 +540,8 @@ re-transcribes that meeting.
 
 `meeting_handoff.rs` (#114) hands a meeting to the owner's own AI app (Claude, ChatGPT), whose
 login Koalino never holds. `prepare_handoff` builds the message (the summary prompt, or an
-introduction for a chat) and the meeting as a Markdown file. `store_external_summary` keeps the
+introduction for a chat) and the meeting as a Markdown file. Photos and files go beside it as
+files; the Markdown only names them. `store_external_summary` keeps the
 answer as the summary, marked `edited` and labelled with its app, and returns the summary it
 replaced; `restore_summary` puts that one back (Undo).
 

@@ -3703,9 +3703,9 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
     meeting followed by its files (`File name, meeting "Title"`). Project files now give text for
     PDFs and office documents too, and so does project search. A cited meeting file opens its
     meeting.
-  - **Hand-off to the owner's AI app:** pasted on a computer (#126), the message ends with an
-    "Attached files" section holding their text. On Android the files themselves are shared, so
-    the Markdown does not repeat them.
+  - **Hand-off to the owner's AI app:** ~~pasted on a computer (#126), the message ends with an
+    "Attached files" section holding their text.~~ Replaced the same day: the files always go as
+    files (see "#126 follow-up: files as files, and chat").
 - **Not done:**
   - **Scanned PDFs and pictures of text.** There is no OCR. Photos and slides still go to models
     that read images, as before.
@@ -3753,3 +3753,28 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   services' consumer terms forbid automated access and scraping of outputs, so it could put the
   owner's accounts at risk. Claude Code or Codex (#105) remain the fully automatic route with the
   same plans.
+
+## 2026-11-15 — #126 follow-up: files as files, and chat in the owner's AI app
+
+- **Owner's feedback:** the website hand-off should work for chat too, not only for summaries.
+  Attachments must go as files, not turned into text, whenever an attachment or a photo is added.
+- **Decision:**
+  - **Files go as files.** The hand-off Markdown no longer holds the attachments' text. It ends
+    with "The meeting's photos and files come with it as files: a, b." On a computer the folder
+    with the copies opens beside the website, and the steps say to drag them into the message
+    box. A meeting with only files can be handed off.
+  - **ChatGPT is not filled through its address when there are files.** chatgpt.com sends a
+    `?q=` message by itself, before the files could be dragged in. With files, the message is
+    copied and the owner pastes it after dragging them. claude.ai, which waits for Enter, is
+    still filled through its address.
+  - **Chat pages offer "Use your own AI app"** (an open-in-new icon). For a meeting, it is the
+    meeting's chat hand-off. For a project, the core's `write_project_handoff` writes one
+    Markdown file with every meeting of the project (summary, notes, transcript, oldest first).
+    The project's files and every meeting's attachments go with it as files, within the existing
+    limits (20 files, 50 MiB each, 100 MiB in all).
+- **Not done:**
+  - **"Chat with all your notes."** Every meeting is far more than a website message or 20 files
+    can carry, so that chat stays in Koalino.
+  - **Summaries and chat inside Koalino** (API connections, Claude Code, Codex) still read the
+    files' text (#128). Sending the originals there depends on the connection: Anthropic's API
+    reads PDFs, local OpenAI-compatible servers do not.

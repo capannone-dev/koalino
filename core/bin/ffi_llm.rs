@@ -55,6 +55,7 @@ use crate::{
         write_handoff,
     },
     ports::storage::{DocumentChanges, MeetingRecording, NoteRepository},
+    project_handoff::write_project_handoff,
     transcription_settings::TranscriptionPaths,
 };
 
@@ -168,7 +169,8 @@ pub unsafe extern "C" fn note_taker_summarize_meeting(
 
 /// Writes a meeting's hand-off to the owner's own AI app (#114).
 ///
-/// Inputs: A JSON object: `meeting_id`, `purpose` (`summary` or `chat`), `directory`, a folder
+/// Inputs: A JSON object: `meeting_id` (or `project_id`, for a project's chat: its meetings and
+/// all their files, #126), `purpose` (`summary` or `chat`), `directory`, a folder
 /// the app owns for hand-offs (it is emptied first), and optional `inline` (true on computers,
 /// #126: the message carries the meeting, to paste into a website). Outputs: Caller-freed
 /// `{"ok":true,"message","prompt","files":[{"path","mime_type"}],"skipped"}` or an error
@@ -199,6 +201,34 @@ pub unsafe extern "C" fn note_taker_handoff_meeting(request_json: *const c_char)
             ));
         }
     };
+    // A project goes to the owner's AI app for a chat (#126 follow-up).
+    if let (Some(project_id), Some(directory)) = (text("project_id"), text("directory")) {
+        let Some(crate::domain::chat::ChatScope::Project(project_id)) =
+            crate::domain::chat::ChatScope::parse("project", Some(project_id))
+        else {
+            return into_c(failure(
+                "invalid_request",
+                "`project_id` is not a project ID",
+            ));
+        };
+        let delivery = if request.get("inline").and_then(Value::as_bool) == Some(true) {
+            HandoffDelivery::Pasted
+        } else {
+            HandoffDelivery::Attached
+        };
+        let directory = PathBuf::from(directory);
+        let answer = handoff_with(&services(), |_, _, _| {
+            with_runtime_summary_sources(|repository, voices, _| {
+                write_project_handoff(repository, voices, project_id, delivery, &directory)
+            })
+            .unwrap_or_else(|| {
+                Err(SummaryError::Storage(String::from(
+                    "the native runtime is unavailable",
+                )))
+            })
+        });
+        return into_c(answer.to_string());
+    }
     let (Some(meeting_id), Some(directory)) = (text("meeting_id"), text("directory")) else {
         return into_c(failure(
             "invalid_request",

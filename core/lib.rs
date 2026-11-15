@@ -154,6 +154,12 @@ pub mod project_commands;
 #[cfg(test)]
 #[path = "bin/project_commands_tests.rs"]
 mod project_commands_tests;
+/// Hands a project to the owner's own AI app for a chat (#126).
+#[path = "bin/project_handoff.rs"]
+pub mod project_handoff;
+#[cfg(test)]
+#[path = "bin/project_handoff_tests.rs"]
+mod project_handoff_tests;
 /// Defines wire protocols with external processes (the Teams bot bridge).
 pub mod protocol;
 #[path = "bin/recording_controller.rs"]

@@ -16,7 +16,7 @@ use crate::{
         combined_meetings::{MeetingListing, name_recording_devices, recording_devices_label},
         export_manager::{ExportManager, ExportWriter},
         meeting_crdt::MeetingCrdtService,
-        meeting_handoff::{HandoffDelivery, HandoffPurpose, prepare_handoff},
+        meeting_handoff::{HandoffDelivery, HandoffPurpose, handoff_file_name, prepare_handoff},
         meeting_summary::{
             AttachedDocument, SpokenLine, SummaryError, SummaryMaterial, SummaryOutcome,
             summarize_meeting,
@@ -238,15 +238,10 @@ where
     let storage = |error: &dyn std::fmt::Display| SummaryError::Storage(error.to_string());
     let prepared = prepare_summary(repository, voices, meeting_id, glossary, device_name, p2p)?;
     let template = summary_template_for(&prepared, default_template);
-    let handoff = prepare_handoff(&template, &prepared.material, purpose, delivery)?;
     empty_folder(directory).map_err(|error| storage(&error))?;
+    let document_name = handoff_file_name(&prepared.material.values.title);
 
-    let document_path = directory.join(&handoff.file_name);
-    std::fs::write(&document_path, handoff.document.as_bytes()).map_err(|error| storage(&error))?;
-    let mut files = vec![HandoffFile {
-        path: document_path,
-        mime_type: String::from("text/markdown"),
-    }];
+    // The photos and files go as they are, never as their text (#128).
     let writer = ExportWriter::new(Vec::new(), std::env::temp_dir());
     let document = ExportManager::new(repository, repository, voices, &writer)
         .extract_meeting(
@@ -256,36 +251,94 @@ where
         .map_err(|error| storage(&error))?;
     let mut attachments: Vec<_> = document.attachments().iter().collect();
     attachments.sort_by_key(|attachment| attachment.original_timestamp());
-    let mut used_names = vec![handoff.file_name.clone()];
-    let (mut skipped, mut total_bytes) = (0, 0_u64);
-    for attachment in attachments {
-        if files.len() > MAX_HANDOFF_FILES {
-            skipped += 1;
-            continue;
-        }
-        let Some(contents) = repository
-            .read_attachment_file(Path::new(attachment.file_path()), MAX_HANDOFF_FILE_BYTES)
-            .filter(|contents| total_bytes + contents.len() as u64 <= MAX_HANDOFF_TOTAL_BYTES)
-        else {
-            skipped += 1;
-            continue;
-        };
-        let name = unique_name(&handoff_file_stem(attachment.display_name()), &used_names);
-        let path = directory.join(&name);
-        std::fs::write(&path, contents.as_slice()).map_err(|error| storage(&error))?;
-        total_bytes += contents.len() as u64;
-        used_names.push(name);
-        files.push(HandoffFile {
-            path,
-            mime_type: attachment.mime_type().to_owned(),
-        });
-    }
+    let mut used_names = vec![document_name.clone()];
+    let sources: Vec<HandoffSource> = attachments
+        .into_iter()
+        .map(|attachment| {
+            let stored_name = attachment.display_name();
+            HandoffSource {
+                stored_path: attachment.file_path().to_owned(),
+                mime_type: attachment.mime_type().to_owned(),
+                name: stored_name
+                    .strip_prefix(&format!("{}-", attachment.attachment_id()))
+                    .unwrap_or(stored_name)
+                    .to_owned(),
+            }
+        })
+        .collect();
+    let (attached, skipped) = copy_handoff_files(repository, &sources, directory, &mut used_names)?;
+    let handoff = prepare_handoff(
+        &template,
+        &prepared.material,
+        purpose,
+        delivery,
+        &used_names[1..],
+    )?;
+    let document_path = directory.join(&handoff.file_name);
+    std::fs::write(&document_path, handoff.document.as_bytes()).map_err(|error| storage(&error))?;
+    let mut files = vec![HandoffFile {
+        path: document_path,
+        mime_type: String::from("text/markdown"),
+    }];
+    files.extend(attached);
     Ok(WrittenHandoff {
         message: handoff.message,
         prompt: handoff.prompt,
         files,
         skipped,
     })
+}
+
+/// One stored file a hand-off copies.
+#[derive(Clone, Debug)]
+pub(crate) struct HandoffSource {
+    /// Where the sealed file is stored.
+    pub stored_path: String,
+    /// Its MIME type.
+    pub mime_type: String,
+    /// Its shown name.
+    pub name: String,
+}
+
+/// Copies stored files into a hand-off folder as plain files, in the given order (#114, #128).
+///
+/// Inputs: The repository, the files, the folder, and the names already used there (extended).
+/// Outputs: The copies, and how many were left out (unreadable, or over
+/// `MAX_HANDOFF_FILES`, `MAX_HANDOFF_FILE_BYTES` or `MAX_HANDOFF_TOTAL_BYTES`).
+/// Side effects: Decrypts the files and writes clear copies into `directory`: personal data the
+/// caller shares at once and deletes soon.
+pub(crate) fn copy_handoff_files<Repository: AttachmentRepository + ?Sized>(
+    repository: &Repository,
+    sources: &[HandoffSource],
+    directory: &Path,
+    used_names: &mut Vec<String>,
+) -> Result<(Vec<HandoffFile>, usize), SummaryError> {
+    let storage = |error: &dyn std::fmt::Display| SummaryError::Storage(error.to_string());
+    let mut files = Vec::new();
+    let (mut skipped, mut total_bytes) = (0, 0_u64);
+    for source in sources {
+        if files.len() >= MAX_HANDOFF_FILES {
+            skipped += 1;
+            continue;
+        }
+        let Some(contents) = repository
+            .read_attachment_file(Path::new(&source.stored_path), MAX_HANDOFF_FILE_BYTES)
+            .filter(|contents| total_bytes + contents.len() as u64 <= MAX_HANDOFF_TOTAL_BYTES)
+        else {
+            skipped += 1;
+            continue;
+        };
+        let name = unique_name(&handoff_file_stem(&source.name), used_names);
+        let path = directory.join(&name);
+        std::fs::write(&path, contents.as_slice()).map_err(|error| storage(&error))?;
+        total_bytes += contents.len() as u64;
+        used_names.push(name);
+        files.push(HandoffFile {
+            path,
+            mime_type: source.mime_type.clone(),
+        });
+    }
+    Ok((files, skipped))
 }
 
 /// Creates `directory` if needed and deletes the files in it (not folders).

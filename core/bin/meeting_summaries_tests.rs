@@ -251,6 +251,10 @@ fn a_hand_off_writes_the_meeting_and_its_files_into_a_fresh_folder() {
     let document =
         std::fs::read_to_string(&written.files[0].path).unwrap_or_else(|e| panic!("{e}"));
     assert!(document.contains("We approve it."));
+    assert!(
+        document.contains("come with it as files: board.png, deck.pdf."),
+        "the files are named, not turned into text (#128)"
+    );
     assert_eq!(
         std::fs::read(&written.files[2].path).unwrap_or_default(),
         b"%PDF"

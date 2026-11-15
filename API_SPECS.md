@@ -251,9 +251,13 @@ and meeting summaries" below). Keys are write-only.
 - `char *note_taker_handoff_meeting(const char *request_json)` (#114) prepares a meeting for the
   owner's own AI app. The request is
   `{"meeting_id","purpose":"summary"|"chat","directory","inline"?}`, where `directory` is a folder
-  the app owns for hand-offs. With `"inline": true` (computers, #126), `message` also carries the
-  meeting's Markdown, for the owner to paste into a website. The core empties it, then writes the meeting
-  as Markdown and plain copies of its attachments (at most 20, 50 MiB each, 100 MiB in all).
+  the app owns for hand-offs. For a project's chat (#126), `project_id` replaces `meeting_id`
+  (`purpose` must be `chat`): the Markdown holds every meeting of the project, oldest first, and
+  the files are the project's own files and every meeting's attachments. With `"inline": true`
+  (computers, #126), `message` also carries the Markdown, for the owner to paste into a website.
+  Attachments always go as files: the Markdown only names them, never their text. The core empties
+  the folder, then writes the Markdown and plain copies of the attachments (at most 20, 50 MiB
+  each, 100 MiB in all).
   The answer is `message` (the summary prompt, or an introduction for a chat), `prompt` (the
   filled-in instructions; empty for a chat), `files` (`path`, `mime_type`; the Markdown first) and
   `skipped`. Errors: `invalid_request`, `nothing_to_summarize`, `storage_failed`. No AI connection

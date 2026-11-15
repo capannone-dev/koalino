@@ -59,16 +59,17 @@ pub struct Handoff {
 /// Builds the hand-off of a meeting.
 ///
 /// Inputs: The summary template (the meeting's own or the default), the meeting's material, the
-/// purpose, and how the meeting travels. Images in the material are ignored; the caller attaches
-/// the files itself.
-/// Outputs: The message and document, or `NothingToSummarize` without words, notes or files'
-/// text. When pasted, the document ends with the text of the meeting's files (#128).
+/// purpose, how the meeting travels, and the names of the files the caller attaches. Images and
+/// documents' text in the material are not used: the files go as they are.
+/// Outputs: The message and document, or `NothingToSummarize` without words, notes or files.
+/// The document ends by naming `attached_files`, the photos and files that go with it as files.
 /// Side effects: None.
 pub fn prepare_handoff(
     template: &PromptTemplate,
     material: &SummaryMaterial,
     purpose: HandoffPurpose,
     delivery: HandoffDelivery,
+    attached_files: &[String],
 ) -> Result<Handoff, SummaryError> {
     let notes = material
         .notes
@@ -76,12 +77,7 @@ pub fn prepare_handoff(
         .map(str::trim)
         .filter(|notes| !notes.is_empty());
     let transcript = render_transcript(&material.lines);
-    let documents: Vec<_> = material
-        .documents
-        .iter()
-        .filter(|document| !document.text.trim().is_empty())
-        .collect();
-    if transcript.is_empty() && notes.is_none() && documents.is_empty() {
+    if transcript.is_empty() && notes.is_none() && attached_files.is_empty() {
         return Err(SummaryError::NothingToSummarize);
     }
     let values = &material.values;
@@ -99,17 +95,13 @@ pub fn prepare_handoff(
              Words may be misheard, especially names, technical terms and people talking at once.\n\n{transcript}\n"
         ));
     }
-    // A pasted hand-off carries no files, so their text comes along (#128); an attached one
-    // shares the files themselves.
-    if delivery == HandoffDelivery::Pasted && !documents.is_empty() {
-        document.push_str("\n## Attached files\n");
-        for attached in documents {
-            document.push_str(&format!(
-                "\n### {}\n\n{}\n",
-                attached.name,
-                attached.text.trim()
-            ));
-        }
+    // Photos and files travel as files, never as their text; naming them tells the model to
+    // read them (#128).
+    if !attached_files.is_empty() {
+        document.push_str(&format!(
+            "\n## Attached files\n\nThe meeting's photos and files come with it as files: {}.\n",
+            attached_files.join(", ")
+        ));
     }
     let (message, prompt) = match (purpose, delivery) {
         (HandoffPurpose::Summary, HandoffDelivery::Pasted) => {

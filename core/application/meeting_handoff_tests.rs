@@ -45,49 +45,46 @@ fn agenda() -> AttachedDocument {
     }
 }
 
-/// A pasted hand-off cannot carry files, so their text goes in the message (#128); an attached
-/// one sends the files themselves, so the meeting's Markdown does not repeat them.
+/// Photos and files go as files, never as their text (#128 follow-up): the meeting's Markdown
+/// only names them, so the model knows to read them.
 #[test]
-fn the_files_text_is_pasted_but_not_repeated_beside_attached_files() {
+fn files_are_named_not_turned_into_text() {
     let mut meeting = material(vec![spoken("Anna", 0, "We ship on Friday.")], None);
     meeting.documents = vec![agenda()];
+    let files = ["agenda.md".to_owned(), "board.jpg".to_owned()];
 
-    let pasted = prepare_handoff(
-        &template(),
-        &meeting,
-        HandoffPurpose::Chat,
-        HandoffDelivery::Pasted,
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
-    let attached = prepare_handoff(
-        &template(),
-        &meeting,
-        HandoffPurpose::Chat,
-        HandoffDelivery::Attached,
-    )
-    .unwrap_or_else(|e| panic!("{e}"));
+    for delivery in [HandoffDelivery::Pasted, HandoffDelivery::Attached] {
+        let handoff = prepare_handoff(
+            &template(),
+            &meeting,
+            HandoffPurpose::Chat,
+            delivery,
+            &files,
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
 
-    assert!(
-        pasted
-            .message
-            .contains("## Attached files\n\n### agenda.md\n\n1. Budget 2027"),
-        "{}",
-        pasted.message
-    );
-    assert!(!attached.document.contains("1. Budget 2027"));
+        assert!(
+            handoff
+                .document
+                .contains("## Attached files\n\nThe meeting's photos and files come with it as files: agenda.md, board.jpg.\n"),
+            "{}",
+            handoff.document
+        );
+        assert!(!handoff.message.contains("1. Budget 2027"));
+    }
 }
 
 /// A meeting with only a file can be handed off.
 #[test]
 fn a_meeting_with_only_a_file_is_handed_off() {
-    let mut meeting = material(Vec::new(), None);
-    meeting.documents = vec![agenda()];
+    let meeting = material(Vec::new(), None);
 
     let handoff = prepare_handoff(
         &template(),
         &meeting,
         HandoffPurpose::Summary,
         HandoffDelivery::Pasted,
+        &["plan.pdf".to_owned()],
     );
 
     assert!(handoff.is_ok());
@@ -115,6 +112,7 @@ fn a_summary_hand_off_asks_with_the_owners_prompt_and_attaches_the_meeting() {
         ),
         HandoffPurpose::Summary,
         HandoffDelivery::Attached,
+        &[],
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -145,6 +143,7 @@ fn a_chat_hand_off_attaches_the_meeting_without_the_summary_prompt() {
         &material(vec![spoken("Anna", 0, "Hello.")], None),
         HandoffPurpose::Chat,
         HandoffDelivery::Attached,
+        &[],
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -168,6 +167,7 @@ fn a_pasted_hand_off_carries_the_meeting_in_the_message() {
         &meeting,
         HandoffPurpose::Summary,
         HandoffDelivery::Pasted,
+        &[],
     )
     .unwrap_or_else(|e| panic!("{e}"));
     let chat = prepare_handoff(
@@ -175,6 +175,7 @@ fn a_pasted_hand_off_carries_the_meeting_in_the_message() {
         &meeting,
         HandoffPurpose::Chat,
         HandoffDelivery::Pasted,
+        &[],
     )
     .unwrap_or_else(|e| panic!("{e}"));
 
@@ -198,6 +199,7 @@ fn a_meeting_without_words_or_notes_is_not_handed_off() {
         &material(Vec::new(), Some("  ")),
         HandoffPurpose::Chat,
         HandoffDelivery::Attached,
+        &[],
     );
     assert!(matches!(refused, Err(SummaryError::NothingToSummarize)));
 }

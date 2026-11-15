@@ -4,8 +4,9 @@
 
 Meetings and projects hold files: PDFs, Word, PowerPoint and Excel documents, LibreOffice
 documents, e-mails, text, Markdown, CSV and the like. This folder turns such a file into plain text
-(#128), so the meeting's summary, the meeting and project chats, the hand-off to the owner's own AI
-app and project search can use what the files say.
+(#128), so the meeting's summary, the meeting and project chats and project search can use what
+the files say. The hand-off to the owner's own AI app does not use it: there the files go as
+files (#126).
 
 | File | Purpose |
 | --- | --- |
