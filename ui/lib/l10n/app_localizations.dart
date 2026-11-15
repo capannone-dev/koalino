@@ -3762,7 +3762,7 @@ abstract class AppLocalizations {
   /// No description provided for @runsWhisperSmallOnThePhone.
   ///
   /// In en, this message translates to:
-  /// **'Runs Whisper Small on the phone\'s AI chip, in place of the model chosen above, and for the after-meeting pass unless it has its own model. Word times are approximate.'**
+  /// **'Runs Whisper Small on the phone\'s AI chip, in place of the model chosen below, and for the after-meeting pass unless it has its own model. Word times are approximate.'**
   String get runsWhisperSmallOnThePhone;
 
   /// No description provided for @removeTheNpuFiles.
@@ -4269,6 +4269,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Smaller versions that make a few more mistakes, English-only versions, and models that may not fit this device.'**
   String get moreModelsHint;
+
+  /// No description provided for @microphoneSilencedByCall.
+  ///
+  /// In en, this message translates to:
+  /// **'Android is silencing the microphone while another app uses it for a call: nothing is recorded until the call ends.'**
+  String get microphoneSilencedByCall;
 }
 
 class _AppLocalizationsDelegate

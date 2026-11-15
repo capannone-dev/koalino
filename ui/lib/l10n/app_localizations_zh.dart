@@ -2036,7 +2036,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get runsWhisperSmallOnThePhone =>
-      '在手机的 AI 芯片上运行 Whisper Small，替代上方所选的模型；会后处理若没有单独的模型也使用它。字词时间为近似值。';
+      '在手机的 AI 芯片上运行 Whisper Small，替代下方所选的模型；会后处理若没有单独的模型也使用它。字词时间为近似值。';
 
   @override
   String get removeTheNpuFiles => '移除 NPU 文件';
@@ -2471,4 +2471,8 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get moreModelsHint => '更小但错误稍多的版本、仅支持英语的版本，以及可能超出此设备承受能力的模型。';
+
+  @override
+  String get microphoneSilencedByCall =>
+      '另一个应用正在通话中使用麦克风，Android 已将其静音：通话结束前不会录到任何内容。';
 }

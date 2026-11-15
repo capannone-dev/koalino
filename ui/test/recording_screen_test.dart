@@ -197,6 +197,44 @@ Future<List<String>> pumpRecordingScreenWithCamera(
 
 /// Verifies the recording lifecycle and the optional meeting title sent to Rust.
 void main() {
+  testWidgets(
+      'a microphone Android silences for a call is said while recording',
+      (WidgetTester tester) async {
+    final FakeRecordingBridge recordingBridge =
+        FakeRecordingBridge(startResult: true);
+    bool silenced = true;
+    int checks = 0;
+    final RecordingController controller = RecordingController(
+      recordingBridge: recordingBridge,
+      microphoneSilenced: () async {
+        checks += 1;
+        return silenced;
+      },
+      silenceCheckInterval: const Duration(seconds: 2),
+    );
+    await tester.pumpWidget(
+        MaterialApp(home: RecordingScreen(recordingController: controller)));
+    await tester.pump(const Duration(seconds: 5));
+    expect(checks, 0, reason: 'nothing is checked while idle');
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    expect(controller.microphoneSilenced, isTrue);
+    expect(find.textContaining('silencing the microphone'), findsOneWidget);
+
+    silenced = false;
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.textContaining('silencing the microphone'), findsNothing);
+
+    await tester.tap(find.text('Stop'));
+    await tester.pumpAndSettle();
+    final int checksAtStop = checks;
+    await tester.pump(const Duration(seconds: 10));
+    expect(checks, checksAtStop, reason: 'checks end with the recording');
+    controller.dispose();
+  });
+
   testWidgets('Take photos opens the camera for the meeting being recorded',
       (WidgetTester tester) async {
     final FakeRecordingBridge recordingBridge =

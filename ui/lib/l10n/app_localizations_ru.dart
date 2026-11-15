@@ -2187,7 +2187,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get runsWhisperSmallOnThePhone =>
-      'Запускает Whisper Small на ИИ-чипе телефона вместо выбранной выше модели, а также для обработки после встречи, если для неё нет своей модели. Время слов приблизительное.';
+      'Запускает Whisper Small на ИИ-чипе телефона вместо выбранной ниже модели, а также для обработки после встречи, если для неё нет своей модели. Время слов приблизительное.';
 
   @override
   String get removeTheNpuFiles => 'Удалить файлы для NPU';
@@ -2669,4 +2669,8 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get moreModelsHint =>
       'Облегчённые версии, которые ошибаются чуть чаще, версии только для английского и модели, которые могут не поместиться на этом устройстве.';
+
+  @override
+  String get microphoneSilencedByCall =>
+      'Android заглушает микрофон, пока другое приложение использует его для звонка: до конца звонка ничего не записывается.';
 }

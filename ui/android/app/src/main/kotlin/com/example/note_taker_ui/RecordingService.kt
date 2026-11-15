@@ -5,7 +5,8 @@
 // JNI (`NativeCore`), so they work without opening or unlocking the app, and every change is
 // reported to Dart through `stateListener`. Dart starts, updates, and ends the service with
 // `show` as its own recorder changes. The lock-screen version of the notification hides the
-// meeting title. Framework APIs only, no AndroidX.
+// meeting title. While Android feeds the recording silence because a call holds the microphone,
+// the notification says so (#111), with the text Dart sent. Framework APIs only, no AndroidX.
 package com.example.note_taker_ui
 
 import android.app.Notification
@@ -17,6 +18,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
+import android.media.AudioManager
+import android.media.AudioRecordingConfiguration
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -34,7 +37,38 @@ class RecordingService : Service() {
     /** The meeting title, or null when untitled; shown only when the device is unlocked. */
     private var title: String? = null
 
+    /** Dart's localized sentence for a silenced recording, or null before Dart sent one. */
+    private var silencedText: String? = null
+
+    /** Whether Android is feeding the recording silence for a call (#111). */
+    private var silenced = false
+
+    /** Follows capture changes, so the notification says when a call silences the recording. */
+    private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
+        override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>) {
+            refreshSilenced()
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
+
+    /** Side effects: Registers the capture callback on Android 10 and later. */
+    override fun onCreate() {
+        super.onCreate()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getSystemService(AudioManager::class.java)
+                ?.registerAudioRecordingCallback(recordingCallback, mainThread)
+        }
+    }
+
+    /** Updates the notification when a call starts or stops silencing the recording. */
+    private fun refreshSilenced() {
+        val nowSilenced = state == STATE_RECORDING && CallSignals.isRecordingSilenced(this)
+        if (nowSilenced != silenced) {
+            silenced = nowSilenced
+            post()
+        }
+    }
 
     /**
      * Handles `show` from Dart and the notification's actions.
@@ -48,6 +82,8 @@ class RecordingService : Service() {
             ACTION_SHOW -> {
                 state = intent.getStringExtra(EXTRA_STATE) ?: STATE_RECORDING
                 title = intent.getStringExtra(EXTRA_TITLE)
+                silencedText = intent.getStringExtra(EXTRA_SILENCED_TEXT) ?: silencedText
+                silenced = state == STATE_RECORDING && CallSignals.isRecordingSilenced(this)
                 post()
             }
             ACTION_PAUSE -> runCore(STATE_PAUSED) { NativeCore.pauseRecording() }
@@ -59,6 +95,10 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getSystemService(AudioManager::class.java)
+                ?.unregisterAudioRecordingCallback(recordingCallback)
+        }
         coreExecutor.shutdown()
         super.onDestroy()
     }
@@ -158,6 +198,11 @@ class RecordingService : Service() {
         if (includeTitle && !meetingTitle.isNullOrEmpty()) {
             builder.setContentText(meetingTitle)
         }
+        // The warning names no meeting, so the lock screen shows it too (#111).
+        val warning = silencedText
+        if (silenced && state == STATE_RECORDING && warning != null) {
+            builder.setContentText(warning).setStyle(Notification.BigTextStyle().bigText(warning))
+        }
         if (includeTitle) {
             builder.setPublicVersion(buildNotification(includeTitle = false))
         }
@@ -235,6 +280,7 @@ class RecordingService : Service() {
         private const val ACTION_STOP = "com.example.note_taker_ui.recording.STOP"
         private const val EXTRA_STATE = "state"
         private const val EXTRA_TITLE = "title"
+        private const val EXTRA_SILENCED_TEXT = "silencedText"
         private const val CHANNEL_ID = "recording"
         private const val NOTIFICATION_ID = 4701
 
@@ -245,11 +291,12 @@ class RecordingService : Service() {
         /**
          * Starts or updates the service for `state`, or ends it for `idle`.
          *
-         * Inputs: A state name from Dart and the meeting title (null when untitled).
+         * Inputs: A state name from Dart, the meeting title (null when untitled), and the
+         * sentence to show while a call silences the recording.
          * Side effects: Starts a foreground service; call while the app is visible (Android 12
          * and later refuse to start one from the background, which Dart never does).
          */
-        fun show(context: Context, state: String, title: String?) {
+        fun show(context: Context, state: String, title: String?, silencedText: String? = null) {
             val intent = Intent(context, RecordingService::class.java)
             if (state == STATE_IDLE) {
                 context.stopService(intent)
@@ -258,6 +305,7 @@ class RecordingService : Service() {
             intent.setAction(ACTION_SHOW)
                 .putExtra(EXTRA_STATE, state)
                 .putExtra(EXTRA_TITLE, title)
+                .putExtra(EXTRA_SILENCED_TEXT, silencedText)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
             } else {

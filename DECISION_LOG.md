@@ -3640,3 +3640,26 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   past it.
 - **Archives:** an `.xpi` must list its files without a leading `./`, or Firefox reports that it
   has no valid manifest. `web-ext` builds it correctly.
+
+## 2026-11-15 — #111 Android silences a recording during a call, and Koalino now says so
+
+- **Finding:** the owner accepted the offer during a Signal call on the S23, and only a few
+  sentences were transcribed. The phone's audio log shows why. Signal captured with
+  `VOICE_COMMUNICATION`, and Android marked Koalino's capture `silenced` from its first second
+  until the call ended. It was unsilenced for the 14 seconds between two calls, then silenced
+  again. This is Android's concurrent-capture policy, which the compatibility definition
+  requires: while an app captures with `VOICE_COMMUNICATION`, every other app except an
+  accessibility service receives silence. No ordinary app can record the microphone during a
+  VoIP call.
+- **Decision:** Koalino detects the silencing (`AudioRecordingConfiguration.isClientSilenced`,
+  Android 10 and later) and says so:
+  - in the recording notification, through a capture callback in `RecordingService`;
+  - on the recording screen, polled every 3 seconds while recording.
+  
+  The recording continues and picks up again when the call ends.
+- **Not done:**
+  - **The call offer on Android stays.** Whether to drop it, since it cannot record a VoIP
+    call, is the owner's choice.
+  - **The call app's name in the title.** Android hides which app captures (the configurations
+    are anonymized). The audio log names it only for system apps. Reading it would need
+    notification access or usage-stats permission.

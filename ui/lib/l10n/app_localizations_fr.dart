@@ -2214,7 +2214,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get runsWhisperSmallOnThePhone =>
-      'Exécute Whisper Small sur la puce IA du téléphone, à la place du modèle choisi ci-dessus, et pour la passe après la réunion sauf si elle a son propre modèle. Les horaires des mots sont approximatifs.';
+      'Exécute Whisper Small sur la puce IA du téléphone, à la place du modèle choisi ci-dessous, et pour la passe après la réunion sauf si elle a son propre modèle. Les horaires des mots sont approximatifs.';
 
   @override
   String get removeTheNpuFiles => 'Supprimer les fichiers du NPU';
@@ -2663,4 +2663,8 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get moreModelsHint =>
       'Versions plus légères qui font un peu plus d\'erreurs, versions en anglais uniquement, et modèles qui risquent de ne pas tenir sur cet appareil.';
+
+  @override
+  String get microphoneSilencedByCall =>
+      'Android coupe le micro tant qu\'une autre app l\'utilise pour un appel : rien n\'est enregistré avant la fin de l\'appel.';
 }

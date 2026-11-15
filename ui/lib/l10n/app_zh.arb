@@ -607,7 +607,7 @@
   "transcribeOnTheNpu": "在 NPU 上转写",
   "thisPhoneHasAnAiChip": "此手机有一颗 AI 芯片（NPU），可以运行 Whisper Small 并释放处理器：30 秒语音约需 2 秒。需要从 Qualcomm 下载文件。",
   "download": "下载",
-  "runsWhisperSmallOnThePhone": "在手机的 AI 芯片上运行 Whisper Small，替代上方所选的模型；会后处理若没有单独的模型也使用它。字词时间为近似值。",
+  "runsWhisperSmallOnThePhone": "在手机的 AI 芯片上运行 Whisper Small，替代下方所选的模型；会后处理若没有单独的模型也使用它。字词时间为近似值。",
   "removeTheNpuFiles": "移除 NPU 文件",
   "alsoRecordTheComputerSSound": "同时录制电脑声音",
   "transcribesWhatTheComputerPlaysSuch": "除麦克风外，还转写电脑播放的声音，例如通话的另一方。当麦克风也能听到扬声器时，重复的字词只保留一次。",
@@ -691,5 +691,6 @@
   "systemLanguage": "跟随系统",
   "photosAddedCount": "{count, plural, =1{已添加 1 张照片} other{已添加 {count} 张照片}}",
   "moreModels": "更多模型（{count}）",
-  "moreModelsHint": "更小但错误稍多的版本、仅支持英语的版本，以及可能超出此设备承受能力的模型。"
+  "moreModelsHint": "更小但错误稍多的版本、仅支持英语的版本，以及可能超出此设备承受能力的模型。",
+  "microphoneSilencedByCall": "另一个应用正在通话中使用麦克风，Android 已将其静音：通话结束前不会录到任何内容。"
 }

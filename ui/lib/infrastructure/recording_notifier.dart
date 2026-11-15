@@ -8,6 +8,7 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:note_taker_ui/l10n/l10n.dart';
 import 'package:flutter/services.dart'
     show MethodCall, MethodChannel, PlatformException;
 
@@ -80,8 +81,12 @@ final class AndroidRecordingNotifier implements RecordingNotifier {
   @override
   Future<bool> show(RecordingNotificationState state, {String? title}) async {
     try {
-      await _channel.invokeMethod<void>(
-          'show', <String, String?>{'state': state.name, 'title': title});
+      await _channel.invokeMethod<void>('show', <String, String?>{
+        'state': state.name,
+        'title': title,
+        // Shown by the service while Android silences the recording for a call (#111).
+        'silencedText': l10n.microphoneSilencedByCall,
+      });
       return true;
     } on PlatformException {
       return false;

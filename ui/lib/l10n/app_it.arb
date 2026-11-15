@@ -607,7 +607,7 @@
   "transcribeOnTheNpu": "Trascrivi sulla NPU",
   "thisPhoneHasAnAiChip": "Questo telefono ha un chip per l'IA (NPU) che può eseguire Whisper Small lasciando libero il processore: 30 secondi di parlato richiedono circa 2 secondi. Serve un download da Qualcomm.",
   "download": "Scarica",
-  "runsWhisperSmallOnThePhone": "Esegue Whisper Small sul chip IA del telefono, al posto del modello scelto sopra, anche per la passata dopo la riunione se questa non ha un modello suo. I tempi delle parole sono approssimativi.",
+  "runsWhisperSmallOnThePhone": "Esegue Whisper Small sul chip IA del telefono, al posto del modello scelto sotto, anche per la passata dopo la riunione se questa non ha un modello suo. I tempi delle parole sono approssimativi.",
   "removeTheNpuFiles": "Rimuovi i file per la NPU",
   "alsoRecordTheComputerSSound": "Registra anche l'audio del computer",
   "transcribesWhatTheComputerPlaysSuch": "Trascrive ciò che il computer riproduce, come l'altra parte di una chiamata, accanto al microfono. Quando il microfono sente anche gli altoparlanti, le parole ripetute vengono tenute una sola volta.",
@@ -691,5 +691,6 @@
   "systemLanguage": "Predefinita di sistema",
   "photosAddedCount": "{count, plural, =1{1 foto aggiunta} other{{count} foto aggiunte}}",
   "moreModels": "Altri modelli ({count})",
-  "moreModelsHint": "Versioni più leggere che sbagliano un po' di più, versioni solo in inglese e modelli che potrebbero non entrare in questo dispositivo."
+  "moreModelsHint": "Versioni più leggere che sbagliano un po' di più, versioni solo in inglese e modelli che potrebbero non entrare in questo dispositivo.",
+  "microphoneSilencedByCall": "Android sta silenziando il microfono mentre un'altra app lo usa per una chiamata: non viene registrato nulla finché la chiamata non termina."
 }

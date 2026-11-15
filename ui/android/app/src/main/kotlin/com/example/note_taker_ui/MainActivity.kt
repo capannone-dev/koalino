@@ -98,7 +98,12 @@ class MainActivity : FlutterActivity() {
                 return@setMethodCallHandler
             }
             try {
-                RecordingService.show(this, state, call.argument<String>("title"))
+                RecordingService.show(
+                    this,
+                    state,
+                    call.argument<String>("title"),
+                    call.argument<String>("silencedText"),
+                )
                 result.success(null)
             } catch (error: RuntimeException) {
                 // For example a foreground service the system refuses to start.

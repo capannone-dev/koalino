@@ -607,7 +607,7 @@
   "transcribeOnTheNpu": "NPU で文字起こし",
   "thisPhoneHasAnAiChip": "このスマートフォンには Whisper Small を実行できる AI チップ（NPU）があり、プロセッサーを空けておけます。30 秒の発話を約 2 秒で処理します。Qualcomm からのダウンロードが必要です。",
   "download": "ダウンロード",
-  "runsWhisperSmallOnThePhone": "上で選んだモデルの代わりにスマートフォンの AI チップで Whisper Small を実行します。会議後の処理に専用のモデルがない場合はそれにも使います。単語の時刻はおおよそです。",
+  "runsWhisperSmallOnThePhone": "下で選んだモデルの代わりにスマートフォンの AI チップで Whisper Small を実行します。会議後の処理に専用のモデルがない場合はそれにも使います。単語の時刻はおおよそです。",
   "removeTheNpuFiles": "NPU 用ファイルを削除",
   "alsoRecordTheComputerSSound": "コンピューターの音声も録音",
   "transcribesWhatTheComputerPlaysSuch": "マイクに加えて、通話相手の声などコンピューターが再生する音声も文字起こしします。マイクがスピーカーの音も拾った場合、重複した言葉は 1 回だけ残します。",
@@ -691,5 +691,6 @@
   "systemLanguage": "システムのデフォルト",
   "photosAddedCount": "{count, plural, =1{写真を 1 枚追加しました} other{写真を {count} 枚追加しました}}",
   "moreModels": "その他のモデル（{count}）",
-  "moreModelsHint": "少し誤りが増える軽量版、英語専用版、このデバイスでは大きすぎる可能性のあるモデルです。"
+  "moreModelsHint": "少し誤りが増える軽量版、英語専用版、このデバイスでは大きすぎる可能性のあるモデルです。",
+  "microphoneSilencedByCall": "別のアプリが通話でマイクを使用しているため、Android がマイクを無音にしています。通話が終わるまで何も録音されません。"
 }

@@ -4,7 +4,8 @@
 // then decides when a call starts and ends, as on desktops. The offer shows as a notification
 // (`CallOffer.kt`, on `note_taker/call_offer`): Record opens the app and answers `record`, since
 // a recording can only start while the app is in front; Not now or swiping it away answers
-// `dismissed`.
+// `dismissed`. While recording, `silenced` says whether Android is feeding the recording silence
+// because a call holds the microphone, which it does for the whole call.
 
 import 'dart:async';
 
@@ -39,6 +40,16 @@ final class AndroidCallSignals {
               }),
     ];
   }
+
+  /// Whether Android is giving this app's recording silence because a call holds the
+  /// microphone (#111): its concurrent-capture policy lets the call's capture through and
+  /// silences the others.
+  ///
+  /// Outputs: `true` while silenced; `false` when not, or when Kotlin cannot tell (before
+  /// Android 10). Throws `PlatformException` or `MissingPluginException` when Kotlin cannot
+  /// answer. Side effects: None.
+  Future<bool> silenced() async =>
+      await _channel.invokeMethod<bool>('silenced') ?? false;
 }
 
 /// The call offer as an Android notification.

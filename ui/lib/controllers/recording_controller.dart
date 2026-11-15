@@ -36,16 +36,72 @@ final class RecordingController extends ChangeNotifier {
   /// notification and reports the changes made from it (Issue #47).
   /// Outputs: A controller in the idle state.
   /// Side effects: Subscribes to the notifier's changes until `dispose`.
+  ///
+  /// `microphoneSilenced` (Android only, #111) answers whether the system is feeding this app
+  /// silence because another app holds the microphone for a call; it is asked every
+  /// `silenceCheckInterval` while recording.
   RecordingController({
     required RecordingBridge recordingBridge,
     MicrophonePermission microphonePermission =
         const GrantedMicrophonePermission(),
     RecordingNotifier recordingNotifier = const NoRecordingNotifier(),
+    Future<bool> Function()? microphoneSilenced,
+    Duration silenceCheckInterval = const Duration(seconds: 3),
   })  : _recordingBridge = recordingBridge,
         _microphonePermission = microphonePermission,
-        _recordingNotifier = recordingNotifier {
+        _recordingNotifier = recordingNotifier,
+        _checkSilenced = microphoneSilenced,
+        _silenceCheckInterval = silenceCheckInterval {
     _externalChanges =
         recordingNotifier.externalChanges.listen(_applyExternalChange);
+    if (microphoneSilenced != null) {
+      addListener(_followRecordingForSilence);
+    }
+  }
+
+  final Future<bool> Function()? _checkSilenced;
+  final Duration _silenceCheckInterval;
+
+  /// Asks `_checkSilenced` while recording; `null` otherwise.
+  Timer? _silenceTimer;
+  bool _microphoneSilenced = false;
+
+  /// Whether Android is giving the recording silence because a call holds the microphone
+  /// (#111). Always false off Android and while not recording.
+  bool get microphoneSilenced => _microphoneSilenced;
+
+  /// Starts the silence checks when a recording starts and ends them when it stops.
+  void _followRecordingForSilence() {
+    final bool recording = _state == RecordingUiState.recording;
+    if (recording && _silenceTimer == null) {
+      _silenceTimer =
+          Timer.periodic(_silenceCheckInterval, (_) => _checkSilence());
+    } else if (!recording && _silenceTimer != null) {
+      _silenceTimer?.cancel();
+      _silenceTimer = null;
+      if (_microphoneSilenced) {
+        _microphoneSilenced = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Asks once and tells listeners when the answer changed; a failed check changes nothing.
+  Future<void> _checkSilence() async {
+    final Future<bool> Function()? check = _checkSilenced;
+    if (check == null) {
+      return;
+    }
+    final bool silenced;
+    try {
+      silenced = await check();
+    } on Object {
+      return;
+    }
+    if (_silenceTimer != null && silenced != _microphoneSilenced) {
+      _microphoneSilenced = silenced;
+      notifyListeners();
+    }
   }
 
   final RecordingBridge _recordingBridge;
@@ -267,6 +323,7 @@ final class RecordingController extends ChangeNotifier {
   /// Stops listening to the notifier. Side effects: Cancels the subscription.
   @override
   void dispose() {
+    _silenceTimer?.cancel();
     unawaited(_externalChanges.cancel());
     super.dispose();
   }

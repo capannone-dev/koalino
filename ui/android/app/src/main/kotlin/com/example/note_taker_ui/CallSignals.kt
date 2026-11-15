@@ -5,6 +5,7 @@
 //   WhatsApp) set for the call; or
 // - an active recording uses the `VOICE_COMMUNICATION` source.
 // Koalino's own recorder uses neither, so it never counts. Answered on `note_taker/call_signals`.
+// `silenced` answers whether Android is feeding a recording silence for a call (#111).
 package com.example.note_taker_ui
 
 import android.content.Context
@@ -21,6 +22,10 @@ class CallSignals(private val context: Context) : MethodChannel.MethodCallHandle
      * call holds the microphone. Side effects: None.
      */
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        if (call.method == "silenced") {
+            result.success(isRecordingSilenced(context))
+            return
+        }
         if (call.method != "users") {
             result.notImplemented()
             return
@@ -50,5 +55,25 @@ class CallSignals(private val context: Context) : MethodChannel.MethodCallHandle
     companion object {
         /** The process name the core knows as an unnamed call app (`domain::call_watch`). */
         const val VOICE_CALL = "android:voice-communication"
+
+        /**
+         * Whether Android is feeding a non-call capture silence (#111): its concurrent-capture
+         * policy gives the microphone to a `VOICE_COMMUNICATION` capture and silences the
+         * others. Other apps' captures are anonymized, so this cannot tell Koalino's own from
+         * another app's; callers ask only while Koalino records.
+         *
+         * Outputs: true while such a capture is silenced; false otherwise or before Android 10,
+         * which does not report silencing. Side effects: None.
+         */
+        fun isRecordingSilenced(context: Context): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                return false
+            }
+            val audio = context.getSystemService(AudioManager::class.java) ?: return false
+            return audio.activeRecordingConfigurations.any {
+                it.isClientSilenced &&
+                    it.clientAudioSource != MediaRecorder.AudioSource.VOICE_COMMUNICATION
+            }
+        }
     }
 }

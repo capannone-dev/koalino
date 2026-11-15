@@ -2087,7 +2087,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get runsWhisperSmallOnThePhone =>
-      '上で選んだモデルの代わりにスマートフォンの AI チップで Whisper Small を実行します。会議後の処理に専用のモデルがない場合はそれにも使います。単語の時刻はおおよそです。';
+      '下で選んだモデルの代わりにスマートフォンの AI チップで Whisper Small を実行します。会議後の処理に専用のモデルがない場合はそれにも使います。単語の時刻はおおよそです。';
 
   @override
   String get removeTheNpuFiles => 'NPU 用ファイルを削除';
@@ -2527,4 +2527,8 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get moreModelsHint => '少し誤りが増える軽量版、英語専用版、このデバイスでは大きすぎる可能性のあるモデルです。';
+
+  @override
+  String get microphoneSilencedByCall =>
+      '別のアプリが通話でマイクを使用しているため、Android がマイクを無音にしています。通話が終わるまで何も録音されません。';
 }

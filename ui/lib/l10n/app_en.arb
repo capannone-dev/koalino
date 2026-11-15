@@ -1772,7 +1772,7 @@
   "@thisPhoneHasAnAiChip": {},
   "download": "Download",
   "@download": {},
-  "runsWhisperSmallOnThePhone": "Runs Whisper Small on the phone's AI chip, in place of the model chosen above, and for the after-meeting pass unless it has its own model. Word times are approximate.",
+  "runsWhisperSmallOnThePhone": "Runs Whisper Small on the phone's AI chip, in place of the model chosen below, and for the after-meeting pass unless it has its own model. Word times are approximate.",
   "@runsWhisperSmallOnThePhone": {},
   "removeTheNpuFiles": "Remove the NPU files",
   "@removeTheNpuFiles": {},
@@ -2168,5 +2168,6 @@
       }
     }
   },
-  "moreModelsHint": "Smaller versions that make a few more mistakes, English-only versions, and models that may not fit this device."
+  "moreModelsHint": "Smaller versions that make a few more mistakes, English-only versions, and models that may not fit this device.",
+  "microphoneSilencedByCall": "Android is silencing the microphone while another app uses it for a call: nothing is recorded until the call ends."
 }

@@ -2161,7 +2161,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get runsWhisperSmallOnThePhone =>
-      'يشغّل Whisper Small على شريحة الذكاء الاصطناعي في الهاتف بدلاً من النموذج المختار أعلاه، وكذلك لمعالجة ما بعد الاجتماع إن لم يكن لها نموذج خاص. توقيت الكلمات تقريبي.';
+      'يشغّل Whisper Small على شريحة الذكاء الاصطناعي في الهاتف بدلاً من النموذج المختار أدناه، وكذلك لمعالجة ما بعد الاجتماع إن لم يكن لها نموذج خاص. توقيت الكلمات تقريبي.';
 
   @override
   String get removeTheNpuFiles => 'إزالة ملفات NPU';
@@ -2678,4 +2678,8 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get moreModelsHint =>
       'إصدارات أخف تخطئ أكثر قليلاً، وإصدارات للإنجليزية فقط، ونماذج قد لا يتسع لها هذا الجهاز.';
+
+  @override
+  String get microphoneSilencedByCall =>
+      'يكتم Android الميكروفون بينما يستخدمه تطبيق آخر في مكالمة: لن يُسجَّل أي شيء حتى تنتهي المكالمة.';
 }

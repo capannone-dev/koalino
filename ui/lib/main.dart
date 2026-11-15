@@ -96,6 +96,9 @@ Future<void> main() async {
     recordingBridge: recordingBridge,
     microphonePermission: platformMicrophonePermission(),
     recordingNotifier: platformRecordingNotifier(),
+    // Android feeds a recording silence while a call holds the microphone (#111).
+    microphoneSilenced:
+        Platform.isAndroid ? const AndroidCallSignals().silenced : null,
   );
   // Lives as long as the app, so a choice survives switching destinations.
   final TranscriptionLanguageController languageController =

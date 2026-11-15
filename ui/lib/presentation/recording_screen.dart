@@ -233,6 +233,16 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                           child: Text(completionMessage,
                               textAlign: TextAlign.center),
                         ),
+                      if (recordingController.microphoneSilenced)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            l10n.microphoneSilencedByCall,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                color: Theme.of(context).colorScheme.error),
+                          ),
+                        ),
                       if (recordingController.errorMessage
                           case final String errorMessage)
                         Padding(
