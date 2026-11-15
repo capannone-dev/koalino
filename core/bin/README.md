@@ -362,13 +362,14 @@ that (`restore_summary`, #114). `meeting_summaries.rs`' `write_handoff`, exposed
 `search_commands.rs` (#100) is the search answer shared by the app (`note_taker_search` in
 `ffi.rs`), the web (`server/search_routes.rs`) and the CLI (`search`): the request's scope, each
 hit as JSON, and stable error codes. `HostSearchSources` gives `application/search.rs` the saved
-people's names and project files' text (`ProjectFiles::searchable_text`: text and Markdown files,
-e-mails).
+people's names and project files' text (`ProjectFiles::searchable_text`: text, Markdown and CSV files,
+e-mails, PDFs and office documents, through `adapters/documents`, #128).
 
 `notes_chat_commands.rs` (#97) is chat with notes for the app (`ffi_chat.rs`,
 `note_taker_chat`), the daemon (`server/chat_routes.rs`) and the CLI (`chat`). `gather_material`
-reads what a chat is about. For a meeting: its summary, notes, transcript and photos. For a
-project: its files' text and newest images, then its meetings newest first. For everything: a
+reads what a chat is about. For a meeting: its summary, notes, transcript and photos, then its files' text (#128). For a
+project: its files' text and newest images, then its meetings newest first, each followed by its
+files' text. For everything: a
 list of all meetings and projects, then the meetings (and matching files) that best match the
 question. `ask_with` holds the store only while reading and storing, never while the model
 answers. A phone asks a paired computer instead (#107): `ask_paired_computer_with` sends the

@@ -34,6 +34,7 @@ use uuid::Uuid;
 
 use crate::{
     adapters::{
+        documents::text_extraction::{extract_text, has_text},
         email::mail_parser_reader::MailParserEmailReader,
         storage::{
             attachment_file_store::{AttachmentFileStore, ProjectEmailImport, project_folder_name},
@@ -67,6 +68,8 @@ impl<T> ProjectCommandRepository for T where
 
 /// How much of a text file search reads (#100).
 const MAX_SEARCHED_TEXT_BYTES: u64 = 2 * 1024 * 1024;
+/// Largest PDF, office document or e-mail whose text is read for search and chat (#128).
+const MAX_EXTRACTED_FILE_BYTES: u64 = 50 * 1024 * 1024;
 
 /// The files side of projects: where resources live and how e-mails are read.
 #[derive(Clone, Debug)]
@@ -174,13 +177,16 @@ impl ProjectFiles {
             .import_file(repository, meeting_id, source_path, None)
     }
 
-    /// Reads a resource's text for search (#100): a text or Markdown file (its first 2 MiB), or
-    /// an e-mail's subject, senders and body. Other files have no text here.
+    /// Reads a resource's text for search (#100) and chat: a text or Markdown file (its first
+    /// 2 MiB), or, through `extract_text` (#128), an e-mail, a PDF, a Word, PowerPoint, Excel or
+    /// LibreOffice document, or a CSV, JSON or YAML file. Pictures have no text here.
     ///
-    /// Outputs: The text, or `None` for other kinds and for a file missing or unreadable here
-    /// (one still syncing). Side effects: Reads the file.
+    /// Outputs: The text, or `None` for other kinds, for a file over `MAX_EXTRACTED_FILE_BYTES`,
+    /// and for a file missing or unreadable here (one still syncing). Side effects: Reads the
+    /// file.
     pub fn searchable_text(&self, resource: &Attachment) -> Option<String> {
         use std::io::Read as _;
+        let name = resource.shown_file_name();
         match resource.mime_type() {
             "text/plain" | "text/markdown" => {
                 let mut contents = zeroize::Zeroizing::new(Vec::new());
@@ -192,25 +198,12 @@ impl ProjectFiles {
                     .ok()?;
                 Some(String::from_utf8_lossy(&contents).into_owned())
             }
-            "message/rfc822" => {
-                let raw_email = self.read_file(resource).ok()?;
-                let email = self.email_reader.read_email(&raw_email).ok()?;
-                let senders: Vec<String> = email
-                    .from
-                    .iter()
-                    .map(|person| match &person.name {
-                        Some(name) => {
-                            format!("{name} <{}>", person.address.as_deref().unwrap_or(""))
-                        }
-                        None => person.address.clone().unwrap_or_default(),
-                    })
-                    .collect();
-                Some(format!(
-                    "{}\n{}\n{}",
-                    email.subject.unwrap_or_default(),
-                    senders.join(", "),
-                    email.body_text
-                ))
+            mime_type if has_text(mime_type, &name) => {
+                if self.clear_len(resource)? > MAX_EXTRACTED_FILE_BYTES {
+                    return None;
+                }
+                let contents = self.read_file(resource).ok()?;
+                extract_text(mime_type, &name, &contents)
             }
             _ => None,
         }

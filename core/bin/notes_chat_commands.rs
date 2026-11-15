@@ -17,7 +17,8 @@
 //! `paired_computer_left`, `rate_limited`, `busy`, `p2p_unavailable`, or the computer's own code.
 //!
 //! `gather_material` reads what a chat is about: one meeting's transcript, summary, notes and
-//! photos; one project's files (text, Markdown, e-mails), images and meetings, newest first; or
+//! photos and files' text; one project's files (text, e-mails, PDF and office documents, #128),
+//! images and meetings, newest first, each meeting followed by its files; or
 //! everything, starting with a list of all meetings and projects, then the meetings and files
 //! that best match the question. `ask_with` holds the host's store only while gathering and
 //! storing, never during the model's answer. Nothing here logs questions, answers or material.
@@ -32,7 +33,7 @@ use crate::{
         combined_meetings::MeetingListing,
         export_manager::{ExportManager, ExportWriter},
         meeting_crdt::MeetingCrdtService,
-        meeting_summary::{SpokenLine, render_transcript},
+        meeting_summary::{AttachedDocument, SpokenLine, render_transcript},
         notes_chat::{ChatError, ChatMaterial, ContextItem, ask, relevance},
         paired_chat_exchange::{
             PairedChatAnswer, PairedChatOutcome, PairedChatRequest, PairedChatTurn,
@@ -47,7 +48,7 @@ use crate::{
         projects::ProjectId,
     },
     llm_commands::{CommandError, LlmServices},
-    meeting_summaries::{load_summary, prepare_summary},
+    meeting_summaries::{MAX_LLM_DOCUMENTS, load_summary, prepare_summary, read_document},
     ports::{chat::ChatHistoryRepository, voice::VoiceVectorDB},
     project_commands::{ProjectCommandRepository, ProjectFiles},
 };
@@ -346,6 +347,56 @@ fn file_item(
     })
 }
 
+/// A meeting's file as chat material, which a citation opens through the meeting (#128).
+///
+/// Inputs: The meeting, the file's text, and whether to name the meeting in the label (in a
+/// project's chat). Side effects: None.
+fn meeting_file_item(
+    meeting: &MeetingText,
+    document: AttachedDocument,
+    name_the_meeting: bool,
+) -> ContextItem {
+    let label = if name_the_meeting {
+        format!("File {}, meeting \"{}\"", document.name, meeting.title)
+    } else {
+        format!("File {}", document.name)
+    };
+    ContextItem {
+        label,
+        full: document.text,
+        short: None,
+        target: Some(ChatTarget::Meeting {
+            meeting_id: meeting.meeting_id.clone(),
+        }),
+    }
+}
+
+/// The text of a meeting's stored files, oldest first, at most `MAX_LLM_DOCUMENTS` (#128).
+///
+/// Side effects: Reads and decrypts the files.
+fn meeting_documents<Repository>(
+    repository: &Repository,
+    attachments: &[crate::domain::models::Attachment],
+) -> Vec<AttachedDocument>
+where
+    Repository: ProjectCommandRepository + ?Sized,
+{
+    let mut readable: Vec<_> = attachments.iter().collect();
+    readable.sort_by_key(|attachment| attachment.original_timestamp());
+    readable
+        .into_iter()
+        .filter_map(|attachment| {
+            read_document(
+                repository,
+                std::path::Path::new(attachment.file_path()),
+                attachment.mime_type(),
+                &attachment.shown_file_name(),
+            )
+        })
+        .take(MAX_LLM_DOCUMENTS)
+        .collect()
+}
+
 /// Reads what a chat is about.
 ///
 /// Inputs: The repository, the voice library (for speakers' names), the project files (for
@@ -376,16 +427,24 @@ where
                 ));
             }
             let meeting = read_meeting(repository, voices, meeting_id)?;
-            // The summary's material holds the meeting's photos and slides, already checked.
-            let images = prepare_summary(repository, voices, meeting_id, &[], "", None)
-                .map(|prepared| prepared.material.images)
-                .unwrap_or_default();
+            // The summary's material holds the meeting's photos and slides, already checked,
+            // and its files' text (#128).
+            let (images, documents) =
+                prepare_summary(repository, voices, meeting_id, &[], "", None)
+                    .map(|prepared| (prepared.material.images, prepared.material.documents))
+                    .unwrap_or_default();
+            let mut items = vec![ContextItem {
+                short: None,
+                ..meeting.item()
+            }];
+            items.extend(
+                documents
+                    .into_iter()
+                    .map(|document| meeting_file_item(&meeting, document, false)),
+            );
             Ok(ChatMaterial {
                 description: format!("the meeting \"{}\"", meeting.title),
-                items: vec![ContextItem {
-                    short: None,
-                    ..meeting.item()
-                }],
+                items,
                 images,
             })
         }
@@ -448,7 +507,18 @@ where
         }
     }
     meetings.sort_by_key(|meeting| std::cmp::Reverse(meeting.started_at));
-    items.extend(meetings.iter().map(MeetingText::item));
+    for meeting in &meetings {
+        items.push(meeting.item());
+        // Each meeting's files follow it (#128).
+        let attachments = repository
+            .get_attachments_for_meeting(&MeetingId::new(meeting.meeting_id.as_str()))
+            .map_err(|error| storage(&error))?;
+        items.extend(
+            meeting_documents(repository, &attachments)
+                .into_iter()
+                .map(|document| meeting_file_item(meeting, document, true)),
+        );
+    }
     Ok(ChatMaterial {
         description: format!("the project \"{}\"", project.name().as_str()),
         items,

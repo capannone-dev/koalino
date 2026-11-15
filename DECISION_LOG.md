@@ -3686,3 +3686,29 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - the clipboard held the prompt and the transcript;
   - the browser opened claude.ai;
   - a copied answer became the summary with Undo when Koalino was focused again.
+
+## 2026-11-15 — #128 Attached files in summaries and chat
+
+- **Owner's request:** a meeting's or project's attachments should be used by the chat and the
+  summary.
+- **Decision:**
+  - **A new adapter, `core/adapters/documents/`,** reads a file's text in memory: text, Markdown,
+    CSV, JSON and YAML; e-mails; PDF (`lopdf`, already in the tree through `printpdf`); Word,
+    PowerPoint and Excel; LibreOffice text, slides and sheets (`zip` with deflate only, plus
+    `xml-rs`). All are pure Rust, MIT or Apache-2.0. A file gives at most 200,000 characters.
+  - **Summary:** after the transcript, each file's text follows as `Attached file "name":`. A
+    long file is condensed in parts like a long transcript, so nothing is cut. A meeting with only
+    files can be summarized. At most 20 files of up to 50 MiB each, oldest first.
+  - **Chat:** a meeting's chat gets one item per file (`File name`). A project's chat lists each
+    meeting followed by its files (`File name, meeting "Title"`). Project files now give text for
+    PDFs and office documents too, and so does project search. A cited meeting file opens its
+    meeting.
+  - **Hand-off to the owner's AI app:** pasted on a computer (#126), the message ends with an
+    "Attached files" section holding their text. On Android the files themselves are shared, so
+    the Markdown does not repeat them.
+- **Not done:**
+  - **Scanned PDFs and pictures of text.** There is no OCR. Photos and slides still go to models
+    that read images, as before.
+  - **Old `.doc`/`.xls`/`.ppt`.** These binary formats need a much larger parser.
+- **Privacy:** files are decrypted in memory only. Their text goes to the connection the owner
+  chose, as the transcript does, and is never logged.

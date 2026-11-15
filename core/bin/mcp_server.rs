@@ -11,7 +11,7 @@
 //! | `search` | `query`, `scope`? (`meetings`/`projects`/`project`), `project_id`? | `search_commands`' hits |
 //! | `list_projects` | none | `projects` |
 //! | `read_project` | `project_id` | the project, its meetings and its files (no paths) |
-//! | `read_project_file` | `project_id`, `attachment_id` | the file's `text` (text, Markdown, e-mail) |
+//! | `read_project_file` | `project_id`, `attachment_id` | the file's `text` (text, e-mail, PDF, office) |
 //!
 //! Nothing is written: no tool changes a note, and the server opens no network listener. It is
 //! off until the owner turns it on (`<db>.assistant-access.json`), and the switch is read at
@@ -412,7 +412,7 @@ where
         let text = self.files.searchable_text(&resource).ok_or_else(|| {
             ToolError::new(
                 "no_text",
-                "the file has no text to read here (only text, Markdown and e-mail files do)",
+                "the file has no text to read here (pictures and other kinds have none)",
             )
         })?;
         Ok(json!({

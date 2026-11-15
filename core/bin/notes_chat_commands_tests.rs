@@ -191,6 +191,72 @@ fn a_project_chat_gets_its_files_then_its_meetings_newest_first() {
     let _ = std::fs::remove_dir_all(folder);
 }
 
+/// A meeting's files are read for its chat, and for its project's chat after the meeting; a
+/// project's CSV file now gives text too (#128).
+#[test]
+fn chats_read_the_text_of_meeting_and_project_files() {
+    let folder = std::env::temp_dir().join(format!("chat-files-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
+    let repository = repository();
+    let files = ProjectFiles::new(
+        folder.join("attachments"),
+        DeviceId::new("device"),
+        repository.sealed_files(),
+    );
+    let project = repository
+        .create_project(&ProjectName::parse("Launch").unwrap_or_else(|error| panic!("{error}")))
+        .unwrap_or_else(|error| panic!("{error}"))
+        .project_id();
+    files
+        .add_contents(
+            &repository,
+            project,
+            "figures.csv",
+            b"quarter,revenue\nQ3,120",
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+    let meeting_id = meeting(&repository, "m-1", "Review", "See the agenda.");
+    repository
+        .move_meeting_to_project(&meeting_id, Some(project))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let agenda = folder.join("agenda.md");
+    std::fs::write(&agenda, "1. Hiring plan").unwrap_or_else(|error| panic!("{error}"));
+    files
+        .attach_to_meeting(&repository, &meeting_id, &agenda)
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let gather = |scope: ChatScope| {
+        gather_material(
+            &repository,
+            &InMemoryVoiceVectorDB::new(),
+            Some(&files),
+            &scope,
+            "",
+        )
+        .unwrap_or_else(|error| panic!("{}", error.message))
+    };
+    let in_meeting = gather(ChatScope::Meeting(meeting_id.clone()));
+    let in_project = gather(ChatScope::Project(project));
+
+    let labels = |material: &crate::application::notes_chat::ChatMaterial| -> Vec<String> {
+        material
+            .items
+            .iter()
+            .map(|item| item.label.clone())
+            .collect()
+    };
+    assert_eq!(labels(&in_meeting).len(), 2, "{:?}", labels(&in_meeting));
+    assert_eq!(in_meeting.items[1].label, "File agenda.md");
+    assert_eq!(in_meeting.items[1].full, "1. Hiring plan");
+    let project_labels = labels(&in_project);
+    assert_eq!(project_labels.len(), 3, "{project_labels:?}");
+    assert_eq!(project_labels[0], "File figures.csv");
+    assert!(in_project.items[0].full.contains("Q3,120"));
+    assert!(project_labels[1].starts_with("Meeting \"Review\""));
+    assert_eq!(project_labels[2], "File agenda.md, meeting \"Review\"");
+    let _ = std::fs::remove_dir_all(folder);
+}
+
 #[test]
 fn everything_starts_with_a_list_then_the_best_matches() {
     let repository = repository();

@@ -941,7 +941,7 @@ go to `NOTE_TAKER_LOG_DIR`, by default `logs` beside the database, and name tool
   - `list_projects {}` → `{"projects":[...]}` as `GET /api/projects`.
   - `read_project {project_id}` → the project, its meetings and its files, without file paths.
   - `read_project_file {project_id, attachment_id}` → `{"attachment_id","mime_type","text"}` for
-    text, Markdown and e-mail files.
+    text, Markdown, CSV, e-mail, PDF, Word, PowerPoint, Excel and LibreOffice files (#128).
 - A failed tool answers `isError: true` with `<code>: <message>` (`meeting_not_found`,
   `project_not_found`, `resource_not_found`, `no_text`, `invalid_request`, `storage_failed`, or a
   search code). While access is off (`<db>.assistant-access.json`, read at every call), every
