@@ -157,7 +157,10 @@ start-up. `RustHandoffCore(inline: true)` asks for a message that carries the me
 `desktop_handoff.dart` (#126) is the computer's `HandoffPlatform`, for owners who use claude.ai or
 chatgpt.com rather than Claude Code or Codex. Both websites are always offered (`viaBrowser`).
 `share` opens the website with `openWithSystem` (`xdg-open`, or Explorer's URL handler on
-Windows). It also opens the hand-off folder (`<support>/handoff`) when the meeting has photos or
+Windows). A message of up to 12,000 characters goes in the address (`AiApp.prefilledAddress`,
+`?q=`): claude.ai fills its message box, and chatgpt.com also sends it. `prefills` tells the
+controller which, so the steps dialog (`showHandoffSteps`) says "press Enter", "it sends by
+itself" or "paste with Ctrl+V". It also opens the hand-off folder (`<support>/handoff`) when the meeting has photos or
 files to drag in. The controller has already put the message on the clipboard, and it reads the
 answer back when the window is active again.
 

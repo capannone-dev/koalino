@@ -2170,7 +2170,7 @@
   },
   "moreModelsHint": "Smaller versions that make a few more mistakes, English-only versions, and models that may not fit this device.",
   "microphoneSilencedByCall": "Android is silencing the microphone while another app uses it for a call: nothing is recorded until the call ends.",
-  "handoffInTheBrowser": "Koalino copies the meeting with your prompt and opens the website in your browser, where you are signed in with your own account. Paste it there (Ctrl+V). If the meeting has photos or files, their folder opens too: drag them in. For a summary, copy the answer when it is ready and come back: Koalino keeps it.",
+  "handoffInTheBrowser": "Koalino opens the website in your browser, where you are signed in with your own account, and gives it the meeting with your prompt. The next window shows what to do there.",
   "toKeepTheSummaryCopyTheWebsite": "To keep the summary, copy {appName}'s answer on the website and come back to Koalino.",
   "@toKeepTheSummaryCopyTheWebsite": {
     "placeholders": {
@@ -2197,5 +2197,25 @@
   "newMeetingExplanation": "A meeting without a recording. Write notes or add files to it: summaries and chat use them.",
   "@newMeetingExplanation": {},
   "titleOptional": "Title (optional)",
-  "@titleOptional": {}
+  "@titleOptional": {},
+  "handoffStepPressEnter": "{site} opens with the meeting already in the message box. Press Enter to send it.",
+  "@handoffStepPressEnter": {"placeholders": {"site": {"type": "String"}}},
+  "handoffStepSentByItself": "{site} opens and sends the meeting by itself. Sign in first if it asks.",
+  "@handoffStepSentByItself": {"placeholders": {"site": {"type": "String"}}},
+  "handoffStepPaste": "{site} opens and Koalino copies the meeting. Click the message box, paste it (Ctrl+V) and press Enter.",
+  "@handoffStepPaste": {"placeholders": {"site": {"type": "String"}}},
+  "handoffStepDragFiles": "A folder with the meeting's photos and files opens too: drag them into the conversation.",
+  "@handoffStepDragFiles": {},
+  "handoffStepCopyAnswer": "When the answer is complete, press the copy button under it.",
+  "@handoffStepCopyAnswer": {},
+  "handoffStepComeBack": "Come back to Koalino: the answer becomes the meeting's summary, with Undo.",
+  "@handoffStepComeBack": {},
+  "handoffStepAskThere": "Then ask your questions about the meeting there.",
+  "@handoffStepAskThere": {},
+  "openSite": "Open {site}",
+  "@openSite": {"placeholders": {"site": {"type": "String"}}},
+  "writtenBySourceOn": "Written by {source} on {createdAt}",
+  "@writtenBySourceOn": {"placeholders": {"source": {"type": "String"}, "createdAt": {"type": "String"}}},
+  "noRecordingWriteNotesOrAttach": "No recording. Write notes or attach files: summaries and chat use them.",
+  "@noRecordingWriteNotesOrAttach": {}
 }

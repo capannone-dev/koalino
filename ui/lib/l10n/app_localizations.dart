@@ -4279,7 +4279,7 @@ abstract class AppLocalizations {
   /// No description provided for @handoffInTheBrowser.
   ///
   /// In en, this message translates to:
-  /// **'Koalino copies the meeting with your prompt and opens the website in your browser, where you are signed in with your own account. Paste it there (Ctrl+V). If the meeting has photos or files, their folder opens too: drag them in. For a summary, copy the answer when it is ready and come back: Koalino keeps it.'**
+  /// **'Koalino opens the website in your browser, where you are signed in with your own account, and gives it the meeting with your prompt. The next window shows what to do there.'**
   String get handoffInTheBrowser;
 
   /// No description provided for @toKeepTheSummaryCopyTheWebsite.
@@ -4383,6 +4383,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Title (optional)'**
   String get titleOptional;
+
+  /// No description provided for @handoffStepPressEnter.
+  ///
+  /// In en, this message translates to:
+  /// **'{site} opens with the meeting already in the message box. Press Enter to send it.'**
+  String handoffStepPressEnter(String site);
+
+  /// No description provided for @handoffStepSentByItself.
+  ///
+  /// In en, this message translates to:
+  /// **'{site} opens and sends the meeting by itself. Sign in first if it asks.'**
+  String handoffStepSentByItself(String site);
+
+  /// No description provided for @handoffStepPaste.
+  ///
+  /// In en, this message translates to:
+  /// **'{site} opens and Koalino copies the meeting. Click the message box, paste it (Ctrl+V) and press Enter.'**
+  String handoffStepPaste(String site);
+
+  /// No description provided for @handoffStepDragFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'A folder with the meeting\'s photos and files opens too: drag them into the conversation.'**
+  String get handoffStepDragFiles;
+
+  /// No description provided for @handoffStepCopyAnswer.
+  ///
+  /// In en, this message translates to:
+  /// **'When the answer is complete, press the copy button under it.'**
+  String get handoffStepCopyAnswer;
+
+  /// No description provided for @handoffStepComeBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Come back to Koalino: the answer becomes the meeting\'s summary, with Undo.'**
+  String get handoffStepComeBack;
+
+  /// No description provided for @handoffStepAskThere.
+  ///
+  /// In en, this message translates to:
+  /// **'Then ask your questions about the meeting there.'**
+  String get handoffStepAskThere;
+
+  /// No description provided for @openSite.
+  ///
+  /// In en, this message translates to:
+  /// **'Open {site}'**
+  String openSite(String site);
+
+  /// No description provided for @writtenBySourceOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Written by {source} on {createdAt}'**
+  String writtenBySourceOn(String source, String createdAt);
+
+  /// No description provided for @noRecordingWriteNotesOrAttach.
+  ///
+  /// In en, this message translates to:
+  /// **'No recording. Write notes or attach files: summaries and chat use them.'**
+  String get noRecordingWriteNotesOrAttach;
 }
 
 class _AppLocalizationsDelegate

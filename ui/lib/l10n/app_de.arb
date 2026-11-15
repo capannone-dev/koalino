@@ -693,7 +693,7 @@
   "moreModels": "Weitere Modelle ({count})",
   "moreModelsHint": "Kleinere Versionen mit etwas mehr Fehlern, reine Englisch-Versionen und Modelle, die für dieses Gerät zu groß sein können.",
   "microphoneSilencedByCall": "Android schaltet das Mikrofon stumm, während eine andere App es für einen Anruf nutzt: Bis der Anruf endet, wird nichts aufgenommen.",
-  "handoffInTheBrowser": "Koalino kopiert das Meeting mit deinem Prompt und öffnet die Website im Browser, wo du mit deinem eigenen Konto angemeldet bist. Füge es dort ein (Strg+V). Hat das Meeting Fotos oder Dateien, öffnet sich auch ihr Ordner: zieh sie hinein. Für eine Zusammenfassung kopiere die Antwort, wenn sie fertig ist, und komm zurück: Koalino behält sie.",
+  "handoffInTheBrowser": "Koalino öffnet die Website in deinem Browser, wo du mit deinem eigenen Konto angemeldet bist, und übergibt ihr die Besprechung mit deinem Prompt. Das nächste Fenster zeigt, was dort zu tun ist.",
   "toKeepTheSummaryCopyTheWebsite": "Um die Zusammenfassung zu behalten, kopiere die Antwort von {appName} auf der Website und kehre zu Koalino zurück.",
   "useYourClaudeOrChatgptPlan": "Deinen Claude- oder ChatGPT-Plan nutzen",
   "summariesCanUseYourOwnPlan": "Zusammenfassungen können dein eigenes Claude- oder ChatGPT-Abo nutzen, ohne API-Schlüssel. Installiere Claude Code oder Codex und melde dich einmal an: Danach schreibt Koalino Zusammenfassungen selbst.",
@@ -710,5 +710,15 @@
   "claudeAiOrChatgptComInYourBrowser": "claude.ai oder chatgpt.com im Browser, mit deinem Konto",
   "newMeeting": "Neue Besprechung",
   "newMeetingExplanation": "Eine Besprechung ohne Aufnahme. Schreib Notizen oder füge Dateien hinzu: Zusammenfassungen und Chat verwenden sie.",
-  "titleOptional": "Titel (optional)"
+  "titleOptional": "Titel (optional)",
+  "handoffStepPressEnter": "{site} öffnet sich mit der Besprechung bereits im Nachrichtenfeld. Drück die Eingabetaste, um sie zu senden.",
+  "handoffStepSentByItself": "{site} öffnet sich und sendet die Besprechung von selbst. Melde dich zuerst an, falls es danach fragt.",
+  "handoffStepPaste": "{site} öffnet sich und Koalino kopiert die Besprechung. Klick ins Nachrichtenfeld, füge sie ein (Strg+V) und drück die Eingabetaste.",
+  "handoffStepDragFiles": "Ein Ordner mit den Fotos und Dateien der Besprechung öffnet sich auch: zieh sie in die Unterhaltung.",
+  "handoffStepCopyAnswer": "Wenn die Antwort fertig ist, drück die Kopieren-Schaltfläche darunter.",
+  "handoffStepComeBack": "Komm zurück zu Koalino: Die Antwort wird zur Zusammenfassung der Besprechung, mit Rückgängig.",
+  "handoffStepAskThere": "Stell dann dort deine Fragen zur Besprechung.",
+  "openSite": "{site} öffnen",
+  "writtenBySourceOn": "Geschrieben von {source} am {createdAt}",
+  "noRecordingWriteNotesOrAttach": "Keine Aufnahme. Schreib Notizen oder hänge Dateien an: Zusammenfassungen und Chat verwenden sie."
 }

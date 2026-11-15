@@ -2534,7 +2534,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get handoffInTheBrowser =>
-      'Koalino は会議とプロンプトをコピーし、自分のアカウントでサインインしているブラウザーでウェブサイトを開きます。そこに貼り付けてください（Ctrl+V）。会議に写真やファイルがある場合はそのフォルダーも開くので、ドラッグして入れてください。要約の場合は、回答ができたらコピーして戻ってください。Koalino が保存します。';
+      'Koalino はブラウザーでサイトを開き（ご自身のアカウントでサインイン済み）、プロンプトと一緒に会議を渡します。次のウィンドウで、そこで行うことを説明します。';
 
   @override
   String toKeepTheSummaryCopyTheWebsite(String appName) {
@@ -2595,4 +2595,45 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get titleOptional => 'タイトル（任意）';
+
+  @override
+  String handoffStepPressEnter(String site) {
+    return '$site が会議をメッセージ欄に入れた状態で開きます。Enter キーを押して送信してください。';
+  }
+
+  @override
+  String handoffStepSentByItself(String site) {
+    return '$site が開き、会議を自動で送信します。求められたら先にサインインしてください。';
+  }
+
+  @override
+  String handoffStepPaste(String site) {
+    return '$site が開き、Koalino が会議をコピーします。メッセージ欄をクリックして貼り付け（Ctrl+V）、Enter キーを押してください。';
+  }
+
+  @override
+  String get handoffStepDragFiles => '会議の写真とファイルのフォルダーも開きます。会話にドラッグしてください。';
+
+  @override
+  String get handoffStepCopyAnswer => '回答が完成したら、その下のコピーボタンを押してください。';
+
+  @override
+  String get handoffStepComeBack => 'Koalino に戻ると、回答が会議の要約になります（元に戻せます）。';
+
+  @override
+  String get handoffStepAskThere => 'その後、そこで会議について質問してください。';
+
+  @override
+  String openSite(String site) {
+    return '$site を開く';
+  }
+
+  @override
+  String writtenBySourceOn(String source, String createdAt) {
+    return '$source が $createdAt に作成';
+  }
+
+  @override
+  String get noRecordingWriteNotesOrAttach =>
+      '録音はありません。メモを書くかファイルを添付してください。要約とチャットで使われます。';
 }

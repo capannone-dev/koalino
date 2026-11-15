@@ -693,7 +693,7 @@
   "moreModels": "その他のモデル（{count}）",
   "moreModelsHint": "少し誤りが増える軽量版、英語専用版、このデバイスでは大きすぎる可能性のあるモデルです。",
   "microphoneSilencedByCall": "別のアプリが通話でマイクを使用しているため、Android がマイクを無音にしています。通話が終わるまで何も録音されません。",
-  "handoffInTheBrowser": "Koalino は会議とプロンプトをコピーし、自分のアカウントでサインインしているブラウザーでウェブサイトを開きます。そこに貼り付けてください（Ctrl+V）。会議に写真やファイルがある場合はそのフォルダーも開くので、ドラッグして入れてください。要約の場合は、回答ができたらコピーして戻ってください。Koalino が保存します。",
+  "handoffInTheBrowser": "Koalino はブラウザーでサイトを開き（ご自身のアカウントでサインイン済み）、プロンプトと一緒に会議を渡します。次のウィンドウで、そこで行うことを説明します。",
   "toKeepTheSummaryCopyTheWebsite": "要約を保存するには、ウェブサイトで {appName} の回答をコピーして Koalino に戻ってください。",
   "useYourClaudeOrChatgptPlan": "Claude または ChatGPT のプランを使う",
   "summariesCanUseYourOwnPlan": "要約には API キーなしで自分の Claude または ChatGPT のサブスクリプションを使えます。Claude Code または Codex をインストールして一度サインインすれば、あとは Koalino が自動で要約を書きます。",
@@ -710,5 +710,15 @@
   "claudeAiOrChatgptComInYourBrowser": "ブラウザーで claude.ai または chatgpt.com を自分のアカウントで",
   "newMeeting": "新しい会議",
   "newMeetingExplanation": "録音のない会議です。メモを書いたりファイルを追加したりすると、要約とチャットで使われます。",
-  "titleOptional": "タイトル（任意）"
+  "titleOptional": "タイトル（任意）",
+  "handoffStepPressEnter": "{site} が会議をメッセージ欄に入れた状態で開きます。Enter キーを押して送信してください。",
+  "handoffStepSentByItself": "{site} が開き、会議を自動で送信します。求められたら先にサインインしてください。",
+  "handoffStepPaste": "{site} が開き、Koalino が会議をコピーします。メッセージ欄をクリックして貼り付け（Ctrl+V）、Enter キーを押してください。",
+  "handoffStepDragFiles": "会議の写真とファイルのフォルダーも開きます。会話にドラッグしてください。",
+  "handoffStepCopyAnswer": "回答が完成したら、その下のコピーボタンを押してください。",
+  "handoffStepComeBack": "Koalino に戻ると、回答が会議の要約になります（元に戻せます）。",
+  "handoffStepAskThere": "その後、そこで会議について質問してください。",
+  "openSite": "{site} を開く",
+  "writtenBySourceOn": "{source} が {createdAt} に作成",
+  "noRecordingWriteNotesOrAttach": "録音はありません。メモを書くかファイルを添付してください。要約とチャットで使われます。"
 }

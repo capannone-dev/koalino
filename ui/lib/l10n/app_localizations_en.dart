@@ -2631,7 +2631,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get handoffInTheBrowser =>
-      'Koalino copies the meeting with your prompt and opens the website in your browser, where you are signed in with your own account. Paste it there (Ctrl+V). If the meeting has photos or files, their folder opens too: drag them in. For a summary, copy the answer when it is ready and come back: Koalino keeps it.';
+      'Koalino opens the website in your browser, where you are signed in with your own account, and gives it the meeting with your prompt. The next window shows what to do there.';
 
   @override
   String toKeepTheSummaryCopyTheWebsite(String appName) {
@@ -2694,4 +2694,49 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get titleOptional => 'Title (optional)';
+
+  @override
+  String handoffStepPressEnter(String site) {
+    return '$site opens with the meeting already in the message box. Press Enter to send it.';
+  }
+
+  @override
+  String handoffStepSentByItself(String site) {
+    return '$site opens and sends the meeting by itself. Sign in first if it asks.';
+  }
+
+  @override
+  String handoffStepPaste(String site) {
+    return '$site opens and Koalino copies the meeting. Click the message box, paste it (Ctrl+V) and press Enter.';
+  }
+
+  @override
+  String get handoffStepDragFiles =>
+      'A folder with the meeting\'s photos and files opens too: drag them into the conversation.';
+
+  @override
+  String get handoffStepCopyAnswer =>
+      'When the answer is complete, press the copy button under it.';
+
+  @override
+  String get handoffStepComeBack =>
+      'Come back to Koalino: the answer becomes the meeting\'s summary, with Undo.';
+
+  @override
+  String get handoffStepAskThere =>
+      'Then ask your questions about the meeting there.';
+
+  @override
+  String openSite(String site) {
+    return 'Open $site';
+  }
+
+  @override
+  String writtenBySourceOn(String source, String createdAt) {
+    return 'Written by $source on $createdAt';
+  }
+
+  @override
+  String get noRecordingWriteNotesOrAttach =>
+      'No recording. Write notes or attach files: summaries and chat use them.';
 }

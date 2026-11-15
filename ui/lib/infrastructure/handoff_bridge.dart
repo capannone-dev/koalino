@@ -14,15 +14,40 @@ import 'package:path_provider/path_provider.dart';
 
 /// An AI app a meeting can be handed to directly.
 enum AiApp {
-  /// Anthropic's Claude app.
-  claude('com.anthropic.claude', 'Claude'),
+  /// Anthropic's Claude app. Its website fills the message box from `?q=` and waits for the
+  /// owner to send it (Claude Help Center, "Open Claude with a link").
+  claude('com.anthropic.claude', 'Claude', 'https://claude.ai/new', 'claude.ai',
+      false),
 
-  /// OpenAI's ChatGPT app.
-  chatgpt(
-      'com.openai.chatgpt', 'ChatGPT', 'https://chatgpt.com/', 'chatgpt.com');
+  /// OpenAI's ChatGPT app. Its website sends the message given in `?q=` by itself (seen on
+  /// chatgpt.com in November 2026; not documented by OpenAI).
+  chatgpt('com.openai.chatgpt', 'ChatGPT', 'https://chatgpt.com/',
+      'chatgpt.com', true);
 
-  const AiApp(this.packageName, this.displayName,
-      [this.webAddress = 'https://claude.ai/new', this.webName = 'claude.ai']);
+  const AiApp(this.packageName, this.displayName, this.webAddress, this.webName,
+      this.sendsByItself);
+
+  /// Longest message put in the website's address (#126); claude.ai cuts `?q=` at about 14,000
+  /// characters, so a longer meeting is pasted instead.
+  static const int maxPrefilledChars = 12000;
+
+  /// Longest address opened, so the browser, the system's launcher (32,767 characters on
+  /// Windows) and the website's servers all take it.
+  static const int maxPrefilledAddressLength = 24000;
+
+  /// Whether the website sends a message it was given in its address without the owner
+  /// pressing Enter.
+  final bool sendsByItself;
+
+  /// The website's address with `message` in its message box, or null when the message is too
+  /// long for an address.
+  String? prefilledAddress(String message) {
+    if (message.length > maxPrefilledChars) {
+      return null;
+    }
+    final String address = '$webAddress?q=${Uri.encodeComponent(message)}';
+    return address.length > maxPrefilledAddressLength ? null : address;
+  }
 
   /// The Android package.
   final String packageName;
@@ -144,6 +169,10 @@ abstract interface class HandoffPlatform {
   /// Sends the message and files to `app`, or through the share sheet when null.
   Future<void> share(PreparedHandoff handoff, AiApp? app);
 
+  /// Whether `share` puts the message in the app's message box itself, so the owner does not
+  /// paste it (#126).
+  bool prefills(PreparedHandoff handoff, AiApp? app);
+
   /// The clipboard's text, or null.
   Future<String?> readClipboard();
 
@@ -217,6 +246,10 @@ final class AndroidHandoffPlatform implements HandoffPlatform {
 
   @override
   bool get viaBrowser => false;
+
+  /// The Android share carries the message to the app, which shows it ready to send.
+  @override
+  bool prefills(PreparedHandoff handoff, AiApp? app) => false;
 
   /// Under `cache/shared`, the folder Android's `SharedFileProvider` serves.
   @override

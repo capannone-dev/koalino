@@ -693,7 +693,7 @@
   "moreModels": "更多模型（{count}）",
   "moreModelsHint": "更小但错误稍多的版本、仅支持英语的版本，以及可能超出此设备承受能力的模型。",
   "microphoneSilencedByCall": "另一个应用正在通话中使用麦克风，Android 已将其静音：通话结束前不会录到任何内容。",
-  "handoffInTheBrowser": "Koalino 会复制会议内容和你的提示词，并在浏览器中打开网站（你已用自己的账号登录）。在那里粘贴（Ctrl+V）。如果会议有照片或文件，其文件夹也会打开：把它们拖进去。如需摘要，回答完成后复制它并回到这里：Koalino 会保存它。",
+  "handoffInTheBrowser": "Koalino 会在浏览器中打开网站（你已用自己的账号登录），并把会议连同你的提示交给它。下一个窗口会说明在那里要做什么。",
   "toKeepTheSummaryCopyTheWebsite": "要保存摘要，请在网站上复制 {appName} 的回答，然后回到 Koalino。",
   "useYourClaudeOrChatgptPlan": "使用你的 Claude 或 ChatGPT 套餐",
   "summariesCanUseYourOwnPlan": "摘要可以使用你自己的 Claude 或 ChatGPT 订阅，无需 API 密钥。安装 Claude Code 或 Codex 并登录一次，之后 Koalino 会自动撰写摘要。",
@@ -710,5 +710,15 @@
   "claudeAiOrChatgptComInYourBrowser": "在浏览器中使用 claude.ai 或 chatgpt.com，使用你的账号",
   "newMeeting": "新建会议",
   "newMeetingExplanation": "没有录音的会议。写笔记或添加文件，摘要和聊天会用到它们。",
-  "titleOptional": "标题（可选）"
+  "titleOptional": "标题（可选）",
+  "handoffStepPressEnter": "{site} 打开时会议已在消息框中。按 Enter 发送。",
+  "handoffStepSentByItself": "{site} 打开后会自动发送会议。如有提示，请先登录。",
+  "handoffStepPaste": "{site} 会打开，Koalino 会复制会议。点击消息框，粘贴（Ctrl+V）后按 Enter。",
+  "handoffStepDragFiles": "还会打开一个包含会议照片和文件的文件夹：把它们拖进对话。",
+  "handoffStepCopyAnswer": "回答完成后，点击其下方的复制按钮。",
+  "handoffStepComeBack": "回到 Koalino：回答会成为会议摘要，可撤销。",
+  "handoffStepAskThere": "然后在那里提出关于会议的问题。",
+  "openSite": "打开 {site}",
+  "writtenBySourceOn": "由 {source} 于 {createdAt} 撰写",
+  "noRecordingWriteNotesOrAttach": "没有录音。写笔记或附加文件，摘要和聊天会用到它们。"
 }

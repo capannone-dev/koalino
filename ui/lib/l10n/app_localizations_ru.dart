@@ -2676,7 +2676,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get handoffInTheBrowser =>
-      'Koalino копирует встречу вместе с вашим промптом и открывает сайт в браузере, где вы вошли в свою учётную запись. Вставьте её туда (Ctrl+V). Если у встречи есть фото или файлы, откроется и их папка: перетащите их. Для резюме скопируйте ответ, когда он будет готов, и вернитесь: Koalino его сохранит.';
+      'Koalino откроет сайт в браузере, где вы вошли в свою учётную запись, и передаст ему встречу с вашим запросом. Следующее окно покажет, что там делать.';
 
   @override
   String toKeepTheSummaryCopyTheWebsite(String appName) {
@@ -2740,4 +2740,48 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get titleOptional => 'Название (необязательно)';
+
+  @override
+  String handoffStepPressEnter(String site) {
+    return '$site откроется со встречей уже в поле сообщения. Нажмите Enter, чтобы отправить её.';
+  }
+
+  @override
+  String handoffStepSentByItself(String site) {
+    return '$site откроется и сам отправит встречу. Если попросит, сначала войдите.';
+  }
+
+  @override
+  String handoffStepPaste(String site) {
+    return '$site откроется, а Koalino скопирует встречу. Щёлкните в поле сообщения, вставьте её (Ctrl+V) и нажмите Enter.';
+  }
+
+  @override
+  String get handoffStepDragFiles =>
+      'Также откроется папка с фото и файлами встречи: перетащите их в разговор.';
+
+  @override
+  String get handoffStepCopyAnswer =>
+      'Когда ответ готов, нажмите кнопку копирования под ним.';
+
+  @override
+  String get handoffStepComeBack =>
+      'Вернитесь в Koalino: ответ станет сводкой встречи, с возможностью отменить.';
+
+  @override
+  String get handoffStepAskThere => 'Затем задавайте там вопросы о встрече.';
+
+  @override
+  String openSite(String site) {
+    return 'Открыть $site';
+  }
+
+  @override
+  String writtenBySourceOn(String source, String createdAt) {
+    return 'Написано: $source, $createdAt';
+  }
+
+  @override
+  String get noRecordingWriteNotesOrAttach =>
+      'Записи нет. Напишите заметки или прикрепите файлы: их используют сводки и чат.';
 }

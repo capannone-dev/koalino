@@ -2662,7 +2662,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get handoffInTheBrowser =>
-      'Koalino copia la reunión con tu prompt y abre el sitio en tu navegador, donde has iniciado sesión con tu propia cuenta. Pégala allí (Ctrl+V). Si la reunión tiene fotos o archivos, también se abre su carpeta: arrástralos. Para un resumen, copia la respuesta cuando esté lista y vuelve: Koalino la guarda.';
+      'Koalino abre el sitio web en tu navegador, donde has iniciado sesión con tu propia cuenta, y le pasa la reunión con tu prompt. La siguiente ventana muestra qué hacer allí.';
 
   @override
   String toKeepTheSummaryCopyTheWebsite(String appName) {
@@ -2725,4 +2725,49 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get titleOptional => 'Título (opcional)';
+
+  @override
+  String handoffStepPressEnter(String site) {
+    return '$site se abre con la reunión ya en el cuadro de mensaje. Pulsa Intro para enviarla.';
+  }
+
+  @override
+  String handoffStepSentByItself(String site) {
+    return '$site se abre y envía la reunión por sí solo. Inicia sesión primero si te lo pide.';
+  }
+
+  @override
+  String handoffStepPaste(String site) {
+    return '$site se abre y Koalino copia la reunión. Haz clic en el cuadro de mensaje, pégala (Ctrl+V) y pulsa Intro.';
+  }
+
+  @override
+  String get handoffStepDragFiles =>
+      'También se abre una carpeta con las fotos y archivos de la reunión: arrástralos a la conversación.';
+
+  @override
+  String get handoffStepCopyAnswer =>
+      'Cuando la respuesta esté completa, pulsa el botón de copiar debajo de ella.';
+
+  @override
+  String get handoffStepComeBack =>
+      'Vuelve a Koalino: la respuesta se convierte en el resumen de la reunión, con Deshacer.';
+
+  @override
+  String get handoffStepAskThere =>
+      'Luego haz allí tus preguntas sobre la reunión.';
+
+  @override
+  String openSite(String site) {
+    return 'Abrir $site';
+  }
+
+  @override
+  String writtenBySourceOn(String source, String createdAt) {
+    return 'Escrito por $source el $createdAt';
+  }
+
+  @override
+  String get noRecordingWriteNotesOrAttach =>
+      'Sin grabación. Escribe notas o adjunta archivos: los resúmenes y el chat los usan.';
 }

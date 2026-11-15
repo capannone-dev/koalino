@@ -2672,7 +2672,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get handoffInTheBrowser =>
-      'Koalino copia la riunione con il tuo prompt e apre il sito nel browser, dove hai effettuato l\'accesso con il tuo account. Incollala lì (Ctrl+V). Se la riunione ha foto o file, si apre anche la loro cartella: trascinali dentro. Per un riassunto, copia la risposta quando è pronta e torna qui: Koalino la conserva.';
+      'Koalino apre il sito nel browser, dove hai effettuato l\'accesso con il tuo account, e gli passa la riunione con il tuo prompt. La finestra successiva mostra cosa fare lì.';
 
   @override
   String toKeepTheSummaryCopyTheWebsite(String appName) {
@@ -2735,4 +2735,48 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get titleOptional => 'Titolo (facoltativo)';
+
+  @override
+  String handoffStepPressEnter(String site) {
+    return '$site si apre con la riunione già nella casella del messaggio. Premi Invio per inviarla.';
+  }
+
+  @override
+  String handoffStepSentByItself(String site) {
+    return '$site si apre e invia la riunione da solo. Se lo chiede, accedi prima.';
+  }
+
+  @override
+  String handoffStepPaste(String site) {
+    return '$site si apre e Koalino copia la riunione. Fai clic nella casella del messaggio, incollala (Ctrl+V) e premi Invio.';
+  }
+
+  @override
+  String get handoffStepDragFiles =>
+      'Si apre anche una cartella con le foto e i file della riunione: trascinali nella conversazione.';
+
+  @override
+  String get handoffStepCopyAnswer =>
+      'Quando la risposta è completa, premi il pulsante di copia sotto di essa.';
+
+  @override
+  String get handoffStepComeBack =>
+      'Torna su Koalino: la risposta diventa il riassunto della riunione, con Annulla.';
+
+  @override
+  String get handoffStepAskThere => 'Poi fai lì le tue domande sulla riunione.';
+
+  @override
+  String openSite(String site) {
+    return 'Apri $site';
+  }
+
+  @override
+  String writtenBySourceOn(String source, String createdAt) {
+    return 'Scritto da $source il $createdAt';
+  }
+
+  @override
+  String get noRecordingWriteNotesOrAttach =>
+      'Nessuna registrazione. Scrivi note o allega file: riassunti e chat li usano.';
 }

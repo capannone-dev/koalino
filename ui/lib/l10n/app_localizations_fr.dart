@@ -2670,7 +2670,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get handoffInTheBrowser =>
-      'Koalino copie la réunion avec votre prompt et ouvre le site dans votre navigateur, où vous êtes connecté avec votre propre compte. Collez-la (Ctrl+V). Si la réunion a des photos ou des fichiers, leur dossier s\'ouvre aussi : glissez-les dedans. Pour un résumé, copiez la réponse quand elle est prête et revenez : Koalino la garde.';
+      'Koalino ouvre le site dans votre navigateur, où vous êtes connecté avec votre propre compte, et lui transmet la réunion avec votre prompt. La fenêtre suivante indique quoi faire là-bas.';
 
   @override
   String toKeepTheSummaryCopyTheWebsite(String appName) {
@@ -2734,4 +2734,49 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get titleOptional => 'Titre (facultatif)';
+
+  @override
+  String handoffStepPressEnter(String site) {
+    return '$site s\'ouvre avec la réunion déjà dans la zone de message. Appuyez sur Entrée pour l\'envoyer.';
+  }
+
+  @override
+  String handoffStepSentByItself(String site) {
+    return '$site s\'ouvre et envoie la réunion tout seul. Connectez-vous d\'abord s\'il le demande.';
+  }
+
+  @override
+  String handoffStepPaste(String site) {
+    return '$site s\'ouvre et Koalino copie la réunion. Cliquez dans la zone de message, collez-la (Ctrl+V) et appuyez sur Entrée.';
+  }
+
+  @override
+  String get handoffStepDragFiles =>
+      'Un dossier avec les photos et fichiers de la réunion s\'ouvre aussi : faites-les glisser dans la conversation.';
+
+  @override
+  String get handoffStepCopyAnswer =>
+      'Quand la réponse est terminée, appuyez sur le bouton de copie en dessous.';
+
+  @override
+  String get handoffStepComeBack =>
+      'Revenez dans Koalino : la réponse devient le résumé de la réunion, avec Annuler.';
+
+  @override
+  String get handoffStepAskThere =>
+      'Posez ensuite vos questions sur la réunion là-bas.';
+
+  @override
+  String openSite(String site) {
+    return 'Ouvrir $site';
+  }
+
+  @override
+  String writtenBySourceOn(String source, String createdAt) {
+    return 'Écrit par $source le $createdAt';
+  }
+
+  @override
+  String get noRecordingWriteNotesOrAttach =>
+      'Pas d\'enregistrement. Écrivez des notes ou joignez des fichiers : les résumés et le chat les utilisent.';
 }

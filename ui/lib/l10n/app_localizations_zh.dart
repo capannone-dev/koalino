@@ -2478,7 +2478,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get handoffInTheBrowser =>
-      'Koalino 会复制会议内容和你的提示词，并在浏览器中打开网站（你已用自己的账号登录）。在那里粘贴（Ctrl+V）。如果会议有照片或文件，其文件夹也会打开：把它们拖进去。如需摘要，回答完成后复制它并回到这里：Koalino 会保存它。';
+      'Koalino 会在浏览器中打开网站（你已用自己的账号登录），并把会议连同你的提示交给它。下一个窗口会说明在那里要做什么。';
 
   @override
   String toKeepTheSummaryCopyTheWebsite(String appName) {
@@ -2538,4 +2538,44 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get titleOptional => '标题（可选）';
+
+  @override
+  String handoffStepPressEnter(String site) {
+    return '$site 打开时会议已在消息框中。按 Enter 发送。';
+  }
+
+  @override
+  String handoffStepSentByItself(String site) {
+    return '$site 打开后会自动发送会议。如有提示，请先登录。';
+  }
+
+  @override
+  String handoffStepPaste(String site) {
+    return '$site 会打开，Koalino 会复制会议。点击消息框，粘贴（Ctrl+V）后按 Enter。';
+  }
+
+  @override
+  String get handoffStepDragFiles => '还会打开一个包含会议照片和文件的文件夹：把它们拖进对话。';
+
+  @override
+  String get handoffStepCopyAnswer => '回答完成后，点击其下方的复制按钮。';
+
+  @override
+  String get handoffStepComeBack => '回到 Koalino：回答会成为会议摘要，可撤销。';
+
+  @override
+  String get handoffStepAskThere => '然后在那里提出关于会议的问题。';
+
+  @override
+  String openSite(String site) {
+    return '打开 $site';
+  }
+
+  @override
+  String writtenBySourceOn(String source, String createdAt) {
+    return '由 $source 于 $createdAt 撰写';
+  }
+
+  @override
+  String get noRecordingWriteNotesOrAttach => '没有录音。写笔记或附加文件，摘要和聊天会用到它们。';
 }

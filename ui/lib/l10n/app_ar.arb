@@ -693,7 +693,7 @@
   "moreModels": "نماذج أخرى ({count})",
   "moreModelsHint": "إصدارات أخف تخطئ أكثر قليلاً، وإصدارات للإنجليزية فقط، ونماذج قد لا يتسع لها هذا الجهاز.",
   "microphoneSilencedByCall": "يكتم Android الميكروفون بينما يستخدمه تطبيق آخر في مكالمة: لن يُسجَّل أي شيء حتى تنتهي المكالمة.",
-  "handoffInTheBrowser": "ينسخ Koalino الاجتماع مع موجّهك ويفتح الموقع في متصفحك، حيث سجّلت الدخول بحسابك. الصقه هناك (Ctrl+V). إذا كان للاجتماع صور أو ملفات، يُفتح مجلدها أيضًا: اسحبها إلى هناك. للحصول على ملخص، انسخ الإجابة عندما تجهز وعُد: سيحتفظ بها Koalino.",
+  "handoffInTheBrowser": "يفتح Koalino الموقع في متصفحك، حيث سجّلت الدخول بحسابك، ويعطيه الاجتماع مع موجّهك. تعرض النافذة التالية ما عليك فعله هناك.",
   "toKeepTheSummaryCopyTheWebsite": "للاحتفاظ بالملخص، انسخ إجابة {appName} من الموقع ثم عُد إلى Koalino.",
   "useYourClaudeOrChatgptPlan": "استخدم اشتراكك في Claude أو ChatGPT",
   "summariesCanUseYourOwnPlan": "يمكن للملخصات استخدام اشتراكك الخاص في Claude أو ChatGPT دون مفتاح API. ثبّت Claude Code أو Codex وسجّل الدخول مرة واحدة: بعدها يكتب Koalino الملخصات بنفسه.",
@@ -710,5 +710,15 @@
   "claudeAiOrChatgptComInYourBrowser": "claude.ai أو chatgpt.com في متصفحك، بحسابك",
   "newMeeting": "اجتماع جديد",
   "newMeetingExplanation": "اجتماع بلا تسجيل. اكتب ملاحظات أو أضف ملفات: تستخدمها الملخصات والدردشة.",
-  "titleOptional": "العنوان (اختياري)"
+  "titleOptional": "العنوان (اختياري)",
+  "handoffStepPressEnter": "يفتح {site} والاجتماع موجود بالفعل في مربع الرسالة. اضغط Enter لإرساله.",
+  "handoffStepSentByItself": "يفتح {site} ويرسل الاجتماع تلقائيًا. سجّل الدخول أولًا إذا طُلب منك.",
+  "handoffStepPaste": "يفتح {site} وينسخ Koalino الاجتماع. انقر مربع الرسالة والصقه (Ctrl+V) ثم اضغط Enter.",
+  "handoffStepDragFiles": "يُفتح أيضًا مجلد فيه صور الاجتماع وملفاته: اسحبها إلى المحادثة.",
+  "handoffStepCopyAnswer": "عند اكتمال الإجابة، اضغط زر النسخ أسفلها.",
+  "handoffStepComeBack": "عُد إلى Koalino: تصبح الإجابة ملخص الاجتماع، مع إمكانية التراجع.",
+  "handoffStepAskThere": "ثم اطرح أسئلتك عن الاجتماع هناك.",
+  "openSite": "افتح {site}",
+  "writtenBySourceOn": "كتبه {source} في {createdAt}",
+  "noRecordingWriteNotesOrAttach": "لا يوجد تسجيل. اكتب ملاحظات أو أرفق ملفات: تستخدمها الملخصات والدردشة."
 }

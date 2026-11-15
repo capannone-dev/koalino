@@ -103,6 +103,12 @@ final class FakeHandoffPorts implements HandoffCore, HandoffPlatform {
   @override
   bool viaBrowser = false;
 
+  /// Whether the website opens with the message in its box.
+  bool prefilled = false;
+
+  @override
+  bool prefills(PreparedHandoff handoff, AiApp? app) => prefilled;
+
   @override
   Future<String> handoffDirectory() async => '/cache/shared/handoff';
 
@@ -270,6 +276,90 @@ void main() {
     await tester.tap(find.text('Undo'));
     await tester.pumpAndSettle();
     expect(ports.calls.last, 'restore m-1 null');
+  });
+
+  test('on a computer the steps are shown first, and Cancel shares nothing',
+      () async {
+    ports.viaBrowser = true;
+    ports.prefilled = true;
+    final List<HandoffSteps> shown = <HandoffSteps>[];
+
+    final String? cancelled = await controller
+        .handOff('m-1', 'Review', HandoffPurpose.summary, app: AiApp.claude,
+            confirm: (HandoffSteps steps) async {
+      shown.add(steps);
+      return false;
+    });
+
+    expect(cancelled, isNull);
+    expect(shown.single.prefilled, isTrue);
+    expect(shown.single.app, AiApp.claude);
+    expect(shown.single.hasFiles, isFalse);
+    expect(
+        ports.calls.where((String call) => call.startsWith('share')), isEmpty);
+    expect(controller.pending, isNull);
+
+    await controller.handOff('m-1', 'Review', HandoffPurpose.summary,
+        app: AiApp.claude, confirm: (HandoffSteps steps) async => true);
+    expect(ports.calls.last, 'share claude 1');
+    expect(controller.pending, isNotNull);
+  });
+
+  test('on a computer the answer is credited to the website', () async {
+    ports.viaBrowser = true;
+    await controller.handOff('m-1', 'Review', HandoffPurpose.summary,
+        app: AiApp.chatgpt);
+
+    ports.clipboard = answer;
+    await controller.checkClipboard();
+
+    expect(ports.calls.last, startsWith('keep m-1 chatgpt.com '));
+  });
+
+  testWidgets('the steps say what to do in the website',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (BuildContext context) => Column(children: <Widget>[
+            TextButton(
+              onPressed: () => showHandoffSteps(
+                  context,
+                  const HandoffSteps(
+                      app: AiApp.claude,
+                      purpose: HandoffPurpose.summary,
+                      prefilled: true,
+                      hasFiles: false)),
+              child: const Text('prefilled'),
+            ),
+            TextButton(
+              onPressed: () => showHandoffSteps(
+                  context,
+                  const HandoffSteps(
+                      app: AiApp.chatgpt,
+                      purpose: HandoffPurpose.summary,
+                      prefilled: false,
+                      hasFiles: true)),
+              child: const Text('pasted'),
+            ),
+          ]),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('prefilled'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Press Enter'), findsOneWidget);
+    expect(find.textContaining('Ctrl+V'), findsNothing);
+    expect(find.textContaining('copy button'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('pasted'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Ctrl+V'), findsOneWidget);
+    expect(find.textContaining('drag them'), findsOneWidget);
+    expect(find.text('Open chatgpt.com'), findsOneWidget);
   });
 
   test('an answer shared back as text is kept while a summary waits', () async {

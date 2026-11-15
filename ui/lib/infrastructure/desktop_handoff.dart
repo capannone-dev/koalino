@@ -1,7 +1,8 @@
 // Hands a meeting to Claude or ChatGPT in the browser on a computer (#126), for owners who use
 // claude.ai or chatgpt.com rather than Claude Code or Codex. The core writes a message that
-// carries the prompt and the meeting (`inline`); the controller puts it on the clipboard, and
-// this opens the website for the owner to paste it. Photos and files cannot be pasted, so their
+// carries the prompt and the meeting (`inline`); the controller puts it on the clipboard. A
+// message of up to `AiApp.maxPrefilledChars` goes in the website's address (`?q=`), which fills
+// the message box (chatgpt.com also sends it); a longer one is pasted by the owner. Photos and files cannot be pasted, so their
 // folder opens too, to drag them in. The answer comes back as on Android: the owner copies it,
 // and Koalino reads the clipboard when its window is active again. Nothing is sent by Koalino.
 
@@ -49,11 +50,16 @@ final class DesktopHandoffPlatform implements HandoffPlatform {
     if (app == null) {
       return;
     }
-    await _open(app.webAddress);
+    await _open(app.prefilledAddress(handoff.message) ?? app.webAddress);
     if (handoff.files.length > 1) {
       await _open(await handoffDirectory());
     }
   }
+
+  /// A meeting short enough goes in the website's address, which fills its message box.
+  @override
+  bool prefills(PreparedHandoff handoff, AiApp? app) =>
+      app?.prefilledAddress(handoff.message) != null;
 
   @override
   Future<String?> readClipboard() async =>

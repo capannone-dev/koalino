@@ -2703,7 +2703,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get handoffInTheBrowser =>
-      'Koalino kopiert das Meeting mit deinem Prompt und öffnet die Website im Browser, wo du mit deinem eigenen Konto angemeldet bist. Füge es dort ein (Strg+V). Hat das Meeting Fotos oder Dateien, öffnet sich auch ihr Ordner: zieh sie hinein. Für eine Zusammenfassung kopiere die Antwort, wenn sie fertig ist, und komm zurück: Koalino behält sie.';
+      'Koalino öffnet die Website in deinem Browser, wo du mit deinem eigenen Konto angemeldet bist, und übergibt ihr die Besprechung mit deinem Prompt. Das nächste Fenster zeigt, was dort zu tun ist.';
 
   @override
   String toKeepTheSummaryCopyTheWebsite(String appName) {
@@ -2767,4 +2767,49 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get titleOptional => 'Titel (optional)';
+
+  @override
+  String handoffStepPressEnter(String site) {
+    return '$site öffnet sich mit der Besprechung bereits im Nachrichtenfeld. Drück die Eingabetaste, um sie zu senden.';
+  }
+
+  @override
+  String handoffStepSentByItself(String site) {
+    return '$site öffnet sich und sendet die Besprechung von selbst. Melde dich zuerst an, falls es danach fragt.';
+  }
+
+  @override
+  String handoffStepPaste(String site) {
+    return '$site öffnet sich und Koalino kopiert die Besprechung. Klick ins Nachrichtenfeld, füge sie ein (Strg+V) und drück die Eingabetaste.';
+  }
+
+  @override
+  String get handoffStepDragFiles =>
+      'Ein Ordner mit den Fotos und Dateien der Besprechung öffnet sich auch: zieh sie in die Unterhaltung.';
+
+  @override
+  String get handoffStepCopyAnswer =>
+      'Wenn die Antwort fertig ist, drück die Kopieren-Schaltfläche darunter.';
+
+  @override
+  String get handoffStepComeBack =>
+      'Komm zurück zu Koalino: Die Antwort wird zur Zusammenfassung der Besprechung, mit Rückgängig.';
+
+  @override
+  String get handoffStepAskThere =>
+      'Stell dann dort deine Fragen zur Besprechung.';
+
+  @override
+  String openSite(String site) {
+    return '$site öffnen';
+  }
+
+  @override
+  String writtenBySourceOn(String source, String createdAt) {
+    return 'Geschrieben von $source am $createdAt';
+  }
+
+  @override
+  String get noRecordingWriteNotesOrAttach =>
+      'Keine Aufnahme. Schreib Notizen oder hänge Dateien an: Zusammenfassungen und Chat verwenden sie.';
 }

@@ -693,7 +693,7 @@
   "moreModels": "Más modelos ({count})",
   "moreModelsHint": "Versiones más ligeras que cometen algún error más, versiones solo en inglés y modelos que quizá no quepan en este dispositivo.",
   "microphoneSilencedByCall": "Android está silenciando el micrófono mientras otra app lo usa para una llamada: no se graba nada hasta que termine la llamada.",
-  "handoffInTheBrowser": "Koalino copia la reunión con tu prompt y abre el sitio en tu navegador, donde has iniciado sesión con tu propia cuenta. Pégala allí (Ctrl+V). Si la reunión tiene fotos o archivos, también se abre su carpeta: arrástralos. Para un resumen, copia la respuesta cuando esté lista y vuelve: Koalino la guarda.",
+  "handoffInTheBrowser": "Koalino abre el sitio web en tu navegador, donde has iniciado sesión con tu propia cuenta, y le pasa la reunión con tu prompt. La siguiente ventana muestra qué hacer allí.",
   "toKeepTheSummaryCopyTheWebsite": "Para guardar el resumen, copia la respuesta de {appName} en el sitio y vuelve a Koalino.",
   "useYourClaudeOrChatgptPlan": "Usa tu plan de Claude o ChatGPT",
   "summariesCanUseYourOwnPlan": "Los resúmenes pueden usar tu propia suscripción de Claude o ChatGPT, sin clave de API. Instala Claude Code o Codex e inicia sesión una vez: después Koalino escribe los resúmenes por sí solo.",
@@ -710,5 +710,15 @@
   "claudeAiOrChatgptComInYourBrowser": "claude.ai o chatgpt.com en tu navegador, con tu cuenta",
   "newMeeting": "Nueva reunión",
   "newMeetingExplanation": "Una reunión sin grabación. Escribe notas o añade archivos: los resúmenes y el chat los usan.",
-  "titleOptional": "Título (opcional)"
+  "titleOptional": "Título (opcional)",
+  "handoffStepPressEnter": "{site} se abre con la reunión ya en el cuadro de mensaje. Pulsa Intro para enviarla.",
+  "handoffStepSentByItself": "{site} se abre y envía la reunión por sí solo. Inicia sesión primero si te lo pide.",
+  "handoffStepPaste": "{site} se abre y Koalino copia la reunión. Haz clic en el cuadro de mensaje, pégala (Ctrl+V) y pulsa Intro.",
+  "handoffStepDragFiles": "También se abre una carpeta con las fotos y archivos de la reunión: arrástralos a la conversación.",
+  "handoffStepCopyAnswer": "Cuando la respuesta esté completa, pulsa el botón de copiar debajo de ella.",
+  "handoffStepComeBack": "Vuelve a Koalino: la respuesta se convierte en el resumen de la reunión, con Deshacer.",
+  "handoffStepAskThere": "Luego haz allí tus preguntas sobre la reunión.",
+  "openSite": "Abrir {site}",
+  "writtenBySourceOn": "Escrito por {source} el {createdAt}",
+  "noRecordingWriteNotesOrAttach": "Sin grabación. Escribe notas o adjunta archivos: los resúmenes y el chat los usan."
 }

@@ -2666,7 +2666,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get handoffInTheBrowser =>
-      'O Koalino copia a reunião com o seu prompt e abre o site no navegador, onde você está conectado com a sua própria conta. Cole-a lá (Ctrl+V). Se a reunião tiver fotos ou arquivos, a pasta deles também abre: arraste-os para lá. Para um resumo, copie a resposta quando estiver pronta e volte: o Koalino a guarda.';
+      'O Koalino abre o site no seu navegador, onde tem sessão iniciada com a sua própria conta, e passa-lhe a reunião com o seu prompt. A janela seguinte mostra o que fazer lá.';
 
   @override
   String toKeepTheSummaryCopyTheWebsite(String appName) {
@@ -2730,4 +2730,49 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get titleOptional => 'Título (opcional)';
+
+  @override
+  String handoffStepPressEnter(String site) {
+    return '$site abre com a reunião já na caixa de mensagem. Prima Enter para a enviar.';
+  }
+
+  @override
+  String handoffStepSentByItself(String site) {
+    return '$site abre e envia a reunião sozinho. Inicie sessão primeiro, se pedir.';
+  }
+
+  @override
+  String handoffStepPaste(String site) {
+    return '$site abre e o Koalino copia a reunião. Clique na caixa de mensagem, cole-a (Ctrl+V) e prima Enter.';
+  }
+
+  @override
+  String get handoffStepDragFiles =>
+      'Também abre uma pasta com as fotos e ficheiros da reunião: arraste-os para a conversa.';
+
+  @override
+  String get handoffStepCopyAnswer =>
+      'Quando a resposta estiver completa, prima o botão de copiar por baixo dela.';
+
+  @override
+  String get handoffStepComeBack =>
+      'Volte ao Koalino: a resposta passa a ser o resumo da reunião, com Anular.';
+
+  @override
+  String get handoffStepAskThere =>
+      'Depois, faça lá as suas perguntas sobre a reunião.';
+
+  @override
+  String openSite(String site) {
+    return 'Abrir $site';
+  }
+
+  @override
+  String writtenBySourceOn(String source, String createdAt) {
+    return 'Escrito por $source em $createdAt';
+  }
+
+  @override
+  String get noRecordingWriteNotesOrAttach =>
+      'Sem gravação. Escreva notas ou anexe ficheiros: os resumos e o chat usam-nos.';
 }

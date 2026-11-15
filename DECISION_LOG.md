@@ -3728,3 +3728,28 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
     summarized and discussed.
 - **Not done:** a separate **New meeting** inside a project. The meeting can be moved into a
   project from its page, as any meeting can.
+
+## 2026-11-15 — #126 follow-up: fewer steps on claude.ai and chatgpt.com
+
+- **Owner's feedback:** the website hand-off works, but it is not obvious that the meeting must be
+  pasted and sent. Can it be automated?
+- **Decision:**
+  - **The meeting goes in the website's address when it fits.** Both sites read `?q=`:
+    - claude.ai documents it. The message box is filled and the owner presses Enter. The text is
+      cut at about 14,000 characters.
+    - chatgpt.com fills the box and sends it by itself. OpenAI does not document this, but a
+      synthetic 12,600-character message was sent whole in a test on deb-gui.
+    - Koalino uses the address for messages of up to 12,000 characters, and addresses of up to
+      24,000 (accented text grows when encoded; Windows' launcher takes 32,767). Longer meetings
+      are pasted as before. The clipboard holds the message either way.
+  - **Numbered steps are shown before the website opens:**
+    - one of "press Enter", "it sends by itself", or "click the box, Ctrl+V, Enter";
+    - "drag the files in", when the meeting has some;
+    - for a summary, "copy the answer" and "come back to Koalino"; for a chat, "ask your
+      questions there".
+    - Cancel stops the hand-off.
+- **Not done: sending and reading the answer for the owner.** That would mean a script driving
+  the owner's signed-in claude.ai or chatgpt.com page (the browser extension could). Both
+  services' consumer terms forbid automated access and scraping of outputs, so it could put the
+  owner's accounts at risk. Claude Code or Codex (#105) remain the fully automatic route with the
+  same plans.

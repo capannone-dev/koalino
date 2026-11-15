@@ -2685,7 +2685,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get handoffInTheBrowser =>
-      'ينسخ Koalino الاجتماع مع موجّهك ويفتح الموقع في متصفحك، حيث سجّلت الدخول بحسابك. الصقه هناك (Ctrl+V). إذا كان للاجتماع صور أو ملفات، يُفتح مجلدها أيضًا: اسحبها إلى هناك. للحصول على ملخص، انسخ الإجابة عندما تجهز وعُد: سيحتفظ بها Koalino.';
+      'يفتح Koalino الموقع في متصفحك، حيث سجّلت الدخول بحسابك، ويعطيه الاجتماع مع موجّهك. تعرض النافذة التالية ما عليك فعله هناك.';
 
   @override
   String toKeepTheSummaryCopyTheWebsite(String appName) {
@@ -2749,4 +2749,48 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get titleOptional => 'العنوان (اختياري)';
+
+  @override
+  String handoffStepPressEnter(String site) {
+    return 'يفتح $site والاجتماع موجود بالفعل في مربع الرسالة. اضغط Enter لإرساله.';
+  }
+
+  @override
+  String handoffStepSentByItself(String site) {
+    return 'يفتح $site ويرسل الاجتماع تلقائيًا. سجّل الدخول أولًا إذا طُلب منك.';
+  }
+
+  @override
+  String handoffStepPaste(String site) {
+    return 'يفتح $site وينسخ Koalino الاجتماع. انقر مربع الرسالة والصقه (Ctrl+V) ثم اضغط Enter.';
+  }
+
+  @override
+  String get handoffStepDragFiles =>
+      'يُفتح أيضًا مجلد فيه صور الاجتماع وملفاته: اسحبها إلى المحادثة.';
+
+  @override
+  String get handoffStepCopyAnswer =>
+      'عند اكتمال الإجابة، اضغط زر النسخ أسفلها.';
+
+  @override
+  String get handoffStepComeBack =>
+      'عُد إلى Koalino: تصبح الإجابة ملخص الاجتماع، مع إمكانية التراجع.';
+
+  @override
+  String get handoffStepAskThere => 'ثم اطرح أسئلتك عن الاجتماع هناك.';
+
+  @override
+  String openSite(String site) {
+    return 'افتح $site';
+  }
+
+  @override
+  String writtenBySourceOn(String source, String createdAt) {
+    return 'كتبه $source في $createdAt';
+  }
+
+  @override
+  String get noRecordingWriteNotesOrAttach =>
+      'لا يوجد تسجيل. اكتب ملاحظات أو أرفق ملفات: تستخدمها الملخصات والدردشة.';
 }

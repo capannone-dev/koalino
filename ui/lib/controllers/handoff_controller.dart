@@ -6,8 +6,9 @@
 // when sharing, so an app that drops the shared text can still be given it, and so the clipboard
 // still holding it means nothing was copied. An answer shared back to Koalino as text is offered
 // as the summary too (`keepSharedAnswer`). A chat hand-off leaves nothing pending. On a computer
-// (#126) the apps are claude.ai and chatgpt.com in the browser, the message carries the meeting
-// for the owner to paste, and the clipboard is read when Koalino's window is active again.
+// (#126) the apps are claude.ai and chatgpt.com in the browser: the steps are shown first, the
+// message carries the meeting (in the website's address when short enough, else pasted by the
+// owner), and the clipboard is read when Koalino's window is active again.
 
 import 'dart:async';
 
@@ -22,6 +23,29 @@ const int minAnswerCharacters = 80;
 
 /// How long a summary hand-off waits for its answer.
 const Duration answerWindow = Duration(hours: 1);
+
+/// What the owner will do in the website, shown before it opens (#126).
+final class HandoffSteps {
+  /// Creates the steps.
+  const HandoffSteps({
+    required this.app,
+    required this.purpose,
+    required this.prefilled,
+    required this.hasFiles,
+  });
+
+  /// The website; null for the share sheet.
+  final AiApp? app;
+
+  /// A summary (the answer comes back) or a chat.
+  final HandoffPurpose purpose;
+
+  /// Whether the website opens with the meeting in its message box; otherwise the owner pastes.
+  final bool prefilled;
+
+  /// Whether a folder of photos and files opens too, to drag them in.
+  final bool hasFiles;
+}
 
 /// A summary hand-off waiting for its answer.
 final class PendingAnswer {
@@ -149,15 +173,26 @@ final class HandoffController extends ChangeNotifier
 
   /// Hands a meeting to `app`, or to one picked in the share sheet.
   ///
-  /// Outputs: null once shared, or a message why not. Side effects: The core writes the meeting
-  /// and its files to the hand-off folder; the prompt goes on the clipboard; the other app opens
-  /// with them. A summary hand-off becomes `pending`, replacing an earlier one.
+  /// Inputs: The meeting, the purpose, the app, and `confirm`, which is shown the steps once the
+  /// meeting is ready and may cancel (on a computer, #126).
+  /// Outputs: null once shared or cancelled, or a message why not. Side effects: The core writes
+  /// the meeting and its files to the hand-off folder; the message goes on the clipboard; the
+  /// other app opens with them. A summary hand-off becomes `pending`, replacing an earlier one.
   Future<String?> handOff(
       String meetingId, String title, HandoffPurpose purpose,
-      {AiApp? app}) async {
+      {AiApp? app, Future<bool> Function(HandoffSteps steps)? confirm}) async {
     try {
       final PreparedHandoff handoff = await _core.prepare(
           meetingId, purpose, await _platform.handoffDirectory());
+      if (confirm != null &&
+          !await confirm(HandoffSteps(
+            app: app,
+            purpose: purpose,
+            prefilled: _platform.prefills(handoff, app),
+            hasFiles: handoff.files.length > 1,
+          ))) {
+        return null;
+      }
       await _platform.writeClipboard(handoff.message);
       await _platform.share(handoff, app);
       pending = purpose == HandoffPurpose.summary
@@ -240,7 +275,12 @@ final class HandoffController extends ChangeNotifier
     try {
       final KeptAnswer kept = await _core.keepAnswer(waiting.meetingId,
           text: text,
-          source: l10n.app(waiting.app?.displayName ?? 'Another'),
+          // On a computer the answer came from the website (#126).
+          source: switch (waiting.app) {
+            final AiApp app when viaBrowser => app.webName,
+            final AiApp app => l10n.app(app.displayName),
+            null => l10n.app('Another'),
+          },
           prompt: waiting.prompt);
       _onSummaryChanged?.call(waiting.meetingId);
       _events.add(HandoffKept(
