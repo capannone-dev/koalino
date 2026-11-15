@@ -207,6 +207,9 @@ pub struct WrittenHandoff {
     pub files: Vec<HandoffFile>,
     /// Files left out: unreadable, or over the size or count limits.
     pub skipped: usize,
+    /// Whether the Markdown goes only as a file (the message does not carry it), so the owner
+    /// adds it to a website by hand (#126).
+    pub document_attached: bool,
 }
 
 /// Writes a meeting's hand-off to the owner's own AI app (#114) into `directory`.
@@ -286,6 +289,7 @@ where
         prompt: handoff.prompt,
         files,
         skipped,
+        document_attached: delivery == HandoffDelivery::Attached,
     })
 }
 

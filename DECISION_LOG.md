@@ -3773,8 +3773,9 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
     The project's files and every meeting's attachments go with it as files, within the existing
     limits (20 files, 50 MiB each, 100 MiB in all).
 - **Not done:**
-  - **"Chat with all your notes."** Every meeting is far more than a website message or 20 files
-    can carry, so that chat stays in Koalino.
+  - ~~**"Chat with all your notes."** Every meeting is far more than a website message or 20 files
+    can carry, so that chat stays in Koalino.~~ Done the same day at the owner's request, see
+    below.
   - **Summaries and chat inside Koalino** (API connections, Claude Code, Codex) still read the
     files' text (#128). Sending the originals there depends on the connection: Anthropic's API
     reads PDFs, local OpenAI-compatible servers do not.
@@ -3804,3 +3805,17 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Privacy:** this is the one place where logs hold meeting words, by the owner's choice. A
   `trace` log stays on the device and leaves only when the owner exports it. Evaluations report
   aggregates (word changes, error rates), never the text.
+
+## 2026-11-15 — #126 "Chat with all your notes" in the owner's AI app
+
+- **Owner's request:** "Chat with all your notes" should also offer *Use your own AI app*.
+- **Decision:** the core writes **All notes.md**: every listed meeting, oldest first, each
+  naming its project, with its summary, notes and transcript. It goes **only as a file**, even
+  on a computer, since every note is far too long to paste or to put in an address. The message
+  is a short introduction. Every project's files and every meeting's photos and files are copied
+  beside it as files, within the usual limits (20 files, 50 MiB each, 100 MiB in all); the rest
+  are counted as skipped.
+- The steps dialog says to drag the files in, the folder opens, and chatgpt.com is not filled
+  through its address, so it does not send before the document is in (`hasFilesToDrag`).
+- **Limit:** a website may refuse a very large Markdown file, or read only part of it. The
+  owner's AI app reads it as the site allows; Koalino does not cut it.

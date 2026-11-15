@@ -490,7 +490,8 @@ pub fn summary_request_json(request: &SummaryRequest) -> Value {
 ///
 /// Inputs: The services and a `write` step given the glossary, this device's name and the
 /// owner's default template; the caller holds its repository only inside it. Outputs:
-/// `{"ok":true,"message","prompt","files":[{"path","mime_type"}],"skipped"}` or the error.
+/// `{"ok":true,"message","prompt","files":[{"path","mime_type"}],"skipped","document_attached"}`
+/// or the error.
 /// Side effects: Those of `write`; no AI connection is used.
 pub fn handoff_with(
     services: &LlmServices,
@@ -511,6 +512,7 @@ pub fn handoff_with(
                 "mime_type": file.mime_type,
             })).collect::<Vec<_>>(),
             "skipped": written.skipped,
+            "document_attached": written.document_attached,
         }),
         Err(error) => CommandError::from(error).to_json(),
     }

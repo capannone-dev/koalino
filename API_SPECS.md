@@ -253,14 +253,16 @@ and meeting summaries" below). Keys are write-only.
   `{"meeting_id","purpose":"summary"|"chat","directory","inline"?}`, where `directory` is a folder
   the app owns for hand-offs. For a project's chat (#126), `project_id` replaces `meeting_id`
   (`purpose` must be `chat`): the Markdown holds every meeting of the project, oldest first, and
-  the files are the project's own files and every meeting's attachments. With `"inline": true`
+  the files are the project's own files and every meeting's attachments. `"all": true` instead
+  hands over every note: every listed meeting (each naming its project) and every project's
+  files; that Markdown always goes only as a file, too long to paste. With `"inline": true`
   (computers, #126), `message` also carries the Markdown, for the owner to paste into a website.
   Attachments always go as files: the Markdown only names them, never their text. The core empties
   the folder, then writes the Markdown and plain copies of the attachments (at most 20, 50 MiB
   each, 100 MiB in all).
   The answer is `message` (the summary prompt, or an introduction for a chat), `prompt` (the
-  filled-in instructions; empty for a chat), `files` (`path`, `mime_type`; the Markdown first) and
-  `skipped`. Errors: `invalid_request`, `nothing_to_summarize`, `storage_failed`. No AI connection
+  filled-in instructions; empty for a chat), `files` (`path`, `mime_type`; the Markdown first),
+  `skipped` and `document_attached` (true when the message does not carry the Markdown). Errors: `invalid_request`, `nothing_to_summarize`, `storage_failed`. No AI connection
   is used; the app shares the files and empties the folder again.
 
 ### Meeting edits C ABI (#96)

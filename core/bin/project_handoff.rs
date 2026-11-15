@@ -1,9 +1,10 @@
-//! Hands a project to the owner's own AI app for a chat (#126 follow-up), as a meeting's
-//! hand-off does (#114): the project's meetings as one Markdown document (notes, summary and
-//! transcript of each, oldest first), and the project's files and its meetings' photos and files
-//! copied beside it as files, never turned into text. On a computer the message carries the
-//! document for pasting into claude.ai or chatgpt.com; on Android the document is attached.
-//! Nothing is sent anywhere by Koalino, and nothing here logs content.
+//! Hands a project, or every note, to the owner's own AI app for a chat (#126 follow-up), as a
+//! meeting's hand-off does (#114): the meetings as one Markdown document (notes, summary and
+//! transcript of each, oldest first), and the projects' files and the meetings' photos and files
+//! copied beside it as files, never turned into text. On a computer a project's message carries
+//! the document for pasting into claude.ai or chatgpt.com; every note is too long to paste, so
+//! that document always goes as a file. On Android the document is attached. Nothing is sent
+//! anywhere by Koalino, and nothing here logs content.
 
 use std::path::Path;
 
@@ -22,19 +23,29 @@ use crate::{
     project_commands::ProjectCommandRepository,
 };
 
-/// Writes a project's hand-off into `directory`.
+/// Which notes a chat hand-off carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotesHandoffScope {
+    /// One project: its meetings and files.
+    Project(ProjectId),
+    /// Every meeting and every project's files ("Chat with all your notes").
+    Everything,
+}
+
+/// Writes a project's, or every note's, chat hand-off into `directory`.
 ///
-/// Inputs: The repository, the voice library (for speakers' names), the project, how the
-/// document travels, and a folder the hand-off owns.
-/// Outputs: The message (an introduction for a chat, followed by the document when pasted), no
-/// prompt, and the files: the project's Markdown first, then the project's files and each
-/// meeting's photos and files; or `Storage` when the project is missing or a read fails.
+/// Inputs: The repository, the voice library (for speakers' names), the scope, how the document
+/// travels, and a folder the hand-off owns.
+/// Outputs: The message (an introduction for a chat, followed by a project's document when
+/// pasted), no prompt, the files (the Markdown first, then the projects' files and each
+/// meeting's photos and files), and `document_attached`; or `Storage` when the project is
+/// missing or a read fails.
 /// Side effects: Empties `directory`, then writes the Markdown and clear copies of the files:
 /// personal data the caller shares at once and deletes soon.
-pub fn write_project_handoff<Repository, Voices>(
+pub fn write_notes_handoff<Repository, Voices>(
     repository: &Repository,
     voices: &Voices,
-    project_id: ProjectId,
+    scope: NotesHandoffScope,
     delivery: HandoffDelivery,
     directory: &Path,
 ) -> Result<WrittenHandoff, SummaryError>
@@ -43,17 +54,50 @@ where
     Voices: VoiceVectorDB + ?Sized,
 {
     let storage = |error: &dyn std::fmt::Display| SummaryError::Storage(error.to_string());
-    let project = repository
-        .load_project(project_id)
-        .map_err(|error| storage(&error))?
-        .ok_or_else(|| SummaryError::Storage(String::from("there is no such project")))?;
-    let name = project.name().as_str().to_owned();
+    let projects = repository
+        .list_projects()
+        .map_err(|error| storage(&error))?;
+    let project_name = |project_id: ProjectId| {
+        projects
+            .iter()
+            .find(|summary| summary.project.project_id() == project_id)
+            .map(|summary| summary.project.name().as_str().to_owned())
+    };
+    // Meetings the list shows: not deleted, not folded into another (#88).
+    let listed = listed_meetings(repository).map_err(|error| storage(&error))?;
+    let (name, project_ids, meeting_ids) = match scope {
+        NotesHandoffScope::Project(project_id) => (
+            project_name(project_id)
+                .ok_or_else(|| SummaryError::Storage(String::from("there is no such project")))?,
+            vec![project_id],
+            repository
+                .project_meeting_ids(project_id)
+                .map_err(|error| storage(&error))?,
+        ),
+        NotesHandoffScope::Everything => (
+            String::from("All notes"),
+            projects
+                .iter()
+                .map(|summary| summary.project.project_id())
+                .collect(),
+            listed.clone(),
+        ),
+    };
+    let everything = scope == NotesHandoffScope::Everything;
+    let meeting_projects = repository
+        .meeting_projects()
+        .map_err(|error| storage(&error))?;
     empty_folder(directory).map_err(|error| storage(&error))?;
     let document_name = handoff_file_name(&name);
 
-    let mut resources = repository
-        .project_resources(project_id)
-        .map_err(|error| storage(&error))?;
+    let mut resources = Vec::new();
+    for project_id in project_ids {
+        resources.extend(
+            repository
+                .project_resources(project_id)
+                .map_err(|error| storage(&error))?,
+        );
+    }
     resources.sort_by_key(|resource| resource.original_timestamp());
     let mut sources: Vec<HandoffSource> = resources
         .iter()
@@ -64,12 +108,8 @@ where
         })
         .collect();
 
-    let listed = listed_meetings(repository).map_err(|error| storage(&error))?;
     let mut meetings = Vec::new();
-    for meeting_id in repository
-        .project_meeting_ids(project_id)
-        .map_err(|error| storage(&error))?
-    {
+    for meeting_id in meeting_ids {
         if !listed.contains(&meeting_id) {
             continue;
         }
@@ -85,15 +125,30 @@ where
             "{} {}",
             prepared.material.values.date, prepared.material.values.time
         );
-        meetings.push((started, prepared, summary, attachments));
+        // Every note's document says which project each meeting belongs to.
+        let in_project = meeting_projects
+            .iter()
+            .find(|(id, _)| everything && *id == meeting_id)
+            .and_then(|(_, project_id)| project_name(*project_id))
+            .map(|project| format!(", project \"{project}\""))
+            .unwrap_or_default();
+        meetings.push((started, in_project, prepared, summary, attachments));
     }
     meetings.sort_by(|left, right| left.0.cmp(&right.0));
 
-    let mut document = format!("# {name}\n\nProject with {} meetings.\n", meetings.len());
-    for (started, prepared, summary, attachments) in &meetings {
+    let mut document = if everything {
+        format!(
+            "# {name}\n\nEvery meeting ({}) and the files of {} projects.\n",
+            meetings.len(),
+            projects.len()
+        )
+    } else {
+        format!("# {name}\n\nProject with {} meetings.\n", meetings.len())
+    };
+    for (started, in_project, prepared, summary, attachments) in &meetings {
         let material = &prepared.material;
         document.push_str(&format!(
-            "\n## Meeting \"{}\", {started}, {}\n",
+            "\n## Meeting \"{}\", {started}, {}{in_project}\n",
             material.values.title, material.values.duration
         ));
         if let Some(summary) = summary.as_deref().filter(|text| !text.trim().is_empty()) {
@@ -122,17 +177,29 @@ where
     let mut used_names = vec![document_name.clone()];
     let (attached, skipped) = copy_handoff_files(repository, &sources, directory, &mut used_names)?;
     if used_names.len() > 1 {
+        let whose = if everything {
+            "The projects' and meetings'"
+        } else {
+            "The project's and its meetings'"
+        };
         document.push_str(&format!(
-            "\n## Attached files\n\nThe project's and its meetings' photos and files come with it as files: {}.\n",
+            "\n## Attached files\n\n{whose} photos and files come with it as files: {}.\n",
             used_names[1..].join(", ")
         ));
     }
-    let message = match delivery {
-        HandoffDelivery::Pasted => format!(
+    // Every note is too long to paste into a website, so its document always goes as a file.
+    let document_attached = everything || delivery == HandoffDelivery::Attached;
+    let message = match (everything, document_attached) {
+        (true, _) => format!(
+            "The attached file {document_name} has all my notes: every meeting's summary, notes \
+             and transcript, and which project it belongs to. Please read it; I will ask you \
+             questions about my notes."
+        ),
+        (false, false) => format!(
             "Below are the meetings of the project \"{name}\": summaries, notes and transcripts. \
              Please read them; I will ask you questions about the project.\n\n{document}"
         ),
-        HandoffDelivery::Attached => format!(
+        (false, true) => format!(
             "The attached file {document_name} has the meetings of the project \"{name}\": \
              summaries, notes and transcripts. Please read it; I will ask you questions about the \
              project."
@@ -150,5 +217,6 @@ where
         prompt: String::new(),
         files,
         skipped,
+        document_attached,
     })
 }
