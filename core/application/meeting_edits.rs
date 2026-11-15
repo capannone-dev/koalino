@@ -1,4 +1,5 @@
-//! The owner's edits to a meeting (#96): its notes, its summary, and single transcript segments.
+//! The owner's edits to a meeting (#96): its notes, its summary, and single transcript segments;
+//! and a meeting started by writing, with no recording (#129).
 //!
 //! Every edit goes into the meeting document, so it syncs to paired devices and is sealed at rest.
 //! A summary changed by hand is marked `edited`, and automatic summaries never replace a meeting
@@ -10,12 +11,15 @@
 use automerge::{AutoCommit, ROOT, ReadDoc, ScalarValue, Value, transaction::Transactable};
 use chrono::{DateTime, Utc};
 
-use super::meeting_summary_document::{read_summary, with_summary};
+use super::{
+    meeting_crdt::MeetingCrdtService,
+    meeting_summary_document::{read_summary, with_summary},
+};
 use crate::{
     domain::{
-        errors::StorageError,
+        errors::{MeetingTitleError, StorageError},
         llm::MeetingSummary,
-        models::{MeetingId, TranscriptSegment},
+        models::{MeetingId, MeetingTitle, TranscriptSegment},
     },
     ports::storage::NoteRepository,
 };
@@ -135,6 +139,49 @@ where
         Ok(automerge_document.save())
     })?;
     Ok(())
+}
+
+/// Creates a meeting the owner starts by writing, with no recording (#129).
+///
+/// Inputs: The repository, an optional title (trimmed, line breaks made spaces; blank means
+/// untitled; at most
+/// `MeetingTitle::MAX_CHARACTERS`) and optional notes (at most `MAX_NOTES_CHARS`).
+/// Outputs: The new `meeting-<uuid>` ID, or `TooLong` with nothing created.
+/// Side effects: Inserts the meeting and its document, which syncs to paired devices like any
+/// other meeting. Neither the title nor the notes are logged.
+pub fn create_written_meeting<Repository>(
+    repository: &Repository,
+    title: Option<&str>,
+    notes: Option<&str>,
+) -> Result<MeetingId, EditError>
+where
+    Repository: NoteRepository + ?Sized,
+{
+    // A pasted title may carry line breaks or tabs: they become spaces.
+    let title = title.map(|title| title.replace(char::is_control, " "));
+    let title = match title.as_deref().map(MeetingTitle::parse) {
+        None | Some(Err(MeetingTitleError::Blank | MeetingTitleError::ControlCharacter)) => None,
+        Some(Ok(title)) => Some(title),
+        Some(Err(MeetingTitleError::TooLong { max_characters })) => {
+            return Err(EditError::TooLong {
+                limit: max_characters,
+            });
+        }
+    };
+    let notes = notes.filter(|notes| !notes.trim().is_empty());
+    if let Some(notes) = notes {
+        check_length(notes, MAX_NOTES_CHARS)?;
+    }
+    let meeting_id = MeetingId::new(format!("meeting-{}", uuid::Uuid::new_v4()));
+    let service = MeetingCrdtService::new(repository);
+    match &title {
+        Some(title) => service.create_titled_meeting(&meeting_id, title)?,
+        None => service.create_meeting(&meeting_id)?,
+    }
+    if let Some(notes) = notes {
+        set_notes(repository, &meeting_id, notes)?;
+    }
+    Ok(meeting_id)
 }
 
 /// Replaces the summary's text with the owner's, or writes a summary by hand when there is none.

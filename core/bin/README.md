@@ -355,7 +355,7 @@ over after 30 minutes, and at most 10 requests are sent per hour. `ffi_llm.rs` a
 `ffi_edits.rs` (#96) gives the app `note_taker_meeting_edit`: the notes, the summary's text and
 single transcript segments, through `application/meeting_edits.rs` (the same rules as the web).
 It also keeps an answer from the owner's own AI app as the summary (`keep_answer`) and undoes
-that (`restore_summary`, #114). `meeting_summaries.rs`' `write_handoff`, exposed as
+that (`restore_summary`, #114), and creates a meeting with no recording (`create_meeting`, #129). `meeting_summaries.rs`' `write_handoff`, exposed as
 `note_taker_handoff_meeting` in `ffi_llm.rs`, writes the files that hand-off shares; with
 `inline` (#126), the message carries the meeting for pasting into a website.
 

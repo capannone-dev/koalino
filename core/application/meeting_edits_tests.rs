@@ -11,8 +11,8 @@ use super::{
     meeting_crdt::MeetingCrdtService,
     meeting_document::AutomergeMeetingDocumentCodec,
     meeting_edits::{
-        EditError, MAX_NOTES_CHARS, edit_segment, edit_summary, load_notes, set_notes,
-        transcript_edited,
+        EditError, MAX_NOTES_CHARS, create_written_meeting, edit_segment, edit_summary, load_notes,
+        set_notes, transcript_edited,
     },
     meeting_summary_document::{read_summary, with_summary},
 };
@@ -179,4 +179,59 @@ fn a_segment_edit_keeps_speaker_and_timing_and_flags_the_transcript() {
         edit_segment(&repository, &meeting(), 5, 6, "x"),
         Err(EditError::SegmentNotFound)
     ));
+}
+
+/// A meeting can be started by writing, with no recording (#129): titled, with notes, listed.
+#[test]
+fn a_written_meeting_is_created_with_its_title_and_notes() {
+    let repository = repository();
+
+    let meeting_id = create_written_meeting(
+        &repository,
+        Some("  Call with the bank "),
+        Some("IBAN to check"),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let untitled =
+        create_written_meeting(&repository, Some("   "), None).unwrap_or_else(|e| panic!("{e}"));
+
+    assert!(meeting_id.as_str().starts_with("meeting-"));
+    let metadata = repository
+        .load_meeting_metadata(&meeting_id)
+        .unwrap_or_else(|e| panic!("{e}"))
+        .unwrap_or_else(|| panic!("the meeting must exist"));
+    assert_eq!(
+        metadata.title().map(MeetingTitle::as_str),
+        Some("Call with the bank")
+    );
+    assert_eq!(
+        load_notes(&repository, &meeting_id)
+            .ok()
+            .flatten()
+            .as_deref(),
+        Some("IBAN to check")
+    );
+    assert_ne!(meeting_id, untitled);
+    assert_eq!(load_notes(&repository, &untitled).ok(), Some(None));
+    let listed = repository.list_meeting_ids().unwrap_or_default();
+    assert!(listed.contains(&meeting_id) && listed.contains(&untitled));
+}
+
+/// A title or notes over the limits create nothing.
+#[test]
+fn a_written_meeting_with_too_long_a_title_is_refused() {
+    let repository = repository();
+    let before = repository.list_meeting_ids().unwrap_or_default().len();
+
+    let long_title = "x".repeat(MeetingTitle::MAX_CHARACTERS + 1);
+    let refused = create_written_meeting(&repository, Some(&long_title), None);
+    let too_much =
+        create_written_meeting(&repository, None, Some(&"n".repeat(MAX_NOTES_CHARS + 1)));
+
+    assert!(matches!(refused, Err(EditError::TooLong { .. })));
+    assert!(matches!(too_much, Err(EditError::TooLong { .. })));
+    assert_eq!(
+        repository.list_meeting_ids().unwrap_or_default().len(),
+        before
+    );
 }

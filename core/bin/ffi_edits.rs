@@ -6,6 +6,7 @@
 //!
 //! | `command` | Fields | Answer |
 //! | --- | --- | --- |
+//! | `create_meeting` | optional `title`, optional `text` (the notes) | `meeting_id` of a new meeting with no recording (#129) |
 //! | `notes` | `meeting_id` | `notes`: text or null |
 //! | `set_notes` | `meeting_id`, `text` | `notes` |
 //! | `edit_summary` | `meeting_id`, `text` | `summary`, marked `edited` |
@@ -25,7 +26,9 @@ use serde_json::{Value, json};
 
 use crate::{
     application::{
-        meeting_edits::{EditError, edit_segment, edit_summary, load_notes, set_notes},
+        meeting_edits::{
+            EditError, create_written_meeting, edit_segment, edit_summary, load_notes, set_notes,
+        },
         meeting_handoff::{restore_summary, store_external_summary},
     },
     domain::{llm::MeetingSummary, models::MeetingId},
@@ -46,6 +49,12 @@ where
         return failure("invalid_request", "the request is not JSON");
     };
     let text = |field: &str| request.get(field).and_then(Value::as_str);
+    if request.get("command").and_then(Value::as_str) == Some("create_meeting") {
+        return match create_written_meeting(repository, text("title"), text("text")) {
+            Ok(meeting_id) => json!({"ok": true, "meeting_id": meeting_id.as_str()}),
+            Err(error) => edit_failure(&error),
+        };
+    }
     let Some(meeting_id) = text("meeting_id").map(MeetingId::new) else {
         return failure("invalid_request", "`meeting_id` is required");
     };
@@ -195,6 +204,35 @@ mod tests {
         domain::models::{MeetingId, TranscriptSegment},
         ports::storage::NoteRepository,
     };
+
+    /// `create_meeting` needs no meeting ID and answers the new one (#129).
+    #[test]
+    fn the_app_creates_a_written_meeting() {
+        let repository = SqliteNoteRepository::open_in_memory(ephemeral_cipher())
+            .and_then(|repository| {
+                repository.with_document_codec(Arc::new(AutomergeMeetingDocumentCodec))
+            })
+            .unwrap_or_else(|error| panic!("{error}"));
+
+        let created = run_edit_command(
+            &repository,
+            &json!({"command": "create_meeting", "title": "Supplier call", "text": "Prices"})
+                .to_string(),
+        );
+
+        assert_eq!(created["ok"], true, "{created}");
+        let meeting_id = created["meeting_id"].as_str().unwrap_or_default();
+        let notes = run_edit_command(
+            &repository,
+            &json!({"command": "notes", "meeting_id": meeting_id}).to_string(),
+        );
+        assert_eq!(notes["notes"], "Prices");
+        let long = run_edit_command(
+            &repository,
+            &json!({"command": "create_meeting", "title": "x".repeat(500)}).to_string(),
+        );
+        assert_eq!(long["error_code"], "too_long");
+    }
 
     #[test]
     fn the_app_edits_notes_summaries_and_segments() {

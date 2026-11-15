@@ -268,7 +268,9 @@ and meeting summaries" below). Keys are write-only.
   removed it; `keep_answer` (`meeting_id`, `text`, `source` such as `Claude app`, optional `prompt`)
   → `summary` and `previous` (the summary it replaced, or null), keeping an answer from the
   owner's own AI app as the summary, marked `edited` (#114); `restore_summary` (`meeting_id`,
-  `summary` as `previous` gave it, or null to remove it) undoes that. Error codes:
+  `summary` as `previous` gave it, or null to remove it) undoes that; `create_meeting` (optional
+  `title`, optional `text` for the notes; no `meeting_id`) → `meeting_id` of a new meeting with
+  no recording, filled by writing or adding files (#129). Error codes:
   `invalid_request`, `meeting_not_found`, `segment_not_found`, `empty`, `too_long`,
   `storage_failed`, `runtime_unavailable`.
 
