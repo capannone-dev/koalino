@@ -88,7 +88,8 @@ a paired computer write the summary (#107); `describePairedRequest` words its st
 `setPairedSummaryConnection` chooses the connection that answers paired devices.
 
 `call_watch_controller.dart` (#111) looks at the microphone's users every 3 seconds on desktops
-and Android phones (where `hostUsers` passes the core what Kotlin saw).
+(`offersToRecordCalls`: Linux and Windows). Android phones do not offer: Android gives a call the
+microphone and other captures silence. `hostUsers` lets a host pass the users it sees itself.
 - A call noticed while nothing is being recorded becomes `offeredApp`, shown as a banner and,
   where there is one, as a system notification (`CallNotifier`). Only `acceptOffer` (the owner's
   tap on either) starts a recording, titled "`<app>` call" ("Call" for Android's unnamed call app)

@@ -9,8 +9,8 @@
 // (`SharedFiles`, Issue #46). Files and e-mails shared to the app from others are copied by
 // `IncomingShares` and offered to Dart on `note_taker/incoming_shares` (Issue #85).
 // `ChargingReporter` tells the core when the phone charges, so the after-meeting pass can run (#87).
-// `CallSignals` (`note_taker/call_signals`) tells Dart when another app is in a call, and
-// `CallOffer` (`note_taker/call_offer`) offers to record it as a notification (#111).
+// `CallSignals` (`note_taker/call_signals`) tells Dart when a call silences a recording (#111).
+// The phone does not offer to record calls; the call offer's old notification channel is removed.
 // `NpuDownload` (`note_taker/npu`) fetches the NPU's Whisper files on request and points the
 // NPU's library search at them (#75). `PairingLinks` (`note_taker/pairing_links`) hands Dart
 // the pairing invite links the camera opens from another device's QR code (#122).
@@ -44,9 +44,6 @@ class MainActivity : FlutterActivity() {
     /** Reports charging to the core while the activity exists; created with it. */
     private val chargingReporter by lazy { ChargingReporter(applicationContext) }
 
-    /** Offers to record a call as a notification; created with the activity. */
-    private val callOffer by lazy { CallOffer(this) }
-
     /** Runs Keystore work off the main thread. */
     private val keyVaultExecutor = Executors.newSingleThreadExecutor()
 
@@ -77,10 +74,6 @@ class MainActivity : FlutterActivity() {
         pairingLinks.channel = linksChannel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/call_signals")
             .setMethodCallHandler(CallSignals(applicationContext))
-        val callOfferChannel =
-            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/call_offer")
-        callOfferChannel.setMethodCallHandler(callOffer)
-        callOffer.channel = callOfferChannel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/npu")
             .setMethodCallHandler(NpuDownload())
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/whisper_model")
@@ -160,7 +153,6 @@ class MainActivity : FlutterActivity() {
         RecordingService.stateListener = null
         incomingShares.channel = null
         pairingLinks.channel = null
-        callOffer.channel = null
         super.cleanUpFlutterEngine(flutterEngine)
     }
 
@@ -173,7 +165,7 @@ class MainActivity : FlutterActivity() {
         NpuDownload.prepareEnvironment(applicationContext)
         super.onCreate(savedInstanceState)
         chargingReporter.start()
-        callOffer.start()
+        removeCallOfferChannel()
         if (savedInstanceState == null &&
             (pairingLinks.receive(intent) || incomingShares.receive(intent))
         ) {
@@ -185,19 +177,27 @@ class MainActivity : FlutterActivity() {
     /** Stops reporting charging when the activity goes away. */
     override fun onDestroy() {
         chargingReporter.stop()
-        callOffer.stop()
         super.onDestroy()
     }
 
-    /**
-     * Copies a share that reached the running app (the activity is `singleTop`), or answers the
-     * call offer's Record.
-     */
+    /** Copies a share that reached the running app (the activity is `singleTop`). */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (!callOffer.receive(intent) && !pairingLinks.receive(intent)) {
+        if (!pairingLinks.receive(intent)) {
             incomingShares.receive(intent)
         }
+    }
+
+    /**
+     * Deletes the "Calls" notification channel earlier versions made for the call offer (#111),
+     * so it no longer shows in the app's notification settings. Side effects: None when absent.
+     */
+    private fun removeCallOfferChannel() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) {
+            return
+        }
+        getSystemService(android.app.NotificationManager::class.java)
+            ?.deleteNotificationChannel("call_offer")
     }
 
     /** Hands RECORD_AUDIO answers to `MicrophonePermission`. */

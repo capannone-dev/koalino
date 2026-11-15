@@ -1,7 +1,9 @@
 // Offers to record when a call starts and stops that recording when the call ends (#111).
 //
-// Polls the core's call watch every few seconds (on Android with the users Kotlin saw, since the
-// core cannot look there). A call noticed while nothing is
+// Polls the core's call watch every few seconds (a host that sees the microphone's users itself
+// can pass them, since the core cannot look everywhere). Only desktops offer: Android gives a
+// call the microphone and other apps silence (or, before Android 10, could take the microphone
+// from the call), so the phone never offers (`offersToRecordCalls`). A call noticed while nothing is
 // recorded becomes an offer, shown in the app and as a system notification where there is one;
 // only the owner's tap (on either) starts a recording. A
 // recording started from the offer is tied to the call: when the call ends, and the owner keeps
@@ -17,7 +19,16 @@ import 'package:note_taker_ui/infrastructure/call_watch_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
-/// Reads the microphone's users on the host, where the core cannot (Android).
+/// Whether the app offers to record calls on `operatingSystem` (`Platform.operatingSystem`).
+///
+/// Outputs: true on Linux and Windows, where a recording hears the call alongside its app.
+/// false on Android (#111): Android silences every capture but the call's, and older versions
+/// could take the microphone from the call, so the offer would only cause harm. Side effects:
+/// None.
+bool offersToRecordCalls(String operatingSystem) =>
+    operatingSystem == 'linux' || operatingSystem == 'windows';
+
+/// Reads the microphone's users on the host, where the core cannot.
 typedef HostMicrophoneUsers = Future<List<HostMicrophoneUser>> Function();
 
 /// The name the core gives a call whose app is unknown (Android).

@@ -190,10 +190,9 @@ toast (`note_taker_call_toast`; Windows PowerShell cannot receive a toast's butt
 Other platforms use `NoCallNotifier` (the banner only). No
 plugin is needed. When no notification can be shown (`NoCallNotifier`, or `notify-send` missing
 or failing), the answer is `unavailable`, which leaves the banner up; only `dismissed` clears it.
-`android_call_signals.dart` is the Android side: `AndroidCallSignals.users()` asks Kotlin
-(`note_taker/call_signals`) whether another app is in a call, as `HostMicrophoneUser`s the poll
-carries to the core, and `AndroidCallNotifier` posts the offer as a notification
-(`note_taker/call_offer`); its Record opens the app, since a recording can only start in front.
+`android_call_signals.dart` is the Android side: `AndroidCallSignals.silenced()` asks Kotlin
+(`note_taker/call_signals`) whether a call is making Android feed the recording silence. The
+phone does not offer to record calls (`offersToRecordCalls`, #111).
 
 `incoming_share_bridge.dart` (Issue #85) hands over what other apps share to Koalino:
 `IncomingShare` (the copies' folder, their paths, and how many could not be read) and

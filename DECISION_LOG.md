@@ -3778,3 +3778,16 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - **Summaries and chat inside Koalino** (API connections, Claude Code, Codex) still read the
     files' text (#128). Sending the originals there depends on the connection: Anthropic's API
     reads PDFs, local OpenAI-compatible servers do not.
+
+## 2026-11-15 — #111 The phone no longer offers to record calls
+
+- **Owner's decision:** on Android, do not offer to record a call if the recording would keep the
+  call's app from using the microphone, or could not hear the call.
+- **Why that is always the case on Android:** Android 10 and later give the call app the
+  microphone and feed every other capture silence for the whole call (seen in the owner's Signal
+  test). Android 9 and earlier allowed one capture at a time, so a recording could take the
+  microphone from the call. Either way the offer can only produce silence or harm the call.
+- **Decision:** only Linux and Windows offer (`offersToRecordCalls`). The Android offer
+  notification (`CallOffer.kt`) and Kotlin's call detection for it are removed, and its old
+  "Calls" notification channel is deleted at start-up. A recording the owner starts during a call
+  still says that Android is giving it silence. The core's generic host-users poll stays.

@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
-import 'package:note_taker_ui/infrastructure/android_call_signals.dart';
 import 'package:note_taker_ui/infrastructure/call_notifier.dart';
 import 'package:note_taker_ui/infrastructure/call_watch_bridge.dart';
 import 'package:note_taker_ui/presentation/call_offer_banner.dart';
@@ -329,43 +328,12 @@ void main() {
         isEmpty);
   });
 
-  test('the Android notification asks Kotlin and takes its answer', () async {
-    final List<MethodCall> calls = <MethodCall>[];
-    const MethodChannel channel = MethodChannel('test/call_offer');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (MethodCall call) async {
-      calls.add(call);
-      return call.method == 'show';
-    });
-    addTearDown(() => TestDefaultBinaryMessengerBinding
-        .instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, null));
-    final AndroidCallNotifier android = AndroidCallNotifier(channel: channel);
-
-    final Future<CallNotificationAnswer> answer = android.offer('A call app');
-    await pumpEventQueue();
-    expect(calls.single.method, 'show');
-    expect(calls.single.arguments, <String, Object?>{'app': 'A call app'});
-    await android.handleCall(const MethodCall('answer', 'record'));
-    expect(await answer, CallNotificationAnswer.record);
-
-    final Future<CallNotificationAnswer> second = android.offer('A call app');
-    await pumpEventQueue();
-    android.withdraw();
-    expect(await second, CallNotificationAnswer.dismissed);
-    expect(calls.last.method, 'withdraw');
-  });
-
-  test('the Android notification is unavailable when notifications are off',
-      () async {
-    const MethodChannel channel = MethodChannel('test/call_offer_off');
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (MethodCall call) async => false);
-    addTearDown(() => TestDefaultBinaryMessengerBinding
-        .instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, null));
-    expect(await AndroidCallNotifier(channel: channel).offer('Teams'),
-        CallNotificationAnswer.unavailable);
+  test('only desktops offer to record calls: Android silences a second capture',
+      () {
+    expect(offersToRecordCalls('linux'), isTrue);
+    expect(offersToRecordCalls('windows'), isTrue);
+    expect(offersToRecordCalls('android'), isFalse);
+    expect(offersToRecordCalls('macos'), isFalse);
   });
 
   testWidgets('the banner offers, and Not now dismisses',

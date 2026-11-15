@@ -115,23 +115,16 @@ Future<void> main() async {
     recordingBridge: recordingBridge,
     meetingBridge: const RustMeetingBridge(),
   );
-  // Desktops and Android phones notice calls and offer to record them (#111). Android tells
-  // the core what it sees, since the core cannot look there.
+  // Desktops notice calls and offer to record them (#111). The phone does not: Android gives
+  // the call the microphone and Koalino silence.
   final CallWatchController? callWatchController =
-      Platform.isLinux || Platform.isWindows
+      offersToRecordCalls(Platform.operatingSystem)
           ? CallWatchController(
               bridge: const CallWatchBridge(),
               recordingController: recordingController,
               notifier: platformCallNotifier(),
             )
-          : Platform.isAndroid
-              ? CallWatchController(
-                  bridge: const CallWatchBridge(),
-                  recordingController: recordingController,
-                  notifier: AndroidCallNotifier(),
-                  hostUsers: const AndroidCallSignals().users,
-                )
-              : null;
+          : null;
   final CoreStartupController coreStartupController = CoreStartupController(
     // Android keeps the key in the Keystore and Kotlin hands it to Rust over JNI first;
     // desktops reach their keychain from Rust.
