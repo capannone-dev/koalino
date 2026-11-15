@@ -1,4 +1,4 @@
-// Lists meetings with a summary button (#95) and a per-row actions menu (button or right-click)
+// Lists meetings with a labelled summary button (#95; the word beside the icon since 2026-11-15) and a per-row actions menu (button or right-click)
 // that opens the summary, renames a meeting in place, adds it to a project (#94), or deletes it.
 
 "use client";
@@ -113,10 +113,10 @@ export function MeetingList({ meetings }: { meetings: MeetingSummary[] }) {
               <Link
                 href={`/meetings/${encodeURIComponent(meeting.meeting_id)}#summary`}
                 aria-label={t("summaryOf", { title: meeting.title })}
-                title={t("summary")}
-                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-full px-3 text-sm text-muted hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus"
               >
                 <SummaryIcon />
+                <span>{t("summary")}</span>
               </Link>
               <button
                 ref={(button) => {

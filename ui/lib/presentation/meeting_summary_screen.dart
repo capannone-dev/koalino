@@ -41,8 +41,9 @@ Future<void> openMeetingSummary(
       ),
     ));
 
-/// The summary icon beside a meeting's name; it opens the summary page, and spins while one is
-/// being written.
+/// The summary button beside a meeting's name: an icon with the word "Summary", since the icon
+/// alone was not self-explanatory (owner, 2026-11-15). It opens the summary page, and its icon
+/// spins while one is being written.
 final class MeetingSummaryButton extends StatelessWidget {
   /// Creates the button for one meeting.
   const MeetingSummaryButton({
@@ -59,19 +60,26 @@ final class MeetingSummaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: controller,
-        builder: (BuildContext context, Widget? child) => IconButton(
-          key: ValueKey<String>('summary-$meetingId'),
-          tooltip: controller.isSummarizing(meetingId)
+        builder: (BuildContext context, Widget? child) => Tooltip(
+          message: controller.isSummarizing(meetingId)
               ? l10n.writingTheSummaryOf(title)
               : l10n.summaryOf(title),
-          icon: controller.isSummarizing(meetingId)
-              ? const SizedBox.square(
-                  dimension: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.summarize_outlined),
-          onPressed: () => openMeetingSummary(context,
-              controller: controller, meetingId: meetingId, title: title),
+          child: TextButton.icon(
+            key: ValueKey<String>('summary-$meetingId'),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            icon: controller.isSummarizing(meetingId)
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.summarize_outlined),
+            label: Text(l10n.summary),
+            onPressed: () => openMeetingSummary(context,
+                controller: controller, meetingId: meetingId, title: title),
+          ),
         ),
       );
 }

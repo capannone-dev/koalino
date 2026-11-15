@@ -31,6 +31,24 @@ void main() {
             controller: controller, meetingId: 'm-1', title: 'Budget review'),
       );
 
+  testWidgets('the summary button says what it is in words, not only an icon',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: MeetingSummaryButton(
+              controller: controller, meetingId: 'm-1', title: 'Budget review'),
+        ),
+      ),
+    ));
+
+    final Finder button = find.byKey(const ValueKey<String>('summary-m-1'));
+    expect(button, findsOneWidget);
+    expect(find.descendant(of: button, matching: find.text('Summary')),
+        findsOneWidget);
+    expect(find.byTooltip('Summary of Budget review'), findsOneWidget);
+  });
+
   testWidgets('writes a summary with the default connection and shows it',
       (WidgetTester tester) async {
     core.answer(

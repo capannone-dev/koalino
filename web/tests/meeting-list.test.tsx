@@ -36,6 +36,14 @@ test("lists each meeting title as a link to its detail page", () => {
   expect(screen.getByRole("link", { name: "Meeting 2026-10-26 18:00 UTC" })).toBeInTheDocument();
 });
 
+test("the summary link says Summary in words, not only with an icon", () => {
+  render(<MeetingList meetings={meetings} />);
+
+  const summaryLink = screen.getByRole("link", { name: "Summary of Project Sync" });
+  expect(summaryLink).toHaveAttribute("href", "/meetings/meeting-titled#summary");
+  expect(summaryLink).toHaveTextContent("Summary");
+});
+
 test("the actions button opens a menu with Rename", () => {
   render(<MeetingList meetings={meetings} />);
   const actionsButton = screen.getByRole("button", { name: "Actions for Project Sync" });
