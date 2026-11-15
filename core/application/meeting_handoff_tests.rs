@@ -7,7 +7,7 @@ use super::meeting_handoff::{
     HandoffDelivery, HandoffPurpose, handoff_file_name, prepare_handoff, restore_summary,
     store_external_summary,
 };
-use super::meeting_summary::{SpokenLine, SummaryError, SummaryMaterial};
+use super::meeting_summary::{AttachedDocument, SpokenLine, SummaryError, SummaryMaterial};
 use crate::{
     adapters::storage::sqlite_adapter::SqliteNoteRepository,
     application::meeting_summary_document::read_summary,
@@ -34,7 +34,63 @@ fn material(lines: Vec<SpokenLine>, notes: Option<&str>) -> SummaryMaterial {
         notes: notes.map(str::to_owned),
         lines,
         images: Vec::new(),
+        documents: Vec::new(),
     }
+}
+
+fn agenda() -> AttachedDocument {
+    AttachedDocument {
+        name: "agenda.md".to_owned(),
+        text: "1. Budget 2027".to_owned(),
+    }
+}
+
+/// A pasted hand-off cannot carry files, so their text goes in the message (#128); an attached
+/// one sends the files themselves, so the meeting's Markdown does not repeat them.
+#[test]
+fn the_files_text_is_pasted_but_not_repeated_beside_attached_files() {
+    let mut meeting = material(vec![spoken("Anna", 0, "We ship on Friday.")], None);
+    meeting.documents = vec![agenda()];
+
+    let pasted = prepare_handoff(
+        &template(),
+        &meeting,
+        HandoffPurpose::Chat,
+        HandoffDelivery::Pasted,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+    let attached = prepare_handoff(
+        &template(),
+        &meeting,
+        HandoffPurpose::Chat,
+        HandoffDelivery::Attached,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    assert!(
+        pasted
+            .message
+            .contains("## Attached files\n\n### agenda.md\n\n1. Budget 2027"),
+        "{}",
+        pasted.message
+    );
+    assert!(!attached.document.contains("1. Budget 2027"));
+}
+
+/// A meeting with only a file can be handed off.
+#[test]
+fn a_meeting_with_only_a_file_is_handed_off() {
+    let mut meeting = material(Vec::new(), None);
+    meeting.documents = vec![agenda()];
+
+    let handoff = prepare_handoff(
+        &template(),
+        &meeting,
+        HandoffPurpose::Summary,
+        HandoffDelivery::Pasted,
+    );
+
+    assert!(handoff.is_ok());
 }
 
 fn spoken(speaker: &str, start_ms: u64, text: &str) -> SpokenLine {

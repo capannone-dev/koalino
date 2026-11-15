@@ -104,6 +104,45 @@ fn preparing_gathers_the_transcript_notes_photos_and_values() {
     drop(std::fs::remove_dir_all(folder));
 }
 
+/// The text of the meeting's files goes with the transcript; files without text do not (#128).
+#[test]
+fn preparing_reads_the_text_of_the_meetings_files() {
+    let repository = repository();
+    let folder = record(&repository);
+    let agenda = folder.join("agenda.md");
+    std::fs::write(&agenda, "1. Budget 2027\n2. Hiring").unwrap_or_else(|e| panic!("{e}"));
+    repository
+        .save_attachment(&Attachment::new(
+            Uuid::new_v4(),
+            Some(meeting()),
+            agenda.display().to_string(),
+            "text/markdown",
+            Utc::now(),
+            "device",
+        ))
+        .unwrap_or_else(|e| panic!("{e}"));
+
+    let prepared = prepare_summary(
+        &repository,
+        &InMemoryVoiceVectorDB::new(),
+        &meeting(),
+        &[],
+        "Laptop",
+        None,
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    let documents = &prepared.material.documents;
+    assert_eq!(
+        documents.len(),
+        1,
+        "the photo and the empty PDF give no text"
+    );
+    assert_eq!(documents[0].name, "agenda.md");
+    assert_eq!(documents[0].text, "1. Budget 2027\n2. Hiring");
+    drop(std::fs::remove_dir_all(folder));
+}
+
 #[test]
 fn the_meetings_own_prompt_wins_and_a_summary_is_kept_in_its_document() {
     let repository = repository();

@@ -61,7 +61,8 @@ pub struct Handoff {
 /// Inputs: The summary template (the meeting's own or the default), the meeting's material, the
 /// purpose, and how the meeting travels. Images in the material are ignored; the caller attaches
 /// the files itself.
-/// Outputs: The message and document, or `NothingToSummarize` without words or notes.
+/// Outputs: The message and document, or `NothingToSummarize` without words, notes or files'
+/// text. When pasted, the document ends with the text of the meeting's files (#128).
 /// Side effects: None.
 pub fn prepare_handoff(
     template: &PromptTemplate,
@@ -75,7 +76,12 @@ pub fn prepare_handoff(
         .map(str::trim)
         .filter(|notes| !notes.is_empty());
     let transcript = render_transcript(&material.lines);
-    if transcript.is_empty() && notes.is_none() {
+    let documents: Vec<_> = material
+        .documents
+        .iter()
+        .filter(|document| !document.text.trim().is_empty())
+        .collect();
+    if transcript.is_empty() && notes.is_none() && documents.is_empty() {
         return Err(SummaryError::NothingToSummarize);
     }
     let values = &material.values;
@@ -92,6 +98,18 @@ pub fn prepare_handoff(
             "\n## Transcript\n\nAutomatic transcript, with each speaker and the time from the start. \
              Words may be misheard, especially names, technical terms and people talking at once.\n\n{transcript}\n"
         ));
+    }
+    // A pasted hand-off carries no files, so their text comes along (#128); an attached one
+    // shares the files themselves.
+    if delivery == HandoffDelivery::Pasted && !documents.is_empty() {
+        document.push_str("\n## Attached files\n");
+        for attached in documents {
+            document.push_str(&format!(
+                "\n### {}\n\n{}\n",
+                attached.name,
+                attached.text.trim()
+            ));
+        }
     }
     let (message, prompt) = match (purpose, delivery) {
         (HandoffPurpose::Summary, HandoffDelivery::Pasted) => {

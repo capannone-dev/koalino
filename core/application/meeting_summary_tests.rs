@@ -7,7 +7,8 @@ use std::sync::Mutex;
 use chrono::{TimeZone, Utc};
 
 use super::meeting_summary::{
-    SpokenLine, SummaryError, SummaryMaterial, render_transcript, summarize_meeting,
+    AttachedDocument, SpokenLine, SummaryError, SummaryMaterial, render_transcript,
+    summarize_meeting,
 };
 use crate::{
     domain::{
@@ -93,7 +94,92 @@ fn material(lines: Vec<SpokenLine>) -> SummaryMaterial {
         images: LlmImage::new("image/jpeg", vec![9; 10])
             .into_iter()
             .collect(),
+        documents: Vec::new(),
     }
+}
+
+fn document(name: &str, text: &str) -> AttachedDocument {
+    AttachedDocument {
+        name: name.to_owned(),
+        text: text.to_owned(),
+    }
+}
+
+/// The meeting's attached documents go with the transcript, each named (#128).
+#[test]
+fn attached_documents_are_sent_after_the_transcript() {
+    let engine = ScriptedEngine::new(vec![answer("Summary")]);
+    let mut meeting = material(vec![line("Anna", 0, "We ship on Friday.")]);
+    meeting.documents = vec![document("plan.pdf", "Budget 2027: 40k for hiring.")];
+
+    summarize_meeting(
+        &engine,
+        &connection(32_000),
+        &PromptTemplate::default_summary(),
+        meeting,
+        now(),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    let user = engine.seen()[0].turns[0].text.clone();
+    let transcript_at = user.find("We ship on Friday.").unwrap_or(usize::MAX);
+    let document_at = user
+        .find("Attached file \"plan.pdf\":\nBudget 2027: 40k for hiring.")
+        .unwrap_or(0);
+    assert!(transcript_at < document_at, "{user}");
+}
+
+/// A document too long for the context is condensed in parts, as a long transcript is.
+#[test]
+fn a_long_attached_document_is_condensed_never_cut() {
+    let text = format!(
+        "FIRST {} LAST",
+        "Clause about the supplier contract and its renewal. ".repeat(600)
+    );
+    let replies: Vec<_> = (0..30)
+        .map(|part| answer(&format!("notes {part}")))
+        .collect();
+    let engine = ScriptedEngine::new(replies);
+    let mut meeting = material(vec![line("Anna", 0, "See the contract.")]);
+    meeting.documents = vec![document("contract.docx", &text)];
+
+    let outcome = summarize_meeting(
+        &engine,
+        &connection(4_096),
+        &PromptTemplate::default_summary(),
+        meeting,
+        now(),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+
+    let seen = engine.seen();
+    assert!(outcome.parts > 1);
+    let parts: String = seen[..outcome.parts]
+        .iter()
+        .map(|request| request.turns[0].text.clone())
+        .collect();
+    assert!(parts.contains("FIRST") && parts.contains("LAST"));
+    assert!(parts.contains("contract.docx"));
+}
+
+/// A meeting with only a document, no words or notes, can still be summarized.
+#[test]
+fn a_meeting_with_only_a_document_is_summarized() {
+    let engine = ScriptedEngine::new(vec![answer("Summary")]);
+    let mut meeting = material(Vec::new());
+    meeting.notes = None;
+    meeting.documents = vec![document("agenda.md", "1. Budget")];
+
+    let outcome = summarize_meeting(
+        &engine,
+        &connection(32_000),
+        &PromptTemplate::default_summary(),
+        meeting,
+        now(),
+    );
+
+    assert!(outcome.is_ok());
+    assert!(engine.seen()[0].turns[0].text.contains("1. Budget"));
 }
 
 fn line(speaker: &str, start_ms: u64, text: &str) -> SpokenLine {

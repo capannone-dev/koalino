@@ -11,13 +11,15 @@ use std::{collections::HashMap, path::Path};
 use chrono::{DateTime, Utc};
 
 use crate::{
+    adapters::documents::text_extraction::{extract_text, has_text},
     application::{
         combined_meetings::{MeetingListing, name_recording_devices, recording_devices_label},
         export_manager::{ExportManager, ExportWriter},
         meeting_crdt::MeetingCrdtService,
         meeting_handoff::{HandoffDelivery, HandoffPurpose, prepare_handoff},
         meeting_summary::{
-            SpokenLine, SummaryError, SummaryMaterial, SummaryOutcome, summarize_meeting,
+            AttachedDocument, SpokenLine, SummaryError, SummaryMaterial, SummaryOutcome,
+            summarize_meeting,
         },
         meeting_summary_document::{
             read_summary, read_summary_prompt, read_summary_request, with_summary,
@@ -30,7 +32,7 @@ use crate::{
             LlmConnection, LlmImage, MAX_LLM_IMAGE_BYTES, MAX_LLM_IMAGES, MeetingSummary,
             PromptTemplate, PromptTemplateError, PromptValues, SummaryRequest,
         },
-        models::{ExportFormat, ExportOptions, MeetingId},
+        models::{ExportAttachment, ExportFormat, ExportOptions, MeetingId},
     },
     ports::{
         ai::LlmEngine,
@@ -132,6 +134,7 @@ where
         })
         .take(MAX_LLM_IMAGES)
         .collect();
+    let documents = read_documents(repository, document.attachments());
     let device = match p2p {
         Some(status) => {
             let recordings = repository
@@ -165,6 +168,7 @@ where
             notes,
             lines,
             images,
+            documents,
         },
         meeting_prompt,
     })
@@ -341,6 +345,65 @@ pub(crate) fn read_image<Repository: AttachmentRepository + ?Sized>(
     let contents = repository.read_attachment_file(path, MAX_LLM_IMAGE_BYTES as u64)?;
     LlmImage::new(mime_type, contents.to_vec())
 }
+
+/// Reads the text of a meeting's files that have some (#128), oldest first.
+///
+/// Inputs: The repository and the meeting's attachments as exported. Outputs: Up to
+/// `MAX_LLM_DOCUMENTS` files' text; pictures, unreadable files and files over
+/// `MAX_LLM_DOCUMENT_BYTES` are left out. Side effects: Reads and decrypts the files.
+pub(crate) fn read_documents<Repository: AttachmentRepository + ?Sized>(
+    repository: &Repository,
+    attachments: &[ExportAttachment],
+) -> Vec<AttachedDocument> {
+    let mut readable: Vec<_> = attachments
+        .iter()
+        .filter(|attachment| !attachment.is_image())
+        .collect();
+    readable.sort_by_key(|attachment| attachment.original_timestamp());
+    readable
+        .into_iter()
+        .filter_map(|attachment| {
+            let stored_name = attachment.display_name();
+            let name = stored_name
+                .strip_prefix(&format!("{}-", attachment.attachment_id()))
+                .unwrap_or(stored_name);
+            read_document(
+                repository,
+                Path::new(attachment.file_path()),
+                attachment.mime_type(),
+                name,
+            )
+        })
+        .take(MAX_LLM_DOCUMENTS)
+        .collect()
+}
+
+/// Reads one stored file's text, when its kind has some (#128).
+///
+/// Inputs: The repository, the stored path, the MIME type and the shown name (for the
+/// extension). Outputs: The named text, or `None` for a picture, an unreadable or empty file, or
+/// one over `MAX_LLM_DOCUMENT_BYTES`. Side effects: Reads and decrypts the file.
+pub(crate) fn read_document<Repository: AttachmentRepository + ?Sized>(
+    repository: &Repository,
+    stored_path: &Path,
+    mime_type: &str,
+    name: &str,
+) -> Option<AttachedDocument> {
+    if !has_text(mime_type, name) {
+        return None;
+    }
+    let contents = repository.read_attachment_file(stored_path, MAX_LLM_DOCUMENT_BYTES)?;
+    let text = extract_text(mime_type, name, &contents)?;
+    Some(AttachedDocument {
+        name: name.to_owned(),
+        text,
+    })
+}
+
+/// Most files whose text goes with a summary or chat (#128).
+pub(crate) const MAX_LLM_DOCUMENTS: usize = 20;
+/// Largest file read for its text, in bytes.
+pub(crate) const MAX_LLM_DOCUMENT_BYTES: u64 = 50 * 1024 * 1024;
 
 /// Finds the name of the meeting's project.
 fn project_name<Repository>(

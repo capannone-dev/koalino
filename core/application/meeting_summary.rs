@@ -1,7 +1,8 @@
 //! Asks a language model for a meeting's summary (#95).
 //!
 //! The rendered template is the instructions; the owner's notes and the speaker-attributed
-//! transcript go in the user message, with the meeting's photos and slides attached. Nothing is
+//! transcript go in the user message, followed by the text of the meeting's attached files
+//! (#128), with the meeting's photos and slides attached. Nothing is
 //! cut to fit: when the transcript is longer than the connection's context, it is split into
 //! parts, the model takes notes on each part, and the summary is written from those notes (up to
 //! three rounds). A server that cannot read images is asked once more without them.
@@ -52,6 +53,17 @@ pub struct SummaryMaterial {
     pub lines: Vec<SpokenLine>,
     /// Photos and slides, already checked by `LlmImage::new`.
     pub images: Vec<LlmImage>,
+    /// The text of the meeting's attached files (#128), sent after the transcript.
+    pub documents: Vec<AttachedDocument>,
+}
+
+/// One attached file's text, as read by the document adapter (#128).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AttachedDocument {
+    /// The file's shown name.
+    pub name: String,
+    /// Its text.
+    pub text: String,
 }
 
 /// A summary and how it was obtained.
@@ -132,8 +144,8 @@ fn merged_lines(lines: &[SpokenLine]) -> Vec<String> {
 /// Asks the model for the meeting's summary.
 ///
 /// Inputs: The engine for `connection`, the template, the material, and the time to record.
-/// Outputs: The summary and how it was obtained; `NothingToSummarize` without transcript or
-/// notes; `TooLong` when even condensed notes do not fit; or the model's error.
+/// Outputs: The summary and how it was obtained; `NothingToSummarize` without transcript,
+/// notes or attached files; `TooLong` when even condensed notes do not fit; or the model's error.
 /// Side effects: Sends the meeting's text and images to the connection's server, one request
 /// per part plus one for the summary. Blocks: run it on a background thread.
 pub fn summarize_meeting(
@@ -149,6 +161,21 @@ pub fn summarize_meeting(
         .map(str::trim)
         .filter(|notes| !notes.is_empty());
     let mut pieces = merged_lines(&material.lines);
+    let has_transcript = !pieces.is_empty();
+    // Each attached file follows the transcript, named, so a long one is condensed like it.
+    pieces.extend(
+        material
+            .documents
+            .iter()
+            .filter(|document| !document.text.trim().is_empty())
+            .map(|document| {
+                format!(
+                    "\nAttached file \"{}\":\n{}",
+                    document.name,
+                    document.text.trim()
+                )
+            }),
+    );
     if pieces.is_empty() && notes.is_none() {
         return Err(SummaryError::NothingToSummarize);
     }
@@ -165,9 +192,13 @@ pub fn summarize_meeting(
         let fixed = instructions.len() + notes_section.len() + 120;
         if fixed + body.len() <= budget.text_characters(0) {
             let heading = if condensed {
-                format!("Notes taken on the transcript in {parts} parts, in order:\n\n")
-            } else {
+                format!(
+                    "Notes taken on the transcript and attached files in {parts} parts, in order:\n\n"
+                )
+            } else if has_transcript {
                 String::from("Transcript, with each speaker and the time from the start:\n")
+            } else {
+                String::from("The meeting's attached files:\n")
             };
             let user = format!("{notes_section}{heading}{body}");
             // An engine that cannot read images (Claude Code without tools, #105) gets none.
@@ -247,10 +278,10 @@ pub fn summarize_meeting(
 /// The instructions for taking notes on one part of a long transcript.
 fn part_instructions(title: &str, part: usize, total: usize) -> String {
     format!(
-        "You take notes on part {part} of {total} of the transcript of the meeting \"{title}\". \
-Write concise notes in the transcript's language: the topics, decisions, action items with \
-their owners and dates, figures and open questions. Keep names and numbers exactly as written. \
-Write only the notes."
+        "You take notes on part {part} of {total} of the transcript and attached files of the \
+meeting \"{title}\". Write concise notes in the material's language: the topics, decisions, \
+action items with their owners and dates, figures and open questions. Keep names and numbers \
+exactly as written. Write only the notes."
     )
 }
 
