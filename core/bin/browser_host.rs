@@ -23,7 +23,8 @@ use note_taker_core::adapters::{
         browser_host::{
             bridge_client::BridgeClientConfig,
             host_install::{
-                CHROMIUM_EXTENSION_ID, FIREFOX_EXTENSION_ID, install_linux, install_windows,
+                CHROMIUM_EXTENSION_ID, FIREFOX_EXTENSION_ID, bridge_secret_report, install_linux,
+                install_windows,
             },
             host_session::run_host_session,
         },
@@ -151,14 +152,10 @@ fn install() -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
-    match ensure_bridge_secret(&bridge_secret_keychain()) {
-        Ok(_secret) => println!(
-            "Bridge secret: in the keychain (note-taker / teams-bridge-secret); the daemon reads it too"
-        ),
-        Err(error) => println!(
-            "Bridge secret: not created ({error}); the daemon's bridge then accepts any local program"
-        ),
-    }
+    let keychain_error = ensure_bridge_secret(&bridge_secret_keychain())
+        .err()
+        .map(|error| error.to_string());
+    println!("{}", bridge_secret_report(keychain_error.as_deref()));
     println!("Firefox add-on ID: {FIREFOX_EXTENSION_ID}");
     println!("Chrome/Edge extension ID: {CHROMIUM_EXTENSION_ID}");
     ExitCode::SUCCESS

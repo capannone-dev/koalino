@@ -197,3 +197,21 @@ fn write_manifest(manifest_path: &Path, manifest: &serde_json::Value) -> Result<
     std::fs::write(manifest_path, text)
         .with_context(|| format!("unable to write {}", manifest_path.display()))
 }
+
+/// The line `browser-host install` prints about the bridge secret.
+///
+/// Inputs: `None` when the secret is in the keychain, or why it could not be created there.
+/// Outputs: One line for the owner. Without a secret it says what each receiver does (#125): the
+/// Koalino app creates the secret when it starts, or keeps its bridge off; only a daemon with no
+/// `NOTE_TAKER_TEAMS_BRIDGE_SECRET` accepts any local program. Side effects: None.
+pub fn bridge_secret_report(keychain_error: Option<&str>) -> String {
+    match keychain_error {
+        None => "Bridge secret: in the keychain (note-taker / teams-bridge-secret); the app and the daemon read it too".to_owned(),
+        Some(error) => format!(
+            "Bridge secret: not created ({error}). The Koalino app creates it when it starts, and \
+             keeps its bridge off if the keychain cannot hold one. A daemon needs \
+             NOTE_TAKER_TEAMS_BRIDGE_SECRET set for itself and for the browser; without it, its \
+             bridge accepts any local program."
+        ),
+    }
+}

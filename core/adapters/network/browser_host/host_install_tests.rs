@@ -3,8 +3,9 @@
 use std::path::{Path, PathBuf};
 
 use super::host_install::{
-    Browser, CHROMIUM_EXTENSION_ID, FIREFOX_EXTENSION_ID, HOST_NAME, host_manifest, install_linux,
-    linux_manifest_path, windows_registry_key, without_verbatim_prefix,
+    Browser, CHROMIUM_EXTENSION_ID, FIREFOX_EXTENSION_ID, HOST_NAME, bridge_secret_report,
+    host_manifest, install_linux, linux_manifest_path, windows_registry_key,
+    without_verbatim_prefix,
 };
 
 /// A unique temporary home directory, removed on drop.
@@ -136,4 +137,30 @@ fn ordinary_paths_are_kept_as_they_are() {
             PathBuf::from(path)
         );
     }
+}
+
+/// Verifies the install report names where the secret is kept when it could be created.
+#[test]
+fn the_report_names_the_keychain_entry_when_the_secret_is_kept() {
+    let report = bridge_secret_report(None);
+    assert!(report.contains("in the keychain"), "{report}");
+    assert!(report.contains("teams-bridge-secret"), "{report}");
+}
+
+/// Verifies the report tells the app and the daemon apart when the keychain refused (#125): the
+/// app keeps its bridge off (or creates the secret when it starts), while only a daemon without a
+/// configured secret accepts any local program.
+#[test]
+fn the_report_without_a_secret_says_what_the_app_and_the_daemon_do() {
+    let report = bridge_secret_report(Some("store locked"));
+    assert!(report.contains("not created (store locked)"), "{report}");
+    assert!(report.contains("Koalino app"), "{report}");
+    assert!(
+        report.contains("NOTE_TAKER_TEAMS_BRIDGE_SECRET"),
+        "{report}"
+    );
+    assert!(
+        !report.starts_with("Bridge secret: not created (store locked); the daemon's bridge then accepts any local program"),
+        "{report}"
+    );
 }
