@@ -18,6 +18,8 @@
 # Desktop builds also stage the read-only MCP server for the owner's AI assistant (#112):
 #   linux   -> ui/native/linux/note_taker_mcp (installed beside the app's executable)
 #   windows -> ui/native/windows/note_taker_mcp.exe (installed beside the runner)
+# and the browser extension's native host, browser-host, the same way (#125), so an owner who
+# installs only the app can run `browser-host install` from its folder.
 # The staging directories are gitignored. Usage: build-flutter-native.sh linux|android|windows ...
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
@@ -88,11 +90,13 @@ for platform in "$@"; do
       unset GGML_NATIVE GGML_AVX GGML_AVX2 GGML_FMA GGML_F16C
       check_debian_13_compatible "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/libnote_taker_core.so"
       # The read-only MCP server for the owner's AI assistant (#112) needs no AI features.
-      cargo build --release --bin note_taker_mcp --target "$DEBIAN_TARGET"
-      check_debian_13_compatible "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/note_taker_mcp"
+      cargo build --release --bin note_taker_mcp --bin browser-host --target "$DEBIAN_TARGET"
+      check_debian_13_compatible "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/note_taker_mcp" \
+        "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/browser-host"
       mkdir -p ui/native/linux
       cp "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/libnote_taker_core.so" ui/native/linux/
       cp "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/note_taker_mcp" ui/native/linux/
+      cp "$CARGO_TARGET_DIR/$DEBIAN_TARGET/release/browser-host" ui/native/linux/
       stage_model ui/native/models
       stage_diarization_models ui/native/models
       ;;
@@ -122,10 +126,11 @@ for platform in "$@"; do
         --target x86_64-pc-windows-gnu
       RUSTFLAGS="-L native=$VULKAN_SDK/lib" \
         cargo zigbuild --release --features local-ai,microphone,computer-sound,vad,diarization,whisper-rs/vulkan --lib --target x86_64-pc-windows-gnu
-      cargo zigbuild --release --bin note_taker_mcp --target x86_64-pc-windows-gnu
+      cargo zigbuild --release --bin note_taker_mcp --bin browser-host --target x86_64-pc-windows-gnu
       mkdir -p ui/native/windows
       cp "$CARGO_TARGET_DIR/x86_64-pc-windows-gnu/release/note_taker_core.dll" ui/native/windows/
       cp "$CARGO_TARGET_DIR/x86_64-pc-windows-gnu/release/note_taker_mcp.exe" ui/native/windows/
+      cp "$CARGO_TARGET_DIR/x86_64-pc-windows-gnu/release/browser-host.exe" ui/native/windows/
       stage_model ui/native/models
       stage_diarization_models ui/native/models
       stage_onnx_runtime

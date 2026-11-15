@@ -127,6 +127,17 @@ else()
   message(STATUS "MCP server not staged; run tools/cross/build-flutter-native.sh linux")
 endif()
 
+# Install the browser extension's native host (#102, #125), staged the same way, so the owner can
+# run `browser-host install` from the app's folder. Optional: without it the extension needs the
+# host from the server package or a source build.
+set(NOTE_TAKER_BROWSER_HOST "${CMAKE_CURRENT_SOURCE_DIR}/../native/linux/browser-host")
+if(EXISTS "${NOTE_TAKER_BROWSER_HOST}")
+  install(PROGRAMS "${NOTE_TAKER_BROWSER_HOST}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+else()
+  message(STATUS "browser-host not staged; run tools/cross/build-flutter-native.sh linux")
+endif()
+
 # Bundle the Whisper model staged by tools/cross/build-flutter-native.sh into data/models, where
 # the app finds it beside the executable, so a fresh install transcribes offline (Issue #45).
 # Without it the app runs but recordings report that no transcription engine is configured.

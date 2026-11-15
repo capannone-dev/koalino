@@ -3563,3 +3563,32 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   matching `lang` and `dir`; the Arabic layout is mirrored. Firefox reads the same `_locales`.
 - With this, the app, the dashboard and the extension all follow the system or browser language.
   The translations still need a native review.
+
+## 2026-11-15 — #125 Preview packages, and what they contain
+
+- **Packages** (v0.1.0-preview.1, a GitHub pre-release with SHA-256 sums):
+  - Linux and Windows desktop archives;
+  - an arm64 Android APK;
+  - a Debian 13 server archive;
+  - the Chromium extension as a zip.
+
+  Firefox waits for Mozilla's unlisted signing. Android is signed with the development key, as on
+  the owner's phone, so it updates their install in place; a release key will need a reinstall.
+- **The desktop apps carry `browser-host`**, staged and installed like `note_taker_mcp`. Since #123
+  the app receives browser meetings itself, but the helper that registers the extension with the
+  browser came only from a source build or the server package.
+- **The server package carries the web dashboard** as a Next.js standalone server
+  (`KOALINO_WEB_STANDALONE=1` at build time; development builds are unchanged), started by
+  `./dashboard`. It needs Node.js 20 or newer. Bundling Node itself would add about 100 MB, while
+  Debian ships it.
+- **The dashboard must be opened as `http://localhost:3000`.** The daemon's CORS allows that origin
+  only (`DASHBOARD_ORIGIN`). Opened as `127.0.0.1:3000`, the server-rendered pages worked, but the
+  browser-side calls failed (the chat showed "Can't reach the note-taking server"). The launcher
+  therefore fixes the port and says which address to open.
+- **Screenshots** use an excerpt of AMI meeting ES2004a (CC BY 4.0), credited in the README.
+- **Checked:**
+  - the Linux bundle on a clean deb-gui: it imported and showed the demo meeting, with four
+    voices;
+  - the server package's daemon and dashboard;
+  - the Windows bundle on win11: it started and was ready to record;
+  - `browser-host install` from the desktop folder.
