@@ -85,7 +85,7 @@ with their SHA-256 sums in `SHA256SUMS.txt`.
 | Android (64-bit ARM) | [`koalino-android-arm64-0.1.0.apk`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-android-arm64-0.1.0.apk) | The app with Whisper `base` and the diarization models |
 | Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.1.0.tar.gz`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-server-linux-x86_64-0.1.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
 | Chrome, Edge, Chromium | [`koalino-browser-extension-chromium-0.1.0.zip`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-browser-extension-chromium-0.1.0.zip) | The browser extension, to load unpacked |
-| Firefox | not yet | A signed add-on will follow; until then, load `browser-extension/dist/firefox` from a source build |
+| Firefox (140 or newer) | [`koalino-browser-extension-firefox-0.1.0.xpi`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-browser-extension-firefox-0.1.0.xpi) | The browser extension, signed by Mozilla (unlisted) |
 
 ## Install
 
@@ -138,7 +138,8 @@ service and the other settings, see [`server/README.md`](server/README.md) and
    `bin/`).
 2. Keep the Koalino app open, or on a server run the daemon with
    `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
-3. Chrome, Edge or Chromium: unzip the extension, open `chrome://extensions` (`edge://extensions`),
+3. Firefox: open the `.xpi` in Firefox (drag it onto a window, or File → Open) and press **Add**.
+   Chrome, Edge or Chromium: unzip the extension, open `chrome://extensions` (`edge://extensions`),
    turn on **Developer mode**, choose **Load unpacked** and pick the unzipped folder.
 4. Open the extension's popup: it says whether Koalino is reachable, and asks for access to Teams
    if the browser has not granted it.

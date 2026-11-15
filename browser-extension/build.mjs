@@ -57,7 +57,15 @@ const manifests = {
   firefox: {
     ...baseManifest,
     background: { scripts: ["background.js"] },
-    browser_specific_settings: { gecko: { id: FIREFOX_ADDON_ID, strict_min_version: "128.0" } },
+    browser_specific_settings: {
+      gecko: {
+        id: FIREFOX_ADDON_ID,
+        strict_min_version: "140.0",
+        // AMO's declaration of data sent to the developer or third parties: none. Meetings go only
+        // to the Koalino app on this computer, through the native host (#123).
+        data_collection_permissions: { required: ["none"] },
+      },
+    },
   },
   chromium: {
     ...baseManifest,
@@ -96,7 +104,7 @@ for (const [browser, manifest] of Object.entries(manifests)) {
     },
     bundle: true,
     format: "iife",
-    target: browser === "firefox" ? "firefox128" : "chrome111",
+    target: browser === "firefox" ? "firefox140" : "chrome111",
     outdir,
     logLevel: "warning",
   });

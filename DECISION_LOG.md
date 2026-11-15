@@ -3621,3 +3621,18 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - This is two errors in one room, so it is a guard, not a tuning.
 - **Still unmeasured:** voices recorded in different rooms or on different devices from their
   enrollment.
+
+## 2026-11-15 — #123 The Firefox add-on is signed by Mozilla, unlisted
+
+- **Signing:** `browser-extension/sign-firefox.sh` signs `dist/firefox` on addons.mozilla.org on
+  the unlisted channel, using `web-ext` (MPL-2.0, a development dependency only). Release Firefox
+  then installs it permanently, and it stays out of the public catalogue. The owner's API key
+  stays in `~/.config/koalino/amo.env`, reaches `web-ext` only through its environment variables,
+  and is never printed. The script trims spaces and quotes around the values: the first try
+  failed with "Error decoding signature" because the pasted secret carried spaces.
+- **Manifest:** AMO now asks every add-on to declare the data it sends to its developer or to
+  third parties. Ours declares `none`, because meetings go only to the Koalino app on the same
+  computer. That key needs Firefox 140, so the minimum moved from 128 to 140; current ESR is
+  past it.
+- **Archives:** an `.xpi` must list its files without a leading `./`, or Firefox reports that it
+  has no valid manifest. `web-ext` builds it correctly.

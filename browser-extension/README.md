@@ -68,6 +68,7 @@ start the daemon with `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
 | `src/locales/` | The extension's text in ten languages (#124); the build turns it into each browser's `_locales`. |
 | `static/` | `popup.html` and icons. |
 | `tests/` | Vitest specs (jsdom). |
+| `sign-firefox.sh` | Signs `dist/firefox` as an unlisted add-on on addons.mozilla.org into `dist/signed`, with the owner's API key from `~/.config/koalino/amo.env` (passed through web-ext's environment variables, never printed). Each signing needs a new `version` in `build.mjs`. |
 | `build.mjs` | Builds `dist/firefox` and `dist/chromium`, with each browser's manifest and `_locales`. |
 
 ## Build, test, install
@@ -89,9 +90,9 @@ node build.mjs        # dist/firefox and dist/chromium
 3. Load the extension:
    - Chrome or Edge: Extensions → Developer mode → Load unpacked → `dist/chromium`. The ID must
      be `dgmaacilnokmfecfdcajdjadeboemnpd`.
-   - Firefox: `about:debugging` → This Firefox → Load Temporary Add-on → `dist/firefox/manifest.json`.
-     Unsigned add-ons stay installed only in ESR, Developer Edition or Nightly with
-     `xpinstall.signatures.required` set to false.
+   - Firefox (140 or newer): open the signed `.xpi` from the release (or from `dist/signed`) in
+     Firefox and press **Add**. For development, `about:debugging` → This Firefox → Load Temporary
+     Add-on → `dist/firefox/manifest.json` loads the unsigned build until Firefox restarts.
 4. Firefox does not grant a hand-loaded extension its site access. The extension then opens its
    popup in a tab: press **Allow on Teams** and accept, then reload any open Teams tab. The popup
    shows the same button later if the access is removed.
