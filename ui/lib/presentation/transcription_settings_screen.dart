@@ -66,6 +66,50 @@ Map<String, String> get _familyHints => <String, String>{
       'large-v3-turbo': l10n.veryAccurateBestWithAGraphics,
     };
 
+/// The "More models" section's header, which opens the variants (#75).
+const Key moreModelsKey = ValueKey<String>('more-models');
+
+/// The sizes listed at once, by their standard multilingual model (#75). The other large models
+/// are older or need far more memory than `large-v3-turbo` for little gain.
+const Set<String> _mainFamilies = <String>{
+  'tiny',
+  'base',
+  'small',
+  'medium',
+  'large-v3-turbo',
+};
+
+/// The catalog split for display: rows shown at once, and rows under "More models".
+typedef ModelRows = ({
+  List<WhisperModelInfo> main,
+  List<WhisperModelInfo> more
+});
+
+/// Splits the catalog so the list shows one row per size, not every variant (#75).
+///
+/// Inputs: The catalog in its order, and `pinned` file names that must stay visible (the chosen
+/// model, Automatic's, a suggestion or proposal).
+/// Outputs: `main` holds each main size's standard multilingual model unless it may not fit in
+/// memory, plus every model on the device or pinned; `more` holds the rest (quantized,
+/// English-only, older or too large), both in catalog order.
+/// Side effects: None.
+ModelRows splitModelRows(List<WhisperModelInfo> models,
+    {required Set<String> pinned}) {
+  final List<WhisperModelInfo> main = <WhisperModelInfo>[];
+  final List<WhisperModelInfo> more = <WhisperModelInfo>[];
+  for (final WhisperModelInfo model in models) {
+    final bool standard = _mainFamilies.contains(model.family) &&
+        model.name == model.family &&
+        !model.tooLargeForMemory;
+    if (standard || model.onDevice || pinned.contains(model.fileName)) {
+      main.add(model);
+    } else {
+      more.add(model);
+    }
+  }
+  return (main: main, more: more);
+}
+
 /// Formats a size in plain units.
 String formatModelSize(int bytes) => bytes >= 1000000000
     ? '${(bytes / 1000000000).toStringAsFixed(1)} GB'
@@ -143,11 +187,12 @@ final class _TranscriptionSettingsScreenState
                     padding: const EdgeInsets.all(16),
                     child: Text(message),
                   ),
-                ..._modelTiles(context, settings),
+                // On a phone with an AI chip, the NPU is the main choice (#75).
                 if (settings.npu.supported) ...<Widget>[
-                  const Divider(),
                   ..._npuTiles(settings.npu),
+                  const Divider(),
                 ],
+                ..._modelTiles(context, settings),
                 const Divider(),
                 // Keyed, so the message row above appearing keeps its text and state.
                 _GlossarySection(
@@ -334,7 +379,7 @@ final class _TranscriptionSettingsScreenState
         ),
       );
 
-  /// The models, grouped by size in catalog order.
+  /// The models: one row per size, with the variants under "More models" (#75).
   List<Widget> _modelTiles(
       BuildContext context, TranscriptionSettings settings) {
     final List<Widget> tiles = <Widget>[
@@ -351,14 +396,43 @@ final class _TranscriptionSettingsScreenState
         ..._suggestionTiles(settings),
       ..._efficientTiles(settings),
     ];
+    final ModelRows rows = splitModelRows(settings.models, pinned: <String>{
+      if (settings.selectedModel case final String selected) selected,
+      if (settings.automatic.fileName case final String automatic) automatic,
+      if (settings.automatic.waitingForDownload case final String waiting)
+        waiting,
+      if (settings.suggestion?.fileName case final String suggested) suggested,
+      if (settings.proposal?.fileName case final String proposed) proposed,
+    });
+    for (final WhisperModelInfo model in rows.main) {
+      tiles.add(_modelTile(settings, model, withHint: true));
+    }
+    if (rows.more.isNotEmpty) {
+      tiles.add(ExpansionTile(
+        key: moreModelsKey,
+        title: Text(l10n.moreModels(rows.more.length)),
+        subtitle: Text(l10n.moreModelsHint),
+        children: _groupedModelTiles(context, settings, rows.more),
+      ));
+    }
+    return tiles;
+  }
+
+  /// The rows under "More models", with a header per size.
+  List<Widget> _groupedModelTiles(BuildContext context,
+      TranscriptionSettings settings, List<WhisperModelInfo> models) {
+    final List<Widget> tiles = <Widget>[];
     String? family;
-    for (final WhisperModelInfo model in settings.models) {
+    for (final WhisperModelInfo model in models) {
       if (model.family != family) {
         family = model.family;
         tiles.add(Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: Text('${model.family}: ${_familyHints[model.family] ?? ''}',
-              style: Theme.of(context).textTheme.labelLarge),
+          child: Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text('${model.family}: ${_familyHints[model.family] ?? ''}',
+                style: Theme.of(context).textTheme.labelLarge),
+          ),
         ));
       }
       tiles.add(_modelTile(settings, model));
@@ -544,8 +618,9 @@ final class _TranscriptionSettingsScreenState
     ];
   }
 
-  /// One model's row.
-  Widget _modelTile(TranscriptionSettings settings, WhisperModelInfo model) {
+  /// One model's row; `withHint` starts its notes with what its size is good for.
+  Widget _modelTile(TranscriptionSettings settings, WhisperModelInfo model,
+      {bool withHint = false}) {
     final TranscriptionSettingsController controller = widget.controller;
     final WhisperDownload download = settings.download;
     final bool downloadingThis =
@@ -555,6 +630,8 @@ final class _TranscriptionSettingsScreenState
         widget.languageCode != 'en' &&
         widget.languageCode != 'auto';
     final List<String> notes = <String>[
+      if (withHint && model.name == model.family)
+        if (_familyHints[model.family] case final String hint) hint,
       formatModelSize(model.sizeBytes),
       if (model.onDevice) l10n.onThisDevice,
       if (settings.automatic.enabled &&

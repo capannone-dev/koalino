@@ -2669,4 +2669,13 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String moreModels(int count) {
+    return 'نماذج أخرى ($count)';
+  }
+
+  @override
+  String get moreModelsHint =>
+      'إصدارات أخف تخطئ أكثر قليلاً، وإصدارات للإنجليزية فقط، ونماذج قد لا يتسع لها هذا الجهاز.';
 }

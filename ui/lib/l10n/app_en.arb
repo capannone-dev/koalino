@@ -2159,5 +2159,14 @@
         "type": "int"
       }
     }
-  }
+  },
+  "moreModels": "More models ({count})",
+  "@moreModels": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "moreModelsHint": "Smaller versions that make a few more mistakes, English-only versions, and models that may not fit this device."
 }

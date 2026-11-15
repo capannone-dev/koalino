@@ -2463,4 +2463,12 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String moreModels(int count) {
+    return '更多模型（$count）';
+  }
+
+  @override
+  String get moreModelsHint => '更小但错误稍多的版本、仅支持英语的版本，以及可能超出此设备承受能力的模型。';
 }

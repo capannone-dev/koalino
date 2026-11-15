@@ -2519,4 +2519,12 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String moreModels(int count) {
+    return 'その他のモデル（$count）';
+  }
+
+  @override
+  String get moreModelsHint => '少し誤りが増える軽量版、英語専用版、このデバイスでは大きすぎる可能性のあるモデルです。';
 }

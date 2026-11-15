@@ -2656,4 +2656,13 @@ class AppLocalizationsIt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String moreModels(int count) {
+    return 'Altri modelli ($count)';
+  }
+
+  @override
+  String get moreModelsHint =>
+      'Versioni più leggere che sbagliano un po\' di più, versioni solo in inglese e modelli che potrebbero non entrare in questo dispositivo.';
 }

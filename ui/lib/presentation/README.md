@@ -82,7 +82,11 @@ readers), so an active recording and every screen keep their state. It forwards 
 hidden and shown to `AppLockController`.
 
 `transcription_settings_screen.dart` lists the Whisper models by size, with no cloud provider
-or key field (#67, #117). The first row, "Automatic" (the default, #106), names the model it runs here and why,
+or key field (#67, #117). On a phone with an AI chip, the NPU switch comes first (#75). The list
+shows one row per size (tiny, base, small, medium, large-v3-turbo, the standard multilingual
+model unless it may not fit in memory), plus every model on the device or chosen, suggested or
+proposed; `splitModelRows` puts the quantized, English-only, older and too-large variants under a
+collapsed "More models (N)" (#75). The first row, "Automatic" (the default, #106), names the model it runs here and why,
 with a Download button while the suggested model isn't on the device; picking a model by hand leaves it, and
 the efficient mode switch shows only then. Its Glossary section takes one name or term per line; the message under Save says
 it applies from the next recording, and refused text stays in the field to correct. Below it,

@@ -689,5 +689,7 @@
   "appLanguage": "Langue de l'app",
   "appLanguageDescription": "La langue des menus et des messages de Koalino.",
   "systemLanguage": "Langue du système",
-  "photosAddedCount": "{count, plural, =1{1 photo ajoutée} other{{count} photos ajoutées}}"
+  "photosAddedCount": "{count, plural, =1{1 photo ajoutée} other{{count} photos ajoutées}}",
+  "moreModels": "Autres modèles ({count})",
+  "moreModelsHint": "Versions plus légères qui font un peu plus d'erreurs, versions en anglais uniquement, et modèles qui risquent de ne pas tenir sur cet appareil."
 }

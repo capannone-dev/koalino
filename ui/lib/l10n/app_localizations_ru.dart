@@ -2660,4 +2660,13 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String moreModels(int count) {
+    return 'Другие модели ($count)';
+  }
+
+  @override
+  String get moreModelsHint =>
+      'Облегчённые версии, которые ошибаются чуть чаще, версии только для английского и модели, которые могут не поместиться на этом устройстве.';
 }

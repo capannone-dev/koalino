@@ -689,5 +689,7 @@
   "appLanguage": "لغة التطبيق",
   "appLanguageDescription": "لغة قوائم Koalino ورسائله.",
   "systemLanguage": "لغة النظام",
-  "photosAddedCount": "{count, plural, =0{لم تُضف صور} =1{أُضيفت صورة واحدة} =2{أُضيفت صورتان} few{أُضيفت {count} صور} many{أُضيفت {count} صورة} other{أُضيفت {count} صورة}}"
+  "photosAddedCount": "{count, plural, =0{لم تُضف صور} =1{أُضيفت صورة واحدة} =2{أُضيفت صورتان} few{أُضيفت {count} صور} many{أُضيفت {count} صورة} other{أُضيفت {count} صورة}}",
+  "moreModels": "نماذج أخرى ({count})",
+  "moreModelsHint": "إصدارات أخف تخطئ أكثر قليلاً، وإصدارات للإنجليزية فقط، ونماذج قد لا يتسع لها هذا الجهاز."
 }

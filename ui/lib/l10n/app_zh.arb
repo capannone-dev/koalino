@@ -689,5 +689,7 @@
   "appLanguage": "应用语言",
   "appLanguageDescription": "Koalino 菜单和消息的语言。",
   "systemLanguage": "跟随系统",
-  "photosAddedCount": "{count, plural, =1{已添加 1 张照片} other{已添加 {count} 张照片}}"
+  "photosAddedCount": "{count, plural, =1{已添加 1 张照片} other{已添加 {count} 张照片}}",
+  "moreModels": "更多模型（{count}）",
+  "moreModelsHint": "更小但错误稍多的版本、仅支持英语的版本，以及可能超出此设备承受能力的模型。"
 }

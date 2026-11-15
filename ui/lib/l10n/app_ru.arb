@@ -689,5 +689,7 @@
   "appLanguage": "Язык приложения",
   "appLanguageDescription": "Язык меню и сообщений Koalino.",
   "systemLanguage": "Как в системе",
-  "photosAddedCount": "{count, plural, one{Добавлено {count} фото} few{Добавлено {count} фото} many{Добавлено {count} фото} other{Добавлено {count} фото}}"
+  "photosAddedCount": "{count, plural, one{Добавлено {count} фото} few{Добавлено {count} фото} many{Добавлено {count} фото} other{Добавлено {count} фото}}",
+  "moreModels": "Другие модели ({count})",
+  "moreModelsHint": "Облегчённые версии, которые ошибаются чуть чаще, версии только для английского и модели, которые могут не поместиться на этом устройстве."
 }

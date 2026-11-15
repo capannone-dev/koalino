@@ -4257,6 +4257,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 photo added} other{{count} photos added}}'**
   String photosAddedCount(int count);
+
+  /// No description provided for @moreModels.
+  ///
+  /// In en, this message translates to:
+  /// **'More models ({count})'**
+  String moreModels(int count);
+
+  /// No description provided for @moreModelsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Smaller versions that make a few more mistakes, English-only versions, and models that may not fit this device.'**
+  String get moreModelsHint;
 }
 
 class _AppLocalizationsDelegate

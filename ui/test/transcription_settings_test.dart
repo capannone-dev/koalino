@@ -281,7 +281,71 @@ Future<TranscriptionSettingsController> _pump(
   return controller;
 }
 
+/// A catalog row for the list-splitting tests.
+WhisperModelInfo _row(String name,
+        {bool onDevice = false, bool tooLarge = false}) =>
+    WhisperModelInfo(
+      fileName: 'ggml-$name.bin',
+      name: name,
+      family: name.split('-q').first.replaceAll('.en', ''),
+      sizeBytes: 1000,
+      englishOnly: name.contains('.en'),
+      onDevice: onDevice,
+      removable: onDevice,
+      tooLargeForMemory: tooLarge,
+    );
+
 void main() {
+  test('one row per size is shown; variants wait under More models (#75)', () {
+    final List<WhisperModelInfo> catalog = <WhisperModelInfo>[
+      _row('tiny', onDevice: true),
+      _row('tiny-q5_1'),
+      _row('tiny.en'),
+      _row('base', onDevice: true),
+      _row('base-q8_0', onDevice: true),
+      _row('small'),
+      _row('small.en-q5_1'),
+      _row('medium', tooLarge: true),
+      _row('large-v2'),
+      _row('large-v3'),
+      _row('large-v3-turbo', tooLarge: true),
+      _row('large-v3-turbo-q5_0'),
+    ];
+
+    final ModelRows rows =
+        splitModelRows(catalog, pinned: <String>{'ggml-small.en-q5_1.bin'});
+
+    expect(rows.main.map((WhisperModelInfo row) => row.name), <String>[
+      'tiny',
+      'base',
+      'base-q8_0',
+      'small',
+      'small.en-q5_1',
+    ]);
+    expect(rows.more.map((WhisperModelInfo row) => row.name), <String>[
+      'tiny-q5_1',
+      'tiny.en',
+      'medium',
+      'large-v2',
+      'large-v3',
+      'large-v3-turbo',
+      'large-v3-turbo-q5_0',
+    ]);
+  });
+
+  testWidgets('More models opens the variants and says how many there are',
+      (WidgetTester tester) async {
+    final _FakeBridge bridge = _FakeBridge();
+    await _pump(tester, bridge);
+    expect(find.byTooltip('Download small.en'), findsNothing);
+    await tester.scrollUntilVisible(find.byKey(moreModelsKey), 100,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('More models (1)'), findsOneWidget);
+    await tester.tap(find.byKey(moreModelsKey));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Download small.en'), findsOneWidget);
+  });
+
   testWidgets('a suggestion on the device is applied with efficient mode',
       (WidgetTester tester) async {
     final _FakeBridge bridge = _FakeBridge()
@@ -448,6 +512,10 @@ void main() {
       (WidgetTester tester) async {
     final _FakeBridge bridge = _FakeBridge();
     await _pump(tester, bridge);
+    await tester.scrollUntilVisible(find.byKey(moreModelsKey), 100,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(moreModelsKey));
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byTooltip('Download small.en'), 100,
         scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('doesn\'t match your language'), findsOneWidget);
@@ -845,6 +913,8 @@ void main() {
     await tester.tap(find.byKey(npuRemoveKey));
     await tester.pumpAndSettle();
     expect(downloader.calls, contains('remove /data/npu'));
+    await tester.scrollUntilVisible(find.byKey(npuDownloadKey), -200,
+        scrollable: find.byType(Scrollable).first);
     expect(find.byKey(npuDownloadKey), findsOneWidget);
   });
 }

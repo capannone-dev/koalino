@@ -2615,4 +2615,13 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String moreModels(int count) {
+    return 'More models ($count)';
+  }
+
+  @override
+  String get moreModelsHint =>
+      'Smaller versions that make a few more mistakes, English-only versions, and models that may not fit this device.';
 }
