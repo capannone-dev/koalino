@@ -3791,3 +3791,16 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   notification (`CallOffer.kt`) and Kotlin's call detection for it are removed, and its old
   "Calls" notification channel is deleted at start-up. A recording the owner starts during a call
   still says that Android is giving it silence. The core's generic host-users poll stays.
+
+## 2026-11-15 — #87 The transcript before and after the pass, at the trace log level
+
+- **Owner's request:** in the most verbose log mode, record the meeting's transcript before and
+  after the second pass, so it can be evaluated.
+- **Decision:** at `trace` (Settings → log level), `refinement_worker` logs two events per pass,
+  `stage` `before` and `after`, each with the whole transcript as `[hh:mm:ss] speaker: text`
+  lines (`application::pass_comparison`). The speaker is a short voice or cluster ID, not a name.
+  This is done for the pass over one recording and for the combined pass (#88). At every other
+  level nothing is read or logged.
+- **Privacy:** this is the one place where logs hold meeting words, by the owner's choice. A
+  `trace` log stays on the device and leaves only when the owner exports it. Evaluations report
+  aggregates (word changes, error rates), never the text.

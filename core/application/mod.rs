@@ -133,6 +133,10 @@ mod paired_chat_relay_tests;
 pub mod pairing_manager;
 #[cfg(test)]
 mod pairing_manager_tests;
+/// Logs the transcript before and after the after-meeting pass at `trace` (#87).
+pub mod pass_comparison;
+#[cfg(test)]
+mod pass_comparison_tests;
 /// Connects transcription, diarization, and voice identity into speaker-attributed segments.
 pub mod pipeline;
 /// Encodes the sealed `NTP1` messages that copy the project list to paired devices (Issue #85).

@@ -20,7 +20,9 @@
 //! confirmed transfer, when unreadable, when its meeting is gone, after three failed attempts, or
 //! when it has waited three weeks to be combined, or when the owner edited the meeting's
 //! transcript (#96), which no pass replaces. `RetainedSpeechInbox`
-//! stores speech paired devices send for combining. Logs carry meeting ids and counts only.
+//! stores speech paired devices send for combining. Logs carry meeting ids and counts only,
+//! except at `trace`, where the transcript before and after each pass is logged for comparison
+//! (#87, `application::pass_comparison`).
 
 use std::{
     collections::{HashMap, HashSet},
@@ -33,6 +35,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use crate::application::pass_comparison::{PassStage, log_pass_transcript};
 use crate::application::{
     glossary_transcription::GlossaryTranscription, pipeline::pipeline_factory::GlossarySource,
 };
@@ -654,6 +657,9 @@ impl RefinementWorker {
         };
         let member_recordings: Vec<CombinedRecording<'_>> = recordings.collect();
         let control = Arc::clone(&self.control);
+        log_pass_transcript(root, PassStage::Before, || {
+            repository.load_transcript_segments(root)
+        });
         let outcome = refine_combined_meeting(
             &root_recording,
             &member_recordings,
@@ -678,6 +684,9 @@ impl RefinementWorker {
             false,
         );
         if combined {
+            log_pass_transcript(root, PassStage::After, || {
+                repository.load_transcript_segments(root)
+            });
             let members: Vec<MeetingId> =
                 members.iter().map(|(member, _)| member.clone()).collect();
             if let Err(error) = repository.mark_combined(root, &members) {
@@ -772,6 +781,9 @@ impl RefinementWorker {
             audio_source.insert(recording_id, samples);
         };
         let cancelled = || !control.may_run();
+        log_pass_transcript(meeting_id, PassStage::Before, || {
+            repository.load_transcript_segments(meeting_id)
+        });
         let outcome = refine_meeting(
             meeting_id,
             &borrowed,
@@ -783,13 +795,19 @@ impl RefinementWorker {
         );
         drop(borrowed);
         drop(chunks);
-        self.settle(
+        let replaced = self.settle(
             meeting_id,
             std::slice::from_ref(meeting_id),
             outcome,
             "Meeting transcript re-transcribed after the meeting",
             keep,
-        )
+        );
+        if replaced {
+            log_pass_transcript(meeting_id, PassStage::After, || {
+                repository.load_transcript_segments(meeting_id)
+            });
+        }
+        replaced
     }
 
     /// Deletes a meeting's retained audio and forgets its attempts.

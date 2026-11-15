@@ -538,6 +538,10 @@ which keep their speaker, timing and overlap mark and lose their uncertain-word 
 edit sets the document's `transcript_edited` flag; `refinement_worker.rs` reads it and no longer
 re-transcribes that meeting.
 
+`pass_comparison.rs` (#87) logs a meeting's transcript before and after the after-meeting pass,
+as `[hh:mm:ss] speaker: text` lines, at the `trace` log level only, so the owner can evaluate
+the pass. At other levels nothing is read or logged.
+
 `meeting_handoff.rs` (#114) hands a meeting to the owner's own AI app (Claude, ChatGPT), whose
 login Koalino never holds. `prepare_handoff` builds the message (the summary prompt, or an
 introduction for a chat) and the meeting as a Markdown file. Photos and files go beside it as
