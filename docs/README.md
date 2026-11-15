@@ -8,3 +8,4 @@ Texts meant for people using Koalino rather than for developers. Design records 
 | File | Purpose |
 | --- | --- |
 | `meeting-consent-notice.md` | A notice to paste in an online meeting's chat, in English and Italian, telling participants the meeting is recorded and transcribed on the owner's devices |
+| `screenshots/` | The pictures in the main README; see its README |

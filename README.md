@@ -9,11 +9,143 @@ store. Voice embeddings, transcripts and meeting documents are encrypted at rest
 (ports and adapters), so you can swap the AI, network, storage, and export implementations
 without touching domain logic.
 
-> **Status: pre-1.0.** Recording, transcription, the meetings workflow, export, telemetry, and
-> structured logging work today, as do P2P sync between devices (#43), microphone capture (#45),
-> and on-device speaker diarization (#44), which is opt-in: a `diarization` build with exported
-> models. The apps do not ship those models yet. See
-> [AUDIT_V1.md](AUDIT_V1.md) for the full compliance matrix and readiness assessment.
+> **Status: preview (0.1.0).** Everything below works today on Linux, Windows and Android, and
+> the packages are preview builds: names, IDs and signing keys may still change before the first
+> release. See [AUDIT_V1.md](AUDIT_V1.md) for the compliance matrix and readiness assessment.
+
+## Features
+
+**Recording and transcription, on your devices**
+- Transcribes with Whisper ([whisper.cpp](https://github.com/ggml-org/whisper.cpp)) on the device,
+  offline: on the desktop GPU (Vulkan), and on a phone's CPU, GPU or NPU. Whisper `base` ships
+  with the app; *Automatic* chooses the model this device keeps up with.
+- Detects the language as people speak, or uses the one you choose; a glossary teaches it names
+  and project terms.
+- After the meeting, a second pass re-transcribes it in longer windows for a cleaner text.
+- On a computer, records the call's sound as a second track beside the microphone, and offers to
+  record when a call starts.
+- Marks words it is unsure of and passages where people spoke over each other.
+
+**Who said what**
+- On-device speaker diarization: voices are told apart as "Speaker 1", "Speaker 2"…
+- Name a voice once in the voice gallery, and Koalino recognises it in later meetings.
+- Takes speaker names from the call window or the Teams captions when it can.
+
+**Notes**
+- Meetings, notes and summaries, which you can edit, including the transcript.
+- Projects that gather meetings, notes, files and e-mails; search across everything.
+- Export to Markdown, PDF and JSON; an optional notes folder mirrors everything as plain files you
+  can edit with any editor.
+
+**AI, only if you want it**
+- Meeting summaries and chat with your notes, with answers that link to the moment they cite,
+  through a language model you choose: a local server (Ollama, llama.cpp, LM Studio…) or, on a
+  computer, your own Claude Code or Codex sign-in. A phone can ask a paired computer to do it.
+- A read-only MCP server lets your own AI assistant read your notes.
+
+**Your devices, no cloud**
+- Peer-to-peer sync between your devices (libp2p, end-to-end encrypted), paired with a QR code;
+  everything works offline and syncs later.
+- One meeting recorded on several devices is combined into one.
+- Notes, transcripts, voice signatures and files are encrypted at rest (AES-256-GCM, key in the
+  system keychain). Recorded speech is deleted once it is no longer needed.
+
+**Online meetings**
+- A browser extension for Firefox, Chrome and Edge records Teams meetings joined in the browser:
+  sound, live captions, shared slides and, after the meeting, the Teams transcript.
+- A Teams bot does the same for meetings it is invited to.
+
+**In ten languages**: English, Italian, Spanish, French, German, Portuguese, Chinese (Simplified),
+Japanese, Russian and Arabic, following the system language.
+
+## Screenshots
+
+| | |
+| --- | --- |
+| ![A meeting's transcript in the Linux app, with speakers, times and uncertain words in grey](docs/screenshots/desktop-meeting.png) | ![The voice gallery with the four voices found in the meeting](docs/screenshots/desktop-voices.png) |
+| *A meeting in the Linux app: speakers, times, and uncertain words in grey.* | *The voice gallery: name a voice once.* |
+| ![The web dashboard showing the same meeting](docs/screenshots/web-meeting.png) | ![The Windows app, ready to record](docs/screenshots/windows-record.png) |
+| *The web dashboard of the server package.* | *The Windows app.* |
+| ![Settings with the app language menu open](docs/screenshots/desktop-languages.png) | ![The browser extension's popup](docs/screenshots/extension-popup.png) |
+| *The app in ten languages.* | *The browser extension.* |
+
+The meeting shown is an excerpt of meeting ES2004a from the
+[AMI Meeting Corpus](https://groups.inf.ed.ac.uk/ami/corpus/) (CC BY 4.0), transcribed by Koalino.
+
+## Download
+
+Preview packages for 0.1.0 are on the
+[v0.1.0-preview.1 release page](https://github.com/capannone-dev/note_taker/releases/tag/v0.1.0-preview.1),
+with their SHA-256 sums in `SHA256SUMS.txt`.
+
+| Platform | Package | Contents |
+| --- | --- | --- |
+| Linux desktop (x86_64, Debian 13 or newer) | [`koalino-linux-x86_64-0.1.0.tar.gz`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-linux-x86_64-0.1.0.tar.gz) | The app, Whisper `base`, the diarization models, the MCP server and the browser extension's host |
+| Windows desktop (x86_64, Windows 10 or 11) | [`koalino-windows-x86_64-0.1.0.zip`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-windows-x86_64-0.1.0.zip) | The same, for Windows |
+| Android (64-bit ARM) | [`koalino-android-arm64-0.1.0.apk`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-android-arm64-0.1.0.apk) | The app with Whisper `base` and the diarization models |
+| Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.1.0.tar.gz`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-server-linux-x86_64-0.1.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
+| Chrome, Edge, Chromium | [`koalino-browser-extension-chromium-0.1.0.zip`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-browser-extension-chromium-0.1.0.zip) | The browser extension, to load unpacked |
+| Firefox | not yet | A signed add-on will follow; until then, load `browser-extension/dist/firefox` from a source build |
+
+## Install
+
+### Linux desktop
+
+```sh
+sudo apt install libgtk-3-0t64 libasound2t64 libstdc++6   # usually present on a desktop
+tar -xzf koalino-linux-x86_64-0.1.0.tar.gz
+koalino-linux-x86_64-0.1.0/note_taker_ui
+```
+
+Koalino keeps its encryption key in the desktop keychain (GNOME Keyring, KWallet). Without one,
+start it with `NOTE_TAKER_ENCRYPTION_PASSPHRASE` set. Data lives in
+`~/.local/share/com.example.note_taker_ui/`.
+
+### Windows
+
+Unzip `koalino-windows-x86_64-0.1.0.zip` and run `note_taker_ui.exe`. The preview is not code
+signed, so SmartScreen may warn: choose **More info → Run anyway**. The key is kept in Windows
+Credential Manager.
+
+### Android
+
+Copy the APK to a 64-bit phone and open it, allowing installs from that app when Android asks.
+Koalino asks for the microphone, and for notifications so it can keep recording with the screen
+off. The preview is signed with a development key: if a later build is signed with the release
+key, Android will refuse to update it in place.
+
+### Linux server
+
+```sh
+sudo apt install libstdc++6 nodejs        # Node.js 20 or newer, for the dashboard only
+tar -xzf koalino-server-linux-x86_64-0.1.0.tar.gz && cd koalino-server-linux-x86_64-0.1.0
+export NOTE_TAKER_ENCRYPTION_PASSPHRASE='…'   # or rely on the system keychain
+./daemon &                                # API on 127.0.0.1:8080
+./dashboard &                             # web UI: open http://localhost:3000
+./cli meetings list
+./cli record start --title "Weekly sync" --input meeting.wav
+```
+
+The dashboard talks to the daemon from your browser, so open it on the server itself or through
+an SSH tunnel (`ssh -L 3000:127.0.0.1:3000 -L 8080:127.0.0.1:8080 server`). For a systemd
+service and the other settings, see [`server/README.md`](server/README.md) and
+[Configuration](#configuration).
+
+### Browser extension (Teams in the browser)
+
+1. Register the extension's helper once, from the desktop app's folder or the server package:
+   `browser-host install` (`browser-host.exe install` on Windows; the server package has it in
+   `bin/`).
+2. Keep the Koalino app open, or on a server run the daemon with
+   `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
+3. Chrome, Edge or Chromium: unzip the extension, open `chrome://extensions` (`edge://extensions`),
+   turn on **Developer mode**, choose **Load unpacked** and pick the unzipped folder.
+4. Open the extension's popup: it says whether Koalino is reachable, and asks for access to Teams
+   if the browser has not granted it.
+
+When a Teams call starts, Koalino asks whether to record it. Tell the other participants; a
+notice to paste in the meeting chat is in [`docs/meeting-consent-notice.md`](docs/meeting-consent-notice.md).
+More in [`browser-extension/README.md`](browser-extension/README.md).
 
 ## Components
 
@@ -26,7 +158,7 @@ without touching domain logic.
 | [`browser-extension/`](browser-extension/README.md) | Firefox/Chrome/Edge extension that records Teams meetings joined in the browser (audio, captions, slides, the Teams transcript) and sends them to the daemon through the `browser-host` native messaging host | TypeScript |
 | [`server/`](server/README.md) | Headless Linux deployment notes (systemd, background recording) | — |
 
-## Building
+## Building from source
 
 Prerequisites: a stable Rust toolchain. Add the Flutter SDK for `ui/`, Node.js for `web/`, and
 the .NET SDK for `teams-bot/`.
