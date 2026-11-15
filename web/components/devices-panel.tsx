@@ -2,6 +2,7 @@
 // pairing with nearby devices by comparing a six-digit code, answering pairing requests, and
 // removing paired devices. It polls `GET /api/p2p/status` every two seconds, as the Flutter
 // Devices screen does, and words every failure itself: the server's error text is never shown.
+// Nearby devices show the name they told, and this server can be renamed (Issue #121).
 
 "use client";
 
@@ -18,6 +19,7 @@ import {
   P2pRequestError,
   rejectPairingRequest,
   removeDevice,
+  setDeviceName,
   startPairing,
   type DeviceCapabilities,
   type InviteFailureCode,
@@ -146,6 +148,9 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
   const [deviceToRemove, setDeviceToRemove] = useState<TrustedDevice | null>(null);
   const [invite, setInvite] = useState<PairingInvite | null>(null);
   const [inviteText, setInviteText] = useState("");
+  /** The name being typed, or `null` while the rename form is closed. */
+  const [draftName, setDraftName] = useState<string | null>(null);
+  const [renameRefusal, setRenameRefusal] = useState<string | null>(null);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -175,6 +180,25 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
     await refreshStatus();
   }
 
+  /** Saves the typed name; a refusal stays beside the field, which stays open. */
+  async function saveName(name: string) {
+    setIsBusy(true);
+    setRenameRefusal(null);
+    try {
+      await setDeviceName(name);
+      setDraftName(null);
+      setMessage(null);
+    } catch (error) {
+      setRenameRefusal(
+        error instanceof P2pRequestError && error.kind === "invalid_peer" ? "Use 1 to 64 characters, without line breaks." : failureMessage(error)
+      );
+      setIsBusy(false);
+      return;
+    }
+    setIsBusy(false);
+    await refreshStatus();
+  }
+
   const statusLine = (
     <p role="status" aria-live="polite">
       {isReachable ? message : unreachableMessage}
@@ -199,11 +223,64 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
     <div className="max-w-2xl space-y-6">
       {statusLine}
       <div className="card space-y-3">
-        <div>
-          <p className="font-semibold">{status.device_name}</p>
-          <p className="text-sm text-muted">This device</p>
-          <p className="text-sm text-muted">{describeCapabilities(status.capabilities)}</p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-semibold">{status.device_name}</p>
+            <p className="text-sm text-muted">This device</p>
+            <p className="text-sm text-muted">{describeCapabilities(status.capabilities)}</p>
+          </div>
+          {draftName === null && (
+            <button
+              type="button"
+              className={secondaryButton}
+              aria-label="Rename this device"
+              disabled={isBusy}
+              onClick={() => {
+                setRenameRefusal(null);
+                setDraftName(status.device_name);
+              }}
+            >
+              Rename
+            </button>
+          )}
         </div>
+        {draftName !== null && (
+          <form
+            className="space-y-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveName(draftName);
+            }}
+          >
+            <label className="block">
+              Device name
+              <input
+                className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30"
+                type="text"
+                autoComplete="off"
+                maxLength={256}
+                value={draftName}
+                aria-invalid={renameRefusal !== null}
+                aria-describedby="device-name-help"
+                onChange={(event) => {
+                  setDraftName(event.target.value);
+                  setRenameRefusal(null);
+                }}
+              />
+            </label>
+            <p id="device-name-help" className={renameRefusal ? "text-sm text-danger" : "text-sm text-muted"}>
+              {renameRefusal ?? "Nearby devices see this name while this server is discoverable. Devices already paired keep the name they learned."}
+            </p>
+            <div className="flex gap-2">
+              <button type="submit" className={primaryButton} disabled={isBusy}>
+                Save
+              </button>
+              <button type="button" className={secondaryButton} disabled={isBusy} onClick={() => setDraftName(null)}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
         {isDiscoverable ? (
           <p>Discoverable: your other devices can ask to pair for a few minutes.</p>
         ) : (
@@ -311,7 +388,14 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
         )}
         {status.nearby_devices.map((device) => (
           <div key={device.peer_id} className="card flex items-center justify-between gap-4">
-            <p className="font-mono">{shortPeerId(device.peer_id)}</p>
+            {device.device_name ? (
+              <div>
+                <p className="font-semibold">{device.device_name}</p>
+                <p className="font-mono text-sm text-muted">{shortPeerId(device.peer_id)}</p>
+              </div>
+            ) : (
+              <p className="font-mono">{shortPeerId(device.peer_id)}</p>
+            )}
             <button type="button" className={primaryButton} disabled={isBusy} onClick={() => void runStep(async () => (await startPairing(device.peer_id), null))}>
               Pair
             </button>

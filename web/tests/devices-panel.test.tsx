@@ -18,7 +18,8 @@ vi.mock("@/lib/p2p-api", async () => ({
   rejectPairingRequest: vi.fn(),
   removeDevice: vi.fn(),
   createInvite: vi.fn(),
-  joinInvite: vi.fn()
+  joinInvite: vi.fn(),
+  setDeviceName: vi.fn()
 }));
 
 const nearbyPeerId = "12D3KooWNearbyPeer000000000000000000000000000abcdef";
@@ -260,4 +261,46 @@ test("using an invite says what comes next, and a refusal says why", async () =>
   fireEvent.click(screen.getByRole("button", { name: "Find device" }));
   expect(await screen.findByText("Device found. Choose Pair under Nearby devices.")).toBeInTheDocument();
   expect(p2pApi.joinInvite).toHaveBeenLastCalledWith("new invite");
+});
+
+test("a nearby device shows the name it told, with its peer ID below (#121)", () => {
+  const quietPeerId = "12D3KooWQuietPeer0000000000000000000000000000fedcba";
+  render(
+    <DevicesPanel
+      initialStatus={runningStatus({ nearby_devices: [{ peer_id: nearbyPeerId, device_name: "Kitchen tablet" }, { peer_id: quietPeerId }] })}
+    />
+  );
+
+  expect(screen.getByText("Kitchen tablet")).toBeInTheDocument();
+  expect(screen.getByText("12D3Koo…abcdef")).toBeInTheDocument();
+  expect(screen.getByText("12D3Koo…fedcba")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Pair" })).toHaveLength(2);
+});
+
+test("Rename saves this device's name and shows it (#121)", async () => {
+  vi.mocked(p2pApi.setDeviceName).mockResolvedValue("Ettore server");
+  vi.mocked(p2pApi.getP2pStatus).mockResolvedValue(runningStatus({ device_name: "Ettore server" }));
+  render(<DevicesPanel initialStatus={runningStatus()} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Rename this device" }));
+  const field = screen.getByRole("textbox", { name: "Device name" });
+  expect(field).toHaveValue("Office server");
+  fireEvent.change(field, { target: { value: "Ettore server" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(await screen.findByText("Ettore server")).toBeInTheDocument();
+  expect(p2pApi.setDeviceName).toHaveBeenCalledWith("Ettore server");
+  expect(screen.queryByRole("textbox", { name: "Device name" })).not.toBeInTheDocument();
+});
+
+test("a refused name says why and keeps the field (#121)", async () => {
+  vi.mocked(p2pApi.setDeviceName).mockRejectedValue(new p2pApi.P2pRequestError("invalid_peer", 400));
+  render(<DevicesPanel initialStatus={runningStatus()} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Rename this device" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Device name" }), { target: { value: " " } });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(await screen.findByText("Use 1 to 64 characters, without line breaks.")).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Device name" })).toBeInTheDocument();
 });

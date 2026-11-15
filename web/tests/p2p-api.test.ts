@@ -11,6 +11,7 @@ import {
   P2pRequestError,
   rejectPairingRequest,
   removeDevice,
+  setDeviceName,
   startPairing
 } from "@/lib/p2p-api";
 
@@ -99,4 +100,15 @@ test("an unreachable daemon is a network failure", async () => {
 
   expect(failure).toBeInstanceOf(P2pRequestError);
   expect(failure).toMatchObject({ kind: "network", status: null });
+});
+
+test("setDeviceName puts the name and returns the saved one (#121)", async () => {
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ device_name: "Office server" }), { status: 200 }));
+
+  await expect(setDeviceName(" Office server ")).resolves.toBe("Office server");
+  expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8080/api/p2p/device-name", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: " Office server " })
+  });
 });

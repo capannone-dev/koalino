@@ -99,4 +99,6 @@ the six-digit code to compare with **Codes match** or **Cancel pairing**, **Acce
 **Reject** for requests, and **Remove** for a paired device after an inline confirmation. Failures
 map to plain messages; server text is never shown. This server and each paired device show
 their manifest in one line (`describeCapabilities`, such as "8 CPU cores · Whisper (on device)"),
-or "Not connected".
+or "Not connected". A nearby device shows the name it told, with its short peer ID below
+(#121), and **Rename** opens an inline field for this server's name; a refused name stays there
+with its reason.

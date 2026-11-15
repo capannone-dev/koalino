@@ -37,11 +37,12 @@ Settings tests (Issue #46, #103):
 Devices tests (Issue #43):
 
 - `p2p-api.test.ts` covers the status read, every pairing route with its method, peer ID
-  encoding, the failure kind per status, and an unreachable daemon.
+  encoding, the failure kind per status, an unreachable daemon, and the rename request (#121).
 - `devices-panel.test.tsx` covers sync off, an unreachable server, the empty sections, Make
   discoverable, pairing with a nearby device and comparing the code, Codes match and its result,
   waiting for the other device, accepting and rejecting a request, removing a device after
-  confirmation, a refused step's message, and the two-second refresh.
+  confirmation, a refused step's message, the two-second refresh, nearby names with the peer ID
+  below, and renaming this server, including a refused name (#121).
 
 Projects tests (Issue #85):
 

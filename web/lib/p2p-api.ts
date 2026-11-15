@@ -21,7 +21,8 @@ export type DeviceCapabilities = {
  */
 export type TrustedDevice = { peer_id: string; device_name: string; paired_at_ms: number; capabilities: DeviceCapabilities | null };
 /** An unpaired device seen on the local network. */
-export type NearbyDevice = { peer_id: string };
+/** `device_name` is present once the device told it; it tells only while discoverable (#121). */
+export type NearbyDevice = { peer_id: string; device_name?: string | null };
 /** A pairing request awaiting the owner's answer, with the code both devices show. */
 export type IncomingPairingRequest = { peer_id: string; device_name: string; code: string };
 /** A pairing this server started; `locally_confirmed` once the owner said the codes match. */
@@ -217,6 +218,22 @@ export async function setTranscriptionRoute(route: string): Promise<void> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ route })
   });
+}
+
+/**
+ * Renames this device through `PUT /api/p2p/device-name` (#121).
+ *
+ * Inputs: the name as typed; the server trims and checks it. Outputs: the saved name.
+ * Side effects: one HTTP request; the server saves the name and announces it at once. Throws
+ * `P2pRequestError`, `invalid_peer` (400) for a blank, too long or control-character name.
+ */
+export async function setDeviceName(name: string): Promise<string> {
+  const response = await p2pRequest("/api/p2p/device-name", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  });
+  return ((await response.json()) as { device_name: string }).device_name;
 }
 
 /**

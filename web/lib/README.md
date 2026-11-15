@@ -19,7 +19,9 @@ and network failures. `meeting-title.ts` validates titles with the same rules as
 
 `p2p-api.ts` (Issue #43) is the device sync client: `getP2pStatus` (`GET /api/p2p/status`) and
 the pairing steps `makeDiscoverable`, `startPairing` (returns the code), `confirmPairingCode`,
-`cancelPairing`, `acceptPairingRequest`, `rejectPairingRequest`, and `removeDevice`. Failures
+`cancelPairing`, `acceptPairingRequest`, `rejectPairingRequest`, and `removeDevice`, plus
+`setDeviceName` (`PUT /api/p2p/device-name`, #121), which returns the saved name. A
+`NearbyDevice` may carry the `device_name` it told while discoverable. Failures
 throw `P2pRequestError`, whose `kind` is `invalid_peer` (400), `not_found` (404), `refused` (409),
 `unavailable` (503), `server`, or `network`. It shares `apiBaseUrl` with `api.ts`.
 `DeviceCapabilities` is the manifest summary the status carries for this server and for each
