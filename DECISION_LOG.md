@@ -3458,3 +3458,18 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Not done:** devices paired before a rename keep the name they learned while pairing. Telling
   paired devices about a rename would need a change to the trust store; it waits until someone
   asks for it.
+
+## 2026-11-15 — #102 A reloaded Teams page continues the same meeting
+
+- **Problem:** reloading the Teams page during a call (or rejoining it) made two Koalino
+  meetings with the same title, before and after the reload.
+- **Owner's decision:** they should be one meeting.
+- **Decision:** the content script no longer ends the meeting on `pagehide`. It sends the audio
+  and captions it holds and keeps the meeting ID in the tab's `sessionStorage`. When the
+  reloaded page is back in the call within two minutes of the last heartbeat, with the same
+  title, it continues that meeting: same meeting ID and the first part's start time, so the
+  daemon resumes its open session and times follow on. It does not ask again, because the owner
+  already chose to record this call. The background ends the meeting in Koalino if no tab
+  resumes it within two minutes, so a closed tab still gets its after-meeting pass.
+- **Kept simple:** the captions and live transcript come as two files, before and after the
+  reload. Only the same tab continues a meeting; a rejoin in another tab is a new meeting.

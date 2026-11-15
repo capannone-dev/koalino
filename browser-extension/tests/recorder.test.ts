@@ -114,6 +114,38 @@ describe("MeetingRecorder", () => {
     expect(captions?.type === "document" && captions.text).toContain("00:00:02.000 --> 00:00:02.000\n<v Alan>Hello there.</v>");
   });
 
+  it("on a page leaving mid-call, keeps what it has but does not end the meeting (#102)", () => {
+    const { sent, recorder } = recorderFixture();
+    document.body.innerHTML = `<div><div><span>Alan</span></div><span data-tid="closed-caption-text">Hello there.</span></div>`;
+    recorder.observePage({ captions: true });
+    recorder.addAudio("remote", second(500));
+    recorder.interrupt();
+    recorder.interrupt();
+    recorder.stop();
+
+    const tail = sent.slice(1).map((message) => (message.type === "document" ? message.kind : message.type));
+    expect(tail).toEqual(["audio", "teams_captions"]);
+  });
+
+  it("a resumed recording keeps the first start, so its times follow on (#102)", () => {
+    const sent: HostMessage[] = [];
+    let clock = 1_000_000 + 90_000;
+    const ports: RecorderPorts = { send: (message) => sent.push(message), now: () => clock, root: document };
+    const recorder = new MeetingRecorder(
+      { meetingId: "browser-teams-1", title: "Weekly sync", ownerName: "Ada", startMs: 1_000_000 },
+      ports,
+    );
+    for (let index = 0; index < 10; index += 1) {
+      clock += 1_000;
+      recorder.addAudio("remote", second(500));
+    }
+    recorder.stop();
+
+    expect(sent[0]).toMatchObject({ type: "meeting", meetingId: "browser-teams-1", startTimeMs: 1_000_000 });
+    const audio = sent.find((message) => message.type === "audio");
+    expect(audio?.type === "audio" && audio.timestampMs).toBe(90_000);
+  });
+
   it("keeps a slide once the share settles, stamped when it settled", () => {
     const { sent, recorder, advance } = recorderFixture();
     const signature = new Array<number>(32 * 18).fill(200);

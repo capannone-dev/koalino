@@ -8,6 +8,9 @@
  * Chrome the background is a service worker that open ports keep alive; in Firefox it is an event
  * page. Message contents are never logged.
  *
+ * A tab whose port closes while it records may be reloading: the meeting is ended in Koalino only
+ * if no tab resumes it within two minutes (`InterruptedRecordings`, #102).
+ *
  * It also relays between a tab and its recap frames (the SharePoint frame Teams shows a recap
  * transcript in): the tab asks them to download the transcript, and they pass back the WebVTT
  * their page hook copied.
@@ -28,6 +31,7 @@ import {
   TabMessage,
   describeProgress,
 } from "../lib/messages";
+import { InterruptedRecordings } from "../lib/interruptions";
 import { hasTeamsAccess } from "../lib/siteAccess";
 
 /** Requests the popup sends. */
@@ -48,6 +52,13 @@ let rejected = 0;
 const tabs = new Set<chrome.runtime.Port>();
 /** What each recording tab shows in the popup: its title, then its progress line. */
 const recordings = new Map<chrome.runtime.Port, string>();
+/** The Koalino meeting each recording tab records. */
+const recordingMeetings = new Map<chrome.runtime.Port, string>();
+/** Meetings whose tab went away mid-call, ended unless resumed (#102). */
+const interruptions = new InterruptedRecordings((meetingId) => sendToHost({ type: "ended", meetingId }), {
+  setTimeout: (run, delayMs) => self.setTimeout(run, delayMs),
+  clearTimeout: (timerId) => self.clearTimeout(timerId),
+});
 /** Each tab's last Teams transcript fetch status, for the popup. */
 const recapStatuses = new Map<chrome.runtime.Port, string>();
 
@@ -151,8 +162,14 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onMessage.addListener((message: TabMessage) => {
     if (message.kind === "host") sendToHost(message.message);
     if (message.kind === "recording") {
-      if (message.recording) recordings.set(port, message.title || "Teams meeting");
-      else recordings.delete(port);
+      if (message.recording) {
+        recordings.set(port, message.title || "Teams meeting");
+        recordingMeetings.set(port, message.meetingId);
+        interruptions.resumed(message.meetingId);
+      } else {
+        recordings.delete(port);
+        recordingMeetings.delete(port);
+      }
     }
     if (message.kind === "progress" && recordings.has(port)) recordings.set(port, describeProgress(message.progress));
     if (message.kind === "recap-download") requestRecapDownload(port.sender?.tab?.id);
@@ -162,6 +179,9 @@ chrome.runtime.onConnect.addListener((port) => {
     tabs.delete(port);
     recordings.delete(port);
     recapStatuses.delete(port);
+    const interruptedMeeting = recordingMeetings.get(port);
+    recordingMeetings.delete(port);
+    if (interruptedMeeting !== undefined) interruptions.interrupted(interruptedMeeting);
   });
 });
 

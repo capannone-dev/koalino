@@ -25,6 +25,12 @@ Optional, off by default: **Start Teams transcription when I record** (More → 
 transcribe → Start transcription). Everyone in the meeting sees it, and Microsoft stores the
 transcript.
 
+**A reload stays one meeting.** If the Teams page reloads (or the owner rejoins) in the same tab
+within two minutes, recording continues the same Koalino meeting, without asking again: the
+owner already chose to record that call. The captions are kept in two files, before and after.
+If the tab does not come back, the background ends the meeting in Koalino two minutes after the
+page went away.
+
 Limits found in the #102 probes:
 
 - Teams publishes the transcript only to the organizer's organisation. As a guest, the

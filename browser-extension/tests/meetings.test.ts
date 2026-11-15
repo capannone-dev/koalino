@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   HEARTBEAT_MS,
+  RESUME_GAP_MS,
   RecordedMeeting,
   heartbeatDue,
   matchRecapToMeeting,
@@ -12,6 +13,7 @@ import {
   pendingTranscriptMeetings,
   pruneMeetings,
   recapRetryDue,
+  resumableMeeting,
 } from "../src/lib/meetings";
 
 const HOUR = 3_600_000;
@@ -117,5 +119,36 @@ describe("recapRetryDue", () => {
     expect(recapRetryDue({ count: 1, lastMs: 0 }, 30_000)).toBe(false);
     expect(recapRetryDue({ count: 1, lastMs: 0 }, 60_000)).toBe(true);
     expect(recapRetryDue({ count: 3, lastMs: 0 }, 10 * 60_000)).toBe(false);
+  });
+});
+
+describe("resuming after a reload (#102)", () => {
+  /** A recording this tab was running, last seen at 17:00. */
+  const interrupted = weeklySync({ startMs: NOV_9_16H, endMs: null, lastSeenMs: NOV_9_16H + HOUR });
+  const seenAt = NOV_9_16H + HOUR;
+
+  it("resumes the recording this tab ran when the call is back within two minutes", () => {
+    expect(resumableMeeting([interrupted], "browser-teams-1", seenAt + RESUME_GAP_MS)?.meetingId).toBe("browser-teams-1");
+  });
+
+  it("starts afresh once the gap is longer", () => {
+    expect(resumableMeeting([interrupted], "browser-teams-1", seenAt + RESUME_GAP_MS + 1)).toBeNull();
+  });
+
+  it("never resumes a recording that ended, or one another tab ran", () => {
+    expect(resumableMeeting([weeklySync({ endMs: seenAt })], "browser-teams-1", seenAt + 1_000)).toBeNull();
+    expect(resumableMeeting([interrupted], "browser-teams-2", seenAt + 1_000)).toBeNull();
+    expect(resumableMeeting([interrupted], null, seenAt + 1_000)).toBeNull();
+  });
+
+  it("starts afresh when this tab joined another call, but not when the title is unknown", () => {
+    expect(resumableMeeting([interrupted], "browser-teams-1", seenAt + 1_000, "Board review")).toBeNull();
+    expect(resumableMeeting([interrupted], "browser-teams-1", seenAt + 1_000, " weekly  SYNC ")?.meetingId).toBe("browser-teams-1");
+    expect(resumableMeeting([interrupted], "browser-teams-1", seenAt + 1_000, "")?.meetingId).toBe("browser-teams-1");
+  });
+
+  it("measures the gap from the start when no heartbeat was noted", () => {
+    const young = weeklySync({ startMs: seenAt, endMs: null });
+    expect(resumableMeeting([young], "browser-teams-1", seenAt + 10_000)?.meetingId).toBe("browser-teams-1");
   });
 });

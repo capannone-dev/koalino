@@ -37,6 +37,7 @@ import {
   newMeetingId,
   pendingTranscriptMeetings,
   recapRetryDue,
+  resumableMeeting,
 } from "../lib/meetings";
 import { ExtensionSettings, DEFAULT_SETTINGS } from "../lib/settings";
 import { loadMeetings, loadSettings, saveMeeting, saveSettings, settingsChanged } from "../lib/storage";
@@ -99,7 +100,12 @@ function connectPort(): chrome.runtime.Port {
   });
   // Firefox stops an idle background and loses what it knew: tell it again.
   if (state === "recording" && record) {
-    opened.postMessage({ kind: "recording", recording: true, title: record.title } satisfies TabMessage);
+    opened.postMessage({
+      kind: "recording",
+      recording: true,
+      title: record.title,
+      meetingId: record.meetingId,
+    } satisfies TabMessage);
     lastProgress = "";
   }
   if (recapStatus) opened.postMessage({ kind: "recap-status", status: recapStatus } satisfies TabMessage);
@@ -143,26 +149,55 @@ function refreshOverlay(): void {
   showRecording(status, stopByOwner);
 }
 
-/** Starts recording the current call. */
-function startRecording(): void {
-  const startMs = Date.now();
-  const meetingId = newMeetingId(startMs);
-  const title = meetingTitleFromDocumentTitle(document.title);
+/** Remembers, in this tab only, the meeting it records; a reload keeps it (#102). */
+const TAB_MEETING_KEY = "koalino-recording-meeting";
+
+/** The meeting this tab was recording before it reloaded, or `null`. */
+function tabMeetingId(): string | null {
+  try {
+    return window.sessionStorage.getItem(TAB_MEETING_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Remembers (or, with `null`, forgets) the meeting this tab records. */
+function rememberTabMeeting(meetingId: string | null): void {
+  try {
+    if (meetingId === null) window.sessionStorage.removeItem(TAB_MEETING_KEY);
+    else window.sessionStorage.setItem(TAB_MEETING_KEY, meetingId);
+  } catch {
+    // Storage blocked: a reload then starts a new meeting, as before #102.
+  }
+}
+
+/**
+ * Starts recording the current call, or continues `resumed`, the meeting this tab recorded
+ * before a reload (#102): same meeting ID and start, so Koalino keeps one meeting.
+ */
+function startRecording(resumed: RecordedMeeting | null = null): void {
+  const nowMs = Date.now();
+  const startMs = resumed?.startMs ?? nowMs;
+  const meetingId = resumed?.meetingId ?? newMeetingId(startMs);
+  const title = resumed?.title || meetingTitleFromDocumentTitle(document.title);
   recorder = new MeetingRecorder(
-    { meetingId, title, ownerName: ownerName(document) },
+    { meetingId, title, ownerName: ownerName(document), startMs },
     { send: toHost, now: Date.now, root: document },
   );
-  record = {
-    meetingId,
-    title,
-    startMs,
-    endMs: null,
-    teamsTranscriptSeen: false,
-    transcriptFetched: false,
-  };
+  record = resumed
+    ? { ...resumed, lastSeenMs: nowMs }
+    : {
+        meetingId,
+        title,
+        startMs,
+        endMs: null,
+        teamsTranscriptSeen: false,
+        transcriptFetched: false,
+      };
   void saveMeeting(record);
+  rememberTabMeeting(meetingId);
   state = "recording";
-  recordingStartedAt = startMs;
+  recordingStartedAt = nowMs;
   captionsAttempted = false;
   transcriptionAttempted = false;
   lastProblem = null;
@@ -170,7 +205,7 @@ function startRecording(): void {
   shareShown = false;
   overlayStatus = "\u0000";
   toHook("start-audio");
-  toBackground({ kind: "recording", recording: true, title });
+  toBackground({ kind: "recording", recording: true, title, meetingId });
   refreshOverlay();
 }
 
@@ -181,9 +216,24 @@ function stopRecording(): void {
   recorder.stop();
   record = { ...record, endMs: Date.now(), teamsTranscriptSeen: recorder.sawTeamsTranscript() };
   void saveMeeting(record);
-  toBackground({ kind: "recording", recording: false, title: record.title });
+  rememberTabMeeting(null);
+  toBackground({ kind: "recording", recording: false, title: record.title, meetingId: record.meetingId });
   recorder = null;
   hideOverlay();
+}
+
+/**
+ * The page is unloading mid-call, perhaps to reload (#102): send what was collected, but leave
+ * the meeting open. The reloaded page continues it; if none does, the background ends it.
+ * Side effects: Sends audio and captions; notes the time in the record.
+ */
+function interruptRecording(): void {
+  if (!recorder || !record) return;
+  toHook("stop-audio");
+  recorder.interrupt();
+  record = { ...record, lastSeenMs: Date.now(), teamsTranscriptSeen: recorder.sawTeamsTranscript() };
+  void saveMeeting(record);
+  recorder = null;
 }
 
 /**
@@ -379,7 +429,16 @@ async function tick(): Promise<void> {
   const inCall = isInCall(document);
   if (inCall) {
     if (state === "idle") {
-      if (settings.alwaysRecordTeams) {
+      // The owner already chose to record this call before the page reloaded: continue it.
+      const resumed = resumableMeeting(
+        await loadMeetings(),
+        tabMeetingId(),
+        Date.now(),
+        meetingTitleFromDocumentTitle(document.title),
+      );
+      if (resumed) {
+        startRecording(resumed);
+      } else if (settings.alwaysRecordTeams) {
         startRecording();
       } else {
         state = "asking";
@@ -426,7 +485,7 @@ function onShareFrame(present: boolean, signature: number[]): void {
 }
 
 window.addEventListener("pagehide", () => {
-  if (state === "recording") stopRecording();
+  if (state === "recording") interruptRecording();
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {

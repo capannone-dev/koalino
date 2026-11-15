@@ -31,6 +31,11 @@ export interface RecordedMeeting {
 export const KEEP_MS = 14 * 24 * 3_600_000;
 /** How often a running recording notes that it is still running. */
 export const HEARTBEAT_MS = 30_000;
+/**
+ * How long a call may be gone (a reload, a rejoin) and still continue the same Koalino meeting
+ * (#102). Measured from the recording's last heartbeat, so a reload has about 1.5–2 minutes.
+ */
+export const RESUME_GAP_MS = 2 * 60_000;
 /** How far a recap's times may differ from the recorded times. */
 const TIME_SLACK_MS = 30 * 60_000;
 
@@ -86,6 +91,30 @@ export function recordedEnd(meeting: RecordedMeeting): number {
 export function heartbeatDue(meeting: RecordedMeeting, nowMs: number): boolean {
   if (meeting.endMs !== null) return false;
   return nowMs - (meeting.lastSeenMs ?? meeting.startMs) >= HEARTBEAT_MS;
+}
+
+/**
+ * The recording a reloaded tab should continue instead of starting a new meeting (#102).
+ *
+ * Inputs: The records; the meeting ID this tab was recording before it reloaded (kept in the
+ * tab's `sessionStorage`, `null` when none); the time now; and the title the tab shows now.
+ * Outputs: That record when it never ended, was last seen at most `RESUME_GAP_MS` ago, and has
+ * the same title (when both are known); otherwise `null`. Only the tab that recorded a meeting
+ * continues it, so a call in another tab, or another call joined in this one, stays its own.
+ * Side effects: None.
+ */
+export function resumableMeeting(
+  meetings: readonly RecordedMeeting[],
+  tabMeetingId: string | null,
+  nowMs: number,
+  currentTitle = "",
+): RecordedMeeting | null {
+  if (tabMeetingId === null) return null;
+  const meeting = meetings.find((candidate) => candidate.meetingId === tabMeetingId);
+  if (!meeting || meeting.endMs !== null) return null;
+  const [recordedTitle, shownTitle] = [normalized(meeting.title), normalized(currentTitle)];
+  if (recordedTitle !== "" && shownTitle !== "" && recordedTitle !== shownTitle) return null;
+  return nowMs - recordedEnd(meeting) <= RESUME_GAP_MS ? meeting : null;
 }
 
 /**

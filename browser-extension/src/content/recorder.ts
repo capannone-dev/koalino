@@ -49,6 +49,11 @@ export interface RecorderMeeting {
   meetingId: string;
   title: string;
   ownerName: string;
+  /**
+   * When the meeting started (epoch ms), for a recording that continues one interrupted by a
+   * reload (#102); its times then follow on from the first part. Absent: now.
+   */
+  startMs?: number;
 }
 
 /** One track's chunking state. */
@@ -79,7 +84,7 @@ export class MeetingRecorder {
     private readonly meeting: RecorderMeeting,
     private readonly ports: RecorderPorts,
   ) {
-    this.startMs = ports.now();
+    this.startMs = meeting.startMs ?? ports.now();
     ports.send({
       type: "meeting",
       meetingId: meeting.meetingId,
@@ -197,6 +202,22 @@ export class MeetingRecorder {
    */
   stop(): void {
     if (this.stopped) return;
+    this.sendCollected();
+    this.ports.send({ type: "ended", meetingId: this.meeting.meetingId });
+  }
+
+  /**
+   * Stops because the page is going away mid-call, perhaps to reload (#102): sends what was
+   * collected but not the meeting's end, so a resumed recording continues the same meeting.
+   * Side effects: Flushes audio; sends the captions and the live transcript collected so far.
+   */
+  interrupt(): void {
+    if (this.stopped) return;
+    this.sendCollected();
+  }
+
+  /** Flushes the audio, then sends the captions and the live transcript; stops the recorder. */
+  private sendCollected(): void {
     for (const timing of this.tracks.values()) timing.chunker.flush();
     this.stopped = true;
     if (!this.captions.isEmpty()) {
@@ -217,6 +238,5 @@ export class MeetingRecorder {
         timestampMs: 0,
       });
     }
-    this.ports.send({ type: "ended", meetingId: this.meeting.meetingId });
   }
 }
