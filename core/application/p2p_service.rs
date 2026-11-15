@@ -749,6 +749,18 @@ where
             }
             Err(error) => tracing::warn!(error = %error, "a pairing event could not be applied"),
         }
+        // A paired device renamed on its own screen says so when it connects (#121).
+        match self.pairing_manager.apply_paired_peer_names() {
+            Ok(false) => {}
+            Ok(true) => {
+                if let Err(error) = self.refresh_trusted_devices() {
+                    tracing::warn!(error = %error, "paired devices could not be listed");
+                }
+            }
+            Err(error) => {
+                tracing::warn!(error = %error, "a paired device's name could not be kept")
+            }
+        }
         for _ in 0..MAX_EVENTS_PER_PASS {
             let network_event = match self.pairing_manager.transport_mut().poll_event() {
                 Ok(Some(network_event)) => network_event,

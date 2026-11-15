@@ -3455,9 +3455,13 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Privacy:** a device answers only over connections its peer gate admits, so a stranger on
   the same Wi-Fi learns the name only while the owner keeps the pairing window open, the same
   exposure the pairing request already had. The name is a claim: pairing still needs the code.
-- **Not done:** devices paired before a rename keep the name they learned while pairing. Telling
-  paired devices about a rename would need a change to the trust store; it waits until someone
-  asks for it.
+- **Renames reach paired devices** (added after the owner's test showed they did not): paired
+  devices ask each other the same question when they connect, and a renamed device asks every
+  connected paired device again. The question then carries the asker's own name
+  (`asker_name`, optional, so older versions ignore it), and both the question and the answer
+  update the stored name of a *paired* device in the allowlist (`rename_peer`, keeping the
+  pairing time). A name from an unpaired device never touches the allowlist. A paired device
+  could already claim any name at pairing time, so trusting its later claims adds no exposure.
 
 ## 2026-11-15 — #102 A reloaded Teams page continues the same meeting
 

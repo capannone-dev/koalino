@@ -68,7 +68,11 @@ it has no name for; `peer_gate.rs` admits outbound dials to those probe targets.
 answers only over connections its own gate admits, so only while its pairing window is open. A
 name that fails `DeviceName::parse` is dropped. `nearby_peer_name` reads the learned name;
 forgetting or expiring a nearby peer drops it. `set_local_name` changes the name this device
-answers with and puts in its pairing requests.
+answers with and puts in its pairing requests. Paired devices use the same protocol to keep each other's
+current name: on the first connection to a paired peer, and to every connected paired peer after
+`set_local_name` changes the name, the adapter sends `DeviceNameQuestion { asker_name }`. Names a
+paired peer gives, in that field or in its answer, queue up for `take_paired_peer_names`, which
+the pairing manager stores in the allowlist.
 
 The adapter implements `PairingTransport` as follows:
 

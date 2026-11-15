@@ -193,6 +193,40 @@ fn trusting_lists_peers_and_re_pairing_updates_them() {
     );
 }
 
+/// A paired device's new name replaces the stored one and keeps its pairing time (#121); an
+/// unchanged name or an unpaired device changes nothing.
+#[test]
+fn renaming_a_paired_peer_keeps_its_pairing_time() {
+    let store = SqlitePeerStore::open_in_memory(fixed_cipher())
+        .unwrap_or_else(|error| panic!("peer store must open: {error}"));
+    store
+        .trust_peer(&trusted_peer("peer-phone", "Phone", 2_000))
+        .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+    let rename = |peer: &str, name: &str| {
+        store
+            .rename_peer(
+                &DeviceId::new(peer),
+                &DeviceName::parse(name).unwrap_or_else(|error| panic!("{error}")),
+            )
+            .unwrap_or_else(|error| panic!("rename must succeed: {error}"))
+    };
+
+    assert!(rename("peer-phone", "S23"));
+    assert!(
+        !rename("peer-phone", "S23"),
+        "the same name changes nothing"
+    );
+    assert!(
+        !rename("peer-stranger", "Stranger"),
+        "an unpaired device is not added"
+    );
+    let peers = store
+        .trusted_peers()
+        .unwrap_or_else(|error| panic!("peers must list: {error}"));
+
+    assert_eq!(peers, vec![trusted_peer("peer-phone", "S23", 2_000)]);
+}
+
 /// Revoking removes the peer, reports whether it existed, and persists across reopening.
 #[test]
 fn revoking_a_peer_removes_it_persistently() {

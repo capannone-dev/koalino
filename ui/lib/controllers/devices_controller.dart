@@ -168,12 +168,12 @@ final class DevicesController extends ChangeNotifier {
     return errorMessage ?? l10n.thatDidNotWorkTryAgain;
   }
 
-  /// Renames this device (#121); nearby devices see the new name at once.
+  /// Renames this device (#121); nearby and connected paired devices see the new name at once,
+  /// other paired devices when they next connect.
   ///
   /// Inputs: The name as typed; Rust trims and checks it.
   /// Outputs: `null` once saved, or a message for the owner; nothing changes on failure.
-  /// Side effects: Writes the saved name through the bridge and refreshes. Devices paired before
-  /// keep the name they learned when pairing.
+  /// Side effects: Writes the saved name through the bridge and refreshes.
   Future<String?> renameDevice(String name) async {
     try {
       await _bridge.setDeviceName(name);

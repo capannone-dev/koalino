@@ -32,6 +32,8 @@ struct ScriptedTransport {
     answered_name: Option<String>,
     events: VecDeque<PairingEvent>,
     trusted: Vec<DeviceId>,
+    /// Names paired devices gave, handed out once.
+    paired_names: Vec<(DeviceId, DeviceName)>,
 }
 
 impl PairingTransport for ScriptedTransport {
@@ -53,6 +55,9 @@ impl PairingTransport for ScriptedTransport {
     }
     fn set_local_name(&mut self, local_name: &DeviceName) {
         self.answered_name = Some(local_name.as_str().to_owned());
+    }
+    fn take_paired_peer_names(&mut self) -> Vec<(DeviceId, DeviceName)> {
+        std::mem::take(&mut self.paired_names)
     }
     fn request_pairing(
         &mut self,
@@ -122,6 +127,21 @@ impl TrustedPeerStore for MemoryTrustStore {
     }
     fn trusted_peers(&self) -> Result<Vec<TrustedPeer>, StorageError> {
         Ok(self.peers())
+    }
+    fn rename_peer(
+        &self,
+        peer_id: &DeviceId,
+        device_name: &DeviceName,
+    ) -> Result<bool, StorageError> {
+        let mut peers = self.0.lock().map_err(|_| StorageError::Unavailable)?;
+        let Some(peer) = peers
+            .iter_mut()
+            .find(|peer| peer.peer_id() == peer_id && peer.device_name() != device_name)
+        else {
+            return Ok(false);
+        };
+        *peer = TrustedPeer::new(peer_id.clone(), device_name.clone(), peer.paired_at_ms());
+        Ok(true)
     }
     fn is_trusted(&self, peer_id: &DeviceId) -> Result<bool, StorageError> {
         Ok(self.peers().iter().any(|peer| peer.peer_id() == peer_id))
@@ -586,4 +606,34 @@ fn nearby_devices_carry_the_names_they_gave() {
         Some(name("Studio desktop"))
     );
     assert_eq!(pairing.nearby_device_name(&DeviceId::new("other")), None);
+}
+
+/// A paired device that says a new name has it stored (#121); a name heard from a device that is
+/// not paired stores nothing.
+#[test]
+fn a_paired_device_new_name_is_stored() {
+    let mut pairing = manager();
+    let phone = DeviceId::new("peer-phone");
+    pairing
+        .store()
+        .trust_peer(&TrustedPeer::new(phone.clone(), name("Phone"), 7))
+        .unwrap_or_else(|error| panic!("peer must be stored: {error}"));
+    pairing.transport_mut().paired_names = vec![
+        (phone.clone(), name("S23")),
+        (DeviceId::new("peer-stranger"), name("Stranger")),
+    ];
+
+    let renamed = pairing
+        .apply_paired_peer_names()
+        .unwrap_or_else(|error| panic!("names must apply: {error}"));
+    let renamed_again = pairing
+        .apply_paired_peer_names()
+        .unwrap_or_else(|error| panic!("names must apply: {error}"));
+
+    assert!(renamed);
+    assert!(!renamed_again, "nothing new was heard");
+    assert_eq!(
+        pairing.store().peers(),
+        vec![TrustedPeer::new(phone, name("S23"), 7)]
+    );
 }

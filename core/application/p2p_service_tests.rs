@@ -315,6 +315,38 @@ async fn renaming_changes_the_announced_name() {
     assert!(laptop.status().nearby_device_names.is_empty());
 }
 
+/// A device renamed after pairing shows its new name on the paired device too (#121).
+#[tokio::test]
+async fn a_rename_after_pairing_reaches_the_paired_device() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9353"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let mut laptop = service("Laptop", laptop_adapter);
+    let mut phone = service("Phone", phone_adapter);
+    pair(&mut laptop, &mut phone, phone_address).await;
+    let new_name = crate::domain::peer_trust::DeviceName::parse("S23")
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    run(&mut phone, P2pCommand::Rename(new_name));
+    drive(&mut laptop, &mut phone, |laptop, _| {
+        laptop
+            .status()
+            .trusted_devices
+            .iter()
+            .any(|device| device.device_name().as_str() == "S23")
+    })
+    .await;
+
+    assert_eq!(laptop.status().trusted_devices.len(), 1);
+}
+
 /// The phone accepts first and syncs its meeting at once, while the laptop, which has not
 /// confirmed yet, still drops those messages. Once the laptop confirms, the phone's retry
 /// delivers the meeting.

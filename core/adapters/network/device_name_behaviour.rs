@@ -7,6 +7,10 @@
 //! carries: pairing still needs the code both devices show. Messages reuse the pairing framing
 //! (length-prefixed versioned JSON, at most 4 KiB). A separate protocol, rather than a new field
 //! on the pairing request, keeps older versions from taking the question for a pairing request.
+//!
+//! Paired devices use it too: each asks the other when they connect, and a renamed device asks
+//! every connected paired device again, with its own name in the question, so both sides keep
+//! the other's current name (#121).
 
 use std::{io, time::Duration};
 
@@ -35,13 +39,28 @@ impl AsRef<str> for DeviceNameProtocol {
 pub struct DeviceNameQuestion {
     /// Wire-format version; must be the pairing messages' version.
     pub version: u32,
+    /// The asking device's own name, sent only to paired devices so a rename reaches them
+    /// (#121). Older versions leave it out and ignore it, unvalidated on receipt.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asker_name: Option<String>,
 }
 
 impl Default for DeviceNameQuestion {
-    /// Creates a current-version question.
+    /// Creates a current-version question that tells nothing about the asker.
     fn default() -> Self {
         Self {
             version: PAIRING_MESSAGE_VERSION,
+            asker_name: None,
+        }
+    }
+}
+
+impl DeviceNameQuestion {
+    /// Creates a question for a paired device that also tells it the asker's name.
+    pub fn telling(asker_name: &str) -> Self {
+        Self {
+            version: PAIRING_MESSAGE_VERSION,
+            asker_name: Some(asker_name.to_owned()),
         }
     }
 }

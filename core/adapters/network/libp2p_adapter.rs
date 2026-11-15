@@ -397,6 +397,8 @@ pub struct Libp2pNetworkAdapter {
     name_probed_at: HashMap<DeviceId, std::time::Instant>,
     /// The name this device gives when asked; `None` answers nothing.
     local_device_name: Option<DeviceName>,
+    /// Names paired devices gave, in a question or an answer, not yet taken (#121).
+    heard_paired_peer_names: VecDeque<(DeviceId, DeviceName)>,
     /// Pairing requests awaiting the owner's answer, by requesting peer.
     pending_pairing_answers: HashMap<PeerId, request_response::ResponseChannel<PairingResponse>>,
     /// Pairing events not yet taken by the application.
@@ -536,6 +538,7 @@ impl Libp2pNetworkAdapter {
             nearby_peer_names: HashMap::new(),
             name_probed_at: HashMap::new(),
             local_device_name: None,
+            heard_paired_peer_names: VecDeque::new(),
             pending_pairing_answers: HashMap::new(),
             pending_pairing_events: VecDeque::new(),
             relay: None,
@@ -718,9 +721,58 @@ impl Libp2pNetworkAdapter {
         self.nearby_peer_names.get(peer_device_id).cloned()
     }
 
-    /// Sets the name this device answers with.
+    /// Sets the name this device answers with, and tells connected paired devices when it
+    /// changed (#121).
+    ///
+    /// Side effects: Sends a name question carrying the new name to each connected paired peer.
     pub fn set_local_name(&mut self, local_name: &DeviceName) {
+        let changed = self.local_device_name.as_ref() != Some(local_name);
         self.local_device_name = Some(local_name.clone());
+        if !changed {
+            return;
+        }
+        let connected_paired: Vec<PeerId> = self
+            .swarm
+            .connected_peers()
+            .filter(|peer| self.swarm.behaviour().peer_gate.is_trusted(peer))
+            .copied()
+            .collect();
+        for peer_id in connected_paired {
+            self.tell_paired_peer_name(peer_id);
+        }
+    }
+
+    /// Asks a paired peer its name, telling it this device's name (#121).
+    ///
+    /// Side effects: Sends one name question; nothing when this device has no name yet.
+    fn tell_paired_peer_name(&mut self, peer_id: PeerId) {
+        let Some(local_name) = &self.local_device_name else {
+            return;
+        };
+        let question = DeviceNameQuestion::telling(local_name.as_str());
+        self.swarm
+            .behaviour_mut()
+            .device_names
+            .send_request(&peer_id, question);
+    }
+
+    /// Takes the names paired devices gave since the last call (#121), oldest first.
+    ///
+    /// Outputs: Each paired device's validated name, possibly unchanged. Side effects: Empties
+    /// the queue.
+    pub fn take_paired_peer_names(&mut self) -> Vec<(DeviceId, DeviceName)> {
+        self.heard_paired_peer_names.drain(..).collect()
+    }
+
+    /// Queues a name a peer gave, when the peer is paired and the name is valid.
+    fn hear_paired_peer_name(&mut self, peer: PeerId, claimed_name: &str) {
+        if !self.swarm.behaviour().peer_gate.is_trusted(&peer) {
+            return;
+        }
+        if let Ok(name) = DeviceName::parse(claimed_name) {
+            self.heard_paired_peer_names
+                .push_back((Self::device_id_from_peer_id(peer), name));
+        }
     }
 
     /// Answers name questions and keeps the names nearby devices give (#121).
@@ -733,9 +785,16 @@ impl Libp2pNetworkAdapter {
     ) {
         match event {
             request_response::Event::Message {
-                message: request_response::Message::Request { channel, .. },
+                peer,
+                message:
+                    request_response::Message::Request {
+                        channel, request, ..
+                    },
                 ..
             } => {
+                if let Some(asker_name) = &request.asker_name {
+                    self.hear_paired_peer_name(peer, asker_name);
+                }
                 if let Some(local_name) = &self.local_device_name {
                     let answer = DeviceNameAnswer::new(local_name.as_str());
                     if self
@@ -754,6 +813,7 @@ impl Libp2pNetworkAdapter {
                 message: request_response::Message::Response { response, .. },
                 ..
             } => {
+                self.hear_paired_peer_name(peer, &response.device_name);
                 let peer_device_id = Self::device_id_from_peer_id(peer);
                 if !self.nearby_unpaired_peer_ids.contains(&peer_device_id) {
                     return;
@@ -1403,6 +1463,8 @@ impl Libp2pNetworkAdapter {
         {
             self.pending_network_events
                 .push_back(NetworkEvent::PeerDiscovered(peer_device_id));
+            // Each side asks the other, so a rename made while apart is learned (#121).
+            self.tell_paired_peer_name(peer_id);
         }
     }
 
@@ -1734,6 +1796,10 @@ impl PairingTransport for Libp2pNetworkAdapter {
         Libp2pNetworkAdapter::set_local_name(self, local_name);
     }
 
+    fn take_paired_peer_names(&mut self) -> Vec<(DeviceId, DeviceName)> {
+        Libp2pNetworkAdapter::take_paired_peer_names(self)
+    }
+
     /// Allows the dial and sends the request; libp2p dials using addresses mDNS provided.
     fn request_pairing(
         &mut self,
@@ -1919,6 +1985,95 @@ mod tests {
             ),
             "asking grants no trust"
         );
+    }
+
+    /// Pairs `phone` with `laptop`, listening on `port`, and dials it.
+    fn connect_paired(
+        phone: &mut Libp2pNetworkAdapter,
+        laptop: &mut Libp2pNetworkAdapter,
+        port: u16,
+    ) {
+        let laptop_id = laptop.local_device_id();
+        phone
+            .add_static_peer(&format!("/memory/{port}/p2p/{}", laptop_id.as_str()))
+            .unwrap_or_else(|error| panic!("a full peer address must be accepted: {error}"));
+        trust_each_other(phone, laptop);
+        phone.redial_paired_peers();
+    }
+
+    /// Drives both adapters until each has heard `expected` from the other, collecting names.
+    async fn hear_names(
+        phone: &mut Libp2pNetworkAdapter,
+        laptop: &mut Libp2pNetworkAdapter,
+        phone_hears: &str,
+        laptop_hears: Option<&str>,
+    ) -> (bool, bool) {
+        let laptop_id = laptop.local_device_id();
+        let phone_id = phone.local_device_id();
+        let (mut phone_heard, mut laptop_heard) = (false, laptop_hears.is_none());
+        drive_until(phone, laptop, Duration::from_secs(5), |phone, laptop| {
+            for (peer, name) in phone.take_paired_peer_names() {
+                phone_heard |= peer == laptop_id && name.as_str() == phone_hears;
+            }
+            for (peer, name) in laptop.take_paired_peer_names() {
+                laptop_heard |= peer == phone_id && Some(name.as_str()) == laptop_hears;
+            }
+            phone_heard && laptop_heard
+        })
+        .await;
+        (phone_heard, laptop_heard)
+    }
+
+    /// Paired devices tell each other their current names when they connect (#121), so a rename
+    /// made while they were apart reaches the other device.
+    #[tokio::test]
+    async fn paired_devices_tell_each_other_their_names_on_connecting() {
+        let (mut phone, mut laptop, _) = listening_pair("/memory/9343");
+        phone.set_local_name(&device_name("Phone"));
+        laptop.set_local_name(&device_name("Work laptop"));
+        connect_paired(&mut phone, &mut laptop, 9343);
+
+        let heard = hear_names(&mut phone, &mut laptop, "Work laptop", Some("Phone")).await;
+
+        assert_eq!(heard, (true, true), "both names must arrive");
+    }
+
+    /// A rename reaches a paired device already connected (#121).
+    #[tokio::test]
+    async fn a_rename_reaches_a_connected_paired_device() {
+        let (mut phone, mut laptop, _) = listening_pair("/memory/9344");
+        phone.set_local_name(&device_name("Phone"));
+        laptop.set_local_name(&device_name("Laptop"));
+        connect_paired(&mut phone, &mut laptop, 9344);
+        let first = hear_names(&mut phone, &mut laptop, "Laptop", Some("Phone")).await;
+        assert_eq!(first, (true, true));
+
+        laptop.set_local_name(&device_name("Kitchen laptop"));
+        let heard = hear_names(&mut phone, &mut laptop, "Kitchen laptop", None).await;
+
+        assert!(heard.0, "the new name must arrive");
+    }
+
+    /// An unpaired device's name never counts as a paired device's name.
+    #[tokio::test]
+    async fn an_unpaired_device_name_is_not_taken_as_a_paired_rename() {
+        let (mut asker, mut laptop, address) = listening_pair("/memory/9345");
+        let laptop_id = laptop.local_device_id();
+        laptop.set_local_name(&device_name("Laptop"));
+        laptop.open_pairing_window(Duration::from_secs(60));
+        list_as_nearby(&mut asker, &laptop_id, &address);
+
+        asker.probe_nearby_names();
+        drive_until(
+            &mut asker,
+            &mut laptop,
+            Duration::from_secs(5),
+            |asker, _| asker.nearby_peer_name(&laptop_id).is_some(),
+        )
+        .await;
+
+        assert!(asker.take_paired_peer_names().is_empty());
+        assert!(laptop.take_paired_peer_names().is_empty());
     }
 
     /// A device that is not open to pairing refuses the question, so its name stays unknown.

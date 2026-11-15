@@ -325,6 +325,27 @@ impl TrustedPeerStore for SqlitePeerStore {
         Ok(())
     }
 
+    /// Updates the name in the peer's row when it differs. Side effects: Writes at most one row;
+    /// logs the peer ID only.
+    fn rename_peer(
+        &self,
+        peer_id: &DeviceId,
+        device_name: &DeviceName,
+    ) -> Result<bool, StorageError> {
+        let changed_rows = self
+            .connection
+            .execute(
+                "UPDATE p2p_trusted_peers SET device_name = ?2
+                 WHERE peer_id = ?1 AND device_name <> ?2",
+                params![peer_id.as_str(), device_name.as_str()],
+            )
+            .map_err(|error| sqlite_error("unable to rename the trusted peer", error))?;
+        if changed_rows > 0 {
+            tracing::info!(peer_id = %peer_id.as_str(), "P2P peer renamed");
+        }
+        Ok(changed_rows > 0)
+    }
+
     /// Deletes the peer row. Side effects: Deletes at most one row; logs the peer ID only.
     fn revoke_peer(&self, peer_id: &DeviceId) -> Result<bool, StorageError> {
         let removed_rows = self

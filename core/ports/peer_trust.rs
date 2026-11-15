@@ -68,6 +68,19 @@ pub trait TrustedPeerStore {
     /// Side effects: Upserts one row.
     fn trust_peer(&self, peer: &TrustedPeer) -> Result<(), StorageError>;
 
+    /// Replaces a paired device's name with the one it now gives (#121), keeping its pairing time.
+    ///
+    /// Inputs: The paired device and its validated new name. Outputs: Whether a stored name
+    /// changed (`false` for the same name or an unpaired device), or a storage error.
+    /// Side effects: Updates at most one row; stores that keep no names ignore it.
+    fn rename_peer(
+        &self,
+        _peer_id: &DeviceId,
+        _device_name: &DeviceName,
+    ) -> Result<bool, StorageError> {
+        Ok(false)
+    }
+
     /// Removes `peer_id` from the allowlist.
     ///
     /// Inputs: The peer ID to revoke. Outputs: Whether the peer was trusted, or a storage error.
@@ -181,8 +194,16 @@ pub trait PairingTransport {
 
     /// Sets the name this device gives nearby devices that ask (#121).
     ///
-    /// Side effects: Later answers carry it.
+    /// Side effects: Later answers carry it; connected paired devices are told the new name.
     fn set_local_name(&mut self, _local_name: &DeviceName) {}
+
+    /// Takes the names paired devices gave since the last call (#121): each says its current
+    /// name when they connect and again after a rename.
+    ///
+    /// Outputs: Validated names by peer, possibly unchanged ones. Side effects: Empties the queue.
+    fn take_paired_peer_names(&mut self) -> Vec<(DeviceId, DeviceName)> {
+        Vec::new()
+    }
 
     /// Asks `peer_id` to pair, announcing `local_name`.
     ///

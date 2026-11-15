@@ -245,12 +245,26 @@ where
     }
 
     /// Renames this device (#121): later pairing requests and answers, and nearby devices that
-    /// ask, get the new name. Devices already paired keep the name they were given.
+    /// ask, get the new name; connected paired devices are told it, and the others when they
+    /// next connect.
     ///
-    /// Side effects: Updates the transport's answer.
+    /// Side effects: Updates the transport's answer and sends the name to connected paired peers.
     pub fn rename(&mut self, local_name: DeviceName) {
         self.transport.set_local_name(&local_name);
         self.local_name = local_name;
+    }
+
+    /// Stores the names paired devices gave since the last call (#121), so a device renamed on
+    /// its own screen shows its new name here.
+    ///
+    /// Outputs: Whether any stored name changed, or a storage error. Side effects: Updates the
+    /// allowlist's names; a name from a device that is not paired is dropped.
+    pub fn apply_paired_peer_names(&mut self) -> Result<bool, PairingError> {
+        let mut renamed = false;
+        for (peer_id, device_name) in self.transport.take_paired_peer_names() {
+            renamed |= self.store.rename_peer(&peer_id, &device_name)?;
+        }
+        Ok(renamed)
     }
 
     /// The name a nearby unpaired device gave (#121), or `None` while it has not.
