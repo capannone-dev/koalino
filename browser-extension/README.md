@@ -64,10 +64,11 @@ start the daemon with `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
 | `src/recap/` | The recap frame script: downloads the Teams transcript inside the recap's SharePoint frame. |
 | `src/background/` | The background: the native host connection and the popup's state. |
 | `src/popup/` | The popup: connection status, recording progress, the Teams transcript fetch's status, and settings. |
-| `src/lib/` | Browser-independent logic: PCM, WebVTT, captions, slides, Teams DOM readers, meeting records, settings, messages. |
+| `src/lib/` | Browser-independent logic: PCM, WebVTT, captions, slides, Teams DOM readers, meeting records, settings, messages, translations. |
+| `src/locales/` | The extension's text in ten languages (#124); the build turns it into each browser's `_locales`. |
 | `static/` | `popup.html` and icons. |
 | `tests/` | Vitest specs (jsdom). |
-| `build.mjs` | Builds `dist/firefox` and `dist/chromium`, with each browser's manifest. |
+| `build.mjs` | Builds `dist/firefox` and `dist/chromium`, with each browser's manifest and `_locales`. |
 
 ## Build, test, install
 

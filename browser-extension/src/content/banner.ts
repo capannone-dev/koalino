@@ -3,6 +3,7 @@
  * starts ("Record this meeting with Koalino?") and, while recording, a visible indicator with
  * a Stop button. It lives in a closed shadow root so Teams' styles and scripts do not reach it.
  */
+import { msg, textDirection } from "../lib/i18n";
 
 /** What the owner answered. */
 export type ConsentAnswer = "record" | "always" | "not-now";
@@ -37,6 +38,7 @@ function panel(): HTMLDivElement {
   style.textContent = STYLE;
   const container = document.createElement("div");
   container.className = "panel";
+  container.dir = textDirection();
   root.append(style, container);
   return container;
 }
@@ -58,16 +60,16 @@ function button(label: string, onClick: () => void, primary = false): HTMLButton
 export function askConsent(onAnswer: (answer: ConsentAnswer) => void): void {
   const container = panel();
   const text = document.createElement("span");
-  text.textContent = "Record this meeting with Koalino?";
+  text.textContent = msg("recordQuestion");
   const answer = (value: ConsentAnswer) => () => {
     hideOverlay();
     onAnswer(value);
   };
   container.append(
     text,
-    button("Record", answer("record"), true),
-    button("Always for Teams", answer("always")),
-    button("Not now", answer("not-now")),
+    button(msg("record"), answer("record"), true),
+    button(msg("alwaysForTeams"), answer("always")),
+    button(msg("notNow"), answer("not-now")),
   );
 }
 
@@ -82,11 +84,11 @@ export function showRecording(status: string, onStop: () => void): void {
   const dot = document.createElement("span");
   dot.className = "dot";
   const text = document.createElement("span");
-  text.textContent = "Koalino is recording";
+  text.textContent = msg("koalinoIsRecording");
   const detail = document.createElement("span");
   detail.className = "detail";
   detail.textContent = status;
-  container.append(dot, text, detail, button("Stop", onStop));
+  container.append(dot, text, detail, button(msg("stop"), onStop));
 }
 
 /** Removes the overlay. Side effects: Detaches it from the page. */

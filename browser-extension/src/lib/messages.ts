@@ -9,6 +9,7 @@
  * - background ⇄ native host: `HostMessage`, the JSON schema of
  *   `core/adapters/network/browser_host/extension_message.rs`.
  */
+import { msg } from "./i18n";
 
 /** Tags messages the page hook posts. */
 export const HOOK_SOURCE = "note-taker-hook";
@@ -97,22 +98,21 @@ export type TabMessage =
   /** What happened to the last Teams transcript fetch, for the popup (titles and times only). */
   | { kind: "recap-status"; status: string };
 
-/** "1 slide" or "2 slides". */
-function count(amount: number, noun: string): string {
-  return `${amount} ${noun}${amount === 1 ? "" : "s"}`;
-}
-
 /**
  * The popup's line for a recording in progress.
  *
- * Inputs: The progress. Outputs: "<title>: N audio chunks, N slides, N captions", with the last
- * problem in brackets. Side effects: None.
+ * Inputs: The progress. Outputs: "<title>: audio chunks N, slides N, captions N" in the browser's
+ * language (counts after their label, so no plural forms are needed), with the last problem in
+ * brackets. Side effects: None.
  */
 export function describeProgress(progress: RecordingProgress): string {
-  const line =
-    `${progress.title || "Teams meeting"}: ${count(progress.audioChunks, "audio chunk")}, ` +
-    `${count(progress.slides, "slide")}, ${count(progress.captions, "caption")}`;
-  return progress.problem ? `${line} (problem: ${progress.problem})` : line;
+  const line = msg("recordingProgress", {
+    title: progress.title || msg("teamsMeeting"),
+    audio: progress.audioChunks,
+    slides: progress.slides,
+    captions: progress.captions,
+  });
+  return progress.problem ? msg("recordingProblem", { line, problem: progress.problem }) : line;
 }
 
 /** From the background to a content script. */

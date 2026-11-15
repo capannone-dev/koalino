@@ -8,3 +8,6 @@ probes. The extension contexts that need a real browser (page hook, background, 
 automation) are checked by hand in the test VMs. The More menu in `automation.test.ts`, the slide frames in
 `slides.test.ts` and the profile labels in `teamsDom.test.ts` copy what the Firefox live test on
 the work account showed (November 2026).
+
+`i18n.test.ts` checks the `msg` fallback, the `_locales` conversion, and that every language in
+`src/locales` has every message with the English placeholders (#124).

@@ -15,6 +15,7 @@
  * Everything goes to the background over a port, and from there to the native host. Nothing of
  * the meeting is logged.
  */
+import { msg, type MessageKey } from "../lib/i18n";
 import { RecapFetchOutcome, fetchRecapTranscript, startTeamsTranscription, turnOnCaptions } from "./automation";
 import { askConsent, hideOverlay, showRecording } from "./banner";
 import { MeetingRecorder } from "./recorder";
@@ -134,9 +135,9 @@ function toHook(command: HookCommand["command"]): void {
 
 /** The recording overlay's status line. */
 function statusLine(): string {
-  if (connection.host === "missing") return "Koalino helper not installed";
-  if (connection.bridge === "unavailable") return "Koalino app not running; data is queued";
-  if (connection.bridge === "connected") return "sending to Koalino";
+  if (connection.host === "missing") return msg("statusHelperMissing");
+  if (connection.bridge === "unavailable") return msg("statusAppNotRunning");
+  if (connection.bridge === "connected") return msg("statusSending");
   return "";
 }
 
@@ -351,9 +352,9 @@ function sessionTime(recap: { startMs: number | null; endMs: number | null }): s
 }
 
 /** What a failed fetch step means, for the popup. */
-const RECAP_FAILURES: Record<Exclude<RecapFetchOutcome, "sent">, string> = {
-  "no-transcript-tab": "the recap has no Transcript tab",
-  "nothing-arrived": "the transcript could not be downloaded",
+const RECAP_FAILURES: Record<Exclude<RecapFetchOutcome, "sent">, MessageKey> = {
+  "no-transcript-tab": "recapNoTranscriptTab",
+  "nothing-arrived": "recapNothingArrived",
 };
 
 /** Looks for recaps of recorded meetings and fetches their transcripts. */
@@ -374,27 +375,30 @@ async function checkRecaps(): Promise<void> {
         );
         reportRecapStatus(
           sent
-            ? `Teams transcript of ${sent.title || "Teams meeting"} already sent to Koalino.`
-            : `Teams transcript on screen (${sessionTime(recap) || "no time shown"}): no recorded meeting matches.`,
+            ? msg("transcriptAlreadySent", { title: sent.title || msg("teamsMeeting") })
+            : msg("transcriptNoMatch", { time: sessionTime(recap) || msg("noTimeShown") }),
         );
         continue;
       }
       const attempts = recapAttempts.get(meeting.meetingId);
       if (!recapRetryDue(attempts, Date.now())) continue;
       recapAttempts.set(meeting.meetingId, { count: (attempts?.count ?? 0) + 1, lastMs: Date.now() });
-      const title = meeting.title || "Teams meeting";
-      reportRecapStatus(`Fetching the Teams transcript of ${title}…`);
+      const title = meeting.title || msg("teamsMeeting");
+      reportRecapStatus(msg("fetchingTranscript", { title }));
       const outcome = await fetchRecapTranscript(document, recap.open, requestRecapDownload, transcriptArrival(meeting));
       const triesLeft = recapRetryDue({ count: (attempts?.count ?? 0) + 1, lastMs: 0 }, Date.now());
       reportRecapStatus(
         outcome === "sent"
-          ? `Teams transcript of ${title} sent to Koalino.`
-          : `Teams transcript of ${title}: ${RECAP_FAILURES[outcome]}${triesLeft ? "; trying again in a minute" : ""}.`,
+          ? msg("transcriptSent", { title })
+          : msg(triesLeft ? "transcriptFailedRetrying" : "transcriptFailed", {
+              title,
+              reason: msg(RECAP_FAILURES[outcome]),
+            }),
       );
       return;
     }
   } catch (error) {
-    reportRecapStatus(`Teams transcript: ${error instanceof Error ? error.name : "error"}.`);
+    reportRecapStatus(msg("transcriptError", { error: error instanceof Error ? error.name : "error" }));
   }
 }
 

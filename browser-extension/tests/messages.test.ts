@@ -9,12 +9,12 @@ describe("describeProgress", () => {
   it("counts what was sent", () => {
     expect(
       describeProgress({ title: "Weekly sync", audioChunks: 12, slides: 1, captions: 30, problem: null }),
-    ).toBe("Weekly sync: 12 audio chunks, 1 slide, 30 captions");
+    ).toBe("Weekly sync: audio chunks 12, slides 1, captions 30");
   });
 
   it("names an untitled meeting and adds the last problem", () => {
     expect(
       describeProgress({ title: "", audioChunks: 1, slides: 0, captions: 0, problem: "slides: SecurityError" }),
-    ).toBe("Teams meeting: 1 audio chunk, 0 slides, 0 captions (problem: slides: SecurityError)");
+    ).toBe("Teams meeting: audio chunks 1, slides 0, captions 0 (problem: slides: SecurityError)");
   });
 });

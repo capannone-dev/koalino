@@ -18,6 +18,7 @@
  * After it is installed without access to the Teams sites (Firefox, when loaded by hand), it opens
  * its settings page in a tab, where the owner can allow it.
  */
+import { msg } from "../lib/i18n";
 import {
   BackgroundMessage,
   ConnectionState,
@@ -163,7 +164,7 @@ chrome.runtime.onConnect.addListener((port) => {
     if (message.kind === "host") sendToHost(message.message);
     if (message.kind === "recording") {
       if (message.recording) {
-        recordings.set(port, message.title || "Teams meeting");
+        recordings.set(port, message.title || msg("teamsMeeting"));
         recordingMeetings.set(port, message.meetingId);
         interruptions.resumed(message.meetingId);
       } else {

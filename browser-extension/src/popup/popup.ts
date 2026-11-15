@@ -5,6 +5,7 @@
  * may not run on the Teams sites, it says so first and offers to allow it.
  */
 import type { PopupState } from "../background/background";
+import { msg, textDirection, uiLanguage, type MessageKey } from "../lib/i18n";
 import { ExtensionSettings } from "../lib/settings";
 import { hasTeamsAccess, requestTeamsAccess } from "../lib/siteAccess";
 import { loadSettings, saveSettings } from "../lib/storage";
@@ -17,19 +18,21 @@ function render(state: PopupState): void {
   const { connection } = state;
   if (connection.host === "missing") {
     host.className = "bad";
-    host.textContent = "Helper not installed: run “browser-host install” from Koalino.";
+    host.textContent = msg("helperMissing");
   } else if (connection.bridge === "connected") {
     host.className = "ok";
-    host.textContent = "Connected to the Koalino app.";
+    host.textContent = msg("connectedToApp");
   } else if (connection.bridge === "unavailable") {
     host.className = "warn";
-    host.textContent = "Koalino app not running (or its meeting bridge is off); recordings wait.";
+    host.textContent = msg("appNotRunning");
   } else {
     host.className = "";
-    host.textContent = "Not checked yet.";
+    host.textContent = msg("notCheckedYet");
   }
   recordings.textContent =
-    state.recordings.length > 0 ? `Recording ${state.recordings.join("\n")}` : "Not recording.";
+    state.recordings.length > 0
+      ? msg("recordingMeetings", { meetings: state.recordings.join("\n") })
+      : msg("notRecording");
   const transcripts = document.getElementById("transcripts");
   if (transcripts) {
     transcripts.textContent = state.recapStatuses.join("\n");
@@ -68,16 +71,31 @@ async function renderAccess(refused = false): Promise<void> {
   notice.hidden = granted && !justGranted;
   if (justGranted) {
     notice.className = "status ok";
-    text.textContent = "Allowed. Reload any Teams tab that was already open.";
+    text.textContent = msg("accessAllowed");
     document.getElementById("allow")?.setAttribute("hidden", "");
   } else if (refused) {
-    text.textContent = "Not allowed: Koalino cannot record Teams until you allow it.";
+    text.textContent = msg("accessRefused");
   }
 }
 
 /** Set once access was granted from this page, to tell the owner to reload Teams. */
 let justGranted = false;
 
+/**
+ * Puts the popup's fixed text in the browser's language.
+ *
+ * Inputs: None. Side effects: Sets `lang` and `dir` on the page and the text of every element
+ * marked `data-i18n`.
+ */
+function translatePage(): void {
+  document.documentElement.lang = uiLanguage();
+  document.documentElement.dir = textDirection();
+  for (const element of document.querySelectorAll<HTMLElement>("[data-i18n]")) {
+    element.textContent = msg(element.dataset.i18n as MessageKey);
+  }
+}
+
+translatePage();
 document.getElementById("allow")?.addEventListener("click", () => {
   // The request must start in the click itself, before any other await.
   void requestTeamsAccess(chrome.permissions, chrome.runtime.getManifest()).then((granted) => {

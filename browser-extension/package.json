@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "license": "GPL-3.0-or-later",
   "private": true,
+  "type": "module",
   "description": "Koalino browser extension: records online meetings in the browser and sends them to the local Koalino app",
   "scripts": {
     "build": "node build.mjs",

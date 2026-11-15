@@ -12,3 +12,4 @@ entry point into one script (`build.mjs`).
 | `background/` | The background (Chrome service worker, Firefox event page) | `background.ts` → `background.js` |
 | `popup/` | The toolbar popup | `popup.ts` → `popup.js` |
 | `lib/` | Pure logic, used by the others and covered by `tests/` | — |
+| `locales/` | The text shown, one JSON file per language (#124) | — |

@@ -3544,3 +3544,22 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 
   Translations are machine-made and need a native review. Portuguese follows the app's
   Brazilian wording.
+
+## 2026-11-15 — #124 The browser extension in the same ten languages
+
+- **Decision:** the WebExtension standard, `_locales/<lang>/messages.json` read through
+  `chrome.i18n.getMessage`, which Firefox and Chromium both support. The sources are flat JSON
+  files in `browser-extension/src/locales` with the app's `{name}` placeholders; `build.mjs`
+  converts them, numbering the placeholders in English order so a translation may reorder them.
+- **Which language:** the browser's UI language, else English. The extension has no override:
+  browsers give extensions none, and the popup and the overlay are a few lines.
+- **`lang` and `dir` come from the messages** (`languageTag`, `textDirection`), not from
+  `getUILanguage` or `@@bidi_dir`. In a Chromium test started with `--lang=ar`, the messages
+  were Arabic while `getUILanguage` said `en-US`, so the Arabic popup was laid out left to right.
+- **No plural forms:** the recording line puts the counts after their labels ("audio chunks 12"),
+  so `chrome.i18n`'s lack of plurals does not matter.
+- **Kept in English:** error names in "problem: …", and command names.
+- **Verified:** headless Chromium with `--lang=it`, `pt-BR` and `ar` showed the translated popup with
+  matching `lang` and `dir`; the Arabic layout is mirrored. Firefox reads the same `_locales`.
+- With this, the app, the dashboard and the extension all follow the system or browser language.
+  The translations still need a native review.

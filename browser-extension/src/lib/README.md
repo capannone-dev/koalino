@@ -2,7 +2,8 @@
 
 # Shared logic (`browser-extension/src/lib`)
 
-Plain TypeScript with no extension APIs, except `storage.ts`, so it runs in every context and in
+Plain TypeScript with no extension APIs, except `storage.ts` (and `i18n.ts`, which falls back to
+English without them), so it runs in every context and in
 the Vitest specs under `tests/`.
 
 | File | Purpose |
@@ -17,4 +18,6 @@ the Vitest specs under `tests/`.
 | `settings.ts` | Settings and their defaults. |
 | `storage.ts` | Settings and meeting records in `chrome.storage.local`. |
 | `messages.ts` | The messages between hook, content script, background and native host, and the popup's progress line (`describeProgress`). |
+| `i18n.ts` | `msg(key, params)`: a message in the browser's language through `chrome.i18n`, else English; `textDirection` and `uiLanguage` for `dir` and `lang`, read from the messages so they match the text (#124). |
+| `localeFormat.ts` | Turns `src/locales/<lang>.json` into the browsers' `_locales/<dir>/messages.json` (`$NAME$` placeholders numbered in English order); `build.mjs` imports it. |
 | `siteAccess.ts` | Checks and asks for access to the Teams sites, which Firefox does not grant a hand-loaded Manifest V3 extension and Chrome lets the owner withhold (they include SharePoint, for the recap transcript frame), and `embeddedInTeams`, which tells a frame Teams opened from any other SharePoint page. |

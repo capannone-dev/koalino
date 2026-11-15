@@ -1,12 +1,14 @@
 /**
  * Builds the extension for Firefox and for Chromium browsers (Chrome, Edge, Chromium) into
  * dist/firefox and dist/chromium: bundles the TypeScript entry points with esbuild, copies the
- * static files, and writes each browser's manifest.
+ * static files, writes each language's `_locales/<lang>/messages.json` from `src/locales` (#124),
+ * and writes each browser's manifest.
  *
  * Usage: node build.mjs
  */
 import { build } from "esbuild";
-import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chromeLocaleDirectory, chromeMessages } from "./src/lib/localeFormat.ts";
 
 /** The Teams sites the extension works on. */
 const TEAMS_SITES = [
@@ -34,9 +36,10 @@ const FIREFOX_ADDON_ID = "browser-bridge@note-taker.local";
 /** The manifest parts both browsers share. */
 const baseManifest = {
   manifest_version: 3,
-  name: "Koalino for Teams",
+  name: "__MSG_extName__",
   version: "0.1.0",
-  description: "Records Teams meetings in the browser and sends them to the Koalino app on this computer.",
+  description: "__MSG_extDescription__",
+  default_locale: "en",
   permissions: ["nativeMessaging", "storage"],
   host_permissions: [...TEAMS_SITES, ...RECAP_FRAME_SITES],
   icons: { 48: "icon-48.png", 128: "icon-128.png" },
@@ -64,6 +67,21 @@ const manifests = {
   },
 };
 
+/**
+ * Writes every language's messages into an output folder's `_locales`.
+ *
+ * Inputs: The output folder. Side effects: Creates `<outdir>/_locales/<lang>/messages.json`.
+ */
+function writeLocales(outdir) {
+  const readLocale = (file) => JSON.parse(readFileSync(`src/locales/${file}`, "utf8"));
+  const english = readLocale("en.json");
+  for (const file of readdirSync("src/locales").filter((name) => name.endsWith(".json"))) {
+    const directory = `${outdir}/_locales/${chromeLocaleDirectory(file.replace(/\.json$/, ""))}`;
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(`${directory}/messages.json`, JSON.stringify(chromeMessages(readLocale(file), english), null, 2));
+  }
+}
+
 for (const [browser, manifest] of Object.entries(manifests)) {
   const outdir = `dist/${browser}`;
   rmSync(outdir, { recursive: true, force: true });
@@ -83,6 +101,7 @@ for (const [browser, manifest] of Object.entries(manifests)) {
     logLevel: "warning",
   });
   cpSync("static", outdir, { recursive: true });
+  writeLocales(outdir);
   writeFileSync(`${outdir}/manifest.json`, JSON.stringify(manifest, null, 2));
   console.log(`built ${outdir}`);
 }
