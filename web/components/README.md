@@ -28,7 +28,8 @@ and Codex on this computer; no API keys since #117), adds, edits, tests and remo
 default, edits the summary prompt template, turns automatic summaries on or off (#101) and chooses
 the connection that writes the summaries paired devices ask for (#107), all through
 `lib/llm-api.ts`. `meeting-summary-panel.tsx` shows a meeting's stored summary, writes one
-with a chosen connection and edits the meeting's own prompt.
+with a chosen connection and edits the meeting's own prompt, and downloads the summary as PDF,
+plain text, Word or Markdown (#130).
 `meeting-notes.tsx` (#96) shows a meeting's Markdown notes as written and edits them in a text
 field (`lib/edits-api.ts`, `PUT /api/meetings/{id}/notes`). `meeting-summary-panel.tsx` also edits
 the summary's text, or takes one written by hand ("Written by you."). `meeting-transcript.tsx`,

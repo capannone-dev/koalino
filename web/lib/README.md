@@ -46,7 +46,7 @@ is the meeting's project, absent from older servers.
 
 `edits-api.ts` (#96) edits a meeting: `getMeetingNotes`, `saveMeetingNotes`, `editSummaryText`
 and `editSegment`, with `EditApiError` and `editErrorMessage`. `llm-api.ts` (#95) holds the AI
-connections and summaries.
+connections and summaries, and `fetchSummaryExport` downloads a summary as a file (#130).
 
 `search-api.ts` (#100) is `searchNotes(query, scope, projectId?)` over `GET /api/search`, with
 `SearchApiError` and `searchErrorMessage` (never the server's text). `hitHref` gives the page and

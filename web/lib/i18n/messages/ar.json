@@ -526,5 +526,8 @@
   "writtenBy": "كتبه {model} ({connectionLabel}){edited}{stopped}.",
   "writtenByYou": "كتبته أنت.",
   "youAsked": "سألت:",
-  "yourQuestion": "سؤالك"
+  "yourQuestion": "سؤالك",
+  "exportAs": "تصدير بصيغة",
+  "plainText": "نص عادي",
+  "theSummaryCouldNotBeExported": "تعذّر تصدير الملخص. حاول مرة أخرى."
 }

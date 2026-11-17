@@ -15,7 +15,8 @@ vi.mock("@/lib/edits-api", async () => ({
 vi.mock("@/lib/llm-api", async () => ({
   ...(await vi.importActual<typeof api>("@/lib/llm-api")),
   summarizeMeeting: vi.fn(),
-  setMeetingPrompt: vi.fn()
+  setMeetingPrompt: vi.fn(),
+  fetchSummaryExport: vi.fn()
 }));
 
 const connections: api.LlmConnection[] = [
@@ -36,6 +37,7 @@ const written: api.StoredSummary = {
 beforeEach(() => {
   vi.mocked(api.summarizeMeeting).mockReset();
   vi.mocked(api.setMeetingPrompt).mockReset();
+  vi.mocked(api.fetchSummaryExport).mockReset();
 });
 
 test("writes a summary with the default connection and shows it", async () => {
@@ -107,4 +109,33 @@ test("the summary can be edited, and written by hand without one", async () => {
   fireEvent.change(screen.getByLabelText("Summary (Markdown)"), { target: { value: "Mine." } });
   fireEvent.click(screen.getByRole("button", { name: "Save summary" }));
   expect(await screen.findByText("Written by you.")).toBeInTheDocument();
+});
+
+test("the summary downloads as PDF, plain text, Word or Markdown (#130)", async () => {
+  const blob = new Blob(["x"]);
+  vi.mocked(api.fetchSummaryExport).mockResolvedValue({ fileName: "Budget - summary.docx", blob });
+  const saveFile = vi.fn();
+  render(<MeetingSummaryPanel meetingId="m-1" summary={written} meetingPrompt={null} connections={[]} defaultTemplate="T" saveFile={saveFile} />);
+
+  const group = screen.getByRole("group", { name: "Export as" });
+  expect(group).toBeInTheDocument();
+  for (const name of ["PDF", "Plain text", "Word", "Markdown"]) {
+    expect(screen.getByRole("button", { name })).toBeInTheDocument();
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Word" }));
+
+  expect(await screen.findByText("Downloaded Budget - summary.docx.")).toBeInTheDocument();
+  expect(api.fetchSummaryExport).toHaveBeenCalledWith("m-1", "docx");
+  expect(saveFile).toHaveBeenCalledWith(blob, "Budget - summary.docx");
+});
+
+test("a failed download is explained, and without a summary there is nothing to export", async () => {
+  vi.mocked(api.fetchSummaryExport).mockRejectedValue(new api.LlmApiError("export_failed", 500));
+  const { unmount } = render(<MeetingSummaryPanel meetingId="m-1" summary={written} meetingPrompt={null} connections={[]} defaultTemplate="T" saveFile={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "PDF" }));
+  expect(await screen.findByText("The summary could not be exported. Try again.")).toBeInTheDocument();
+  unmount();
+
+  render(<MeetingSummaryPanel meetingId="m-1" summary={null} meetingPrompt={null} connections={[]} defaultTemplate="T" />);
+  expect(screen.queryByRole("group", { name: "Export as" })).not.toBeInTheDocument();
 });

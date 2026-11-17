@@ -519,5 +519,8 @@
   "writtenBy": "Написано {model} ({connectionLabel}){edited}{stopped}.",
   "writtenByYou": "Написано вами.",
   "youAsked": "Вы спросили:",
-  "yourQuestion": "Ваш вопрос"
+  "yourQuestion": "Ваш вопрос",
+  "exportAs": "Экспортировать как",
+  "plainText": "Обычный текст",
+  "theSummaryCouldNotBeExported": "Не удалось экспортировать сводку. Попробуйте ещё раз."
 }

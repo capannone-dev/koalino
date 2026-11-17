@@ -499,5 +499,8 @@
   "writtenBy": "Scritto da {model} ({connectionLabel}){edited}{stopped}.",
   "writtenByYou": "Scritto da te.",
   "youAsked": "Hai chiesto:",
-  "yourQuestion": "La tua domanda"
+  "yourQuestion": "La tua domanda",
+  "exportAs": "Esporta come",
+  "plainText": "Testo semplice",
+  "theSummaryCouldNotBeExported": "Non è stato possibile esportare il riassunto. Riprova."
 }

@@ -105,7 +105,10 @@ const messages = (t: Translate) : Record<string, string> => ({
   llm_tool_missing: t("claudeCodeOrCodexIs"),
   llm_tool_failed: t("claudeCodeOrCodexCould2"),
   save_failed: t("theSettingsCouldNotBe"),
-  storage_failed: t("theMeetingCouldNotBe")
+  storage_failed: t("theMeetingCouldNotBe"),
+  storage_error: t("theMeetingCouldNotBe"),
+  no_summary: t("noSummaryYet"),
+  export_failed: t("theSummaryCouldNotBeExported")
 });
 
 /**
@@ -138,6 +141,55 @@ async function request<Answer>(path: string, init: RequestInit = {}): Promise<An
     throw new LlmApiError(typeof body.error_code === "string" ? body.error_code : "server", response.status, detail);
   }
   return body as Answer;
+}
+
+/** The formats a summary downloads as (#130), named as the daemon expects them. */
+export type SummaryExportFormat = "pdf" | "txt" | "docx" | "md";
+
+/** A downloaded summary file. */
+export type SummaryDownload = { fileName: string; blob: Blob };
+
+/**
+ * Reads the download name from `Content-Disposition`: the UTF-8 `filename*`, else `filename`.
+ *
+ * Outputs: the name, or `fallback` when there is none. Side effects: none.
+ */
+function downloadName(disposition: string, fallback: string): string {
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded);
+    } catch {
+      // Malformed: use the plain name.
+    }
+  }
+  return /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallback;
+}
+
+/**
+ * Downloads a meeting's summary as a file
+ * (`GET /api/meetings/{id}/summary/export?format=…`, #130).
+ *
+ * Outputs: the file and the name the daemon gave it (`<title> - summary.<ext>`). Throws
+ * `LlmApiError` (`no_summary`, `meeting_not_found`, `export_failed`, `network`, …).
+ * Side effects: none on the daemon.
+ */
+export async function fetchSummaryExport(meetingId: string, format: SummaryExportFormat): Promise<SummaryDownload> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${apiBaseUrl}/api/meetings/${encodeURIComponent(meetingId)}/summary/export?format=${format}`,
+      { cache: "no-store" }
+    );
+  } catch {
+    throw new LlmApiError("network", null);
+  }
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { error_code?: unknown };
+    throw new LlmApiError(typeof body.error_code === "string" ? body.error_code : "server", response.status);
+  }
+  const fileName = downloadName(response.headers.get("content-disposition") ?? "", `summary.${format}`);
+  return { fileName, blob: await response.blob() };
 }
 
 /** Builds a JSON request. */

@@ -499,5 +499,8 @@
   "writtenBy": "{model}（{connectionLabel}）が作成{edited}{stopped}。",
   "writtenByYou": "あなたが作成。",
   "youAsked": "質問:",
-  "yourQuestion": "質問"
+  "yourQuestion": "質問",
+  "exportAs": "書き出し形式",
+  "plainText": "プレーンテキスト",
+  "theSummaryCouldNotBeExported": "要約を書き出せませんでした。もう一度お試しください。"
 }

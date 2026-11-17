@@ -499,5 +499,8 @@
   "writtenBy": "由 {model}（{connectionLabel}）撰写{edited}{stopped}。",
   "writtenByYou": "由你撰写。",
   "youAsked": "你的问题：",
-  "yourQuestion": "你的问题"
+  "yourQuestion": "你的问题",
+  "exportAs": "导出为",
+  "plainText": "纯文本",
+  "theSummaryCouldNotBeExported": "无法导出摘要。请重试。"
 }

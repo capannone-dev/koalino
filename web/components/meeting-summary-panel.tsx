@@ -1,19 +1,23 @@
 // Renders a meeting's AI summary (#95) on its page: the stored summary, a button to write or
 // rewrite it with the default connection or another one, and the meeting's own prompt, which
 // replaces the Settings prompt for this meeting only. The owner can also edit the summary's text,
-// or write one by hand (#96); an edited summary is never replaced automatically.
+// or write one by hand (#96); an edited summary is never replaced automatically. A summary
+// downloads as PDF, plain text, Word or Markdown (#130).
 
 "use client";
 
 import { useId, useState } from "react";
 import { editErrorMessage, editSummaryText } from "@/lib/edits-api";
 import {
+  fetchSummaryExport,
   llmErrorMessage,
   setMeetingPrompt,
   summarizeMeeting,
   type LlmConnection,
-  type StoredSummary
+  type StoredSummary,
+  type SummaryExportFormat
 } from "@/lib/llm-api";
+import { saveBlobAsFile } from "@/components/log-settings";
 import { useT } from "@/lib/i18n/client";
 
 const buttonClass =
@@ -31,7 +35,17 @@ export type MeetingSummaryPanelProps = {
   connections: LlmConnection[] | null;
   /** The Settings prompt, shown as a starting point for the meeting's own. */
   defaultTemplate: string;
+  /** Saves a downloaded file; the browser's download by default (tests pass their own). */
+  saveFile?: (blob: Blob, fileName: string) => void;
 };
+
+/** The download formats, in menu order; the labels are names of formats, except plain text. */
+const exportFormats: { format: SummaryExportFormat; label: string | null }[] = [
+  { format: "pdf", label: "PDF" },
+  { format: "txt", label: null },
+  { format: "docx", label: "Word" },
+  { format: "md", label: "Markdown" }
+];
 
 /**
  * Shows and writes a meeting's summary.
@@ -46,7 +60,8 @@ export function MeetingSummaryPanel({
   summary,
   meetingPrompt,
   connections,
-  defaultTemplate
+  defaultTemplate,
+  saveFile = saveBlobAsFile
 }: MeetingSummaryPanelProps) {
   const t = useT();
   const [current, setCurrent] = useState(summary);
@@ -74,6 +89,21 @@ export function MeetingSummaryPanel({
         result.images_skipped > 0 ? t("picturesNotSent", { count: result.images_skipped }) : null
       ].filter(Boolean);
       setMessage([t("summaryWritten"), ...notes].join(" "));
+    } catch (error) {
+      setMessage(llmErrorMessage(error, t));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Downloads the summary as `format` and saves it. */
+  async function exportAs(format: SummaryExportFormat) {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const download = await fetchSummaryExport(meetingId, format);
+      saveFile(download.blob, download.fileName);
+      setMessage(t("downloaded", { fileName: download.fileName }));
     } catch (error) {
       setMessage(llmErrorMessage(error, t));
     } finally {
@@ -141,7 +171,17 @@ export function MeetingSummaryPanel({
               <>{t("writtenBy", { model: current.model, connectionLabel: current.connection_label, edited: current.edited ? t("edited") : "", stopped: current.truncated ? t("modelStoppedEarly") : "" })}</>
             )}
           </p>
-          <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText(current.text)}>{t("editSummary")}</button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" className={buttonClass} disabled={busy} onClick={() => setEditingText(current.text)}>{t("editSummary")}</button>
+            <div role="group" aria-labelledby={`${meetingId}-summary-export`} className="flex flex-wrap items-center gap-2">
+              <span id={`${meetingId}-summary-export`} className="text-sm font-semibold">{t("exportAs")}</span>
+              {exportFormats.map(({ format, label }) => (
+                <button key={format} type="button" className={buttonClass} disabled={busy} onClick={() => void exportAs(format)}>
+                  {label ?? t("plainText")}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
