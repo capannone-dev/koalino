@@ -102,7 +102,8 @@ where
     /// Reuses a durable mapping or auto-creates an identity named from a new external participant.
     ///
     /// Inputs: `external` carries the stable mapping key and UI display name.
-    /// Outputs: An existing identity or a new UUID identity whose initial name is the display name.
+    /// Outputs: The mapped identity; else the one saved person with the same name (#134); else a
+    /// new UUID identity whose initial name is the display name.
     /// Side effects: Persists a new external-ID mapping only for unseen external IDs.
     fn map_external_to_local(
         &self,
@@ -113,6 +114,19 @@ where
             .find_by_external_id(external.external_id())?
         {
             return Ok(existing_identity);
+        }
+        // Someone already saved under this name (often the owner) keeps one person (#134).
+        if let Some(named_identity) = self
+            .external_identity_repository
+            .find_by_display_name(external.display_name())?
+        {
+            self.external_identity_repository
+                .save_external_mapping(external.external_id(), &named_identity)?;
+            tracing::info!(
+                identity_id = %named_identity.identity_id(),
+                "Mapped an external meeting participant to the saved person of the same name"
+            );
+            return Ok(named_identity);
         }
         let created_identity =
             crate::domain::models::SpeakerIdentity::new(Uuid::new_v4(), external.display_name());

@@ -3863,3 +3863,22 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   applies.
 - **Effect:** a slow computer transcribes the meeting late (the after-meeting pass waits for the
   backlog) instead of losing it.
+
+## 2026-11-17 — Voice gallery: people without a voice sample, and a clip for every voice (#134)
+
+- **Owner's report:** saved people with "0" voices, and a group of voices with one Play, or two,
+  for many parts.
+- **People without a voice sample.** On the owner's data, 4 of 6. Three were named from voices
+  too short or mixed to keep a sample (#74 keeps only clean voices), which is as designed. They
+  now read "no voice sample yet, so not recognized by voice" instead of "0 voice samples". The
+  fourth was made by the Teams mapping for the owner's own Teams account, next to the existing
+  person of the same name. **Decision:** an unmapped participant whose name matches exactly one
+  saved person, ignoring case and spacing, is mapped to that person. With two or more matches a
+  new person is still made.
+- **Play missing.** A live voice kept one clip, from its first chunk. The final pass deleted it
+  when no single speaker held it long enough, and a speaker the final pass separated from a
+  merged live voice got no clip at all. **Decision:** a live voice keeps up to 3 clips per
+  recording. After the meeting each unnamed speaker gets the clip, from any of the recording's
+  clips, that holds them alone longest, cut to that stretch. Unused clips are deleted, so no
+  more raw audio is kept after the meeting than before.
+- Groups of up to 6 parts show their parts, each with its own Play, without a tap.

@@ -39,6 +39,28 @@ pub(super) fn initialize_external_identity_schema(
 }
 
 impl ExternalIdentityRepository for SqliteVoiceVectorDB {
+    /// Finds the one saved person with this name, ignoring case and spacing (#134).
+    ///
+    /// Inputs: A display name. Outputs: The person when exactly one matches, else `None`, or a
+    /// storage error. Side effects: Reads SQLite.
+    fn find_by_display_name(
+        &self,
+        display_name: &str,
+    ) -> Result<Option<SpeakerIdentity>, StorageError> {
+        let wanted = comparable_name(display_name);
+        if wanted.is_empty() {
+            return Ok(None);
+        }
+        let mut matches = self
+            .list_speaker_identities()?
+            .into_iter()
+            .filter(|identity| comparable_name(identity.display_name()) == wanted);
+        Ok(match (matches.next(), matches.next()) {
+            (Some(only), None) => Some(only),
+            _ => None,
+        })
+    }
+
     /// Looks up the identity mapped to `external_id`, with its current display name.
     ///
     /// Inputs: A provider-stable external ID.
@@ -110,4 +132,12 @@ impl ExternalIdentityRepository for SqliteVoiceVectorDB {
     fn store_participant_voice(&self, embedding: VoiceEmbedding) -> Result<(), StorageError> {
         self.store_embedding(embedding)
     }
+}
+
+/// A name as compared for matching: lowercase, single-spaced.
+fn comparable_name(name: &str) -> String {
+    name.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
 }

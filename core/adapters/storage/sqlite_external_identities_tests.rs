@@ -200,3 +200,65 @@ fn voice_count(database: &TemporaryDatabase, identity: &SpeakerIdentity) -> usiz
         .voice_variant_count(identity.identity_id())
         .unwrap_or_else(|error| panic!("count should load: {error}"))
 }
+
+/// Verifies a new participant whose name matches one saved person maps to that person instead of
+/// a second, voiceless person of the same name (#134).
+#[test]
+fn a_participant_named_like_a_saved_person_maps_to_that_person() {
+    let database = TemporaryDatabase::new();
+    let store = database.open();
+    let saved = SpeakerIdentity::new(Uuid::new_v4(), "Ettore  Rossi");
+    store
+        .save_speaker_identity(&saved)
+        .unwrap_or_else(|error| panic!("person should save: {error}"));
+    let mapper = TeamsIdentityMapper::new(std::sync::Mutex::new(store));
+
+    let mapped = mapper
+        .map_external_to_local(ExternalParticipant::new(
+            "browser-owner:ettore rossi",
+            "ettore rossi",
+            None,
+        ))
+        .unwrap_or_else(|error| panic!("mapping should succeed: {error}"));
+
+    assert_eq!(mapped.identity_id(), saved.identity_id());
+    let store = database.open();
+    assert_eq!(
+        store
+            .list_speaker_identities()
+            .unwrap_or_else(|error| panic!("people should list: {error}"))
+            .len(),
+        1
+    );
+    assert_eq!(
+        store
+            .find_by_external_id("browser-owner:ettore rossi")
+            .unwrap_or_else(|error| panic!("lookup should succeed: {error}"))
+            .map(|identity| identity.identity_id()),
+        Some(saved.identity_id())
+    );
+}
+
+/// Verifies two saved people with the participant's name are ambiguous, so a new one is made.
+#[test]
+fn an_ambiguous_name_still_creates_a_new_person() {
+    let database = TemporaryDatabase::new();
+    let store = database.open();
+    for _ in 0..2 {
+        store
+            .save_speaker_identity(&SpeakerIdentity::new(Uuid::new_v4(), "Anna"))
+            .unwrap_or_else(|error| panic!("person should save: {error}"));
+    }
+    let mapper = TeamsIdentityMapper::new(std::sync::Mutex::new(store));
+    mapper
+        .map_external_to_local(ExternalParticipant::new("teams-anna", "Anna", None))
+        .unwrap_or_else(|error| panic!("mapping should succeed: {error}"));
+    assert_eq!(
+        database
+            .open()
+            .list_speaker_identities()
+            .unwrap_or_else(|error| panic!("people should list: {error}"))
+            .len(),
+        3
+    );
+}

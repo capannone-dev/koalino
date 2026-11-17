@@ -81,6 +81,20 @@ pub trait ExternalIdentityRepository {
         identity: &SpeakerIdentity,
     ) -> Result<(), StorageError>;
 
+    /// Finds the one saved person with this display name, compared ignoring case and spacing, so a
+    /// new participant who is already in the gallery isn't saved twice (#134).
+    ///
+    /// Inputs: The participant's display name.
+    /// Outputs: The person when exactly one matches; `None` for none, several, or a repository
+    /// without people. Side effects: Reads saved people only.
+    fn find_by_display_name(
+        &self,
+        display_name: &str,
+    ) -> Result<Option<SpeakerIdentity>, StorageError> {
+        let _ = display_name;
+        Ok(None)
+    }
+
     /// Stores a participant's voice variant in the gallery (#103).
     ///
     /// Inputs: The embedding, whose identity must already be saved (the mapping saves it).
@@ -125,6 +139,19 @@ where
         self.lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .save_external_mapping(external_id, identity)
+    }
+
+    /// Locks the inner repository and looks up the name (recovers from poisoning).
+    ///
+    /// Inputs: A display name. Outputs: The inner repository's answer.
+    /// Side effects: Holds the lock for the duration of the read.
+    fn find_by_display_name(
+        &self,
+        display_name: &str,
+    ) -> Result<Option<SpeakerIdentity>, StorageError> {
+        self.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .find_by_display_name(display_name)
     }
 
     /// Locks the inner repository and stores the voice (recovers from poisoning).

@@ -1205,9 +1205,10 @@ fn one_speaker_per_chunk_diarizer(
     }
 }
 
-/// Verifies two similar unknown voices share one cluster, one review clip, and the segment link.
+/// Verifies two similar unknown voices share one cluster and the segment link, and each chunk
+/// keeps a clip of that cluster while it has fewer than three (#134).
 #[tokio::test]
-async fn similar_unknown_voices_share_one_cluster_and_one_review_clip() {
+async fn similar_unknown_voices_share_one_cluster_and_its_review_clips() {
     let meeting_id = MeetingId::new(MEETING_ID);
     let mut session = MeetingSession::start(
         meeting_id.clone(),
@@ -1248,28 +1249,29 @@ async fn similar_unknown_voices_share_one_cluster_and_one_review_clip() {
         .note_repository()
         .get_unassigned_clips(&meeting_id)
         .unwrap_or_else(|error| panic!("clips should load: {error}"));
-    assert_eq!(
-        saved_clips.len(),
-        1,
-        "one review clip per cluster, not per chunk"
-    );
-    assert_eq!(saved_clips[0].cluster_id(), Some(cluster_id));
-    assert_eq!(
-        produced_segments
+    assert_eq!(saved_clips.len(), 2, "both chunks keep a clip of the voice");
+    assert!(
+        saved_clips
             .iter()
-            .map(|produced| produced.attribution().clone())
-            .collect::<Vec<_>>(),
-        vec![
-            SpeakerAttribution::Unknown {
-                clip_id: Some(saved_clips[0].clip_id()),
-                cluster_id: Some(cluster_id),
-            },
-            SpeakerAttribution::Unknown {
-                clip_id: None,
-                cluster_id: Some(cluster_id),
-            },
-        ]
+            .all(|clip| clip.cluster_id() == Some(cluster_id))
     );
+    let attributions: Vec<SpeakerAttribution> = produced_segments
+        .iter()
+        .map(|produced| produced.attribution().clone())
+        .collect();
+    assert_eq!(attributions.len(), 2);
+    for attribution in &attributions {
+        match attribution {
+            SpeakerAttribution::Unknown {
+                clip_id: Some(clip_id),
+                cluster_id: Some(segment_cluster_id),
+            } => {
+                assert_eq!(*segment_cluster_id, cluster_id);
+                assert!(saved_clips.iter().any(|clip| clip.clip_id() == *clip_id));
+            }
+            other => panic!("each chunk links its own clip and the cluster: {other:?}"),
+        }
+    }
     assert!(
         session
             .persisted_segments()
