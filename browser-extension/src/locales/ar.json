@@ -25,7 +25,7 @@
   "accessRefused": "غير مسموح: لا يمكن لـ Koalino تسجيل Teams حتى تسمح بذلك.",
   "teamsMeeting": "اجتماع Teams",
   "statusHelperMissing": "مساعد Koalino غير مثبّت",
-  "statusAppNotRunning": "تطبيق Koalino لا يعمل؛ البيانات في قائمة الانتظار",
+  "statusAppNotRunning": "Koalino لا يعمل: افتحه الآن. حتى ذلك الحين تُحفظ آخر 4 دقائق فقط",
   "statusSending": "جارٍ الإرسال إلى Koalino",
   "transcriptAlreadySent": "نص Teams المكتوب لـ {title} أُرسل بالفعل إلى Koalino.",
   "transcriptNoMatch": "نص Teams المكتوب على الشاشة ({time}): لا يطابقه أي اجتماع مسجّل.",

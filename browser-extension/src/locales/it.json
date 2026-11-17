@@ -25,7 +25,7 @@
   "accessRefused": "Non consentito: Koalino non può registrare Teams finché non lo consenti.",
   "teamsMeeting": "Riunione di Teams",
   "statusHelperMissing": "Assistente Koalino non installato",
-  "statusAppNotRunning": "App Koalino non in esecuzione; i dati restano in coda",
+  "statusAppNotRunning": "Koalino non è aperto: aprilo ora. Fino ad allora si tengono solo gli ultimi 4 minuti",
   "statusSending": "invio a Koalino",
   "transcriptAlreadySent": "Trascrizione di Teams di {title} già inviata a Koalino.",
   "transcriptNoMatch": "Trascrizione di Teams sullo schermo ({time}): nessuna riunione registrata corrisponde.",

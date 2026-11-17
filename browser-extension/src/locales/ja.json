@@ -25,7 +25,7 @@
   "accessRefused": "許可されていません。許可するまで Koalino は Teams を録音できません。",
   "teamsMeeting": "Teams 会議",
   "statusHelperMissing": "Koalino ヘルパーが未インストール",
-  "statusAppNotRunning": "Koalino アプリ未実行。データは待機中",
+  "statusAppNotRunning": "Koalino が起動していません。今すぐ開いてください。それまでは直近 4 分だけが保持されます",
   "statusSending": "Koalino に送信中",
   "transcriptAlreadySent": "{title} の Teams 文字起こしは Koalino に送信済みです。",
   "transcriptNoMatch": "画面上の Teams 文字起こし（{time}）: 一致する録音済みの会議がありません。",

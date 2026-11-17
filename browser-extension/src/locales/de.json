@@ -25,7 +25,7 @@
   "accessRefused": "Nicht erlaubt: Koalino kann Teams erst aufnehmen, wenn Sie es erlauben.",
   "teamsMeeting": "Teams-Besprechung",
   "statusHelperMissing": "Koalino-Hilfsprogramm nicht installiert",
-  "statusAppNotRunning": "Koalino-App läuft nicht; Daten werden zwischengespeichert",
+  "statusAppNotRunning": "Koalino läuft nicht: jetzt öffnen. Bis dahin bleiben nur die letzten 4 Minuten erhalten",
   "statusSending": "wird an Koalino gesendet",
   "transcriptAlreadySent": "Teams-Transkript von {title} bereits an Koalino gesendet.",
   "transcriptNoMatch": "Teams-Transkript auf dem Bildschirm ({time}): keine aufgenommene Besprechung passt.",

@@ -25,7 +25,7 @@
   "accessRefused": "未允许：在你允许之前，Koalino 无法录制 Teams。",
   "teamsMeeting": "Teams 会议",
   "statusHelperMissing": "未安装 Koalino 辅助程序",
-  "statusAppNotRunning": "Koalino 应用未运行；数据已排队",
+  "statusAppNotRunning": "Koalino 未运行：请立即打开。在此之前只保留最近 4 分钟",
   "statusSending": "正在发送到 Koalino",
   "transcriptAlreadySent": "{title} 的 Teams 转录已发送到 Koalino。",
   "transcriptNoMatch": "屏幕上的 Teams 转录（{time}）：没有匹配的已录制会议。",

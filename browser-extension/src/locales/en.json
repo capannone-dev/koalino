@@ -25,7 +25,7 @@
   "accessRefused": "Not allowed: Koalino cannot record Teams until you allow it.",
   "teamsMeeting": "Teams meeting",
   "statusHelperMissing": "Koalino helper not installed",
-  "statusAppNotRunning": "Koalino app not running; data is queued",
+  "statusAppNotRunning": "Koalino isn't running: open it now. Until then only the last 4 minutes are kept",
   "statusSending": "sending to Koalino",
   "transcriptAlreadySent": "Teams transcript of {title} already sent to Koalino.",
   "transcriptNoMatch": "Teams transcript on screen ({time}): no recorded meeting matches.",
