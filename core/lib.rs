@@ -192,6 +192,12 @@ pub mod speed_check;
 mod speed_check_tests;
 #[path = "bin/storage_composition.rs"]
 pub mod storage_composition;
+/// Exports a meeting's summary as PDF, text, Word or Markdown for the app and web API (#130).
+#[path = "bin/summary_export_commands.rs"]
+pub mod summary_export_commands;
+#[cfg(test)]
+#[path = "bin/summary_export_commands_tests.rs"]
+mod summary_export_commands_tests;
 /// Composes the Teams bot bridge (WebSocket server, buffer, and meeting pump) for the daemon.
 #[path = "bin/teams_bridge_composition.rs"]
 pub mod teams_bridge_composition;

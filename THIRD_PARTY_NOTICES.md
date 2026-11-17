@@ -456,6 +456,7 @@ Every crate in `Cargo.lock`, for all platforms and features.
 | protobuf-codegen | 3.7.2 | MIT |
 | protobuf-parse | 3.7.2 | MIT |
 | protobuf-support | 3.7.2 | MIT |
+| pulldown-cmark | 0.13.6 | MIT |
 | pulseaudio | 0.3.2 | MIT |
 | quinn | 0.11.12 | MIT OR Apache-2.0 |
 | quinn-proto | 0.11.19 | MIT OR Apache-2.0 |

@@ -15,6 +15,9 @@
 //! its own connection, such as Claude Code or Codex signed in there (#107), or cancels the
 //! request. `note_taker_get_meeting_summary` reports the request's state.
 //!
+//! `note_taker_export_summary` saves a meeting's summary as a PDF, text, Word or Markdown file
+//! where the owner chose (#130).
+//!
 //! `start_auto_summaries` runs the app's automatic summaries (#101) once the runtime opens, and
 //! a stopped recording wakes them.
 
@@ -27,7 +30,10 @@ use std::{
 use serde_json::{Value, json};
 
 use crate::{
-    adapters::audio::retained_audio_store::RetainedSpeechIndex,
+    adapters::{
+        audio::retained_audio_store::RetainedSpeechIndex,
+        export::{pdf_fonts::PdfFontConfig, summary_export::SummaryExportFormat},
+    },
     application::{
         combined_meetings::HeldSpeech,
         meeting_handoff::{HandoffDelivery, HandoffPurpose},
@@ -56,6 +62,7 @@ use crate::{
     },
     ports::storage::{DocumentChanges, MeetingRecording, NoteRepository},
     project_handoff::{NotesHandoffScope, write_notes_handoff},
+    summary_export_commands::export_summary_to_file,
     transcription_settings::TranscriptionPaths,
 };
 
@@ -312,6 +319,63 @@ pub unsafe extern "C" fn note_taker_get_meeting_summary(meeting_id: *const c_cha
             }),
             Err(_) => json!({"ok": false, "error_code": "storage_failed",
                              "error": "the summary could not be read"}),
+        }
+    });
+    into_c(answer.map_or_else(runtime_unavailable, |answer| answer.to_string()))
+}
+
+/// Saves a meeting's summary as a file (#130).
+///
+/// Inputs: The meeting ID; the format (`pdf`, `txt`, `docx` or `md`); the file to write, which
+/// the owner chose (an existing file is replaced).
+/// Outputs: Caller-freed `{"ok":true,"file_path","size_bytes"}`, or `{"ok":false,"error_code","error"}` with
+/// `invalid_request`, `meeting_not_found`, `no_summary`, `storage_error`, `export_failed` or
+/// `runtime_unavailable`.
+/// Side effects: Reads the meeting; may read font files; writes the file. It runs synchronously,
+/// so the app calls it off the UI thread.
+///
+/// # Safety
+/// Each pointer must be null or a valid NUL-terminated string that stays alive for the call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn note_taker_export_summary(
+    meeting_id: *const c_char,
+    format: *const c_char,
+    output_path: *const c_char,
+) -> *mut c_char {
+    let arguments = (
+        unsafe { ffi_string(meeting_id) },
+        unsafe { ffi_string(format) },
+        unsafe { ffi_string(output_path) },
+    );
+    let (Some(meeting_id), Some(format), Some(output_path)) = arguments else {
+        return into_c(failure(
+            "invalid_request",
+            "the meeting ID, format and path must be UTF-8 C strings",
+        ));
+    };
+    let format = match format.parse::<SummaryExportFormat>() {
+        Ok(format) => format,
+        Err(error) => return into_c(failure("invalid_request", &error.to_string())),
+    };
+    if output_path.trim().is_empty() {
+        return into_c(failure("invalid_request", "the file path is empty"));
+    }
+    let meeting_id = MeetingId::new(meeting_id);
+    let answer = with_runtime_repositories(|repository, _| -> Value {
+        match export_summary_to_file(
+            repository,
+            &meeting_id,
+            format,
+            std::path::Path::new(output_path),
+            &PdfFontConfig::from_environment(),
+        ) {
+            Ok(saved_path) => json!({
+                "ok": true,
+                "file_path": saved_path.display().to_string(),
+                "size_bytes": std::fs::metadata(&saved_path).map_or(0, |metadata| metadata.len()),
+            }),
+            Err(error) => json!({"ok": false, "error_code": error.code(),
+                                 "error": error.to_string()}),
         }
     });
     into_c(answer.map_or_else(runtime_unavailable, |answer| answer.to_string()))

@@ -26,9 +26,13 @@ pub mod markdown_exporter;
 pub mod pdf_exporter;
 /// Selects, loads, and measures the Unicode fonts embedded in meeting PDFs.
 pub mod pdf_fonts;
+/// Exports a meeting's summary alone as PDF, plain text, Word or Markdown (#130).
+pub mod summary_export;
 
 #[cfg(test)]
 mod pdf_unicode_tests;
+#[cfg(test)]
+mod summary_export_tests;
 #[cfg(test)]
 mod tests;
 

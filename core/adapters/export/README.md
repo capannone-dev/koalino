@@ -16,6 +16,8 @@ repository, and only the PDF exporter opens attachment files (the staged copies)
 | `mod.rs` | `default_exporters()`, `default_export_directory()`, atomic file writing | — |
 | `tests.rs` | Renderer contract tests with fixed fixtures, plus a `ToUnicode`-aware PDF text extractor | — |
 | `pdf_unicode_tests.rs` | PDF Unicode, emoji, fallback, size, and speed contracts (Issue #37) | — |
+| `summary_export.rs` | A meeting's summary alone (#130): its Markdown read with `pulldown-cmark` into headings, paragraphs and list items, rendered as A4 PDF (the PDF exporter's flowing layout, `render_flow_pdf`, and fonts), plain text, Word (a minimal WordprocessingML package written with `zip`, with heading styles and bold/italic runs) or Markdown | `.pdf` `.txt` `.docx` `.md` |
+| `summary_export_tests.rs` | Summary parsing and the four formats (#130) | — |
 | `fonts/` | Bundled DejaVu Sans Regular and Bold, with their license | — |
 | `test_fonts/` | Tiny OFL CJK and emoji subset fonts used only by the tests | — |
 

@@ -323,6 +323,10 @@ the labelled transcript, the owner's notes, the image attachments (oldest first,
 under 3.75 MB), the project, the language and the meeting's own prompt; `run_summary` asks the
 model with no lock held; `store_summary` writes the result into the meeting document in one
 transaction. `set_meeting_prompt` checks and stores a meeting's own template.
+`summary_export_commands.rs` (#130) exports the stored summary as PDF, text, Word or Markdown,
+named `<title> - summary.<ext>`: `export_summary` returns the bytes (the web API's
+`GET /api/meetings/{id}/summary/export`), `export_summary_to_file` saves them atomically where the
+owner chose (the app's `note_taker_export_summary`).
 `load_summary_request`, `store_summary_request` and `store_answered_request` read, write and
 answer a paired device's request (#107); the last stores the summary and removes the request in
 one write.

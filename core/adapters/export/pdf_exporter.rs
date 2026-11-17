@@ -109,9 +109,11 @@ pub(crate) enum FontWeight {
 
 /// One item assigned to a page during layout.
 enum PlacedItem {
-    /// A single, already wrapped line whose baseline is at `baseline_mm`.
+    /// A single, already wrapped line whose baseline is at `baseline_mm` and whose left edge is
+    /// `left_mm` from the page edge.
     Text {
         baseline_mm: f32,
+        left_mm: f32,
         text: String,
         font_size: f32,
         weight: FontWeight,
@@ -204,6 +206,7 @@ impl<'fonts> BodyLayout<'fonts> {
             self.ensure_space(line_height_mm);
             self.place(PlacedItem::Text {
                 baseline_mm: self.cursor_mm,
+                left_mm: LEFT_MARGIN_MM,
                 text: wrapped_line,
                 font_size,
                 weight,
@@ -223,6 +226,57 @@ impl<'fonts> BodyLayout<'fonts> {
         self.cursor_mm -= 2.0;
         self.push_paragraph(heading_text, font_size, FontWeight::Bold);
         self.cursor_mm -= 2.0;
+    }
+
+    /// Places one block of a flowing document (#130): its gap, then its wrapped lines, the first
+    /// after its marker and the rest aligned after the marker.
+    fn push_flow_block(&mut self, block: &FlowBlock) {
+        let line_height_mm = line_height(block.font_size);
+        if !self.current_page_is_empty() {
+            self.cursor_mm -= block.space_before_mm;
+        }
+        let marker_text = block
+            .marker
+            .as_ref()
+            .map(|marker| format!("{marker} "))
+            .unwrap_or_default();
+        let marker_width_mm =
+            self.text_fonts
+                .text_width_mm(&marker_text, block.font_size, block.weight);
+        let text_indent_mm = block.indent_mm + marker_width_mm;
+        let wrapped_lines = wrap_text_to_width(
+            &block.text,
+            block.font_size,
+            block.weight,
+            self.text_fonts,
+            (TEXT_WIDTH_MM - text_indent_mm).max(TEXT_WIDTH_MM / 4.0),
+        );
+        // A heading stays on the page of the lines that follow it.
+        let first_needs_mm = if block.keep_with_next {
+            line_height_mm + 2.0 * line_height(BODY_FONT_SIZE)
+        } else {
+            line_height_mm
+        };
+        self.ensure_space(first_needs_mm);
+        for (line_index, wrapped_line) in wrapped_lines.into_iter().enumerate() {
+            self.ensure_space(line_height_mm);
+            let (text, left_mm) = if line_index == 0 && !marker_text.is_empty() {
+                (
+                    format!("{marker_text}{wrapped_line}"),
+                    LEFT_MARGIN_MM + block.indent_mm,
+                )
+            } else {
+                (wrapped_line, LEFT_MARGIN_MM + text_indent_mm)
+            };
+            self.place(PlacedItem::Text {
+                baseline_mm: self.cursor_mm,
+                left_mm,
+                text,
+                font_size: block.font_size,
+                weight: block.weight,
+            });
+            self.cursor_mm -= line_height_mm;
+        }
     }
 
     /// Adds vertical whitespace.
@@ -347,6 +401,25 @@ pub(crate) fn render_pdf(
         );
     }
 
+    save_pdf(
+        pdf_document,
+        &text_fonts,
+        &body_layout.embedded_attachments,
+        document_title,
+    )
+}
+
+/// Serializes a drawn document and applies the post-processing pass.
+///
+/// Inputs: The drawn document, the fonts its text was measured with, attachments to embed, and
+/// the title. Outputs: The PDF bytes or `ExportError::Rendering`.
+/// Side effects: Logs a count when some characters had no font.
+fn save_pdf(
+    pdf_document: PdfDocumentReference,
+    text_fonts: &TextFonts,
+    embedded_attachments: &[EmbeddedAttachment],
+    document_title: &str,
+) -> Result<Vec<u8>, ExportError> {
     let embedded_fonts = text_fonts.embedded();
     let uncovered_character_count =
         embedded_fonts.map_or(0, EmbeddedFonts::uncovered_character_count);
@@ -361,13 +434,81 @@ pub(crate) fn render_pdf(
         .map_err(|error| rendering_error("unable to serialize meeting PDF", &error))?;
     finalize_pdf(
         pdf_bytes,
-        &body_layout.embedded_attachments,
+        embedded_attachments,
         document_title,
         embedded_fonts
             .filter(|embedded_fonts| embedded_fonts.needs_unicode_map_rebuild())
             .map(EmbeddedFonts::drawn_characters)
             .as_ref(),
     )
+}
+
+/// One block of a flowing document, such as a paragraph, heading or list item of a summary.
+pub(crate) struct FlowBlock {
+    /// The block's words; wrapped to the page.
+    pub(crate) text: String,
+    /// Size in points.
+    pub(crate) font_size: f32,
+    /// Face.
+    pub(crate) weight: FontWeight,
+    /// Distance of the block from the left margin.
+    pub(crate) indent_mm: f32,
+    /// Drawn before the first line (`•`, `1.`); the other lines align after it.
+    pub(crate) marker: Option<String>,
+    /// Whitespace above the block, unless it starts a page.
+    pub(crate) space_before_mm: f32,
+    /// Keeps the block on the page of the next lines (headings).
+    pub(crate) keep_with_next: bool,
+}
+
+/// Renders a flowing A4 document: the blocks one after another, with `Page N of M` footers and
+/// no title or contents page (#130).
+///
+/// Inputs: The document title (PDF metadata), the blocks, and where fonts are found.
+/// Outputs: The PDF bytes or `ExportError::Rendering`.
+/// Side effects: May read fallback font files, like `render_pdf`.
+pub(crate) fn render_flow_pdf(
+    document_title: &str,
+    blocks: &[FlowBlock],
+    font_config: &PdfFontConfig,
+) -> Result<Vec<u8>, ExportError> {
+    let text_fonts = TextFonts::load(font_config);
+    let mut body_layout = BodyLayout::new(1, &text_fonts);
+    for block in blocks {
+        body_layout.push_flow_block(block);
+    }
+    let total_pages = body_layout.pages.len();
+    let (pdf_document, first_page_index, first_layer_index) = PdfDocument::new(
+        document_title,
+        Mm(PAGE_WIDTH_MM),
+        Mm(PAGE_HEIGHT_MM),
+        "Body",
+    );
+    let pdf_fonts = register_fonts(&pdf_document, &text_fonts)?;
+    let page_fonts = PageFonts {
+        text_fonts: &text_fonts,
+        pdf_fonts: &pdf_fonts,
+    };
+    for (page_offset, page_items) in body_layout.pages.iter().enumerate() {
+        let layer = if page_offset == 0 {
+            pdf_document
+                .get_page(first_page_index)
+                .get_layer(first_layer_index)
+        } else {
+            let (page_index, layer_index) =
+                pdf_document.add_page(Mm(PAGE_WIDTH_MM), Mm(PAGE_HEIGHT_MM), "Body");
+            pdf_document.get_page(page_index).get_layer(layer_index)
+        };
+        draw_page(
+            &layer,
+            page_items,
+            &[],
+            &page_fonts,
+            page_offset + 1,
+            total_pages,
+        );
+    }
+    save_pdf(pdf_document, &text_fonts, &[], document_title)
 }
 
 /// Counts contents entries before layout so the number of contents pages is known up front.
@@ -728,6 +869,7 @@ fn draw_page(
         match item {
             PlacedItem::Text {
                 baseline_mm,
+                left_mm,
                 text,
                 font_size,
                 weight,
@@ -735,7 +877,7 @@ fn draw_page(
                 layer,
                 text,
                 (*font_size, *weight),
-                (LEFT_MARGIN_MM, *baseline_mm),
+                (*left_mm, *baseline_mm),
                 page_fonts,
             ),
             PlacedItem::Image {
@@ -1042,6 +1184,17 @@ pub(crate) fn wrap_text(
     weight: FontWeight,
     text_fonts: &TextFonts,
 ) -> Vec<String> {
+    wrap_text_to_width(text, font_size, weight, text_fonts, TEXT_WIDTH_MM)
+}
+
+/// Wraps like `wrap_text`, to `width_mm` instead of the full printable width.
+fn wrap_text_to_width(
+    text: &str,
+    font_size: f32,
+    weight: FontWeight,
+    text_fonts: &TextFonts,
+    width_mm: f32,
+) -> Vec<String> {
     let space_width_mm = text_fonts.text_width_mm(" ", font_size, weight);
     let mut wrapped_lines = Vec::new();
     for source_line in text.lines() {
@@ -1054,7 +1207,7 @@ pub(crate) fn wrap_text(
             } else {
                 space_width_mm
             };
-            if current_width_mm + separator_width_mm + word_width_mm <= TEXT_WIDTH_MM {
+            if current_width_mm + separator_width_mm + word_width_mm <= width_mm {
                 if !current_line.is_empty() {
                     current_line.push(' ');
                 }
@@ -1066,7 +1219,7 @@ pub(crate) fn wrap_text(
                 wrapped_lines.push(std::mem::take(&mut current_line));
                 current_width_mm = 0.0;
             }
-            if word_width_mm <= TEXT_WIDTH_MM {
+            if word_width_mm <= width_mm {
                 current_line.push_str(word);
                 current_width_mm = word_width_mm;
                 continue;
@@ -1077,8 +1230,7 @@ pub(crate) fn wrap_text(
                     font_size,
                     weight,
                 );
-                if current_width_mm + character_width_mm > TEXT_WIDTH_MM && !current_line.is_empty()
-                {
+                if current_width_mm + character_width_mm > width_mm && !current_line.is_empty() {
                     wrapped_lines.push(std::mem::take(&mut current_line));
                     current_width_mm = 0.0;
                 }

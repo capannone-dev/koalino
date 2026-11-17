@@ -11,6 +11,7 @@
 //! | `GET /api/meetings/{id}/summary` | 200 `{"summary": {...} or null, "meeting_prompt": text or null, "request": a paired computer's summary request (#107) or null}` |
 //! | `POST /api/meetings/{id}/summary` `{"connection_id"?}` | 200 `{"summary","parts","images_sent","images_skipped"}` |
 //! | `PUT /api/meetings/{id}/summary-prompt` `{"prompt": text or null}` | 200 `{"meeting_prompt"}` |
+//! | `GET /api/meetings/{id}/summary/export?format=pdf\|txt\|docx\|md` | 200 the summary as a file to download (#130); 409 `no_summary` |
 //!
 //! The app keeps no API keys; connections are servers the owner runs, or Claude Code and Codex.
 //! Failures answer `{"ok":false,"error_code","error"}`: 400 for invalid requests, connections and
@@ -26,7 +27,7 @@ use std::sync::Arc;
 use axum::{
     Json, Router,
     extract::{Path, State},
-    http::StatusCode,
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post, put},
 };
@@ -34,6 +35,7 @@ use serde_json::{Value, json};
 
 use super::api::ServerAppState;
 use crate::{
+    adapters::export::{pdf_fonts::PdfFontConfig, summary_export::SummaryExportFormat},
     application::{combined_meetings::HeldSpeech, meeting_summary::SummaryError},
     auto_summaries::{AutoSummarizer, AutoSummaryHost, AutoSummaryWake},
     domain::{
@@ -47,6 +49,7 @@ use crate::{
         store_answered_request, store_summary, store_summary_request,
     },
     ports::storage::{DocumentChanges, MeetingRecording},
+    summary_export_commands::export_summary,
 };
 
 /// Registers the routes; `build_router` merges them before its layers.
@@ -72,6 +75,99 @@ pub(super) fn routes() -> Router<ServerAppState> {
             "/api/meetings/{meeting_id}/summary-prompt",
             put(replace_meeting_prompt),
         )
+        .route(
+            "/api/meetings/{meeting_id}/summary/export",
+            get(export_summary_file),
+        )
+}
+
+/// The query of `GET /api/meetings/{meeting_id}/summary/export`.
+#[derive(serde::Deserialize)]
+struct SummaryExportQuery {
+    /// `pdf`, `txt`, `docx` or `md`.
+    format: Option<String>,
+}
+
+/// `GET /api/meetings/{meeting_id}/summary/export?format=…`: the summary as a file (#130).
+///
+/// Outputs: 200 with the file as an attachment named `<title> - summary.<ext>`; 400 for an
+/// unknown format, 404 for an unknown meeting, 409 when the meeting has no summary, 500 when it
+/// can't be read or rendered.
+/// Side effects: Reads the meeting; renders on a blocking thread (the PDF may read font files).
+async fn export_summary_file(
+    State(state): State<ServerAppState>,
+    Path(meeting_id): Path<String>,
+    axum::extract::Query(query): axum::extract::Query<SummaryExportQuery>,
+) -> Response {
+    tracing::info!(
+        endpoint = "/api/meetings/{meeting_id}/summary/export",
+        "headless API request received"
+    );
+    let format = match query
+        .format
+        .as_deref()
+        .unwrap_or("pdf")
+        .parse::<SummaryExportFormat>()
+    {
+        Ok(format) => format,
+        Err(error) => return failure("invalid_request", &error.to_string()),
+    };
+    let meeting_id = MeetingId::new(meeting_id);
+    let repositories = state.repositories();
+    let exported = tokio::task::spawn_blocking(move || {
+        let repositories = repositories.blocking_lock();
+        export_summary(
+            &**repositories,
+            &meeting_id,
+            format,
+            &PdfFontConfig::from_environment(),
+        )
+    })
+    .await;
+    match exported {
+        Ok(Ok(exported)) => (
+            StatusCode::OK,
+            [
+                (header::CONTENT_TYPE, String::from(format.content_type())),
+                (
+                    header::CONTENT_DISPOSITION,
+                    attachment_disposition(&exported.file_name),
+                ),
+            ],
+            exported.bytes,
+        )
+            .into_response(),
+        Ok(Err(error)) => failure(error.code(), &error.to_string()),
+        Err(_) => failure("export_failed", "the export was cancelled"),
+    }
+}
+
+/// A `Content-Disposition` naming the download: an ASCII `filename` for old clients and the
+/// UTF-8 name in `filename*` (RFC 6266/5987). Side effects: None.
+fn attachment_disposition(file_name: &str) -> String {
+    let ascii_name: String = file_name
+        .chars()
+        .map(|character| {
+            if character.is_ascii_graphic() && character != '"' && character != '\\'
+                || character == ' '
+            {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let encoded_name: String = file_name
+        .bytes()
+        .map(|byte| {
+            if byte.is_ascii_alphanumeric() || b"-._~".contains(&byte) {
+                char::from(byte).to_string()
+            } else {
+                format!("%{byte:02X}")
+            }
+        })
+        .collect();
+    format!("attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded_name}")
 }
 
 /// Chooses the HTTP status for a command answer.
@@ -82,7 +178,7 @@ fn status_of(answer: &Value) -> StatusCode {
     match answer["error_code"].as_str().unwrap_or_default() {
         "invalid_request" | "invalid_connection" | "invalid_template" => StatusCode::BAD_REQUEST,
         "connection_not_found" | "meeting_not_found" => StatusCode::NOT_FOUND,
-        "no_connection" | "nothing_to_summarize" => StatusCode::CONFLICT,
+        "no_connection" | "nothing_to_summarize" | "no_summary" => StatusCode::CONFLICT,
         "too_long" => StatusCode::UNPROCESSABLE_ENTITY,
         code if code.starts_with("llm_") => StatusCode::BAD_GATEWAY,
         "unavailable" => StatusCode::SERVICE_UNAVAILABLE,

@@ -216,3 +216,81 @@ async fn a_meetings_own_prompt_is_checked_and_settings_are_updated() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+/// Sends a GET and returns the status, a header, and the raw body.
+async fn download(router: &axum::Router, uri: &str) -> (StatusCode, String, String, Vec<u8>) {
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(uri)
+                .body(Body::empty())
+                .unwrap_or_else(|error| panic!("{error}")),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("{error}"));
+    let status = response.status();
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let (content_type, disposition) = (header("content-type"), header("content-disposition"));
+    let bytes = axum::body::to_bytes(response.into_body(), 8 * 1024 * 1024)
+        .await
+        .unwrap_or_else(|error| panic!("{error}"));
+    (status, content_type, disposition, bytes.to_vec())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_summary_downloads_as_pdf_text_word_or_markdown() {
+    let router = router(false);
+    let (status, _, _, body) =
+        download(&router, "/api/meetings/m-1/summary/export?format=pdf").await;
+    assert_eq!(status, StatusCode::CONFLICT, "no summary yet");
+    assert!(String::from_utf8_lossy(&body).contains("no_summary"));
+
+    let (status, body) = send(
+        &router,
+        "PUT",
+        "/api/meetings/m-1/summary",
+        Some(json!({"text": "## Decisions\n\n- **Budget:** approved"})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, content_type, disposition, bytes) =
+        download(&router, "/api/meetings/m-1/summary/export?format=txt").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(content_type, "text/plain; charset=utf-8");
+    assert!(disposition.starts_with("attachment;"), "{disposition}");
+    assert!(disposition.contains("summary.txt"), "{disposition}");
+    assert!(String::from_utf8_lossy(&bytes).contains("- Budget: approved"));
+
+    for (format, magic) in [
+        ("pdf", &b"%PDF"[..]),
+        ("docx", &b"PK"[..]),
+        ("md", &b"# "[..]),
+    ] {
+        let (status, _, disposition, bytes) = download(
+            &router,
+            &format!("/api/meetings/m-1/summary/export?format={format}"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{format}");
+        assert!(bytes.starts_with(magic), "{format}");
+        assert!(
+            disposition.contains(&format!("summary.{format}")),
+            "{disposition}"
+        );
+    }
+
+    let (status, ..) = download(&router, "/api/meetings/m-1/summary/export?format=rtf").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, ..) = download(&router, "/api/meetings/missing/summary/export?format=pdf").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

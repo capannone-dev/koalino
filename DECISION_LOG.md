@@ -3882,3 +3882,18 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   clips, that holds them alone longest, cut to that stretch. Unused clips are deleted, so no
   more raw audio is kept after the meeting than before.
 - Groups of up to 6 parts show their parts, each with its own Play, without a tap.
+
+## 2026-11-17 — Summary export: PDF, plain text, Word, Markdown (#130)
+
+- **Request:** export a meeting's summary from the app and the web as PDF, text, doc or md.
+- **Decision:** one core renderer for every client (`adapters/export/summary_export.rs`), reached
+  through `note_taker_export_summary` (the app saves where the owner chose) and
+  `GET /api/meetings/{id}/summary/export?format=pdf|txt|docx|md` (the browser downloads it).
+- "doc" is read as Word: the export is `.docx` (the old binary `.doc` format is not written);
+  `doc` and `word` are accepted as names for it.
+- Markdown is parsed with **pulldown-cmark** (MIT, no default features), added for this. The
+  `.docx` is a minimal WordprocessingML package written with the `zip` crate already used to read
+  Office files, rather than a docx crate: six small XML parts, with real heading styles, so Word's
+  navigation pane works. The PDF reuses the meeting PDF's layout and Unicode fonts (#37); its lines
+  are one weight each, so bold words inside a paragraph are plain there (Word keeps them).
+- Tables become one line per row with cells joined by ` | `; images and HTML are dropped.
