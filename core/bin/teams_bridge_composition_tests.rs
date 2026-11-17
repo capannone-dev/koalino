@@ -296,6 +296,7 @@ async fn five_audio_chunks_are_processed_by_the_meeting_session() {
                 )
             },
             device_id: DeviceId::new("device-test"),
+            audio_spool: None,
         },
     )
     .await

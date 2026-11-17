@@ -2026,6 +2026,20 @@ impl ExternalMediaChunk {
         &self.audio_bytes
     }
 
+    /// Moves the audio out, leaving the chunk empty, so it can wait in a sealed spool (#133).
+    ///
+    /// Inputs: None. Outputs: The raw audio bytes; never log them. Side effects: Empties the chunk.
+    pub fn take_audio_bytes(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.audio_bytes)
+    }
+
+    /// Puts back audio taken with `take_audio_bytes`.
+    ///
+    /// Inputs: The raw audio bytes. Outputs: None. Side effects: Replaces the chunk's audio.
+    pub fn restore_audio_bytes(&mut self, audio_bytes: Vec<u8>) {
+        self.audio_bytes = audio_bytes;
+    }
+
     /// The chunk as a WAV file, for the speaker-separation port. Bridges deliver 16 kHz mono
     /// 16-bit little-endian PCM (`EXTERNAL_AUDIO_SAMPLE_RATE_HZ`).
     ///

@@ -3850,3 +3850,16 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   version counts as one, so the owner's machine tries the GPU again by itself.
 - **Trade-off:** a driver that really kills the process now costs two crashes instead of one.
   A silent fall to the CPU cost a meeting.
+
+## 2026-11-17 — Late Teams audio waits sealed on disk instead of being dropped (#133)
+
+- **Found:** the bridge kept 10 s of audio in memory and dropped the oldest when transcription
+  ran slower than real time. On the owner's meeting that lost about two thirds of the speech.
+- **Decision:** past the memory bound, each new chunk's audio goes to `bridge-spool` next to the
+  database, one file per chunk sealed with the database key (the attachments' AES-256-GCM
+  `SealedFiles`). The pump reads it back in order and deletes it. Leftover files are deleted at
+  start-up, so raw audio never outlives its processing (CONTRIBUTING.md §7). The spool is capped at 1 GiB
+  (about 9 hours of one track); past that, or if it can't be written, the old drop-oldest rule
+  applies.
+- **Effect:** a slow computer transcribes the meeting late (the after-meeting pass waits for the
+  backlog) instead of losing it.

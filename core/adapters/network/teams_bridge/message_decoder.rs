@@ -97,6 +97,16 @@ impl BridgeAudio {
         self.media_chunk
     }
 
+    /// Moves the audio out while it waits in the spool (#133); see `restore_audio`.
+    pub fn take_audio(&mut self) -> Vec<u8> {
+        self.media_chunk.take_audio_bytes()
+    }
+
+    /// Puts back audio taken with `take_audio`.
+    pub fn restore_audio(&mut self, audio_bytes: Vec<u8>) {
+        self.media_chunk.restore_audio_bytes(audio_bytes);
+    }
+
     /// Returns the local meeting the chunk belongs to.
     pub fn meeting_uuid(&self) -> Uuid {
         self.meeting_uuid

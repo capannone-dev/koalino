@@ -12,7 +12,8 @@ connects this adapter to the pipeline is `core/bin/teams_bridge_composition.rs`.
 | File | Purpose |
 | --- | --- |
 | `message_decoder.rs` | The only user of the generated Protobuf types. Validates frames (16 kHz PCM, 1–30 s, metadata before media, screen share vs. camera) and derives the local meeting UUID (v5 of the Teams meeting ID). |
-| `bridge_buffer.rs` | Bounded queue between the reader and the pump. Holds `BUFFER_SECONDS` of audio and 16 slides, drops the oldest when full with a rate-limited warning, and never blocks the producer. Meeting starts, ends and documents are never dropped. |
+| `bridge_buffer.rs` | Queue between the reader and the pump; never blocks the producer. Holds `BUFFER_SECONDS` of audio in memory; with a spool, newer audio waits there instead of being dropped (#133). Without one, or when the spool refuses, it drops the oldest audio with a rate-limited warning. Slides are capped at 16. Meeting starts, ends and documents are never dropped. |
+| `sealed_audio_spool.rs` | The spool: one sealed file per chunk in `bridge-spool` next to the database, capped at 1 GiB, deleted when read back and at start-up (#133). |
 | `teams_websocket_server.rs` | `tokio-tungstenite` server on 127.0.0.1. Refuses `Origin` headers, handles the optional shared-secret handshake (1008 on failure), keeps one active bot, and logs connects, disconnects, and reconnects. |
 | `log_capture.rs` | Test-only capture of `tracing` output. |
 | `*_tests.rs` | TDD specs. The server tests drive a mock `tokio-tungstenite` bot sending Protobuf frames; the decoder tests use golden `protoc` fixtures. |

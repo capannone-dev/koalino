@@ -18,10 +18,13 @@
 //! ```
 //!
 //! The pump runs on its own OS thread and waits for each chunk's result, so transcription speed
-//! is the only backpressure: the WebSocket reader never blocks, and when the pump falls more than
-//! `NOTE_TAKER_TEAMS_BRIDGE_BUFFER_SECONDS` behind, the buffer drops the oldest audio. Chunk audio
-//! is keyed `teams-<uuid>` in the store shared with local recordings and is always discarded after
-//! processing, so raw audio never outlives its transcription.
+//! is the only backpressure: the WebSocket reader never blocks. When the pump falls more than
+//! `NOTE_TAKER_TEAMS_BRIDGE_BUFFER_SECONDS` behind, newer audio waits sealed in `bridge-spool`
+//! next to the database (#133), up to 1 GiB, and is transcribed late instead of dropped; only past
+//! that, or without a spool, does the buffer drop the oldest audio. Chunk audio is keyed
+//! `teams-<uuid>` in the store shared with local recordings and is always discarded after
+//! processing; spool files are deleted when read back and at start-up, so raw audio never
+//! outlives its transcription.
 //!
 //! | Variable | Values | Default |
 //! | --- | --- | --- |
@@ -49,8 +52,9 @@ use crate::{
             bridge_secret_keychain, ensure_bridge_secret, load_bridge_secret,
         },
         network::teams_bridge::{
-            bridge_buffer::BridgeBuffer,
+            bridge_buffer::{AudioSpool, BridgeBuffer},
             message_decoder::{BridgeAudio, BridgeEvent, BridgeMeeting},
+            sealed_audio_spool::{DEFAULT_SPOOL_CAP_BYTES, SealedAudioSpool},
             teams_websocket_server::{
                 BridgeSecret, DEFAULT_AUTHENTICATION_TIMEOUT, DEFAULT_TEAMS_BRIDGE_PORT,
                 RunningTeamsBridge, TeamsBridgeServerConfig, TeamsWebSocketServer,
@@ -92,6 +96,9 @@ pub const TEAMS_BRIDGE_PORT_VARIABLE: &str = "NOTE_TAKER_TEAMS_BRIDGE_PORT";
 /// Shared secret the bot must present.
 pub const TEAMS_BRIDGE_SECRET_VARIABLE: &str = "NOTE_TAKER_TEAMS_BRIDGE_SECRET";
 /// Audio the buffer holds before dropping the oldest.
+/// Folder next to the database where audio waits for transcription, sealed (#133).
+pub const AUDIO_SPOOL_DIRECTORY: &str = "bridge-spool";
+/// Variable naming the most audio held in memory before it waits in the spool.
 pub const TEAMS_BRIDGE_BUFFER_SECONDS_VARIABLE: &str = "NOTE_TAKER_TEAMS_BRIDGE_BUFFER_SECONDS";
 /// Directory receiving slide images.
 pub const TEAMS_BRIDGE_SLIDE_DIR_VARIABLE: &str = "NOTE_TAKER_TEAMS_BRIDGE_SLIDE_DIR";
@@ -313,6 +320,8 @@ pub struct TeamsBridgePorts<SlideWorkflow> {
     pub slide_workflow: SlideWorkflow,
     /// Recorded as the acquiring device of each chunk.
     pub device_id: DeviceId,
+    /// Holds audio transcription hasn't reached yet, sealed (#133); `None` drops it instead.
+    pub audio_spool: Option<Arc<dyn AudioSpool>>,
 }
 
 /// Counters reported when the bridge shuts down (IDs and counts only).
@@ -381,7 +390,10 @@ pub async fn start_teams_bridge<SlideWorkflow>(
 where
     SlideWorkflow: AttachmentWorkflow + Send + 'static,
 {
-    let buffer = BridgeBuffer::new(config.buffer_duration());
+    let buffer = match ports.audio_spool.clone() {
+        Some(spool) => BridgeBuffer::with_spool(config.buffer_duration(), spool),
+        None => BridgeBuffer::new(config.buffer_duration()),
+    };
     let server = TeamsWebSocketServer::start(config.server_config(), buffer.clone())
         .await
         .context("unable to start the Teams bridge server")?;
@@ -419,9 +431,12 @@ pub fn open_teams_bridge_ports(
 ) -> Result<TeamsBridgePorts<SlideAttachmentStore<SqliteNoteRepository>>> {
     let voice_store = SqliteVoiceVectorDB::open(database_path, Arc::clone(&embedding_cipher))
         .context("unable to open the voice store for Teams identities")?;
-    let attachment_repository =
-        open_note_repository(database_path, device_id.clone(), embedding_cipher)
-            .context("unable to open the note repository for Teams slides")?;
+    let attachment_repository = open_note_repository(
+        database_path,
+        device_id.clone(),
+        Arc::clone(&embedding_cipher),
+    )
+    .context("unable to open the note repository for Teams slides")?;
     let slide_directory = slide_directory.map_or_else(
         || {
             database_path
@@ -432,6 +447,21 @@ pub fn open_teams_bridge_ports(
         Path::to_path_buf,
     );
     let sealed_files = attachment_repository.sealed_files();
+    let spool_directory = database_path
+        .parent()
+        .map_or_else(PathBuf::new, Path::to_path_buf)
+        .join(AUDIO_SPOOL_DIRECTORY);
+    let audio_spool: Option<Arc<dyn AudioSpool>> = match SealedAudioSpool::open(
+        &spool_directory,
+        Arc::clone(&embedding_cipher),
+        DEFAULT_SPOOL_CAP_BYTES,
+    ) {
+        Ok(spool) => Some(Arc::new(spool)),
+        Err(error) => {
+            tracing::warn!(error = %error, "Teams audio spool unavailable; late audio is dropped");
+            None
+        }
+    };
     // Read at every offer, so switching it in Settings applies without a restart (#103).
     let settings_file = settings_file_for(database_path);
     Ok(TeamsBridgePorts {
@@ -447,6 +477,7 @@ pub fn open_teams_bridge_ports(
             sealed_files,
         ),
         device_id,
+        audio_spool,
     })
 }
 

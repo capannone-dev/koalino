@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::{
     adapters::network::teams_bridge::{
-        bridge_buffer::{BridgeBuffer, MAXIMUM_BUFFERED_SLIDES},
+        bridge_buffer::{AudioSpool, BridgeBuffer, MAXIMUM_BUFFERED_SLIDES, SpoolTicket},
         log_capture::capture_logs,
         message_decoder::{BridgeEvent, decode_frame, local_meeting_uuid},
     },
@@ -179,4 +179,90 @@ fn close_wakes_the_consumer_and_stops_accepting_events() {
     assert!(buffer.is_closed());
     buffer.push(audio_event(100, 0));
     assert_eq!(buffer.buffered_audio_ms(), 0);
+}
+
+/// Keeps spooled audio in memory for the tests, or refuses it.
+#[derive(Default)]
+struct TestSpool {
+    files: std::sync::Mutex<std::collections::HashMap<Uuid, Vec<u8>>>,
+    refuse: bool,
+}
+
+impl AudioSpool for TestSpool {
+    fn store(&self, audio_bytes: &[u8]) -> Option<SpoolTicket> {
+        if self.refuse {
+            return None;
+        }
+        let ticket = SpoolTicket::new();
+        self.files
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(ticket.id(), audio_bytes.to_vec());
+        Some(ticket)
+    }
+
+    fn take(&self, ticket: &SpoolTicket) -> Option<Vec<u8>> {
+        self.files
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&ticket.id())
+    }
+}
+
+/// Verifies that with a spool, audio beyond the memory bound waits on disk instead of being
+/// dropped, and comes back whole and in order (#133).
+#[test]
+fn with_a_spool_overflowing_audio_is_kept_in_order() {
+    let spool = std::sync::Arc::new(TestSpool::default());
+    let buffer = BridgeBuffer::with_spool(Duration::from_secs(10), spool.clone());
+    for chunk_index in 0..6 {
+        let outcome = buffer.push(audio_event(3_000, chunk_index * 3_000));
+        assert_eq!(outcome.dropped_audio_chunks, 0);
+    }
+    buffer.push(slide_event(18_500));
+    assert_eq!(buffer.buffered_audio_ms(), 18_000);
+    assert!(
+        !spool
+            .files
+            .lock()
+            .map(|files| files.is_empty())
+            .unwrap_or(true)
+    );
+
+    let events = drain(&buffer);
+    let timestamps: Vec<u64> = events.iter().map(timestamp_of).collect();
+    assert_eq!(
+        timestamps,
+        vec![0, 3_000, 6_000, 9_000, 12_000, 15_000, 18_500]
+    );
+    for event in &events {
+        if let BridgeEvent::Audio(audio) = event {
+            assert_eq!(audio.duration_ms(), 3_000, "spooled audio comes back whole");
+        }
+    }
+    assert!(
+        spool
+            .files
+            .lock()
+            .map(|files| files.is_empty())
+            .unwrap_or(false)
+    );
+    assert_eq!(buffer.buffered_audio_ms(), 0);
+}
+
+/// Verifies a spool that refuses (disk full, cap reached) falls back to dropping the oldest.
+#[test]
+fn a_refusing_spool_falls_back_to_dropping_the_oldest() {
+    let spool = std::sync::Arc::new(TestSpool {
+        refuse: true,
+        ..TestSpool::default()
+    });
+    let buffer = BridgeBuffer::with_spool(Duration::from_secs(10), spool);
+    for chunk_index in 0..3 {
+        buffer.push(audio_event(3_000, chunk_index * 3_000));
+    }
+    let outcome = buffer.push(audio_event(6_000, 9_000));
+    assert_eq!(outcome.dropped_audio_chunks, 2);
+    let timestamps: Vec<u64> = drain(&buffer).iter().map(timestamp_of).collect();
+    assert_eq!(timestamps, vec![6_000, 9_000]);
 }
