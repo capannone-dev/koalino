@@ -2510,6 +2510,7 @@ class AppLocalizationsEn extends AppLocalizations {
       locale: localeName,
       other: '$count voice samples',
       one: '1 voice sample',
+      zero: 'no voice sample yet, so not recognized by voice',
     );
     return '$_temp0';
   }

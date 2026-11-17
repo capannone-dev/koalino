@@ -2359,6 +2359,7 @@ class AppLocalizationsZh extends AppLocalizations {
       locale: localeName,
       other: '$count 个声音样本',
       one: '1 个声音样本',
+      zero: '尚无声音样本，因此无法通过声音识别',
     );
     return '$_temp0';
   }

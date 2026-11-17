@@ -2549,6 +2549,7 @@ class AppLocalizationsIt extends AppLocalizations {
       locale: localeName,
       other: '$count campioni vocali',
       one: '1 campione vocale',
+      zero: 'nessun campione vocale ancora, quindi non riconosciuto dalla voce',
     );
     return '$_temp0';
   }

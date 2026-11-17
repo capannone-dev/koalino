@@ -674,7 +674,7 @@
   "moreNotShown": "; есть ещё, не показанные здесь — уточните запрос",
   "cpuCores": "{count, plural, one{{count} ядро CPU} few{{count} ядра CPU} many{{count} ядер CPU} other{{count} ядра CPU}}",
   "dayCount": "{count, plural, one{{count} день} few{{count} дня} many{{count} дней} other{{count} дня}}",
-  "voiceSampleCount": "{count, plural, one{{count} образец голоса} few{{count} образца голоса} many{{count} образцов голоса} other{{count} образца голоса}}",
+  "voiceSampleCount": "{count, plural, =0{пока нет образца голоса, поэтому не распознаётся по голосу} one{{count} образец голоса} few{{count} образца голоса} many{{count} образцов голоса} other{{count} образца голоса}}",
   "picturesIncluded": "{count, plural, one{включено {count} изображение} few{включено {count} изображения} many{включено {count} изображений} other{включено {count} изображения}}",
   "partCount": "{count, plural, one{{count} часть} few{{count} части} many{{count} частей} other{{count} части}}",
   "inMeetings": "{parts} в {meetings}",

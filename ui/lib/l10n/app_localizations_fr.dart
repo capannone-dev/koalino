@@ -2547,6 +2547,7 @@ class AppLocalizationsFr extends AppLocalizations {
       locale: localeName,
       other: '$count échantillons de voix',
       one: '1 échantillon de voix',
+      zero: 'pas encore d\'échantillon de voix, donc pas reconnu à la voix',
     );
     return '$_temp0';
   }

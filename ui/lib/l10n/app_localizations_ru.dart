@@ -2544,6 +2544,7 @@ class AppLocalizationsRu extends AppLocalizations {
       many: '$count образцов голоса',
       few: '$count образца голоса',
       one: '$count образец голоса',
+      zero: 'пока нет образца голоса, поэтому не распознаётся по голосу',
     );
     return '$_temp0';
   }

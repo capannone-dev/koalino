@@ -9,6 +9,9 @@ import 'package:note_taker_ui/infrastructure/voice_gallery_bridge.dart';
 import 'package:note_taker_ui/presentation/confirm_delete_dialog.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
+/// Groups with at most this many parts show them, each with its own Play, without a tap (#134).
+const int maxPartsShownOpen = 6;
+
 /// Displays the voice gallery using controller-owned state.
 final class VoiceGalleryScreen extends StatefulWidget {
   /// Creates a Voice Gallery bound to an injected controller.
@@ -350,6 +353,8 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
             ),
             ExpansionTile(
               key: ValueKey<String>('parts-${group.groupId}'),
+              // Open for a small group, so every part shows its own Play (#134).
+              initiallyExpanded: group.voices.length <= maxPartsShownOpen,
               tilePadding: EdgeInsets.zero,
               title: Text(partsLabel),
               subtitle: Text(l10n.theseSoundLikeOnePersonUntick),

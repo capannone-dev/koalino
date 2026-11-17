@@ -14,6 +14,9 @@ import type { Translate } from "@/lib/i18n";
 type PendingDeletion = { title: string; message: string; run: () => Promise<void> };
 
 /** Voices of one person, in listing order (#82). */
+/** Groups with at most this many parts show them, each with its own player, without a click (#134). */
+const MAX_PARTS_SHOWN_OPEN = 6;
+
 type VoiceGroup = { groupId: string; voices: LibraryCluster[] };
 
 /** A plain message for a failed voice deletion; server text is not shown. */
@@ -190,7 +193,7 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
             <p>{lone ? lone.meeting_title ?? t("untitledMeeting") : [...new Set(group.voices.map((voice) => voice.meeting_title ?? t("untitledMeeting")))].join(", ")}</p>
             {longestPlayable ? <audio controls preload="none" src={reviewClipUrl(longestPlayable.cluster_id)} aria-label={t("listenTo", { speakerLabel: speakerLabel.toLowerCase() })} /> : null}
             {lone ? null : (
-              <details className="rounded-lg border border-line-strong px-3 py-2">
+              <details className="rounded-lg border border-line-strong px-3 py-2" open={group.voices.length <= MAX_PARTS_SHOWN_OPEN}>
                 <summary className="min-h-11 cursor-pointer py-2 font-medium">{t("partCount", { count: group.voices.length })}</summary>
                 <p className="text-sm">{t("theseSoundLikeOnePerson")}</p>
                 <ul className="space-y-2 pt-2">

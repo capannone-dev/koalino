@@ -674,7 +674,7 @@
   "moreNotShown": "، وهناك المزيد غير المعروض هنا؛ أضف كلمات لتضييق البحث",
   "cpuCores": "{count, plural, =0{لا أنوية CPU} =1{نواة CPU واحدة} =2{نواتا CPU} few{{count} أنوية CPU} many{{count} نواة CPU} other{{count} نواة CPU}}",
   "dayCount": "{count, plural, =0{0 يوم} =1{يوم واحد} =2{يومان} few{{count} أيام} many{{count} يومًا} other{{count} يوم}}",
-  "voiceSampleCount": "{count, plural, =0{لا عيّنات صوت} =1{عيّنة صوت واحدة} =2{عيّنتا صوت} few{{count} عيّنات صوت} many{{count} عيّنة صوت} other{{count} عيّنة صوت}}",
+  "voiceSampleCount": "{count, plural, =0{لا عيّنة صوت بعد، لذا لا يُتعرَّف عليه بالصوت} =1{عيّنة صوت واحدة} =2{عيّنتا صوت} few{{count} عيّنات صوت} many{{count} عيّنة صوت} other{{count} عيّنة صوت}}",
   "picturesIncluded": "{count, plural, =0{لم تُضمَّن صور} =1{ضُمّنت صورة واحدة} =2{ضُمّنت صورتان} few{ضُمّنت {count} صور} many{ضُمّنت {count} صورة} other{ضُمّنت {count} صورة}}",
   "partCount": "{count, plural, =0{لا أجزاء} =1{جزء واحد} =2{جزءان} few{{count} أجزاء} many{{count} جزءًا} other{{count} جزء}}",
   "inMeetings": "{parts} في {meetings}",

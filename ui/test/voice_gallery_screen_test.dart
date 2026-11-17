@@ -541,6 +541,26 @@ void main() {
     expect(find.text('3 voice samples'), findsOneWidget);
   });
 
+  testWidgets('a person without a voice sample says what that means (#134)',
+      (WidgetTester tester) async {
+    await pumpGallery(
+        tester,
+        FakeVoiceGalleryBridge(
+          clusters: <UnknownSpeakerCluster>[],
+          savedPeople: <SavedPerson>[
+            const SavedPerson(
+                identityId: 'no-voice',
+                displayName: 'Bruno',
+                voiceVariantCount: 0),
+          ],
+        ),
+        meetingId: null);
+
+    expect(find.text('no voice sample yet, so not recognized by voice'),
+        findsOneWidget);
+    expect(find.text('0 voice samples'), findsNothing);
+  });
+
   testWidgets('a voice can be assigned to a saved person',
       (WidgetTester tester) async {
     final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
@@ -670,8 +690,6 @@ void main() {
           FakeVoiceGalleryBridge(clusters: lunch);
 
       await pumpGallery(tester, bridge, meetingId: null);
-      await tester.tap(find.text('3 parts'));
-      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey<String>('play-part-2')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey<String>('include-part-2')));
@@ -695,8 +713,6 @@ void main() {
           clusters: <UnknownSpeakerCluster>[longPart, shortPart]);
 
       await pumpGallery(tester, bridge, meetingId: null);
-      await tester.tap(find.text('2 parts'));
-      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey<String>('include-part-1')));
       await tester.tap(find.byKey(const ValueKey<String>('include-part-2')));
       await tester.enterText(
@@ -708,6 +724,20 @@ void main() {
 
       expect(bridge.assignedGroups, isEmpty);
       expect(find.text('Choose at least one voice to name'), findsOneWidget);
+    });
+
+    testWidgets('each part of a small group shows its own Play at once (#134)',
+        (WidgetTester tester) async {
+      final FakeVoiceGalleryBridge bridge =
+          FakeVoiceGalleryBridge(clusters: lunch);
+
+      await pumpGallery(tester, bridge, meetingId: null);
+
+      for (final String part in <String>['part-1', 'part-2']) {
+        expect(find.byKey(ValueKey<String>('play-$part')), findsOneWidget);
+      }
+      // A part without a clip has nothing to play.
+      expect(find.byKey(const ValueKey<String>('play-part-3')), findsNothing);
     });
 
     testWidgets('Play plays the longest part', (WidgetTester tester) async {

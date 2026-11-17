@@ -266,6 +266,7 @@
   },
   "peopleTalkedAtOnceHere": "Plusieurs personnes parlaient en même temps ici ; des mots peuvent manquer",
   "personVoiceSamples": {
+    "=0": "{name} : pas encore d'échantillon de voix, donc pas reconnu à la voix",
     "=1": "{name} : 1 échantillon de voix",
     "other": "{name} : {count} échantillons de voix"
   },

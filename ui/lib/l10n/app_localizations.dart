@@ -4165,7 +4165,7 @@ abstract class AppLocalizations {
   /// No description provided for @voiceSampleCount.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 voice sample} other{{count} voice samples}}'**
+  /// **'{count, plural, =0{no voice sample yet, so not recognized by voice} =1{1 voice sample} other{{count} voice samples}}'**
   String voiceSampleCount(int count);
 
   /// No description provided for @picturesIncluded.

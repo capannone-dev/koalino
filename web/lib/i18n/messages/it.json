@@ -266,6 +266,7 @@
   },
   "peopleTalkedAtOnceHere": "Qui più persone parlavano insieme; potrebbero mancare parole",
   "personVoiceSamples": {
+    "=0": "{name}: nessun campione vocale ancora, quindi non riconosciuto dalla voce",
     "=1": "{name}: 1 campione vocale",
     "other": "{name}: {count} campioni vocali"
   },

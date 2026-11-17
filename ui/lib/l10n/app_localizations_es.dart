@@ -2540,6 +2540,7 @@ class AppLocalizationsEs extends AppLocalizations {
       locale: localeName,
       other: '$count muestras de voz',
       one: '1 muestra de voz',
+      zero: 'aún sin muestra de voz, así que no se reconoce por la voz',
     );
     return '$_temp0';
   }

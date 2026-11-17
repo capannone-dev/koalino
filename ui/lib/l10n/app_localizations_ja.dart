@@ -2415,6 +2415,7 @@ class AppLocalizationsJa extends AppLocalizations {
       locale: localeName,
       other: '音声サンプル $count 件',
       one: '音声サンプル 1 件',
+      zero: '音声サンプルがまだないため、声では認識されません',
     );
     return '$_temp0';
   }

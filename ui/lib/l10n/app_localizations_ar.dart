@@ -2540,7 +2540,7 @@ class AppLocalizationsAr extends AppLocalizations {
       few: '$count عيّنات صوت',
       two: 'عيّنتا صوت',
       one: 'عيّنة صوت واحدة',
-      zero: 'لا عيّنات صوت',
+      zero: 'لا عيّنة صوت بعد، لذا لا يُتعرَّف عليه بالصوت',
     );
     return '$_temp0';
   }

@@ -674,7 +674,7 @@
   "moreNotShown": "、他にも表示されていない結果があります。言葉を追加して絞り込んでください",
   "cpuCores": "{count, plural, =1{CPU 1 コア} other{CPU {count} コア}}",
   "dayCount": "{count, plural, =1{1 日} other{{count} 日}}",
-  "voiceSampleCount": "{count, plural, =1{音声サンプル 1 件} other{音声サンプル {count} 件}}",
+  "voiceSampleCount": "{count, plural, =0{音声サンプルがまだないため、声では認識されません} =1{音声サンプル 1 件} other{音声サンプル {count} 件}}",
   "picturesIncluded": "{count, plural, =1{1 枚の画像を含めました} other{{count} 枚の画像を含めました}}",
   "partCount": "{count, plural, =1{1 部分} other{{count} 部分}}",
   "inMeetings": "{parts}（{meetings}）",

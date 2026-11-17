@@ -266,6 +266,7 @@
   },
   "peopleTalkedAtOnceHere": "ここでは複数人が同時に話していました。言葉が抜けている可能性があります",
   "personVoiceSamples": {
+    "=0": "{name}: 音声サンプルがまだないため、声では認識されません",
     "=1": "{name}: 音声サンプル 1 件",
     "other": "{name}: 音声サンプル {count} 件"
   },

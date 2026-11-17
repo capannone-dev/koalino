@@ -2580,6 +2580,7 @@ class AppLocalizationsDe extends AppLocalizations {
       locale: localeName,
       other: '$count Stimmproben',
       one: '1 Stimmprobe',
+      zero: 'noch keine Stimmprobe, daher nicht an der Stimme erkannt',
     );
     return '$_temp0';
   }

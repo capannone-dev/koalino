@@ -266,6 +266,7 @@
   },
   "peopleTalkedAtOnceHere": "People talked at once here; words may be missing",
   "personVoiceSamples": {
+    "=0": "{name}: no voice sample yet, so not recognized by voice",
     "=1": "{name}: 1 voice sample",
     "other": "{name}: {count} voice samples"
   },

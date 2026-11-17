@@ -266,6 +266,7 @@
   },
   "peopleTalkedAtOnceHere": "此处多人同时说话；可能缺少字词",
   "personVoiceSamples": {
+    "=0": "{name}：尚无声音样本，因此无法通过声音识别",
     "=1": "{name}：1 个声音样本",
     "other": "{name}：{count} 个声音样本"
   },

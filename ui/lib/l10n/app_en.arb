@@ -2054,7 +2054,7 @@
       }
     }
   },
-  "voiceSampleCount": "{count, plural, =1{1 voice sample} other{{count} voice samples}}",
+  "voiceSampleCount": "{count, plural, =0{no voice sample yet, so not recognized by voice} =1{1 voice sample} other{{count} voice samples}}",
   "@voiceSampleCount": {
     "placeholders": {
       "count": {

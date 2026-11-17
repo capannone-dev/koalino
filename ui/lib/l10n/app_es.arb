@@ -674,7 +674,7 @@
   "moreNotShown": ", hay más sin mostrar: añade palabras para acotar",
   "cpuCores": "{count, plural, =1{1 núcleo de CPU} other{{count} núcleos de CPU}}",
   "dayCount": "{count, plural, =1{1 día} other{{count} días}}",
-  "voiceSampleCount": "{count, plural, =1{1 muestra de voz} other{{count} muestras de voz}}",
+  "voiceSampleCount": "{count, plural, =0{aún sin muestra de voz, así que no se reconoce por la voz} =1{1 muestra de voz} other{{count} muestras de voz}}",
   "picturesIncluded": "{count, plural, =1{se incluyó 1 imagen} other{se incluyeron {count} imágenes}}",
   "partCount": "{count, plural, =1{1 parte} other{{count} partes}}",
   "inMeetings": "{parts} en {meetings}",

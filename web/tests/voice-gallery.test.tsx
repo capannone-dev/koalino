@@ -215,3 +215,17 @@ test("cards use the transcript's speaker numbers when the server gives them (#11
   expect(screen.getByLabelText("Name for speaker 3")).toBeInTheDocument();
   expect(screen.queryByText("Unknown speaker 1")).not.toBeInTheDocument();
 });
+
+test("a small group's parts start open, each with its own player (#134)", () => {
+  const { container } = render(<VoiceGallery clusters={lunch} people={[]} />);
+
+  const parts = container.querySelector("details");
+  expect(parts).not.toBeNull();
+  expect(parts).toHaveAttribute("open");
+});
+
+test("a person without a voice sample says what that means (#134)", () => {
+  render(<VoiceGallery clusters={[]} people={[{ identity_id: "identity-2", display_name: "Bruno", voice_variant_count: 0 }]} />);
+
+  expect(screen.getByText("Bruno: no voice sample yet, so not recognized by voice")).toBeInTheDocument();
+});

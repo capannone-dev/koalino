@@ -2545,6 +2545,7 @@ class AppLocalizationsPt extends AppLocalizations {
       locale: localeName,
       other: '$count amostras de voz',
       one: '1 amostra de voz',
+      zero: 'ainda sem amostra de voz, por isso não é reconhecido pela voz',
     );
     return '$_temp0';
   }
