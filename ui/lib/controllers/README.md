@@ -77,6 +77,11 @@ transcribed; the core stores and applies it.
 
 `transcription_settings_controller.dart` holds the Transcription page: models and downloads (#67); the OpenAI choice is gone (#117).
 
+`summary_export_controller.dart` (#130) exports a meeting's summary as PDF, plain text, Word or
+Markdown like a meeting export: the save dialog on desktops, a private copy handed to the system
+picker and deleted on phones. The summary page shows it as an Export menu when
+`SummariesController.summaryExport` is set.
+
 `summaries_controller.dart` (#95) holds the AI settings and each meeting's summary for Settings,
 the meeting lists and the summary page. It lives as long as the app, so a summary keeps being
 written when its page is left; it ignores a second request for a meeting already being summarized

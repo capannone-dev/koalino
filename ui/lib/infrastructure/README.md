@@ -76,7 +76,9 @@ recording (`note_taker_get_default_language`, `note_taker_set_default_language`,
 isolate and decodes the core's JSON answer into `MeetingExportSuccess` or `MeetingExportFailure`
 (Issue #48). Formats are Markdown, PDF, and JSON. `FilePickerExportSaver` shows the save dialog:
 on desktops it only picks a path (starting in Downloads) and the core writes there; on Android
-and iOS the system document picker receives the bytes.
+and iOS the system document picker receives the bytes. `RustSummaryExportBridge` writes a
+meeting's summary through `note_taker_export_summary` (#130) in a `SummaryExportFormat` (PDF,
+text, Word, Markdown).
 
 `log_bridge.dart` reaches the core's log level and log export (`note_taker_get_log_level`,
 `note_taker_set_log_level`, `note_taker_export_logs`) on background isolates (Issue #46).

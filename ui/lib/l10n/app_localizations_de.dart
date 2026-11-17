@@ -2834,4 +2834,11 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get chatHandoffIntro =>
       'Stelle deine Fragen in deiner eigenen KI-App, mit deinem eigenen Konto. Koalino übergibt ihr Notizen und Transkripte, Fotos und Dateien gehen als Dateien mit.';
+
+  @override
+  String get plainTextFile => 'Reiner Text (.txt)';
+
+  @override
+  String get unableToExportTheSummary =>
+      'Die Zusammenfassung konnte nicht exportiert werden';
 }

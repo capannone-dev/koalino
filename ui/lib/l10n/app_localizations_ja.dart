@@ -2659,4 +2659,10 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get chatHandoffIntro =>
       '自分のアカウントで、自分の AI アプリに質問できます。Koalino がメモと文字起こしを渡し、写真やファイルはファイルのまま一緒に送られます。';
+
+  @override
+  String get plainTextFile => 'プレーンテキスト (.txt)';
+
+  @override
+  String get unableToExportTheSummary => '要約を書き出せませんでした';
 }

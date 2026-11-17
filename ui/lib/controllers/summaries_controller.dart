@@ -4,6 +4,7 @@
 // computer to write a summary (#107); on a computer it chooses the connection that answers.
 
 import 'package:note_taker_ui/controllers/handoff_controller.dart';
+import 'package:note_taker_ui/controllers/summary_export_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_edit_bridge.dart';
@@ -17,6 +18,7 @@ final class SummariesController extends ChangeNotifier {
     required LlmBridge bridge,
     MeetingEditBridge editBridge = const MeetingEditBridge(),
     this.handoff,
+    this.summaryExport,
     this.asksPairedComputer = false,
   })  : _bridge = bridge,
         _editBridge = editBridge;
@@ -26,6 +28,9 @@ final class SummariesController extends ChangeNotifier {
 
   /// Hands a meeting to the owner's own AI app (#114); null where that is not offered (desktops).
   final HandoffController? handoff;
+
+  /// Exports a summary as PDF, text, Word or Markdown (#130); null hides the Export menu.
+  final SummaryExportController? summaryExport;
 
   /// Whether this device asks a paired computer for summaries (phones), rather than answering
   /// paired devices itself (computers) (#107).

@@ -725,5 +725,7 @@
   "handoffStepOpensCopied": "{site} 会打开，Koalino 会复制会议。",
   "handoffStepSend": "按 Enter 发送。",
   "handoffStepPasteSend": "点击消息框，粘贴会议（Ctrl+V）后按 Enter。",
-  "chatHandoffIntro": "用你自己的账号，在你自己的 AI 应用里提问。Koalino 会把笔记和转写交给它，照片和文件以文件形式一并发送。"
+  "chatHandoffIntro": "用你自己的账号，在你自己的 AI 应用里提问。Koalino 会把笔记和转写交给它，照片和文件以文件形式一并发送。",
+  "plainTextFile": "纯文本 (.txt)",
+  "unableToExportTheSummary": "无法导出摘要"
 }

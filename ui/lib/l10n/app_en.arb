@@ -2229,5 +2229,9 @@
   "chatHandoffIntro": "Ask your questions in your own AI app, with your own account. Koalino gives it the notes and transcripts, and the photos and files go with them as files.",
   "@chatHandoffIntro": {
     "description": "Intro of the sheet that continues a meeting's or a project's chat in the owner's own AI app (#126)."
-  }
+  },
+  "plainTextFile": "Plain text (.txt)",
+  "@plainTextFile": {"description": "Summary export menu (#130): the plain-text format."},
+  "unableToExportTheSummary": "Unable to export the summary",
+  "@unableToExportTheSummary": {"description": "Snack bar when a summary export fails (#130)."}
 }

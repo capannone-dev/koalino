@@ -2801,4 +2801,10 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get chatHandoffIntro =>
       'Fai le tue domande nella tua app di IA, con il tuo account. Koalino le passa note e trascrizioni, e foto e file vanno insieme come file.';
+
+  @override
+  String get plainTextFile => 'Testo semplice (.txt)';
+
+  @override
+  String get unableToExportTheSummary => 'Impossibile esportare il riassunto';
 }

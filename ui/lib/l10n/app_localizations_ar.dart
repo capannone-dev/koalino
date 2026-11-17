@@ -2814,4 +2814,10 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get chatHandoffIntro =>
       'اطرح أسئلتك في تطبيق الذكاء الاصطناعي الخاص بك، بحسابك الخاص. يعطيه Koalino الملاحظات والنصوص المفرّغة، وتُرسل الصور والملفات معها كملفات.';
+
+  @override
+  String get plainTextFile => 'نص عادي (.txt)';
+
+  @override
+  String get unableToExportTheSummary => 'تعذّر تصدير الملخص';
 }

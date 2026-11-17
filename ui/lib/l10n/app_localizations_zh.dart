@@ -2599,4 +2599,10 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get chatHandoffIntro =>
       '用你自己的账号，在你自己的 AI 应用里提问。Koalino 会把笔记和转写交给它，照片和文件以文件形式一并发送。';
+
+  @override
+  String get plainTextFile => '纯文本 (.txt)';
+
+  @override
+  String get unableToExportTheSummary => '无法导出摘要';
 }

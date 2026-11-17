@@ -3,6 +3,7 @@
 // with ▸ a connection, the meeting's own prompt, back to the Settings prompt). The model runs in
 // the core on a background isolate, so leaving the page does not stop it. A phone can ask a
 // paired computer to write the summary instead (#107); the page then shows how far it has got.
+// A written summary can be exported as PDF, plain text, Word or Markdown (#130).
 
 import 'dart:async';
 
@@ -12,6 +13,8 @@ import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/controllers/handoff_controller.dart';
+import 'package:note_taker_ui/controllers/summary_export_controller.dart';
+import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/presentation/handoff_widgets.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
 import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
@@ -564,6 +567,13 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                           onPressed:
                               writing ? null : () => _editText(summary.text),
                         ),
+                        if (controller.summaryExport
+                            case final SummaryExportController exporter)
+                          _SummaryExportMenu(
+                            exporter: exporter,
+                            meetingId: widget.meetingId,
+                            title: widget.title,
+                          ),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -579,6 +589,62 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
       ),
     );
   }
+}
+
+/// The Export menu of a summary (#130): PDF, plain text, Word or Markdown. The result shows in a
+/// snack bar.
+final class _SummaryExportMenu extends StatelessWidget {
+  const _SummaryExportMenu(
+      {required this.exporter, required this.meetingId, required this.title});
+
+  final SummaryExportController exporter;
+  final String meetingId;
+  final String title;
+
+  /// Exports in `format` and shows the outcome. Side effects: See `exportSummary`.
+  Future<void> _export(BuildContext context, SummaryExportFormat format) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final String? message = await exporter.exportSummary(
+        meetingId: meetingId, title: title, format: format);
+    if (message != null) {
+      messenger.showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: exporter,
+        builder: (BuildContext context, Widget? child) =>
+            PopupMenuButton<SummaryExportFormat>(
+          tooltip: l10n.export,
+          enabled: !exporter.isExporting,
+          onSelected: (SummaryExportFormat format) => _export(context, format),
+          itemBuilder: (BuildContext context) =>
+              <PopupMenuEntry<SummaryExportFormat>>[
+            for (final SummaryExportFormat format in SummaryExportFormat.values)
+              PopupMenuItem<SummaryExportFormat>(
+                  value: format, child: Text(format.label)),
+          ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                exporter.isExporting
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(Icons.download_outlined,
+                        size: 18, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(l10n.export,
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary)),
+              ],
+            ),
+          ),
+        ),
+      );
 }
 
 /// Asks a paired computer to write the summary (#107) and shows how far it has got.

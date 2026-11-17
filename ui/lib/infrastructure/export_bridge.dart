@@ -2,6 +2,7 @@
 // result where the owner chooses. On desktops the save dialog only picks a path and the core
 // writes there; on Android and iOS the dialog (the system document picker) takes the bytes.
 // On Android an export can also go straight to another app through the share sheet (#114).
+// A meeting's summary alone exports to PDF, text, Word or Markdown the same way (#130).
 
 import 'dart:convert';
 import 'dart:ffi';
@@ -140,6 +141,61 @@ final class RustExportBridge implements ExportBridge {
   }
 }
 
+/// The formats a meeting's summary exports to (#130).
+enum SummaryExportFormat {
+  /// An A4 PDF.
+  pdf('pdf'),
+
+  /// Plain UTF-8 text.
+  text('txt'),
+
+  /// A Word document.
+  word('docx'),
+
+  /// The Markdown as stored.
+  markdown('md');
+
+  const SummaryExportFormat(this.coreName);
+
+  /// The `format` argument of `note_taker_export_summary`; also the file extension.
+  final String coreName;
+
+  /// The file extension, without the dot.
+  String get fileExtension => coreName;
+
+  /// The name shown in the Export menu.
+  String get label => switch (this) {
+        SummaryExportFormat.pdf => 'PDF',
+        SummaryExportFormat.text => l10n.plainTextFile,
+        SummaryExportFormat.word => 'Word (.docx)',
+        SummaryExportFormat.markdown => 'Markdown (.md)',
+      };
+}
+
+/// Exports meeting summaries through the core (#130).
+abstract interface class SummaryExportBridge {
+  /// Writes `meetingId`'s summary as `format` at `outputPath`.
+  ///
+  /// Outputs: The written file, or the failure (`no_summary`, `meeting_not_found`, …).
+  /// Side effects: Writes the file.
+  Future<MeetingExportResult> exportSummary(
+      String meetingId, SummaryExportFormat format, String outputPath);
+}
+
+/// Calls `note_taker_export_summary` on a background isolate, since it writes synchronously.
+final class RustSummaryExportBridge implements SummaryExportBridge {
+  const RustSummaryExportBridge();
+
+  @override
+  Future<MeetingExportResult> exportSummary(
+      String meetingId, SummaryExportFormat format, String outputPath) async {
+    final String coreFormat = format.coreName;
+    final String? responseJson = await Isolate.run(
+        () => _exportSummaryJson(meetingId, coreFormat, outputPath));
+    return meetingExportResultFromJson(responseJson);
+  }
+}
+
 /// Saves an export where the owner chooses.
 abstract interface class ExportSaver {
   /// Whether the dialog takes the file's bytes (Android, iOS) instead of returning a path.
@@ -159,14 +215,19 @@ abstract interface class ExportSaver {
 
 /// The save dialogs of `file_picker`.
 final class FilePickerExportSaver implements ExportSaver {
-  /// Creates the saver; `dialogTitle` names the dialog (the meeting export's by default).
-  const FilePickerExportSaver({String? dialogTitle})
-      : _dialogTitle = dialogTitle;
+  /// Creates the saver; `dialogTitle` names the dialog (the meeting export's by default), or
+  /// `dialogTitleOf` reads the name when the dialog opens, in the app's language at that time.
+  const FilePickerExportSaver(
+      {String? dialogTitle, String Function()? dialogTitleOf})
+      : _dialogTitle = dialogTitle,
+        _dialogTitleOf = dialogTitleOf;
 
   final String? _dialogTitle;
+  final String Function()? _dialogTitleOf;
 
   /// The dialog's title, in the app's language unless one was given.
-  String get dialogTitle => _dialogTitle ?? l10n.exportMeeting;
+  String get dialogTitle =>
+      _dialogTitleOf?.call() ?? _dialogTitle ?? l10n.exportMeeting;
 
   @override
   bool get savesBytes => Platform.isAndroid || Platform.isIOS;
@@ -233,16 +294,33 @@ Future<String?> _downloadsDirectoryPath() async {
   }
 }
 
-/// Calls the core and copies its answer out; runs inside the export isolate.
+/// Calls `note_taker_export_meeting` and copies its answer out; runs inside the export isolate.
 ///
 /// Outputs: The answer JSON, or `null` when the core returned none.
 /// Side effects: The core writes the export; native strings are freed here.
 String? _exportMeetingJson(
-    String meetingId, String format, String optionsJson) {
+        String meetingId, String format, String optionsJson) =>
+    _callExportFunction(
+        'note_taker_export_meeting', meetingId, format, optionsJson);
+
+/// Calls `note_taker_export_summary` (#130); runs inside the export isolate.
+///
+/// Outputs: The answer JSON, or `null` when the core returned none.
+/// Side effects: The core writes the file at `outputPath`.
+String? _exportSummaryJson(
+        String meetingId, String format, String outputPath) =>
+    _callExportFunction(
+        'note_taker_export_summary', meetingId, format, outputPath);
+
+/// Calls a core export function that takes three strings and answers JSON.
+///
+/// Outputs: The answer JSON, or `null` when the core returned none.
+/// Side effects: Whatever the function does; native strings are freed here.
+String? _callExportFunction(
+    String symbol, String meetingId, String format, String optionsJson) {
   final DynamicLibrary coreLibrary = _openCoreLibrary();
-  final _DartExportMeeting exportMeeting =
-      coreLibrary.lookupFunction<_NativeExportMeeting, _DartExportMeeting>(
-          'note_taker_export_meeting');
+  final _DartExportMeeting exportMeeting = coreLibrary
+      .lookupFunction<_NativeExportMeeting, _DartExportMeeting>(symbol);
   final _DartFreeString freeString =
       coreLibrary.lookupFunction<_NativeFreeString, _DartFreeString>(
           'note_taker_free_string');

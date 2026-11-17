@@ -725,5 +725,7 @@
   "handoffStepOpensCopied": "{site} si apre e Koalino copia la riunione.",
   "handoffStepSend": "Premi Invio per inviarla.",
   "handoffStepPasteSend": "Fai clic nella casella del messaggio, incolla la riunione (Ctrl+V) e premi Invio.",
-  "chatHandoffIntro": "Fai le tue domande nella tua app di IA, con il tuo account. Koalino le passa note e trascrizioni, e foto e file vanno insieme come file."
+  "chatHandoffIntro": "Fai le tue domande nella tua app di IA, con il tuo account. Koalino le passa note e trascrizioni, e foto e file vanno insieme come file.",
+  "plainTextFile": "Testo semplice (.txt)",
+  "unableToExportTheSummary": "Impossibile esportare il riassunto"
 }

@@ -2806,4 +2806,10 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get chatHandoffIntro =>
       'Задавайте вопросы в своём ИИ-приложении, со своей учётной записью. Koalino передаёт ему заметки и расшифровки, а фото и файлы идут вместе с ними как файлы.';
+
+  @override
+  String get plainTextFile => 'Обычный текст (.txt)';
+
+  @override
+  String get unableToExportTheSummary => 'Не удалось экспортировать сводку';
 }

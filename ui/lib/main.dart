@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
+import 'package:note_taker_ui/controllers/summary_export_controller.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
@@ -414,8 +415,16 @@ final ChatBridge _chatBridge =
 final SummariesController _summariesController = SummariesController(
   bridge: const LlmBridge(),
   handoff: _handoffController,
+  summaryExport: SummaryExportController(
+    bridge: const RustSummaryExportBridge(),
+    saver: FilePickerExportSaver(dialogTitleOf: _summaryExportDialogTitle),
+    privateDirectory: () async => (await getTemporaryDirectory()).path,
+  ),
   asksPairedComputer: Platform.isAndroid,
 );
+
+/// The summary export's save dialog title, read when it opens (#130).
+String _summaryExportDialogTitle() => l10n.export;
 
 /// Where hand-offs go: the Claude or ChatGPT app on Android (#114), their websites in the
 /// browser on a computer (#126).

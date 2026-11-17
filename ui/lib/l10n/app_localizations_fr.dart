@@ -2801,4 +2801,10 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get chatHandoffIntro =>
       'Pose tes questions dans ta propre app d\'IA, avec ton propre compte. Koalino lui donne les notes et les transcriptions, et les photos et fichiers les accompagnent en tant que fichiers.';
+
+  @override
+  String get plainTextFile => 'Texte brut (.txt)';
+
+  @override
+  String get unableToExportTheSummary => 'Impossible d\'exporter le résumé';
 }

@@ -4473,6 +4473,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Ask your questions in your own AI app, with your own account. Koalino gives it the notes and transcripts, and the photos and files go with them as files.'**
   String get chatHandoffIntro;
+
+  /// Summary export menu (#130): the plain-text format.
+  ///
+  /// In en, this message translates to:
+  /// **'Plain text (.txt)'**
+  String get plainTextFile;
+
+  /// Snack bar when a summary export fails (#130).
+  ///
+  /// In en, this message translates to:
+  /// **'Unable to export the summary'**
+  String get unableToExportTheSummary;
 }
 
 class _AppLocalizationsDelegate

@@ -725,5 +725,7 @@
   "handoffStepOpensCopied": "{site} が開き、Koalino が会議をコピーします。",
   "handoffStepSend": "Enter キーを押して送信します。",
   "handoffStepPasteSend": "メッセージ欄をクリックし、会議を貼り付けて（Ctrl+V）Enter キーを押します。",
-  "chatHandoffIntro": "自分のアカウントで、自分の AI アプリに質問できます。Koalino がメモと文字起こしを渡し、写真やファイルはファイルのまま一緒に送られます。"
+  "chatHandoffIntro": "自分のアカウントで、自分の AI アプリに質問できます。Koalino がメモと文字起こしを渡し、写真やファイルはファイルのまま一緒に送られます。",
+  "plainTextFile": "プレーンテキスト (.txt)",
+  "unableToExportTheSummary": "要約を書き出せませんでした"
 }
