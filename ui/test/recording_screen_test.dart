@@ -198,6 +198,73 @@ Future<List<String>> pumpRecordingScreenWithCamera(
 /// Verifies the recording lifecycle and the optional meeting title sent to Rust.
 void main() {
   testWidgets(
+      'while recording a timer counts the recorded time and holds while paused (#132)',
+      (WidgetTester tester) async {
+    DateTime now = DateTime.utc(2026, 11, 17, 10);
+    final RecordingController controller = RecordingController(
+      recordingBridge: FakeRecordingBridge(startResult: true),
+      now: () => now,
+    );
+    await tester.pumpWidget(
+        MaterialApp(home: RecordingScreen(recordingController: controller)));
+    expect(find.byKey(const ValueKey<String>('recording-timer')), findsNothing);
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    expect(find.text('0:00:00'), findsOneWidget);
+    now = now.add(const Duration(minutes: 1, seconds: 5));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('0:01:05'), findsOneWidget);
+
+    await tester.tap(find.text('Pause'));
+    await tester.pump();
+    now = now.add(const Duration(minutes: 10));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('0:01:05'), findsOneWidget,
+        reason: 'a pause records nothing');
+
+    await tester.tap(find.text('Resume'));
+    await tester.pump();
+    now = now.add(const Duration(hours: 1, seconds: 2));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('1:01:07'), findsOneWidget);
+
+    await tester.tap(find.text('Stop'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('recording-timer')), findsNothing);
+    controller.dispose();
+  });
+
+  testWidgets('ready, recording and paused look clearly different (#132)',
+      (WidgetTester tester) async {
+    final RecordingController controller = RecordingController(
+        recordingBridge: FakeRecordingBridge(startResult: true));
+    await tester.pumpWidget(
+        MaterialApp(home: RecordingScreen(recordingController: controller)));
+    final ColorScheme colors =
+        Theme.of(tester.element(find.byType(RecordingScreen))).colorScheme;
+    Color? panelColor(String state) => tester
+        .widget<Card>(find.byKey(ValueKey<String>('recording-status-$state')))
+        .color;
+
+    expect(panelColor('idle'), colors.surfaceContainerHighest);
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    expect(panelColor('recording'), colors.errorContainer);
+    expect(find.text('REC'), findsOneWidget);
+
+    await tester.tap(find.text('Pause'));
+    await tester.pump();
+    expect(panelColor('paused'), colors.tertiaryContainer);
+    expect(find.text('REC'), findsNothing);
+
+    await tester.tap(find.text('Stop'));
+    await tester.pumpAndSettle();
+    controller.dispose();
+  });
+
+  testWidgets(
       'a microphone Android silences for a call is said while recording',
       (WidgetTester tester) async {
     final FakeRecordingBridge recordingBridge =

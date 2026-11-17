@@ -1,6 +1,9 @@
 // Renders the recording lifecycle and optional meeting title using Material 3 controls, the
 // live transcript growing chunk by chunk while recording (Issue #52), and the camera for photos
-// of the meeting (Issue #54).
+// of the meeting (Issue #54). A status panel sets recording apart from waiting, with the recorded
+// time counting while recording (Issue #132).
+
+import 'dart:async';
 
 // ignore: deprecated_member_use
 import 'package:note_taker_ui/controllers/transcription_language_controller.dart';
@@ -216,10 +219,10 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                         ),
                       ],
                       const SizedBox(height: 16),
-                      Text(
-                        statusLabel,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.headlineSmall,
+                      _RecordingStatusPanel(
+                        controller: recordingController,
+                        state: state,
+                        statusLabel: statusLabel,
                       ),
                       if (isStopping)
                         const Padding(
@@ -315,6 +318,168 @@ final class _RecordingScreenState extends State<RecordingScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Formats recorded time as `H:MM:SS`, e.g. `0:01:05` (#132).
+///
+/// Inputs: A non-negative duration. Outputs: The text. Side effects: None.
+String formatRecordedTime(Duration recorded) {
+  final int totalSeconds = recorded.isNegative ? 0 : recorded.inSeconds;
+  final String minutes = (totalSeconds ~/ 60 % 60).toString().padLeft(2, '0');
+  final String seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+  return '${totalSeconds ~/ 3600}:$minutes:$seconds';
+}
+
+/// Shows where the recorder stands, so recording and waiting can't be mistaken (#132).
+///
+/// Ready is a neutral panel with a microphone; recording is a red panel with a REC badge and the
+/// recorded time counting every second; paused is a tertiary-colored panel whose time holds;
+/// finishing shows the time it reached.
+final class _RecordingStatusPanel extends StatefulWidget {
+  const _RecordingStatusPanel({
+    required this.controller,
+    required this.state,
+    required this.statusLabel,
+  });
+
+  final RecordingController controller;
+  final RecordingUiState state;
+  final String statusLabel;
+
+  @override
+  State<_RecordingStatusPanel> createState() => _RecordingStatusPanelState();
+}
+
+final class _RecordingStatusPanelState extends State<_RecordingStatusPanel> {
+  /// Redraws the time every second while recording; `null` otherwise.
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    _followState();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RecordingStatusPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _followState();
+  }
+
+  /// Ticks only while recording. Side effects: Starts or cancels the timer.
+  void _followState() {
+    final bool recording = widget.state == RecordingUiState.recording;
+    if (recording && _ticker == null) {
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) {
+          setState(() {});
+        }
+      });
+    } else if (!recording) {
+      _ticker?.cancel();
+      _ticker = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final TextTheme text = Theme.of(context).textTheme;
+    final RecordingUiState state = widget.state;
+    final (Color background, Color foreground, IconData icon) = switch (state) {
+      RecordingUiState.recording => (
+          colors.errorContainer,
+          colors.onErrorContainer,
+          Icons.fiber_manual_record,
+        ),
+      RecordingUiState.paused => (
+          colors.tertiaryContainer,
+          colors.onTertiaryContainer,
+          Icons.pause_circle_outline,
+        ),
+      RecordingUiState.stopping => (
+          colors.secondaryContainer,
+          colors.onSecondaryContainer,
+          Icons.hourglass_top,
+        ),
+      RecordingUiState.idle || RecordingUiState.starting => (
+          colors.surfaceContainerHighest,
+          colors.onSurfaceVariant,
+          Icons.mic_none,
+        ),
+    };
+    final bool showsTime = state == RecordingUiState.recording ||
+        state == RecordingUiState.paused ||
+        state == RecordingUiState.stopping;
+    return Card(
+      key: ValueKey<String>('recording-status-${state.name}'),
+      color: background,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        child: Column(
+          children: <Widget>[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(icon,
+                    color: state == RecordingUiState.recording
+                        ? colors.error
+                        : foreground,
+                    size: 28),
+                if (state == RecordingUiState.recording) ...<Widget>[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: colors.error,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'REC',
+                      style: text.labelLarge?.copyWith(
+                        color: colors.onError,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            if (showsTime)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  formatRecordedTime(widget.controller.recordedTime),
+                  key: const ValueKey<String>('recording-timer'),
+                  style: text.displayMedium?.copyWith(
+                    color: foreground,
+                    fontFeatures: const <FontFeature>[
+                      FontFeature.tabularFigures()
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            Text(
+              widget.statusLabel,
+              textAlign: TextAlign.center,
+              style: text.titleMedium?.copyWith(color: foreground),
+            ),
+          ],
         ),
       ),
     );

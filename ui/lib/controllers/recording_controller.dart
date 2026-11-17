@@ -40,6 +40,8 @@ final class RecordingController extends ChangeNotifier {
   /// `microphoneSilenced` (Android only, #111) answers whether the system is feeding this app
   /// silence because another app holds the microphone for a call; it is asked every
   /// `silenceCheckInterval` while recording.
+  ///
+  /// `now` is the clock for `recordedTime` (#132); tests pass a fake one.
   RecordingController({
     required RecordingBridge recordingBridge,
     MicrophonePermission microphonePermission =
@@ -47,7 +49,9 @@ final class RecordingController extends ChangeNotifier {
     RecordingNotifier recordingNotifier = const NoRecordingNotifier(),
     Future<bool> Function()? microphoneSilenced,
     Duration silenceCheckInterval = const Duration(seconds: 3),
-  })  : _recordingBridge = recordingBridge,
+    DateTime Function() now = DateTime.now,
+  })  : _now = now,
+        _recordingBridge = recordingBridge,
         _microphonePermission = microphonePermission,
         _recordingNotifier = recordingNotifier,
         _checkSilenced = microphoneSilenced,
@@ -56,6 +60,51 @@ final class RecordingController extends ChangeNotifier {
         recordingNotifier.externalChanges.listen(_applyExternalChange);
     if (microphoneSilenced != null) {
       addListener(_followRecordingForSilence);
+    }
+    addListener(_followStateForRecordedTime);
+  }
+
+  final DateTime Function() _now;
+
+  /// Recorded time before the current stretch of recording (earlier stretches between pauses).
+  Duration _recordedBefore = Duration.zero;
+
+  /// When the current stretch of recording began; `null` while not recording.
+  DateTime? _recordingSince;
+
+  /// The state `_followStateForRecordedTime` last saw.
+  RecordingUiState _timedState = RecordingUiState.idle;
+
+  /// How long this meeting has been recording, pauses not counted (#132). Zero when no recording
+  /// is open; it holds while paused or finishing.
+  ///
+  /// Side effects: Reads the clock.
+  Duration get recordedTime {
+    final DateTime? since = _recordingSince;
+    return since == null
+        ? _recordedBefore
+        : _recordedBefore + _now().difference(since);
+  }
+
+  /// Starts, holds and resets `recordedTime` as the state changes, whether the app or the
+  /// notification changed it.
+  void _followStateForRecordedTime() {
+    final RecordingUiState current = _state;
+    if (_timedState == current) {
+      return;
+    }
+    _timedState = current;
+    if (current == RecordingUiState.recording) {
+      // A new recording starts from zero: going idle reset it. A failed stop resumes the count.
+      _recordingSince = _now();
+      return;
+    }
+    if (_recordingSince case final DateTime since) {
+      _recordedBefore += _now().difference(since);
+      _recordingSince = null;
+    }
+    if (current == RecordingUiState.idle) {
+      _recordedBefore = Duration.zero;
     }
   }
 
