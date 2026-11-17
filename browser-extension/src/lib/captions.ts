@@ -8,7 +8,8 @@
  *   items have stable IDs, so each ID is one cue.
  *
  * Times are milliseconds from the meeting start, as the content script observed them (captions
- * appear about a second after the words are spoken). Text is never logged.
+ * appear about a second after the words are spoken). A cue ends when its words last changed, not
+ * when it left the screen (#131). Text is never logged.
  */
 import { VttCue, buildVtt } from "./vtt";
 
@@ -64,8 +65,12 @@ export class CaptionCollector {
       if (text === "") continue;
       const existing = this.current.get(snapshot.key);
       if (existing && existing.speaker === snapshot.speaker && continues(existing.text, text)) {
-        existing.text = text;
-        existing.endMs = nowMs;
+        // A caption stays on screen long after its words were spoken; only new words move its
+        // end, so the cue covers the speech and not the minutes it stayed visible (#131).
+        if (existing.text !== text) {
+          existing.text = text;
+          existing.endMs = nowMs;
+        }
         continue;
       }
       const cue: CaptionCue = {

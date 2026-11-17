@@ -3,8 +3,8 @@
 use uuid::Uuid;
 
 use super::speaker_names::{
-    NamedSpan, SpeakingTimeline, VoiceTurn, is_call_window, parse_voice_cues, speaking_name,
-    suggest_names,
+    MAX_CAPTION_SPAN_MS, NamedSpan, SpeakingTimeline, VoiceTurn, caption_spans, is_call_window,
+    parse_voice_cues, speaking_name, suggest_names,
 };
 
 #[test]
@@ -204,5 +204,61 @@ fn a_name_that_wins_for_several_voices_is_suggested_to_none() {
     assert_eq!(
         suggestions.get(&named_voice).map(String::as_str),
         Some("Bruno")
+    );
+}
+
+#[test]
+fn caption_cues_are_clipped_to_the_next_caption_and_a_most_length() {
+    // The extension used to stretch a caption's end while it stayed on screen (#131), so one cue
+    // could cover minutes and every speaker after it.
+    let captions = "WEBVTT\n\n\
+        00:00:05.000 --> 00:03:00.000\n<v Alice Rossi>first\n\n\
+        00:00:09.000 --> 00:02:00.000\n<v Bruno>second\n\n\
+        00:01:00.000 --> 00:05:00.000\n<v Alice Rossi>last\n";
+    assert_eq!(
+        caption_spans(captions),
+        vec![
+            NamedSpan::caption(5_000, 9_000, "Alice Rossi"),
+            NamedSpan::caption(9_000, 9_000 + MAX_CAPTION_SPAN_MS, "Bruno"),
+            NamedSpan::caption(60_000, 60_000 + MAX_CAPTION_SPAN_MS, "Alice Rossi"),
+        ]
+    );
+}
+
+#[test]
+fn a_caption_name_can_be_suggested_to_several_voices_of_one_person() {
+    // Captions follow the words, so they never freeze like a covered call window. One person
+    // split into several voices is offered the same name on each (#131).
+    let first_voice = Uuid::new_v4();
+    let second_voice = Uuid::new_v4();
+    let turns = vec![
+        turn(first_voice, 0, 5_000),
+        turn(second_voice, 5_000, 10_000),
+    ];
+    let spans = vec![NamedSpan::caption(0, 10_000, "Alice")];
+    let suggestions = suggest_names(&turns, &spans);
+    assert_eq!(
+        suggestions.get(&first_voice).map(String::as_str),
+        Some("Alice")
+    );
+    assert_eq!(
+        suggestions.get(&second_voice).map(String::as_str),
+        Some("Alice")
+    );
+}
+
+#[test]
+fn captions_win_over_a_call_window_reading() {
+    let voice = Uuid::new_v4();
+    let turns = vec![turn(voice, 0, 10_000)];
+    let spans = vec![
+        NamedSpan::new(0, 10_000, "Stale Window"),
+        NamedSpan::caption(0, 10_000, "Alice"),
+    ];
+    assert_eq!(
+        suggest_names(&turns, &spans)
+            .get(&voice)
+            .map(String::as_str),
+        Some("Alice")
     );
 }

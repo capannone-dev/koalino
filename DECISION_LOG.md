@@ -3819,3 +3819,21 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   through its address, so it does not send before the document is in (`hasFilesToDrag`).
 - **Limit:** a website may refuse a very large Markdown file, or read only part of it. The
   owner's AI app reads it as the site allows; Koalino does not cut it.
+
+## 2026-11-17 — Caption names reach every voice of one person (#131)
+
+- **Owner's report:** after a real Teams meeting recorded with the Firefox extension, the voice
+  gallery held 28 unknown voices and none had a suggested name.
+- **Cause, measured on that meeting:** the extension moved a caption's end every time it saw the
+  caption on screen, so cues lasted a median of 166 s and no name reached 60% of any voice.
+  With clipped cues 20 voices had a clear name, but each person was split into several voices,
+  and the #113 guard ("a name that wins for more than one voice goes to none") dropped them all.
+- **Decision:**
+  - The extension ends a cue when its words last changed. Caption and live-transcript files
+    already stored are read with each cue clipped at the next cue's start, and at 30 s.
+  - The guard applies only to call-window readings, which can freeze. A caption name may go to
+    several voices, and caption names win over window readings.
+  - The gallery puts voices with the same suggested name on one card, ahead of sound grouping,
+    so the owner names a person once.
+- **Result on that meeting:** 13 cards instead of 28; 18 voices (about 560 s of speech) named
+  as 3 people. The rest are fragments of 2 s or less, with no caption under them.

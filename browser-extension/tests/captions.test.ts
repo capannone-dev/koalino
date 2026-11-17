@@ -33,6 +33,19 @@ describe("CaptionCollector", () => {
     ]);
   });
 
+  it("ends a cue when its words stop changing, not when it leaves the screen (#131)", () => {
+    const collector = new CaptionCollector();
+    const item = {};
+    collector.observe([{ key: item, speaker: "Ada", text: "Good" }], 10_000);
+    collector.observe([{ key: item, speaker: "Ada", text: "Good morning." }], 11_000);
+    // The caption stays on screen, unchanged, for minutes while others speak.
+    collector.observe([{ key: item, speaker: "Ada", text: "Good morning." }], 60_000);
+    collector.observe([{ key: item, speaker: "Ada", text: "Good  morning. " }], 170_000);
+    expect(collector.cues()).toEqual([
+      { startMs: 10_000, endMs: 11_000, speaker: "Ada", text: "Good morning." },
+    ]);
+  });
+
   it("starts a new cue when a recycled element shows other words", () => {
     const collector = new CaptionCollector();
     const item = {};

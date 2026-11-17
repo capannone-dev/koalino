@@ -33,7 +33,7 @@ use crate::{
     },
     domain::{
         models::{MeetingId, SpeakerIdentity, UnassignedVoiceClip, UnknownSpeakerCluster},
-        speaker_names::{NamedSpan, VoiceTurn, parse_voice_cues, suggest_names},
+        speaker_names::{NamedSpan, VoiceTurn, caption_spans, parse_voice_cues, suggest_names},
     },
     ports::{
         storage::{AttachmentRepository, NoteRepository},
@@ -418,6 +418,8 @@ const NAMED_SPAN_FILE_PREFIXES: [&str; 3] = [
     "teams-captions-",
     "teams-live-transcript-",
 ];
+/// File-name prefix of the call window's readings (#113); the other prefixes are captions.
+const CALL_WINDOW_FILE_PREFIX: &str = "speaker-names-";
 /// Largest attachment read for names.
 const MAX_NAMED_SPAN_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -437,22 +439,26 @@ where
         let mut spans = Vec::new();
         for attachment in attachments {
             let path = std::path::Path::new(attachment.file_path());
+            let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
             let is_named_span_file = attachment.mime_type() == "text/vtt"
-                && path
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(|name| {
-                        NAMED_SPAN_FILE_PREFIXES
-                            .iter()
-                            .any(|prefix| name.starts_with(prefix))
-                    });
+                && NAMED_SPAN_FILE_PREFIXES
+                    .iter()
+                    .any(|prefix| file_name.starts_with(prefix));
             if !is_named_span_file {
                 continue;
             }
             if let Some(bytes) = self.0.read_attachment_file(path, MAX_NAMED_SPAN_FILE_BYTES)
                 && let Ok(text) = std::str::from_utf8(&bytes)
             {
-                spans.extend(parse_voice_cues(text));
+                // Captions and the transcript panel follow the words; the call window's
+                // readings can freeze, so they are weighed apart (#131).
+                if file_name.starts_with(CALL_WINDOW_FILE_PREFIX) {
+                    spans.extend(parse_voice_cues(text));
+                } else {
+                    spans.extend(caption_spans(text));
+                }
             }
         }
         spans
@@ -524,7 +530,10 @@ where
             });
         }
     }
-    let group_labels = group_unknown_voices(&representatives, DEFAULT_VOICE_GROUP_SIMILARITY);
+    let group_labels = group_by_suggested_name(
+        &listed_clusters,
+        group_unknown_voices(&representatives, DEFAULT_VOICE_GROUP_SIMILARITY),
+    );
     drop(representatives);
     let mut unknown_voice_groups: Vec<UnknownVoiceGroup> = Vec::new();
     for (mut cluster, group_label) in listed_clusters.into_iter().zip(group_labels) {
@@ -563,6 +572,44 @@ where
         unknown_voice_groups,
         saved_people,
     })
+}
+
+/// Puts voices with the same suggested name in one group (#131).
+///
+/// A meeting can split one person into many short voices that don't sound alike enough to group;
+/// the names shown while they spoke join them, so the owner names them once. A suggested name
+/// outweighs sound: such a voice leaves its sound group. Names are compared ignoring case and
+/// spacing.
+///
+/// Inputs: The voices and their sound-group numbers, in the same order.
+/// Outputs: Group numbers from zero, numbered in order of first appearance. Side effects: None.
+fn group_by_suggested_name(
+    clusters: &[VoiceLibraryCluster],
+    sound_groups: Vec<usize>,
+) -> Vec<usize> {
+    let mut keys: Vec<String> = Vec::new();
+    let mut labels = Vec::with_capacity(sound_groups.len());
+    for (cluster, sound_group) in clusters.iter().zip(sound_groups) {
+        let key = match cluster.suggested_name.as_deref() {
+            Some(name) => format!(
+                "name:{}",
+                name.split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .to_lowercase()
+            ),
+            None => format!("sound:{sound_group}"),
+        };
+        let label = match keys.iter().position(|known| *known == key) {
+            Some(label) => label,
+            None => {
+                keys.push(key);
+                keys.len() - 1
+            }
+        };
+        labels.push(label);
+    }
+    labels
 }
 
 /// Suggests names for one meeting's unknown voices from its named spans (#113).

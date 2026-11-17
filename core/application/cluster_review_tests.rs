@@ -695,3 +695,39 @@ fn voices_are_offered_the_names_shown_while_they_spoke() {
             .all(|cluster| cluster.suggested_name().is_none())
     );
 }
+
+/// Verifies voices the captions name alike are offered as one person, even when they don't
+/// sound alike, so the owner names them once (#131).
+#[test]
+fn voices_the_captions_name_alike_share_one_card() {
+    use crate::domain::speaker_names::NamedSpan;
+    let (note_repository, meeting_id, large_cluster_id, small_cluster_id) =
+        repository_with_two_clusters();
+    note_repository
+        .save_transcript_segments(
+            &meeting_id,
+            &[
+                TranscriptSegment::new(meeting_id.clone(), 0, 4_000, None, "one")
+                    .with_unknown_cluster_id(Some(large_cluster_id)),
+                TranscriptSegment::new(meeting_id.clone(), 5_000, 9_000, None, "two")
+                    .with_unknown_cluster_id(Some(small_cluster_id)),
+            ],
+        )
+        .unwrap_or_else(|error| panic!("segments should save: {error}"));
+    let names = FixedNames(vec![NamedSpan::caption(0, 9_000, "Ada Lovelace")]);
+
+    let library =
+        load_voice_library_with_names(&note_repository, &InMemoryVoiceVectorDB::new(), &names)
+            .unwrap_or_else(|error| panic!("library should load: {error}"));
+
+    assert_eq!(library.unknown_voice_groups().len(), 1);
+    let group = &library.unknown_voice_groups()[0];
+    assert_eq!(group.clusters().len(), 2);
+    assert!(
+        group
+            .clusters()
+            .iter()
+            .all(|cluster| cluster.suggested_name() == Some("Ada Lovelace")
+                && cluster.voice_group_id() == group.group_id())
+    );
+}

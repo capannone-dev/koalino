@@ -25,6 +25,9 @@ pub const MERGE_GAP_MS: u64 = 3_000;
 pub const MIN_EVIDENCE_MS: u64 = 2_000;
 /// The suggested name must cover at least this share of the voice's named speech.
 pub const MIN_NAME_SHARE: f64 = 0.6;
+/// Longest a caption counts as speech, in milliseconds (#131). A caption can stay on screen long
+/// after its words were spoken, so its span also ends where the next caption starts.
+pub const MAX_CAPTION_SPAN_MS: u64 = 30_000;
 /// Longest accepted name, in characters.
 const MAX_NAME_CHARS: usize = 60;
 /// Most words in an accepted name.
@@ -65,16 +68,28 @@ pub struct NamedSpan {
     pub end_ms: u64,
     /// The name as shown.
     pub name: String,
+    /// Whether the span comes from captions or a transcript (text tied to the words spoken)
+    /// rather than a call window's "is speaking" label, which can freeze (#131).
+    pub from_captions: bool,
 }
 
 impl NamedSpan {
-    /// Creates a span. Inputs: start and end (meeting milliseconds) and the name.
+    /// Creates a call-window span. Inputs: start and end (meeting milliseconds) and the name.
     /// Outputs: The span. Side effects: None.
     pub fn new(start_ms: u64, end_ms: u64, name: &str) -> Self {
         Self {
             start_ms,
             end_ms,
             name: name.to_owned(),
+            from_captions: false,
+        }
+    }
+
+    /// Creates a caption span (#131). Inputs and outputs: As `new`. Side effects: None.
+    pub fn caption(start_ms: u64, end_ms: u64, name: &str) -> Self {
+        Self {
+            from_captions: true,
+            ..Self::new(start_ms, end_ms, name)
         }
     }
 }
@@ -283,6 +298,30 @@ pub fn parse_voice_cues(text: &str) -> Vec<NamedSpan> {
     spans
 }
 
+/// Reads caption or transcript cues as caption spans, each clipped to end where the next caption
+/// starts and at most `MAX_CAPTION_SPAN_MS` after its own start (#131).
+///
+/// Inputs: WebVTT text as for `parse_voice_cues`. Outputs: The spans, in start order.
+/// Side effects: None.
+pub fn caption_spans(text: &str) -> Vec<NamedSpan> {
+    let mut spans = parse_voice_cues(text);
+    spans.sort_by_key(|span| (span.start_ms, span.end_ms));
+    let starts: Vec<u64> = spans.iter().map(|span| span.start_ms).collect();
+    for span in &mut spans {
+        let next_start = starts
+            .iter()
+            .copied()
+            .find(|start| *start > span.start_ms)
+            .unwrap_or(u64::MAX);
+        span.end_ms = span
+            .end_ms
+            .min(next_start)
+            .min(span.start_ms.saturating_add(MAX_CAPTION_SPAN_MS));
+        span.from_captions = true;
+    }
+    spans
+}
+
 /// Returns the name of a payload's leading `<v Name>` tag.
 fn voice_tag_name(payload: &str) -> Option<String> {
     let tag = payload.trim_start().strip_prefix("<v")?;
@@ -301,10 +340,37 @@ fn voice_tag_name(payload: &str) -> Option<String> {
 /// Inputs: The unknown voices' turns and the named spans (window readings and captions).
 /// Outputs: For each voice with at least `MIN_EVIDENCE_MS` of speech under named spans, the name
 /// covering at least `MIN_NAME_SHARE` of that speech. Names are compared ignoring case and
-/// spacing; the spelling with the most overlap is returned. A name that wins for more than one
-/// voice is suggested to none of them: a covered or minimized call window stops updating, and one
-/// stale label then spans every voice. Side effects: None.
+/// spacing; the spelling with the most overlap is returned. Captions and call-window readings are
+/// weighed apart, and a caption suggestion wins. A window name that wins for more than one voice
+/// is suggested to none of them: a covered or minimized call window stops updating, and one stale
+/// label then spans every voice. Captions follow the words, so a caption name may go to several
+/// voices: one person split into several voices (#131). Side effects: None.
 pub fn suggest_names(turns: &[VoiceTurn], spans: &[NamedSpan]) -> HashMap<Uuid, String> {
+    let (caption_spans, window_spans): (Vec<NamedSpan>, Vec<NamedSpan>) =
+        spans.iter().cloned().partition(|span| span.from_captions);
+    let window_winners = winning_names(turns, &window_spans);
+    let mut suggestions: HashMap<Uuid, String> = window_winners
+        .iter()
+        .filter(|(_, key, _)| {
+            window_winners
+                .iter()
+                .filter(|(_, other, _)| other == key)
+                .count()
+                == 1
+        })
+        .map(|(cluster_id, _, spelling)| (*cluster_id, spelling.clone()))
+        .collect();
+    for (cluster_id, _, spelling) in winning_names(turns, &caption_spans) {
+        suggestions.insert(cluster_id, spelling);
+    }
+    suggestions
+}
+
+/// Finds each voice's winning name in `spans`.
+///
+/// Outputs: `(voice, compared name, best spelling)` for each voice with enough, clear evidence.
+/// Side effects: None.
+fn winning_names(turns: &[VoiceTurn], spans: &[NamedSpan]) -> Vec<(Uuid, String, String)> {
     /// Overlap per voice, then per compared name: total milliseconds and per spelling.
     type SpellingOverlap = Vec<(String, u64)>;
     let mut overlap: HashMap<Uuid, Vec<(String, u64, SpellingOverlap)>> = HashMap::new();
@@ -359,8 +425,4 @@ pub fn suggest_names(turns: &[VoiceTurn], spans: &[NamedSpan]) -> HashMap<Uuid, 
         }
     }
     winners
-        .iter()
-        .filter(|(_, key, _)| winners.iter().filter(|(_, other, _)| other == key).count() == 1)
-        .map(|(cluster_id, _, spelling)| (*cluster_id, spelling.clone()))
-        .collect()
 }
