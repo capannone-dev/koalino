@@ -3837,3 +3837,16 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
     so the owner names a person once.
 - **Result on that meeting:** 13 cards instead of 28; 18 voices (about 560 s of speech) named
   as 3 people. The rest are fragments of 2 s or less, with no caption under them.
+
+## 2026-11-17 — The GPU is given up only after two unfinished attempts (#133)
+
+- **Found:** the owner's desktop had transcribed on the CPU since 2026-11-15. A `.gpu-attempt`
+  marker (#76) was held from model load until the first chunk finished, so closing the app in
+  that window, with no crash, kept the CPU for good. large-v3-turbo on the CPU runs at about 3×
+  real time, and the Teams bridge dropped two thirds of a browser-recorded meeting.
+- **Decision:** the marker counts unfinished attempts in a row and the GPU is given up at 2.
+  It covers only the GPU work: the model load, then the first inference. An orderly end gives
+  back its own attempt, and a finished inference clears the count. An empty marker from an older
+  version counts as one, so the owner's machine tries the GPU again by itself.
+- **Trade-off:** a driver that really kills the process now costs two crashes instead of one.
+  A silent fall to the CPU cost a meeting.

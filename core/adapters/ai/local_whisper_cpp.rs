@@ -232,8 +232,9 @@ pub struct LocalWhisperCppTranscriptionEngine {
     thread_count: i32,
     language: Option<String>,
     recording_pcm_source: Arc<dyn RecordingPcmSource>,
-    /// An unfinished GPU attempt, ended by the first chunk that succeeds.
-    gpu_attempt: Mutex<Option<GpuAttemptGuard>>,
+    /// The crash marker while the GPU has loaded the model but not yet finished a chunk; the
+    /// first inference is guarded by it, so closing the app while idle counts nothing (#133).
+    unproven_gpu_marker: Mutex<Option<PathBuf>>,
     /// The cores for the threads feeding the GPU; empty when they stay free.
     #[cfg_attr(windows, allow(dead_code))]
     pinned_cores: Vec<usize>,
@@ -265,6 +266,7 @@ impl LocalWhisperCppTranscriptionEngine {
         }
         let gpu = gpu_for_model(&configuration);
         // Without a marker there's nothing to check. With one, a crashed attempt keeps the CPU.
+        // The marker covers the GPU work itself: this model load, then the first inference.
         let gpu_attempt = gpu.and_then(|_| {
             configuration
                 .gpu_attempt_marker
@@ -279,6 +281,12 @@ impl LocalWhisperCppTranscriptionEngine {
             .filter(|_| gpu_allowed)
             .and_then(|gpu| load_on_gpu(model_path, gpu, configuration.efficient_gpu));
         let uses_gpu = gpu_context.is_some();
+        let unproven_gpu_marker = configuration
+            .gpu_attempt_marker
+            .clone()
+            .filter(|_| uses_gpu && matches!(gpu_attempt, Some(Some(_))));
+        // The load ended in order: give back this attempt's count.
+        drop(gpu_attempt);
         ENGINE_USES_GPU.store(uses_gpu, Ordering::Relaxed);
         let model_context = match gpu_context {
             Some(model_context) => {
@@ -301,7 +309,7 @@ impl LocalWhisperCppTranscriptionEngine {
             thread_count: configuration.thread_count,
             language: configuration.language,
             recording_pcm_source,
-            gpu_attempt: Mutex::new(gpu_attempt.flatten().filter(|_| uses_gpu)),
+            unproven_gpu_marker: Mutex::new(unproven_gpu_marker),
             pinned_cores: if uses_gpu && configuration.efficient_gpu {
                 super::compute_resources::cores_for_gpu_submission(
                     &super::compute_resources::core_max_speeds(),
@@ -373,20 +381,33 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
         if let Some(prompt) = prompt.as_deref() {
             inference_parameters.set_initial_prompt(prompt);
         }
-        {
+        let unproven_marker = self
+            .unproven_gpu_marker
+            .lock()
+            .ok()
+            .and_then(|mut marker| marker.take());
+        let first_gpu_attempt = unproven_marker.as_deref().and_then(GpuAttemptGuard::begin);
+        let inference = {
             #[cfg(any(target_os = "linux", target_os = "android"))]
             let _pinned_threads = super::gpu_thread_affinity::PinnedThreads::pin(
                 &self.pinned_cores,
                 super::gpu_thread_affinity::ADRENO_DRIVER_THREAD_PREFIX,
             );
-            inference_state
-                .full(inference_parameters, &pcm_samples)
-                .map_err(|_| TranscriptionError::Unavailable)?;
-        }
-        if let Ok(mut gpu_attempt) = self.gpu_attempt.lock()
-            && let Some(attempt) = gpu_attempt.take()
-        {
-            attempt.confirm();
+            inference_state.full(inference_parameters, &pcm_samples)
+        };
+        match (inference, first_gpu_attempt) {
+            (Ok(_), Some(attempt)) => attempt.confirm(),
+            (Ok(_), None) => {}
+            (Err(_), attempt) => {
+                // A clean failure proves nothing: the next chunk is guarded again.
+                drop(attempt);
+                if let (Some(marker), Ok(mut slot)) =
+                    (unproven_marker, self.unproven_gpu_marker.lock())
+                {
+                    *slot = Some(marker);
+                }
+                return Err(TranscriptionError::Unavailable);
+            }
         }
 
         let mut transcript_content = String::new();
