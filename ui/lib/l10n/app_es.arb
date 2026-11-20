@@ -729,7 +729,7 @@
   "plainTextFile": "Texto sin formato (.txt)",
   "unableToExportTheSummary": "No se pudo exportar el resumen",
   "addAVoice": "Añadir una voz",
-  "newPersonsName": "Nombre de una persona nueva",
+  "alreadySavedVoiceAddsToThem": "{name} ya está guardado: esta voz se le añadirá.",
   "addToASavedPerson": "Añadir a una persona guardada",
   "addVoicesTo": "Añadir voces a {name}",
   "tickTheVoicesThatAre": "Estas voces no se reconocieron como de nadie. Marca las de {name}; usa Reproducir para comprobarlo.",

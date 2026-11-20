@@ -503,7 +503,7 @@
   "exportAs": "書き出し形式",
   "plainText": "プレーンテキスト",
   "theSummaryCouldNotBeExported": "要約を書き出せませんでした。もう一度お試しください。",
-  "newPersonsName": "新しい人の名前",
+  "alreadySavedVoiceAddsToThem": "{name} は保存済みです。この声はこの人に追加されます。",
   "addToASavedPerson": "保存済みの人に追加",
   "addSpeakerToASavedPerson": "{speakerLabel} を保存済みの人に追加",
   "addAVoice": "声を追加",

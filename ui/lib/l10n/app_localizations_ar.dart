@@ -2825,7 +2825,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get addAVoice => 'إضافة صوت';
 
   @override
-  String get newPersonsName => 'اسم شخص جديد';
+  String alreadySavedVoiceAddsToThem(String name) {
+    return '$name محفوظ بالفعل: سيُضاف هذا الصوت إليه.';
+  }
 
   @override
   String get addToASavedPerson => 'إضافة إلى شخص محفوظ';

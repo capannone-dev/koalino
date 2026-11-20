@@ -31,6 +31,9 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   final Map<String, TextEditingController> _nameControllers =
       <String, TextEditingController>{};
 
+  /// Focus of each name field, which the saved-people suggestions follow; same keys.
+  final Map<String, FocusNode> _nameFocusNodes = <String, FocusNode>{};
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +45,9 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
     for (final TextEditingController nameController
         in _nameControllers.values) {
       nameController.dispose();
+    }
+    for (final FocusNode focusNode in _nameFocusNodes.values) {
+      focusNode.dispose();
     }
     super.dispose();
   }
@@ -252,30 +258,54 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
     String keyId,
     void Function(String) onAssign,
   ) {
-    final Widget newPersonRow = Row(
-      children: <Widget>[
-        Expanded(
-          child: TextField(
-            key: ValueKey<String>('identity-name-$keyId'),
-            controller: nameController,
-            decoration: InputDecoration(
-              labelText: controller.savedPeople.isEmpty
-                  ? l10n.name
-                  : l10n.newPersonsName,
-              border: const OutlineInputBorder(),
+    final FocusNode focusNode =
+        _nameFocusNodes.putIfAbsent(keyId, FocusNode.new);
+    final Widget newPersonRow = ValueListenableBuilder<TextEditingValue>(
+      valueListenable: nameController,
+      builder: (BuildContext context, TextEditingValue typed, Widget? child) {
+        // The core gives the voice to a saved person whose name matches, whatever its case
+        // (#136); say so before Assign, and name the button after them.
+        final SavedPerson? match =
+            savedPersonNamed(controller.savedPeople, typed.text);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: _nameField(
+                      controller, nameController, focusNode, keyId, onAssign),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  key: ValueKey<String>('assign-$keyId'),
+                  onPressed: controller.isLoading
+                      ? null
+                      : () => onAssign(nameController.text),
+                  child: Text(match == null
+                      ? l10n.assign
+                      : l10n.addTo(match.displayName)),
+                ),
+              ],
             ),
-            textInputAction: TextInputAction.done,
-            onSubmitted: onAssign,
-          ),
-        ),
-        const SizedBox(width: 12),
-        FilledButton(
-          key: ValueKey<String>('assign-$keyId'),
-          onPressed:
-              controller.isLoading ? null : () => onAssign(nameController.text),
-          child: Text(l10n.assign),
-        ),
-      ],
+            if (match != null)
+              Padding(
+                key: ValueKey<String>('matches-$keyId'),
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: <Widget>[
+                    const Icon(Icons.person_outline, size: 16),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                          l10n.alreadySavedVoiceAddsToThem(match.displayName)),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
     );
     if (controller.savedPeople.isEmpty) {
       return newPersonRow;
@@ -311,6 +341,72 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  /// The name field; while typing, saved people whose names contain the text are offered.
+  Widget _nameField(
+    VoiceGalleryController controller,
+    TextEditingController nameController,
+    FocusNode focusNode,
+    String keyId,
+    void Function(String) onAssign,
+  ) {
+    return RawAutocomplete<SavedPerson>(
+      textEditingController: nameController,
+      focusNode: focusNode,
+      displayStringForOption: (SavedPerson person) => person.displayName,
+      optionsBuilder: (TextEditingValue typed) {
+        final String wanted = typed.text.trim().toLowerCase();
+        if (wanted.isEmpty) {
+          return const Iterable<SavedPerson>.empty();
+        }
+        return controller.savedPeople.where((SavedPerson person) {
+          final String name = person.displayName.toLowerCase();
+          return name.contains(wanted) && name != wanted;
+        });
+      },
+      fieldViewBuilder: (BuildContext context, TextEditingController field,
+              FocusNode fieldFocus, VoidCallback onFieldSubmitted) =>
+          TextField(
+        key: ValueKey<String>('identity-name-$keyId'),
+        controller: field,
+        focusNode: fieldFocus,
+        decoration: InputDecoration(
+          labelText: l10n.name,
+          border: const OutlineInputBorder(),
+        ),
+        textInputAction: TextInputAction.done,
+        onSubmitted: onAssign,
+      ),
+      optionsViewBuilder: (BuildContext context,
+              AutocompleteOnSelected<SavedPerson> onSelected,
+              Iterable<SavedPerson> people) =>
+          Align(
+        alignment: AlignmentDirectional.topStart,
+        child: Material(
+          elevation: 4,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 240, maxWidth: 360),
+            child: ListView(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              children: <Widget>[
+                for (final SavedPerson person in people)
+                  ListTile(
+                    key:
+                        ValueKey<String>('suggest-$keyId-${person.identityId}'),
+                    leading: const Icon(Icons.person_outline),
+                    title: Text(person.displayName),
+                    subtitle:
+                        Text(l10n.voiceSampleCount(person.voiceVariantCount)),
+                    onTap: () => onSelected(person),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -532,10 +628,21 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
       staleControllers.add(nameController);
       return true;
     });
-    if (staleControllers.isNotEmpty) {
+    final List<FocusNode> staleFocusNodes = <FocusNode>[];
+    _nameFocusNodes.removeWhere((String keyId, FocusNode focusNode) {
+      if (listedClusterIds.contains(keyId)) {
+        return false;
+      }
+      staleFocusNodes.add(focusNode);
+      return true;
+    });
+    if (staleControllers.isNotEmpty || staleFocusNodes.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((Duration _) {
         for (final TextEditingController staleController in staleControllers) {
           staleController.dispose();
+        }
+        for (final FocusNode staleFocusNode in staleFocusNodes) {
+          staleFocusNode.dispose();
         }
       });
     }
@@ -655,4 +762,20 @@ final class _VoicePickerDialogState extends State<_VoicePickerDialog> {
       ],
     );
   }
+}
+
+/// The saved person whose name `typedName` is, compared as the core does: trimmed, any case.
+///
+/// Outputs: The person, or `null` for a new name. Side effects: None.
+SavedPerson? savedPersonNamed(List<SavedPerson> savedPeople, String typedName) {
+  final String wanted = typedName.trim().toLowerCase();
+  if (wanted.isEmpty) {
+    return null;
+  }
+  for (final SavedPerson person in savedPeople) {
+    if (person.displayName.trim().toLowerCase() == wanted) {
+      return person;
+    }
+  }
+  return null;
 }

@@ -729,7 +729,7 @@
   "plainTextFile": "نص عادي (.txt)",
   "unableToExportTheSummary": "تعذّر تصدير الملخص",
   "addAVoice": "إضافة صوت",
-  "newPersonsName": "اسم شخص جديد",
+  "alreadySavedVoiceAddsToThem": "{name} محفوظ بالفعل: سيُضاف هذا الصوت إليه.",
   "addToASavedPerson": "إضافة إلى شخص محفوظ",
   "addVoicesTo": "إضافة أصوات إلى {name}",
   "tickTheVoicesThatAre": "لم يُتعرَّف على هذه الأصوات على أنها لأي شخص. حدّد أصوات {name}؛ استخدم تشغيل للتحقق.",

@@ -27,6 +27,13 @@ function deletionFailureMessage(t: Translate, error: unknown): string {
 }
 
 /** Formats milliseconds as seconds with one decimal, e.g. `12.5 s`. */
+/** The saved person whose name `typedName` is, compared as the core does (trimmed, any case). */
+export function savedPersonNamed(people: VoiceIdentity[], typedName: string): VoiceIdentity | null {
+  const wanted = typedName.trim().toLowerCase();
+  if (!wanted) return null;
+  return people.find((person) => person.display_name.trim().toLowerCase() === wanted) ?? null;
+}
+
 function formatSeconds(milliseconds: number): string {
   const tenthsOfSecond = Math.floor((milliseconds + 50) / 100);
   return `${Math.floor(tenthsOfSecond / 10)}.${tenthsOfSecond % 10} s`;
@@ -72,6 +79,8 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null);
   /** Voices left out of their group's naming, by cluster ID. */
   const [leftOut, setLeftOut] = useState<Set<string>>(new Set());
+  /** What each card's name field holds, by group ID, to spot a saved person's name. */
+  const [typedNames, setTypedNames] = useState<Record<string, string>>({});
   /** The saved person whose voice picker is open (#136), and the voices ticked in it. */
   const [addingTo, setAddingTo] = useState<VoiceIdentity | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -209,6 +218,8 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
         const longestPlayable = group.voices.filter((voice) => voice.has_review_clip).sort((first, second) => second.total_duration_ms - first.total_duration_ms)[0];
         // The name a call window showed while one of these voices spoke (#113); only offered.
         const suggestedName = group.voices.find((voice) => voice.suggested_name)?.suggested_name ?? null;
+        // The core gives the voice to a saved person whose name matches, whatever its case.
+        const match = savedPersonNamed(people, typedNames[group.groupId] ?? suggestedName ?? "");
         return (
           <article className="card space-y-2" key={group.groupId}>
             <div className="flex items-center justify-between gap-2">
@@ -242,9 +253,10 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
             )}
             {suggestedName ? <p className="text-sm">{t("theCallShowedSpeakingCheck", { suggestedName })}</p> : null}
             <form className="space-y-2" onSubmit={(event) => submitAssignment(event, group)}>
-              <label className="block">{people.length > 0 ? t("newPersonsName") : t("name")}<input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" name="identityName" type="text" aria-label={t("nameFor", { speakerLabel: speakerLabel.toLowerCase() })} autoComplete="off" list="saved-people" defaultValue={suggestedName ?? undefined} />
+              <label className="block">{t("name")}<input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" name="identityName" type="text" aria-label={t("nameFor", { speakerLabel: speakerLabel.toLowerCase() })} autoComplete="off" list="saved-people" defaultValue={suggestedName ?? undefined} onChange={(event) => { const value = event.target.value; setTypedNames((current) => ({ ...current, [group.groupId]: value })); }} />
               </label>
-              <button className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong" type="submit">{t("assign")}</button>
+              {match ? <p className="text-sm">{t("alreadySavedVoiceAddsToThem", { name: match.display_name })}</p> : null}
+              <button className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong" type="submit">{match ? t("addTo", { name: match.display_name }) : t("assign")}</button>
             </form>
             {people.length > 0 ? (
               // A voice that wasn't matched to someone already saved is given to them here (#136).

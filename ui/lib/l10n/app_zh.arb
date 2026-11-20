@@ -729,7 +729,7 @@
   "plainTextFile": "纯文本 (.txt)",
   "unableToExportTheSummary": "无法导出摘要",
   "addAVoice": "添加声音",
-  "newPersonsName": "新人员的姓名",
+  "alreadySavedVoiceAddsToThem": "{name} 已保存：此声音将添加给此人。",
   "addToASavedPerson": "添加给已保存的人员",
   "addVoicesTo": "为 {name} 添加声音",
   "tickTheVoicesThatAre": "这些声音未被识别为任何人。勾选属于 {name} 的声音；可用“播放”确认。",

@@ -729,7 +729,7 @@
   "plainTextFile": "Reiner Text (.txt)",
   "unableToExportTheSummary": "Die Zusammenfassung konnte nicht exportiert werden",
   "addAVoice": "Stimme hinzufügen",
-  "newPersonsName": "Name einer neuen Person",
+  "alreadySavedVoiceAddsToThem": "{name} ist bereits gespeichert: Diese Stimme wird hinzugefügt.",
   "addToASavedPerson": "Einer gespeicherten Person hinzufügen",
   "addVoicesTo": "Stimmen zu {name} hinzufügen",
   "tickTheVoicesThatAre": "Diese Stimmen wurden niemandem zugeordnet. Hake die an, die {name} gehören; mit Abspielen prüfen.",

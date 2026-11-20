@@ -584,6 +584,71 @@ void main() {
     ]);
   });
 
+  testWidgets('typing suggests saved people, and a match says it adds to them',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[firstCluster],
+      savedPeople: <SavedPerson>[savedAda],
+    );
+
+    await pumpGallery(tester, bridge, meetingId: null);
+    final Finder field =
+        find.byKey(const ValueKey<String>('identity-name-cluster-1'));
+    await tester.enterText(field, 'lov');
+    await tester.pumpAndSettle();
+    final Finder suggestion =
+        find.byKey(const ValueKey<String>('suggest-cluster-1-identity-1'));
+    expect(suggestion, findsOneWidget);
+    expect(
+        find.byKey(const ValueKey<String>('matches-cluster-1')), findsNothing);
+
+    await tester.tap(suggestion);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('matches-cluster-1')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey<String>('assign-cluster-1')),
+            matching: find.text('Add to Ada Lovelace')),
+        findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('assign-cluster-1')));
+    await tester.pumpAndSettle();
+    expect(bridge.assignedClusters, <(String, String)>[
+      ('cluster-1', 'Ada Lovelace'),
+    ]);
+  });
+
+  testWidgets('a typed name matches a saved person whatever its case',
+      (WidgetTester tester) async {
+    await pumpGallery(
+        tester,
+        FakeVoiceGalleryBridge(
+          clusters: <UnknownSpeakerCluster>[firstCluster],
+          savedPeople: <SavedPerson>[savedAda],
+        ),
+        meetingId: null);
+
+    await tester.enterText(
+        find.byKey(const ValueKey<String>('identity-name-cluster-1')),
+        '  ada lovelace ');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey<String>('matches-cluster-1')),
+        findsOneWidget);
+
+    await tester.enterText(
+        find.byKey(const ValueKey<String>('identity-name-cluster-1')),
+        'Ada Byron');
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey<String>('matches-cluster-1')), findsNothing);
+    expect(
+        find.descendant(
+            of: find.byKey(const ValueKey<String>('assign-cluster-1')),
+            matching: find.text('Assign')),
+        findsOneWidget);
+  });
+
   testWidgets('without saved people there is nobody to add a voice to',
       (WidgetTester tester) async {
     await pumpGallery(tester,

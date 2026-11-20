@@ -2610,7 +2610,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addAVoice => '添加声音';
 
   @override
-  String get newPersonsName => '新人员的姓名';
+  String alreadySavedVoiceAddsToThem(String name) {
+    return '$name 已保存：此声音将添加给此人。';
+  }
 
   @override
   String get addToASavedPerson => '添加给已保存的人员';

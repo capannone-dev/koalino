@@ -503,7 +503,7 @@
   "exportAs": "导出为",
   "plainText": "纯文本",
   "theSummaryCouldNotBeExported": "无法导出摘要。请重试。",
-  "newPersonsName": "新人员的姓名",
+  "alreadySavedVoiceAddsToThem": "{name} 已保存：此声音将添加给此人。",
   "addToASavedPerson": "添加给已保存的人员",
   "addSpeakerToASavedPerson": "将 {speakerLabel} 添加给已保存的人员",
   "addAVoice": "添加声音",

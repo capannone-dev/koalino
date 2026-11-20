@@ -2812,7 +2812,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get addAVoice => 'Aggiungi una voce';
 
   @override
-  String get newPersonsName => 'Nome di una nuova persona';
+  String alreadySavedVoiceAddsToThem(String name) {
+    return '$name è già salvato: questa voce verrà aggiunta alla sua.';
+  }
 
   @override
   String get addToASavedPerson => 'Aggiungi a una persona salvata';

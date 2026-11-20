@@ -2772,7 +2772,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addAVoice => 'Add a voice';
 
   @override
-  String get newPersonsName => 'New person\'s name';
+  String alreadySavedVoiceAddsToThem(String name) {
+    return '$name is saved already: this voice will be added to them.';
+  }
 
   @override
   String get addToASavedPerson => 'Add to a saved person';

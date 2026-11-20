@@ -523,7 +523,7 @@
   "exportAs": "Экспортировать как",
   "plainText": "Обычный текст",
   "theSummaryCouldNotBeExported": "Не удалось экспортировать сводку. Попробуйте ещё раз.",
-  "newPersonsName": "Имя нового человека",
+  "alreadySavedVoiceAddsToThem": "{name} уже сохранён: этот голос будет добавлен ему.",
   "addToASavedPerson": "Добавить сохранённому человеку",
   "addSpeakerToASavedPerson": "Добавить {speakerLabel} сохранённому человеку",
   "addAVoice": "Добавить голос",

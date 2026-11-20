@@ -503,7 +503,7 @@
   "exportAs": "Esporta come",
   "plainText": "Testo semplice",
   "theSummaryCouldNotBeExported": "Non è stato possibile esportare il riassunto. Riprova.",
-  "newPersonsName": "Nome di una nuova persona",
+  "alreadySavedVoiceAddsToThem": "{name} è già salvato: questa voce verrà aggiunta alla sua.",
   "addToASavedPerson": "Aggiungi a una persona salvata",
   "addSpeakerToASavedPerson": "Aggiungi {speakerLabel} a una persona salvata",
   "addAVoice": "Aggiungi una voce",

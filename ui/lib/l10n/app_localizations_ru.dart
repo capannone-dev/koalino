@@ -2817,7 +2817,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get addAVoice => 'Добавить голос';
 
   @override
-  String get newPersonsName => 'Имя нового человека';
+  String alreadySavedVoiceAddsToThem(String name) {
+    return '$name уже сохранён: этот голос будет добавлен ему.';
+  }
 
   @override
   String get addToASavedPerson => 'Добавить сохранённому человеку';

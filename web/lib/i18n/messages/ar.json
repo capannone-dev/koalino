@@ -530,7 +530,7 @@
   "exportAs": "تصدير بصيغة",
   "plainText": "نص عادي",
   "theSummaryCouldNotBeExported": "تعذّر تصدير الملخص. حاول مرة أخرى.",
-  "newPersonsName": "اسم شخص جديد",
+  "alreadySavedVoiceAddsToThem": "{name} محفوظ بالفعل: سيُضاف هذا الصوت إليه.",
   "addToASavedPerson": "إضافة إلى شخص محفوظ",
   "addSpeakerToASavedPerson": "إضافة {speakerLabel} إلى شخص محفوظ",
   "addAVoice": "إضافة صوت",

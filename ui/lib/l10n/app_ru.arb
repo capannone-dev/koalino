@@ -729,7 +729,7 @@
   "plainTextFile": "Обычный текст (.txt)",
   "unableToExportTheSummary": "Не удалось экспортировать сводку",
   "addAVoice": "Добавить голос",
-  "newPersonsName": "Имя нового человека",
+  "alreadySavedVoiceAddsToThem": "{name} уже сохранён: этот голос будет добавлен ему.",
   "addToASavedPerson": "Добавить сохранённому человеку",
   "addVoicesTo": "Добавить голоса: {name}",
   "tickTheVoicesThatAre": "Эти голоса ни с кем не сопоставлены. Отметьте голоса {name}; кнопка «Воспроизвести» поможет проверить.",

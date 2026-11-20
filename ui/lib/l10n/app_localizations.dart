@@ -4492,11 +4492,11 @@ abstract class AppLocalizations {
   /// **'Add a voice'**
   String get addAVoice;
 
-  /// Voice gallery (#136): name field label when saved people exist.
+  /// Voice gallery (#136): the typed name is a saved person's; Assign adds the voice to them.
   ///
   /// In en, this message translates to:
-  /// **'New person\'s name'**
-  String get newPersonsName;
+  /// **'{name} is saved already: this voice will be added to them.'**
+  String alreadySavedVoiceAddsToThem(String name);
 
   /// Voice gallery (#136): button on an unknown voice to give it to someone saved.
   ///

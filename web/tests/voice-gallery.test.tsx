@@ -264,3 +264,15 @@ test("a saved person takes voices that were not matched to them (#136)", async (
   expect(api.assignVoiceGroup).toHaveBeenCalledWith(["cluster-1", "cluster-2"], "Ada Lovelace");
   expect(screen.queryByText("12.5 s · 3 chunks")).not.toBeInTheDocument();
 });
+
+test("a typed name of a saved person says the voice is added to them", async () => {
+  vi.mocked(api.assignCluster).mockResolvedValue({ cluster_id: "cluster-1", identity_id: "identity-1", identity_name: "Ada Lovelace", identity_created: false, variants_stored: 1, segments_updated: 2 });
+  render(<VoiceGallery clusters={clusters} people={[ada]} />);
+
+  fireEvent.change(screen.getByLabelText("Name for unknown speaker 1"), { target: { value: " ada lovelace " } });
+  expect(screen.getByText("Ada Lovelace is saved already: this voice will be added to them.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Add to Ada Lovelace" }));
+
+  expect(await screen.findByText("Assigned to Ada Lovelace.")).toBeInTheDocument();
+  expect(api.assignCluster).toHaveBeenCalledWith("cluster-1", "ada lovelace");
+});

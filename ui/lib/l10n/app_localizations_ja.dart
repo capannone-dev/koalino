@@ -2670,7 +2670,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addAVoice => '声を追加';
 
   @override
-  String get newPersonsName => '新しい人の名前';
+  String alreadySavedVoiceAddsToThem(String name) {
+    return '$name は保存済みです。この声はこの人に追加されます。';
+  }
 
   @override
   String get addToASavedPerson => '保存済みの人に追加';
