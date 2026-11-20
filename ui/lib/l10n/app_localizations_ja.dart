@@ -2835,4 +2835,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chooseAMeetingOrFile => '会議またはファイルを選ぶと、ここに表示されます。';
+
+  @override
+  String get backgroundPassTitle => 'Koalino を閉じていても文字起こしを改善';
+
+  @override
+  String get backgroundPassAllowed =>
+      '許可済み: Koalino を閉じていても、省電力モードでも、充電中に待機中の文字起こしを改善します。';
+
+  @override
+  String get backgroundPassAsk =>
+      'タップすると、省電力モードでも充電中に Android が実行できるようになります。許可しない場合は Koalino を開いている間だけ実行されます。';
 }

@@ -2998,4 +2998,15 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get chooseAMeetingOrFile =>
       'Выберите встречу или файл, чтобы открыть его здесь.';
+
+  @override
+  String get backgroundPassTitle => 'Улучшать расшифровки при закрытом Koalino';
+
+  @override
+  String get backgroundPassAllowed =>
+      'Разрешено: телефон улучшает ожидающие расшифровки во время зарядки, даже если Koalino закрыт или включено энергосбережение.';
+
+  @override
+  String get backgroundPassAsk =>
+      'Нажмите, чтобы Android делал это во время зарядки, даже в режиме энергосбережения. Иначе это происходит только при открытом Koalino.';
 }

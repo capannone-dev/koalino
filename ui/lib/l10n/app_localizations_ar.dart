@@ -3002,4 +3002,15 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get chooseAMeetingOrFile => 'اختر اجتماعًا أو ملفًا لعرضه هنا.';
+
+  @override
+  String get backgroundPassTitle => 'تحسين النصوص حتى عند إغلاق Koalino';
+
+  @override
+  String get backgroundPassAllowed =>
+      'مسموح: يحسّن الهاتف النصوص المنتظرة أثناء الشحن، حتى عند إغلاق Koalino أو تفعيل توفير الطاقة.';
+
+  @override
+  String get backgroundPassAsk =>
+      'انقر للسماح لنظام Android بتنفيذ ذلك أثناء شحن الهاتف، حتى مع تفعيل توفير الطاقة. وإلا فلن يحدث إلا وKoalino مفتوح.';
 }

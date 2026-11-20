@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+import 'package:note_taker_ui/infrastructure/background_core.dart';
 import 'package:note_taker_ui/infrastructure/diarization_models.dart';
 import 'package:note_taker_ui/infrastructure/whisper_model.dart';
 import 'package:path_provider/path_provider.dart';
@@ -86,7 +87,8 @@ Future<String> appKeyDirectory() async =>
 /// Outputs: Completes with Rust's status: 0 on success, 1 for invalid settings, 2 when the core
 /// was already configured or started.
 /// Side effects: Creates `<support>/note_taker`, finds or installs the Whisper model (see
-/// `whisper_model.dart`) and the diarization models (see `diarization_models.dart`), and stores the settings in the native process.
+/// `whisper_model.dart`) and the diarization models (see `diarization_models.dart`), and stores the settings in the native process. On Android it also hands them to the host for the
+/// charging job that runs a waiting pass while the app is closed (#87).
 Future<int> configureCore() async {
   final Directory dataDirectory = await appDataDirectory();
   await dataDirectory.create(recursive: true);
@@ -111,6 +113,13 @@ Future<int> configureCore() async {
     p2pPeersDefine: p2pPeersDefine,
     p2pRelayDefine: p2pRelayDefine,
   );
+  if (Platform.isAndroid) {
+    // The charging job opens the core with the same settings while the app is closed (#87).
+    await rememberBackgroundCoreConfiguration(
+      configurationJson: configurationJson,
+      keyDirectory: await appKeyDirectory(),
+    );
+  }
   return Isolate.run(() {
     final DynamicLibrary coreLibrary = _openCoreLibrary();
     final _DartConfigure configure =

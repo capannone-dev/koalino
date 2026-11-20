@@ -3023,4 +3023,16 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get chooseAMeetingOrFile =>
       'Wähle eine Besprechung oder eine Datei, um sie hier zu sehen.';
+
+  @override
+  String get backgroundPassTitle =>
+      'Transkripte auch bei geschlossenem Koalino verbessern';
+
+  @override
+  String get backgroundPassAllowed =>
+      'Erlaubt: Das Telefon verbessert wartende Transkripte, sobald es lädt, auch wenn Koalino geschlossen oder der Energiesparmodus aktiv ist.';
+
+  @override
+  String get backgroundPassAsk =>
+      'Tippen, damit Android dies beim Laden erledigt, auch im Energiesparmodus. Sonst geschieht es nur bei geöffnetem Koalino.';
 }

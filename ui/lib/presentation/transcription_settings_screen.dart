@@ -4,9 +4,11 @@
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/transcription_settings_controller.dart';
+import 'package:note_taker_ui/infrastructure/background_core.dart';
 import 'package:note_taker_ui/infrastructure/npu_download.dart';
 import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
+import 'package:note_taker_ui/presentation/background_pass_tile.dart';
 
 /// Finds the button applying the proposed model in tests.
 const Key useProposalKey = ValueKey<String>('use-proposal');
@@ -119,16 +121,21 @@ String formatModelSize(int bytes) => bytes >= 1000000000
 final class TranscriptionSettingsScreen extends StatefulWidget {
   /// Creates the page.
   ///
-  /// Inputs: The controller and the default transcription language's code, for the warning on
-  /// English-only models.
+  /// Inputs: The controller, the default transcription language's code (for the warning on
+  /// English-only models), and on a phone the bridge for running the after-meeting pass while
+  /// the app is closed (#87).
   const TranscriptionSettingsScreen({
     required this.controller,
     required this.languageCode,
+    this.backgroundPass,
     super.key,
   });
 
   final TranscriptionSettingsController controller;
   final String languageCode;
+
+  /// Offers the battery exemption the background pass needs; null off Android.
+  final BackgroundPassBridge? backgroundPass;
 
   @override
   State<TranscriptionSettingsScreen> createState() =>
@@ -205,6 +212,10 @@ final class _TranscriptionSettingsScreenState
                 _afterMeetingPassTile(settings.afterMeetingPass),
                 if (settings.afterMeetingPass)
                   _afterMeetingPassModelTile(settings),
+                if (settings.afterMeetingPass)
+                  if (widget.backgroundPass
+                      case final BackgroundPassBridge backgroundPass)
+                    BackgroundPassTile(bridge: backgroundPass),
                 _keepSpeechTile(settings.keepSpeech),
               ],
             );

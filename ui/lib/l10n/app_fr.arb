@@ -770,5 +770,8 @@
   "theProjectCouldNotBeMoved": "Le projet n'a pas pu être déplacé.",
   "subprojectCount": "{count, plural, =1{1 sous-projet} other{{count} sous-projets}}",
   "chooseAProject": "Choisissez un projet pour voir ses réunions et ses fichiers.",
-  "chooseAMeetingOrFile": "Choisissez une réunion ou un fichier pour l’afficher ici."
+  "chooseAMeetingOrFile": "Choisissez une réunion ou un fichier pour l’afficher ici.",
+  "backgroundPassTitle": "Améliorer les transcriptions même Koalino fermé",
+  "backgroundPassAllowed": "Autorisé : le téléphone améliore les transcriptions en attente pendant la charge, même Koalino fermé ou avec l'économie d'énergie activée.",
+  "backgroundPassAsk": "Touchez pour qu'Android le fasse pendant la charge, même avec l'économie d'énergie activée. Sinon, cela n'a lieu que Koalino ouvert."
 }

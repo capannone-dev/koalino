@@ -19,6 +19,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Keeps the charging job for a waiting after-meeting pass across reboots (#87). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- Asks once to exempt Koalino from battery optimisation, so that charging job runs even
+         with Power saving on (#87); the owner answers in a system dialog. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <application
         android:label="Koalino"
         android:name="${applicationName}"
@@ -80,6 +85,11 @@
             android:name=".RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone"/>
+        <!-- Runs a waiting after-meeting pass while charging, with the app closed (#87). -->
+        <service
+            android:name=".WaitingPassJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
         <!-- Serves exported logs in cache/shared to the app picked in the share sheet
              (SharedFiles.kt, Issue #46); reachable only through a share's URI grant. -->
         <provider

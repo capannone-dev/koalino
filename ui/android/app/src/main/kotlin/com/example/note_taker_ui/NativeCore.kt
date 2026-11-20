@@ -1,6 +1,7 @@
 // JNI bindings to the Rust core (`core/bin/ffi_android.rs`) for calls that must not pass
 // through Dart: handing over the database key, the recording notification's actions, which
-// run while the app may be in the background (Issue #47), and the charging state (#87).
+// run while the app may be in the background (Issue #47), the charging state (#87), and the
+// background job that runs a waiting after-meeting pass without Flutter (`WaitingPassJob`, #87).
 package com.example.note_taker_ui
 
 /** The Rust core's JNI methods; loading it reuses the library instance Dart already opened. */
@@ -43,4 +44,34 @@ object NativeCore {
      */
     @JvmStatic
     external fun setCharging(charging: Boolean): Int
+
+    /**
+     * Configures the core without Dart, for the background job (#87).
+     * Inputs: The UTF-8 configuration JSON the app stored. Outputs: 0, 1 for invalid JSON, or 2
+     * when this process's app already configured it.
+     */
+    @JvmStatic
+    external fun configure(configurationJson: ByteArray): Int
+
+    /**
+     * Opens the database, key store and P2P. Outputs: 0 when open, 6 without a usable key.
+     * Side effects: Blocks while they open; never call it on the main thread.
+     */
+    @JvmStatic
+    external fun startRuntime(): Int
+
+    /**
+     * Counts the meetings whose speech still awaits the pass. Outputs: the count, or minus the
+     * status opening the core failed with. Side effects: May open the core; not on the main thread.
+     */
+    @JvmStatic
+    external fun speechAwaitingPass(): Int
+
+    /**
+     * Runs one round of the waiting pass and waits for it, at most `timeoutMs`.
+     * Outputs: 0 when the round finished or nothing waits, 2 when the wait ran out, else the
+     * core's status. Side effects: Loads the model and re-transcribes; never on the main thread.
+     */
+    @JvmStatic
+    external fun runWaitingPass(timeoutMs: Int): Int
 }

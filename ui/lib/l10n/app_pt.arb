@@ -770,5 +770,8 @@
   "theProjectCouldNotBeMoved": "Não foi possível mover o projeto.",
   "subprojectCount": "{count, plural, =1{1 subprojeto} other{{count} subprojetos}}",
   "chooseAProject": "Escolha um projeto para ver as suas reuniões e ficheiros.",
-  "chooseAMeetingOrFile": "Escolha uma reunião ou um ficheiro para o ver aqui."
+  "chooseAMeetingOrFile": "Escolha uma reunião ou um ficheiro para o ver aqui.",
+  "backgroundPassTitle": "Melhorar as transcrições com o Koalino fechado",
+  "backgroundPassAllowed": "Permitido: o telefone melhora as transcrições pendentes enquanto carrega, mesmo com o Koalino fechado ou a economia de energia ativada.",
+  "backgroundPassAsk": "Toque para que o Android faça isso enquanto o telefone carrega, mesmo com a economia de energia ativada. Caso contrário, só acontece com o Koalino aberto."
 }

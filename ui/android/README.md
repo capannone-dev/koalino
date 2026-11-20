@@ -97,6 +97,19 @@ a new recording; that loads the Whisper model, which is why the call never runs 
 thread. The pass runs while the app's process runs: Android may freeze a cached app soon after it
 leaves the screen, so a pass pauses then and continues when the app is opened again.
 
+`WaitingPassJob.kt` runs the pass with the app closed. Leaving the app schedules a JobScheduler
+job with a charging constraint, persisted across reboots; Android starts it, in a new process if
+needed, when the phone charges. The job opens the core without Flutter from the configuration
+Dart stored (`BackgroundCoreConfiguration`: paths, device name and peers, no secrets) and the
+Keystore key, which needs no user authentication, so it runs with the screen locked and with the
+app lock on. It runs rounds of the pass until no speech awaits it; when Android stops it (after
+10 to 30 minutes, or when the charger is removed), it reports "not charging" so the pass stops
+after its current window, and the next run resumes from the windows already finished. With
+Power saving on, Android holds the job unless Koalino is exempt from battery optimisation;
+`MainActivity` answers `isExempt` and `requestExemption` (the system dialog) on
+`note_taker/background_core` for the Settings tile. It logs counts and statuses only, under
+`KoalinoWaitingPass`.
+
 ## Microphone
 
 The Rust core records the microphone itself (`cpal` on AAudio, Issue #45), so the app declares

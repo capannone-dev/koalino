@@ -4034,3 +4034,34 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   the one whose speaker has more words, so the sentence stays in its main voice. One short word
   two people say a moment apart, with no neighbour in common, is still written twice.
 
+
+## A phone runs the after-meeting pass while charging with Koalino closed (#87; 2026-11-20)
+- **Context:** the phone ran the pass only while Koalino was open and charging. The owner records
+  meetings, closes the app and plugs the phone in; Android freezes a closed app, so nothing ran.
+  Two options were open: (A) a foreground service while the app is open, or (B) waking the app
+  when the phone charges. The owner asked whether B works without any action, also with the app
+  lock (biometrics) on.
+- **Decision: B.** `WaitingPassJob` is a JobScheduler job with a charging constraint, persisted
+  across reboots and scheduled whenever Koalino goes to the background. It opens the Rust core
+  without Flutter: the app stores its last core configuration (paths, device name, peers; no
+  secrets) in private preferences, and the job unwraps the database key from the Keystore as the
+  app does. That key needs no user authentication, so the job works with the screen locked and
+  with Koalino's app lock on, which gates only the UI. It runs rounds of the pass until no speech
+  awaits it (`note_taker_speech_awaiting_pass`, which ignores speech kept only for combining), and
+  looks again in 30 minutes when a meeting waits for another device's recording.
+- **Resuming:** Android gives such a job 10 minutes, up to 30 (`runtime_min_guarantee_ms`,
+  `runtime_free_quota_max_limit_ms` on the S23's Android 17), and a stopped pass started over. The
+  pass engine now keeps each finished window's transcript, sealed under the database key in
+  `<speech file>.progress`, keyed by a hash of the window's audio, name, language and previous
+  text, so a stopped pass resumes with the same result. The file goes with new speech, the
+  meeting's deletion, and once the meeting took the pass.
+- **Power saving:** with Battery saver on, Android holds every background job of an app not
+  exempt from battery optimisation, even while charging. The owner keeps it on, and the S23 stops
+  charging at 85% (battery protection) while Samsung turns sticky saver off only at 90%, so the
+  job would never run. Settings → Transcription offers "Improve transcripts while Koalino is
+  closed", which asks Android once (`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`). It is a
+  one-time choice; the pass itself then needs no action.
+- **Verified on the S23 (Android 17):** with the process killed and the screen locked, plugging
+  in (simulated with `cmd battery`) started the job in a new process; it opened the encrypted
+  database and finished. With Power saving on it waited until Koalino was exempt.
+

@@ -770,5 +770,8 @@
   "theProjectCouldNotBeMoved": "تعذّر نقل المشروع.",
   "subprojectCount": "{count, plural, zero{لا مشاريع فرعية} one{مشروع فرعي واحد} two{مشروعان فرعيان} few{{count} مشاريع فرعية} many{{count} مشروعًا فرعيًا} other{{count} مشروع فرعي}}",
   "chooseAProject": "اختر مشروعًا لعرض اجتماعاته وملفاته.",
-  "chooseAMeetingOrFile": "اختر اجتماعًا أو ملفًا لعرضه هنا."
+  "chooseAMeetingOrFile": "اختر اجتماعًا أو ملفًا لعرضه هنا.",
+  "backgroundPassTitle": "تحسين النصوص حتى عند إغلاق Koalino",
+  "backgroundPassAllowed": "مسموح: يحسّن الهاتف النصوص المنتظرة أثناء الشحن، حتى عند إغلاق Koalino أو تفعيل توفير الطاقة.",
+  "backgroundPassAsk": "انقر للسماح لنظام Android بتنفيذ ذلك أثناء شحن الهاتف، حتى مع تفعيل توفير الطاقة. وإلا فلن يحدث إلا وKoalino مفتوح."
 }

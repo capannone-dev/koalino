@@ -2991,4 +2991,16 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get chooseAMeetingOrFile =>
       'Choisissez une réunion ou un fichier pour l’afficher ici.';
+
+  @override
+  String get backgroundPassTitle =>
+      'Améliorer les transcriptions même Koalino fermé';
+
+  @override
+  String get backgroundPassAllowed =>
+      'Autorisé : le téléphone améliore les transcriptions en attente pendant la charge, même Koalino fermé ou avec l\'économie d\'énergie activée.';
+
+  @override
+  String get backgroundPassAsk =>
+      'Touchez pour qu\'Android le fasse pendant la charge, même avec l\'économie d\'énergie activée. Sinon, cela n\'a lieu que Koalino ouvert.';
 }

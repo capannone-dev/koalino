@@ -85,6 +85,10 @@ Unlock; the app's widgets stay mounted but hidden (not painted, tapped, or read 
 readers), so an active recording and every screen keep their state. It forwards the app being
 hidden and shown to `AppLockController`.
 
+`background_pass_tile.dart` (#87) is the phone's "Improve transcripts while Koalino is closed"
+tile under the after-meeting pass: it shows whether Koalino is exempt from battery optimisation and
+otherwise asks Android once; it re-reads the answer when the app returns to the front.
+
 `transcription_settings_screen.dart` lists the Whisper models by size, with no cloud provider
 or key field (#67, #117). On a phone with an AI chip, the NPU switch comes first (#75). The list
 shows one row per size (tiny, base, small, medium, large-v3-turbo, the standard multilingual

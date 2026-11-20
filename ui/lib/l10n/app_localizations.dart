@@ -4743,6 +4743,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Choose a meeting or a file to see it here.'**
   String get chooseAMeetingOrFile;
+
+  /// Phone setting: run the after-meeting pass while the app is closed (#87).
+  ///
+  /// In en, this message translates to:
+  /// **'Improve transcripts while Koalino is closed'**
+  String get backgroundPassTitle;
+
+  /// Phone setting: run the after-meeting pass while the app is closed (#87).
+  ///
+  /// In en, this message translates to:
+  /// **'Allowed: the phone improves waiting transcripts whenever it charges, even with Koalino closed or Power saving on.'**
+  String get backgroundPassAllowed;
+
+  /// Phone setting: run the after-meeting pass while the app is closed (#87).
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to let Android run it while the phone charges, even with Power saving on. Otherwise it runs only while Koalino is open.'**
+  String get backgroundPassAsk;
 }
 
 class _AppLocalizationsDelegate

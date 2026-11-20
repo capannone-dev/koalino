@@ -2319,5 +2319,11 @@
   "chooseAProject": "Choose a project to see its meetings and files.",
   "@chooseAProject": {},
   "chooseAMeetingOrFile": "Choose a meeting or a file to see it here.",
-  "@chooseAMeetingOrFile": {}
+  "@chooseAMeetingOrFile": {},
+  "backgroundPassTitle": "Improve transcripts while Koalino is closed",
+  "@backgroundPassTitle": {"description": "Phone setting: run the after-meeting pass while the app is closed (#87)."},
+  "backgroundPassAllowed": "Allowed: the phone improves waiting transcripts whenever it charges, even with Koalino closed or Power saving on.",
+  "@backgroundPassAllowed": {"description": "Phone setting: run the after-meeting pass while the app is closed (#87)."},
+  "backgroundPassAsk": "Tap to let Android run it while the phone charges, even with Power saving on. Otherwise it runs only while Koalino is open.",
+  "@backgroundPassAsk": {"description": "Phone setting: run the after-meeting pass while the app is closed (#87)."}
 }

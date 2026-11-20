@@ -92,7 +92,10 @@ dialog's title, so the log export says "Export logs".
 platform uses its keychain. On Android, `host_key.dart` first asks Kotlin
 (`AndroidKeyVault.provideEncryptionKey`, channel `note_taker/key_vault`) to unwrap the Keystore
 key and hand it to Rust over JNI; no key bytes cross the channel. `startCoreWithHostKey` reports
-any failure as status 6.
+any failure as status 6. On Android, `configureCore` also hands the configuration JSON and the key
+directory to Kotlin (`background_core.dart`, channel `note_taker/background_core`), so the charging
+job can open the core while the app is closed (#87); `BackgroundPassBridge` reads and requests
+the battery exemption that job needs with Power saving on.
 `appConfigurationJson` builds the JSON and is unit-tested; it also passes peer addresses compiled
 in with `--dart-define=NOTE_TAKER_P2P_PEERS`, and a relay address with
 `--dart-define=NOTE_TAKER_P2P_RELAY`, for development builds; addresses saved in Settings replace

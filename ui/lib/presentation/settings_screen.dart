@@ -3,6 +3,8 @@
 // (saved through a dialog on desktops, shared through the share sheet on Android). With device sync
 // on, it also chooses where recordings are transcribed (Issue #59). About Koalino closes the list (#115).
 
+import 'dart:io' show Platform;
+
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/app_language_controller.dart';
@@ -23,6 +25,7 @@ import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
+import 'package:note_taker_ui/infrastructure/background_core.dart';
 import 'package:note_taker_ui/presentation/recordings_widgets.dart';
 import 'package:note_taker_ui/presentation/assistant_access_screen.dart';
 import 'package:note_taker_ui/presentation/call_offer_banner.dart';
@@ -522,5 +525,8 @@ final class _TranscriptionPageState extends State<_TranscriptionPage> {
   Widget build(BuildContext context) => TranscriptionSettingsScreen(
         controller: _controller,
         languageCode: widget.languageCode,
+        // A phone runs the pass from a charging job while the app is closed (#87).
+        backgroundPass:
+            Platform.isAndroid ? const BackgroundPassBridge() : null,
       );
 }

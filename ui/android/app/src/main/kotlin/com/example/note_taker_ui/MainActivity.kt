@@ -14,16 +14,24 @@
 // `NpuDownload` (`note_taker/npu`) fetches the NPU's Whisper files on request and points the
 // NPU's library search at them (#75). `PairingLinks` (`note_taker/pairing_links`) hands Dart
 // the pairing invite links the camera opens from another device's QR code (#122).
+// `note_taker/background_core` stores the core settings for `WaitingPassJob`, which runs a
+// waiting after-meeting pass while the phone charges with the app closed, and asks once for the
+// battery exemption Power saving requires; leaving the app schedules that job (#87).
 package com.example.note_taker_ui
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
+import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.util.concurrent.Executors
@@ -74,6 +82,8 @@ class MainActivity : FlutterActivity() {
         pairingLinks.channel = linksChannel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/call_signals")
             .setMethodCallHandler(CallSignals(applicationContext))
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/background_core")
+            .setMethodCallHandler { call, result -> handleBackgroundCore(call, result) }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/npu")
             .setMethodCallHandler(NpuDownload())
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/whisper_model")
@@ -211,6 +221,42 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /**
+     * Answers the background-pass channel (#87): `remember(configuration, keyDirectory)` stores
+     * the core settings for `WaitingPassJob`; `isExempt` tells whether Koalino is exempt from
+     * battery optimisation, which Power saving requires for the job to run; `requestExemption`
+     * shows Android's dialog asking for it.
+     */
+    private fun handleBackgroundCore(call: MethodCall, result: MethodChannel.Result) {
+        val powerManager = getSystemService(PowerManager::class.java)
+        when (call.method) {
+            "remember" -> {
+                val configurationJson = call.argument<String>("configuration")
+                val keyDirectory = call.argument<String>("keyDirectory")
+                if (configurationJson == null || keyDirectory == null) {
+                    result.error("invalid", "configuration and keyDirectory are required", null)
+                } else {
+                    BackgroundCoreConfiguration(applicationContext)
+                        .remember(configurationJson, keyDirectory)
+                    result.success(null)
+                }
+            }
+            "isExempt" -> result.success(powerManager?.isIgnoringBatteryOptimizations(packageName))
+            "requestExemption" -> {
+                try {
+                    startActivity(
+                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            .setData(Uri.parse("package:$packageName"))
+                    )
+                    result.success(null)
+                } catch (error: ActivityNotFoundException) {
+                    result.error("unavailable", "no battery optimisation dialog", null)
+                }
+            }
+            else -> result.notImplemented()
+        }
+    }
+
     /** Acquires the lock when the app becomes visible. Side effects: raises Wi-Fi power use. */
     override fun onStart() {
         super.onStart()
@@ -222,9 +268,14 @@ class MainActivity : FlutterActivity() {
         lock.acquire()
     }
 
-    /** Releases the lock when the app is hidden; background sync is a separate task (#47). */
+    /**
+     * Releases the lock when the app is hidden; background sync is a separate task (#47).
+     * Side effects: Schedules the charging job, which runs any waiting after-meeting pass once
+     * the phone charges, even after the app is closed (#87); it ends at once when none waits.
+     */
     override fun onStop() {
         multicastLock?.takeIf { it.isHeld }?.release()
+        WaitingPassJob.schedule(applicationContext)
         super.onStop()
     }
 }

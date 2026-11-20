@@ -2772,4 +2772,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chooseAMeetingOrFile => '选择一个会议或文件以在此查看。';
+
+  @override
+  String get backgroundPassTitle => '在 Koalino 关闭时也改进转写';
+
+  @override
+  String get backgroundPassAllowed =>
+      '已允许：即使 Koalino 已关闭或开启了省电模式，手机充电时也会改进待处理的转写。';
+
+  @override
+  String get backgroundPassAsk =>
+      '点按以允许 Android 在手机充电时执行，即使开启了省电模式。否则只会在 Koalino 打开时执行。';
 }
