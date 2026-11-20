@@ -667,3 +667,30 @@ fn quick_checks_read_only_changed_meetings_and_requests_left_for_later() {
     assert!(host.request("busy-elsewhere").is_none());
     assert_eq!(sent(&requests), 2);
 }
+
+/// A meeting with nothing to summarize yet (no transcript, notes or files) is not a failure: it
+/// is not given up, so it is summarized once notes or files are added. On the owner's laptop,
+/// three empty meetings logged a warning three times after every start.
+#[test]
+fn an_empty_meeting_is_not_given_up_and_is_summarized_once_it_has_content() {
+    let (services, requests) = services("empty-later", false);
+    add_connection(&services);
+    let empty = FakeHost {
+        recordings: vec![recording("later", "laptop", 1)],
+        empty: vec![MeetingId::new("later")],
+        ..FakeHost::default()
+    };
+    let mut auto = summarizer(&services);
+
+    for _ in 0..AUTO_SUMMARY_ATTEMPTS + 2 {
+        assert_eq!(auto.run_round(&empty), 0);
+    }
+    assert_eq!(sent(&requests), 0);
+
+    let with_notes = FakeHost {
+        recordings: vec![recording("later", "laptop", 1)],
+        ..FakeHost::default()
+    };
+    assert_eq!(auto.run_round(&with_notes), 1);
+    assert_eq!(sent(&requests), 1);
+}

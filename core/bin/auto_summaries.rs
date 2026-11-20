@@ -11,7 +11,8 @@
 //! - finished, with a final transcript: not being recorded, and its speech is not waiting for
 //!   the after-meeting pass (#87, #88);
 //! - without a summary, so a summary the owner wrote, asked for or edited is never replaced;
-//! - not failed `AUTO_SUMMARY_ATTEMPTS` times since the process started.
+//! - not failed `AUTO_SUMMARY_ATTEMPTS` times since the process started (a meeting with nothing to
+//!   summarize yet is not a failure, so notes or files added later still get it summarized).
 //!
 //! Nothing is sent while the owner keeps automatic summaries off or has no default connection.
 //!
@@ -231,6 +232,13 @@ impl AutoSummarizer {
                 written += 1;
                 self.attempts.remove(&meeting_id);
                 tracing::info!(meeting_id = %meeting_id.as_str(), "meeting summarized automatically");
+            } else if answer["error_code"] == "nothing_to_summarize" {
+                // Not a failure: no transcript, notes or files yet. Checked again next round, a
+                // database read with nothing sent, so notes added later still get a summary.
+                tracing::debug!(
+                    meeting_id = %meeting_id.as_str(),
+                    "nothing to summarize yet"
+                );
             } else {
                 let tried = self.attempts.entry(meeting_id.clone()).or_insert(0);
                 *tried += 1;
