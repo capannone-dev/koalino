@@ -305,3 +305,104 @@ fn the_same_word_from_two_people_a_moment_apart_is_kept_twice() {
         ]
     );
 }
+
+/// Words placed by hand: (text, start, end).
+fn timed(items: &[(&str, u64, u64)]) -> Vec<MeetingWord> {
+    items
+        .iter()
+        .map(|(text, start, end)| MeetingWord::new(*text, *start, *end))
+        .collect()
+}
+
+/// A turn's last word both devices wrote stays with the turn it ends, even when the other
+/// device gave its copy to the next speaker, who has more words (#88: "bordo." opened the next
+/// person's turn).
+#[test]
+fn a_word_both_devices_wrote_stays_with_the_turn_it_ends() {
+    let owner = Uuid::from_u128(1);
+    let guest = Uuid::from_u128(2);
+    let laptop_speakers = [segment(0, 2_000, owner), segment(2_000, 6_000, guest)];
+    // The phone's speaker pass starts the guest's turn early, on the owner's last word.
+    let phone_speakers = [
+        segment(0, 1_200, Uuid::from_u128(11)),
+        segment(1_200, 6_000, Uuid::from_u128(12)),
+    ];
+    let laptop_words = timed(&[
+        ("escursioni", 0, 350),
+        ("di", 400, 750),
+        ("bordo.", 800, 1_150),
+        ("incidente", 2_400, 2_750),
+    ]);
+    let phone_words = timed(&[
+        ("bordo.", 1_300, 1_650),
+        ("l'incidente", 2_000, 2_350),
+        ("è", 2_400, 2_750),
+        ("avvenuto", 2_800, 3_150),
+        ("in", 3_200, 3_550),
+        ("alta", 3_600, 3_950),
+        ("montagna", 4_000, 4_350),
+    ]);
+
+    let combined = combine_sources(
+        &meeting(),
+        &SourceWords {
+            words: laptop_words,
+            offset_ms: 0,
+            speakers: &laptop_speakers,
+        },
+        &[SourceWords {
+            words: phone_words,
+            offset_ms: 0,
+            speakers: &phone_speakers,
+        }],
+    );
+
+    assert_eq!(
+        texts(&combined),
+        vec![
+            (Some(owner), "escursioni di bordo.".to_owned()),
+            (
+                Some(guest),
+                "l'incidente è avvenuto in alta montagna".to_owned()
+            ),
+        ]
+    );
+}
+
+/// A one-word answer between two turns of the other person stays its own turn.
+#[test]
+fn a_one_word_answer_keeps_its_speaker() {
+    let owner = Uuid::from_u128(1);
+    let guest = Uuid::from_u128(2);
+    let speakers = [
+        segment(0, 1_000, owner),
+        segment(1_000, 1_600, guest),
+        segment(1_600, 3_000, owner),
+    ];
+    let words = timed(&[
+        ("va", 0, 300),
+        ("bene?", 350, 800),
+        ("Sì.", 1_100, 1_400),
+        ("Allora", 1_900, 2_300),
+        ("andiamo.", 2_350, 2_900),
+    ]);
+
+    let combined = combine_sources(
+        &meeting(),
+        &SourceWords {
+            words,
+            offset_ms: 0,
+            speakers: &speakers,
+        },
+        &[],
+    );
+
+    assert_eq!(
+        texts(&combined),
+        vec![
+            (Some(owner), "va bene?".to_owned()),
+            (Some(guest), "Sì.".to_owned()),
+            (Some(owner), "Allora andiamo.".to_owned()),
+        ]
+    );
+}

@@ -13,9 +13,9 @@
 //! 4. each person's words are taken from the device that wrote more of them, so in overlapping
 //!    speech each device keeps the person near it;
 //! 5. a word written for both devices within a second, or within three seconds with a
-//!    neighbouring word the same too, is kept once, under the speaker with more words: when one
-//!    device's speaker pass gave part of a sentence to a speaker of its own, the sentence stays
-//!    whole in its main voice.
+//!    neighbouring word the same too, is kept once: under the speaker of the words before it, so
+//!    a turn keeps its last word when the other device started the next turn early; else under
+//!    the speaker with more words, so a sentence one device split off stays in its main voice.
 //!
 //! Before that, a chunk of one recording that lost a sentence its own text had keeps that text
 //! (`keep_live_where_the_pass_lost_speech`), as in the single pass.
@@ -202,8 +202,21 @@ pub fn combine_sources(
         match copy {
             None => written.push(word),
             Some(index) => {
+                // The copy whose speaker continues the words before it stays (a turn keeps its
+                // last word, a sentence its middle); otherwise the speaker with more words.
+                let before = index
+                    .checked_sub(1)
+                    .and_then(|earlier| written.get(earlier))
+                    .map(|earlier| earlier.speaker);
                 let weight_of = |speaker: &Speaker| weight.get(speaker).copied().unwrap_or(0);
-                if weight_of(&word.speaker) > weight_of(&written[index].speaker) {
+                let takes_over = if before == Some(written[index].speaker) {
+                    false
+                } else if before == Some(word.speaker) {
+                    true
+                } else {
+                    weight_of(&word.speaker) > weight_of(&written[index].speaker)
+                };
+                if takes_over {
                     written[index] = word;
                 }
             }

@@ -4031,8 +4031,18 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Repeated words, fixed:** "alta montagna" was written twice because each device's copy was
   chosen for a different speaker and the copies were 1.2 s apart. A word is now also a copy within
   3 s when a neighbouring word is the same at the same distance (within 0.5 s); the copy kept is
-  the one whose speaker has more words, so the sentence stays in its main voice. One short word
-  two people say a moment apart, with no neighbour in common, is still written twice.
+  the one whose speaker continues the words before it, else the one whose speaker has more
+  words. The third run (same setup) showed why continuity comes first: by word count alone,
+  "bordo.", the last word of a turn, went to the next person, whose device had started her turn
+  early. One short word two people say a moment apart, with no neighbour in common, is still
+  written twice.
+- **Third run (both fixes):** all 12 sentences once and in order, no Portuguese chunk, no
+  repeated phrase. The speakers were right: FLEURS reads its sentences with different people,
+  and the test's "female" clips are three women (clip embeddings 0.17 to 0.27 apart, against
+  0.79 to 0.83 within one woman and 0.70 to 0.86 among the man's clips). The speaker pass found
+  the man, the main woman and a second woman; the third woman said one 10 s sentence, under the
+  least group size, and was given to the nearest voice, as designed. So the "split voice" of the
+  earlier runs was a real second person.
 
 
 ## A phone runs the after-meeting pass while charging with Koalino closed (#87; 2026-11-20)
