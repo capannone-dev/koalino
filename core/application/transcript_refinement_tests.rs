@@ -3,7 +3,8 @@
 use uuid::Uuid;
 
 use super::transcript_refinement::{
-    ChunkSpan, MeetingWord, REFINEMENT_WINDOW_MS, plan_windows, reattribute_words,
+    ChunkSpan, MeetingWord, REFINEMENT_WINDOW_MS, keep_live_where_the_pass_lost_speech,
+    plan_windows, reattribute_words,
 };
 use crate::domain::models::{MeetingId, TranscriptSegment};
 
@@ -693,4 +694,101 @@ fn a_word_stretched_over_a_silence_keeps_its_own_speaker_and_length() {
     assert_eq!(segments[0].speaker_identity_id(), Some(first));
     assert_eq!(segments[0].end_time_ms(), 2_500);
     assert_eq!(segments[0].text(), "Ciao sì.");
+}
+
+/// Words spread evenly over `[start_ms, end_ms)`.
+fn spoken(text: &str, start_ms: u64, end_ms: u64) -> Vec<MeetingWord> {
+    let texts: Vec<&str> = text.split_whitespace().collect();
+    let step = (end_ms - start_ms) / texts.len() as u64;
+    texts
+        .iter()
+        .enumerate()
+        .map(|(index, text)| {
+            let start = start_ms + index as u64 * step;
+            word(text, start, start + step)
+        })
+        .collect()
+}
+
+/// A live microphone segment.
+fn live(text: &str, start_ms: u64, end_ms: u64) -> TranscriptSegment {
+    TranscriptSegment::new(meeting(), start_ms, end_ms, None, text)
+}
+
+fn texts(words: &[MeetingWord]) -> String {
+    words
+        .iter()
+        .map(MeetingWord::text)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+const TURN_ONE: &str = "se non si ha l'abitudine di guidare su strade di campagna";
+const TURN_TWO: &str = "questo consentirà ai giocatori di controllare le azioni nel gioco";
+const TURN_THREE: &str = "l'attività svolta è stata per lo più teorica ma il programma";
+
+/// Verifies a window keeps the live text when the pass skipped a sentence the live transcript had
+/// and wrote the next sentence over it (#88: seen on a real two-device test).
+#[test]
+fn a_window_that_lost_a_live_sentence_keeps_the_live_text() {
+    let spans = [span(0, 10_000), span(11_000, 20_000), span(21_000, 29_000)];
+    let mut pass = spoken(TURN_ONE, 0, 10_000);
+    // The second sentence is skipped; the third is written early, then again in its place.
+    pass.extend(spoken(TURN_THREE, 11_000, 20_000));
+    pass.extend(spoken(TURN_THREE, 21_000, 29_000));
+    let standing = [
+        live(TURN_ONE, 0, 10_000),
+        live(TURN_TWO, 11_000, 20_000),
+        live(TURN_THREE, 21_000, 29_000),
+    ];
+
+    let (words, replaced) = keep_live_where_the_pass_lost_speech(pass, &spans, &standing);
+
+    assert_eq!(replaced, 1);
+    assert_eq!(
+        texts(&words),
+        format!("{TURN_ONE} {TURN_TWO} {TURN_THREE}"),
+        "each sentence once, in order"
+    );
+}
+
+/// Verifies a pass that only rewords the live text is kept.
+#[test]
+fn a_pass_that_rewords_the_live_text_is_kept() {
+    let spans = [span(0, 10_000), span(11_000, 20_000)];
+    let pass = [
+        spoken(
+            "se non si ha abitudine di guidare sulle strade di campagna",
+            0,
+            10_000,
+        ),
+        spoken(TURN_TWO, 11_000, 20_000),
+    ]
+    .concat();
+    let standing = [
+        live(TURN_ONE, 0, 10_000),
+        live(
+            "questo consentira ai giocatori di controllare azioni nel gioco",
+            11_000,
+            20_000,
+        ),
+    ];
+
+    let (words, replaced) = keep_live_where_the_pass_lost_speech(pass.clone(), &spans, &standing);
+
+    assert_eq!(replaced, 0);
+    assert_eq!(texts(&words), texts(&pass));
+}
+
+/// Verifies a chunk whose live text is too short to judge (a few words) never vetoes the pass.
+#[test]
+fn a_short_live_text_does_not_veto_the_pass() {
+    let spans = [span(0, 3_000)];
+    let pass = spoken("grazie a tutti", 0, 3_000);
+    let standing = [live("sottotitoli a cura di", 0, 3_000)];
+
+    let (words, replaced) = keep_live_where_the_pass_lost_speech(pass.clone(), &spans, &standing);
+
+    assert_eq!(replaced, 0);
+    assert_eq!(texts(&words), texts(&pass));
 }

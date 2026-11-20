@@ -4004,3 +4004,20 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   - **Not yet verified on a real Teams call:** the dialog was modelled from Teams' menu names, not
     observed in a live call like the captions menu was; its labels may need adjusting then.
 
+
+## The after-meeting pass never loses a sentence the live text had (#88, #87; 2026-11-20)
+- **Context:** the first real two-instance test of #88 (deb-gui, two Koalino instances paired,
+  public FLEURS speech mixed so each "device" hears a different person louder) recognised, folded
+  and combined the meeting correctly, but the combined text lost a whole sentence and repeated the
+  next one. The cause was the recording's own pass: inside a 30 s window Whisper (`base`) skipped
+  a sentence and wrote the next one over its time, then wrote it again in the next window. The
+  same skip happened offline on the same audio (a different sentence), so the single-device pass
+  (#87) can lose speech too.
+- **Decision:** `keep_live_where_the_pass_lost_speech`. For each retained chunk whose live text
+  has at least 6 words, the pass must write at least half of them there (compared without case
+  or punctuation); otherwise its whole window keeps the live text, spread evenly over each live
+  segment. It runs in the single pass and on each recording before combining. It needs no extra
+  inference. Short live texts (a few words, possibly a hallucination the pass dropped) never veto.
+- **Still seen in the test, not changed:** a few words repeated where one person's turn ends and
+  the other's begins (each device's speaker pass labels the border word differently), and one
+  voice split into two speakers by the speaker pass (also on the single recording).

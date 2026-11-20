@@ -14,6 +14,9 @@
 //!    speech each device keeps the person near it;
 //! 5. a word written for both devices within a second is kept once.
 //!
+//! Before that, a window of one recording that lost a sentence its own text had keeps that text
+//! (`keep_live_where_the_pass_lost_speech`), as in the single pass.
+//!
 //! On NOTSOFAR, where every device stands far from everyone, choosing a device per speaker was
 //! neutral (38.9% word error either way), so a badly placed device does not make things worse.
 //! `combine_sources` is pure; `refine_combined_meeting` drives the engine and the repository.
@@ -26,8 +29,8 @@ use crate::{
         same_meeting::{RecordingText, comparison_key, recognise_same_meeting},
         transcript_refinement::{
             ChunkSpan, MeetingWord, RefinementChunk, RefinementError, RefinementOutcome, Speaker,
-            add_missing_review_clips, overlap_of, segments_of, speaker_with_doubt,
-            transcribe_chunks,
+            add_missing_review_clips, keep_live_where_the_pass_lost_speech, overlap_of,
+            segments_of, speaker_with_doubt, transcribe_chunks,
         },
     },
     domain::{
@@ -290,6 +293,16 @@ where
             cancelled,
         )?;
         window_count += windows;
+        let (heard, speakers): (Vec<TranscriptSegment>, Vec<TranscriptSegment>) = repository
+            .load_transcript_segments(&recording.meeting_id)?
+            .into_iter()
+            .partition(|segment| segment.source() == SegmentSource::ComputerSound);
+        // A window that lost a sentence this recording's own text had keeps that text.
+        let spans: Vec<ChunkSpan> = recording.chunks.iter().map(|chunk| chunk.span).collect();
+        let (words, kept_live) = keep_live_where_the_pass_lost_speech(words, &spans, &speakers);
+        if kept_live > 0 {
+            tracing::info!(meeting_id = %recording.meeting_id.as_str(), window_count = kept_live, "The pass lost speech in some windows; their live text stands");
+        }
         let offset_ms = match &root_words {
             None => 0,
             Some(root_words) => refine_offset(root_words, &words, recording.offset_ms),
@@ -297,10 +310,6 @@ where
         if root_words.is_none() {
             root_words = Some(words.clone());
         }
-        let (heard, speakers): (Vec<TranscriptSegment>, Vec<TranscriptSegment>) = repository
-            .load_transcript_segments(&recording.meeting_id)?
-            .into_iter()
-            .partition(|segment| segment.source() == SegmentSource::ComputerSound);
         computer_sound.push((heard, offset_ms));
         transcribed.push((words, speakers, offset_ms));
     }

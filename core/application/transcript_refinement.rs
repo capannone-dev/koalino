@@ -376,6 +376,139 @@ pub enum RefinementError {
     Storage(#[from] StorageError),
 }
 
+/// Fewest words the live transcript must have in a chunk before the pass's text there is judged:
+/// a few words may be a live hallucination the pass rightly dropped.
+const MIN_LIVE_WORDS_JUDGED: usize = 6;
+/// The pass must write at least this share (per mille) of a judged chunk's live words.
+const MIN_LIVE_WORDS_KEPT_PERMILLE: usize = 500;
+
+/// Keeps the live text of a window whose pass lost speech the live transcript had.
+///
+/// Whisper sometimes skips a sentence inside a long window and writes the next one over it, so
+/// the sentence is lost and the next one appears twice (#88: seen on a real two-device test).
+/// A chunk is judged when its live text has at least `MIN_LIVE_WORDS_JUDGED` words; if the pass's
+/// words there (by midpoint) contain fewer than half of them, the pass lost speech, and the whole
+/// window takes the live words instead (spread evenly over each live segment), since the
+/// displaced words belong to it. Words are compared case- and punctuation-free.
+///
+/// Inputs: The pass's words and the chunks, both in the same time; the standing microphone
+/// segments in that time. Outputs: The words to use, in time order, and how many windows kept the
+/// live text. Side effects: None.
+pub(crate) fn keep_live_where_the_pass_lost_speech(
+    words: Vec<MeetingWord>,
+    spans: &[ChunkSpan],
+    standing: &[TranscriptSegment],
+) -> (Vec<MeetingWord>, usize) {
+    use crate::application::same_meeting::comparison_key;
+    let inside =
+        |span: &ChunkSpan, time_ms: u64| span.start_ms <= time_ms && time_ms <= span.end_ms;
+    let live_segments_in = |span: &ChunkSpan| -> Vec<&TranscriptSegment> {
+        standing
+            .iter()
+            .filter(|segment| {
+                segment.source() == SegmentSource::Microphone
+                    && inside(span, segment_middle(segment))
+            })
+            .collect()
+    };
+    let lost_speech = |span: &ChunkSpan| {
+        let mut live_keys: Vec<String> = live_segments_in(span)
+            .into_iter()
+            .flat_map(|segment| {
+                segment
+                    .text()
+                    .split_whitespace()
+                    .map(comparison_key)
+                    .collect::<Vec<_>>()
+            })
+            .filter(|key| !key.is_empty())
+            .collect();
+        if live_keys.len() < MIN_LIVE_WORDS_JUDGED {
+            return false;
+        }
+        let live_count = live_keys.len();
+        let mut kept = 0;
+        for word in words.iter().filter(|word| inside(span, word.midpoint_ms())) {
+            let key = comparison_key(word.text());
+            if let Some(position) = live_keys.iter().position(|live| *live == key) {
+                live_keys.swap_remove(position);
+                kept += 1;
+            }
+        }
+        kept * 1_000 < live_count * MIN_LIVE_WORDS_KEPT_PERMILLE
+    };
+    let replaced_spans: Vec<&ChunkSpan> = plan_windows(spans, REFINEMENT_WINDOW_MS)
+        .into_iter()
+        .filter(|window| {
+            window
+                .chunk_indexes()
+                .iter()
+                .any(|index| spans.get(*index).is_some_and(lost_speech))
+        })
+        .flat_map(|window| {
+            window
+                .chunk_indexes()
+                .iter()
+                .filter_map(|index| spans.get(*index))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    if replaced_spans.is_empty() {
+        return (words, 0);
+    }
+    let replaced_windows = plan_windows(spans, REFINEMENT_WINDOW_MS)
+        .iter()
+        .filter(|window| {
+            window
+                .chunk_indexes()
+                .iter()
+                .filter_map(|index| spans.get(*index))
+                .any(|span| replaced_spans.contains(&span))
+        })
+        .count();
+    let in_replaced = |time_ms: u64| replaced_spans.iter().any(|span| inside(span, time_ms));
+    let mut kept: Vec<MeetingWord> = words
+        .into_iter()
+        .filter(|word| !in_replaced(word.midpoint_ms()))
+        .collect();
+    for span in &replaced_spans {
+        for segment in live_segments_in(span) {
+            kept.extend(spread_words(segment));
+        }
+    }
+    kept.sort_by_key(MeetingWord::start_ms);
+    (kept, replaced_windows)
+}
+
+/// The middle of a segment's time.
+fn segment_middle(segment: &TranscriptSegment) -> u64 {
+    segment.start_time_ms()
+        + segment
+            .end_time_ms()
+            .saturating_sub(segment.start_time_ms())
+            / 2
+}
+
+/// A segment's words spread evenly over its time.
+fn spread_words(segment: &TranscriptSegment) -> Vec<MeetingWord> {
+    let texts: Vec<&str> = segment.text().split_whitespace().collect();
+    let start = segment.start_time_ms();
+    let length = segment.end_time_ms().saturating_sub(start);
+    let count = texts.len().max(1) as u64;
+    texts
+        .iter()
+        .enumerate()
+        .map(|(index, text)| {
+            let index = index as u64;
+            MeetingWord::new(
+                *text,
+                start + length * index / count,
+                start + length * (index + 1) / count,
+            )
+        })
+        .collect()
+}
+
 /// Re-transcribes a finished meeting's retained speech and replaces the text it covers.
 ///
 /// Inputs: The meeting; its retained chunks in time order, each with the language it was recorded
@@ -387,7 +520,8 @@ pub enum RefinementError {
 /// example recorded before retention was on) are kept as they are, and so are the segments heard
 /// on the computer's sound (#108), whose audio is not retained.
 /// Once echo was heard in the meeting, the new microphone text that only repeats the computer's
-/// sound is dropped (#108).
+/// sound is dropped (#108). A window whose new text lost a sentence the live text had keeps the
+/// live text (`keep_live_where_the_pass_lost_speech`).
 /// Side effects: Runs inference and rewrites the meeting's segments, which also updates the
 /// meeting's synced document. Nothing is written until every window is done.
 pub fn refine_meeting<Engine, Repository>(
@@ -417,6 +551,10 @@ where
         return Err(RefinementError::Cancelled);
     }
     let standing = repository.load_transcript_segments(meeting_id)?;
+    let (words, kept_live) = keep_live_where_the_pass_lost_speech(words, &spans, &standing);
+    if kept_live > 0 {
+        tracing::info!(meeting_id = %meeting_id.as_str(), window_count = kept_live, "The pass lost speech in some windows; their live text stands");
+    }
     let covered = |segment: &TranscriptSegment| {
         let middle = segment.start_time_ms()
             + segment
