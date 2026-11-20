@@ -569,5 +569,12 @@
   },
   "recordingsUnavailable": "لا يمكن الوصول إلى التسجيلات الآن.",
   "playRecording": "تشغيل التسجيل",
-  "recordingCouldNotBePlayed": "تعذّر تشغيل التسجيل."
+  "recordingCouldNotBePlayed": "تعذّر تشغيل التسجيل.",
+  "aProjectCantMoveInsideItself": "لا يمكن نقل مشروع إلى داخله أو إلى مشاريعه الفرعية.",
+  "subprojects": "المشاريع الفرعية",
+  "newSubproject": "مشروع فرعي جديد",
+  "moveProjectTo": "نقل إلى",
+  "topLevel": "المستوى الأعلى",
+  "moveProject": "نقل",
+  "projectMoved": "نُقل المشروع"
 }

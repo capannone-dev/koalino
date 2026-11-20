@@ -542,5 +542,12 @@
   },
   "recordingsUnavailable": "Les enregistrements sont inaccessibles pour le moment.",
   "playRecording": "Écouter l'enregistrement",
-  "recordingCouldNotBePlayed": "L'enregistrement n'a pas pu être lu."
+  "recordingCouldNotBePlayed": "L'enregistrement n'a pas pu être lu.",
+  "aProjectCantMoveInsideItself": "Un projet ne peut pas être déplacé dans lui-même ou ses sous-projets.",
+  "subprojects": "Sous-projets",
+  "newSubproject": "Nouveau sous-projet",
+  "moveProjectTo": "Déplacer vers",
+  "topLevel": "Niveau supérieur",
+  "moveProject": "Déplacer",
+  "projectMoved": "Projet déplacé"
 }

@@ -542,5 +542,12 @@
   },
   "recordingsUnavailable": "Aufnahmen sind gerade nicht erreichbar.",
   "playRecording": "Aufnahme abspielen",
-  "recordingCouldNotBePlayed": "Die Aufnahme konnte nicht abgespielt werden."
+  "recordingCouldNotBePlayed": "Die Aufnahme konnte nicht abgespielt werden.",
+  "aProjectCantMoveInsideItself": "Ein Projekt kann nicht in sich selbst oder seine Unterprojekte verschoben werden.",
+  "subprojects": "Unterprojekte",
+  "newSubproject": "Neues Unterprojekt",
+  "moveProjectTo": "Verschieben nach",
+  "topLevel": "Oberste Ebene",
+  "moveProject": "Verschieben",
+  "projectMoved": "Projekt verschoben"
 }

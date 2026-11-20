@@ -540,5 +540,12 @@
   },
   "recordingsUnavailable": "目前无法访问录音。",
   "playRecording": "播放录音",
-  "recordingCouldNotBePlayed": "无法播放该录音。"
+  "recordingCouldNotBePlayed": "无法播放该录音。",
+  "aProjectCantMoveInsideItself": "项目不能移动到其自身或其子项目中。",
+  "subprojects": "子项目",
+  "newSubproject": "新建子项目",
+  "moveProjectTo": "移动到",
+  "topLevel": "顶层",
+  "moveProject": "移动",
+  "projectMoved": "项目已移动"
 }

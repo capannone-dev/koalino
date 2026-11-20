@@ -61,6 +61,9 @@ models on the server's computer, through `PUT /api/settings/after-meeting-pass`.
 
 `retention-settings.tsx` chooses how many days speech waits to be combined with another device's
 recording (#93) through `PUT /api/settings/retention`; a refused choice goes back to the saved one.
+Nested projects (#142): `projects-index.tsx` indents subprojects under their parent;
+`project-view.tsx` lists a project's subprojects, creates one inside it, and moves the project
+(Move to, never into itself or its subprojects); `meeting-project-picker.tsx` indents them too.
 `recordings-settings.tsx` (#140) turns Keep meeting recordings on after a privacy and space
 warning, shows how many are kept, and wipes them all after a confirmation.
 `meeting-recording-player.tsx` shows an `<audio>` player on a meeting's page when the daemon keeps

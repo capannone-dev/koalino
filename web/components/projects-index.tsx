@@ -1,11 +1,12 @@
-// Lists projects (Issue #85) with their meeting and file counts, and creates new ones.
+// Lists projects (Issue #85) with their meeting and file counts, subprojects indented under their
+// parent (#142), and creates new ones.
 
 "use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
-import { createProject, projectErrorMessage, projectNameError, type ProjectSummary } from "@/lib/projects-api";
+import { createProject, projectErrorMessage, projectNameError, projectTree, type ProjectSummary } from "@/lib/projects-api";
 import { useT } from "@/lib/i18n/client";
 
 /** "2 meetings · 3 files", singular where it applies. */
@@ -71,10 +72,12 @@ export function ProjectsIndex({ projects }: { projects: ProjectSummary[] }) {
         <p className="text-muted">{t("noProjectsYetAProject")}</p>
       ) : (
         <ul className="divide-y divide-line rounded-xl border border-line bg-surface">
-          {projects.map((project) => (
+          {projectTree(projects).map(({ project, depth }) => (
             <li key={project.project_id}>
               <Link
                 href={`/projects/${encodeURIComponent(project.project_id)}`}
+                data-depth={depth}
+                style={{ paddingInlineStart: `${1 + depth * 1.5}rem` }}
                 className="block px-4 py-3 hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-focus"
               >
                 <span className="block font-medium break-words">{project.name}</span>

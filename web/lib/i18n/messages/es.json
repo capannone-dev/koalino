@@ -542,5 +542,12 @@
   },
   "recordingsUnavailable": "Las grabaciones no están disponibles ahora.",
   "playRecording": "Reproducir la grabación",
-  "recordingCouldNotBePlayed": "No se pudo reproducir la grabación."
+  "recordingCouldNotBePlayed": "No se pudo reproducir la grabación.",
+  "aProjectCantMoveInsideItself": "Un proyecto no puede moverse dentro de sí mismo ni de sus subproyectos.",
+  "subprojects": "Subproyectos",
+  "newSubproject": "Nuevo subproyecto",
+  "moveProjectTo": "Mover a",
+  "topLevel": "Nivel superior",
+  "moveProject": "Mover",
+  "projectMoved": "Proyecto movido"
 }

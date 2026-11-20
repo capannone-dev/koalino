@@ -23,6 +23,7 @@ vi.mock("@/lib/projects-api", async () => ({
   getProject: vi.fn(),
   getProjectEmail: vi.fn(),
   moveMeetingToProject: vi.fn(),
+  moveProject: vi.fn(),
   uploadProjectFile: vi.fn(),
   deleteProjectResource: vi.fn()
 }));
@@ -153,4 +154,52 @@ test("the meeting page's picker moves the meeting and restores the choice on fai
   fireEvent.change(select, { target: { value: "p1" } });
   await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Moved to Hiring"));
   expect(select.value).toBe("p1");
+});
+
+/** Hiring (p1) holds Interviews (p2), which holds Round two (p3); Budget (p4) is apart (#142). */
+const nested: projectsApi.ProjectSummary[] = [
+  { ...summary, parent_id: null },
+  { ...summary, project_id: "p2", name: "Interviews", parent_id: "p1" },
+  { ...summary, project_id: "p3", name: "Round two", parent_id: "p2" },
+  { ...summary, project_id: "p4", name: "Budget", parent_id: null }
+];
+
+test("the index shows subprojects indented under their parent (#142)", () => {
+  render(<ProjectsIndex projects={nested} />);
+
+  const links = screen.getAllByRole("link").map((link) => [link.textContent?.split("1 meeting")[0], link.getAttribute("data-depth")]);
+  expect(links).toEqual([
+    ["Budget", "0"],
+    ["Hiring", "0"],
+    ["Interviews", "1"],
+    ["Round two", "2"]
+  ]);
+});
+
+test("a project page lists its subprojects and creates one inside it (#142)", async () => {
+  vi.mocked(projectsApi.createProject).mockResolvedValue({ ...summary, project_id: "p9", name: "Offers", parent_id: "p1" });
+  render(<ProjectView initialDetail={detail} allMeetings={meetings} allProjects={nested} />);
+
+  const subprojects = screen.getByRole("region", { name: "Subprojects" });
+  expect(within(subprojects).getByRole("link", { name: /Interviews/ })).toHaveAttribute("href", "/projects/p2");
+  expect(within(subprojects).queryByText("Round two")).toBeNull();
+
+  fireEvent.change(within(subprojects).getByLabelText("New subproject"), { target: { value: "Offers" } });
+  fireEvent.click(within(subprojects).getByRole("button", { name: "Create" }));
+  await waitFor(() => expect(push).toHaveBeenCalledWith("/projects/p9"));
+  expect(projectsApi.createProject).toHaveBeenCalledWith("Offers", "p1");
+});
+
+test("Move to offers the top level and other projects, never the project or its subprojects (#142)", async () => {
+  vi.mocked(projectsApi.moveProject).mockResolvedValue({ ...summary, parent_id: "p4" });
+  render(<ProjectView initialDetail={detail} allMeetings={meetings} allProjects={nested} />);
+
+  const select = screen.getByLabelText("Move to");
+  const options = within(select).getAllByRole("option").map((option) => option.textContent?.trim());
+  expect(options).toEqual(["Top level", "Budget"]);
+
+  fireEvent.change(select, { target: { value: "p4" } });
+  fireEvent.click(screen.getByRole("button", { name: "Move" }));
+  await waitFor(() => expect(projectsApi.moveProject).toHaveBeenCalledWith("p1", "p4"));
+  expect(await screen.findByText("Project moved")).toBeInTheDocument();
 });

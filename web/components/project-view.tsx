@@ -15,22 +15,28 @@ import { SearchPanel } from "@/components/search-panel";
 import type { MeetingSummary } from "@/lib/api";
 import {
   addProjectNote,
+  createProject,
   deleteProject,
   deleteProjectResource,
   getProject,
   getProjectEmail,
   getProjectResourceText,
+  isWithinProject,
   moveMeetingToProject,
+  moveProject,
   projectErrorMessage,
   projectNameError,
   projectResourceFileUrl,
+  projectTree,
   renameProject,
   uploadProjectFile,
   type EmailPerson,
   type EmailView,
   type ProjectDetail,
-  type ProjectResource
+  type ProjectResource,
+  type ProjectSummary
 } from "@/lib/projects-api";
+import { projectCounts } from "@/components/projects-index";
 import { useT } from "@/lib/i18n/client";
 import type { Translate } from "@/lib/i18n";
 
@@ -64,11 +70,20 @@ type Preview =
 /**
  * Shows and changes one project.
  *
- * Inputs: the project as the server rendered it, and every meeting (to offer those outside any
- * project). Outputs: the page's sections. Side effects: calls the project routes and reloads the
- * project after each change; deleting the project returns to `/projects`.
+ * Inputs: the project as the server rendered it, every meeting (to offer those outside any
+ * project), and every project (for its subprojects and Move to, #142). Outputs: the page's
+ * sections. Side effects: calls the project routes and reloads the project after each change;
+ * deleting the project returns to `/projects`; creating a subproject opens it.
  */
-export function ProjectView({ initialDetail, allMeetings }: { initialDetail: ProjectDetail; allMeetings: MeetingSummary[] }) {
+export function ProjectView({
+  initialDetail,
+  allMeetings,
+  allProjects = []
+}: {
+  initialDetail: ProjectDetail;
+  allMeetings: MeetingSummary[];
+  allProjects?: ProjectSummary[];
+}) {
   const t = useT();
   const router = useRouter();
   const [detail, setDetail] = useState(initialDetail);
@@ -84,6 +99,14 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
   const [preview, setPreview] = useState<Preview | null>(null);
   const [pendingDeletion, setPendingDeletion] = useState<{ kind: "project" } | { kind: "resource"; resource: ProjectResource } | null>(null);
   const projectId = detail.project.project_id;
+  const [projects, setProjects] = useState(allProjects);
+  const currentParent = projects.find((project) => project.project_id === projectId)?.parent_id ?? "";
+  const [moveTarget, setMoveTarget] = useState<string>(currentParent);
+  const [subprojectName, setSubprojectName] = useState("");
+  const subprojects = projectTree(projects)
+    .filter(({ project }) => project.parent_id === projectId)
+    .map(({ project }) => project);
+  const moveTargets = projectTree(projects).filter(({ project }) => !isWithinProject(projects, project.project_id, projectId));
   const meetingsOutside = meetings.filter((meeting) => !meeting.project_id);
 
   /** Runs one change, then reloads the project; shows `success` or the failure's message. */
@@ -151,6 +174,33 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
     router.refresh();
   }
 
+  /** Creates a subproject here and opens it (#142). */
+  async function createSubproject(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nameError = projectNameError(subprojectName, t);
+    if (nameError !== null) {
+      setErrorMessage(nameError);
+      return;
+    }
+    setIsBusy(true);
+    setErrorMessage(null);
+    try {
+      const created = await createProject(subprojectName.trim(), projectId);
+      router.push(`/projects/${encodeURIComponent(created.project_id)}`);
+    } catch (error) {
+      setErrorMessage(projectErrorMessage(error, t));
+      setIsBusy(false);
+    }
+  }
+
+  /** Moves this project inside the chosen one, or to the top level (#142). */
+  async function moveHere() {
+    const parentId = moveTarget === "" ? null : moveTarget;
+    await change(() => moveProject(projectId, parentId), t("projectMoved"));
+    setProjects((current) => current.map((project) => (project.project_id === projectId ? { ...project, parent_id: parentId } : project)));
+    router.refresh();
+  }
+
   /** Moves a meeting into this project, or out of it with `null`. */
   async function moveMeeting(meetingId: string, target: string | null) {
     await change(() => moveMeetingToProject(meetingId, target), target === null ? t("meetingRemovedFromTheProject") : t("meetingAdded"));
@@ -198,6 +248,18 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
             <button type="button" className={secondaryButtonClass} onClick={() => setRenameValue(null)}>{t("cancel")}</button>
           </form>
         )}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <label className="block min-w-0 flex-1 text-sm font-medium">{t("moveProjectTo")}<select value={moveTarget} onChange={(event) => setMoveTarget(event.target.value)} className={inputClass}>
+              <option value="">{t("topLevel")}</option>
+              {moveTargets.map(({ project, depth }) => (
+                <option key={project.project_id} value={project.project_id}>
+                  {`${"\u00a0\u00a0".repeat(depth)}${project.name}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" disabled={isBusy || moveTarget === currentParent} className={secondaryButtonClass} onClick={moveHere}>{t("moveProject")}</button>
+        </div>
         <p role="status" aria-live="polite" className="text-sm text-success">
           {statusMessage}
         </p>
@@ -208,6 +270,25 @@ export function ProjectView({ initialDetail, allMeetings }: { initialDetail: Pro
 
       <SearchPanel scope="project" projectId={projectId} label={t("searchThisProject")} />
       <ChatPanel topic={{ scope: "project", id: projectId }} heading={t("chatAboutThisProject")} />
+
+      <section aria-labelledby="project-subprojects" className="space-y-3">
+        <h2 id="project-subprojects" className="text-xl font-semibold">{t("subprojects")}</h2>
+        <ul className="divide-y divide-line rounded-xl border border-line bg-surface empty:hidden">
+          {subprojects.map((project) => (
+            <li key={project.project_id}>
+              <Link href={`/projects/${encodeURIComponent(project.project_id)}`} className="block px-4 py-2 hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-focus">
+                <span className="block font-medium break-words">{project.name}</span>
+                <span className="block text-sm text-muted">{projectCounts(project)}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <form onSubmit={createSubproject} className="flex flex-col gap-2 sm:flex-row sm:items-end" noValidate>
+          <label className="block min-w-0 flex-1 text-sm font-medium">{t("newSubproject")}<input value={subprojectName} onChange={(event) => setSubprojectName(event.target.value)} placeholder={t("projectName")} className={inputClass} />
+          </label>
+          <button type="submit" disabled={isBusy} className={primaryButtonClass}>{t("create")}</button>
+        </form>
+      </section>
 
       <section aria-labelledby="project-meetings" className="space-y-3">
         <h2 id="project-meetings" className="text-xl font-semibold">{t("meetings")}</h2>

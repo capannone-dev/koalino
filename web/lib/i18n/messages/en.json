@@ -542,5 +542,12 @@
   },
   "recordingsUnavailable": "Recordings can't be reached right now.",
   "playRecording": "Play recording",
-  "recordingCouldNotBePlayed": "The recording could not be played."
+  "recordingCouldNotBePlayed": "The recording could not be played.",
+  "aProjectCantMoveInsideItself": "A project can't move inside itself or its subprojects.",
+  "subprojects": "Subprojects",
+  "newSubproject": "New subproject",
+  "moveProjectTo": "Move to",
+  "topLevel": "Top level",
+  "moveProject": "Move",
+  "projectMoved": "Project moved"
 }

@@ -10,6 +10,7 @@ import {
   moveMeetingToProject,
   projectErrorMessage,
   projectNameError,
+  projectTree,
   type ProjectSummary
 } from "@/lib/projects-api";
 import { useT } from "@/lib/i18n/client";
@@ -108,9 +109,10 @@ export function MeetingProjectPicker({
         className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30"
       >
         <option value="">{t("noProject")}</option>
-        {knownProjects.map((project) => (
+        {/* Subprojects indented under their parent (#142). */}
+        {projectTree(knownProjects).map(({ project, depth }) => (
           <option key={project.project_id} value={project.project_id}>
-            {project.name}
+            {`${"\u00a0\u00a0".repeat(depth)}${project.name}`}
           </option>
         ))}
         <option value={newProjectValue}>{t("newProject")}</option>

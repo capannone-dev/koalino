@@ -35,6 +35,9 @@ connected paired device (`null` while not connected).
 `setAfterMeetingPass` over `/api/settings/after-meeting-pass`, throwing `PassError` with
 `invalid_model`, `unavailable`, `server` or `network`.
 
+`projects-api.ts` also nests projects (#142): `createProject(name, parentId)`, `moveProject`,
+and the pure `projectTree` (each level by name, unknown parents at the top) and `isWithinProject`.
+
 `recordings-api.ts` (#140) reads and changes the kept meeting recordings: `getRecordingsStatus`,
 `setKeepRecordings`, `wipeRecordings`, `hasMeetingRecording` and `meetingRecordingUrl` (the WAV
 an `<audio>` element plays), throwing `RecordingsError` with the daemon's `error_code`.

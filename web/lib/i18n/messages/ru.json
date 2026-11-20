@@ -566,5 +566,12 @@
   },
   "recordingsUnavailable": "Записи сейчас недоступны.",
   "playRecording": "Прослушать запись",
-  "recordingCouldNotBePlayed": "Не удалось воспроизвести запись."
+  "recordingCouldNotBePlayed": "Не удалось воспроизвести запись.",
+  "aProjectCantMoveInsideItself": "Проект нельзя переместить внутрь самого себя или его подпроектов.",
+  "subprojects": "Подпроекты",
+  "newSubproject": "Новый подпроект",
+  "moveProjectTo": "Переместить в",
+  "topLevel": "Верхний уровень",
+  "moveProject": "Переместить",
+  "projectMoved": "Проект перемещён"
 }

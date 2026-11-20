@@ -6,7 +6,10 @@ import {
   createProject,
   deleteProjectResource,
   getProjectResourceText,
+  isWithinProject,
   moveMeetingToProject,
+  moveProject,
+  projectTree,
   ProjectApiError,
   projectErrorMessage,
   projectNameError,
@@ -99,4 +102,33 @@ test("project names follow Rust's rules", () => {
   expect(projectNameError("   ")).toBe("Enter a name.");
   expect(projectNameError("a".repeat(201))).toBe("Names can be at most 200 characters.");
   expect(projectNameError("two\nlines")).toBe("Names can't contain line breaks or control characters.");
+});
+
+const project = (project_id: string, name: string, parent_id: string | null = null) => ({ ...summary, project_id, name, parent_id });
+
+test("createProject sends the parent of a subproject (#142)", async () => {
+  fetchMock.mockResolvedValue(new Response(JSON.stringify(summary), { status: 201 }));
+
+  await createProject("Interviews", "p1");
+  expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8080/api/projects", expect.objectContaining({ body: JSON.stringify({ name: "Interviews", parent_id: "p1" }) }));
+});
+
+test("moveProject puts the parent, or null for the top level, and names a loop (#142)", async () => {
+  fetchMock.mockResolvedValue(new Response(JSON.stringify(summary), { status: 200 }));
+  await moveProject("p 2", null);
+  expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:8080/api/projects/p%202/parent", expect.objectContaining({ method: "PUT", body: JSON.stringify({ parent_id: null }) }));
+
+  fetchMock.mockResolvedValue(new Response(JSON.stringify({ error_code: "invalid_parent", error: "x" }), { status: 409 }));
+  const failure = await moveProject("p1", "p2").catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(ProjectApiError);
+  expect(projectErrorMessage(failure)).toBe("A project can't move inside itself or its subprojects.");
+});
+
+test("projectTree orders projects under their parents, unknown parents at the top (#142)", () => {
+  const projects = [project("p3", "Round two", "p2"), project("p4", "Budget"), project("p2", "Interviews", "p1"), project("p1", "Hiring"), project("p5", "Orphan", "gone")];
+
+  expect(projectTree(projects).map(({ project, depth }) => `${depth}:${project.name}`)).toEqual(["0:Budget", "0:Hiring", "1:Interviews", "2:Round two", "0:Orphan"]);
+  expect(isWithinProject(projects, "p3", "p1")).toBe(true);
+  expect(isWithinProject(projects, "p1", "p3")).toBe(false);
+  expect(isWithinProject(projects, "p1", "p1")).toBe(true);
 });

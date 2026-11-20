@@ -540,5 +540,12 @@
   },
   "recordingsUnavailable": "現在、録音にアクセスできません。",
   "playRecording": "録音を再生",
-  "recordingCouldNotBePlayed": "録音を再生できませんでした。"
+  "recordingCouldNotBePlayed": "録音を再生できませんでした。",
+  "aProjectCantMoveInsideItself": "プロジェクトをそれ自身やそのサブプロジェクトの中には移動できません。",
+  "subprojects": "サブプロジェクト",
+  "newSubproject": "新しいサブプロジェクト",
+  "moveProjectTo": "移動先",
+  "topLevel": "最上位",
+  "moveProject": "移動",
+  "projectMoved": "プロジェクトを移動しました"
 }

@@ -14,6 +14,8 @@ export type ProjectSummary = {
   meeting_count: number;
   resource_count: number;
   latest_meeting_at: string | null;
+  /** The project it shows inside, or null at the top level (#142); absent from older daemons. */
+  parent_id?: string | null;
 };
 
 /** How the dashboard shows a resource, decided by Rust from its MIME type. */
@@ -57,6 +59,7 @@ export type AddedResources = { added: ProjectResource[]; skipped_attachments: nu
 export type ProjectFailureKind =
   | "invalid_request"
   | "invalid_name"
+  | "invalid_parent"
   | "project_not_found"
   | "meeting_not_found"
   | "resource_not_found"
@@ -70,6 +73,7 @@ export type ProjectFailureKind =
 const knownKinds: readonly ProjectFailureKind[] = [
   "invalid_request",
   "invalid_name",
+  "invalid_parent",
   "project_not_found",
   "meeting_not_found",
   "resource_not_found",
@@ -111,6 +115,8 @@ export function projectErrorMessage(error: unknown, t: Translate = englishT): st
   switch (error.kind) {
     case "invalid_name":
       return t("thatNameIsntValidUse");
+    case "invalid_parent":
+      return t("aProjectCantMoveInsideItself");
     case "project_not_found":
       return t("thisProjectNoLongerExists");
     case "meeting_not_found":
@@ -170,7 +176,49 @@ export const getProjects = () => projectRequest<ProjectSummary[]>("/api/projects
 export const getProject = (projectId: string) => projectRequest<ProjectDetail>(projectPath(projectId));
 
 /** Creates a project. Side effects: writes SQLite and syncs to paired devices. */
-export const createProject = (name: string) => sendJson<ProjectSummary>("/api/projects", "POST", { name });
+export const createProject = (name: string, parentId?: string) =>
+  sendJson<ProjectSummary>("/api/projects", "POST", parentId === undefined ? { name } : { name, parent_id: parentId });
+
+/** Moves a project inside `parentId`, or to the top level with null (#142). */
+export const moveProject = (projectId: string, parentId: string | null) =>
+  sendJson<ProjectSummary>(`${projectPath(projectId)}/parent`, "PUT", { parent_id: parentId });
+
+/**
+ * Orders projects as a tree (#142): each level by name, each project followed by its subprojects.
+ *
+ * Inputs: every project. Outputs: each with its depth from the top level; a project whose parent
+ * is not listed sits at the top level, and a project is never listed twice. Side effects: none.
+ */
+export function projectTree(projects: ProjectSummary[]): { project: ProjectSummary; depth: number }[] {
+  const known = new Set(projects.map((project) => project.project_id));
+  const parentOf = (project: ProjectSummary) => (project.parent_id && known.has(project.parent_id) ? project.parent_id : null);
+  const ordered: { project: ProjectSummary; depth: number }[] = [];
+  const seen = new Set<string>();
+  const visit = (parentId: string | null, depth: number) => {
+    projects
+      .filter((project) => parentOf(project) === parentId)
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .forEach((project) => {
+        if (seen.has(project.project_id)) return;
+        seen.add(project.project_id);
+        ordered.push({ project, depth });
+        visit(project.project_id, depth + 1);
+      });
+  };
+  visit(null, 0);
+  return ordered;
+}
+
+/** Whether `projectId` is `ancestorId` or sits somewhere inside it (#142). */
+export function isWithinProject(projects: ProjectSummary[], projectId: string, ancestorId: string): boolean {
+  const parents = new Map(projects.map((project) => [project.project_id, project.parent_id ?? null]));
+  let current: string | null = projectId;
+  for (let step = 0; current !== null && step <= projects.length; step++) {
+    if (current === ancestorId) return true;
+    current = parents.get(current) ?? null;
+  }
+  return false;
+}
 
 /** Renames a project. Side effects: as `createProject`. */
 export const renameProject = (projectId: string, name: string) => sendJson<ProjectSummary>(projectPath(projectId), "PATCH", { name });
