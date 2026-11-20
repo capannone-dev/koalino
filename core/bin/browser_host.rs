@@ -12,6 +12,13 @@
 //! | --- | --- | --- |
 //! | `NOTE_TAKER_TEAMS_BRIDGE_PORT` | the daemon's bridge port | `8765` |
 //! | `NOTE_TAKER_TEAMS_BRIDGE_SECRET` | the bridge secret (never logged) | the keychain's `teams-bridge-secret` |
+//! | `NOTE_TAKER_BROWSER_OUTBOX_DIR` | where undelivered meetings wait (#135) | `~/.local/state/note_taker/browser-outbox`, `%LOCALAPPDATA%\note_taker\browser-outbox` |
+//! | `NOTE_TAKER_BROWSER_HOST_START_APP` | `false`: never start Koalino | starts it |
+//!
+//! With a bridge secret, everything Koalino doesn't receive at once waits sealed in the outbox,
+//! however long, and Koalino takes it when it runs, even after the browser closed; and when a
+//! meeting needs Koalino and it isn't running, the host starts the app installed next to it
+//! (#135). Without a secret, frames wait in memory (the last 4 minutes of audio).
 //!
 //! Logs go to stderr (stdout carries the protocol) and never contain meeting content.
 
@@ -21,12 +28,14 @@ use note_taker_core::adapters::{
     keychain::bridge_secret::{bridge_secret_keychain, ensure_bridge_secret, load_bridge_secret},
     network::{
         browser_host::{
-            bridge_client::BridgeClientConfig,
+            app_launcher::{AppLauncher, START_APP_VARIABLE, sibling_app},
+            bridge_client::{BridgeClientConfig, OutboxSettings},
             host_install::{
                 CHROMIUM_EXTENSION_ID, FIREFOX_EXTENSION_ID, bridge_secret_report, install_linux,
                 install_windows,
             },
             host_session::run_host_session,
+            outbox::{OutboxKey, browser_outbox_root},
         },
         teams_bridge::teams_websocket_server::DEFAULT_TEAMS_BRIDGE_PORT,
     },
@@ -109,10 +118,30 @@ fn run_host() -> ExitCode {
         authenticates = secret.is_some(),
         "Koalino browser host started"
     );
+    let outbox_root = browser_outbox_root(|name| std::env::var(name).ok());
+    let mut config = BridgeClientConfig::new(port, secret.clone());
+    if let (Some(root), Some(secret)) = (&outbox_root, &secret) {
+        config = config.with_outbox(OutboxSettings::new(
+            root.clone(),
+            OutboxKey::from_bridge_secret(secret),
+        ));
+    }
+    let starts_app = std::env::var(START_APP_VARIABLE)
+        .map_or(true, |value| !value.trim().eq_ignore_ascii_case("false"));
+    let app = std::env::current_exe()
+        .ok()
+        .and_then(|host| sibling_app(&host));
+    if let (true, Some(app), Some(root)) = (starts_app, app, outbox_root) {
+        let launcher = AppLauncher::new(app, root);
+        config = config.with_core_starter(std::sync::Arc::new(move || {
+            launcher.start_if_needed();
+        }));
+    }
+    tracing::info!(config = ?config, "Koalino browser host configured");
     runtime.block_on(run_host_session(
         std::io::stdin(),
         std::io::stdout(),
-        BridgeClientConfig::new(port, secret),
+        config,
     ));
     tracing::info!("Koalino browser host stopped");
     ExitCode::SUCCESS

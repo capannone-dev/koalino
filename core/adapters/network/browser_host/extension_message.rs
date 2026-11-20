@@ -47,6 +47,17 @@ pub enum ExtensionMessageError {
 pub struct BridgeFrame {
     bytes: Vec<u8>,
     audio_duration_ms: Option<u64>,
+    /// Where the frame leaves the meeting stream (#135): started, ended, or neither.
+    meeting_edge: Option<MeetingEdge>,
+}
+
+/// A frame that starts or ends a meeting.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MeetingEdge {
+    /// A meeting started or was resumed.
+    Started,
+    /// The meeting ended.
+    Ended,
 }
 
 impl BridgeFrame {
@@ -59,6 +70,11 @@ impl BridgeFrame {
     /// frame (never dropped). Side effects: None.
     pub fn audio_duration_ms(&self) -> Option<u64> {
         self.audio_duration_ms
+    }
+
+    /// Whether the frame starts or ends a meeting. Side effects: None.
+    pub fn meeting_edge(&self) -> Option<MeetingEdge> {
+        self.meeting_edge
     }
 }
 
@@ -131,6 +147,7 @@ pub fn to_bridge_frame(message: serde_json::Value) -> Result<BridgeFrame, Extens
         serde_json::from_value(message).map_err(|_| invalid("unknown type or missing fields"))?;
     let mut envelope = TeamsBridgeMessage::new();
     let mut audio_duration_ms = None;
+    let mut meeting_edge = None;
     match message {
         ExtensionMessage::Meeting {
             meeting_id,
@@ -144,6 +161,7 @@ pub fn to_bridge_frame(message: serde_json::Value) -> Result<BridgeFrame, Extens
             metadata.start_time_ms = start_time_ms;
             metadata.participants = participants.into_iter().map(participant).collect();
             envelope.set_metadata(metadata);
+            meeting_edge = Some(MeetingEdge::Started);
         }
         ExtensionMessage::Audio {
             track,
@@ -206,6 +224,7 @@ pub fn to_bridge_frame(message: serde_json::Value) -> Result<BridgeFrame, Extens
             let mut ended = MeetingEnded::new();
             ended.meeting_id = meeting_id;
             envelope.set_ended(ended);
+            meeting_edge = Some(MeetingEdge::Ended);
         }
     }
     let bytes = envelope
@@ -214,6 +233,7 @@ pub fn to_bridge_frame(message: serde_json::Value) -> Result<BridgeFrame, Extens
     Ok(BridgeFrame {
         bytes,
         audio_duration_ms,
+        meeting_edge,
     })
 }
 

@@ -8,21 +8,42 @@
 //! app's own, built when the first browser meeting starts, so an app that never records from the
 //! browser loads no model for it. The bridge runs on its own thread with its own Tokio runtime
 //! for the life of the process. Android has no browser extension, so the bridge never starts
-//! there.
+//! there. While the app runs it holds the browser outbox's running lock, so the browser host
+//! knows not to start it again, and the bridge replays meetings the host kept for it (#135).
 
 use std::{
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 use crate::{
-    adapters::keychain::bridge_secret::bridge_secret_keychain,
+    adapters::{
+        keychain::bridge_secret::bridge_secret_keychain,
+        network::browser_host::outbox::{ExclusiveLock, browser_outbox_root, hold_app_running},
+    },
     domain::models::DeviceId,
     ports::crypto::EmbeddingCipher,
     teams_bridge_composition::{
         BridgePipeline, PipelineHandles, app_bridge_config, start_teams_bridge_with_pipeline,
     },
 };
+
+/// Tells the browser host that Koalino runs, for the life of the process (#135), so it never
+/// starts a second one.
+///
+/// Side effects: Creates and locks `app-running.lock` in the browser outbox folder; the OS
+/// releases the lock when the process ends.
+fn hold_app_running_lock() {
+    static RUNNING_LOCK: OnceLock<Option<ExclusiveLock>> = OnceLock::new();
+    RUNNING_LOCK.get_or_init(|| {
+        let root = browser_outbox_root(|name| std::env::var(name).ok())?;
+        let lock = hold_app_running(&root);
+        if lock.is_none() {
+            tracing::warn!("Another Koalino holds the running lock");
+        }
+        lock
+    });
+}
 
 /// Starts the app's Teams bridge on a thread of its own, on desktops only.
 ///
@@ -42,6 +63,7 @@ pub fn start_app_teams_bridge(
     if cfg!(any(target_os = "android", target_os = "ios")) {
         return;
     }
+    hold_app_running_lock();
     let database_path: PathBuf = database_path.to_path_buf();
     let spawned = std::thread::Builder::new()
         .name("teams-bridge".to_owned())

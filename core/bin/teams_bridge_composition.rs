@@ -45,6 +45,11 @@ use std::{
 use anyhow::{Context, Result, bail};
 use uuid::Uuid;
 
+use crate::adapters::network::browser_host::{
+    bridge_client::BridgeClientConfig,
+    outbox::{OutboxKey, browser_outbox_root},
+    outbox_delivery::run_outbox_importer,
+};
 use crate::{
     adapters::{
         audio::chunk_audio_store::ChunkAudioStore,
@@ -596,12 +601,37 @@ pub async fn start_teams_bridge_with_pipeline(
         )),
     };
     match started {
-        Ok(service) => Some(service),
+        Ok(service) => {
+            start_outbox_importer(config, service.local_addr().port());
+            Some(service)
+        }
         Err(error) => {
             tracing::warn!(error = %format!("{error:#}"), "Teams bridge unavailable");
             None
         }
     }
+}
+
+/// Takes over meetings the browser host kept because Koalino wasn't there (#135): replays them
+/// to this bridge now and every 30 s.
+///
+/// Inputs: The bridge's configuration (its secret seals the outbox) and its port.
+/// Side effects: Spawns a task on the current runtime; without a secret or an outbox location
+/// nothing is started (the host then keeps nothing on disk either).
+fn start_outbox_importer(config: &TeamsBridgeConfig, port: u16) {
+    let Some(secret) = config
+        .shared_secret
+        .as_ref()
+        .map(|secret| secret.expose().to_owned())
+    else {
+        return;
+    };
+    let Some(root) = browser_outbox_root(|name| std::env::var(name).ok()) else {
+        return;
+    };
+    let key = OutboxKey::from_bridge_secret(&secret);
+    let client = BridgeClientConfig::new(port, Some(secret));
+    tokio::spawn(run_outbox_importer(root, key, client));
 }
 
 /// Feeds buffered bridge events into the pipeline worker, one at a time.

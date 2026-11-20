@@ -3897,3 +3897,21 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   navigation pane works. The PDF reuses the meeting PDF's layout and Unicode fonts (#37); its lines
   are one weight each, so bold words inside a paragraph are plain there (Word keeps them).
 - Tables become one line per row with cells joined by ` | `; images and HTML are dropped.
+
+## 2026-11-20 — The browser extension no longer needs Koalino open (#135)
+
+- **Request:** the owner wants the extension to work even when Koalino isn't open, and nothing
+  lost "if Koalino doesn't work for any reason".
+- **Decision:** the browser host keeps every frame it can't deliver in a sealed on-disk outbox
+  (key derived from the bridge secret both sides hold), with no time limit, and leaves it there
+  when the browser closes; Koalino replays left-behind sessions at start and every 30 s. A
+  per-root delivery lock lets one program deliver at a time, because the bridge attaches audio to
+  the last meeting announced, so two streams must never interleave; a host keeps the lock during
+  a meeting and releases it between meetings.
+- The host starts the Koalino app installed next to it when it has something to deliver and
+  can't connect, unless Koalino holds its running lock or was started in the last 2 minutes.
+  Started detached (own process group; on Windows breaking away from the browser's job object).
+- Without a bridge secret (no keychain) nothing can be sealed, so frames wait in memory as before.
+- Known limit: a frame already sent is gone from the outbox; if Koalino crashes before
+  processing it, that frame is lost (the protocol has no acknowledgements).
+- MSRV raised to 1.89 for `std::fs::File::try_lock`.

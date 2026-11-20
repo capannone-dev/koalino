@@ -63,6 +63,12 @@ impl BridgeSecret {
         Self(secret)
     }
 
+    /// The secret itself, for a local client of this bridge (the outbox replay, #135) and the
+    /// outbox key. Never log it. Side effects: None.
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+
     /// Compares `candidate` with the secret in constant time.
     ///
     /// Inputs: The secret presented by the bot.
