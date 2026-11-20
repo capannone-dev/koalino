@@ -12,7 +12,10 @@
 //!    person, else the one they share the most time with);
 //! 4. each person's words are taken from the device that wrote more of them, so in overlapping
 //!    speech each device keeps the person near it;
-//! 5. a word written for both devices within a second is kept once.
+//! 5. a word written for both devices within a second, or within three seconds with a
+//!    neighbouring word the same too, is kept once, under the speaker with more words: when one
+//!    device's speaker pass gave part of a sentence to a speaker of its own, the sentence stays
+//!    whole in its main voice.
 //!
 //! Before that, a chunk of one recording that lost a sentence its own text had keeps that text
 //! (`keep_live_where_the_pass_lost_speech`), as in the single pass.
@@ -42,6 +45,11 @@ use crate::{
 
 /// Two devices' copies of a word closer than this are one word.
 const DUPLICATE_WINDOW_MS: u64 = 1_000;
+/// Two devices' copies of a word up to this far apart are one word when a neighbouring word is
+/// the same too: their clocks and word times can disagree by more than a second (#88).
+const DUPLICATE_PHRASE_WINDOW_MS: u64 = 3_000;
+/// How much further apart than the word itself its confirming neighbour's copies may be.
+const NEIGHBOUR_DRIFT_MS: u64 = 500;
 
 /// One recording's re-transcribed words and its speakers.
 pub struct SourceWords<'speakers> {
@@ -93,6 +101,17 @@ pub fn combine_sources(
             });
         }
     }
+    let mut placed_keys: Vec<(usize, u64, String)> = placed
+        .iter()
+        .map(|word| {
+            (
+                word.source,
+                word.word.start_ms(),
+                comparison_key(word.word.text()),
+            )
+        })
+        .collect();
+    placed_keys.sort_by_key(|(source, start, _)| (*source, *start));
     let mut counts: HashMap<Speaker, Vec<usize>> = HashMap::new();
     for word in &placed {
         let per_source = counts
@@ -122,19 +141,75 @@ pub fn combine_sources(
         .filter(|word| chosen.get(&word.speaker) == Some(&word.source))
         .collect();
     kept.sort_by_key(|word| (word.word.start_ms(), word.source));
+    // Each source's words in time order, to compare a word's neighbours across devices.
+    let mut by_source: Vec<Vec<(u64, String)>> = vec![Vec::new(); members.len() + 1];
+    for word in &placed_keys {
+        by_source[word.0].push((word.1, word.2.clone()));
+    }
+    // A neighbour confirms a copy when it is the same word at the same distance (the two devices'
+    // words drift apart together), so a fragment the far device caught does not.
+    let neighbours_match = |first: &PlacedWord, second: &PlacedWord| {
+        let around = |word: &PlacedWord| -> [Option<&(u64, String)>; 2] {
+            let sequence = &by_source[word.source];
+            sequence
+                .iter()
+                .position(|(start, _)| *start == word.word.start_ms())
+                .map_or([None, None], |index| {
+                    [
+                        index.checked_sub(1).and_then(|before| sequence.get(before)),
+                        sequence.get(index + 1),
+                    ]
+                })
+        };
+        let shift = |earlier: u64, later: u64| i128::from(later) - i128::from(earlier);
+        let word_shift = shift(first.word.start_ms(), second.word.start_ms());
+        around(first)
+            .into_iter()
+            .zip(around(second))
+            .any(|pair| match pair {
+                (Some((first_start, first_key)), Some((second_start, second_key))) => {
+                    first_key == second_key
+                        && (shift(*first_start, *second_start) - word_shift).abs()
+                            <= i128::from(NEIGHBOUR_DRIFT_MS)
+                }
+                _ => false,
+            })
+    };
+    // How many words each speaker keeps: a copy goes to the speaker carrying more of the meeting.
+    let mut weight: HashMap<Speaker, usize> = HashMap::new();
+    for word in &kept {
+        *weight.entry(word.speaker).or_default() += 1;
+    }
     let mut written: Vec<&PlacedWord> = Vec::with_capacity(kept.len());
     for word in &kept {
         let key = comparison_key(word.word.text());
-        let duplicate = written.iter().rev().take_while(|earlier| {
-            word.word.start_ms().saturating_sub(earlier.word.start_ms()) <= DUPLICATE_WINDOW_MS
-        });
-        if duplicate.into_iter().any(|earlier| {
-            earlier.source != word.source && comparison_key(earlier.word.text()) == key
-        }) {
-            continue;
+        let copy = written
+            .iter()
+            .enumerate()
+            .rev()
+            .take_while(|(_, earlier)| {
+                word.word.start_ms().saturating_sub(earlier.word.start_ms())
+                    <= DUPLICATE_PHRASE_WINDOW_MS
+            })
+            .find(|(_, earlier)| {
+                earlier.source != word.source
+                    && comparison_key(earlier.word.text()) == key
+                    && (word.word.start_ms().saturating_sub(earlier.word.start_ms())
+                        <= DUPLICATE_WINDOW_MS
+                        || neighbours_match(earlier, word))
+            })
+            .map(|(index, _)| index);
+        match copy {
+            None => written.push(word),
+            Some(index) => {
+                let weight_of = |speaker: &Speaker| weight.get(speaker).copied().unwrap_or(0);
+                if weight_of(&word.speaker) > weight_of(&written[index].speaker) {
+                    written[index] = word;
+                }
+            }
         }
-        written.push(word);
     }
+    written.sort_by_key(|word| (word.word.start_ms(), word.source));
     segments_of(
         meeting_id,
         written

@@ -228,3 +228,80 @@ fn the_computer_sound_of_every_recording_is_kept_on_the_first_timeline() {
             .all(|segment| segment.source() == SegmentSource::ComputerSound)
     );
 }
+
+/// A phrase both devices wrote more than a second apart is written once, by the device whose
+/// speaker carries the sentence: one device's speaker pass gave two words of the guest's sentence
+/// to a speaker of their own, so each device's copy was chosen for a different speaker (#88).
+#[test]
+fn a_phrase_both_devices_wrote_apart_is_written_once_in_the_main_voice() {
+    let guest = Uuid::from_u128(2);
+    let split = Uuid::from_u128(3);
+    let laptop_speakers = [
+        segment(3_000, 5_000, guest),
+        segment(5_000, 6_000, split),
+        segment(7_000, 9_000, guest),
+    ];
+    let phone_speakers = [segment(3_000, 9_000, Uuid::from_u128(12))];
+    let mut laptop_words = words("l'incidente è avvenuto in", 3_000);
+    laptop_words.extend(words("alta montagna", 5_000));
+    laptop_words.extend(words("e si ritiene", 7_400));
+    let mut phone_words = words("l'incidente è avvenuto in", 3_000);
+    phone_words.extend(words("alta montagna e si ritiene", 6_200));
+
+    let combined = combine_sources(
+        &meeting(),
+        &SourceWords {
+            words: laptop_words,
+            offset_ms: 0,
+            speakers: &laptop_speakers,
+        },
+        &[SourceWords {
+            words: phone_words,
+            offset_ms: 0,
+            speakers: &phone_speakers,
+        }],
+    );
+
+    assert_eq!(
+        texts(&combined),
+        vec![(
+            Some(guest),
+            "l'incidente è avvenuto in alta montagna e si ritiene".to_owned()
+        )]
+    );
+}
+
+/// Two people saying the same short word a moment apart are both written: one word alone, with
+/// no neighbour in common, is not a copy.
+#[test]
+fn the_same_word_from_two_people_a_moment_apart_is_kept_twice() {
+    let owner = Uuid::from_u128(1);
+    let guest = Uuid::from_u128(2);
+    let laptop_speakers = [segment(0, 1_500, owner), segment(1_500, 4_000, guest)];
+    let phone_speakers = [segment(0, 1_500, owner), segment(1_500, 4_000, guest)];
+    let laptop_words = words("va bene sì", 0);
+    let mut phone_words = words("bene", 400);
+    phone_words.extend(words("sì certo", 2_000));
+
+    let combined = combine_sources(
+        &meeting(),
+        &SourceWords {
+            words: laptop_words,
+            offset_ms: 0,
+            speakers: &laptop_speakers,
+        },
+        &[SourceWords {
+            words: phone_words,
+            offset_ms: 0,
+            speakers: &phone_speakers,
+        }],
+    );
+
+    assert_eq!(
+        texts(&combined),
+        vec![
+            (Some(owner), "va bene sì".to_owned()),
+            (Some(guest), "sì certo".to_owned()),
+        ]
+    );
+}
