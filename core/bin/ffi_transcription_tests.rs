@@ -144,3 +144,28 @@ fn the_npu_section_reports_support_files_and_choice() {
     assert_eq!(without_the_feature["supported"], false);
     assert_eq!(npu_json(&paths, &saved, true, None)["supported"], false);
 }
+
+/// Marks the GPU as blocked: two attempts in a row never finished (#76).
+fn block_gpu(paths: &TranscriptionPaths) {
+    std::fs::write(&paths.gpu_attempt_marker, b"2").unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
+fn a_blocked_gpu_counts_as_no_gpu_for_automatic_and_its_check() {
+    // Automatic and the speed check assumed the GPU even when the app had fallen back to the CPU,
+    // so a model timed on the GPU ran three times slower than real time on the CPU (2026-11-17).
+    let blocked = super::device_profile(false, true);
+    assert_eq!(
+        blocked.gpu,
+        crate::domain::whisper_suggestion::DeviceGpu::None
+    );
+
+    let paths = paths("blocked-gpu");
+    block_gpu(&paths);
+    let target = speed_check_target_in(&paths).unwrap_or_else(|| panic!("a target"));
+    assert!(
+        target.hardware_key.contains("gpu: None"),
+        "{}",
+        target.hardware_key
+    );
+}

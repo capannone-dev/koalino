@@ -1242,10 +1242,15 @@ where
         let chunk_start_ms = media_chunk.timestamp_ms();
         let chunk_bounds =
             ChunkBounds::new(chunk_start_ms, chunk_start_ms.saturating_add(duration_ms))?;
+        let transcription_started_at = Instant::now();
         let transcript = self
             .transcription_engine
             .transcribe_external_media(media_chunk, audio_recording)
             .map_err(|error| self.log_transcription_failure(chunk_bounds, error))?;
+        // Timed like the microphone's chunks, so Automatic sees a call it can't keep up with.
+        if let Some(task_metrics) = &self.task_metrics {
+            task_metrics.record_transcription(transcription_started_at.elapsed(), duration_ms);
+        }
         // External audio is always transcribed in the configured language.
         self.record_chunk_language(self.default_language, chunk_start_ms);
 

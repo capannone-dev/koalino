@@ -273,3 +273,56 @@ async fn sessions_without_a_recorder_record_nothing() {
 
     assert_eq!(produced.len(), 1);
 }
+
+/// Maps every participant to one identity.
+struct OneIdentityMapper;
+
+impl crate::ports::external_bridge::IdentityMapper for OneIdentityMapper {
+    fn map_external_to_local(
+        &self,
+        _external: crate::domain::models::ExternalParticipant,
+    ) -> Result<crate::domain::models::SpeakerIdentity, StorageError> {
+        Ok(crate::domain::models::SpeakerIdentity::new(
+            uuid::Uuid::new_v4(),
+            "Dana",
+        ))
+    }
+}
+
+/// Verifies call audio from a browser or bot is timed like the microphone's, so Automatic sees
+/// when transcription falls behind a call (2026-11-17: no row, while chunks ran 3× real time).
+#[tokio::test]
+async fn each_transcribed_call_chunk_records_a_transcription_metric() {
+    let metrics = RecordedMetrics::default();
+    let factory = PipelineFactory::new(
+        ScriptedTranscriptionEngine { fails: false },
+        in_memory_repository(),
+    )
+    .with_task_metrics(recorder(&metrics));
+    let mut session = factory
+        .create_session(&MeetingId::new(MEETING_ID))
+        .unwrap_or_else(|error| panic!("session should start: {error}"));
+    let media_chunk = crate::domain::models::ExternalMediaChunk::new(
+        crate::domain::models::ExternalParticipant::new("teams-user-1", "Dana", None),
+        vec![7, 7, 7],
+        42_000,
+    );
+    let audio_recording = AudioRecording::new(
+        RecordingId::new("external-teams-user-1-42000"),
+        MeetingId::new(MEETING_ID),
+        DeviceId::new("device-metrics"),
+    );
+
+    session
+        .process_external_chunk(&OneIdentityMapper, &media_chunk, &audio_recording, 10_000)
+        .await
+        .unwrap_or_else(|error| panic!("call chunk should process: {error}"));
+
+    let saved_metrics = metrics.saved_metrics.borrow();
+    let transcriptions: Vec<&TaskMetrics> = saved_metrics
+        .iter()
+        .filter(|metric| metric.task_type() == TaskType::Transcription)
+        .collect();
+    assert_eq!(transcriptions.len(), 1);
+    assert_eq!(transcriptions[0].audio_duration_ms(), Some(10_000));
+}

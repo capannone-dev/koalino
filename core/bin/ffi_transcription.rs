@@ -175,14 +175,23 @@ fn model_row(
 
 /// Reads what this device offers, for the suggested model.
 ///
-/// Inputs: Whether efficient mode can run here. Outputs: The profile.
+/// Inputs: Whether efficient mode can run here, and whether the GPU is blocked because attempts
+/// on it never finished: transcription then runs on the CPU, so the profile has no GPU and
+/// Automatic picks (and the speed check times) a model the CPU keeps up with.
+/// Outputs: The profile.
 /// Side effects: Reads system files; may start whisper.cpp's backends.
-fn device_profile(efficient_gpu_available: bool) -> DeviceProfile {
-    let graphics_card_gib = u64::from(local_gpu_megabytes()) / 1024;
+pub(crate) fn device_profile(efficient_gpu_available: bool, gpu_blocked: bool) -> DeviceProfile {
+    let graphics_card_gib = if gpu_blocked {
+        0
+    } else {
+        u64::from(local_gpu_megabytes()) / 1024
+    };
     DeviceProfile {
         is_phone: cfg!(target_os = "android"),
         total_memory_bytes: total_memory_bytes(),
-        gpu: if efficient_gpu_available {
+        gpu: if gpu_blocked {
+            DeviceGpu::None
+        } else if efficient_gpu_available {
             DeviceGpu::EfficientPhoneGpu
         } else if graphics_card_gib > 0 {
             DeviceGpu::Discrete {
@@ -203,7 +212,10 @@ fn device_profile(efficient_gpu_available: bool) -> DeviceProfile {
 fn automatic_on_this_device(
     paths: &TranscriptionPaths,
 ) -> (WhisperSuggestion, Option<AutomaticModel<'_>>) {
-    let suggestion = suggest_whisper_model(&device_profile(efficient_gpu_status().0.is_some()));
+    let suggestion = suggest_whisper_model(&device_profile(
+        efficient_gpu_status().0.is_some(),
+        gpu_is_blocked(&paths.gpu_attempt_marker),
+    ));
     let automatic = automatic_model(
         suggestion,
         |file_name| paths.locate_model(file_name).is_some(),
@@ -231,11 +243,15 @@ fn models_on_device(paths: &TranscriptionPaths) -> BTreeMap<String, PathBuf> {
 }
 
 /// Describes the hardware and the models on it, so a change of either checks again (#109).
-fn hardware_key(efficient_gpu_available: bool, models: &BTreeMap<String, PathBuf>) -> String {
+fn hardware_key(
+    efficient_gpu_available: bool,
+    gpu_blocked: bool,
+    models: &BTreeMap<String, PathBuf>,
+) -> String {
     let names: Vec<&str> = models.keys().map(String::as_str).collect();
     format!(
         "{:?}; {}",
-        device_profile(efficient_gpu_available),
+        device_profile(efficient_gpu_available, gpu_blocked),
         names.join(", ")
     )
 }
@@ -259,7 +275,11 @@ fn speed_check_target_in(paths: &TranscriptionPaths) -> Option<CheckTarget> {
     Some(CheckTarget {
         automatic_file: automatic.file_name.to_owned(),
         efficient: automatic.efficient,
-        hardware_key: hardware_key(efficient_gpu_status().0.is_some(), &models),
+        hardware_key: hardware_key(
+            efficient_gpu_status().0.is_some(),
+            gpu_is_blocked(&paths.gpu_attempt_marker),
+            &models,
+        ),
         models,
     })
 }
@@ -287,7 +307,11 @@ fn speed_check_message_in(
 ) -> Option<String> {
     let record = load_record(&paths.speed_check_file);
     let models = models_on_device(paths);
-    let key = hardware_key(efficient_gpu_available, &models);
+    let key = hardware_key(
+        efficient_gpu_available,
+        gpu_is_blocked(&paths.gpu_attempt_marker),
+        &models,
+    );
     // Automatic's own result is in the record when there is one, so only on-device matters here.
     let checking_next = next_model_to_check(automatic_file, &record, &key, &|_| false, &|file| {
         models.contains_key(file)
@@ -354,7 +378,10 @@ fn settings_json() -> String {
         .clone();
     let disk_probe = paths.models_directory.parent().map(PathBuf::from);
     let (efficient_gpu_name, gpu_in_use) = efficient_gpu_status();
-    let suggestion = suggest_whisper_model(&device_profile(efficient_gpu_name.is_some()));
+    let suggestion = suggest_whisper_model(&device_profile(
+        efficient_gpu_name.is_some(),
+        gpu_is_blocked(&paths.gpu_attempt_marker),
+    ));
     let automatic = automatic_model(
         suggestion,
         |file_name| paths.locate_model(file_name).is_some(),
