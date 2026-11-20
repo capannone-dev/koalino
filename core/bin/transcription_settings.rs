@@ -67,6 +67,10 @@ pub struct SavedTranscriptionSettings {
     /// owner turns it on.
     #[serde(default)]
     pub npu_whisper: bool,
+    /// Whether meeting recordings are kept after processing (#140), for playback; off until the
+    /// owner turns it on.
+    #[serde(default)]
+    pub keep_recordings: bool,
 }
 
 /// Where the settings, downloaded models and sealed key live.

@@ -924,6 +924,7 @@ pub fn start_transcript_pass(
     let repository_path = database_path.to_path_buf();
     let repository_device = device_id.clone();
     let check_cipher = Arc::clone(&embedding_cipher);
+    let kept_cipher = Arc::clone(&embedding_cipher);
     let repository_opener = move || -> RepositoryFactory {
         let repository_path = repository_path.clone();
         let repository_device = repository_device.clone();
@@ -973,7 +974,14 @@ pub fn start_transcript_pass(
     }
     .with_keep_for_source(crate::transcription_settings::keep_for_source(
         settings_file_for(database_path),
-    ));
+    ))
+    .with_kept_recordings(
+        Arc::new(RetainedAudioStore::new(
+            crate::kept_recordings::kept_recordings_directory(database_path),
+            Arc::clone(&kept_cipher),
+        )),
+        crate::kept_recordings::keep_recordings_source(settings_file_for(database_path)),
+    );
     if let Some(link) = speech_link {
         link.accept_speech_with(Box::new(RetainedSpeechInbox::new(
             Arc::clone(&store),

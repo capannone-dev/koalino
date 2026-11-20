@@ -47,6 +47,10 @@ mod pass_routes_tests;
 pub mod project_routes;
 #[cfg(test)]
 mod project_routes_tests;
+/// Serves the owner's kept meeting recordings (#140).
+pub mod recordings_routes;
+#[cfg(test)]
+mod recordings_routes_tests;
 /// Refuses DNS-rebinding hosts and foreign browser origins before any route runs.
 pub mod request_guard;
 #[cfg(test)]

@@ -745,5 +745,19 @@
   "presetQwen": "Alibaba. Pago por uso. Chave: Alibaba Cloud Model Studio.",
   "presetKimi": "Moonshot AI. Pago por uso. Chave: platform.moonshot.ai.",
   "presetMistral": "Mistral (França). Nível gratuito com limites rígidos. Chave: console.mistral.ai.",
-  "presetOpenrouter": "Uma chave para muitos modelos (Gemini, DeepSeek, Qwen…), alguns grátis; o texto também passa pelo OpenRouter. Chave: openrouter.ai."
+  "presetOpenrouter": "Uma chave para muitos modelos (Gemini, DeepSeek, Qwen…), alguns grátis; o texto também passa pelo OpenRouter. Chave: openrouter.ai.",
+  "keepMeetingRecordings": "Guardar as gravações das reuniões",
+  "keepMeetingRecordingsSubtitle": "Guarda o áudio de cada reunião depois da transcrição, criptografado neste dispositivo, para ouvir de novo. Desativado por padrão.",
+  "keepMeetingRecordingsQuestion": "Guardar as gravações das reuniões?",
+  "keepRecordingsWarning": "As gravações contêm as vozes de todos na reunião. Avise as pessoas que você grava e siga as regras de consentimento do seu país: em muitos lugares gravar outras pessoas exige permissão. As gravações ficam criptografadas neste dispositivo e não são sincronizadas; ocupam cerca de 2 MB a cada 10 minutos de fala. São apagadas com a reunião, ou todas de uma vez com Apagar todas as gravações. Só a fala é guardada, então os trechos em silêncio tocam como silêncio.",
+  "keepRecordings": "Guardar gravações",
+  "recordingsKept": "{count, plural, =0{Nenhuma gravação guardada} =1{1 gravação guardada · {size} MB} other{{count} gravações guardadas · {size} MB}}",
+  "wipeAllRecordings": "Apagar todas as gravações",
+  "wipeAllRecordingsQuestion": "Apagar todas as gravações?",
+  "wipeAllRecordingsExplanation": "Todas as gravações guardadas neste dispositivo são apagadas. Transcrições e notas ficam. Não é possível desfazer.",
+  "recordingsWiped": "{count, plural, =0{Nenhuma gravação para apagar.} =1{1 gravação apagada.} other{{count} gravações apagadas.}}",
+  "recordingsUnavailable": "As gravações não estão acessíveis agora.",
+  "playRecording": "Ouvir a gravação",
+  "stopRecordingPlayback": "Parar a reprodução",
+  "recordingCouldNotBePlayed": "Não foi possível reproduzir a gravação."
 }

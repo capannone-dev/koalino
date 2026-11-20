@@ -82,6 +82,9 @@ pub mod ffi_notes_folder;
 /// Turns the Flutter Devices screen's JSON requests into P2P commands.
 #[path = "bin/ffi_p2p.rs"]
 pub mod ffi_p2p;
+/// The app's kept meeting recordings command (#140).
+#[path = "bin/ffi_recordings.rs"]
+pub mod ffi_recordings;
 /// Holds the settings the Flutter app passes to `note_taker_configure`, over the environment.
 #[path = "bin/ffi_settings.rs"]
 pub mod ffi_settings;
@@ -91,6 +94,12 @@ pub mod ffi_teams_bridge;
 /// Settings' Whisper model controls over the C ABI.
 #[path = "bin/ffi_transcription.rs"]
 pub mod ffi_transcription;
+/// The owner's kept meeting recordings: switch, playback and wipe (#140).
+#[path = "bin/kept_recordings.rs"]
+pub mod kept_recordings;
+#[cfg(test)]
+#[path = "bin/kept_recordings_tests.rs"]
+mod kept_recordings_tests;
 /// Runs the language model commands shared by the app and the web API (#95).
 #[path = "bin/llm_commands.rs"]
 pub mod llm_commands;

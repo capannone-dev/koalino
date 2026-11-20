@@ -521,5 +521,26 @@
   "presetQwen": "Alibaba. Pay per use. Key: Alibaba Cloud Model Studio.",
   "presetKimi": "Moonshot AI. Pay per use. Key: platform.moonshot.ai.",
   "presetMistral": "Mistral (France). Free tier with tight limits. Key: console.mistral.ai.",
-  "presetOpenrouter": "One key for many models (Gemini, DeepSeek, Qwen…), some free; your text also passes through OpenRouter. Key: openrouter.ai."
+  "presetOpenrouter": "One key for many models (Gemini, DeepSeek, Qwen…), some free; your text also passes through OpenRouter. Key: openrouter.ai.",
+  "keepMeetingRecordings": "Keep meeting recordings",
+  "keepMeetingRecordingsSubtitle": "Keep each meeting's audio after it is transcribed, sealed on this device, so you can play it back. Off by default.",
+  "keepMeetingRecordingsQuestion": "Keep meeting recordings?",
+  "keepRecordingsWarning": "Recordings hold the voices of everyone in the meeting. Tell the people you record, and follow the consent rules where you are: in many places recording others needs their permission. Recordings stay on this device, encrypted, and are not synced; they take about 2 MB for every 10 minutes of speech. They are deleted with their meeting, or all at once with Wipe all recordings. Only speech is kept, so silent stretches play as silence.",
+  "keepRecordings": "Keep recordings",
+  "recordingsKept": {
+    "=0": "No recordings kept",
+    "=1": "1 recording kept · {size} MB",
+    "other": "{count} recordings kept · {size} MB"
+  },
+  "wipeAllRecordings": "Wipe all recordings",
+  "wipeAllRecordingsQuestion": "Wipe all recordings?",
+  "wipeAllRecordingsExplanation": "Every kept meeting recording on this device is deleted. Transcripts and notes stay. This cannot be undone.",
+  "recordingsWiped": {
+    "=0": "No recordings to wipe.",
+    "=1": "1 recording wiped.",
+    "other": "{count} recordings wiped."
+  },
+  "recordingsUnavailable": "Recordings can't be reached right now.",
+  "playRecording": "Play recording",
+  "recordingCouldNotBePlayed": "The recording could not be played."
 }

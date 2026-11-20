@@ -114,6 +114,7 @@ async fn main() -> Result<()> {
             tracing::warn!(error = %error, "attachment files could not be listed for sealing")
         }
     }
+    let recordings_cipher = Arc::clone(&embedding_cipher);
     let teams_bridge = start_teams_bridge_from_environment(
         &database_path,
         device_id,
@@ -132,6 +133,14 @@ async fn main() -> Result<()> {
             &database_path,
         ))
         .with_deletion_hooks(Arc::new(local_meeting_files))
+        .with_recordings(Arc::new(
+            note_taker_core::kept_recordings::RecordingsServices::for_database(
+                &database_path,
+                recordings_cipher,
+                note_taker_core::kept_recordings::kept_recordings_directory(&database_path)
+                    .join("playback"),
+            ),
+        ))
         .with_project_files(project_files)
         .with_llm_services(Arc::new(
             note_taker_core::llm_commands::LlmServices::for_database(&database_path),

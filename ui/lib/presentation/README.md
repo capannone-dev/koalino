@@ -108,6 +108,11 @@ a builder, which the app always gives. Its last row, About Koalino (`about_tile.
 the About dialog: the version, the GPL-3.0-or-later notice, and View licenses for the Flutter
 packages.
 
+`recordings_widgets.dart` (#140) holds `RecordingsSection` (Settings: Keep meeting recordings,
+turned on only after a privacy and space warning, how many are kept, Wipe all recordings with a
+confirmation) and `PlayRecordingButton` (the meeting page's app bar, shown only when a recording is
+kept; it plays the one decrypted file the core prepares and releases it on stop).
+
 The meeting detail's app bar has Name speakers (`NameSpeakersButton`), which opens the voice
 gallery (`voice_gallery_screen.dart`) for that meeting and reloads the meeting on return so the
 transcript shows the new names. The desktop two-pane layout shows it once a meeting is selected.

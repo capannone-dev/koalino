@@ -1,12 +1,14 @@
 // Renders one meeting's renamable title, when it was created and the languages it was transcribed
 // in, the devices it was recorded on with a Split action (#88), its project (Issue #85), its AI
-// summary (#95), notes and editable transcript (#96), a chat about it (#97), and metadata-only
+// summary (#95), notes and editable transcript (#96), a chat about it (#97), its kept recording
+// (#140), and metadata-only
 // attachment list from Axum.
 
 import { ChatPanel } from "@/components/chat-panel";
 import { MeetingTitleHeader } from "@/components/meeting-title-header";
 import { MeetingProjectPicker } from "@/components/meeting-project-picker";
 import { MeetingRecordedOn } from "@/components/meeting-recorded-on";
+import { MeetingRecordingPlayer } from "@/components/meeting-recording-player";
 import { MeetingNotes } from "@/components/meeting-notes";
 import { MeetingSummaryPanel } from "@/components/meeting-summary-panel";
 import { MeetingTranscript } from "@/components/meeting-transcript";
@@ -42,6 +44,7 @@ export default async function MeetingDetailPage({ params }: { params: Promise<{ 
       </p>
       {languages === null ? null : <p className="text-muted">{languages}</p>}
       <MeetingRecordedOn meeting={meeting} />
+      <MeetingRecordingPlayer meetingId={meeting.meeting_id} />
       <p>{t("meeting", { meetingId: meeting.meeting_id })}</p>
       <MeetingSummaryPanel
         meetingId={meeting.meeting_id}

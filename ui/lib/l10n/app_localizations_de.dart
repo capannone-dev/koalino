@@ -2913,4 +2913,68 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get presetOpenrouter =>
       'Ein Schlüssel für viele Modelle (Gemini, DeepSeek, Qwen…), manche kostenlos; der Text geht auch über OpenRouter. Schlüssel: openrouter.ai.';
+
+  @override
+  String get keepMeetingRecordings => 'Besprechungsaufnahmen behalten';
+
+  @override
+  String get keepMeetingRecordingsSubtitle =>
+      'Den Ton jeder Besprechung nach der Transkription verschlüsselt auf diesem Gerät behalten, um ihn abzuspielen. Standardmäßig aus.';
+
+  @override
+  String get keepMeetingRecordingsQuestion => 'Besprechungsaufnahmen behalten?';
+
+  @override
+  String get keepRecordingsWarning =>
+      'Aufnahmen enthalten die Stimmen aller Teilnehmenden. Sag den Personen, dass du aufnimmst, und beachte die Einwilligungsregeln vor Ort: Vielerorts braucht das Aufnehmen anderer deren Erlaubnis. Aufnahmen bleiben verschlüsselt auf diesem Gerät und werden nicht synchronisiert; sie belegen etwa 2 MB pro 10 Minuten Sprache. Sie werden mit ihrer Besprechung gelöscht oder alle zusammen mit „Alle Aufnahmen löschen“. Nur Sprache wird behalten, stille Stellen werden als Stille abgespielt.';
+
+  @override
+  String get keepRecordings => 'Aufnahmen behalten';
+
+  @override
+  String recordingsKept(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Aufnahmen behalten · $size MB',
+      one: '1 Aufnahme behalten · $size MB',
+      zero: 'Keine Aufnahmen behalten',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get wipeAllRecordings => 'Alle Aufnahmen löschen';
+
+  @override
+  String get wipeAllRecordingsQuestion => 'Alle Aufnahmen löschen?';
+
+  @override
+  String get wipeAllRecordingsExplanation =>
+      'Jede behaltene Besprechungsaufnahme auf diesem Gerät wird gelöscht. Transkripte und Notizen bleiben. Das kann nicht rückgängig gemacht werden.';
+
+  @override
+  String recordingsWiped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Aufnahmen gelöscht.',
+      one: '1 Aufnahme gelöscht.',
+      zero: 'Keine Aufnahmen zu löschen.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordingsUnavailable => 'Aufnahmen sind gerade nicht erreichbar.';
+
+  @override
+  String get playRecording => 'Aufnahme abspielen';
+
+  @override
+  String get stopRecordingPlayback => 'Wiedergabe stoppen';
+
+  @override
+  String get recordingCouldNotBePlayed =>
+      'Die Aufnahme konnte nicht abgespielt werden.';
 }

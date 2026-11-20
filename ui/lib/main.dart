@@ -9,6 +9,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
 import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
@@ -387,6 +388,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
         projectsController: _projectsController,
         summariesController: _summariesController,
         editController: _meetingEditController,
+        recordingsBridge: const RecordingsBridge(),
         focusStartMs: widget.openAtMs,
       );
     }
@@ -402,6 +404,7 @@ final class _MeetingsDestinationState extends State<_MeetingsDestination> {
       editController: _meetingEditController,
       searchBridge: const SearchBridge(),
       chatBridge: _chatBridge,
+      recordingsBridge: const RecordingsBridge(),
     );
   }
 }
@@ -632,6 +635,7 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         languageController: widget.languageController,
         networkSettingsController: _networkSettingsController,
         transcriptionSettingsBridge: const RustTranscriptionSettingsBridge(),
+        recordingsBridge: const RecordingsBridge(),
         summariesController: _summariesController,
         // A folder of plain files is a desktop feature (#98).
         notesFolderBridge: Platform.isAndroid || Platform.isIOS

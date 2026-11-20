@@ -4593,6 +4593,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'One key for many models (Gemini, DeepSeek, Qwen…), some free; your text also passes through OpenRouter. Key: openrouter.ai.'**
   String get presetOpenrouter;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep meeting recordings'**
+  String get keepMeetingRecordings;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep each meeting\'s audio after it is transcribed, sealed on this device, so you can play it back. Off by default.'**
+  String get keepMeetingRecordingsSubtitle;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep meeting recordings?'**
+  String get keepMeetingRecordingsQuestion;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings hold the voices of everyone in the meeting. Tell the people you record, and follow the consent rules where you are: in many places recording others needs their permission. Recordings stay on this device, encrypted, and are not synced; they take about 2 MB for every 10 minutes of speech. They are deleted with their meeting, or all at once with Wipe all recordings. Only speech is kept, so silent stretches play as silence.'**
+  String get keepRecordingsWarning;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep recordings'**
+  String get keepRecordings;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No recordings kept} =1{1 recording kept · {size} MB} other{{count} recordings kept · {size} MB}}'**
+  String recordingsKept(int count, String size);
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Wipe all recordings'**
+  String get wipeAllRecordings;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Wipe all recordings?'**
+  String get wipeAllRecordingsQuestion;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Every kept meeting recording on this device is deleted. Transcripts and notes stay. This cannot be undone.'**
+  String get wipeAllRecordingsExplanation;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0{No recordings to wipe.} =1{1 recording wiped.} other{{count} recordings wiped.}}'**
+  String recordingsWiped(int count);
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings can\'t be reached right now.'**
+  String get recordingsUnavailable;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Play recording'**
+  String get playRecording;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'Stop playback'**
+  String get stopRecordingPlayback;
+
+  /// Kept meeting recordings (#140).
+  ///
+  /// In en, this message translates to:
+  /// **'The recording could not be played.'**
+  String get recordingCouldNotBePlayed;
 }
 
 class _AppLocalizationsDelegate

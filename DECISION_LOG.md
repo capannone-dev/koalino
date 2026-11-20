@@ -3946,3 +3946,29 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - Without a keychain (headless server with no Secret Service) a key can't be saved:
   `keychain_failed`, and the connection is not changed.
 
+## 2026-11-20 — Keeping meeting recordings, by the owner's choice (#140)
+
+- **Request:** the owner wants a setting to keep meeting audio, with a warning about data use and
+  privacy; playback from the meeting; a button that wipes all recordings; and the setting on for
+  their S23 and laptop, to collect data for development.
+- **Decision:** a second, explicit exception to CONTRIBUTING.md §7 ("raw audio must be deleted after
+  processing unless explicitly flagged for retention"). "Keep meeting recordings" is per device
+  and off by default. Turning it on shows a warning: other people's voices, consent rules, about
+  2 MB per 10 minutes of speech (Opus at 24 kbit/s), not synced, how to delete.
+- **What is kept:** the speech the after-meeting pass already keeps (#87): the recorder's speech
+  chunks, Opus, each sealed with AES-256-GCM under the database key and bound to its meeting.
+  When the worker is done with a meeting (pass, combining, sending to the combining device, an
+  owner-edited transcript, expiry, or three failed passes) it moves the file into
+  `<data>/recordings` instead of deleting it. Unreadable speech and speech of deleted meetings are
+  still deleted. Silent chunks were never kept, so playback fills gaps with silence; meetings
+  recorded before the switch was turned on have no recording.
+- **Deletion:** a recording goes with its meeting (here, or within a worker round when the
+  deletion comes from a paired device), and Wipe all deletes every one. Turning the switch off
+  keeps existing recordings until wiped.
+- **Playback:** the app decrypts to one WAV file in the review-clip folder (cleared at start),
+  replaced by the next playback and deleted when playback stops; the web streams the WAV built in
+  memory. A merged meeting (#88) plays its own recording, or else one folded into it, shifted by
+  the fold's offset.
+- **Not covered:** a device with the after-meeting pass off keeps no speech, so it keeps no
+  recording either.
+

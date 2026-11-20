@@ -521,5 +521,26 @@
   "presetQwen": "Alibaba. Nutzungsbasiert. Schlüssel: Alibaba Cloud Model Studio.",
   "presetKimi": "Moonshot AI. Nutzungsbasiert. Schlüssel: platform.moonshot.ai.",
   "presetMistral": "Mistral (Frankreich). Kostenlose Stufe mit engen Limits. Schlüssel: console.mistral.ai.",
-  "presetOpenrouter": "Ein Schlüssel für viele Modelle (Gemini, DeepSeek, Qwen…), manche kostenlos; der Text geht auch über OpenRouter. Schlüssel: openrouter.ai."
+  "presetOpenrouter": "Ein Schlüssel für viele Modelle (Gemini, DeepSeek, Qwen…), manche kostenlos; der Text geht auch über OpenRouter. Schlüssel: openrouter.ai.",
+  "keepMeetingRecordings": "Besprechungsaufnahmen behalten",
+  "keepMeetingRecordingsSubtitle": "Den Ton jeder Besprechung nach der Transkription verschlüsselt auf diesem Gerät behalten, um ihn abzuspielen. Standardmäßig aus.",
+  "keepMeetingRecordingsQuestion": "Besprechungsaufnahmen behalten?",
+  "keepRecordingsWarning": "Aufnahmen enthalten die Stimmen aller Teilnehmenden. Sag den Personen, dass du aufnimmst, und beachte die Einwilligungsregeln vor Ort: Vielerorts braucht das Aufnehmen anderer deren Erlaubnis. Aufnahmen bleiben verschlüsselt auf diesem Gerät und werden nicht synchronisiert; sie belegen etwa 2 MB pro 10 Minuten Sprache. Sie werden mit ihrer Besprechung gelöscht oder alle zusammen mit „Alle Aufnahmen löschen“. Nur Sprache wird behalten, stille Stellen werden als Stille abgespielt.",
+  "keepRecordings": "Aufnahmen behalten",
+  "recordingsKept": {
+    "=0": "Keine Aufnahmen behalten",
+    "=1": "1 Aufnahme behalten · {size} MB",
+    "other": "{count} Aufnahmen behalten · {size} MB"
+  },
+  "wipeAllRecordings": "Alle Aufnahmen löschen",
+  "wipeAllRecordingsQuestion": "Alle Aufnahmen löschen?",
+  "wipeAllRecordingsExplanation": "Jede behaltene Besprechungsaufnahme auf diesem Gerät wird gelöscht. Transkripte und Notizen bleiben. Das kann nicht rückgängig gemacht werden.",
+  "recordingsWiped": {
+    "=0": "Keine Aufnahmen zu löschen.",
+    "=1": "1 Aufnahme gelöscht.",
+    "other": "{count} Aufnahmen gelöscht."
+  },
+  "recordingsUnavailable": "Aufnahmen sind gerade nicht erreichbar.",
+  "playRecording": "Aufnahme abspielen",
+  "recordingCouldNotBePlayed": "Die Aufnahme konnte nicht abgespielt werden."
 }

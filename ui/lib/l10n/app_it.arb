@@ -745,5 +745,19 @@
   "presetQwen": "Alibaba. A consumo. Chiave: Alibaba Cloud Model Studio.",
   "presetKimi": "Moonshot AI. A consumo. Chiave: platform.moonshot.ai.",
   "presetMistral": "Mistral (Francia). Piano gratuito con limiti stretti. Chiave: console.mistral.ai.",
-  "presetOpenrouter": "Una chiave per molti modelli (Gemini, DeepSeek, Qwen…), alcuni gratuiti; il testo passa anche da OpenRouter. Chiave: openrouter.ai."
+  "presetOpenrouter": "Una chiave per molti modelli (Gemini, DeepSeek, Qwen…), alcuni gratuiti; il testo passa anche da OpenRouter. Chiave: openrouter.ai.",
+  "keepMeetingRecordings": "Conserva le registrazioni delle riunioni",
+  "keepMeetingRecordingsSubtitle": "Conserva l'audio di ogni riunione dopo la trascrizione, cifrato su questo dispositivo, per riascoltarlo. Disattivato di default.",
+  "keepMeetingRecordingsQuestion": "Conservare le registrazioni delle riunioni?",
+  "keepRecordingsWarning": "Le registrazioni contengono le voci di tutti i partecipanti. Avvisa le persone che registri e rispetta le regole sul consenso del tuo paese: in molti luoghi registrare altri richiede il loro permesso. Le registrazioni restano su questo dispositivo, cifrate, e non vengono sincronizzate; occupano circa 2 MB ogni 10 minuti di parlato. Vengono eliminate con la loro riunione, o tutte insieme con Elimina tutte le registrazioni. Si conserva solo il parlato, quindi i tratti silenziosi si sentono come silenzio.",
+  "keepRecordings": "Conserva le registrazioni",
+  "recordingsKept": "{count, plural, =0{Nessuna registrazione conservata} =1{1 registrazione conservata · {size} MB} other{{count} registrazioni conservate · {size} MB}}",
+  "wipeAllRecordings": "Elimina tutte le registrazioni",
+  "wipeAllRecordingsQuestion": "Eliminare tutte le registrazioni?",
+  "wipeAllRecordingsExplanation": "Ogni registrazione conservata su questo dispositivo viene eliminata. Trascrizioni e note restano. L'operazione non si può annullare.",
+  "recordingsWiped": "{count, plural, =0{Nessuna registrazione da eliminare.} =1{1 registrazione eliminata.} other{{count} registrazioni eliminate.}}",
+  "recordingsUnavailable": "Le registrazioni non sono raggiungibili ora.",
+  "playRecording": "Riproduci la registrazione",
+  "stopRecordingPlayback": "Ferma la riproduzione",
+  "recordingCouldNotBePlayed": "Non è stato possibile riprodurre la registrazione."
 }

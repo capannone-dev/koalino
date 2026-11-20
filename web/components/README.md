@@ -61,6 +61,10 @@ models on the server's computer, through `PUT /api/settings/after-meeting-pass`.
 
 `retention-settings.tsx` chooses how many days speech waits to be combined with another device's
 recording (#93) through `PUT /api/settings/retention`; a refused choice goes back to the saved one.
+`recordings-settings.tsx` (#140) turns Keep meeting recordings on after a privacy and space
+warning, shows how many are kept, and wipes them all after a confirmation.
+`meeting-recording-player.tsx` shows an `<audio>` player on a meeting's page when the daemon keeps
+its recording, loading it only when played.
 
 `log-settings.tsx` (Issue #46) renders the Settings page's level selector (a directive set
 elsewhere, such as `info,note_taker_core=debug`, shows as "Custom") and **Export logs**, which

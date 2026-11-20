@@ -4,6 +4,8 @@
 import 'dart:io';
 
 // ignore: deprecated_member_use
+import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
+import 'package:note_taker_ui/presentation/recordings_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
@@ -55,6 +57,7 @@ final class MeetingDetailScreen extends StatefulWidget {
     this.summariesController,
     this.editController,
     this.chatBridge,
+    this.recordingsBridge,
     this.focusStartMs,
     super.key,
   });
@@ -80,6 +83,9 @@ final class MeetingDetailScreen extends StatefulWidget {
 
   /// Adds Chat about this meeting when given (#97).
   final ChatBridge? chatBridge;
+
+  /// Adds Play recording when given and the meeting has a kept recording (#140).
+  final RecordingsBridge? recordingsBridge;
 
   @override
   State<MeetingDetailScreen> createState() => _MeetingDetailScreenState();
@@ -117,6 +123,7 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
         summariesController: widget.summariesController,
         editController: widget.editController,
         chatBridge: widget.chatBridge,
+        recordingsBridge: widget.recordingsBridge,
       ),
     ));
   }
@@ -127,6 +134,9 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
       appBar: AppBar(
         title: Text(l10n.meeting2),
         actions: <Widget>[
+          if (widget.recordingsBridge case final RecordingsBridge recordings)
+            PlayRecordingButton(
+                bridge: recordings, meetingId: widget.meetingId),
           if (widget.chatBridge case final ChatBridge bridge)
             IconButton(
               tooltip: l10n.chatAboutThisMeeting,

@@ -72,6 +72,12 @@ documented nonzero status codes distinguishable from lifecycle states.
   runs `refine_meeting`, and drops the model. Audio is deleted after a pass, when unreadable,
   when the meeting was deleted, or after three failures. `record start` waits for the pass after
   Stop. The pass is on by default except on Android, which needs a charging job first.
+- `kept_recordings.rs` (#140) is the owner's opt-in "Keep meeting recordings": the switch
+  (`keep_recordings` in `<db>.transcription-settings.json`, per device, off by default), the
+  `recordings` folder the worker moves sealed speech into instead of deleting it
+  (`RetainedAudioStore::keep_in`), playback as a WAV with each chunk at its time (a folded
+  recording shifted onto its meeting), usage and Wipe all. `ffi_recordings.rs` exposes it to the
+  app as `note_taker_recordings_command`; deleting a meeting deletes its recording.
 - `screen_share_watcher.rs` runs `ScreenShareMonitor::sample` on its own `screen-share-watcher`
   thread at that interval, so frames never touch the audio path:
   - it attaches new slides to the recorded meeting at the meeting time the controller publishes

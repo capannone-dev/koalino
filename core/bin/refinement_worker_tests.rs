@@ -754,3 +754,76 @@ fn the_speed_check_runs_only_when_a_pass_could() {
     );
     assert_eq!(worker.run_speed_check(), 0, "timed once");
 }
+
+/// The kept-recordings store beside the setup's database (#140).
+fn kept_store(setup: &Setup) -> Arc<RetainedAudioStore> {
+    Arc::new(RetainedAudioStore::new(
+        crate::kept_recordings::kept_recordings_directory(&setup.database),
+        Arc::clone(&setup.cipher),
+    ))
+}
+
+#[test]
+fn with_recordings_kept_the_pass_moves_the_speech_instead_of_deleting_it() {
+    let setup = Setup::new();
+    let control = Arc::new(RefinementControl::new(false));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let kept = kept_store(&setup);
+
+    let refined = setup
+        .worker(&control, false, &calls)
+        .with_kept_recordings(Arc::clone(&kept), Arc::new(|| true))
+        .run_pending();
+
+    assert_eq!(refined, 1);
+    assert!(
+        setup.store.pending_meetings().is_empty(),
+        "no longer waiting for a pass"
+    );
+    assert_eq!(kept.pending_meetings(), vec![setup.meeting.clone()]);
+    let chunks = kept
+        .load(&setup.meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(
+        chunks.len(),
+        1,
+        "the same sealed speech, readable with the database key"
+    );
+}
+
+#[test]
+fn with_the_switch_off_the_speech_is_deleted_as_before() {
+    let setup = Setup::new();
+    let control = Arc::new(RefinementControl::new(false));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let kept = kept_store(&setup);
+
+    setup
+        .worker(&control, false, &calls)
+        .with_kept_recordings(Arc::clone(&kept), Arc::new(|| false))
+        .run_pending();
+
+    assert!(setup.store.pending_meetings().is_empty());
+    assert!(kept.pending_meetings().is_empty());
+}
+
+#[test]
+fn a_deleted_meetings_kept_recording_goes_too() {
+    let setup = Setup::new();
+    let control = Arc::new(RefinementControl::new(false));
+    let calls = Arc::new(AtomicUsize::new(0));
+    let kept = kept_store(&setup);
+    let mut worker = setup
+        .worker(&control, false, &calls)
+        .with_kept_recordings(Arc::clone(&kept), Arc::new(|| true));
+    worker.run_pending();
+    assert_eq!(kept.pending_meetings().len(), 1);
+
+    setup
+        .repository()
+        .delete_meeting(&setup.meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+    worker.run_pending();
+
+    assert!(kept.pending_meetings().is_empty());
+}

@@ -558,7 +558,8 @@ impl MeetingDeletionHooks for LocalMeetingFiles {
             .is_some_and(|active| active.meeting_id() == meeting_id.as_str())
     }
 
-    /// Removes the meeting's attachment folder and any speech kept for the after-meeting pass.
+    /// Removes the meeting's attachment folder, any speech kept for the after-meeting pass and
+    /// the owner's kept recording (#140).
     /// Side effects: Deletes files; logs a failure.
     fn remove_files(&self, meeting_id: &MeetingId) {
         if remove_meeting_folder(&self.attachment_directory, meeting_id.as_str()).is_err() {
@@ -574,6 +575,24 @@ impl MeetingDeletionHooks for LocalMeetingFiles {
                 && error.kind() != std::io::ErrorKind::NotFound
             {
                 tracing::warn!("a deleted meeting's retained audio could not be removed");
+            }
+        }
+        // A recording the owner kept (#140), beside the retained audio.
+        if let Some(kept) = self
+            .retained_audio_directory
+            .as_ref()
+            .and_then(|directory| directory.parent())
+            .map(|folder| folder.join("recordings"))
+        {
+            let file = kept.join(
+                crate::adapters::audio::retained_audio_store::RetainedAudioStore::file_name(
+                    meeting_id,
+                ),
+            );
+            if let Err(error) = std::fs::remove_file(&file)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                tracing::warn!("a deleted meeting's kept recording could not be removed");
             }
         }
     }

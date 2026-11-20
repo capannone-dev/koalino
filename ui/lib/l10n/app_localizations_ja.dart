@@ -2732,4 +2732,65 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get presetOpenrouter =>
       '1 つのキーで多くのモデル（Gemini、DeepSeek、Qwen…）、一部無料。テキストは OpenRouter も経由します。キー：openrouter.ai。';
+
+  @override
+  String get keepMeetingRecordings => '会議の録音を保存';
+
+  @override
+  String get keepMeetingRecordingsSubtitle =>
+      '文字起こしの後も各会議の音声をこのデバイスに暗号化して保存し、再生できるようにします。既定ではオフです。';
+
+  @override
+  String get keepMeetingRecordingsQuestion => '会議の録音を保存しますか？';
+
+  @override
+  String get keepRecordingsWarning =>
+      '録音には会議の参加者全員の声が含まれます。録音する相手に伝え、地域の同意に関するルールに従ってください。多くの地域では、他人を録音するには本人の許可が必要です。録音はこのデバイスに暗号化して保存され、同期されません。音声 10 分あたり約 2 MB を使います。録音は会議と一緒に削除されるか、「すべての録音を消去」でまとめて削除されます。保存されるのは音声部分のみで、無音の部分は無音として再生されます。';
+
+  @override
+  String get keepRecordings => '録音を保存';
+
+  @override
+  String recordingsKept(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音を保存 · $size MB',
+      zero: '保存された録音はありません',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get wipeAllRecordings => 'すべての録音を消去';
+
+  @override
+  String get wipeAllRecordingsQuestion => 'すべての録音を消去しますか？';
+
+  @override
+  String get wipeAllRecordingsExplanation =>
+      'このデバイスに保存された会議の録音はすべて削除されます。文字起こしとメモは残ります。元に戻せません。';
+
+  @override
+  String recordingsWiped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音を消去しました。',
+      zero: '消去する録音はありません。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordingsUnavailable => '現在、録音にアクセスできません。';
+
+  @override
+  String get playRecording => '録音を再生';
+
+  @override
+  String get stopRecordingPlayback => '再生を停止';
+
+  @override
+  String get recordingCouldNotBePlayed => '録音を再生できませんでした。';
 }

@@ -521,5 +521,26 @@
   "presetQwen": "Alibaba. Paiement à l'usage. Clé : Alibaba Cloud Model Studio.",
   "presetKimi": "Moonshot AI. Paiement à l'usage. Clé : platform.moonshot.ai.",
   "presetMistral": "Mistral (France). Offre gratuite aux limites strictes. Clé : console.mistral.ai.",
-  "presetOpenrouter": "Une clé pour de nombreux modèles (Gemini, DeepSeek, Qwen…), certains gratuits ; le texte passe aussi par OpenRouter. Clé : openrouter.ai."
+  "presetOpenrouter": "Une clé pour de nombreux modèles (Gemini, DeepSeek, Qwen…), certains gratuits ; le texte passe aussi par OpenRouter. Clé : openrouter.ai.",
+  "keepMeetingRecordings": "Conserver les enregistrements des réunions",
+  "keepMeetingRecordingsSubtitle": "Conserve l'audio de chaque réunion après sa transcription, chiffré sur cet appareil, pour le réécouter. Désactivé par défaut.",
+  "keepMeetingRecordingsQuestion": "Conserver les enregistrements des réunions ?",
+  "keepRecordingsWarning": "Les enregistrements contiennent la voix de tous les participants. Prévenez les personnes que vous enregistrez et respectez les règles de consentement de votre pays : dans de nombreux endroits, enregistrer autrui exige son accord. Les enregistrements restent chiffrés sur cet appareil et ne sont pas synchronisés ; ils occupent environ 2 Mo par tranche de 10 minutes de parole. Ils sont supprimés avec leur réunion, ou tous à la fois avec Effacer tous les enregistrements. Seule la parole est conservée : les passages silencieux sont lus comme du silence.",
+  "keepRecordings": "Conserver les enregistrements",
+  "recordingsKept": {
+    "=0": "Aucun enregistrement conservé",
+    "=1": "1 enregistrement conservé · {size} Mo",
+    "other": "{count} enregistrements conservés · {size} Mo"
+  },
+  "wipeAllRecordings": "Effacer tous les enregistrements",
+  "wipeAllRecordingsQuestion": "Effacer tous les enregistrements ?",
+  "wipeAllRecordingsExplanation": "Chaque enregistrement conservé sur cet appareil est supprimé. Les transcriptions et les notes restent. Cette action est irréversible.",
+  "recordingsWiped": {
+    "=0": "Aucun enregistrement à effacer.",
+    "=1": "1 enregistrement effacé.",
+    "other": "{count} enregistrements effacés."
+  },
+  "recordingsUnavailable": "Les enregistrements sont inaccessibles pour le moment.",
+  "playRecording": "Écouter l'enregistrement",
+  "recordingCouldNotBePlayed": "L'enregistrement n'a pas pu être lu."
 }

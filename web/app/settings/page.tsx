@@ -4,7 +4,8 @@
 // and a download of its logs (Issue #46), and, with device sync on, where recordings are
 // transcribed (Issue #59), the AI connections summaries are written with (#95), the opt-in
 // notes folder on the server's computer (#98), whether online-meeting participants' voices
-// are kept in the voice gallery (#103), and the after-meeting pass and its model (#87).
+// are kept in the voice gallery (#103), the after-meeting pass and its model (#87), and whether
+// meeting recordings are kept, with Wipe all recordings (#140).
 
 import { AiSettings } from "@/components/ai-settings";
 import { DevicesEntry } from "@/components/devices-entry";
@@ -14,6 +15,7 @@ import { LogSettings } from "@/components/log-settings";
 import { MeetingVoicesSettings } from "@/components/meeting-voices-settings";
 import { NotesFolderSettings } from "@/components/notes-folder-settings";
 import { PassSettings } from "@/components/pass-settings";
+import { RecordingsSettings } from "@/components/recordings-settings";
 import { RetentionSettings } from "@/components/retention-settings";
 import { TelemetryEntry } from "@/components/telemetry-entry";
 import { TranscriptionRouteSettings } from "@/components/transcription-route-settings";
@@ -25,6 +27,7 @@ import { getMeetingVoices } from "@/lib/meeting-voices-api";
 import { getNotesFolder } from "@/lib/notes-folder-api";
 import { getAfterMeetingPass } from "@/lib/pass-api";
 import { getP2pStatus } from "@/lib/p2p-api";
+import { getRecordingsStatus } from "@/lib/recordings-api";
 import { getT } from "@/lib/i18n/server";
 
 export default async function SettingsPage() {
@@ -37,6 +40,7 @@ export default async function SettingsPage() {
   const llmSettings = await getLlmSettings().catch(() => null);
   const notesFolder = await getNotesFolder().catch(() => null);
   const meetingVoices = await getMeetingVoices().catch(() => null);
+  const recordings = await getRecordingsStatus().catch(() => null);
   const savedLanguage = (await cookies()).get(languageCookie)?.value;
   return (
     <section className="space-y-4">
@@ -52,6 +56,7 @@ export default async function SettingsPage() {
       <GlossarySettings initialTerms={glossary} />
       <PassSettings initial={afterMeetingPass} />
       <RetentionSettings initial={retention} />
+      <RecordingsSettings initial={recordings} />
       <MeetingVoicesSettings initial={meetingVoices} />
       <AiSettings initial={llmSettings} />
       <NotesFolderSettings initial={notesFolder} />

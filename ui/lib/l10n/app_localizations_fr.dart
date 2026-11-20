@@ -2879,4 +2879,71 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get presetOpenrouter =>
       'Une clé pour de nombreux modèles (Gemini, DeepSeek, Qwen…), certains gratuits ; le texte passe aussi par OpenRouter. Clé : openrouter.ai.';
+
+  @override
+  String get keepMeetingRecordings =>
+      'Conserver les enregistrements des réunions';
+
+  @override
+  String get keepMeetingRecordingsSubtitle =>
+      'Conserve l\'audio de chaque réunion après sa transcription, chiffré sur cet appareil, pour le réécouter. Désactivé par défaut.';
+
+  @override
+  String get keepMeetingRecordingsQuestion =>
+      'Conserver les enregistrements des réunions ?';
+
+  @override
+  String get keepRecordingsWarning =>
+      'Les enregistrements contiennent la voix de tous les participants. Prévenez les personnes que vous enregistrez et respectez les règles de consentement de votre pays : dans de nombreux endroits, enregistrer autrui exige son accord. Les enregistrements restent chiffrés sur cet appareil et ne sont pas synchronisés ; ils occupent environ 2 Mo par tranche de 10 minutes de parole. Ils sont supprimés avec leur réunion, ou tous à la fois avec Effacer tous les enregistrements. Seule la parole est conservée : les passages silencieux sont lus comme du silence.';
+
+  @override
+  String get keepRecordings => 'Conserver les enregistrements';
+
+  @override
+  String recordingsKept(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistrements conservés · $size Mo',
+      one: '1 enregistrement conservé · $size Mo',
+      zero: 'Aucun enregistrement conservé',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get wipeAllRecordings => 'Effacer tous les enregistrements';
+
+  @override
+  String get wipeAllRecordingsQuestion => 'Effacer tous les enregistrements ?';
+
+  @override
+  String get wipeAllRecordingsExplanation =>
+      'Chaque enregistrement conservé sur cet appareil est supprimé. Les transcriptions et les notes restent. Cette action est irréversible.';
+
+  @override
+  String recordingsWiped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistrements effacés.',
+      one: '1 enregistrement effacé.',
+      zero: 'Aucun enregistrement à effacer.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordingsUnavailable =>
+      'Les enregistrements sont inaccessibles pour le moment.';
+
+  @override
+  String get playRecording => 'Écouter l\'enregistrement';
+
+  @override
+  String get stopRecordingPlayback => 'Arrêter la lecture';
+
+  @override
+  String get recordingCouldNotBePlayed =>
+      'L\'enregistrement n\'a pas pu être lu.';
 }

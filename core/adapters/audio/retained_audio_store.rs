@@ -420,6 +420,64 @@ impl RetainedAudioStore {
         }
     }
 
+    /// Moves a meeting's speech into `kept`, the owner's kept recordings (#140), instead of
+    /// deleting it.
+    ///
+    /// Inputs: The meeting and the store of kept recordings, sealed under the same key.
+    /// Outputs: Whether there was speech to keep. A recording already kept for the meeting (the
+    /// meeting was resumed) gets the new records appended, so both parts stay.
+    /// Side effects: Renames or appends the file, then removes it here with any unfinished
+    /// received copy and the pass-alone note.
+    pub fn keep_in(
+        &self,
+        meeting_id: &MeetingId,
+        kept: &RetainedAudioStore,
+    ) -> Result<bool, RetainedAudioError> {
+        let source = self.directory.join(Self::file_name(meeting_id));
+        if fs::metadata(&source).map_or(true, |metadata| metadata.len() == 0) {
+            self.delete(meeting_id)?;
+            return Ok(false);
+        }
+        fs::create_dir_all(&kept.directory)?;
+        let target = kept.directory.join(Self::file_name(meeting_id));
+        if target.exists() {
+            let bytes = Zeroizing::new(fs::read(&source)?);
+            let mut file = OpenOptions::new().append(true).open(&target)?;
+            file.write_all(&bytes)?;
+            file.sync_all()?;
+        } else if fs::rename(&source, &target).is_err() {
+            // Another file system: copy, then delete below.
+            fs::copy(&source, &target)?;
+        }
+        self.delete(meeting_id)?;
+        Ok(true)
+    }
+
+    /// The bytes held for one meeting; 0 when none. Side effects: Reads the file's metadata.
+    pub fn usage_of(&self, meeting_id: &MeetingId) -> u64 {
+        fs::metadata(self.directory.join(Self::file_name(meeting_id)))
+            .map_or(0, |metadata| metadata.len())
+    }
+
+    /// Reports whether speech is held for the meeting. Side effects: Reads the folder.
+    pub fn holds(&self, meeting_id: &MeetingId) -> bool {
+        self.directory.join(Self::file_name(meeting_id)).is_file()
+    }
+
+    /// Counts the meetings held and their bytes on disk.
+    ///
+    /// Side effects: Reads the folder; unreadable entries are skipped.
+    pub fn usage(&self) -> (usize, u64) {
+        self.pending_meetings()
+            .iter()
+            .filter_map(|meeting_id| {
+                fs::metadata(self.directory.join(Self::file_name(meeting_id)))
+                    .ok()
+                    .map(|metadata| metadata.len())
+            })
+            .fold((0, 0), |(count, bytes), size| (count + 1, bytes + size))
+    }
+
     /// Lists the meetings with retained audio, in name order.
     ///
     /// Outputs: Their ids; an unreadable folder or a foreign file name is skipped.

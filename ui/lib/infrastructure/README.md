@@ -135,6 +135,9 @@ background isolate (`callRustLlm`), since a
 summary waits on the model for minutes; tests pass a fake call. API keys are sent once and never
 read back.
 
+`recordings_bridge.dart` (#140) calls `note_taker_recordings_command`: `status`, `setKeep`,
+`wipe`, `has`, `prepare` (the decrypted WAV's path and length) and `release`.
+
 `meeting_edit_bridge.dart` (#96) is `MeetingEditBridge`: the meeting's notes, the summary's text
 and single transcript segments, through `note_taker_meeting_edit` (one JSON request per call, on
 a background isolate through `callRustLlm`). `MeetingEditException` words the core's `error_code`

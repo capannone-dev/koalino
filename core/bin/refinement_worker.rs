@@ -249,7 +249,12 @@ pub struct RefinementWorker {
     keep_for: KeepForSource,
     /// Times Automatic's model on a public clip after a round (#109); `None` never does.
     speed_check: Option<crate::speed_check::SpeedCheck>,
+    /// The owner's kept recordings and whether to keep them (#140); `None` keeps nothing.
+    kept_recordings: Option<(Arc<RetainedAudioStore>, KeepRecordingsSource)>,
 }
+
+/// Reads, at each use, whether the owner keeps meeting recordings (#140).
+pub type KeepRecordingsSource = Arc<dyn Fn() -> bool + Send + Sync>;
 
 impl RefinementWorker {
     /// Creates the worker; nothing runs until `run_pending` or `spawn`.
@@ -271,6 +276,7 @@ impl RefinementWorker {
             glossary_source: None,
             keep_for: Arc::new(|| KEEP_FOR_COMBINING),
             speed_check: None,
+            kept_recordings: None,
         }
     }
 
@@ -293,7 +299,23 @@ impl RefinementWorker {
             glossary_source: None,
             keep_for: Arc::new(|| KEEP_FOR_COMBINING),
             speed_check: None,
+            kept_recordings: None,
         }
+    }
+
+    /// Moves speech it is done with into `kept` instead of deleting it while `keep` returns true
+    /// (#140), and deletes kept recordings of meetings deleted since.
+    ///
+    /// Inputs: The kept-recordings store (same key) and the owner's switch, read at each use.
+    /// Outputs: The worker. Side effects: None.
+    #[must_use]
+    pub fn with_kept_recordings(
+        mut self,
+        kept: Arc<RetainedAudioStore>,
+        keep: KeepRecordingsSource,
+    ) -> Self {
+        self.kept_recordings = Some((kept, keep));
+        self
     }
 
     /// Transcribes every pass with the glossary `glossary_source` returns when a round loads the
@@ -381,6 +403,7 @@ impl RefinementWorker {
             }
         };
         self.fold_recordings(repository.as_ref());
+        self.forget_kept_recordings_of_deleted_meetings(repository.as_ref());
         let pending = self.store.pending_meetings();
         if pending.is_empty() {
             return 0;
@@ -432,7 +455,7 @@ impl RefinementWorker {
                 continue;
             }
             if !meeting_exists(repository.as_ref(), &meeting_id) {
-                self.delete(&meeting_id);
+                self.discard(&meeting_id);
                 continue;
             }
             let plan = plan_retained_audio(&meeting_id, &recordings, &context);
@@ -584,7 +607,7 @@ impl RefinementWorker {
         let chunks = match self.store.load_encoded(meeting_id) {
             Ok(chunks) => chunks,
             Err(RetainedAudioError::Unreadable) => {
-                self.delete(meeting_id);
+                self.discard(meeting_id);
                 return;
             }
             Err(error) => {
@@ -635,7 +658,7 @@ impl RefinementWorker {
                 Ok(chunks) => loaded.push((meeting_id, offset_ms, chunks)),
                 Err(RetainedAudioError::Unreadable) => {
                     tracing::warn!(meeting_id = %meeting_id.as_str(), "retained audio is unreadable; deleting it");
-                    self.delete(&meeting_id);
+                    self.discard(&meeting_id);
                     return false;
                 }
                 Err(error) => {
@@ -763,7 +786,7 @@ impl RefinementWorker {
             Ok(chunks) => chunks,
             Err(RetainedAudioError::Unreadable) => {
                 tracing::warn!(meeting_id = %meeting_id.as_str(), "retained audio is unreadable; deleting it");
-                self.delete(meeting_id);
+                self.discard(meeting_id);
                 return false;
             }
             Err(error) => {
@@ -810,11 +833,51 @@ impl RefinementWorker {
         replaced
     }
 
-    /// Deletes a meeting's retained audio and forgets its attempts.
+    /// Is done with a meeting's retained audio: keeps it among the owner's recordings when they
+    /// chose to (#140), otherwise deletes it; forgets its attempts either way.
+    ///
+    /// Side effects: Moves or deletes the file; a recording that can't be kept is deleted.
     fn delete(&mut self, meeting_id: &MeetingId) {
+        if let Some((kept, keep)) = &self.kept_recordings
+            && keep()
+        {
+            self.attempts.remove(meeting_id.as_str());
+            match self.store.keep_in(meeting_id, kept) {
+                Ok(true) => {
+                    tracing::info!(meeting_id = %meeting_id.as_str(), "The meeting's recording was kept, as the owner chose");
+                    return;
+                }
+                Ok(false) => return,
+                Err(error) => {
+                    tracing::warn!(meeting_id = %meeting_id.as_str(), error = %error, "the recording could not be kept; deleting it");
+                }
+            }
+        }
+        self.discard(meeting_id);
+    }
+
+    /// Deletes a meeting's retained audio, whatever the owner keeps: its meeting is gone, or it
+    /// is unreadable. Side effects: Deletes the file; forgets its attempts.
+    fn discard(&mut self, meeting_id: &MeetingId) {
         self.attempts.remove(meeting_id.as_str());
         if let Err(error) = self.store.delete(meeting_id) {
             tracing::warn!(meeting_id = %meeting_id.as_str(), error = %error, "retained audio could not be deleted");
+        }
+    }
+
+    /// Deletes the kept recordings (#140) of meetings deleted since, here or on a paired device.
+    ///
+    /// Side effects: Reads the repository; deletes files.
+    fn forget_kept_recordings_of_deleted_meetings(&self, repository: &dyn NoteRepository) {
+        let Some((kept, _)) = &self.kept_recordings else {
+            return;
+        };
+        for meeting_id in kept.pending_meetings() {
+            if !meeting_exists(repository, &meeting_id)
+                && let Err(error) = kept.delete(&meeting_id)
+            {
+                tracing::warn!(meeting_id = %meeting_id.as_str(), error = %error, "a deleted meeting's recording could not be removed");
+            }
         }
     }
 }

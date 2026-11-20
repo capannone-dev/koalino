@@ -2669,4 +2669,65 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get presetOpenrouter =>
       '一个密钥用于多种模型（Gemini、DeepSeek、Qwen…），部分免费；文本也会经过 OpenRouter。密钥：openrouter.ai。';
+
+  @override
+  String get keepMeetingRecordings => '保留会议录音';
+
+  @override
+  String get keepMeetingRecordingsSubtitle =>
+      '转写后保留每场会议的音频，加密存放在此设备上，以便回放。默认关闭。';
+
+  @override
+  String get keepMeetingRecordingsQuestion => '保留会议录音？';
+
+  @override
+  String get keepRecordingsWarning =>
+      '录音包含会议中每个人的声音。请告知被录音的人，并遵守当地关于同意的规定：在许多地方，录下他人需要其许可。录音加密保存在此设备上，不会同步；每 10 分钟语音约占 2 MB。录音会随会议一起删除，或用“清除所有录音”一次全部删除。只保留语音，因此静音部分会以静音播放。';
+
+  @override
+  String get keepRecordings => '保留录音';
+
+  @override
+  String recordingsKept(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已保留 $count 段录音 · $size MB',
+      zero: '未保留录音',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get wipeAllRecordings => '清除所有录音';
+
+  @override
+  String get wipeAllRecordingsQuestion => '清除所有录音？';
+
+  @override
+  String get wipeAllRecordingsExplanation =>
+      '此设备上保留的所有会议录音都将被删除。转写和笔记会保留。此操作无法撤销。';
+
+  @override
+  String recordingsWiped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已清除 $count 段录音。',
+      zero: '没有可清除的录音。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordingsUnavailable => '目前无法访问录音。';
+
+  @override
+  String get playRecording => '播放录音';
+
+  @override
+  String get stopRecordingPlayback => '停止播放';
+
+  @override
+  String get recordingCouldNotBePlayed => '无法播放该录音。';
 }

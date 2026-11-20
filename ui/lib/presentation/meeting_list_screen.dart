@@ -1,6 +1,7 @@
 // Renders the meeting list title-first, as a phone list or a desktop list-detail layout.
 
 // ignore: deprecated_member_use
+import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
@@ -49,6 +50,7 @@ final class MeetingListScreen extends StatefulWidget {
     this.editController,
     this.searchBridge,
     this.chatBridge,
+    this.recordingsBridge,
     super.key,
   });
 
@@ -72,6 +74,9 @@ final class MeetingListScreen extends StatefulWidget {
 
   /// Adds the chat over every meeting, summary and project, and a meeting's chat (#97).
   final ChatBridge? chatBridge;
+
+  /// Lets a meeting play its kept recording (#140).
+  final RecordingsBridge? recordingsBridge;
 
   @override
   State<MeetingListScreen> createState() => _MeetingListScreenState();
@@ -163,6 +168,7 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
         summariesController: widget.summariesController,
         editController: widget.editController,
         chatBridge: widget.chatBridge,
+        recordingsBridge: widget.recordingsBridge,
       ),
     ));
   }

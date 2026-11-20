@@ -2838,4 +2838,67 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get presetOpenrouter =>
       'One key for many models (Gemini, DeepSeek, Qwen…), some free; your text also passes through OpenRouter. Key: openrouter.ai.';
+
+  @override
+  String get keepMeetingRecordings => 'Keep meeting recordings';
+
+  @override
+  String get keepMeetingRecordingsSubtitle =>
+      'Keep each meeting\'s audio after it is transcribed, sealed on this device, so you can play it back. Off by default.';
+
+  @override
+  String get keepMeetingRecordingsQuestion => 'Keep meeting recordings?';
+
+  @override
+  String get keepRecordingsWarning =>
+      'Recordings hold the voices of everyone in the meeting. Tell the people you record, and follow the consent rules where you are: in many places recording others needs their permission. Recordings stay on this device, encrypted, and are not synced; they take about 2 MB for every 10 minutes of speech. They are deleted with their meeting, or all at once with Wipe all recordings. Only speech is kept, so silent stretches play as silence.';
+
+  @override
+  String get keepRecordings => 'Keep recordings';
+
+  @override
+  String recordingsKept(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings kept · $size MB',
+      one: '1 recording kept · $size MB',
+      zero: 'No recordings kept',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get wipeAllRecordings => 'Wipe all recordings';
+
+  @override
+  String get wipeAllRecordingsQuestion => 'Wipe all recordings?';
+
+  @override
+  String get wipeAllRecordingsExplanation =>
+      'Every kept meeting recording on this device is deleted. Transcripts and notes stay. This cannot be undone.';
+
+  @override
+  String recordingsWiped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recordings wiped.',
+      one: '1 recording wiped.',
+      zero: 'No recordings to wipe.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordingsUnavailable => 'Recordings can\'t be reached right now.';
+
+  @override
+  String get playRecording => 'Play recording';
+
+  @override
+  String get stopRecordingPlayback => 'Stop playback';
+
+  @override
+  String get recordingCouldNotBePlayed => 'The recording could not be played.';
 }

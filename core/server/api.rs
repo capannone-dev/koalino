@@ -103,6 +103,8 @@ pub struct ServerAppState {
     llm: Option<Arc<crate::llm_commands::LlmServices>>,
     /// The notes folder (#98); `None` makes its routes answer 503.
     notes_folder: Option<Arc<crate::notes_folder_commands::NotesFolderKeeper>>,
+    /// The owner's kept recordings (#140); `None` makes their routes answer 503.
+    recordings: Option<Arc<crate::kept_recordings::RecordingsServices>>,
 }
 
 /// This device as the meetings name it, and the speech it holds for the after-meeting pass.
@@ -139,6 +141,7 @@ impl ServerAppState {
             settings_file: None,
             llm: None,
             notes_folder: None,
+            recordings: None,
         }
     }
 
@@ -320,6 +323,20 @@ impl ServerAppState {
         self.llm.clone()
     }
 
+    /// Attaches the owner's kept recordings (#140). Side effects: None.
+    pub fn with_recordings(
+        mut self,
+        recordings: Arc<crate::kept_recordings::RecordingsServices>,
+    ) -> Self {
+        self.recordings = Some(recordings);
+        self
+    }
+
+    /// The attached kept recordings, if any.
+    pub(super) fn recordings(&self) -> Option<Arc<crate::kept_recordings::RecordingsServices>> {
+        self.recordings.clone()
+    }
+
     /// The shared voice database, for routes that take the lock themselves.
     pub(super) fn voice_database(&self) -> Arc<Mutex<Box<dyn VoiceVectorDB + Send>>> {
         Arc::clone(&self.voice_database)
@@ -416,6 +433,7 @@ pub fn build_router(application_state: ServerAppState) -> Router {
         .merge(super::log_routes::routes())
         .merge(super::glossary_routes::routes())
         .merge(super::retention_routes::routes())
+        .merge(super::recordings_routes::routes())
         .merge(super::pass_routes::routes())
         .merge(super::meeting_voices_routes::routes())
         .merge(super::llm_routes::routes())

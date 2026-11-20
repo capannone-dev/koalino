@@ -2870,4 +2870,69 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get presetOpenrouter =>
       'Una clave para muchos modelos (Gemini, DeepSeek, Qwen…), algunos gratis; el texto también pasa por OpenRouter. Clave: openrouter.ai.';
+
+  @override
+  String get keepMeetingRecordings => 'Guardar las grabaciones de reuniones';
+
+  @override
+  String get keepMeetingRecordingsSubtitle =>
+      'Guarda el audio de cada reunión tras transcribirla, cifrado en este dispositivo, para reproducirlo. Desactivado por defecto.';
+
+  @override
+  String get keepMeetingRecordingsQuestion =>
+      '¿Guardar las grabaciones de reuniones?';
+
+  @override
+  String get keepRecordingsWarning =>
+      'Las grabaciones contienen las voces de todos los asistentes. Avisa a las personas que grabas y respeta las normas de consentimiento de tu país: en muchos lugares grabar a otros requiere su permiso. Las grabaciones se quedan cifradas en este dispositivo y no se sincronizan; ocupan alrededor de 2 MB por cada 10 minutos de voz. Se eliminan con su reunión, o todas a la vez con Borrar todas las grabaciones. Solo se guarda la voz, así que los tramos en silencio se oyen como silencio.';
+
+  @override
+  String get keepRecordings => 'Guardar grabaciones';
+
+  @override
+  String recordingsKept(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count grabaciones guardadas · $size MB',
+      one: '1 grabación guardada · $size MB',
+      zero: 'Ninguna grabación guardada',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get wipeAllRecordings => 'Borrar todas las grabaciones';
+
+  @override
+  String get wipeAllRecordingsQuestion => '¿Borrar todas las grabaciones?';
+
+  @override
+  String get wipeAllRecordingsExplanation =>
+      'Se elimina cada grabación guardada en este dispositivo. Las transcripciones y notas se quedan. No se puede deshacer.';
+
+  @override
+  String recordingsWiped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count grabaciones borradas.',
+      one: '1 grabación borrada.',
+      zero: 'No hay grabaciones que borrar.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordingsUnavailable =>
+      'Las grabaciones no están disponibles ahora.';
+
+  @override
+  String get playRecording => 'Reproducir la grabación';
+
+  @override
+  String get stopRecordingPlayback => 'Detener la reproducción';
+
+  @override
+  String get recordingCouldNotBePlayed => 'No se pudo reproducir la grabación.';
 }

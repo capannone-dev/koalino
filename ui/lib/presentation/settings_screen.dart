@@ -22,6 +22,8 @@ import 'package:note_taker_ui/infrastructure/transcription_settings_bridge.dart'
 import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
+import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
+import 'package:note_taker_ui/presentation/recordings_widgets.dart';
 import 'package:note_taker_ui/presentation/assistant_access_screen.dart';
 import 'package:note_taker_ui/presentation/call_offer_banner.dart';
 import 'package:note_taker_ui/presentation/notes_folder_screen.dart';
@@ -66,6 +68,7 @@ final class SettingsScreen extends StatelessWidget {
     this.notesFolderBridge,
     this.assistantAccessBridge,
     this.callWatchController,
+    this.recordingsBridge,
     super.key,
   });
 
@@ -96,6 +99,9 @@ final class SettingsScreen extends StatelessWidget {
 
   /// Adds the call offer switches (#111, desktops) when given and the system can tell.
   final CallWatchController? callWatchController;
+
+  /// Shows Keep meeting recordings and Wipe all recordings when given (#140).
+  final RecordingsBridge? recordingsBridge;
 
   @override
   Widget build(BuildContext context) {
@@ -156,6 +162,11 @@ final class SettingsScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              const Divider(),
+            ],
+            if (recordingsBridge
+                case final RecordingsBridge recordings) ...<Widget>[
+              RecordingsSection(bridge: recordings),
               const Divider(),
             ],
             if (summariesController

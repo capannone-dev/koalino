@@ -2875,4 +2875,70 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get presetOpenrouter =>
       'Uma chave para muitos modelos (Gemini, DeepSeek, Qwen…), alguns grátis; o texto também passa pelo OpenRouter. Chave: openrouter.ai.';
+
+  @override
+  String get keepMeetingRecordings => 'Guardar as gravações das reuniões';
+
+  @override
+  String get keepMeetingRecordingsSubtitle =>
+      'Guarda o áudio de cada reunião depois da transcrição, criptografado neste dispositivo, para ouvir de novo. Desativado por padrão.';
+
+  @override
+  String get keepMeetingRecordingsQuestion =>
+      'Guardar as gravações das reuniões?';
+
+  @override
+  String get keepRecordingsWarning =>
+      'As gravações contêm as vozes de todos na reunião. Avise as pessoas que você grava e siga as regras de consentimento do seu país: em muitos lugares gravar outras pessoas exige permissão. As gravações ficam criptografadas neste dispositivo e não são sincronizadas; ocupam cerca de 2 MB a cada 10 minutos de fala. São apagadas com a reunião, ou todas de uma vez com Apagar todas as gravações. Só a fala é guardada, então os trechos em silêncio tocam como silêncio.';
+
+  @override
+  String get keepRecordings => 'Guardar gravações';
+
+  @override
+  String recordingsKept(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações guardadas · $size MB',
+      one: '1 gravação guardada · $size MB',
+      zero: 'Nenhuma gravação guardada',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get wipeAllRecordings => 'Apagar todas as gravações';
+
+  @override
+  String get wipeAllRecordingsQuestion => 'Apagar todas as gravações?';
+
+  @override
+  String get wipeAllRecordingsExplanation =>
+      'Todas as gravações guardadas neste dispositivo são apagadas. Transcrições e notas ficam. Não é possível desfazer.';
+
+  @override
+  String recordingsWiped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravações apagadas.',
+      one: '1 gravação apagada.',
+      zero: 'Nenhuma gravação para apagar.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordingsUnavailable =>
+      'As gravações não estão acessíveis agora.';
+
+  @override
+  String get playRecording => 'Ouvir a gravação';
+
+  @override
+  String get stopRecordingPlayback => 'Parar a reprodução';
+
+  @override
+  String get recordingCouldNotBePlayed =>
+      'Não foi possível reproduzir a gravação.';
 }

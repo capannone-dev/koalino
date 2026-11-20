@@ -745,5 +745,19 @@
   "presetQwen": "阿里巴巴。按用量付费。密钥：阿里云百炼 (Model Studio)。",
   "presetKimi": "Moonshot AI。按用量付费。密钥：platform.moonshot.ai。",
   "presetMistral": "Mistral（法国）。免费层级限额严格。密钥：console.mistral.ai。",
-  "presetOpenrouter": "一个密钥用于多种模型（Gemini、DeepSeek、Qwen…），部分免费；文本也会经过 OpenRouter。密钥：openrouter.ai。"
+  "presetOpenrouter": "一个密钥用于多种模型（Gemini、DeepSeek、Qwen…），部分免费；文本也会经过 OpenRouter。密钥：openrouter.ai。",
+  "keepMeetingRecordings": "保留会议录音",
+  "keepMeetingRecordingsSubtitle": "转写后保留每场会议的音频，加密存放在此设备上，以便回放。默认关闭。",
+  "keepMeetingRecordingsQuestion": "保留会议录音？",
+  "keepRecordingsWarning": "录音包含会议中每个人的声音。请告知被录音的人，并遵守当地关于同意的规定：在许多地方，录下他人需要其许可。录音加密保存在此设备上，不会同步；每 10 分钟语音约占 2 MB。录音会随会议一起删除，或用“清除所有录音”一次全部删除。只保留语音，因此静音部分会以静音播放。",
+  "keepRecordings": "保留录音",
+  "recordingsKept": "{count, plural, =0{未保留录音} other{已保留 {count} 段录音 · {size} MB}}",
+  "wipeAllRecordings": "清除所有录音",
+  "wipeAllRecordingsQuestion": "清除所有录音？",
+  "wipeAllRecordingsExplanation": "此设备上保留的所有会议录音都将被删除。转写和笔记会保留。此操作无法撤销。",
+  "recordingsWiped": "{count, plural, =0{没有可清除的录音。} other{已清除 {count} 段录音。}}",
+  "recordingsUnavailable": "目前无法访问录音。",
+  "playRecording": "播放录音",
+  "stopRecordingPlayback": "停止播放",
+  "recordingCouldNotBePlayed": "无法播放该录音。"
 }

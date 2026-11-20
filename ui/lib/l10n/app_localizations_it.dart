@@ -2879,4 +2879,71 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get presetOpenrouter =>
       'Una chiave per molti modelli (Gemini, DeepSeek, Qwen…), alcuni gratuiti; il testo passa anche da OpenRouter. Chiave: openrouter.ai.';
+
+  @override
+  String get keepMeetingRecordings =>
+      'Conserva le registrazioni delle riunioni';
+
+  @override
+  String get keepMeetingRecordingsSubtitle =>
+      'Conserva l\'audio di ogni riunione dopo la trascrizione, cifrato su questo dispositivo, per riascoltarlo. Disattivato di default.';
+
+  @override
+  String get keepMeetingRecordingsQuestion =>
+      'Conservare le registrazioni delle riunioni?';
+
+  @override
+  String get keepRecordingsWarning =>
+      'Le registrazioni contengono le voci di tutti i partecipanti. Avvisa le persone che registri e rispetta le regole sul consenso del tuo paese: in molti luoghi registrare altri richiede il loro permesso. Le registrazioni restano su questo dispositivo, cifrate, e non vengono sincronizzate; occupano circa 2 MB ogni 10 minuti di parlato. Vengono eliminate con la loro riunione, o tutte insieme con Elimina tutte le registrazioni. Si conserva solo il parlato, quindi i tratti silenziosi si sentono come silenzio.';
+
+  @override
+  String get keepRecordings => 'Conserva le registrazioni';
+
+  @override
+  String recordingsKept(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registrazioni conservate · $size MB',
+      one: '1 registrazione conservata · $size MB',
+      zero: 'Nessuna registrazione conservata',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get wipeAllRecordings => 'Elimina tutte le registrazioni';
+
+  @override
+  String get wipeAllRecordingsQuestion => 'Eliminare tutte le registrazioni?';
+
+  @override
+  String get wipeAllRecordingsExplanation =>
+      'Ogni registrazione conservata su questo dispositivo viene eliminata. Trascrizioni e note restano. L\'operazione non si può annullare.';
+
+  @override
+  String recordingsWiped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count registrazioni eliminate.',
+      one: '1 registrazione eliminata.',
+      zero: 'Nessuna registrazione da eliminare.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordingsUnavailable =>
+      'Le registrazioni non sono raggiungibili ora.';
+
+  @override
+  String get playRecording => 'Riproduci la registrazione';
+
+  @override
+  String get stopRecordingPlayback => 'Ferma la riproduzione';
+
+  @override
+  String get recordingCouldNotBePlayed =>
+      'Non è stato possibile riprodurre la registrazione.';
 }

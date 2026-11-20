@@ -669,6 +669,24 @@ daemon without a settings file `503` `unavailable`. The apps use
 `note_taker_set_keep_speech_days(days)` (0 saved, 1 out of range, 2 failed) and read
 `keep_speech` (`{"days","min_days","max_days"}`) in `note_taker_get_transcription_settings()`.
 
+### Kept meeting recordings (#140)
+
+`GET /api/settings/recordings` returns `{"keep":false,"count":0,"bytes":0}`: whether this device
+keeps each meeting's audio after processing (off by default), and how many recordings it holds and
+their size. `PUT /api/settings/recordings` with `{"keep":true}` saves the switch and returns the
+same. `DELETE /api/recordings` deletes every kept recording and returns `{"deleted","bytes"}`.
+`GET /api/meetings/{id}/recording` returns the meeting's recording (or, for a merged meeting, one
+folded into it) as `audio/wav`, 16 kHz mono 16-bit, each speech chunk at its time and silence
+between; `404` `not_found` when none is kept, `422` `unreadable` when it can't be opened.
+`GET /api/meetings/{id}/recording/available` returns `{"available"}` without decrypting. Without
+recordings support the routes answer `503` `unavailable`.
+
+The apps call `note_taker_recordings_command(json)` with `{"command": ...}`: `status`,
+`set_keep` (`keep`), `wipe`, `has` (`meeting_id`; `{"available"}`), `prepare` (`meeting_id`;
+`{"path","duration_ms"}`, a decrypted WAV readable by this user only) and `release` (deletes that
+file). Failures are `{"ok":false,"error_code"}` with `invalid_request`, `not_found`,
+`unreadable`, `storage_failed` or `runtime_unavailable`.
+
 ### AI connections and meeting summaries (#95)
 
 `GET /api/settings/llm` returns `{"ok":true,"connections":[...],"default_connection","template",

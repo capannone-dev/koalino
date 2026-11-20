@@ -283,6 +283,8 @@ struct FfiRuntime {
     /// What the app's Teams bridge (#123) opens its stores with: the database and the unlocked
     /// cipher. Taken once the runtime is in place; `None` in tests.
     teams_bridge_stores: Option<(PathBuf, Arc<dyn crate::ports::crypto::EmbeddingCipher>)>,
+    /// The owner's kept meeting recordings (#140); `None` in tests.
+    kept_recordings: Option<Arc<crate::kept_recordings::RecordingsServices>>,
 }
 
 /// How often the ticker moves microphone audio into the recording.
@@ -516,6 +518,8 @@ impl FfiRuntime {
         let transcription_paths = TranscriptionPaths::from_lookup(setting);
         let pipeline_database_path = database_path.clone();
         let bridge_cipher = Arc::clone(&embedding_cipher);
+        let kept_recordings_cipher = Arc::clone(&embedding_cipher);
+        let review_clip_directory_for_playback = review_clip_directory.clone();
         let remote_gateway = p2p.clone();
         let recording_controller_builder: RecordingControllerBuilder = Box::new(move || {
             spawn_recording_controller(
@@ -547,6 +551,14 @@ impl FfiRuntime {
         runtime.teams_bridge_stores = Some((database_path.clone(), bridge_cipher));
         runtime.retained_speech = Some(RetainedSpeechIndex::new(
             crate::refinement_worker::retained_audio_directory(&database_path),
+        ));
+        // Playback writes into the review-clip folder, whose WAV files are cleared at start.
+        runtime.kept_recordings = Some(Arc::new(
+            crate::kept_recordings::RecordingsServices::for_database(
+                &database_path,
+                Arc::clone(&kept_recordings_cipher),
+                review_clip_directory_for_playback,
+            ),
         ));
         let check_database = database_path.clone();
         let check_device = runtime.note_repository.device_id().as_str().to_owned();
@@ -614,6 +626,7 @@ impl FfiRuntime {
             export_writer,
             p2p: None,
             retained_speech: None,
+            kept_recordings: None,
             charging: false,
             speed_check_due: None,
             microphone_source: None,
@@ -2740,6 +2753,30 @@ fn clear_copy_json(attachment_id: uuid::Uuid) -> String {
             "the file cannot be opened: it is damaged or was sealed with another key",
         ),
     }
+}
+
+/// Lends the kept-recordings services (#140) and, for a meeting, the recordings to play.
+///
+/// Inputs: The meeting to play, or `None`. Outputs: The services and the sources (empty without a
+/// meeting), or `None` when the runtime is unavailable. Side effects: Reads the repository under
+/// the runtime lock, briefly; playback itself runs after the lock is released.
+pub(crate) fn runtime_kept_recordings(
+    meeting_id: Option<&MeetingId>,
+) -> Option<(
+    Arc<crate::kept_recordings::RecordingsServices>,
+    Vec<crate::kept_recordings::RecordingSource>,
+)> {
+    let mut output = None;
+    let _ = with_runtime_json(|runtime| {
+        if let Some(services) = &runtime.kept_recordings {
+            let sources = meeting_id.map_or_else(Vec::new, |meeting_id| {
+                services.sources(meeting_id, Some(&runtime.note_repository))
+            });
+            output = Some((Arc::clone(services), sources));
+        }
+        Ok(String::new())
+    });
+    output
 }
 
 /// Lends the runtime's meeting repository and voice database to another FFI module (#95).

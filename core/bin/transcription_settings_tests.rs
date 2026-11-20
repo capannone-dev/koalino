@@ -87,6 +87,7 @@ fn settings_round_trip() {
         keep_meeting_voices: true,
         computer_sound: Some(false),
         npu_whisper: true,
+        keep_recordings: true,
     };
     assert_eq!(load_settings(&paths.settings_file), Default::default());
     save_settings(&paths.settings_file, &saved).unwrap_or_else(|e| panic!("{e}"));

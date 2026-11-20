@@ -2891,4 +2891,68 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get presetOpenrouter =>
       'مفتاح واحد لنماذج كثيرة (Gemini وDeepSeek وQwen…)، بعضها مجاني؛ ويمر النص أيضًا عبر OpenRouter. المفتاح: openrouter.ai.';
+
+  @override
+  String get keepMeetingRecordings => 'الاحتفاظ بتسجيلات الاجتماعات';
+
+  @override
+  String get keepMeetingRecordingsSubtitle =>
+      'احتفظ بصوت كل اجتماع بعد تفريغه نصيًا، مشفّرًا على هذا الجهاز، لتتمكن من تشغيله. معطّل افتراضيًا.';
+
+  @override
+  String get keepMeetingRecordingsQuestion =>
+      'هل تريد الاحتفاظ بتسجيلات الاجتماعات؟';
+
+  @override
+  String get keepRecordingsWarning =>
+      'تحتوي التسجيلات على أصوات جميع الحاضرين. أخبر الأشخاص الذين تسجّلهم، والتزم بقواعد الموافقة في بلدك: في أماكن كثيرة يتطلب تسجيل الآخرين إذنهم. تبقى التسجيلات مشفّرة على هذا الجهاز ولا تُزامَن، وتشغل نحو 2 ميغابايت لكل 10 دقائق من الكلام. تُحذف مع اجتماعها، أو كلها معًا عبر «مسح كل التسجيلات». يُحتفظ بالكلام فقط، لذا تُشغَّل فترات الصمت صمتًا.';
+
+  @override
+  String get keepRecordings => 'الاحتفاظ بالتسجيلات';
+
+  @override
+  String recordingsKept(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count تسجيلات محفوظة · $size ميغابايت',
+      one: 'تسجيل واحد محفوظ · $size ميغابايت',
+      zero: 'لا توجد تسجيلات محفوظة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get wipeAllRecordings => 'مسح كل التسجيلات';
+
+  @override
+  String get wipeAllRecordingsQuestion => 'هل تريد مسح كل التسجيلات؟';
+
+  @override
+  String get wipeAllRecordingsExplanation =>
+      'ستُحذف كل تسجيلات الاجتماعات المحفوظة على هذا الجهاز. تبقى النصوص والملاحظات. لا يمكن التراجع عن ذلك.';
+
+  @override
+  String recordingsWiped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'تم مسح $count تسجيلات.',
+      one: 'تم مسح تسجيل واحد.',
+      zero: 'لا توجد تسجيلات لمسحها.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordingsUnavailable => 'لا يمكن الوصول إلى التسجيلات الآن.';
+
+  @override
+  String get playRecording => 'تشغيل التسجيل';
+
+  @override
+  String get stopRecordingPlayback => 'إيقاف التشغيل';
+
+  @override
+  String get recordingCouldNotBePlayed => 'تعذّر تشغيل التسجيل.';
 }

@@ -745,5 +745,19 @@
   "presetQwen": "Alibaba. الدفع حسب الاستخدام. المفتاح: Alibaba Cloud Model Studio.",
   "presetKimi": "Moonshot AI. الدفع حسب الاستخدام. المفتاح: platform.moonshot.ai.",
   "presetMistral": "Mistral (فرنسا). فئة مجانية بحدود ضيقة. المفتاح: console.mistral.ai.",
-  "presetOpenrouter": "مفتاح واحد لنماذج كثيرة (Gemini وDeepSeek وQwen…)، بعضها مجاني؛ ويمر النص أيضًا عبر OpenRouter. المفتاح: openrouter.ai."
+  "presetOpenrouter": "مفتاح واحد لنماذج كثيرة (Gemini وDeepSeek وQwen…)، بعضها مجاني؛ ويمر النص أيضًا عبر OpenRouter. المفتاح: openrouter.ai.",
+  "keepMeetingRecordings": "الاحتفاظ بتسجيلات الاجتماعات",
+  "keepMeetingRecordingsSubtitle": "احتفظ بصوت كل اجتماع بعد تفريغه نصيًا، مشفّرًا على هذا الجهاز، لتتمكن من تشغيله. معطّل افتراضيًا.",
+  "keepMeetingRecordingsQuestion": "هل تريد الاحتفاظ بتسجيلات الاجتماعات؟",
+  "keepRecordingsWarning": "تحتوي التسجيلات على أصوات جميع الحاضرين. أخبر الأشخاص الذين تسجّلهم، والتزم بقواعد الموافقة في بلدك: في أماكن كثيرة يتطلب تسجيل الآخرين إذنهم. تبقى التسجيلات مشفّرة على هذا الجهاز ولا تُزامَن، وتشغل نحو 2 ميغابايت لكل 10 دقائق من الكلام. تُحذف مع اجتماعها، أو كلها معًا عبر «مسح كل التسجيلات». يُحتفظ بالكلام فقط، لذا تُشغَّل فترات الصمت صمتًا.",
+  "keepRecordings": "الاحتفاظ بالتسجيلات",
+  "recordingsKept": "{count, plural, =0{لا توجد تسجيلات محفوظة} =1{تسجيل واحد محفوظ · {size} ميغابايت} other{{count} تسجيلات محفوظة · {size} ميغابايت}}",
+  "wipeAllRecordings": "مسح كل التسجيلات",
+  "wipeAllRecordingsQuestion": "هل تريد مسح كل التسجيلات؟",
+  "wipeAllRecordingsExplanation": "ستُحذف كل تسجيلات الاجتماعات المحفوظة على هذا الجهاز. تبقى النصوص والملاحظات. لا يمكن التراجع عن ذلك.",
+  "recordingsWiped": "{count, plural, =0{لا توجد تسجيلات لمسحها.} =1{تم مسح تسجيل واحد.} other{تم مسح {count} تسجيلات.}}",
+  "recordingsUnavailable": "لا يمكن الوصول إلى التسجيلات الآن.",
+  "playRecording": "تشغيل التسجيل",
+  "stopRecordingPlayback": "إيقاف التشغيل",
+  "recordingCouldNotBePlayed": "تعذّر تشغيل التسجيل."
 }

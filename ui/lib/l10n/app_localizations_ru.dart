@@ -2884,4 +2884,71 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get presetOpenrouter =>
       'Один ключ для многих моделей (Gemini, DeepSeek, Qwen…), часть бесплатно; текст также проходит через OpenRouter. Ключ: openrouter.ai.';
+
+  @override
+  String get keepMeetingRecordings => 'Сохранять записи встреч';
+
+  @override
+  String get keepMeetingRecordingsSubtitle =>
+      'Сохранять звук каждой встречи после расшифровки, в зашифрованном виде на этом устройстве, чтобы его можно было прослушать. По умолчанию выключено.';
+
+  @override
+  String get keepMeetingRecordingsQuestion => 'Сохранять записи встреч?';
+
+  @override
+  String get keepRecordingsWarning =>
+      'Записи содержат голоса всех участников. Предупреждайте людей, которых записываете, и соблюдайте местные правила о согласии: во многих странах для записи других нужно их разрешение. Записи хранятся зашифрованными на этом устройстве и не синхронизируются; они занимают около 2 МБ на каждые 10 минут речи. Они удаляются вместе со встречей или все сразу кнопкой «Удалить все записи». Сохраняется только речь, поэтому паузы воспроизводятся как тишина.';
+
+  @override
+  String get keepRecordings => 'Сохранять записи';
+
+  @override
+  String recordingsKept(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count записи · $size МБ',
+      many: '$count записей · $size МБ',
+      few: '$count записи · $size МБ',
+      one: '1 запись · $size МБ',
+      zero: 'Записей нет',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get wipeAllRecordings => 'Удалить все записи';
+
+  @override
+  String get wipeAllRecordingsQuestion => 'Удалить все записи?';
+
+  @override
+  String get wipeAllRecordingsExplanation =>
+      'Все сохранённые записи встреч на этом устройстве будут удалены. Расшифровки и заметки останутся. Это нельзя отменить.';
+
+  @override
+  String recordingsWiped(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Удалено $count записи.',
+      many: 'Удалено $count записей.',
+      few: 'Удалено $count записи.',
+      one: 'Удалена 1 запись.',
+      zero: 'Нечего удалять.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get recordingsUnavailable => 'Записи сейчас недоступны.';
+
+  @override
+  String get playRecording => 'Прослушать запись';
+
+  @override
+  String get stopRecordingPlayback => 'Остановить воспроизведение';
+
+  @override
+  String get recordingCouldNotBePlayed => 'Не удалось воспроизвести запись.';
 }
