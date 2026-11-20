@@ -44,5 +44,7 @@
   "koalinoIsRecording": "Koalino enregistre",
   "stop": "Arrêter",
   "recordingProgress": "{title} : segments audio {audio}, diapositives {slides}, sous-titres {captions}",
-  "recordingProblem": "{line} (problème : {problem})"
+  "recordingProblem": "{line} (problème : {problem})",
+  "matchSpokenLanguage": "Régler la langue parlée de Teams sur celle de Koalino",
+  "matchSpokenLanguageHint": "Quand Koalino a une langue fixe. La langue change pour toute la réunion, et les autres peuvent le voir."
 }

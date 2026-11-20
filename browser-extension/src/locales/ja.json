@@ -44,5 +44,7 @@
   "koalinoIsRecording": "Koalino が録音中",
   "stop": "停止",
   "recordingProgress": "{title}: 音声チャンク {audio}、スライド {slides}、キャプション {captions}",
-  "recordingProblem": "{line}（問題: {problem}）"
+  "recordingProblem": "{line}（問題: {problem}）",
+  "matchSpokenLanguage": "Teams の話し言葉を Koalino の言語に合わせる",
+  "matchSpokenLanguageHint": "Koalino で言語を固定している場合。会議全体の言語が変わり、他の参加者にも表示されることがあります。"
 }

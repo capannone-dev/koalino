@@ -16,7 +16,13 @@
  * the meeting is logged.
  */
 import { msg, type MessageKey } from "../lib/i18n";
-import { RecapFetchOutcome, fetchRecapTranscript, startTeamsTranscription, turnOnCaptions } from "./automation";
+import {
+  RecapFetchOutcome,
+  fetchRecapTranscript,
+  setTeamsSpokenLanguage,
+  startTeamsTranscription,
+  turnOnCaptions,
+} from "./automation";
 import { askConsent, hideOverlay, showRecording } from "./banner";
 import { MeetingRecorder } from "./recorder";
 import {
@@ -69,6 +75,8 @@ let record: RecordedMeeting | null = null;
 let recordingStartedAt = 0;
 let captionsAttempted = false;
 let transcriptionAttempted = false;
+/** Whether Teams' spoken language was set to Koalino's in this recording (#141). */
+let languageAttempted = false;
 let shareShown = false;
 let lastRecapCheck = 0;
 let recapFetch: { meeting: RecordedMeeting; arrived: () => void } | null = null;
@@ -202,6 +210,7 @@ function startRecording(resumed: RecordedMeeting | null = null): void {
   recordingStartedAt = nowMs;
   captionsAttempted = false;
   transcriptionAttempted = false;
+  languageAttempted = false;
   lastProblem = null;
   lastProgress = "";
   shareShown = false;
@@ -300,6 +309,19 @@ async function whileRecording(): Promise<void> {
   if (settings.captureCaptions && !captionsAttempted && elapsed >= CAPTIONS_DELAY_MS) {
     captionsAttempted = true;
     void turnOnCaptions(document);
+  }
+  // Before Teams transcription starts, so it starts in Koalino's language (#141). Only once
+  // Koalino has named a fixed language; the steps run one after another.
+  if (
+    settings.matchTeamsSpokenLanguage &&
+    !languageAttempted &&
+    connection.language &&
+    elapsed >= CAPTIONS_DELAY_MS
+  ) {
+    languageAttempted = true;
+    void setTeamsSpokenLanguage(document, connection.language).then((outcome) => {
+      if (outcome === "failed") lastProblem = "spoken language: not set";
+    });
   }
   if (
     settings.startTeamsTranscription &&

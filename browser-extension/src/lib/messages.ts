@@ -64,7 +64,8 @@ export type HostMessage =
 
 /** From the native host to the background. */
 export type HostReply =
-  | { type: "status"; bridge: "connected" | "unavailable" }
+  /** `language`: Koalino's fixed transcription language (a Whisper code), absent for Auto (#141). */
+  | { type: "status"; bridge: "connected" | "unavailable"; language?: string }
   | { type: "rejected"; reason: string };
 
 /** The state the background reports to tabs and the popup. */
@@ -75,6 +76,8 @@ export interface ConnectionState {
   bridge: "connected" | "unavailable" | "unknown";
   /** The browser's reason when the host could not start. */
   hostError?: string;
+  /** Koalino's fixed transcription language, when the app named one (#141). */
+  language?: string;
 }
 
 /** What a tab has sent to Koalino for the meeting it records, for the popup. */

@@ -44,5 +44,7 @@
   "koalinoIsRecording": "Koalino يسجّل الآن",
   "stop": "إيقاف",
   "recordingProgress": "{title}: مقاطع الصوت {audio}، الشرائح {slides}، الترجمات {captions}",
-  "recordingProblem": "{line} (مشكلة: {problem})"
+  "recordingProblem": "{line} (مشكلة: {problem})",
+  "matchSpokenLanguage": "ضبط لغة الكلام في Teams على لغة Koalino",
+  "matchSpokenLanguageHint": "عندما تكون لغة Koalino محددة. تتغير اللغة للاجتماع كله، وقد يرى الآخرون ذلك."
 }

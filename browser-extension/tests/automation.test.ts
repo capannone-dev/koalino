@@ -8,6 +8,7 @@ import {
   downloadRecapVtt,
   fetchRecapTranscript,
   findControl,
+  setTeamsSpokenLanguage,
   startTeamsTranscription,
   turnOnCaptions,
 } from "../src/content/automation";
@@ -180,5 +181,93 @@ describe("recap transcript", () => {
     document.body.innerHTML = "<div>AI summary</div>";
     const fetched = await fetchRecapTranscript(document, null, () => undefined, async () => true, 300);
     expect(fetched).toBe("no-transcript-tab");
+  });
+});
+
+/**
+ * A model of Teams' spoken-language dialog: More → Language and speech → Change spoken language
+ * opens a dialog with a "Meeting spoken language" dropdown and an Update button. `applied` holds
+ * what Update saved.
+ */
+function buildLanguageDialog(current: string, options: string[]): { applied: string | null } {
+  const result: { applied: string | null } = { applied: null };
+  document.body.innerHTML = '<button id="callingButtons-showMoreBtn" aria-expanded="false">More</button>';
+  const more = document.getElementById("callingButtons-showMoreBtn") as HTMLElement;
+  more.addEventListener("click", () => {
+    const open = more.getAttribute("aria-expanded") === "true";
+    document.getElementById("more-menu")?.remove();
+    document.getElementById("submenu")?.remove();
+    more.setAttribute("aria-expanded", String(!open));
+    if (open) return;
+    const menu = document.createElement("div");
+    menu.id = "more-menu";
+    menu.setAttribute("role", "menu");
+    menu.append(
+      item("LanguageSpeechMenuControl-id", "menuitem", "Language and speech", () =>
+        showSubmenu([
+          item("spoken-language-button", "menuitem", "Change spoken language", () => {
+            const dialog = document.createElement("div");
+            dialog.setAttribute("role", "dialog");
+            const dropdown = document.createElement("button");
+            dropdown.setAttribute("role", "combobox");
+            dropdown.setAttribute("aria-label", "Meeting spoken language");
+            dropdown.textContent = current;
+            dropdown.addEventListener("click", () => {
+              const list = document.createElement("div");
+              list.setAttribute("role", "listbox");
+              for (const name of options) {
+                const option = document.createElement("div");
+                option.setAttribute("role", "option");
+                option.textContent = name;
+                option.addEventListener("click", () => {
+                  dropdown.textContent = name;
+                  list.remove();
+                });
+                list.append(option);
+              }
+              document.body.append(list);
+            });
+            const update = document.createElement("button");
+            update.textContent = "Update";
+            update.addEventListener("click", () => {
+              result.applied = dropdown.textContent;
+              dialog.remove();
+            });
+            const cancel = document.createElement("button");
+            cancel.textContent = "Cancel";
+            cancel.addEventListener("click", () => dialog.remove());
+            dialog.append(dropdown, cancel, update);
+            document.body.append(dialog);
+          }),
+        ]),
+      ),
+    );
+    document.body.append(menu);
+  });
+  return result;
+}
+
+describe("Teams spoken language (#141)", () => {
+  const languages = ["English (United States)", "French (France)", "Italian (Italy)", "Italian (Switzerland)"];
+
+  it("chooses Koalino's language and presses Update", async () => {
+    const teams = buildLanguageDialog("English (United States)", languages);
+    expect(await setTeamsSpokenLanguage(document, "it")).toBe("set");
+    expect(teams.applied).toBe("Italian (Italy)");
+    expect(document.querySelector("[role='dialog']")).toBeNull();
+  });
+
+  it("leaves a language that already matches alone", async () => {
+    const teams = buildLanguageDialog("Italian (Italy)", languages);
+    expect(await setTeamsSpokenLanguage(document, "it")).toBe("already");
+    expect(teams.applied).toBeNull();
+    expect(document.querySelector("[role='dialog']")).toBeNull();
+  });
+
+  it("cancels when Teams does not offer the language", async () => {
+    const teams = buildLanguageDialog("English (United States)", languages);
+    expect(await setTeamsSpokenLanguage(document, "fi")).toBe("failed");
+    expect(teams.applied).toBeNull();
+    expect(document.querySelector("[role='dialog']")).toBeNull();
   });
 });

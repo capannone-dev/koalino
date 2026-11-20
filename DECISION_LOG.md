@@ -3988,3 +3988,19 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   real move, so it cannot undo nesting; it simply shows every project at the top level.
 - **Counts:** a project's meeting and file counts are its own, not its subprojects'.
 
+## Teams' spoken language follows Koalino's (#141, 2026-11-20)
+- **Context:** the owner asked for Teams' captions and transcription to use the language set in
+  Koalino. Teams applies the spoken language to the whole meeting, so it is an extension option,
+  off by default (owner's choice).
+- **Decisions:**
+  - **How the extension learns it:** the bridge's authentication acknowledgement carries
+    `"language"` (the default transcription language read at each connection, absent for Auto).
+    The browser host checks it is a plausible code and passes it in `{"type":"status"}`. No new
+    message or file path is needed, and a changed language reaches the next connection.
+  - **Driving Teams:** More → Language and speech → Change spoken language (or Language
+    settings), the dropdown labelled "spoken language", the option whose name before "(" matches
+    `Intl.DisplayNames` in the page's language or English, then Update. It runs once per
+    recording, before Teams transcription would start, and cancels when the language is missing.
+  - **Not yet verified on a real Teams call:** the dialog was modelled from Teams' menu names, not
+    observed in a live call like the captions menu was; its labels may need adjusting then.
+

@@ -44,5 +44,7 @@
   "koalinoIsRecording": "Koalino ведёт запись",
   "stop": "Остановить",
   "recordingProgress": "{title}: аудиофрагменты {audio}, слайды {slides}, субтитры {captions}",
-  "recordingProblem": "{line} (проблема: {problem})"
+  "recordingProblem": "{line} (проблема: {problem})",
+  "matchSpokenLanguage": "Задавать в Teams язык речи как в Koalino",
+  "matchSpokenLanguageHint": "Если в Koalino выбран конкретный язык. Он меняется для всей встречи, и другие могут это увидеть."
 }

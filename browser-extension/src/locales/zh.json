@@ -44,5 +44,7 @@
   "koalinoIsRecording": "Koalino 正在录制",
   "stop": "停止",
   "recordingProgress": "{title}：音频块 {audio}，幻灯片 {slides}，字幕 {captions}",
-  "recordingProblem": "{line}（问题：{problem}）"
+  "recordingProblem": "{line}（问题：{problem}）",
+  "matchSpokenLanguage": "将 Teams 的口语语言设为 Koalino 的语言",
+  "matchSpokenLanguageHint": "当 Koalino 设置了固定语言时。这会更改整个会议的语言，其他人可能会看到。"
 }

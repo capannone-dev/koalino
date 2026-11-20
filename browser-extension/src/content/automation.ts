@@ -185,6 +185,113 @@ export function startTeamsTranscription(root: ParentNode): Promise<boolean> {
   });
 }
 
+const SPOKEN_LANGUAGE: ControlSpec = { label: /^(change )?(meeting )?spoken language|^language settings$/i };
+const SPOKEN_LANGUAGE_DROPDOWN = /spoken language/i;
+const APPLY_LANGUAGE: ControlSpec = { label: /^(update|confirm|save|apply)$/i };
+const CANCEL: ControlSpec = { label: /^cancel$/i };
+
+/** How setting Teams' spoken language ended. */
+export type SpokenLanguageOutcome = "set" | "already" | "failed";
+
+/**
+ * The names Teams may give a language: in the page's language and in English ("Italian").
+ *
+ * Inputs: A Whisper language code ("it"). Outputs: Lower-case names, possibly empty.
+ * Side effects: None.
+ */
+function languageNames(code: string): string[] {
+  const names = new Set<string>();
+  for (const locale of [document.documentElement.lang, navigator.language, "en"]) {
+    if (!locale) continue;
+    try {
+      const name = new Intl.DisplayNames([locale], { type: "language" }).of(code);
+      if (name && name.toLowerCase() !== code) names.add(name.toLowerCase());
+    } catch {
+      // An unknown locale or code names nothing.
+    }
+  }
+  return [...names];
+}
+
+/** Whether a Teams language label ("Italian (Italy)") is one of `names`. */
+function namesLanguage(label: string, names: string[]): boolean {
+  const language = label.replace(/\s*\(.*$/, "").trim().toLowerCase();
+  return names.includes(language);
+}
+
+/** The dialog's spoken-language dropdown. */
+function spokenLanguageDropdown(root: ParentNode): HTMLElement | null {
+  for (const candidate of root.querySelectorAll<HTMLElement>("[role='combobox'], select, button[aria-haspopup]")) {
+    const labelledBy = candidate.getAttribute("aria-labelledby");
+    const label = labelledBy ? document.getElementById(labelledBy)?.textContent ?? "" : candidate.getAttribute("aria-label") ?? "";
+    if (SPOKEN_LANGUAGE_DROPDOWN.test(label)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Sets the meeting's spoken language in Teams to Koalino's (#141; the owner's opt-in).
+ *
+ * Inputs: The document and a Whisper language code. Outputs: `set`, `already` when Teams used
+ * it already, or `failed` (control or language not found; the dialog is cancelled).
+ * Side effects: Opens More → Language and speech → Change spoken language, chooses the language
+ * and presses Update. Teams applies it to the whole meeting and may tell the participants.
+ */
+export function setTeamsSpokenLanguage(root: ParentNode, code: string): Promise<SpokenLanguageOutcome> {
+  let outcome: SpokenLanguageOutcome = "failed";
+  return oneAtATime(async () => {
+    const names = languageNames(code);
+    if (names.length === 0 || !(await openMoreMenu(root))) return false;
+    const direct = await waitFor(() => findSpec(root, SPOKEN_LANGUAGE), 1_500);
+    if (direct) {
+      press(direct);
+    } else if (!(await pressWhenShown(root, LANGUAGE_AND_SPEECH)) || !(await pressWhenShown(root, SPOKEN_LANGUAGE))) {
+      closeMenus(root);
+      return false;
+    }
+    const dropdown = await waitFor(() => spokenLanguageDropdown(root));
+    if (!dropdown) {
+      closeMenus(root);
+      return false;
+    }
+    const cancel = () => {
+      const button = findSpec(root, CANCEL);
+      if (button) press(button);
+      closeMenus(root);
+    };
+    // The dropdown's label names the field; its text or selected option is the current language.
+    const shown =
+      dropdown instanceof HTMLSelectElement
+        ? (dropdown.selectedOptions[0]?.textContent ?? "")
+        : (dropdown.getAttribute("value") ?? dropdown.textContent ?? "");
+    if (namesLanguage(shown.replace(/\s+/g, " "), names)) {
+      outcome = "already";
+      cancel();
+      return true;
+    }
+    press(dropdown);
+    const option = await waitFor(() => {
+      for (const candidate of root.querySelectorAll<HTMLElement>("[role='option'], option")) {
+        if (namesLanguage(labelOf(candidate), names)) return candidate;
+      }
+      return null;
+    }, 2_000);
+    if (!option) {
+      press(dropdown);
+      cancel();
+      return false;
+    }
+    press(option);
+    if (!(await pressWhenShown(root, APPLY_LANGUAGE))) {
+      cancel();
+      return false;
+    }
+    outcome = "set";
+    closeMenus(root);
+    return true;
+  }).then(() => outcome);
+}
+
 /** How often the recap frame is asked to download the transcript before giving up. */
 const RECAP_DOWNLOAD_ATTEMPTS = 3;
 

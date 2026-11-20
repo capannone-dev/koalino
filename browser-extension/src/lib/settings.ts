@@ -17,6 +17,11 @@ export interface ExtensionSettings {
   captureCaptions: boolean;
   /** Send the Teams transcript to Koalino when Teams publishes it. */
   fetchTeamsTranscripts: boolean;
+  /**
+   * When recording, set the meeting's spoken language in Teams to Koalino's fixed language
+   * (#141). Off by default: Teams applies it to the whole meeting.
+   */
+  matchTeamsSpokenLanguage: boolean;
 }
 
 /** The settings before the owner changes anything. */
@@ -26,6 +31,7 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
   captureSlides: true,
   captureCaptions: true,
   fetchTeamsTranscripts: true,
+  matchTeamsSpokenLanguage: false,
 };
 
 /**

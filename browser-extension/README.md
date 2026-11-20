@@ -25,6 +25,13 @@ Optional, off by default: **Start Teams transcription when I record** (More → 
 transcribe → Start transcription). Everyone in the meeting sees it, and Microsoft stores the
 transcript.
 
+Optional, off by default: **Set Teams' spoken language to Koalino's** (#141). Koalino names its
+default transcription language when the host connects (nothing for Auto); about 20 s into a
+recording, before transcription would start, the extension opens More → Language and speech →
+Change spoken language, picks that language (matched by name in the page's language or English)
+and presses Update. A language Teams already uses is left alone; one Teams does not offer is
+cancelled and shown as a problem in the popup. Teams applies it to the whole meeting.
+
 **A reload stays one meeting.** If the Teams page reloads (or the owner rejoins) in the same tab
 within two minutes, recording continues the same Koalino meeting, without asking again: the
 owner already chose to record that call. The captions are kept in two files, before and after.

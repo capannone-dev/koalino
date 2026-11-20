@@ -88,7 +88,11 @@ function ensureHost(): chrome.runtime.Port | null {
   try {
     const port = chrome.runtime.connectNative(HOST_NAME);
     port.onMessage.addListener((reply: HostReply) => {
-      if (reply.type === "status") setConnection({ host: "connected", bridge: reply.bridge });
+      if (reply.type === "status") {
+        // Connected: the app's answer (none for Auto). Unavailable: what it said last (#141).
+        const language = reply.bridge === "connected" ? reply.language : connection.language;
+        setConnection({ host: "connected", bridge: reply.bridge, ...(language ? { language } : {}) });
+      }
       if (reply.type === "rejected") rejected += 1;
     });
     port.onDisconnect.addListener(() => {
