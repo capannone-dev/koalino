@@ -4025,6 +4025,12 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   first version restored whole 30 s windows, 4 of 6 per recording, bringing back the Portuguese
   live chunk; replayed on B's recording, the per-chunk rule restores exactly the three chunks
   where `base` lost speech (0 of 18, 4 of 23 and 1 of 22 live words kept).
-- **Still seen in the test, not changed:** a few words repeated where one person's turn ends and
-  the other's begins (each device's speaker pass labels the border word differently), and one
-  voice split into two speakers by the speaker pass (also on the single recording).
+- **Still seen in the test:** a few words repeated where one person's turn ends and the other's
+  begins (each device's speaker pass labels the border word differently), and one voice split
+  into two speakers by the speaker pass (also on the single recording).
+- **Repeated words, fixed:** "alta montagna" was written twice because each device's copy was
+  chosen for a different speaker and the copies were 1.2 s apart. A word is now also a copy within
+  3 s when a neighbouring word is the same at the same distance (within 0.5 s); the copy kept is
+  the one whose speaker has more words, so the sentence stays in its main voice. One short word
+  two people say a moment apart, with no neighbour in common, is still written twice.
+
