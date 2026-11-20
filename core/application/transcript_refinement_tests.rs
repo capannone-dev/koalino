@@ -792,3 +792,39 @@ fn a_short_live_text_does_not_veto_the_pass() {
     assert_eq!(replaced, 0);
     assert_eq!(texts(&words), texts(&pass));
 }
+
+/// Verifies only the chunk that lost speech takes the live text: the pass's better text of the
+/// other chunks in the same window stays (a live chunk may even be in the wrong language).
+#[test]
+fn only_the_chunk_that_lost_speech_takes_the_live_text() {
+    let spans = [span(0, 10_000), span(11_000, 20_000)];
+    let pass = spoken(TURN_ONE, 0, 10_000);
+    let standing = [
+        live(
+            "se eu está de tracoi bambi em anciani são state liberados",
+            0,
+            10_000,
+        ),
+        live(TURN_TWO, 11_000, 20_000),
+    ];
+
+    let (words, replaced) = keep_live_where_the_pass_lost_speech(pass, &spans, &standing);
+
+    assert_eq!(replaced, 1);
+    assert_eq!(texts(&words), format!("{TURN_ONE} {TURN_TWO}"));
+}
+
+/// Verifies a sentence written over a skipped one is caught when the pass then also lost most of
+/// it in its own chunk: the misplaced words match the neighbour's live text (seen on #88).
+#[test]
+fn a_sentence_moved_over_a_skipped_one_is_caught_by_the_neighbours_live_text() {
+    let spans = [span(0, 10_000), span(11_000, 20_000)];
+    let mut pass = spoken(TURN_THREE, 0, 10_000);
+    pass.extend(spoken("programma", 11_000, 20_000));
+    let standing = [live(TURN_TWO, 0, 10_000), live(TURN_THREE, 11_000, 20_000)];
+
+    let (words, replaced) = keep_live_where_the_pass_lost_speech(pass, &spans, &standing);
+
+    assert_eq!(replaced, 2);
+    assert_eq!(texts(&words), format!("{TURN_TWO} {TURN_THREE}"));
+}

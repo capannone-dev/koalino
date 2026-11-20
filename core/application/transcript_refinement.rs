@@ -382,17 +382,20 @@ const MIN_LIVE_WORDS_JUDGED: usize = 6;
 /// The pass must write at least this share (per mille) of a judged chunk's live words.
 const MIN_LIVE_WORDS_KEPT_PERMILLE: usize = 500;
 
-/// Keeps the live text of a window whose pass lost speech the live transcript had.
+/// Keeps the live text of a chunk whose pass lost speech the live transcript had.
 ///
 /// Whisper sometimes skips a sentence inside a long window and writes the next one over it, so
 /// the sentence is lost and the next one appears twice (#88: seen on a real two-device test).
 /// A chunk is judged when its live text has at least `MIN_LIVE_WORDS_JUDGED` words; if the pass's
-/// words there (by midpoint) contain fewer than half of them, the pass lost speech, and the whole
-/// window takes the live words instead (spread evenly over each live segment), since the
-/// displaced words belong to it. Words are compared case- and punctuation-free.
+/// words there (by midpoint) contain fewer than half of them, the pass lost speech, and that chunk
+/// takes the live words instead (spread evenly over each live segment), but only when the pass
+/// wrote under half as many words there or mostly wrote a neighbouring chunk's words; a pass
+/// with its own full text there stands, since then the live text is the wrong one (a live chunk
+/// may even be in another language). The words Whisper misplaced go with the chunk. Words are
+/// compared case- and punctuation-free.
 ///
 /// Inputs: The pass's words and the chunks, both in the same time; the standing microphone
-/// segments in that time. Outputs: The words to use, in time order, and how many windows kept the
+/// segments in that time. Outputs: The words to use, in time order, and how many chunks kept the
 /// live text. Side effects: None.
 pub(crate) fn keep_live_where_the_pass_lost_speech(
     words: Vec<MeetingWord>,
@@ -411,8 +414,28 @@ pub(crate) fn keep_live_where_the_pass_lost_speech(
             })
             .collect()
     };
-    let lost_speech = |span: &ChunkSpan| {
-        let mut live_keys: Vec<String> = live_segments_in(span)
+    let pass_keys_in = |span: &ChunkSpan| -> Vec<String> {
+        words
+            .iter()
+            .filter(|word| inside(span, word.midpoint_ms()))
+            .map(|word| comparison_key(word.text()))
+            .filter(|key| !key.is_empty())
+            .collect()
+    };
+    // Share (per mille) of `keys` also found in `pool`, each pool word used once.
+    let found_permille = |keys: &[String], pool: Vec<String>| -> usize {
+        let mut pool = pool;
+        let mut found = 0;
+        for key in keys {
+            if let Some(position) = pool.iter().position(|other| other == key) {
+                pool.swap_remove(position);
+                found += 1;
+            }
+        }
+        found * 1_000 / keys.len().max(1)
+    };
+    let live_keys_in = |span: &ChunkSpan| -> Vec<String> {
+        live_segments_in(span)
             .into_iter()
             .flat_map(|segment| {
                 segment
@@ -422,50 +445,51 @@ pub(crate) fn keep_live_where_the_pass_lost_speech(
                     .collect::<Vec<_>>()
             })
             .filter(|key| !key.is_empty())
-            .collect();
+            .collect()
+    };
+    let lost_speech = |index: usize, span: &ChunkSpan| {
+        let live_keys = live_keys_in(span);
         if live_keys.len() < MIN_LIVE_WORDS_JUDGED {
             return false;
         }
-        let live_count = live_keys.len();
-        let mut kept = 0;
-        for word in words.iter().filter(|word| inside(span, word.midpoint_ms())) {
-            let key = comparison_key(word.text());
-            if let Some(position) = live_keys.iter().position(|live| *live == key) {
-                live_keys.swap_remove(position);
-                kept += 1;
-            }
+        let pass_keys = pass_keys_in(span);
+        if found_permille(&live_keys, pass_keys.clone()) >= MIN_LIVE_WORDS_KEPT_PERMILLE {
+            return false;
         }
-        kept * 1_000 < live_count * MIN_LIVE_WORDS_KEPT_PERMILLE
+        // The pass disagrees with the live text. It lost speech when it wrote little here, or
+        // wrote a neighbouring chunk's words (a sentence written over the skipped one, matching
+        // the neighbour's pass or live text);
+        // otherwise its own text stands (the live text may be wrong, even in another language).
+        if pass_keys.len() * 2 < live_keys.len() {
+            return true;
+        }
+        let neighbours: Vec<&ChunkSpan> = [index.checked_sub(1), index.checked_add(1)]
+            .into_iter()
+            .flatten()
+            .filter_map(|neighbour| spans.get(neighbour))
+            .collect();
+        let neighbours_pass: Vec<String> = neighbours
+            .iter()
+            .flat_map(|neighbour| pass_keys_in(neighbour))
+            .collect();
+        let neighbours_live: Vec<String> = neighbours
+            .iter()
+            .flat_map(|neighbour| live_keys_in(neighbour))
+            .collect();
+        found_permille(&pass_keys, neighbours_pass) >= MIN_LIVE_WORDS_KEPT_PERMILLE
+            || found_permille(&pass_keys, neighbours_live) >= MIN_LIVE_WORDS_KEPT_PERMILLE
     };
-    let replaced_spans: Vec<&ChunkSpan> = plan_windows(spans, REFINEMENT_WINDOW_MS)
-        .into_iter()
-        .filter(|window| {
-            window
-                .chunk_indexes()
-                .iter()
-                .any(|index| spans.get(*index).is_some_and(lost_speech))
-        })
-        .flat_map(|window| {
-            window
-                .chunk_indexes()
-                .iter()
-                .filter_map(|index| spans.get(*index))
-                .collect::<Vec<_>>()
-        })
+    // Only the chunk that lost speech: the words Whisper misplaced there belong to it, and the
+    // rest of its window is the better text (a whole-window fallback measured worse on #88).
+    let replaced_spans: Vec<&ChunkSpan> = spans
+        .iter()
+        .enumerate()
+        .filter(|(index, span)| lost_speech(*index, span))
+        .map(|(_, span)| span)
         .collect();
     if replaced_spans.is_empty() {
         return (words, 0);
     }
-    let replaced_windows = plan_windows(spans, REFINEMENT_WINDOW_MS)
-        .iter()
-        .filter(|window| {
-            window
-                .chunk_indexes()
-                .iter()
-                .filter_map(|index| spans.get(*index))
-                .any(|span| replaced_spans.contains(&span))
-        })
-        .count();
     let in_replaced = |time_ms: u64| replaced_spans.iter().any(|span| inside(span, time_ms));
     let mut kept: Vec<MeetingWord> = words
         .into_iter()
@@ -477,7 +501,8 @@ pub(crate) fn keep_live_where_the_pass_lost_speech(
         }
     }
     kept.sort_by_key(MeetingWord::start_ms);
-    (kept, replaced_windows)
+    let replaced_chunks = replaced_spans.len();
+    (kept, replaced_chunks)
 }
 
 /// The middle of a segment's time.
@@ -521,7 +546,7 @@ fn spread_words(segment: &TranscriptSegment) -> Vec<MeetingWord> {
 /// on the computer's sound (#108), whose audio is not retained.
 /// Once echo was heard in the meeting, the new microphone text that only repeats the computer's
 /// sound is dropped (#108). A window whose new text lost a sentence the live text had keeps the
-/// live text (`keep_live_where_the_pass_lost_speech`).
+/// live text in that chunk (`keep_live_where_the_pass_lost_speech`).
 /// Side effects: Runs inference and rewrites the meeting's segments, which also updates the
 /// meeting's synced document. Nothing is written until every window is done.
 pub fn refine_meeting<Engine, Repository>(
@@ -553,7 +578,7 @@ where
     let standing = repository.load_transcript_segments(meeting_id)?;
     let (words, kept_live) = keep_live_where_the_pass_lost_speech(words, &spans, &standing);
     if kept_live > 0 {
-        tracing::info!(meeting_id = %meeting_id.as_str(), window_count = kept_live, "The pass lost speech in some windows; their live text stands");
+        tracing::info!(meeting_id = %meeting_id.as_str(), chunk_count = kept_live, "The pass lost speech in some chunks; their live text stands");
     }
     let covered = |segment: &TranscriptSegment| {
         let middle = segment.start_time_ms()

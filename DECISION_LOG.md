@@ -4013,11 +4013,18 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   a sentence and wrote the next one over its time, then wrote it again in the next window. The
   same skip happened offline on the same audio (a different sentence), so the single-device pass
   (#87) can lose speech too.
-- **Decision:** `keep_live_where_the_pass_lost_speech`. For each retained chunk whose live text
-  has at least 6 words, the pass must write at least half of them there (compared without case
-  or punctuation); otherwise its whole window keeps the live text, spread evenly over each live
-  segment. It runs in the single pass and on each recording before combining. It needs no extra
-  inference. Short live texts (a few words, possibly a hallucination the pass dropped) never veto.
+- **Decision:** `keep_live_where_the_pass_lost_speech`. A retained chunk whose live text has at
+  least 6 words is judged. If the pass wrote at least half of those words there (compared without
+  case or punctuation), it stands. Otherwise the chunk keeps its live text (spread evenly over
+  each live segment) when the pass wrote under half as many words there, or mostly wrote a
+  neighbouring chunk's words (its pass or live text: a sentence moved over the skipped one). A
+  pass with its own full text there stands, since then the live text is the wrong one; the
+  second run showed a live chunk transcribed in Portuguese. It runs in the single pass and on
+  each recording before combining, with no extra inference. Short live texts never veto.
+- **Measured (second run, same setup):** every sentence was in the combined text, once. The
+  first version restored whole 30 s windows, 4 of 6 per recording, bringing back the Portuguese
+  live chunk; replayed on B's recording, the per-chunk rule restores exactly the three chunks
+  where `base` lost speech (0 of 18, 4 of 23 and 1 of 22 live words kept).
 - **Still seen in the test, not changed:** a few words repeated where one person's turn ends and
   the other's begins (each device's speaker pass labels the border word differently), and one
   voice split into two speakers by the speaker pass (also on the single recording).

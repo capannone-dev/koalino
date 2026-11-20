@@ -14,7 +14,7 @@
 //!    speech each device keeps the person near it;
 //! 5. a word written for both devices within a second is kept once.
 //!
-//! Before that, a window of one recording that lost a sentence its own text had keeps that text
+//! Before that, a chunk of one recording that lost a sentence its own text had keeps that text
 //! (`keep_live_where_the_pass_lost_speech`), as in the single pass.
 //!
 //! On NOTSOFAR, where every device stands far from everyone, choosing a device per speaker was
@@ -297,11 +297,11 @@ where
             .load_transcript_segments(&recording.meeting_id)?
             .into_iter()
             .partition(|segment| segment.source() == SegmentSource::ComputerSound);
-        // A window that lost a sentence this recording's own text had keeps that text.
+        // A chunk that lost a sentence this recording's own text had keeps that text.
         let spans: Vec<ChunkSpan> = recording.chunks.iter().map(|chunk| chunk.span).collect();
         let (words, kept_live) = keep_live_where_the_pass_lost_speech(words, &spans, &speakers);
         if kept_live > 0 {
-            tracing::info!(meeting_id = %recording.meeting_id.as_str(), window_count = kept_live, "The pass lost speech in some windows; their live text stands");
+            tracing::info!(meeting_id = %recording.meeting_id.as_str(), chunk_count = kept_live, "The pass lost speech in some chunks; their live text stands");
         }
         let offset_ms = match &root_words {
             None => 0,
