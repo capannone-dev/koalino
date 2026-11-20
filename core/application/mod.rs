@@ -165,6 +165,10 @@ mod screen_share_monitor_tests;
 pub mod search;
 #[cfg(test)]
 mod search_tests;
+/// Copies the owner's summary and chat prompts to paired devices, sealed (#145).
+pub mod shared_prompts_exchange;
+#[cfg(test)]
+mod shared_prompts_exchange_tests;
 /// Decides which screen frames are new slides (Issue #49).
 pub mod slide_change_detector;
 #[cfg(test)]

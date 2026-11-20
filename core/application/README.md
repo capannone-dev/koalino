@@ -134,6 +134,11 @@ a meeting being recorded and removes private attachment files. `remove_leftover_
 the app and the daemon start, before P2P (#83): in each finished recording whose transcript points
 at a final-pass voice, it deletes, with deletion records, the unknown voices no line points at.
 
+`shared_prompts_exchange.rs` (#145) encodes the `NTO1` messages that copy the owner's summary and
+chat prompts, sealed with the pair key; the receiver checks each prompt and keeps the newest edit
+of each (`SharedPrompts::merge`). `NTS1` was taken by the meeting sync envelope; a test checks the
+headers do not overlap.
+
 `deletion_exchange.rs` encodes the `NTD1` messages listing deleted meetings and unknown voices. They
 hold identifiers only. `P2pService` sends them whenever a device has not had every record, and
 `RepositorySyncManager` drops sync messages about a deleted meeting.

@@ -64,6 +64,9 @@ use crate::{
             is_project_library_message,
         },
         repository_sync_manager::{RepositorySyncManager, RepositorySyncManagerError},
+        shared_prompts_exchange::{
+            decode_shared_prompts_message, encode_shared_prompts_message, is_shared_prompts_message,
+        },
         speech_transfer_exchange::{is_speech_part, is_speech_receipt},
         transcription_exchange::{
             TranscriptionRequest, TranscriptionResponse, decode_transcription_request,
@@ -76,6 +79,7 @@ use crate::{
             decode_voice_library_message, encode_voice_library_messages, is_voice_library_message,
         },
     },
+    domain::shared_prompts::SharedPrompts,
     domain::{
         errors::{StorageError, TranscriptionError},
         models::{
@@ -92,6 +96,7 @@ use crate::{
         remote_transcription::{
             FinishedTranscription, HostedTranscription, TranscriptionHost, TranscriptionRouteStore,
         },
+        shared_prompts::SharedPromptsSync,
         storage::NoteRepository,
         voice::VoiceLibrarySync,
     },
@@ -500,6 +505,10 @@ pub struct P2pService<Transport, Store, Repository> {
     project_library: Option<Box<dyn ProjectLibrarySync>>,
     /// The project-list digest each connected device was last sent.
     shared_project_digests: HashMap<DeviceId, [u8; 32]>,
+    /// The owner's prompts to keep in step with paired devices (#145); `None` leaves them here.
+    shared_prompts: Option<Box<dyn SharedPromptsSync>>,
+    /// The prompts each connected device was last sent.
+    sent_prompts: HashMap<DeviceId, SharedPrompts>,
 }
 
 impl<Transport, Store, Repository> P2pService<Transport, Store, Repository>
@@ -549,6 +558,8 @@ where
             shared_voice_digests: HashMap::new(),
             project_library: None,
             shared_project_digests: HashMap::new(),
+            shared_prompts: None,
+            sent_prompts: HashMap::new(),
         }
     }
 
@@ -576,6 +587,16 @@ where
     /// Inputs: The project list. Outputs: The service. Side effects: None until devices connect.
     pub fn with_project_library(mut self, project_library: Box<dyn ProjectLibrarySync>) -> Self {
         self.project_library = Some(project_library);
+        self
+    }
+
+    /// Keeps the owner's summary and chat prompts in step with paired devices (#145). It needs a
+    /// pair agreement secret too, since the prompts travel only under a pair key.
+    ///
+    /// Inputs: Where this device keeps its prompts. Outputs: The service. Side effects: None
+    /// until devices connect.
+    pub fn with_shared_prompts(mut self, shared_prompts: Box<dyn SharedPromptsSync>) -> Self {
+        self.shared_prompts = Some(shared_prompts);
         self
     }
 
@@ -680,6 +701,7 @@ where
         self.retry_held_shares();
         self.share_voice_library();
         self.share_project_library();
+        self.share_prompts();
         self.share_attachments();
         self.expire_pending_transcriptions();
         self.expire_pending_speech();
@@ -839,6 +861,10 @@ where
                     self.accept_project_library(peer_device_id, payload);
                     return;
                 }
+                if is_shared_prompts_message(payload) {
+                    self.accept_prompts(peer_device_id, payload);
+                    return;
+                }
                 if is_cluster_share_message(payload) {
                     self.accept_cluster_share(peer_device_id, payload);
                     return;
@@ -862,6 +888,7 @@ where
                 self.shared_clusters.remove(peer_device_id);
                 self.shared_voice_digests.remove(peer_device_id);
                 self.shared_project_digests.remove(peer_device_id);
+                self.sent_prompts.remove(peer_device_id);
                 self.shared_deletion_counts.remove(peer_device_id);
                 if let Some(attachment_sync) = self.attachment_sync.as_mut() {
                     attachment_sync.peer_lost(peer_device_id);
@@ -876,6 +903,7 @@ where
             NetworkEvent::DeliveryFailed(peer_device_id) => {
                 self.shared_voice_digests.remove(peer_device_id);
                 self.shared_project_digests.remove(peer_device_id);
+                self.sent_prompts.remove(peer_device_id);
                 self.shared_deletion_counts.remove(peer_device_id);
                 if let Some(attachment_sync) = self.attachment_sync.as_mut() {
                     attachment_sync.forget_shared(peer_device_id);
@@ -1238,6 +1266,124 @@ where
                     "the project list could not be sent"
                 ),
             }
+        }
+    }
+
+    /// Sends the owner's prompts to every connected device that was not sent them as they are now.
+    ///
+    /// Side effects: Reads the prompts each call and, when a device needs them, sends a sealed
+    /// message. Failures are logged without the prompts and retried next call.
+    fn share_prompts(&mut self) {
+        if self.connected_peers.is_empty() || self.pair_agreement_secret.is_none() {
+            return;
+        }
+        let Some(shared_prompts) = self.shared_prompts.as_ref() else {
+            return;
+        };
+        let prompts = match shared_prompts.shared_prompts() {
+            Ok(prompts) => prompts,
+            Err(error) => {
+                tracing::warn!(error = %error, "the shared prompts could not be read");
+                return;
+            }
+        };
+        let waiting: Vec<DeviceId> = self
+            .connected_peers
+            .iter()
+            .filter(|peer| self.sent_prompts.get(*peer) != Some(&prompts))
+            .cloned()
+            .collect();
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        for peer_device_id in waiting {
+            let pair_key = match self.pairing_manager.store().pair_key(&peer_device_id) {
+                Ok(Some(pair_key)) => pair_key,
+                Ok(None) => continue,
+                Err(error) => {
+                    tracing::warn!(
+                        peer = %peer_device_id.as_str(),
+                        error = %error,
+                        "the pair key could not be loaded"
+                    );
+                    continue;
+                }
+            };
+            let message = match encode_shared_prompts_message(
+                &prompts,
+                &pair_key,
+                &local_peer_id,
+                &peer_device_id,
+            ) {
+                Ok(message) => message,
+                Err(error) => {
+                    tracing::warn!(error = %error, "the shared prompts could not be sealed");
+                    continue;
+                }
+            };
+            match self
+                .pairing_manager
+                .transport_mut()
+                .send_encrypted(&peer_device_id, &message)
+            {
+                Ok(()) => {
+                    self.sent_prompts.insert(peer_device_id, prompts.clone());
+                }
+                Err(error) => tracing::warn!(
+                    peer = %peer_device_id.as_str(),
+                    error = %error,
+                    "the shared prompts could not be sent"
+                ),
+            }
+        }
+    }
+
+    /// Opens and merges the prompts `peer_device_id` sent.
+    ///
+    /// Side effects: May change this device's summary and chat prompts. A message from a device
+    /// without an agreed pair key, or one that fails to open or merge, is logged (peer ID only)
+    /// and dropped.
+    fn accept_prompts(&mut self, peer_device_id: &DeviceId, payload: &[u8]) {
+        let Some(shared_prompts) = self.shared_prompts.as_ref() else {
+            return;
+        };
+        let pair_key = match self.pairing_manager.store().pair_key(peer_device_id) {
+            Ok(Some(pair_key)) => pair_key,
+            Ok(None) => {
+                tracing::warn!(
+                    peer = %peer_device_id.as_str(),
+                    "shared prompts arrived before the pair key was agreed and were dropped"
+                );
+                self.ask_for_pair_key(peer_device_id);
+                return;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    peer = %peer_device_id.as_str(),
+                    error = %error,
+                    "the pair key could not be loaded"
+                );
+                return;
+            }
+        };
+        let local_peer_id = self.pairing_manager.transport().local_peer_id();
+        let merged =
+            decode_shared_prompts_message(payload, &pair_key, peer_device_id, &local_peer_id)
+                .map_err(|error| error.to_string())
+                .and_then(|prompts| {
+                    shared_prompts
+                        .merge_shared_prompts(&prompts)
+                        .map_err(|error| error.to_string())
+                });
+        match merged {
+            Ok(true) => tracing::info!(
+                peer = %peer_device_id.as_str(),
+                "took newer prompts from a paired device"
+            ),
+            Ok(false) => {}
+            Err(error) => tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                error = %error,
+                "shared prompts were rejected"
+            ),
         }
     }
 
@@ -1909,6 +2055,7 @@ where
         self.shared_clusters.remove(peer_device_id);
         self.shared_voice_digests.remove(peer_device_id);
         self.shared_project_digests.remove(peer_device_id);
+        self.sent_prompts.remove(peer_device_id);
         self.shared_deletion_counts.remove(peer_device_id);
         if let Some(attachment_sync) = self.attachment_sync.as_mut() {
             attachment_sync.forget_shared(peer_device_id);

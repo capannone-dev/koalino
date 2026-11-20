@@ -325,8 +325,9 @@ closure that reads `keeps_meeting_voices` at every offer. An old saved OpenAI ch
 and dropped at the next save (#117). `device_resources.rs` reads free disk space and total memory.
 
 `llm_settings.rs` keeps the language model settings (#95, #101) in `<db>.llm-settings.json`: the
-connections, the default one (the only connection when there is one), the summary template (the
-built-in one until the owner writes their own), and whether meetings are summarized
+connections, the default one (the only connection when there is one), the summary template and
+the chat prompt (the built-in ones until the owner writes their own; each notes when it changed,
+and `FileSharedPrompts` keeps both in step with paired devices, #145), and whether meetings are summarized
 automatically, which is on until the owner opts out, and which connection answers paired
 devices' summary requests (#107; none until the owner chooses one). Entries edited by hand into something
 invalid, or of a removed kind such as `anthropic`, are dropped when read. API keys of online

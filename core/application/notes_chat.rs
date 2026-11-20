@@ -18,6 +18,7 @@ use crate::{
         },
         errors::LlmError,
         llm::{LlmConnection, LlmImage, LlmRequest, LlmRole, LlmTurn},
+        shared_prompts::{ChatPrompt, DEFAULT_CHAT_PROMPT},
     },
     ports::ai::LlmEngine,
 };
@@ -30,6 +31,10 @@ const MAX_ANSWER_TOKENS: u32 = 2_048;
 const IMAGE_TOKENS: usize = 1_600;
 /// Tokens kept for the instructions' own wording.
 const FRAMING_TOKENS: usize = 400;
+/// How the model must cite the material; the app turns `[n]` into links, so the owner's chat
+/// prompt (#145) does not replace it.
+const CITATION_RULE: &str = "Each piece of material has a number; cite where each statement \
+     comes from right after it, as [n], or as [n, hh:mm:ss] for a moment in a transcript.";
 
 /// One piece of material the model may be given.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -231,16 +236,39 @@ fn recent_turns(history: &[ChatMessage], budget_chars: usize) -> Vec<LlmTurn> {
     turns
 }
 
-/// Asks the model a question about the material.
+/// Asks the model a question about the material, framed by the built-in chat prompt.
 ///
-/// Inputs: The engine for `connection`, the material, the chat so far, and the question.
+/// Inputs, outputs and side effects: As `ask_with_prompt`.
+pub fn ask(
+    engine: &dyn LlmEngine,
+    connection: &LlmConnection,
+    material: ChatMaterial,
+    history: &[ChatMessage],
+    question: &str,
+) -> Result<ChatReply, ChatError> {
+    ask_with_prompt(
+        engine,
+        connection,
+        &ChatPrompt::default(),
+        material,
+        history,
+        question,
+    )
+}
+
+/// Asks the model a question about the material, framed by the owner's chat prompt (#145).
+///
+/// Inputs: The engine for `connection`, the chat prompt (filled in with what is asked about;
+/// the rule to cite the material by number always follows it), the material, the chat so far,
+/// and the question.
 /// Outputs: The answer with what was included, or why there is none. Side effects: Sends the
 /// question, the recent turns and the material that fits to the connection's server; a server
 /// that cannot read images is asked once more without them. Blocks: run it on a background
 /// thread.
-pub fn ask(
+pub fn ask_with_prompt(
     engine: &dyn LlmEngine,
     connection: &LlmConnection,
+    prompt: &ChatPrompt,
     material: ChatMaterial,
     history: &[ChatMessage],
     question: &str,
@@ -272,7 +300,16 @@ pub fn ask(
     let image_tokens = images.len() * IMAGE_TOKENS;
     let mut room_tokens = context_tokens
         .saturating_sub(answer_tokens as usize + FRAMING_TOKENS)
-        .saturating_sub(question.chars().count() / CHARACTERS_PER_TOKEN);
+        .saturating_sub(question.chars().count() / CHARACTERS_PER_TOKEN)
+        // The owner's chat prompt beyond what the framing allowance covers (#145).
+        .saturating_sub(
+            prompt
+                .as_str()
+                .chars()
+                .count()
+                .saturating_sub(DEFAULT_CHAT_PROMPT.chars().count())
+                / CHARACTERS_PER_TOKEN,
+        );
     if image_tokens > room_tokens / 2 {
         // Images never take more than half the room.
         let keep = (room_tokens / 2) / IMAGE_TOKENS;
@@ -312,14 +349,10 @@ pub fn ask(
             None => omitted.push(item.label.clone()),
         }
     }
+    // The owner's framing, then the citation rule the app relies on to link sources.
     let mut system = format!(
-        "You answer the owner's questions about {}, using only the material below from their \
-         note-taking app: transcripts ([hh:mm:ss] Speaker: text), summaries, notes and files. \
-         When the material does not hold the answer, say so. Each piece of material has a \
-         number; cite where each statement comes from right after it, as [n], or as \
-         [n, hh:mm:ss] for a moment in a transcript. Answer in the language of the question, \
-         in Markdown.",
-        material.description
+        "{}\n\n{CITATION_RULE}",
+        prompt.render(&material.description).trim()
     );
     if !omitted.is_empty() {
         system.push_str(&format!(

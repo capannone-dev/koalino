@@ -4086,3 +4086,21 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   in (simulated with `cmd battery`) started the job in a new process; it opened the encrypted
   database and finished. With Power saving on it waited until Koalino was exempt.
 
+
+
+## The summary and chat prompts are the owner's, on every paired device (#145; 2026-11-20)
+- **Context:** the summary prompt was editable but kept per device in `<db>.llm-settings.json`;
+  the chat instructions were fixed. The owner wants to edit both and see the same on every device.
+- **Decision:** the chat prompt is the chat's framing paragraph, with `{{scope}}`; the rule to
+  cite the material as `[n]` stays fixed after it, since the app links answers to sources by
+  those numbers. Both prompts stay in the settings file, each with the time it last changed. The
+  P2P service sends them in a sealed `NTO1` message to each connected paired device whenever
+  they differ from what that device was last sent; the receiver keeps the newer version of each
+  (equal times: the larger text, so every device ends the same). A reset to the built-in prompt
+  is an edit and syncs too. A settings file that cannot be read is never written over by a merge,
+  so the owner's connections cannot be lost.
+- **Rejected:** keeping the prompts in an Automerge document. Two short texts with a
+  last-edit-wins rule need no character merge, and the settings file already holds them.
+- **Lesson:** `NTS1`, chosen first, was already the meeting sync envelope, and taking those
+  messages for prompts stopped every meeting from syncing. A test now checks that the prompts
+  header does not overlap the others.

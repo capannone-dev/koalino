@@ -211,3 +211,87 @@ fn with_the_keychain_turned_off_api_keys_never_reach_the_platform_keychain() {
         "no key is written without a sealing key"
     );
 }
+
+/// The chat prompt (#145) is the built-in one until the owner writes one; each prompt notes
+/// when it last changed, a reset to the built-in prompt included, so paired devices can tell the
+/// newest edit.
+#[test]
+fn the_chat_prompt_and_both_prompts_change_times_are_kept() {
+    let file = folder("chat-prompt").join("settings.json");
+    let mut settings = load_llm_settings(&file);
+    assert_eq!(
+        settings.chat_prompt().as_str(),
+        crate::domain::shared_prompts::DEFAULT_CHAT_PROMPT
+    );
+    assert!(!settings.has_custom_chat_prompt());
+    assert_eq!(settings.shared_prompts().chat.changed_at_ms, 0);
+
+    let refused = settings.set_chat_prompt(Some("About {{title}}"));
+    assert!(refused.is_err());
+    settings
+        .set_chat_prompt(Some("Brief answers about {{scope}}."))
+        .unwrap_or_else(|e| panic!("{e}"));
+    settings
+        .set_template(Some("Only decisions."))
+        .unwrap_or_else(|e| panic!("{e}"));
+    save_llm_settings(&file, &settings).unwrap_or_else(|e| panic!("{e}"));
+
+    let mut reloaded = load_llm_settings(&file);
+    assert_eq!(
+        reloaded.chat_prompt().as_str(),
+        "Brief answers about {{scope}}."
+    );
+    let prompts = reloaded.shared_prompts();
+    assert!(prompts.chat.changed_at_ms > 0);
+    assert!(prompts.summary.changed_at_ms > 0);
+    assert_eq!(prompts.summary.text.as_deref(), Some("Only decisions."));
+
+    reloaded
+        .set_chat_prompt(None)
+        .unwrap_or_else(|e| panic!("{e}"));
+    let reset = reloaded.shared_prompts().chat;
+    assert_eq!(reset.text, None);
+    assert!(reset.changed_at_ms >= prompts.chat.changed_at_ms);
+}
+
+/// Another device's newer prompts are written to the file, and the rest of the settings stay; a
+/// damaged file is not overwritten, so its connections are not lost.
+#[test]
+fn a_paired_devices_prompts_merge_into_the_settings_file() {
+    use super::llm_settings::FileSharedPrompts;
+    use crate::{
+        domain::shared_prompts::{PromptVersion, SharedPrompts},
+        ports::shared_prompts::SharedPromptsSync,
+    };
+
+    let file = folder("merge-prompts").join("settings.json");
+    let mut settings = SavedLlmSettings::default();
+    settings.upsert_connection(local("office"));
+    save_llm_settings(&file, &settings).unwrap_or_else(|e| panic!("{e}"));
+    let store = FileSharedPrompts::new(file.clone());
+    let incoming = SharedPrompts {
+        summary: PromptVersion {
+            text: Some("Decisions of {{title}}.".to_owned()),
+            changed_at_ms: 5,
+        },
+        chat: PromptVersion {
+            text: Some("One line about {{scope}}.".to_owned()),
+            changed_at_ms: 6,
+        },
+    };
+
+    assert_eq!(store.merge_shared_prompts(&incoming).ok(), Some(true));
+    assert_eq!(store.merge_shared_prompts(&incoming).ok(), Some(false));
+    let merged = load_llm_settings(&file);
+    assert_eq!(merged.template().as_str(), "Decisions of {{title}}.");
+    assert_eq!(merged.chat_prompt().as_str(), "One line about {{scope}}.");
+    assert_eq!(merged.connections().len(), 1);
+    assert_eq!(store.shared_prompts().ok(), Some(incoming.clone()));
+
+    std::fs::write(&file, b"{ damaged").unwrap_or_else(|e| panic!("{e}"));
+    assert!(store.merge_shared_prompts(&incoming).is_err());
+    assert_eq!(
+        std::fs::read(&file).unwrap_or_default(),
+        b"{ damaged".to_vec()
+    );
+}

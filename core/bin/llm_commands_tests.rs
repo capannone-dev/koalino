@@ -555,3 +555,36 @@ fn without_a_keyring_a_key_is_refused() {
     );
     assert_eq!(refused["error_code"], "keychain_failed");
 }
+
+/// The chat prompt (#145) is shown and changed like the summary template: the built-in one
+/// until the owner writes one, `null` going back to it, and a wrong placeholder refused.
+#[test]
+fn the_chat_prompt_is_shown_and_changed() {
+    let (services, _) = services("chat-prompt");
+    let settings = run(&services, json!({"command": "settings"}));
+    assert_eq!(
+        settings["chat_prompt"],
+        crate::domain::shared_prompts::DEFAULT_CHAT_PROMPT
+    );
+    assert_eq!(settings["default_chat_prompt"], settings["chat_prompt"]);
+    assert_eq!(settings["custom_chat_prompt"], false);
+    assert_eq!(settings["chat_placeholders"], json!(["scope"]));
+
+    let updated = run(
+        &services,
+        json!({"command": "update", "chat_prompt": "Short answers about {{scope}}."}),
+    );
+    assert_eq!(updated["chat_prompt"], "Short answers about {{scope}}.");
+    assert_eq!(updated["custom_chat_prompt"], true);
+    // The summary template is left alone.
+    assert_eq!(updated["custom_template"], false);
+
+    let bad = run(
+        &services,
+        json!({"command": "update", "chat_prompt": "About {{title}}"}),
+    );
+    assert_eq!(bad["error_code"], "invalid_chat_prompt");
+
+    let reset = run(&services, json!({"command": "update", "chat_prompt": null}));
+    assert_eq!(reset["custom_chat_prompt"], false);
+}

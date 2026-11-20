@@ -42,6 +42,10 @@ code whisper.cpp knows.
 `network_addresses.rs` holds the relay and static peer addresses, and the pairing invite's text form.
 Invite text is untrusted, so parsing bounds every part (Issues #64 and #65).
 
+`shared_prompts.rs` (#145) defines the prompts paired devices share: `ChatPrompt` (the chat's
+framing paragraph, with `{{scope}}`) and `SharedPrompts`, each prompt's text (`None` for the
+built-in one) with when it changed; `merge` keeps the newest, so every device ends the same.
+
 `projects.rs` (Issue #85) defines projects, folders of meetings and resources: `ProjectId`, `ProjectName` (1–200
 characters, trimmed, no control characters), `Project` with the rule paired devices use to agree on a name
 (`supersedes`: newest change, then greater name), and `ProjectTombstone`, the deletion record that always wins. Projects nest (#142): each has a parent with its own

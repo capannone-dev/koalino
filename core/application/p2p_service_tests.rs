@@ -1805,3 +1805,99 @@ async fn a_computer_without_chat_declines_the_question() {
     let result = ask_chat(&mut laptop, &mut phone).await;
     assert_eq!(result, Some(Err("llm_unreachable".to_owned())));
 }
+
+/// Prompts kept in memory, as a host keeps them with its settings (#145).
+#[derive(Clone, Default)]
+struct MemoryPrompts(Arc<Mutex<crate::domain::shared_prompts::SharedPrompts>>);
+
+impl MemoryPrompts {
+    fn get(&self) -> crate::domain::shared_prompts::SharedPrompts {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    fn set(&self, prompts: crate::domain::shared_prompts::SharedPrompts) {
+        *self.0.lock().unwrap_or_else(PoisonError::into_inner) = prompts;
+    }
+}
+
+impl crate::ports::shared_prompts::SharedPromptsSync for MemoryPrompts {
+    fn shared_prompts(
+        &self,
+    ) -> Result<crate::domain::shared_prompts::SharedPrompts, crate::domain::errors::StorageError>
+    {
+        Ok(self.get())
+    }
+
+    fn merge_shared_prompts(
+        &self,
+        incoming: &crate::domain::shared_prompts::SharedPrompts,
+    ) -> Result<bool, crate::domain::errors::StorageError> {
+        Ok(self
+            .0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .merge(incoming))
+    }
+}
+
+/// A prompt version with text.
+fn prompt_version(
+    text: Option<&str>,
+    changed_at_ms: u64,
+) -> crate::domain::shared_prompts::PromptVersion {
+    crate::domain::shared_prompts::PromptVersion {
+        text: text.map(str::to_owned),
+        changed_at_ms,
+    }
+}
+
+/// The owner's summary prompt edited on the laptop and chat prompt edited on the phone reach
+/// both devices (#145); a later reset to the built-in chat prompt reaches the phone too.
+#[tokio::test]
+async fn prompts_reach_paired_devices() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9614"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let (on_laptop, on_phone) = (MemoryPrompts::default(), MemoryPrompts::default());
+    on_laptop.set(crate::domain::shared_prompts::SharedPrompts {
+        summary: prompt_version(Some("Only decisions for {{title}}."), 2_000),
+        chat: prompt_version(Some("Old chat about {{scope}}."), 1_000),
+    });
+    on_phone.set(crate::domain::shared_prompts::SharedPrompts {
+        summary: prompt_version(None, 0),
+        chat: prompt_version(Some("Short answers about {{scope}}."), 3_000),
+    });
+    let (laptop, _laptop_database) = service_with_database("Laptop", laptop_adapter);
+    let (phone, _phone_database) = service_with_database("Phone", phone_adapter);
+    let mut laptop = laptop
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_shared_prompts(Box::new(on_laptop.clone()));
+    let mut phone = phone
+        .with_pair_agreement_secret(PairAgreementSecret::generate())
+        .with_shared_prompts(Box::new(on_phone.clone()));
+
+    pair(&mut laptop, &mut phone, phone_address).await;
+    let expected = crate::domain::shared_prompts::SharedPrompts {
+        summary: prompt_version(Some("Only decisions for {{title}}."), 2_000),
+        chat: prompt_version(Some("Short answers about {{scope}}."), 3_000),
+    };
+    drive(&mut laptop, &mut phone, |_, _| {
+        on_laptop.get() == expected && on_phone.get() == expected
+    })
+    .await;
+
+    let mut reset = on_laptop.get();
+    reset.chat = prompt_version(None, 4_000);
+    on_laptop.set(reset.clone());
+    drive(&mut laptop, &mut phone, |_, _| on_phone.get() == reset).await;
+}

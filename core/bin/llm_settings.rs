@@ -1,6 +1,7 @@
 //! Keeps the owner's language model settings (#95, #101): the connections, the default one, the
-//! summary template, whether meetings are summarized automatically, and which connection answers
-//! paired devices' summary requests (#107).
+//! summary template and chat prompt (shared with paired devices since #145, through
+//! `FileSharedPrompts`), whether meetings are summarized automatically, and which connection
+//! answers paired devices' summary requests (#107).
 //!
 //! The settings live per device in `<db>.llm-settings.json`, beside the transcription settings.
 //! API keys never do (#138): an online connection's key is kept in the platform keychain under
@@ -20,10 +21,11 @@ use crate::{
         platform_keychain::PlatformKeychain, sealed_file_keychain::SealedFileKeychain,
     },
     domain::{
-        errors::CryptoError,
+        errors::{CryptoError, StorageError},
         llm::{LlmConnection, PromptTemplate, PromptTemplateError},
+        shared_prompts::{ChatPrompt, PromptVersion, SharedPrompts},
     },
-    ports::crypto::KeychainStore,
+    ports::{crypto::KeychainStore, shared_prompts::SharedPromptsSync},
 };
 
 /// Why a default could not be chosen.
@@ -46,6 +48,15 @@ pub struct SavedLlmSettings {
     /// The owner's summary template; `None` uses the built-in one.
     #[serde(default)]
     summary_template: Option<String>,
+    /// When the summary template last changed, in Unix milliseconds; 0 when never (#145).
+    #[serde(default)]
+    summary_template_changed_at_ms: u64,
+    /// The owner's chat prompt (#145); `None` uses the built-in one.
+    #[serde(default)]
+    chat_prompt: Option<String>,
+    /// When the chat prompt last changed, in Unix milliseconds; 0 when never.
+    #[serde(default)]
+    chat_prompt_changed_at_ms: u64,
     /// Summarize each meeting once its transcript is final (#101); the owner can opt out.
     #[serde(default = "automatic_summaries_by_default")]
     auto_summarize: bool,
@@ -78,6 +89,9 @@ impl Default for SavedLlmSettings {
             connections: Vec::new(),
             default_connection: None,
             summary_template: None,
+            summary_template_changed_at_ms: 0,
+            chat_prompt: None,
+            chat_prompt_changed_at_ms: 0,
             auto_summarize: automatic_summaries_by_default(),
             paired_summary_connection: None,
         }
@@ -177,12 +191,73 @@ impl SavedLlmSettings {
     /// Stores the owner's template, or goes back to the built-in one with `None`.
     ///
     /// Outputs: The template's problem, if any. Side effects: Changes these settings only.
+    /// Side effects: Changes these settings only; notes the time of the change, so paired devices
+    /// keep the newest prompt (#145).
     pub fn set_template(&mut self, text: Option<&str>) -> Result<(), PromptTemplateError> {
         self.summary_template = match text {
             Some(text) => Some(PromptTemplate::parse(text)?.as_str().to_owned()),
             None => None,
         };
+        self.summary_template_changed_at_ms = now_ms();
         Ok(())
+    }
+
+    /// Returns the chat prompt (#145): the owner's, or the built-in one. Side effects: None.
+    pub fn chat_prompt(&self) -> ChatPrompt {
+        self.chat_prompt
+            .as_deref()
+            .and_then(|text| ChatPrompt::parse(text).ok())
+            .unwrap_or_default()
+    }
+
+    /// Reports whether the owner wrote their own chat prompt. Side effects: None.
+    pub fn has_custom_chat_prompt(&self) -> bool {
+        self.chat_prompt.is_some()
+    }
+
+    /// Stores the owner's chat prompt, or goes back to the built-in one with `None`.
+    ///
+    /// Outputs: The prompt's problem, if any. Side effects: Changes these settings only; notes
+    /// the time of the change.
+    pub fn set_chat_prompt(&mut self, text: Option<&str>) -> Result<(), PromptTemplateError> {
+        self.chat_prompt = match text {
+            Some(text) => Some(ChatPrompt::parse(text)?.as_str().to_owned()),
+            None => None,
+        };
+        self.chat_prompt_changed_at_ms = now_ms();
+        Ok(())
+    }
+
+    /// Returns both prompts with when they changed, as paired devices exchange them (#145).
+    ///
+    /// Side effects: None.
+    pub fn shared_prompts(&self) -> SharedPrompts {
+        SharedPrompts {
+            summary: PromptVersion {
+                text: self.summary_template.clone(),
+                changed_at_ms: self.summary_template_changed_at_ms,
+            },
+            chat: PromptVersion {
+                text: self.chat_prompt.clone(),
+                changed_at_ms: self.chat_prompt_changed_at_ms,
+            },
+        }
+    }
+
+    /// Keeps the newer version of each prompt a paired device sent.
+    ///
+    /// Inputs: The device's prompts, already checked. Outputs: Whether a prompt changed.
+    /// Side effects: Changes these settings only.
+    pub fn merge_shared_prompts(&mut self, incoming: &SharedPrompts) -> bool {
+        let mut prompts = self.shared_prompts();
+        if !prompts.merge(incoming) {
+            return false;
+        }
+        self.summary_template = prompts.summary.text;
+        self.summary_template_changed_at_ms = prompts.summary.changed_at_ms;
+        self.chat_prompt = prompts.chat.text;
+        self.chat_prompt_changed_at_ms = prompts.chat.changed_at_ms;
+        true
     }
 
     /// Reports whether meetings are summarized automatically. Side effects: None.
@@ -243,6 +318,14 @@ impl SavedLlmSettings {
             tracing::warn!("ignored a summary template that is no longer valid");
             self.summary_template = None;
         }
+        if self
+            .chat_prompt
+            .as_deref()
+            .is_some_and(|text| ChatPrompt::parse(text).is_err())
+        {
+            tracing::warn!("ignored a chat prompt that is no longer valid");
+            self.chat_prompt = None;
+        }
         if self.chosen_default_id().is_none() {
             self.default_connection = None;
         }
@@ -272,6 +355,67 @@ pub fn load_llm_settings(settings_file: &Path) -> SavedLlmSettings {
         .and_then(|bytes| serde_json::from_slice::<SavedLlmSettings>(&bytes).ok())
         .unwrap_or_default()
         .revalidated()
+}
+
+/// Reads the settings, telling a damaged file apart from a missing one.
+///
+/// Inputs: The JSON file's path. Outputs: The settings (none for a missing file), or the error
+/// for a file that cannot be read or parsed. Side effects: Reads the file.
+fn load_llm_settings_strictly(settings_file: &Path) -> io::Result<SavedLlmSettings> {
+    match fs::read(settings_file) {
+        Ok(bytes) => serde_json::from_slice::<SavedLlmSettings>(&bytes)
+            .map(SavedLlmSettings::revalidated)
+            .map_err(io::Error::other),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(SavedLlmSettings::default()),
+        Err(error) => Err(error),
+    }
+}
+
+/// The prompts paired devices share, kept in the settings file (#145).
+pub struct FileSharedPrompts {
+    settings_file: PathBuf,
+}
+
+impl FileSharedPrompts {
+    /// Uses the settings file at `settings_file`. Side effects: None.
+    pub fn new(settings_file: PathBuf) -> Self {
+        Self { settings_file }
+    }
+}
+
+impl SharedPromptsSync for FileSharedPrompts {
+    /// Side effects: Reads the settings file; a damaged one is an error.
+    fn shared_prompts(&self) -> Result<SharedPrompts, StorageError> {
+        load_llm_settings_strictly(&self.settings_file)
+            .map(|settings| settings.shared_prompts())
+            .map_err(|error| StorageError::Rejected {
+                reason: error.to_string(),
+            })
+    }
+
+    /// Side effects: Rewrites the settings file when a prompt changes; never writes over a file
+    /// it could not read, so the owner's connections are not lost.
+    fn merge_shared_prompts(&self, incoming: &SharedPrompts) -> Result<bool, StorageError> {
+        let mut settings = load_llm_settings_strictly(&self.settings_file).map_err(|error| {
+            StorageError::Rejected {
+                reason: error.to_string(),
+            }
+        })?;
+        if !settings.merge_shared_prompts(incoming) {
+            return Ok(false);
+        }
+        save_llm_settings(&self.settings_file, &settings).map_err(|error| {
+            StorageError::Rejected {
+                reason: error.to_string(),
+            }
+        })?;
+        Ok(true)
+    }
+}
+
+/// The current time in Unix milliseconds; 0 if the clock is before 1970.
+fn now_ms() -> u64 {
+    u64::try_from(chrono::Utc::now().timestamp_millis()).unwrap_or_default()
 }
 
 /// Stores the settings.

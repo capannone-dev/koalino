@@ -6,13 +6,14 @@ use std::sync::Mutex;
 use chrono::{TimeZone, Utc};
 
 use super::notes_chat::{
-    ChatError, ChatMaterial, ContextItem, Inclusion, ask, fit_context, relevance,
+    ChatError, ChatMaterial, ContextItem, Inclusion, ask, ask_with_prompt, fit_context, relevance,
 };
 use crate::{
     domain::{
         chat::{ChatMessage, ChatRole},
         errors::LlmError,
         llm::{LlmCompletion, LlmConnection, LlmImage, LlmKind, LlmRequest, LlmRole},
+        shared_prompts::ChatPrompt,
     },
     ports::ai::LlmEngine,
 };
@@ -317,4 +318,35 @@ fn material_is_numbered_and_the_answer_cites_it_as_sources() {
         cited,
         vec![(2, Some(61_000), Some(meeting)), (1, None, None)]
     );
+}
+
+/// The owner's chat prompt (#145) frames the material in place of the built-in one, filled in
+/// with what is asked about; the rule to cite the material by number always follows it.
+#[test]
+fn the_owners_chat_prompt_replaces_the_built_in_one() {
+    let engine = ScriptedEngine::new(vec![answer("Friday [1].")]);
+    let material = ChatMaterial {
+        description: String::from("the meeting \"Review\""),
+        items: vec![ContextItem {
+            label: String::from("Meeting \"Review\""),
+            full: String::from("[00:01:01] Anna: We ship on Friday."),
+            short: None,
+            target: None,
+        }],
+        images: Vec::new(),
+    };
+    let prompt = ChatPrompt::parse("Reply in one line about {{scope}}.")
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    ask_with_prompt(&engine, &connection(8_000), &prompt, material, &[], "When?")
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let system = &engine.seen()[0].system;
+    assert!(
+        system.starts_with("Reply in one line about the meeting \"Review\"."),
+        "{system}"
+    );
+    assert!(!system.contains("You answer the owner's questions"));
+    assert!(system.contains("as [n]"), "{system}");
+    assert!(system.contains("We ship on Friday."));
 }

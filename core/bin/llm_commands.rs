@@ -7,10 +7,10 @@
 //!
 //! | `command` | Fields | Answer |
 //! | --- | --- | --- |
-//! | `settings` | | `connections`, `default_connection`, `template`, `default_template`, `custom_template`, `auto_summarize`, `paired_summary_connection`, `placeholders` |
+//! | `settings` | | `connections`, `default_connection`, `template`, `default_template`, `custom_template`, `auto_summarize`, `paired_summary_connection`, `placeholders`, `chat_prompt`, `default_chat_prompt`, `custom_chat_prompt`, `chat_placeholders` (#145) |
 //! | `save_connection` | `id`? (absent creates), `label`, `kind` (`open_ai_compatible`, `claude_code`, `codex`), `base_url` (not for `claude_code`/`codex`), `model` (optional for those), `context_tokens`, `api_key`? (#138, OpenAI-compatible only), `clear_key`? | `connection` |
 //! | `delete_connection` | `id` | `deleted: true` (its key goes too) |
-//! | `update` | `default_connection`?, `template`? (null resets), `auto_summarize`?, `paired_summary_connection`? (null stops answering paired devices, #107) | the settings |
+//! | `update` | `default_connection`?, `template`? (null resets), `chat_prompt`? (null resets, #145), `auto_summarize`?, `paired_summary_connection`? (null stops answering paired devices, #107) | the settings |
 //! | `test_connection` | `id` | `reply`: the model's answer to a fixed one-line request, which holds no meeting content |
 //!
 //! A connection is shown as `{id,label,kind,base_url,model,context_tokens,plain_http,has_key,
@@ -50,6 +50,7 @@ use crate::{
             DEFAULT_SUMMARY_TEMPLATE, LlmConnection, LlmKind, LlmRequest, LlmRole, LlmTurn,
             MeetingSummary, PLACEHOLDERS, PromptTemplate, SummaryRequest, SummaryRequestState,
         },
+        shared_prompts::{CHAT_SCOPE_PLACEHOLDER, DEFAULT_CHAT_PROMPT},
     },
     ports::ai::LlmEngine,
 };
@@ -352,6 +353,10 @@ pub fn settings_json(services: &LlmServices, settings: &SavedLlmSettings) -> Val
         "auto_summarize": settings.auto_summarize(),
         "paired_summary_connection": settings.paired_summary_connection().map(LlmConnection::id),
         "placeholders": PLACEHOLDERS,
+        "chat_prompt": settings.chat_prompt().as_str(),
+        "default_chat_prompt": DEFAULT_CHAT_PROMPT,
+        "custom_chat_prompt": settings.has_custom_chat_prompt(),
+        "chat_placeholders": [CHAT_SCOPE_PLACEHOLDER],
     })
 }
 
@@ -475,7 +480,8 @@ fn delete_connection(services: &LlmServices, id: &str) -> Result<Value, CommandE
     Ok(json!({"deleted": true}))
 }
 
-/// Changes the default connection, the template and automatic summaries, each only when named.
+/// Changes the default connection, the summary template, the chat prompt (#145) and automatic
+/// summaries, each only when named.
 fn update(services: &LlmServices, request: &Value) -> Result<Value, CommandError> {
     let settings = services.change(|settings| {
         if let Some(default) = request.get("default_connection") {
@@ -487,6 +493,11 @@ fn update(services: &LlmServices, request: &Value) -> Result<Value, CommandError
             settings
                 .set_template(template.as_str())
                 .map_err(|error| CommandError::new("invalid_template", error.to_string()))?;
+        }
+        if let Some(chat_prompt) = request.get("chat_prompt") {
+            settings
+                .set_chat_prompt(chat_prompt.as_str())
+                .map_err(|error| CommandError::new("invalid_chat_prompt", error.to_string()))?;
         }
         if let Some(enabled) = request.get("auto_summarize").and_then(Value::as_bool) {
             settings.set_auto_summarize(enabled);

@@ -45,6 +45,10 @@ mod peer_trust_tests;
 pub mod projects;
 #[cfg(test)]
 mod projects_tests;
+/// Defines the summary and chat prompts paired devices share (#145).
+pub mod shared_prompts;
+#[cfg(test)]
+mod shared_prompts_tests;
 /// Turns the names a call app shows into name suggestions for unknown voices (#113).
 pub mod speaker_names;
 #[cfg(test)]

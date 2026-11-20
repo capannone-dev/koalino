@@ -3,7 +3,7 @@
 //! | Route | Success |
 //! | --- | --- |
 //! | `GET /api/settings/llm` | 200 the settings (see `llm_commands`) |
-//! | `PUT /api/settings/llm` `{"default_connection"?,"template"?,"auto_summarize"?}` | 200 the settings |
+//! | `PUT /api/settings/llm` `{"default_connection"?,"template"?,"chat_prompt"?,"auto_summarize"?}` | 200 the settings |
 //! | `POST /api/settings/llm/connections` | 200 `{"connection"}`, created |
 //! | `PUT /api/settings/llm/connections/{id}` | 200 `{"connection"}`, edited |
 //! | `DELETE /api/settings/llm/connections/{id}` | 200 `{"deleted":true}` |

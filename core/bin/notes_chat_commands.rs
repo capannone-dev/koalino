@@ -34,7 +34,7 @@ use crate::{
         export_manager::{ExportManager, ExportWriter},
         meeting_crdt::MeetingCrdtService,
         meeting_summary::{AttachedDocument, SpokenLine, render_transcript},
-        notes_chat::{ChatError, ChatMaterial, ContextItem, ask, relevance},
+        notes_chat::{ChatError, ChatMaterial, ContextItem, ask_with_prompt, relevance},
         paired_chat_exchange::{
             PairedChatAnswer, PairedChatOutcome, PairedChatRequest, PairedChatTurn,
         },
@@ -671,7 +671,15 @@ pub fn ask_with(
         let engine = services.engine(connection)?;
         let (material, history) = gather()?;
         let asked_at = Utc::now();
-        let reply = ask(engine.as_ref(), connection, material, &history, question)?;
+        // The owner's chat prompt, shared by paired devices (#145).
+        let reply = ask_with_prompt(
+            engine.as_ref(),
+            connection,
+            &settings.chat_prompt(),
+            material,
+            &history,
+            question,
+        )?;
         let messages = [
             ChatMessage::question(question.trim(), asked_at),
             ChatMessage {
@@ -801,9 +809,10 @@ pub fn answer_for_paired_device(
             ..ChatMessage::question(&turn.text, asked_at)
         })
         .collect();
-    match ask(
+    match ask_with_prompt(
         engine.as_ref(),
         connection,
+        &settings.chat_prompt(),
         material,
         &history,
         &request.question,

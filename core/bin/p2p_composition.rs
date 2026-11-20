@@ -68,6 +68,7 @@ use crate::{
         network_addresses::NetworkAddresses,
         peer_trust::DeviceName,
     },
+    llm_settings::{FileSharedPrompts, llm_settings_file_for},
     p2p_network_routes::{NetworkRoutes, run_network_command},
     pipeline_composition::{PipelineConfig, select_transcription_engine},
     ports::{
@@ -716,6 +717,10 @@ fn open_service(
     .with_pair_agreement_secret(pair_agreement_secret)
     .with_voice_library(Box::new(voice_library))
     .with_project_library(Box::new(project_library))
+    // The owner's summary and chat prompts, kept with the AI settings (#145).
+    .with_shared_prompts(Box::new(FileSharedPrompts::new(llm_settings_file_for(
+        database_path,
+    ))))
     .with_attachment_library(Box::new(attachment_library))
     .with_transcription_route_store(Box::new(route_store));
     if let Some(pipeline_config) = hosted_pipeline {
