@@ -2733,4 +2733,43 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get columnWidth => '列宽';
+
+  @override
+  String get subprojects => '子项目';
+
+  @override
+  String get newSubproject => '新建子项目';
+
+  @override
+  String get moveProjectTo => '移动到…';
+
+  @override
+  String get topLevel => '顶层';
+
+  @override
+  String moveProjectTitle(String project) {
+    return '将 $project 移动到';
+  }
+
+  @override
+  String get movedToTopLevel => '已移动到顶层';
+
+  @override
+  String get theProjectCouldNotBeMoved => '无法移动该项目。';
+
+  @override
+  String subprojectCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个子项目',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chooseAProject => '选择一个项目以查看其会议和文件。';
+
+  @override
+  String get chooseAMeetingOrFile => '选择一个会议或文件以在此查看。';
 }

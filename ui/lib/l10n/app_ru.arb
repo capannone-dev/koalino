@@ -760,5 +760,15 @@
   "playRecording": "Прослушать запись",
   "stopRecordingPlayback": "Остановить воспроизведение",
   "recordingCouldNotBePlayed": "Не удалось воспроизвести запись.",
-  "columnWidth": "Ширина столбца"
+  "columnWidth": "Ширина столбца",
+  "subprojects": "Подпроекты",
+  "newSubproject": "Новый подпроект",
+  "moveProjectTo": "Переместить в…",
+  "topLevel": "Верхний уровень",
+  "moveProjectTitle": "Переместить «{project}» в",
+  "movedToTopLevel": "Перемещено на верхний уровень",
+  "theProjectCouldNotBeMoved": "Не удалось переместить проект.",
+  "subprojectCount": "{count, plural, =1{1 подпроект} few{{count} подпроекта} many{{count} подпроектов} other{{count} подпроекта}}",
+  "chooseAProject": "Выберите проект, чтобы увидеть его встречи и файлы.",
+  "chooseAMeetingOrFile": "Выберите встречу или файл, чтобы открыть его здесь."
 }

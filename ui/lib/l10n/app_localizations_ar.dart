@@ -2958,4 +2958,48 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get columnWidth => 'عرض العمود';
+
+  @override
+  String get subprojects => 'المشاريع الفرعية';
+
+  @override
+  String get newSubproject => 'مشروع فرعي جديد';
+
+  @override
+  String get moveProjectTo => 'نقل إلى…';
+
+  @override
+  String get topLevel => 'المستوى الأعلى';
+
+  @override
+  String moveProjectTitle(String project) {
+    return 'نقل $project إلى';
+  }
+
+  @override
+  String get movedToTopLevel => 'نُقل إلى المستوى الأعلى';
+
+  @override
+  String get theProjectCouldNotBeMoved => 'تعذّر نقل المشروع.';
+
+  @override
+  String subprojectCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مشروع فرعي',
+      many: '$count مشروعًا فرعيًا',
+      few: '$count مشاريع فرعية',
+      two: 'مشروعان فرعيان',
+      one: 'مشروع فرعي واحد',
+      zero: 'لا مشاريع فرعية',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chooseAProject => 'اختر مشروعًا لعرض اجتماعاته وملفاته.';
+
+  @override
+  String get chooseAMeetingOrFile => 'اختر اجتماعًا أو ملفًا لعرضه هنا.';
 }

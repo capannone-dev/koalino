@@ -31,9 +31,10 @@ final class FakeProjectRunner {
 
 /// A project as Rust sends it.
 Map<String, Object?> projectJson(String projectId, String name,
-        {int meetingCount = 0, int resourceCount = 0}) =>
+        {int meetingCount = 0, int resourceCount = 0, String? parentId}) =>
     <String, Object?>{
       'project_id': projectId,
+      'parent_id': parentId,
       'name': name,
       'created_at': '2026-11-03T09:00:00+00:00',
       'updated_at': '2026-11-03T09:00:00+00:00',

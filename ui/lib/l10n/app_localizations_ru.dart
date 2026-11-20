@@ -2954,4 +2954,48 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get columnWidth => 'Ширина столбца';
+
+  @override
+  String get subprojects => 'Подпроекты';
+
+  @override
+  String get newSubproject => 'Новый подпроект';
+
+  @override
+  String get moveProjectTo => 'Переместить в…';
+
+  @override
+  String get topLevel => 'Верхний уровень';
+
+  @override
+  String moveProjectTitle(String project) {
+    return 'Переместить «$project» в';
+  }
+
+  @override
+  String get movedToTopLevel => 'Перемещено на верхний уровень';
+
+  @override
+  String get theProjectCouldNotBeMoved => 'Не удалось переместить проект.';
+
+  @override
+  String subprojectCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count подпроекта',
+      many: '$count подпроектов',
+      few: '$count подпроекта',
+      one: '1 подпроект',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chooseAProject =>
+      'Выберите проект, чтобы увидеть его встречи и файлы.';
+
+  @override
+  String get chooseAMeetingOrFile =>
+      'Выберите встречу или файл, чтобы открыть его здесь.';
 }

@@ -4683,6 +4683,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Column width'**
   String get columnWidth;
+
+  /// No description provided for @subprojects.
+  ///
+  /// In en, this message translates to:
+  /// **'Subprojects'**
+  String get subprojects;
+
+  /// No description provided for @newSubproject.
+  ///
+  /// In en, this message translates to:
+  /// **'New subproject'**
+  String get newSubproject;
+
+  /// No description provided for @moveProjectTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Move to…'**
+  String get moveProjectTo;
+
+  /// No description provided for @topLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Top level'**
+  String get topLevel;
+
+  /// No description provided for @moveProjectTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Move {project} to'**
+  String moveProjectTitle(String project);
+
+  /// No description provided for @movedToTopLevel.
+  ///
+  /// In en, this message translates to:
+  /// **'Moved to the top level'**
+  String get movedToTopLevel;
+
+  /// No description provided for @theProjectCouldNotBeMoved.
+  ///
+  /// In en, this message translates to:
+  /// **'The project could not be moved.'**
+  String get theProjectCouldNotBeMoved;
+
+  /// No description provided for @subprojectCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 subproject} other{{count} subprojects}}'**
+  String subprojectCount(int count);
+
+  /// No description provided for @chooseAProject.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a project to see its meetings and files.'**
+  String get chooseAProject;
+
+  /// No description provided for @chooseAMeetingOrFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a meeting or a file to see it here.'**
+  String get chooseAMeetingOrFile;
 }
 
 class _AppLocalizationsDelegate

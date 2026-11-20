@@ -760,5 +760,15 @@
   "playRecording": "Aufnahme abspielen",
   "stopRecordingPlayback": "Wiedergabe stoppen",
   "recordingCouldNotBePlayed": "Die Aufnahme konnte nicht abgespielt werden.",
-  "columnWidth": "Spaltenbreite"
+  "columnWidth": "Spaltenbreite",
+  "subprojects": "Unterprojekte",
+  "newSubproject": "Neues Unterprojekt",
+  "moveProjectTo": "Verschieben nach…",
+  "topLevel": "Oberste Ebene",
+  "moveProjectTitle": "{project} verschieben nach",
+  "movedToTopLevel": "Auf die oberste Ebene verschoben",
+  "theProjectCouldNotBeMoved": "Das Projekt konnte nicht verschoben werden.",
+  "subprojectCount": "{count, plural, =1{1 Unterprojekt} other{{count} Unterprojekte}}",
+  "chooseAProject": "Wähle ein Projekt, um seine Besprechungen und Dateien zu sehen.",
+  "chooseAMeetingOrFile": "Wähle eine Besprechung oder eine Datei, um sie hier zu sehen."
 }

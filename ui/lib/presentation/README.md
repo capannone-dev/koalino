@@ -108,6 +108,11 @@ a builder, which the app always gives. Its last row, About Koalino (`about_tile.
 the About dialog: the version, the GPL-3.0-or-later notice, and View licenses for the Flutter
 packages.
 
+Projects nest (#142): on phones the Projects tab lists top-level projects and each project's page
+lists its subprojects, with New subproject and Move to… (`chooseProjectParent` in
+`project_dialogs.dart`); on wide windows `projects_screen.dart` shows resizable columns: the
+project tree, the chosen project's page, then the chosen meeting or file.
+
 `resizable_pane.dart` (#142) is a desktop column with a draggable right edge (mouse, arrow keys
 when focused, double-click for the default); widths are kept in `ui-layout.json` in the app's
 support folder. The meeting list uses it, and so do the project columns.

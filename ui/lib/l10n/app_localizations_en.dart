@@ -2904,4 +2904,46 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get columnWidth => 'Column width';
+
+  @override
+  String get subprojects => 'Subprojects';
+
+  @override
+  String get newSubproject => 'New subproject';
+
+  @override
+  String get moveProjectTo => 'Move to…';
+
+  @override
+  String get topLevel => 'Top level';
+
+  @override
+  String moveProjectTitle(String project) {
+    return 'Move $project to';
+  }
+
+  @override
+  String get movedToTopLevel => 'Moved to the top level';
+
+  @override
+  String get theProjectCouldNotBeMoved => 'The project could not be moved.';
+
+  @override
+  String subprojectCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count subprojects',
+      one: '1 subproject',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chooseAProject =>
+      'Choose a project to see its meetings and files.';
+
+  @override
+  String get chooseAMeetingOrFile =>
+      'Choose a meeting or a file to see it here.';
 }

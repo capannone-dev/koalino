@@ -21,6 +21,7 @@ final class ProjectSummary {
     required this.meetingCount,
     required this.resourceCount,
     required this.latestMeetingAt,
+    this.parentId,
   });
 
   /// Stable project identifier (a UUID).
@@ -38,6 +39,9 @@ final class ProjectSummary {
   /// When its newest meeting started, or `null` without meetings.
   final DateTime? latestMeetingAt;
 
+  /// The project it shows inside, or `null` at the top level (#142).
+  final String? parentId;
+
   /// Decodes one project object.
   ///
   /// Throws `TypeError` or `FormatException` for a malformed object.
@@ -50,6 +54,7 @@ final class ProjectSummary {
           final String time => DateTime.parse(time).toUtc(),
           _ => null,
         },
+        parentId: json['parent_id'] as String?,
       );
 }
 
@@ -316,11 +321,25 @@ final class ProjectBridge {
       ProjectSummary.fromJson);
 
   /// Creates a project named `name`. Side effects: Writes SQLite; syncs to paired devices.
-  Future<ProjectSummary> createProject(String name) async =>
-      ProjectSummary.fromJson(
-          ((await _send(<String, Object?>{'command': 'create', 'name': name}))[
-                  'project']! as Map)
-              .cast<String, Object?>());
+  /// Inside `parentId` when given (#142).
+  Future<ProjectSummary> createProject(String name, {String? parentId}) async =>
+      ProjectSummary.fromJson(((await _send(<String, Object?>{
+        'command': 'create',
+        'name': name,
+        if (parentId != null) 'parent_id': parentId,
+      }))['project']! as Map)
+          .cast<String, Object?>());
+
+  /// Moves a project inside `parentId`, or to the top level when null (#142).
+  ///
+  /// Throws `ProjectCommandException` with `invalid_parent` for a move inside itself.
+  /// Side effects: Writes SQLite; syncs to paired devices.
+  Future<void> moveProject(String projectId, String? parentId) =>
+      _send(<String, Object?>{
+        'command': 'move_project',
+        'project_id': projectId,
+        'parent_id': parentId,
+      });
 
   /// Renames a project. Side effects: Writes SQLite; syncs to paired devices.
   Future<void> renameProject(String projectId, String name) =>

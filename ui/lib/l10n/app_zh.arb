@@ -760,5 +760,15 @@
   "playRecording": "播放录音",
   "stopRecordingPlayback": "停止播放",
   "recordingCouldNotBePlayed": "无法播放该录音。",
-  "columnWidth": "列宽"
+  "columnWidth": "列宽",
+  "subprojects": "子项目",
+  "newSubproject": "新建子项目",
+  "moveProjectTo": "移动到…",
+  "topLevel": "顶层",
+  "moveProjectTitle": "将 {project} 移动到",
+  "movedToTopLevel": "已移动到顶层",
+  "theProjectCouldNotBeMoved": "无法移动该项目。",
+  "subprojectCount": "{count, plural, other{{count} 个子项目}}",
+  "chooseAProject": "选择一个项目以查看其会议和文件。",
+  "chooseAMeetingOrFile": "选择一个会议或文件以在此查看。"
 }

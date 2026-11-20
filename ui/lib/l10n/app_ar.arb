@@ -760,5 +760,15 @@
   "playRecording": "تشغيل التسجيل",
   "stopRecordingPlayback": "إيقاف التشغيل",
   "recordingCouldNotBePlayed": "تعذّر تشغيل التسجيل.",
-  "columnWidth": "عرض العمود"
+  "columnWidth": "عرض العمود",
+  "subprojects": "المشاريع الفرعية",
+  "newSubproject": "مشروع فرعي جديد",
+  "moveProjectTo": "نقل إلى…",
+  "topLevel": "المستوى الأعلى",
+  "moveProjectTitle": "نقل {project} إلى",
+  "movedToTopLevel": "نُقل إلى المستوى الأعلى",
+  "theProjectCouldNotBeMoved": "تعذّر نقل المشروع.",
+  "subprojectCount": "{count, plural, zero{لا مشاريع فرعية} one{مشروع فرعي واحد} two{مشروعان فرعيان} few{{count} مشاريع فرعية} many{{count} مشروعًا فرعيًا} other{{count} مشروع فرعي}}",
+  "chooseAProject": "اختر مشروعًا لعرض اجتماعاته وملفاته.",
+  "chooseAMeetingOrFile": "اختر اجتماعًا أو ملفًا لعرضه هنا."
 }

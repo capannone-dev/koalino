@@ -2796,4 +2796,43 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get columnWidth => '列の幅';
+
+  @override
+  String get subprojects => 'サブプロジェクト';
+
+  @override
+  String get newSubproject => '新しいサブプロジェクト';
+
+  @override
+  String get moveProjectTo => '移動先…';
+
+  @override
+  String get topLevel => '最上位';
+
+  @override
+  String moveProjectTitle(String project) {
+    return '$project の移動先';
+  }
+
+  @override
+  String get movedToTopLevel => '最上位に移動しました';
+
+  @override
+  String get theProjectCouldNotBeMoved => 'プロジェクトを移動できませんでした。';
+
+  @override
+  String subprojectCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'サブプロジェクト $count 件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chooseAProject => 'プロジェクトを選ぶと、その会議とファイルが表示されます。';
+
+  @override
+  String get chooseAMeetingOrFile => '会議またはファイルを選ぶと、ここに表示されます。';
 }

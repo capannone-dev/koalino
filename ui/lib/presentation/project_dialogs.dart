@@ -302,9 +302,13 @@ Future<void> chooseProjectForMeeting(
                 value: _noProject,
                 title: Text(l10n.noProject),
               ),
-              for (final ProjectSummary project in controller.projects)
+              // Subprojects sit indented under their parent (#142).
+              for (final (:ProjectSummary project, :int depth)
+                  in controller.projectTree)
                 RadioListTile<String>(
                   value: project.projectId,
+                  contentPadding: EdgeInsetsDirectional.only(
+                      start: 16 + depth * _nestingIndent, end: 24),
                   title: Text(project.name),
                 ),
             ],
@@ -352,5 +356,65 @@ Future<void> chooseProjectForMeeting(
         : target == _noProject
             ? l10n.removedFromItsProject
             : l10n.movedTo(targetName ?? 'the project')),
+  ));
+}
+
+/// How far each level of subprojects is indented in choosers (#142).
+const double _nestingIndent = 24;
+
+/// The parent chooser's value for the top level, which no project ID can equal.
+const String _topLevel = '';
+
+/// Asks where `project` should go (the top level or another project) and moves it there (#142).
+///
+/// Inputs: A mounted context, the projects controller and the project. The project itself and
+/// its subprojects are not offered, nor its current place. Outputs: Completes when the chooser
+/// closes. Side effects: May write the project's parent, which syncs; shows a snack bar with the
+/// outcome.
+Future<void> chooseProjectParent(
+  BuildContext context, {
+  required ProjectsController controller,
+  required ProjectSummary project,
+}) async {
+  final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+  final String current = project.parentId ?? _topLevel;
+  final String? chosen = await showDialog<String>(
+    context: context,
+    builder: (BuildContext context) => SimpleDialog(
+      title: Text(l10n.moveProjectTitle(project.name)),
+      children: <Widget>[
+        ListTile(
+          key: const ValueKey<String>('move-project-top-level'),
+          leading: const Icon(Icons.vertical_align_top),
+          title: Text(l10n.topLevel),
+          enabled: current != _topLevel,
+          onTap: () => Navigator.of(context).pop(_topLevel),
+        ),
+        for (final (project: ProjectSummary candidate, :int depth)
+            in controller.projectTree)
+          if (!controller.isWithin(candidate.projectId, project.projectId))
+            ListTile(
+              key: ValueKey<String>('move-project-into-${candidate.projectId}'),
+              contentPadding: EdgeInsetsDirectional.only(
+                  start: 16 + depth * _nestingIndent, end: 24),
+              leading: const Icon(Icons.folder_outlined),
+              title: Text(candidate.name),
+              enabled: candidate.projectId != current,
+              onTap: () => Navigator.of(context).pop(candidate.projectId),
+            ),
+      ],
+    ),
+  );
+  if (chosen == null || chosen == current) {
+    return;
+  }
+  final String? parentId = chosen == _topLevel ? null : chosen;
+  final bool moved = await controller.moveProject(project.projectId, parentId);
+  messenger.showSnackBar(SnackBar(
+    content: Text(!moved
+        ? l10n.theProjectCouldNotBeMoved
+        : parentId == null
+            ? l10n.movedToTopLevel
+            : l10n.movedTo(controller.projectById(parentId)?.name ?? '')),
   ));
 }

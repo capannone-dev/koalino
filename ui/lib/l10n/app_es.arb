@@ -760,5 +760,15 @@
   "playRecording": "Reproducir la grabación",
   "stopRecordingPlayback": "Detener la reproducción",
   "recordingCouldNotBePlayed": "No se pudo reproducir la grabación.",
-  "columnWidth": "Ancho de la columna"
+  "columnWidth": "Ancho de la columna",
+  "subprojects": "Subproyectos",
+  "newSubproject": "Nuevo subproyecto",
+  "moveProjectTo": "Mover a…",
+  "topLevel": "Nivel superior",
+  "moveProjectTitle": "Mover {project} a",
+  "movedToTopLevel": "Movido al nivel superior",
+  "theProjectCouldNotBeMoved": "No se pudo mover el proyecto.",
+  "subprojectCount": "{count, plural, =1{1 subproyecto} other{{count} subproyectos}}",
+  "chooseAProject": "Elige un proyecto para ver sus reuniones y archivos.",
+  "chooseAMeetingOrFile": "Elige una reunión o un archivo para verlo aquí."
 }

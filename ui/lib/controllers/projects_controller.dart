@@ -145,16 +145,78 @@ final class ProjectsController extends ChangeNotifier {
   /// Inputs: A name already checked with `projectNameError`.
   /// Outputs: The new project, or `null` when Rust refused. Side effects: Writes SQLite; reloads
   /// the list.
-  Future<ProjectSummary?> createProject(String name) async {
+  Future<ProjectSummary?> createProject(String name, {String? parentId}) async {
     try {
       final ProjectSummary created =
-          await _projectBridge.createProject(name.trim());
+          await _projectBridge.createProject(name.trim(), parentId: parentId);
       await loadProjects();
       return created;
     } on Object {
       return null;
     }
   }
+
+  /// Moves a project inside `parentId`, or to the top level when null (#142).
+  ///
+  /// Outputs: Whether it moved. Side effects: Writes SQLite; reloads the list and the open
+  /// project.
+  Future<bool> moveProject(String projectId, String? parentId) async {
+    try {
+      await _projectBridge.moveProject(projectId, parentId);
+    } on Object {
+      return false;
+    }
+    await refresh();
+    return true;
+  }
+
+  /// The project with `projectId`, or `null` when it is not listed.
+  ProjectSummary? projectById(String projectId) => _projects
+      .where((ProjectSummary project) => project.projectId == projectId)
+      .firstOrNull;
+
+  /// The projects directly inside `parentId` (the top level when null), by name.
+  List<ProjectSummary> childrenOf(String? parentId) => <ProjectSummary>[
+        for (final ProjectSummary project in _projects)
+          if (_shownParent(project) == parentId) project,
+      ];
+
+  /// Every project in tree order (each followed by its subprojects) with its depth from the top
+  /// level, for choosers.
+  List<({ProjectSummary project, int depth})> get projectTree {
+    final List<({ProjectSummary project, int depth})> ordered =
+        <({ProjectSummary project, int depth})>[];
+    final Set<String> seen = <String>{};
+    void visit(String? parentId, int depth) {
+      for (final ProjectSummary child in childrenOf(parentId)) {
+        if (seen.add(child.projectId)) {
+          ordered.add((project: child, depth: depth));
+          visit(child.projectId, depth + 1);
+        }
+      }
+    }
+
+    visit(null, 0);
+    return ordered;
+  }
+
+  /// Whether `projectId` is `ancestorId` or somewhere inside it.
+  bool isWithin(String projectId, String ancestorId) {
+    String? current = projectId;
+    for (int step = 0; step <= _projects.length && current != null; step++) {
+      if (current == ancestorId) {
+        return true;
+      }
+      current = projectById(current)?.parentId;
+    }
+    return false;
+  }
+
+  /// The parent a project shows under: its parent when listed, the top level otherwise.
+  String? _shownParent(ProjectSummary project) => switch (project.parentId) {
+        final String parentId when projectById(parentId) != null => parentId,
+        _ => null,
+      };
 
   /// Renames a project.
   ///

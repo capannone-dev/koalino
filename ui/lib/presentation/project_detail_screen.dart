@@ -1,6 +1,9 @@
-// One project's page (Issue #85): its meetings, newest first, and its resources (files, notes
-// and e-mails), with actions to add files, write a note, add meetings, rename and delete, and to
-// search this project's files and meetings (#100).
+// One project's page (Issue #85): its subprojects (#142), its meetings, newest first, and its
+// resources (files, notes and e-mails), with actions to add files, write a note, add meetings,
+// create a subproject, move, rename and delete, and to search this project's files and meetings
+// (#100). On phones it is a page of its own and opens what it lists as further pages; the
+// desktop's project columns (#142) show it as their middle column and open what it lists beside
+// it through the `onOpen…` callbacks.
 
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -31,11 +34,31 @@ final class ProjectDetailScreen extends StatelessWidget {
     this.searchBridge,
     this.chatBridge,
     this.meetingMomentBuilder,
+    this.onOpenMeeting,
+    this.onOpenResource,
+    this.onOpenProject,
+    this.onDeleted,
+    this.selectedItemId,
     super.key,
   });
 
   final ProjectsController controller;
   final String projectId;
+
+  /// Opens a meeting beside the page instead of as a page of its own (desktop columns, #142).
+  final void Function(String meetingId)? onOpenMeeting;
+
+  /// Opens a file, note or e-mail beside the page (desktop columns, #142).
+  final void Function(ProjectResource resource)? onOpenResource;
+
+  /// Opens a subproject in place of this page (desktop columns, #142).
+  final void Function(String projectId)? onOpenProject;
+
+  /// Called after the project is deleted, instead of closing the page (desktop columns, #142).
+  final VoidCallback? onDeleted;
+
+  /// The meeting or resource shown beside the page, highlighted in the lists.
+  final String? selectedItemId;
   final MeetingScreenBuilder? meetingScreenBuilder;
   final PdfViewBuilder pdfViewBuilder;
 
@@ -138,12 +161,56 @@ final class ProjectDetailScreen extends StatelessWidget {
       return;
     }
     if (await controller.deleteProject(projectId)) {
-      if (context.mounted) {
+      if (onDeleted case final VoidCallback deleted) {
+        deleted();
+      } else if (context.mounted) {
         Navigator.of(context).pop();
       }
     } else if (context.mounted) {
       _tell(context, l10n.theProjectCouldNotBeDeleted);
     }
+  }
+
+  /// Asks for a name and creates a subproject here (#142).
+  Future<void> _addSubproject(BuildContext context) async {
+    final String? name = await askProjectName(context,
+        title: l10n.newSubproject, confirmLabel: l10n.create);
+    if (name == null) {
+      return;
+    }
+    final ProjectSummary? created =
+        await controller.createProject(name, parentId: projectId);
+    if (created == null) {
+      if (context.mounted) {
+        _tell(context, l10n.theProjectCouldNotBeCreated);
+      }
+      return;
+    }
+    await controller.refresh();
+  }
+
+  /// Opens a subproject: beside, through `onOpenProject`, or as a page of its own whose return
+  /// reopens this project.
+  void _openSubproject(BuildContext context, String subprojectId) {
+    if (onOpenProject case final void Function(String) open) {
+      open(subprojectId);
+      return;
+    }
+    controller.openProject(subprojectId);
+    Navigator.of(context)
+        .push(MaterialPageRoute<void>(
+          builder: (BuildContext context) => ProjectDetailScreen(
+            controller: controller,
+            projectId: subprojectId,
+            meetingScreenBuilder: meetingScreenBuilder,
+            pdfViewBuilder: pdfViewBuilder,
+            summariesController: summariesController,
+            searchBridge: searchBridge,
+            chatBridge: chatBridge,
+            meetingMomentBuilder: meetingMomentBuilder,
+          ),
+        ))
+        .then((_) => controller.openProject(projectId));
   }
 
   Future<void> _deleteResource(
@@ -239,11 +306,18 @@ final class ProjectDetailScreen extends StatelessWidget {
                 PopupMenuButton<String>(
                   key: const ValueKey<String>('project-menu'),
                   onSelected: (String action) => switch (action) {
+                    'subproject' => _addSubproject(context),
+                    'move' => chooseProjectParent(context,
+                        controller: controller, project: project),
                     'rename' => _rename(context, project),
                     _ => _delete(context, project),
                   },
                   itemBuilder: (BuildContext context) =>
                       <PopupMenuEntry<String>>[
+                    PopupMenuItem<String>(
+                        value: 'subproject', child: Text(l10n.newSubproject)),
+                    PopupMenuItem<String>(
+                        value: 'move', child: Text(l10n.moveProjectTo)),
                     PopupMenuItem<String>(
                         value: 'rename', child: Text(l10n.rename)),
                     PopupMenuItem<String>(
@@ -304,10 +378,25 @@ final class _ProjectBody extends StatelessWidget {
               style: theme.textTheme.titleSmall
                   ?.copyWith(color: theme.colorScheme.primary)),
         );
+    final List<ProjectSummary> subprojects =
+        screen.controller.childrenOf(screen.projectId);
     return RefreshIndicator(
       onRefresh: screen.controller.refresh,
       child: ListView(
         children: <Widget>[
+          if (subprojects.isNotEmpty) ...<Widget>[
+            header(l10n.subprojects),
+            for (final ProjectSummary subproject in subprojects)
+              ListTile(
+                key: ValueKey<String>('subproject-${subproject.projectId}'),
+                leading: const Icon(Icons.folder_outlined),
+                title: Text(subproject.name),
+                subtitle: Text(projectCounts(screen.controller, subproject)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () =>
+                    screen._openSubproject(context, subproject.projectId),
+              ),
+          ],
           header(l10n.meetings),
           if (detail.meetings.isEmpty)
             ListTile(
@@ -320,11 +409,14 @@ final class _ProjectBody extends StatelessWidget {
               meeting,
               ListTile(
                 key: ValueKey<String>('project-meeting-${meeting.meetingId}'),
+                selected: screen.selectedItemId == meeting.meetingId,
                 leading: const Icon(Icons.event_note_outlined),
                 title: Text(meeting.title),
                 subtitle: Text(localizations
                     .formatMediumDate(meeting.createdAt.toLocal())),
                 onTap: switch (screen.meetingScreenBuilder) {
+                  _ when screen.onOpenMeeting != null => () =>
+                      screen.onOpenMeeting!(meeting.meetingId),
                   // On return, the meeting may have moved to another project.
                   final MeetingScreenBuilder builder => () =>
                       Navigator.of(context)
@@ -364,20 +456,28 @@ final class _ProjectBody extends StatelessWidget {
             ListTile(
               key:
                   ValueKey<String>('project-resource-${resource.attachmentId}'),
+              selected: screen.selectedItemId == resource.attachmentId,
               leading: Icon(_resourceIcon(resource.kind)),
               title: Text(resource.fileName),
               subtitle: Text(resource.isAvailable
                   ? '${localizations.formatMediumDate(resource.addedAt.toLocal())}'
                       ' · ${_size(resource.sizeBytes ?? 0)}'
                   : l10n.onItsWayFromAPaired),
-              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                builder: (BuildContext context) => ResourceViewerScreen(
-                  controller: screen.controller,
-                  projectId: screen.projectId,
-                  resource: resource,
-                  pdfViewBuilder: screen.pdfViewBuilder,
-                ),
-              )),
+              onTap: () {
+                if (screen.onOpenResource
+                    case final void Function(ProjectResource) open) {
+                  open(resource);
+                  return;
+                }
+                Navigator.of(context).push(MaterialPageRoute<void>(
+                  builder: (BuildContext context) => ResourceViewerScreen(
+                    controller: screen.controller,
+                    projectId: screen.projectId,
+                    resource: resource,
+                    pdfViewBuilder: screen.pdfViewBuilder,
+                  ),
+                ));
+              },
               trailing: IconButton(
                 tooltip: l10n.delete,
                 icon: const Icon(Icons.delete_outline),
@@ -410,4 +510,14 @@ String _size(int bytes) {
     return '${(bytes / 1024).toStringAsFixed(0)} KB';
   }
   return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+}
+
+/// `2 meetings · 3 files`, and `· 1 subproject` when it has any (#142).
+String projectCounts(ProjectsController controller, ProjectSummary project) {
+  final int subprojects = controller.childrenOf(project.projectId).length;
+  return <String>[
+    l10n.meetingCount(project.meetingCount),
+    l10n.fileCount(project.resourceCount),
+    if (subprojects > 0) l10n.subprojectCount(subprojects),
+  ].join(' · ');
 }

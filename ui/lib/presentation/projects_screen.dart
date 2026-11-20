@@ -1,6 +1,10 @@
-// The Projects tab (Issue #85): folders of meetings and resources. Lists projects by name and
-// opens each one; creating a project asks for its name. Search (#100) finds words in every
-// project's files and meetings.
+// The Projects tab (Issue #85): folders of meetings and resources, nested to any depth (#142).
+// Creating a project asks for its name. Search (#100) finds words in every project's files and
+// meetings.
+//
+// Phones list the top-level projects and open each as a page, whose subprojects open as further
+// pages. Wide windows (#142) show columns, each resizable: the project tree, then the chosen
+// project's subprojects, meetings and files (its page), then the chosen meeting or file.
 
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/projects_controller.dart';
@@ -10,7 +14,10 @@ import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/project_detail_screen.dart';
+import 'package:note_taker_ui/presentation/meeting_list_screen.dart'
+    show twoPaneBreakpoint;
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
+import 'package:note_taker_ui/presentation/resizable_pane.dart';
 import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
 import 'package:note_taker_ui/presentation/search_screen.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
@@ -63,16 +70,52 @@ final class ProjectsScreen extends StatefulWidget {
   State<ProjectsScreen> createState() => _ProjectsScreenState();
 }
 
-/// Requests the list once.
+/// Requests the list once, and holds what the desktop columns show.
 final class _ProjectsScreenState extends State<ProjectsScreen> {
+  /// Whether the last layout had columns.
+  bool _isWide = false;
+
+  /// The project whose page is the middle column (desktop).
+  String? _selectedProjectId;
+
+  /// Projects whose subprojects the tree shows (desktop).
+  final Set<String> _expanded = <String>{};
+
+  /// The meeting shown in the last column (desktop).
+  String? _shownMeetingId;
+
+  /// The file, note or e-mail shown in the last column (desktop).
+  ProjectResource? _shownResource;
+
   @override
   void initState() {
     super.initState();
     widget.controller.loadProjects();
   }
 
-  /// Opens a project's page.
+  /// Chooses the project of the middle column, showing it and its parents open in the tree.
+  void _select(String projectId) {
+    widget.controller.openProject(projectId);
+    setState(() {
+      _selectedProjectId = projectId;
+      _shownMeetingId = null;
+      _shownResource = null;
+      String? current = projectId;
+      for (int step = 0;
+          current != null && step <= widget.controller.projects.length;
+          step++) {
+        _expanded.add(current);
+        current = widget.controller.projectById(current)?.parentId;
+      }
+    });
+  }
+
+  /// Opens a project: in the columns on wide windows, as a page on phones.
   void _open(String projectId) {
+    if (_isWide) {
+      _select(projectId);
+      return;
+    }
     widget.controller.openProject(projectId);
     Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (BuildContext context) => _projectPage(context, projectId),
@@ -131,21 +174,143 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) {
+        _isWide = constraints.maxWidth >= twoPaneBreakpoint;
+        return _isWide
+            ? _columns(context, constraints.maxWidth)
+            : _phone(context);
+      },
+    );
+  }
+
+  /// The search and refresh actions of both layouts.
+  List<Widget> _commonActions() => <Widget>[
+        if (widget.searchBridge case final SearchBridge bridge)
+          IconButton(
+            tooltip: l10n.searchProjects,
+            icon: const Icon(Icons.search),
+            onPressed: () => _search(bridge),
+          ),
+        IconButton(
+          tooltip: l10n.refresh,
+          icon: const Icon(Icons.refresh),
+          onPressed: widget.controller.refresh,
+        ),
+      ];
+
+  /// The desktop columns: tree, project page, meeting or file (#142).
+  Widget _columns(BuildContext context, double width) {
+    final double paneLimit = (width - _minShownWidth) / 2;
+    final String? selected = _selectedProjectId;
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.projects),
         actions: <Widget>[
-          if (widget.searchBridge case final SearchBridge bridge)
-            IconButton(
-              tooltip: l10n.searchProjects,
-              icon: const Icon(Icons.search),
-              onPressed: () => _search(bridge),
-            ),
+          ..._commonActions(),
           IconButton(
-            tooltip: l10n.refresh,
-            icon: const Icon(Icons.refresh),
-            onPressed: widget.controller.loadProjects,
+            key: const ValueKey<String>('new-project'),
+            tooltip: l10n.newProject2,
+            icon: const Icon(Icons.create_new_folder_outlined),
+            onPressed: _create,
           ),
+        ],
+      ),
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          ResizablePane(
+            id: 'projects-tree',
+            defaultWidth: 260,
+            maxWidth: paneLimit,
+            child: AnimatedBuilder(
+              animation: widget.controller,
+              builder: (BuildContext context, Widget? child) => _ProjectTree(
+                controller: widget.controller,
+                selectedProjectId: selected,
+                expanded: _expanded,
+                onSelect: _select,
+                onToggle: (String projectId) => setState(() {
+                  if (!_expanded.remove(projectId)) {
+                    _expanded.add(projectId);
+                  }
+                }),
+              ),
+            ),
+          ),
+          ResizablePane(
+            id: 'project-contents',
+            defaultWidth: 360,
+            minWidth: 300,
+            maxWidth: paneLimit,
+            child: selected == null
+                ? _Hint(text: l10n.chooseAProject)
+                : ProjectDetailScreen(
+                    key: ValueKey<String>('project-page-$selected'),
+                    controller: widget.controller,
+                    projectId: selected,
+                    pdfViewBuilder: widget.pdfViewBuilder,
+                    summariesController: widget.summariesController,
+                    searchBridge: widget.searchBridge,
+                    chatBridge: widget.chatBridge,
+                    meetingMomentBuilder: widget.searchMeetingBuilder,
+                    meetingScreenBuilder: widget.meetingScreenBuilder,
+                    selectedItemId:
+                        _shownMeetingId ?? _shownResource?.attachmentId,
+                    onOpenMeeting: widget.meetingScreenBuilder == null
+                        ? null
+                        : (String meetingId) => setState(() {
+                              _shownMeetingId = meetingId;
+                              _shownResource = null;
+                            }),
+                    onOpenResource: (ProjectResource resource) => setState(() {
+                      _shownResource = resource;
+                      _shownMeetingId = null;
+                    }),
+                    onOpenProject: _select,
+                    onDeleted: () => setState(() {
+                      _selectedProjectId = null;
+                      _shownMeetingId = null;
+                      _shownResource = null;
+                    }),
+                  ),
+          ),
+          Expanded(child: _shown(context, selected)),
+        ],
+      ),
+    );
+  }
+
+  /// The last column: the chosen meeting's page, the chosen file, or a hint.
+  Widget _shown(BuildContext context, String? projectId) {
+    if ((_shownMeetingId, widget.meetingScreenBuilder)
+        case (final String meetingId, final MeetingScreenBuilder builder)) {
+      return KeyedSubtree(
+        key: ValueKey<String>('shown-meeting-$meetingId'),
+        child: Builder(
+            builder: (BuildContext context) => builder(context, meetingId)),
+      );
+    }
+    if ((_shownResource, projectId)
+        case (final ProjectResource resource, final String projectId)) {
+      return ResourceViewerScreen(
+        key: ValueKey<String>('shown-resource-${resource.attachmentId}'),
+        controller: widget.controller,
+        projectId: projectId,
+        resource: resource,
+        pdfViewBuilder: widget.pdfViewBuilder,
+      );
+    }
+    return _Hint(text: l10n.chooseAMeetingOrFile);
+  }
+
+  /// The phone list of top-level projects.
+  Widget _phone(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(l10n.projects),
+        actions: <Widget>[
+          ..._commonActions(),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -178,12 +343,12 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
           return ListView(
             padding: const EdgeInsets.only(bottom: 88),
             children: <Widget>[
-              for (final ProjectSummary project in controller.projects)
+              for (final ProjectSummary project in controller.childrenOf(null))
                 ListTile(
                   key: ValueKey<String>('project-${project.projectId}'),
                   leading: const Icon(Icons.folder_outlined),
                   title: Text(project.name),
-                  subtitle: Text(_counts(project)),
+                  subtitle: Text(projectCounts(controller, project)),
                   onTap: () => _open(project.projectId),
                 ),
             ],
@@ -194,7 +359,108 @@ final class _ProjectsScreenState extends State<ProjectsScreen> {
   }
 }
 
-/// `2 meetings · 3 files`.
-String _counts(ProjectSummary project) =>
-    '${l10n.meetingCount(project.meetingCount)} · '
-    '${l10n.fileCount(project.resourceCount)}';
+/// Room always left to the meeting or file beside the two project columns.
+const double _minShownWidth = 400;
+
+/// How far each tree level is indented.
+const double _treeIndent = 16;
+
+/// A centred hint in an empty column.
+final class _Hint extends StatelessWidget {
+  const _Hint({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Text(text,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant)),
+        ),
+      );
+}
+
+/// The desktop's project tree (#142): top-level projects, and the subprojects of open ones.
+final class _ProjectTree extends StatelessWidget {
+  const _ProjectTree({
+    required this.controller,
+    required this.selectedProjectId,
+    required this.expanded,
+    required this.onSelect,
+    required this.onToggle,
+  });
+
+  final ProjectsController controller;
+  final String? selectedProjectId;
+  final Set<String> expanded;
+  final void Function(String projectId) onSelect;
+  final void Function(String projectId) onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    if (controller.isLoading && controller.projects.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (controller.errorMessage case final String message) {
+      return _Hint(text: message);
+    }
+    if (controller.projects.isEmpty) {
+      return _Hint(text: l10n.noProjectsYetAProjectGathers);
+    }
+    final List<Widget> rows = <Widget>[];
+    final Set<String> seen = <String>{};
+    void add(String? parentId, int depth) {
+      for (final ProjectSummary project in controller.childrenOf(parentId)) {
+        if (!seen.add(project.projectId)) {
+          continue;
+        }
+        final bool hasChildren =
+            controller.childrenOf(project.projectId).isNotEmpty;
+        final bool isOpen = expanded.contains(project.projectId);
+        rows.add(ListTile(
+          key: ValueKey<String>('tree-project-${project.projectId}'),
+          dense: true,
+          selected: project.projectId == selectedProjectId,
+          contentPadding: EdgeInsetsDirectional.only(
+              start: 4 + depth * _treeIndent, end: 8),
+          leading: SizedBox(
+            width: 64,
+            child: Row(
+              children: <Widget>[
+                if (hasChildren)
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    tooltip:
+                        MaterialLocalizations.of(context).expandedIconTapHint,
+                    icon:
+                        Icon(isOpen ? Icons.expand_more : Icons.chevron_right),
+                    onPressed: () => onToggle(project.projectId),
+                  )
+                else
+                  const SizedBox(width: 40),
+                Icon(isOpen && hasChildren
+                    ? Icons.folder_open_outlined
+                    : Icons.folder_outlined),
+              ],
+            ),
+          ),
+          title:
+              Text(project.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          onTap: () => onSelect(project.projectId),
+        ));
+        if (isOpen) {
+          add(project.projectId, depth + 1);
+        }
+      }
+    }
+
+    add(null, 0);
+    return ListView(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: rows,
+    );
+  }
+}

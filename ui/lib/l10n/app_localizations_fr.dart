@@ -2949,4 +2949,46 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get columnWidth => 'Largeur de la colonne';
+
+  @override
+  String get subprojects => 'Sous-projets';
+
+  @override
+  String get newSubproject => 'Nouveau sous-projet';
+
+  @override
+  String get moveProjectTo => 'Déplacer vers…';
+
+  @override
+  String get topLevel => 'Niveau supérieur';
+
+  @override
+  String moveProjectTitle(String project) {
+    return 'Déplacer $project vers';
+  }
+
+  @override
+  String get movedToTopLevel => 'Déplacé au niveau supérieur';
+
+  @override
+  String get theProjectCouldNotBeMoved => 'Le projet n\'a pas pu être déplacé.';
+
+  @override
+  String subprojectCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sous-projets',
+      one: '1 sous-projet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get chooseAProject =>
+      'Choisissez un projet pour voir ses réunions et ses fichiers.';
+
+  @override
+  String get chooseAMeetingOrFile =>
+      'Choisissez une réunion ou un fichier pour l’afficher ici.';
 }

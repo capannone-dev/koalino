@@ -30,6 +30,9 @@ final class FakeProjects {
     ],
   };
 
+  /// The parent of each nested project (#142).
+  final Map<String, String> parents = <String, String>{};
+
   /// Project of each meeting.
   final Map<String, String> memberships = <String, String>{
     'meeting-1': 'p1',
@@ -45,19 +48,38 @@ final class FakeProjects {
           'projects': <Object?>[
             for (final MapEntry<String, String> entry in names.entries)
               projectJson(entry.key, entry.value,
-                  resourceCount: resources[entry.key]?.length ?? 0),
+                  resourceCount: resources[entry.key]?.length ?? 0,
+                  parentId: parents[entry.key]),
           ],
         },
       'create' => () {
-          names['p2'] = request['name']! as String;
+          final String newId = 'p${names.length + 1}';
+          names[newId] = request['name']! as String;
+          if (request['parent_id'] case final String parentId) {
+            parents[newId] = parentId;
+          }
           return <String, Object?>{
             'ok': true,
-            'project': projectJson('p2', names['p2']!),
+            'project':
+                projectJson(newId, names[newId]!, parentId: parents[newId]),
+          };
+        }(),
+      'move_project' => () {
+          if (request['parent_id'] case final String parentId) {
+            parents[projectId!] = parentId;
+          } else {
+            parents.remove(projectId);
+          }
+          return <String, Object?>{
+            'ok': true,
+            'project': projectJson(projectId!, names[projectId]!,
+                parentId: parents[projectId]),
           };
         }(),
       'detail' => <String, Object?>{
           'ok': true,
-          'project': projectJson(projectId!, names[projectId]!),
+          'project': projectJson(projectId!, names[projectId]!,
+              parentId: parents[projectId]),
           'meetings': <Object?>[
             for (final MapEntry<String, String> entry in memberships.entries)
               if (entry.value == projectId)
@@ -149,7 +171,182 @@ Future<void> _pumpTab(
   await tester.pumpAndSettle();
 }
 
+/// Pumps the tab at desktop size, with meetings opening as a labelled placeholder.
+Future<void> _pumpDesktopTab(
+    WidgetTester tester, ProjectsController controller) async {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(1400, 800);
+  addTearDown(tester.view.reset);
+  await tester.pumpWidget(MaterialApp(
+    home: ProjectsScreen(
+      controller: controller,
+      meetingScreenBuilder: (BuildContext context, String meetingId) =>
+          Scaffold(body: Text('Meeting page $meetingId')),
+      pdfViewBuilder: (String filePath) => Text('PDF $filePath'),
+    ),
+  ));
+  await tester.pumpAndSettle();
+}
+
+/// Hiring (p1) holds Interviews (p2), which holds Round two (p3); Budget (p4) is apart.
+FakeProjects _nestedProjects() => FakeProjects()
+  ..names.addAll(<String, String>{
+    'p2': 'Interviews',
+    'p3': 'Round two',
+    'p4': 'Budget',
+  })
+  ..parents.addAll(<String, String>{'p2': 'p1', 'p3': 'p2'});
+
 void main() {
+  group('nested projects (#142)', () {
+    testWidgets(
+        'a phone lists top-level projects and opens subprojects in turn',
+        (WidgetTester tester) async {
+      final FakeProjects projects = _nestedProjects();
+      await _pumpTab(tester, projects.controller());
+
+      expect(find.text('Hiring'), findsOneWidget);
+      expect(find.text('Budget'), findsOneWidget);
+      expect(find.text('Interviews'), findsNothing);
+
+      await tester.tap(find.text('Hiring'));
+      await tester.pumpAndSettle();
+      expect(find.text('Subprojects'), findsOneWidget);
+      await tester.tap(find.text('Interviews'));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AppBar, 'Interviews'), findsOneWidget);
+      expect(find.text('Round two'), findsOneWidget);
+    });
+
+    testWidgets('a subproject is created inside the open project',
+        (WidgetTester tester) async {
+      final FakeProjects projects = _nestedProjects();
+      await _pumpTab(tester, projects.controller());
+      await tester.tap(find.text('Budget'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey<String>('project-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New subproject'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const ValueKey<String>('project-name-field')), 'Q1');
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      final Map<String, Object?> create = projects.runner.requests
+          .firstWhere((Map<String, Object?> r) => r['command'] == 'create');
+      expect(create['parent_id'], 'p4');
+      expect(find.text('Q1'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Move to… offers the top level and other projects, never the project or its subprojects',
+        (WidgetTester tester) async {
+      final FakeProjects projects = _nestedProjects();
+      await _pumpTab(tester, projects.controller());
+      await tester.tap(find.text('Hiring'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Interviews'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey<String>('project-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Move to…'));
+      await tester.pumpAndSettle();
+      final Finder dialog = find.byType(SimpleDialog);
+      expect(find.descendant(of: dialog, matching: find.text('Top level')),
+          findsOneWidget);
+      expect(find.descendant(of: dialog, matching: find.text('Budget')),
+          findsOneWidget);
+      expect(find.descendant(of: dialog, matching: find.text('Round two')),
+          findsNothing);
+      expect(find.descendant(of: dialog, matching: find.text('Interviews')),
+          findsNothing);
+
+      await tester
+          .tap(find.descendant(of: dialog, matching: find.text('Budget')));
+      await tester.pumpAndSettle();
+
+      expect(projects.parents['p2'], 'p4');
+      expect(find.text('Moved to Budget'), findsOneWidget);
+    });
+
+    testWidgets(
+        'a desktop shows projects, then the chosen one, then its meeting or file, in columns',
+        (WidgetTester tester) async {
+      final FakeProjects projects = _nestedProjects();
+      await _pumpDesktopTab(tester, projects.controller());
+
+      final Finder tree =
+          find.byKey(const ValueKey<String>('pane-projects-tree'));
+      expect(find.descendant(of: tree, matching: find.text('Hiring')),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey<String>('resize-projects-tree')),
+          findsOneWidget);
+
+      await tester
+          .tap(find.descendant(of: tree, matching: find.text('Hiring')));
+      await tester.pumpAndSettle();
+      final Finder contents =
+          find.byKey(const ValueKey<String>('pane-project-contents'));
+      expect(find.descendant(of: contents, matching: find.text('Kick-off')),
+          findsOneWidget);
+      expect(find.descendant(of: contents, matching: find.text('offer.eml')),
+          findsOneWidget);
+      expect(find.descendant(of: tree, matching: find.text('Interviews')),
+          findsOneWidget,
+          reason: 'choosing a project shows its subprojects in the tree');
+
+      await tester
+          .tap(find.descendant(of: contents, matching: find.text('Kick-off')));
+      await tester.pumpAndSettle();
+      expect(find.text('Meeting page meeting-1'), findsOneWidget);
+
+      await tester
+          .tap(find.descendant(of: contents, matching: find.text('offer.eml')));
+      await tester.pumpAndSettle();
+      expect(find.text('Meeting page meeting-1'), findsNothing);
+      expect(find.text('I accept.'), findsOneWidget);
+
+      await tester.tap(
+          find.descendant(of: contents, matching: find.text('Interviews')));
+      await tester.pumpAndSettle();
+      expect(
+          find.descendant(
+              of: contents,
+              matching: find.widgetWithText(AppBar, 'Interviews')),
+          findsOneWidget);
+      expect(find.descendant(of: tree, matching: find.text('Round two')),
+          findsOneWidget);
+    });
+
+    testWidgets('the meeting chooser shows subprojects under their parent',
+        (WidgetTester tester) async {
+      final FakeProjects projects = _nestedProjects();
+      projects.memberships.clear();
+      final ProjectsController controller = projects.controller();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(actions: <Widget>[
+            MoveToProjectButton(controller: controller, meetingId: 'meeting-1'),
+          ]),
+        ),
+      ));
+
+      await tester.tap(find.byKey(const ValueKey<String>('move-to-project')));
+      await tester.pumpAndSettle();
+      final double hiring = tester.getTopLeft(find.text('Hiring')).dx;
+      expect(
+          tester.getTopLeft(find.text('Interviews')).dx, greaterThan(hiring));
+      expect(tester.getTopLeft(find.text('Round two')).dx,
+          greaterThan(tester.getTopLeft(find.text('Interviews')).dx));
+      await tester.tap(find.text('Round two'));
+      await tester.pumpAndSettle();
+      expect(projects.memberships, <String, String>{'meeting-1': 'p3'});
+    });
+  });
+
   testWidgets('projects are listed and a new one opens after naming it',
       (WidgetTester tester) async {
     final FakeProjects projects = FakeProjects();
