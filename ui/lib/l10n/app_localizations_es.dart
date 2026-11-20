@@ -2798,4 +2798,28 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get unableToExportTheSummary => 'No se pudo exportar el resumen';
+
+  @override
+  String get addAVoice => 'Añadir una voz';
+
+  @override
+  String get newPersonsName => 'Nombre de una persona nueva';
+
+  @override
+  String get addToASavedPerson => 'Añadir a una persona guardada';
+
+  @override
+  String addVoicesTo(String name) {
+    return 'Añadir voces a $name';
+  }
+
+  @override
+  String tickTheVoicesThatAre(String name) {
+    return 'Estas voces no se reconocieron como de nadie. Marca las de $name; usa Reproducir para comprobarlo.';
+  }
+
+  @override
+  String addTo(String name) {
+    return 'Añadir a $name';
+  }
 }

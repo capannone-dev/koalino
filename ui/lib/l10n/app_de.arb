@@ -727,5 +727,11 @@
   "handoffStepPasteSend": "Klick ins Nachrichtenfeld, füge die Besprechung ein (Strg+V) und drück die Eingabetaste.",
   "chatHandoffIntro": "Stelle deine Fragen in deiner eigenen KI-App, mit deinem eigenen Konto. Koalino übergibt ihr Notizen und Transkripte, Fotos und Dateien gehen als Dateien mit.",
   "plainTextFile": "Reiner Text (.txt)",
-  "unableToExportTheSummary": "Die Zusammenfassung konnte nicht exportiert werden"
+  "unableToExportTheSummary": "Die Zusammenfassung konnte nicht exportiert werden",
+  "addAVoice": "Stimme hinzufügen",
+  "newPersonsName": "Name einer neuen Person",
+  "addToASavedPerson": "Einer gespeicherten Person hinzufügen",
+  "addVoicesTo": "Stimmen zu {name} hinzufügen",
+  "tickTheVoicesThatAre": "Diese Stimmen wurden niemandem zugeordnet. Hake die an, die {name} gehören; mit Abspielen prüfen.",
+  "addTo": "Zu {name} hinzufügen"
 }

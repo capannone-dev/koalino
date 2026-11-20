@@ -502,5 +502,12 @@
   "yourQuestion": "La tua domanda",
   "exportAs": "Esporta come",
   "plainText": "Testo semplice",
-  "theSummaryCouldNotBeExported": "Non è stato possibile esportare il riassunto. Riprova."
+  "theSummaryCouldNotBeExported": "Non è stato possibile esportare il riassunto. Riprova.",
+  "newPersonsName": "Nome di una nuova persona",
+  "addToASavedPerson": "Aggiungi a una persona salvata",
+  "addSpeakerToASavedPerson": "Aggiungi {speakerLabel} a una persona salvata",
+  "addAVoice": "Aggiungi una voce",
+  "addAVoiceTo": "Aggiungi una voce a {name}",
+  "tickTheVoicesThatAre": "Queste voci non sono state riconosciute. Spunta quelle di {name}; ascoltale per controllare.",
+  "addTo": "Aggiungi a {name}"
 }

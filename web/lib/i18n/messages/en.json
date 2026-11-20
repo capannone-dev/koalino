@@ -502,5 +502,12 @@
   "yourQuestion": "Your question",
   "exportAs": "Export as",
   "plainText": "Plain text",
-  "theSummaryCouldNotBeExported": "The summary could not be exported. Try again."
+  "theSummaryCouldNotBeExported": "The summary could not be exported. Try again.",
+  "newPersonsName": "New person's name",
+  "addToASavedPerson": "Add to a saved person",
+  "addSpeakerToASavedPerson": "Add {speakerLabel} to a saved person",
+  "addAVoice": "Add a voice",
+  "addAVoiceTo": "Add a voice to {name}",
+  "tickTheVoicesThatAre": "These voices were not recognized as anyone. Tick the ones that are {name}; listen to check.",
+  "addTo": "Add to {name}"
 }

@@ -727,5 +727,11 @@
   "handoffStepPasteSend": "点击消息框，粘贴会议（Ctrl+V）后按 Enter。",
   "chatHandoffIntro": "用你自己的账号，在你自己的 AI 应用里提问。Koalino 会把笔记和转写交给它，照片和文件以文件形式一并发送。",
   "plainTextFile": "纯文本 (.txt)",
-  "unableToExportTheSummary": "无法导出摘要"
+  "unableToExportTheSummary": "无法导出摘要",
+  "addAVoice": "添加声音",
+  "newPersonsName": "新人员的姓名",
+  "addToASavedPerson": "添加给已保存的人员",
+  "addVoicesTo": "为 {name} 添加声音",
+  "tickTheVoicesThatAre": "这些声音未被识别为任何人。勾选属于 {name} 的声音；可用“播放”确认。",
+  "addTo": "添加给 {name}"
 }

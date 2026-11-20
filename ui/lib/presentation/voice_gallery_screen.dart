@@ -116,13 +116,27 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
                     title: Text(person.displayName),
                     subtitle:
                         Text(l10n.voiceSampleCount(person.voiceVariantCount)),
-                    trailing: IconButton(
-                      key: ValueKey<String>(
-                          'delete-person-${person.identityId}'),
-                      tooltip: l10n.delete4(person.displayName),
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () =>
-                          _confirmDeletePerson(context, controller, person),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        if (controller.clusters.isNotEmpty)
+                          TextButton.icon(
+                            key: ValueKey<String>(
+                                'add-voice-${person.identityId}'),
+                            icon: const Icon(Icons.record_voice_over_outlined),
+                            label: Text(l10n.addAVoice),
+                            onPressed: () => _pickVoicesForPerson(
+                                context, controller, person),
+                          ),
+                        IconButton(
+                          key: ValueKey<String>(
+                              'delete-person-${person.identityId}'),
+                          tooltip: l10n.delete4(person.displayName),
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () =>
+                              _confirmDeletePerson(context, controller, person),
+                        ),
+                      ],
                     ),
                   ),
               ],
@@ -238,30 +252,17 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
     String keyId,
     void Function(String) onAssign,
   ) {
-    return Row(
+    final Widget newPersonRow = Row(
       children: <Widget>[
         Expanded(
           child: TextField(
             key: ValueKey<String>('identity-name-$keyId'),
             controller: nameController,
             decoration: InputDecoration(
-              labelText: l10n.name,
+              labelText: controller.savedPeople.isEmpty
+                  ? l10n.name
+                  : l10n.newPersonsName,
               border: const OutlineInputBorder(),
-              suffixIcon: controller.savedPeople.isEmpty
-                  ? null
-                  : PopupMenuButton<String>(
-                      tooltip: l10n.chooseASavedPerson,
-                      icon: const Icon(Icons.people_outline),
-                      onSelected: (String name) => nameController.text = name,
-                      itemBuilder: (BuildContext context) =>
-                          <PopupMenuEntry<String>>[
-                        for (final SavedPerson person in controller.savedPeople)
-                          PopupMenuItem<String>(
-                            value: person.displayName,
-                            child: Text(person.displayName),
-                          ),
-                      ],
-                    ),
             ),
             textInputAction: TextInputAction.done,
             onSubmitted: onAssign,
@@ -276,6 +277,70 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
         ),
       ],
     );
+    if (controller.savedPeople.isEmpty) {
+      return newPersonRow;
+    }
+    // A voice that wasn't matched to someone already saved is given to them here (#136).
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        newPersonRow,
+        const SizedBox(height: 8),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: MenuAnchor(
+            menuChildren: <Widget>[
+              for (final SavedPerson person in controller.savedPeople)
+                MenuItemButton(
+                  key: ValueKey<String>('add-to-$keyId-${person.identityId}'),
+                  leadingIcon: const Icon(Icons.person_outline),
+                  onPressed: controller.isLoading
+                      ? null
+                      : () => onAssign(person.displayName),
+                  child: Text(person.displayName),
+                ),
+            ],
+            builder:
+                (BuildContext context, MenuController menu, Widget? child) =>
+                    OutlinedButton.icon(
+              key: ValueKey<String>('add-to-person-$keyId'),
+              icon: const Icon(Icons.person_add_alt_1_outlined),
+              label: Text(l10n.addToASavedPerson),
+              onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Lets the owner tick unknown voices that are `person` and gives them to them (#136).
+  ///
+  /// Side effects: Shows a dialog; may play clips and assign voices through the controller.
+  Future<void> _pickVoicesForPerson(BuildContext context,
+      VoiceGalleryController controller, SavedPerson person) async {
+    final List<UnknownSpeakerCluster>? picked =
+        await showDialog<List<UnknownSpeakerCluster>>(
+      context: context,
+      builder: (BuildContext dialogContext) => _VoicePickerDialog(
+        controller: controller,
+        person: person,
+        titleOf: (UnknownSpeakerCluster voice) =>
+            _voiceTitle(voice, controller.clusters.indexOf(voice)),
+        detailsOf: (UnknownSpeakerCluster voice) =>
+            '${voice.meetingTitle ?? l10n.untitledMeeting} · '
+            '${_formatSeconds(voice.totalDurationMs)}',
+      ),
+    );
+    // A clip still playing from the dialog stops with it.
+    for (final UnknownSpeakerCluster voice in controller.clusters) {
+      if (voice.clusterId == controller.playingClusterId) {
+        await controller.play(voice);
+      }
+    }
+    if (picked != null && picked.isNotEmpty) {
+      await controller.addVoicesToPerson(picked, person);
+    }
   }
 
   /// Builds one card for several voices of one person (#82): their total, the meetings they
@@ -501,5 +566,93 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
   String _formatSeconds(int milliseconds) {
     final int tenthsOfSecond = (milliseconds + 50) ~/ 100;
     return '${tenthsOfSecond ~/ 10}.${tenthsOfSecond % 10} s';
+  }
+}
+
+/// The unknown voices to tick for one saved person, each with Play to check it (#136).
+final class _VoicePickerDialog extends StatefulWidget {
+  const _VoicePickerDialog({
+    required this.controller,
+    required this.person,
+    required this.titleOf,
+    required this.detailsOf,
+  });
+
+  final VoiceGalleryController controller;
+  final SavedPerson person;
+
+  /// The voice's name as the gallery shows it.
+  final String Function(UnknownSpeakerCluster) titleOf;
+
+  /// Its meeting and length.
+  final String Function(UnknownSpeakerCluster) detailsOf;
+
+  @override
+  State<_VoicePickerDialog> createState() => _VoicePickerDialogState();
+}
+
+final class _VoicePickerDialogState extends State<_VoicePickerDialog> {
+  /// The ids of the voices ticked.
+  final Set<String> _picked = <String>{};
+
+  @override
+  Widget build(BuildContext context) {
+    final String name = widget.person.displayName;
+    return AlertDialog(
+      title: Text(l10n.addVoicesTo(name)),
+      content: SizedBox(
+        width: 480,
+        child: AnimatedBuilder(
+          animation: widget.controller,
+          builder: (BuildContext context, Widget? child) => ListView(
+            shrinkWrap: true,
+            children: <Widget>[
+              Text(l10n.tickTheVoicesThatAre(name)),
+              const SizedBox(height: 8),
+              for (final UnknownSpeakerCluster voice
+                  in widget.controller.clusters)
+                CheckboxListTile(
+                  key: ValueKey<String>('pick-${voice.clusterId}'),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: _picked.contains(voice.clusterId),
+                  onChanged: (bool? ticked) => setState(() => ticked ?? false
+                      ? _picked.add(voice.clusterId)
+                      : _picked.remove(voice.clusterId)),
+                  title: Text(widget.titleOf(voice)),
+                  subtitle: Text(widget.detailsOf(voice)),
+                  secondary: voice.hasReviewClip
+                      ? TextButton(
+                          key: ValueKey<String>('pick-play-${voice.clusterId}'),
+                          onPressed: () => widget.controller.play(voice),
+                          child: Text(widget.controller.playingClusterId ==
+                                  voice.clusterId
+                              ? l10n.stop
+                              : l10n.play),
+                        )
+                      : null,
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: <Widget>[
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(l10n.cancel),
+        ),
+        FilledButton(
+          key: const ValueKey<String>('confirm-add-voices'),
+          onPressed: _picked.isEmpty
+              ? null
+              : () => Navigator.of(context).pop(<UnknownSpeakerCluster>[
+                    for (final UnknownSpeakerCluster voice
+                        in widget.controller.clusters)
+                      if (_picked.contains(voice.clusterId)) voice,
+                  ]),
+          child: Text(l10n.addTo(name)),
+        ),
+      ],
+    );
   }
 }

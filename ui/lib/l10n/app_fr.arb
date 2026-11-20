@@ -727,5 +727,11 @@
   "handoffStepPasteSend": "Cliquez dans la zone de message, collez la réunion (Ctrl+V) et appuyez sur Entrée.",
   "chatHandoffIntro": "Pose tes questions dans ta propre app d'IA, avec ton propre compte. Koalino lui donne les notes et les transcriptions, et les photos et fichiers les accompagnent en tant que fichiers.",
   "plainTextFile": "Texte brut (.txt)",
-  "unableToExportTheSummary": "Impossible d'exporter le résumé"
+  "unableToExportTheSummary": "Impossible d'exporter le résumé",
+  "addAVoice": "Ajouter une voix",
+  "newPersonsName": "Nom d'une nouvelle personne",
+  "addToASavedPerson": "Ajouter à une personne enregistrée",
+  "addVoicesTo": "Ajouter des voix à {name}",
+  "tickTheVoicesThatAre": "Ces voix n'ont été reconnues comme celles de personne. Cochez celles de {name} ; utilisez Lire pour vérifier.",
+  "addTo": "Ajouter à {name}"
 }

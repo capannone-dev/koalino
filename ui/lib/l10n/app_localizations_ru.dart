@@ -2812,4 +2812,28 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get unableToExportTheSummary => 'Не удалось экспортировать сводку';
+
+  @override
+  String get addAVoice => 'Добавить голос';
+
+  @override
+  String get newPersonsName => 'Имя нового человека';
+
+  @override
+  String get addToASavedPerson => 'Добавить сохранённому человеку';
+
+  @override
+  String addVoicesTo(String name) {
+    return 'Добавить голоса: $name';
+  }
+
+  @override
+  String tickTheVoicesThatAre(String name) {
+    return 'Эти голоса ни с кем не сопоставлены. Отметьте голоса $name; кнопка «Воспроизвести» поможет проверить.';
+  }
+
+  @override
+  String addTo(String name) {
+    return 'Добавить: $name';
+  }
 }

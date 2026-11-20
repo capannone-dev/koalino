@@ -229,3 +229,38 @@ test("a person without a voice sample says what that means (#134)", () => {
 
   expect(screen.getByText("Bruno: no voice sample yet, so not recognized by voice")).toBeInTheDocument();
 });
+
+const ada: api.VoiceIdentity = { identity_id: "identity-1", display_name: "Ada Lovelace", voice_variant_count: 3 };
+
+test("an unknown voice is added to a saved person from its own control (#136)", async () => {
+  vi.mocked(api.assignCluster).mockResolvedValue({ cluster_id: "cluster-1", identity_id: "identity-1", identity_name: "Ada Lovelace", identity_created: false, variants_stored: 1, segments_updated: 2 });
+  render(<VoiceGallery clusters={clusters} people={[ada]} />);
+
+  fireEvent.change(screen.getByLabelText("Add unknown speaker 1 to a saved person"), { target: { value: "Ada Lovelace" } });
+  fireEvent.click(screen.getAllByRole("button", { name: "Add" })[0]);
+
+  expect(await screen.findByText("Assigned to Ada Lovelace.")).toBeInTheDocument();
+  expect(api.assignCluster).toHaveBeenCalledWith("cluster-1", "Ada Lovelace");
+  expect(screen.getByText("Ada Lovelace: 4 voice samples")).toBeInTheDocument();
+});
+
+test("without saved people no voice can be added to one", () => {
+  render(<VoiceGallery clusters={clusters} people={[]} />);
+  expect(screen.queryByLabelText("Add unknown speaker 1 to a saved person")).not.toBeInTheDocument();
+});
+
+test("a saved person takes voices that were not matched to them (#136)", async () => {
+  vi.mocked(api.assignVoiceGroup).mockResolvedValue({ identity_id: "identity-1", identity_name: "Ada Lovelace", identity_created: false, assigned_cluster_ids: ["cluster-1", "cluster-2"], skipped_cluster_count: 0, variants_stored: 2, segments_updated: 4 });
+  render(<VoiceGallery clusters={clusters} people={[ada]} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Add a voice to Ada Lovelace" }));
+  const confirm = screen.getByRole("button", { name: "Add to Ada Lovelace" });
+  expect(confirm).toBeDisabled();
+  fireEvent.click(screen.getByLabelText("Ada Lovelace: Project Sync · 12.5 s"));
+  fireEvent.click(screen.getByLabelText("Ada Lovelace: Untitled meeting · 0.7 s"));
+  fireEvent.click(confirm);
+
+  expect(await screen.findByText("Assigned 2 voices to Ada Lovelace.")).toBeInTheDocument();
+  expect(api.assignVoiceGroup).toHaveBeenCalledWith(["cluster-1", "cluster-2"], "Ada Lovelace");
+  expect(screen.queryByText("12.5 s · 3 chunks")).not.toBeInTheDocument();
+});

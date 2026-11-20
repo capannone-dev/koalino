@@ -2820,4 +2820,28 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get unableToExportTheSummary => 'تعذّر تصدير الملخص';
+
+  @override
+  String get addAVoice => 'إضافة صوت';
+
+  @override
+  String get newPersonsName => 'اسم شخص جديد';
+
+  @override
+  String get addToASavedPerson => 'إضافة إلى شخص محفوظ';
+
+  @override
+  String addVoicesTo(String name) {
+    return 'إضافة أصوات إلى $name';
+  }
+
+  @override
+  String tickTheVoicesThatAre(String name) {
+    return 'لم يُتعرَّف على هذه الأصوات على أنها لأي شخص. حدّد أصوات $name؛ استخدم تشغيل للتحقق.';
+  }
+
+  @override
+  String addTo(String name) {
+    return 'إضافة إلى $name';
+  }
 }

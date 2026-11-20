@@ -2605,4 +2605,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unableToExportTheSummary => '无法导出摘要';
+
+  @override
+  String get addAVoice => '添加声音';
+
+  @override
+  String get newPersonsName => '新人员的姓名';
+
+  @override
+  String get addToASavedPerson => '添加给已保存的人员';
+
+  @override
+  String addVoicesTo(String name) {
+    return '为 $name 添加声音';
+  }
+
+  @override
+  String tickTheVoicesThatAre(String name) {
+    return '这些声音未被识别为任何人。勾选属于 $name 的声音；可用“播放”确认。';
+  }
+
+  @override
+  String addTo(String name) {
+    return '添加给 $name';
+  }
 }

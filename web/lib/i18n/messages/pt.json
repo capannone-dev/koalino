@@ -502,5 +502,12 @@
   "yourQuestion": "Sua pergunta",
   "exportAs": "Exportar como",
   "plainText": "Texto simples",
-  "theSummaryCouldNotBeExported": "Não foi possível exportar o resumo. Tente novamente."
+  "theSummaryCouldNotBeExported": "Não foi possível exportar o resumo. Tente novamente.",
+  "newPersonsName": "Nome de uma nova pessoa",
+  "addToASavedPerson": "Adicionar a uma pessoa salva",
+  "addSpeakerToASavedPerson": "Adicionar {speakerLabel} a uma pessoa salva",
+  "addAVoice": "Adicionar uma voz",
+  "addAVoiceTo": "Adicionar uma voz a {name}",
+  "tickTheVoicesThatAre": "Estas vozes não foram reconhecidas como de ninguém. Marque as de {name}; ouça para conferir.",
+  "addTo": "Adicionar a {name}"
 }

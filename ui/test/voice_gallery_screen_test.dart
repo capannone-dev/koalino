@@ -537,6 +537,8 @@ void main() {
 
     expect(find.text('Project Sync'), findsOneWidget);
     expect(find.text('Untitled meeting'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('3 voice samples'), 200,
+        scrollable: find.byType(Scrollable).first);
     expect(find.text('Ada Lovelace'), findsOneWidget);
     expect(find.text('3 voice samples'), findsOneWidget);
   });
@@ -561,7 +563,8 @@ void main() {
     expect(find.text('0 voice samples'), findsNothing);
   });
 
-  testWidgets('a voice can be assigned to a saved person',
+  testWidgets(
+      'an unknown voice is added to a saved person from its own button (#136)',
       (WidgetTester tester) async {
     final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
       clusters: <UnknownSpeakerCluster>[firstCluster],
@@ -569,15 +572,82 @@ void main() {
     );
 
     await pumpGallery(tester, bridge, meetingId: null);
-    await tester.tap(find.byTooltip('Choose a saved person'));
+    await tester
+        .tap(find.byKey(const ValueKey<String>('add-to-person-cluster-1')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Ada Lovelace').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey<String>('assign-cluster-1')));
+    await tester
+        .tap(find.byKey(const ValueKey<String>('add-to-cluster-1-identity-1')));
     await tester.pumpAndSettle();
 
     expect(bridge.assignedClusters, <(String, String)>[
       ('cluster-1', 'Ada Lovelace'),
+    ]);
+  });
+
+  testWidgets('without saved people there is nobody to add a voice to',
+      (WidgetTester tester) async {
+    await pumpGallery(tester,
+        FakeVoiceGalleryBridge(clusters: <UnknownSpeakerCluster>[firstCluster]),
+        meetingId: null);
+
+    expect(find.byKey(const ValueKey<String>('add-to-person-cluster-1')),
+        findsNothing);
+  });
+
+  testWidgets(
+      'a saved person takes voices that were not matched to them (#136)',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[firstCluster, otherMeetingCluster],
+      savedPeople: <SavedPerson>[savedAda],
+    );
+
+    await pumpGallery(tester, bridge, meetingId: null);
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('add-voice-identity-1')), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester
+        .tap(find.byKey(const ValueKey<String>('add-voice-identity-1')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Add voices to Ada Lovelace'), findsOneWidget);
+    final Finder confirm =
+        find.byKey(const ValueKey<String>('confirm-add-voices'));
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull,
+        reason: 'nothing ticked yet');
+
+    await tester.tap(find.byKey(const ValueKey<String>('pick-cluster-1')));
+    await tester.tap(find.byKey(const ValueKey<String>('pick-cluster-3')));
+    await tester.pumpAndSettle();
+    await tester.tap(confirm);
+    await tester.pumpAndSettle();
+
+    expect(bridge.assignedGroups, <(String, String)>[
+      ('cluster-1,cluster-3', 'Ada Lovelace'),
+    ]);
+  });
+
+  testWidgets('one voice picked for a saved person is assigned alone',
+      (WidgetTester tester) async {
+    final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
+      clusters: <UnknownSpeakerCluster>[firstCluster, otherMeetingCluster],
+      savedPeople: <SavedPerson>[savedAda],
+    );
+
+    await pumpGallery(tester, bridge, meetingId: null);
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey<String>('add-voice-identity-1')), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester
+        .tap(find.byKey(const ValueKey<String>('add-voice-identity-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('pick-cluster-3')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('confirm-add-voices')));
+    await tester.pumpAndSettle();
+
+    expect(bridge.assignedClusters, <(String, String)>[
+      ('cluster-3', 'Ada Lovelace'),
     ]);
   });
 

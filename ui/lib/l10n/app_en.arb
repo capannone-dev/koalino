@@ -2233,5 +2233,17 @@
   "plainTextFile": "Plain text (.txt)",
   "@plainTextFile": {"description": "Summary export menu (#130): the plain-text format."},
   "unableToExportTheSummary": "Unable to export the summary",
-  "@unableToExportTheSummary": {"description": "Snack bar when a summary export fails (#130)."}
+  "@unableToExportTheSummary": {"description": "Snack bar when a summary export fails (#130)."},
+  "addAVoice": "Add a voice",
+  "@addAVoice": {"description": "Voice gallery (#136): button on a saved person to give them unmatched voices."},
+  "newPersonsName": "New person's name",
+  "@newPersonsName": {"description": "Voice gallery (#136): name field label when saved people exist."},
+  "addToASavedPerson": "Add to a saved person",
+  "@addToASavedPerson": {"description": "Voice gallery (#136): button on an unknown voice to give it to someone saved."},
+  "addVoicesTo": "Add voices to {name}",
+  "@addVoicesTo": {"description": "Voice gallery (#136): picker dialog title.", "placeholders": {"name": {"type": "String"}}},
+  "tickTheVoicesThatAre": "These voices were not recognized as anyone. Tick the ones that are {name}; use Play to check.",
+  "@tickTheVoicesThatAre": {"description": "Voice gallery (#136): picker dialog explanation.", "placeholders": {"name": {"type": "String"}}},
+  "addTo": "Add to {name}",
+  "@addTo": {"description": "Voice gallery (#136): picker dialog confirm button.", "placeholders": {"name": {"type": "String"}}}
 }

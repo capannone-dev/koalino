@@ -727,5 +727,11 @@
   "handoffStepPasteSend": "メッセージ欄をクリックし、会議を貼り付けて（Ctrl+V）Enter キーを押します。",
   "chatHandoffIntro": "自分のアカウントで、自分の AI アプリに質問できます。Koalino がメモと文字起こしを渡し、写真やファイルはファイルのまま一緒に送られます。",
   "plainTextFile": "プレーンテキスト (.txt)",
-  "unableToExportTheSummary": "要約を書き出せませんでした"
+  "unableToExportTheSummary": "要約を書き出せませんでした",
+  "addAVoice": "声を追加",
+  "newPersonsName": "新しい人の名前",
+  "addToASavedPerson": "保存済みの人に追加",
+  "addVoicesTo": "{name} に声を追加",
+  "tickTheVoicesThatAre": "これらの声は誰とも認識されませんでした。{name} の声にチェックを入れてください。「再生」で確認できます。",
+  "addTo": "{name} に追加"
 }

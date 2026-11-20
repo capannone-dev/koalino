@@ -727,5 +727,11 @@
   "handoffStepPasteSend": "Fai clic nella casella del messaggio, incolla la riunione (Ctrl+V) e premi Invio.",
   "chatHandoffIntro": "Fai le tue domande nella tua app di IA, con il tuo account. Koalino le passa note e trascrizioni, e foto e file vanno insieme come file.",
   "plainTextFile": "Testo semplice (.txt)",
-  "unableToExportTheSummary": "Impossibile esportare il riassunto"
+  "unableToExportTheSummary": "Impossibile esportare il riassunto",
+  "addAVoice": "Aggiungi una voce",
+  "newPersonsName": "Nome di una nuova persona",
+  "addToASavedPerson": "Aggiungi a una persona salvata",
+  "addVoicesTo": "Aggiungi voci a {name}",
+  "tickTheVoicesThatAre": "Queste voci non sono state riconosciute. Spunta quelle di {name}; usa Riproduci per controllare.",
+  "addTo": "Aggiungi a {name}"
 }

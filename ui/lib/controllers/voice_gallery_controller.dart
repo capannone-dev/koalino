@@ -295,6 +295,42 @@ final class VoiceGalleryController extends ChangeNotifier {
     await load();
   }
 
+  /// Gives `voices` (unknown voices the owner picked) to the saved `person` (#136): their
+  /// voice samples join that person's, so later meetings recognize them in these voices too.
+  ///
+  /// One voice goes through `assignCluster`, several through one group naming. An empty pick is
+  /// rejected locally. Side effects: Calls Rust, then reloads the gallery.
+  Future<void> addVoicesToPerson(
+      List<UnknownSpeakerCluster> voices, SavedPerson person) async {
+    if (voices.isEmpty) {
+      _statusMessage = l10n.chooseAtLeastOneVoiceTo;
+      notifyListeners();
+      return;
+    }
+    if (voices.length == 1) {
+      return assignCluster(voices.single, person.displayName);
+    }
+    try {
+      final VoiceGroupAssignmentResult result =
+          await _voiceGalleryBridge.assignVoiceGroup(
+        clusterIds: <String>[
+          for (final UnknownSpeakerCluster voice in voices) voice.clusterId,
+        ],
+        identityName: person.displayName,
+      );
+      final String assigned = l10n.assignedVoicesTo(
+          result.assignedClusterIds.length, result.identityName);
+      _statusMessage = result.variantsStored > 0
+          ? assigned
+          : l10n.thereWasNotEnoughClearSpeech(assigned);
+    } on Object {
+      _statusMessage = l10n.unableToAssignTheSpeakerCluster;
+      notifyListeners();
+      return;
+    }
+    await load();
+  }
+
   @override
   void dispose() {
     unawaited(_playbackFinished.cancel());

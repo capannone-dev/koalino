@@ -4485,6 +4485,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unable to export the summary'**
   String get unableToExportTheSummary;
+
+  /// Voice gallery (#136): button on a saved person to give them unmatched voices.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a voice'**
+  String get addAVoice;
+
+  /// Voice gallery (#136): name field label when saved people exist.
+  ///
+  /// In en, this message translates to:
+  /// **'New person\'s name'**
+  String get newPersonsName;
+
+  /// Voice gallery (#136): button on an unknown voice to give it to someone saved.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to a saved person'**
+  String get addToASavedPerson;
+
+  /// Voice gallery (#136): picker dialog title.
+  ///
+  /// In en, this message translates to:
+  /// **'Add voices to {name}'**
+  String addVoicesTo(String name);
+
+  /// Voice gallery (#136): picker dialog explanation.
+  ///
+  /// In en, this message translates to:
+  /// **'These voices were not recognized as anyone. Tick the ones that are {name}; use Play to check.'**
+  String tickTheVoicesThatAre(String name);
+
+  /// Voice gallery (#136): picker dialog confirm button.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to {name}'**
+  String addTo(String name);
 }
 
 class _AppLocalizationsDelegate

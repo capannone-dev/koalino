@@ -3915,3 +3915,14 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - Known limit: a frame already sent is gone from the outbox; if Koalino crashes before
   processing it, that frame is lost (the protocol has no acknowledgements).
 - MSRV raised to 1.89 for `std::fs::File::try_lock`.
+
+## 2026-11-20 — Giving a known person a voice that wasn't matched to them (#136)
+
+- **Request:** the owner found it unclear how to add, to someone already saved, a voice that
+  wasn't recognized as them.
+- **Decision:** both directions are now explicit, in the app and the web UI. Each unknown voice
+  has "Add to a saved person" (a list of saved people; picking one assigns at once), and its name
+  field reads "New person's name". Each saved person has "Add a voice", which lists the
+  unmatched voices with Play/listen and checkboxes, and "Add to <name>" gives the ticked ones to
+  them (one voice: a single assignment; several: one group naming). No core change: assigning to
+  an existing name already adds voice samples to that person.

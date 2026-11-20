@@ -2665,4 +2665,28 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get unableToExportTheSummary => '要約を書き出せませんでした';
+
+  @override
+  String get addAVoice => '声を追加';
+
+  @override
+  String get newPersonsName => '新しい人の名前';
+
+  @override
+  String get addToASavedPerson => '保存済みの人に追加';
+
+  @override
+  String addVoicesTo(String name) {
+    return '$name に声を追加';
+  }
+
+  @override
+  String tickTheVoicesThatAre(String name) {
+    return 'これらの声は誰とも認識されませんでした。$name の声にチェックを入れてください。「再生」で確認できます。';
+  }
+
+  @override
+  String addTo(String name) {
+    return '$name に追加';
+  }
 }

@@ -502,5 +502,12 @@
   "yourQuestion": "你的问题",
   "exportAs": "导出为",
   "plainText": "纯文本",
-  "theSummaryCouldNotBeExported": "无法导出摘要。请重试。"
+  "theSummaryCouldNotBeExported": "无法导出摘要。请重试。",
+  "newPersonsName": "新人员的姓名",
+  "addToASavedPerson": "添加给已保存的人员",
+  "addSpeakerToASavedPerson": "将 {speakerLabel} 添加给已保存的人员",
+  "addAVoice": "添加声音",
+  "addAVoiceTo": "为 {name} 添加声音",
+  "tickTheVoicesThatAre": "这些声音未被识别为任何人。勾选属于 {name} 的声音；可试听确认。",
+  "addTo": "添加给 {name}"
 }

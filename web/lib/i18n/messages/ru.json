@@ -522,5 +522,12 @@
   "yourQuestion": "Ваш вопрос",
   "exportAs": "Экспортировать как",
   "plainText": "Обычный текст",
-  "theSummaryCouldNotBeExported": "Не удалось экспортировать сводку. Попробуйте ещё раз."
+  "theSummaryCouldNotBeExported": "Не удалось экспортировать сводку. Попробуйте ещё раз.",
+  "newPersonsName": "Имя нового человека",
+  "addToASavedPerson": "Добавить сохранённому человеку",
+  "addSpeakerToASavedPerson": "Добавить {speakerLabel} сохранённому человеку",
+  "addAVoice": "Добавить голос",
+  "addAVoiceTo": "Добавить голос: {name}",
+  "tickTheVoicesThatAre": "Эти голоса ни с кем не сопоставлены. Отметьте голоса {name}; прослушайте, чтобы проверить.",
+  "addTo": "Добавить: {name}"
 }

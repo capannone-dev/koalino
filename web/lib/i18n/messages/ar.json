@@ -529,5 +529,12 @@
   "yourQuestion": "سؤالك",
   "exportAs": "تصدير بصيغة",
   "plainText": "نص عادي",
-  "theSummaryCouldNotBeExported": "تعذّر تصدير الملخص. حاول مرة أخرى."
+  "theSummaryCouldNotBeExported": "تعذّر تصدير الملخص. حاول مرة أخرى.",
+  "newPersonsName": "اسم شخص جديد",
+  "addToASavedPerson": "إضافة إلى شخص محفوظ",
+  "addSpeakerToASavedPerson": "إضافة {speakerLabel} إلى شخص محفوظ",
+  "addAVoice": "إضافة صوت",
+  "addAVoiceTo": "إضافة صوت إلى {name}",
+  "tickTheVoicesThatAre": "لم يُتعرَّف على هذه الأصوات على أنها لأي شخص. حدّد أصوات {name}؛ استمع للتحقق.",
+  "addTo": "إضافة إلى {name}"
 }

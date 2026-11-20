@@ -502,5 +502,12 @@
   "yourQuestion": "質問",
   "exportAs": "書き出し形式",
   "plainText": "プレーンテキスト",
-  "theSummaryCouldNotBeExported": "要約を書き出せませんでした。もう一度お試しください。"
+  "theSummaryCouldNotBeExported": "要約を書き出せませんでした。もう一度お試しください。",
+  "newPersonsName": "新しい人の名前",
+  "addToASavedPerson": "保存済みの人に追加",
+  "addSpeakerToASavedPerson": "{speakerLabel} を保存済みの人に追加",
+  "addAVoice": "声を追加",
+  "addAVoiceTo": "{name} に声を追加",
+  "tickTheVoicesThatAre": "これらの声は誰とも認識されませんでした。{name} の声にチェックを入れてください。聞いて確認できます。",
+  "addTo": "{name} に追加"
 }

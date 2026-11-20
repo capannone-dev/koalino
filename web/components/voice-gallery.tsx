@@ -72,6 +72,31 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null);
   /** Voices left out of their group's naming, by cluster ID. */
   const [leftOut, setLeftOut] = useState<Set<string>>(new Set());
+  /** The saved person whose voice picker is open (#136), and the voices ticked in it. */
+  const [addingTo, setAddingTo] = useState<VoiceIdentity | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+
+  /** Opens (or closes) the voice picker of `person`. */
+  function togglePicker(person: VoiceIdentity) {
+    setPicked(new Set());
+    setAddingTo((current) => (current?.identity_id === person.identity_id ? null : person));
+  }
+
+  /** Gives the voices ticked in the picker to its person, then closes it. */
+  async function addPickedVoices(person: VoiceIdentity) {
+    const clusterIds = pendingClusters.filter((voice) => picked.has(voice.cluster_id)).map((voice) => voice.cluster_id);
+    await assignVoices(clusterIds, person.display_name);
+    setAddingTo(null);
+    setPicked(new Set());
+  }
+
+  /** Gives a lone voice or a group's included voices to the person chosen in its own list. */
+  async function submitToSavedPerson(event: FormEvent<HTMLFormElement>, group: VoiceGroup) {
+    event.preventDefault();
+    const identityName = String(new FormData(event.currentTarget).get("savedPerson") ?? "");
+    const included = group.voices.length === 1 ? [group.voices[0].cluster_id] : group.voices.filter((voice) => !leftOut.has(voice.cluster_id)).map((voice) => voice.cluster_id);
+    await assignVoices(included, identityName, group.voices.length > 1);
+  }
 
   /** Asks before deleting every voice of a group (often just one), then removes its card. */
   function askToDeleteGroup(group: VoiceGroup, speakerLabel: string) {
@@ -136,20 +161,26 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
       setMessage(t("enterANameBeforeAssigning"));
       return;
     }
+    const included = group.voices.length === 1 ? [group.voices[0].cluster_id] : group.voices.filter((voice) => !leftOut.has(voice.cluster_id)).map((voice) => voice.cluster_id);
+    await assignVoices(included, identityName, group.voices.length > 1);
+  }
+
+  /** Gives the picked voices to the saved person (#136), from either side of the page. */
+  async function assignVoices(clusterIds: string[], identityName: string, fromGroup = false) {
     const noVoiceNote = t("thereWasNotEnoughClear");
     try {
-      if (group.voices.length === 1) {
-        const assignment = await assignCluster(group.voices[0].cluster_id, identityName);
+      // A group's naming stays one group call even when only one part is left ticked.
+      if (clusterIds.length === 1 && !fromGroup) {
+        const assignment = await assignCluster(clusterIds[0], identityName);
         recordNaming([assignment.cluster_id], assignment.identity_id, assignment.identity_name, assignment.variants_stored);
         setMessage(`${t("assignedTo2", { identityName: assignment.identity_name })}${assignment.variants_stored > 0 ? "" : noVoiceNote}`);
         return;
       }
-      const included = group.voices.filter((voice) => !leftOut.has(voice.cluster_id)).map((voice) => voice.cluster_id);
-      if (included.length === 0) {
+      if (clusterIds.length === 0) {
         setMessage(t("chooseAtLeastOneVoice"));
         return;
       }
-      const assignment = await assignVoiceGroup(included, identityName);
+      const assignment = await assignVoiceGroup(clusterIds, identityName);
       recordNaming(assignment.assigned_cluster_ids, assignment.identity_id, assignment.identity_name, assignment.variants_stored);
       const named = assignment.assigned_cluster_ids.length;
       const assigned = named === 1 ? t("assignedTo2", { identityName: assignment.identity_name }) : t("assignedVoicesTo", { count: named, identityName: assignment.identity_name });
@@ -211,10 +242,21 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
             )}
             {suggestedName ? <p className="text-sm">{t("theCallShowedSpeakingCheck", { suggestedName })}</p> : null}
             <form className="space-y-2" onSubmit={(event) => submitAssignment(event, group)}>
-              <label className="block">{t("name")}<input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" name="identityName" type="text" aria-label={t("nameFor", { speakerLabel: speakerLabel.toLowerCase() })} autoComplete="off" list="saved-people" defaultValue={suggestedName ?? undefined} />
+              <label className="block">{people.length > 0 ? t("newPersonsName") : t("name")}<input className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" name="identityName" type="text" aria-label={t("nameFor", { speakerLabel: speakerLabel.toLowerCase() })} autoComplete="off" list="saved-people" defaultValue={suggestedName ?? undefined} />
               </label>
               <button className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong" type="submit">{t("assign")}</button>
             </form>
+            {people.length > 0 ? (
+              // A voice that wasn't matched to someone already saved is given to them here (#136).
+              <form className="flex flex-wrap items-end gap-2" onSubmit={(event) => submitToSavedPerson(event, group)}>
+                <label className="block grow">{t("addToASavedPerson")}
+                  <select name="savedPerson" className="mt-1 block min-h-11 w-full rounded-lg border border-line-strong bg-surface px-3 text-base focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/30" aria-label={t("addSpeakerToASavedPerson", { speakerLabel: speakerLabel.toLowerCase() })}>
+                    {people.map((person) => <option key={person.identity_id} value={person.display_name}>{person.display_name}</option>)}
+                  </select>
+                </label>
+                <button className="min-h-11 rounded-lg border border-line-strong px-4 font-medium hover:bg-surface-muted" type="submit">{t("add")}</button>
+              </form>
+            ) : null}
           </article>
         );
       })}
@@ -223,14 +265,60 @@ export function VoiceGallery({ clusters, people: initialPeople }: { clusters: Li
       {people.length === 0 ? <p>{t("noSavedPeopleYetName")}</p> : null}
       <ul>
         {people.map((person) => (
-          <li key={person.identity_id} className="flex items-center justify-between gap-2">
-            <span>{t("personVoiceSamples", { name: person.display_name, count: person.voice_variant_count })}</span>
-            <button
-              type="button"
-              aria-label={t("delete9", { displayName: person.display_name })}
-              onClick={() => askToDeletePerson(person)}
-              className="min-h-11 rounded-lg px-3 font-medium text-danger hover:bg-surface-muted"
-            >{t("delete")}</button>
+          <li key={person.identity_id} className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>{t("personVoiceSamples", { name: person.display_name, count: person.voice_variant_count })}</span>
+              <div className="flex gap-1">
+                {pendingClusters.length > 0 ? (
+                  <button
+                    type="button"
+                    aria-expanded={addingTo?.identity_id === person.identity_id}
+                    aria-label={t("addAVoiceTo", { name: person.display_name })}
+                    onClick={() => togglePicker(person)}
+                    className="min-h-11 rounded-lg px-3 font-medium hover:bg-surface-muted"
+                  >{t("addAVoice")}</button>
+                ) : null}
+                <button
+                  type="button"
+                  aria-label={t("delete9", { displayName: person.display_name })}
+                  onClick={() => askToDeletePerson(person)}
+                  className="min-h-11 rounded-lg px-3 font-medium text-danger hover:bg-surface-muted"
+                >{t("delete")}</button>
+              </div>
+            </div>
+            {addingTo?.identity_id === person.identity_id ? (
+              <div className="card space-y-2">
+                <p className="text-sm">{t("tickTheVoicesThatAre", { name: person.display_name })}</p>
+                <ul className="space-y-2">
+                  {pendingClusters.map((voice) => (
+                    <li key={voice.cluster_id} className="flex flex-wrap items-center gap-2">
+                      <label className="flex min-h-11 items-center gap-2">
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5"
+                          checked={picked.has(voice.cluster_id)}
+                          onChange={(event) => setPicked((current) => {
+                            const next = new Set(current);
+                            if (event.target.checked) next.add(voice.cluster_id);
+                            else next.delete(voice.cluster_id);
+                            return next;
+                          })}
+                          aria-label={`${person.display_name}: ${partLabel(t, voice)}`}
+                        />
+                        <span>{voice.speaker_label ? `${voice.speaker_label} · ` : ""}{partLabel(t, voice)}</span>
+                      </label>
+                      {voice.has_review_clip ? <audio controls preload="none" src={reviewClipUrl(voice.cluster_id)} aria-label={t("listenTo2", { partLabel: partLabel(t, voice) })} className="max-w-full" /> : null}
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  disabled={picked.size === 0}
+                  onClick={() => addPickedVoices(person)}
+                  className="min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:opacity-50"
+                >{t("addTo", { name: person.display_name })}</button>
+              </div>
+            ) : null}
           </li>
         ))}
       </ul>
