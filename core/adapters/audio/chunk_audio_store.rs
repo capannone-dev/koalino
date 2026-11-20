@@ -59,6 +59,21 @@ impl ChunkAudioStore {
         }
     }
 
+    /// Hashes a held chunk's samples, so a finished pass window can be recognised (#87).
+    ///
+    /// Inputs: The chunk's recording ID. Outputs: The SHA-256 of its samples (little-endian), or
+    /// `None` when it is not held. Side effects: None; the samples stay held.
+    pub fn fingerprint(&self, recording_id: &RecordingId) -> Option<[u8; 32]> {
+        use sha2::{Digest, Sha256};
+        let entries = self.lock_entries();
+        let samples = entries.get(recording_id.as_str())?;
+        let mut hasher = Sha256::new();
+        for sample in samples {
+            hasher.update(sample.to_le_bytes());
+        }
+        Some(hasher.finalize().into())
+    }
+
     /// Returns how many chunks are waiting to be read.
     pub fn len(&self) -> usize {
         self.lock_entries().len()

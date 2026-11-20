@@ -14,7 +14,10 @@
 //! user only. Speech received from a paired device for combining (#88) is written to
 //! `<file>.incoming` and becomes the meeting's file only once complete. An empty `<file>.passed`
 //! notes that the meeting already took the pass alone while its speech waits to be combined with
-//! a late recording; new speech or deletion drops it.
+//! a late recording; new speech or deletion drops it. `<file>.progress` holds the windows the pass
+//! already transcribed, each sealed with its text under the same key, so a pass stopped part way
+//! (a phone's background job runs at most 10 to 30 minutes, #87) resumes instead of starting over;
+//! it goes with the pass-alone note, and once the meeting took the pass.
 
 use std::{
     fs::{self, OpenOptions},
@@ -185,6 +188,7 @@ impl RetainedAudioStore {
     ///
     /// Side effects: Creates an empty `<file>.passed`, readable by this user only.
     pub fn mark_passed_alone(&self, meeting_id: &MeetingId) -> Result<(), RetainedAudioError> {
+        self.forget_finished_windows(meeting_id)?;
         fs::create_dir_all(&self.directory)?;
         private_append(&self.passed_path(meeting_id))?;
         Ok(())
@@ -203,12 +207,107 @@ impl RetainedAudioStore {
     }
 
     /// Drops a meeting's pass-alone note. Side effects: Removes `<file>.passed` if present.
+    /// Also drops the windows the pass finished, as they belong to the speech held until now.
     fn forget_pass_alone(&self, meeting_id: &MeetingId) -> Result<(), RetainedAudioError> {
+        self.forget_finished_windows(meeting_id)?;
         match fs::remove_file(self.passed_path(meeting_id)) {
             Ok(()) => Ok(()),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
             Err(error) => Err(error.into()),
         }
+    }
+
+    /// The path of a meeting's finished pass windows.
+    fn progress_path(&self, meeting_id: &MeetingId) -> PathBuf {
+        self.directory
+            .join(format!("{}.progress", Self::file_name(meeting_id)))
+    }
+
+    /// The authenticated data binding a finished window to its meeting and its key.
+    fn progress_context(meeting_id: &MeetingId, key: &[u8; 32]) -> String {
+        let key_hex: String = key.iter().map(|byte| format!("{byte:02x}")).collect();
+        format!("retained-progress:v1:{}:{key_hex}", meeting_id.as_str())
+    }
+
+    /// Drops a meeting's finished pass windows. Side effects: Removes `<file>.progress`.
+    fn forget_finished_windows(&self, meeting_id: &MeetingId) -> Result<(), RetainedAudioError> {
+        match fs::remove_file(self.progress_path(meeting_id)) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    /// Keeps the transcript of one window the pass finished, so a stopped pass resumes (#87).
+    ///
+    /// Inputs: The meeting; `key`, which names the window's audio and context (a hash, never the
+    /// audio); and the engine's transcript.
+    /// Outputs: `Ok(())`, or a storage or encryption error (the pass goes on without it).
+    /// Side effects: Appends a sealed record (length, then the sealed JSON) to `<file>.progress`,
+    /// readable by this user only. The plaintext is wiped.
+    pub fn record_finished_window(
+        &self,
+        meeting_id: &MeetingId,
+        key: &[u8; 32],
+        transcript: &crate::domain::models::Transcript,
+    ) -> Result<(), RetainedAudioError> {
+        let words: Vec<serde_json::Value> = transcript
+            .timed_words()
+            .iter()
+            .map(|word| {
+                serde_json::json!([
+                    word.text(),
+                    word.start_ms(),
+                    word.end_ms(),
+                    word.probability_permille()
+                ])
+            })
+            .collect();
+        let plaintext = Zeroizing::new(
+            serde_json::to_vec(&serde_json::json!({
+                "content": transcript.content(),
+                "words": words,
+            }))
+            .map_err(|_| RetainedAudioError::Encryption)?,
+        );
+        let sealed = self
+            .cipher
+            .seal_secret(&Self::progress_context(meeting_id, key), &plaintext)
+            .map_err(|_| RetainedAudioError::Encryption)?;
+        let length = u32::try_from(sealed.len()).map_err(|_| RetainedAudioError::Encryption)?;
+        fs::create_dir_all(&self.directory)?;
+        let mut file = private_append(&self.progress_path(meeting_id))?;
+        let mut record = Vec::with_capacity(4 + sealed.len());
+        record.extend_from_slice(&length.to_le_bytes());
+        record.extend_from_slice(&sealed);
+        file.write_all(&record)?;
+        Ok(())
+    }
+
+    /// Returns the transcript of a window the pass already finished, when `key` matches one.
+    ///
+    /// Inputs: The meeting and the window's key. Outputs: The transcript, or `None` when no
+    /// record matches (or the file is unreadable, which only costs the work again).
+    /// Side effects: Reads the file; plaintext is wiped after parsing.
+    pub fn finished_window(
+        &self,
+        meeting_id: &MeetingId,
+        key: &[u8; 32],
+    ) -> Option<crate::domain::models::Transcript> {
+        let bytes = fs::read(self.progress_path(meeting_id)).ok()?;
+        let context = Self::progress_context(meeting_id, key);
+        let mut rest = bytes.as_slice();
+        while let Some((length, after_length)) = rest.split_first_chunk::<4>() {
+            let length = usize::try_from(u32::from_le_bytes(*length)).ok()?;
+            let (sealed, after_record) = after_length.split_at_checked(length)?;
+            rest = after_record;
+            // Records of other windows are sealed under other contexts and fail to open.
+            let Ok(plaintext) = self.cipher.open_secret(&context, sealed) else {
+                continue;
+            };
+            return transcript_from_json(meeting_id, &plaintext);
+        }
+        None
     }
 
     /// Seals one chunk's compressed speech for `meeting_id` and appends it to `file_name`.
@@ -526,6 +625,23 @@ impl RetainedSpeechIndex {
         })
     }
 
+    /// Counts the meetings whose speech still needs the pass here (#87): held speech that has not
+    /// taken it alone. Speech that did and only waits to be combined is not counted, so a phone's
+    /// background job does not keep running for it.
+    ///
+    /// Outputs: The count; 0 for an empty or missing folder. Side effects: Lists the folder only.
+    pub fn awaiting_pass(&self) -> usize {
+        let suffix = format!(".{FILE_EXTENSION}");
+        fs::read_dir(&self.directory).map_or(0, |entries| {
+            entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .filter(|name| name.ends_with(&suffix))
+                .filter(|name| !self.directory.join(format!("{name}.passed")).exists())
+                .count()
+        })
+    }
+
     /// Returns the meeting's speech held here: how long ago it was last written, as of `now`, and
     /// whether it already took the pass alone; `None` when none is held.
     ///
@@ -559,6 +675,38 @@ fn passed_path(directory: &std::path::Path, meeting_id: &MeetingId) -> PathBuf {
         "{}.passed",
         RetainedAudioStore::file_name(meeting_id)
     ))
+}
+
+/// Rebuilds a finished window's transcript from its JSON (see `record_finished_window`).
+///
+/// Outputs: The transcript, or `None` when the JSON is not of that shape. Side effects: None.
+fn transcript_from_json(
+    meeting_id: &MeetingId,
+    plaintext: &[u8],
+) -> Option<crate::domain::models::Transcript> {
+    let value: serde_json::Value = serde_json::from_slice(plaintext).ok()?;
+    let content = value.get("content")?.as_str()?;
+    let words = value
+        .get("words")?
+        .as_array()?
+        .iter()
+        .map(|word| {
+            let text = word.get(0)?.as_str()?;
+            let start_ms = word.get(1)?.as_u64()?;
+            let end_ms = word.get(2)?.as_u64()?;
+            let probability = word
+                .get(3)?
+                .as_u64()
+                .and_then(|permille| u16::try_from(permille).ok());
+            Some(
+                crate::domain::models::TimedWord::new(text, start_ms, end_ms)
+                    .with_probability_permille(probability),
+            )
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(
+        crate::domain::models::Transcript::new(meeting_id.clone(), content).with_timed_words(words),
+    )
 }
 
 /// Opens `path` for appending, creating it readable and writable by this user only.

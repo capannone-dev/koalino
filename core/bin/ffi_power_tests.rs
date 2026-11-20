@@ -148,3 +148,49 @@ fn charging_with_a_speed_check_due_starts_the_worker() {
     );
     let _ = std::fs::remove_dir_all(&folder);
 }
+
+/// Speech waiting at `folder` for meeting `name`.
+fn leave_speech(folder: &std::path::Path, name: &str) {
+    RetainedAudioStore::new(folder.to_path_buf(), ephemeral_cipher())
+        .append_chunk(
+            &MeetingId::new(name),
+            ChunkSpan {
+                start_ms: 0,
+                end_ms: 1_000,
+            },
+            None,
+            &[0; 160],
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+}
+
+#[test]
+fn a_background_job_gets_the_pass_only_while_speech_awaits_it() {
+    let folder = speech_folder();
+    let control = Arc::new(RefinementControl::new(true));
+    let builds = Arc::new(AtomicUsize::new(0));
+    let mut runtime = phone_runtime(&control, &folder, &builds)
+        .with_retained_speech(RetainedSpeechIndex::new(folder.clone()));
+
+    assert_eq!(runtime.speech_awaiting_pass(), 0);
+    assert!(runtime.waiting_pass_control().is_none());
+    assert_eq!(builds.load(Ordering::SeqCst), 0, "nothing waits: no model");
+
+    leave_speech(&folder, "meeting-left-over");
+    assert_eq!(runtime.speech_awaiting_pass(), 1);
+    let handed = runtime
+        .waiting_pass_control()
+        .unwrap_or_else(|| panic!("waiting speech must start the pass"));
+    assert!(Arc::ptr_eq(&handed, &control));
+    assert_eq!(builds.load(Ordering::SeqCst), 1);
+
+    RetainedAudioStore::new(folder.clone(), ephemeral_cipher())
+        .mark_passed_alone(&MeetingId::new("meeting-left-over"))
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(
+        runtime.speech_awaiting_pass(),
+        0,
+        "speech kept only for combining needs no background run"
+    );
+    let _ = std::fs::remove_dir_all(&folder);
+}

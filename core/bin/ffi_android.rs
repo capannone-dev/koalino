@@ -11,7 +11,8 @@
 //! is in the background or the screen is locked.
 //!
 //! `MainActivity.kt` reports whether the phone is charging, because a phone runs the
-//! after-meeting pass only then (#87).
+//! after-meeting pass only then (#87). `WaitingPassJob.kt` runs that pass from a JobScheduler
+//! job while the phone charges, with the app closed and the screen locked (#87).
 //!
 //! The Kotlin side is `com.example.note_taker_ui.NativeCore`. It loads this library with
 //! `System.loadLibrary("note_taker_core")`, which returns the instance Dart already opened, so
@@ -26,9 +27,10 @@ use jni::{
 use zeroize::Zeroizing;
 
 use crate::ffi::{
-    FFI_INVALID_ARGUMENT, HOST_ENCRYPTION_KEY_LENGTH, note_taker_pause_recording,
-    note_taker_set_charging, note_taker_start_recording, note_taker_stop_recording,
-    store_host_encryption_key,
+    FFI_INVALID_ARGUMENT, HOST_ENCRYPTION_KEY_LENGTH, note_taker_configure,
+    note_taker_pause_recording, note_taker_run_waiting_pass, note_taker_set_charging,
+    note_taker_speech_awaiting_pass, note_taker_start_recording, note_taker_start_runtime,
+    note_taker_stop_recording, store_host_encryption_key,
 };
 
 /// Implements `NativeCore.provideEncryptionKey(key: ByteArray): Int`.
@@ -109,4 +111,78 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_setCharging<'
     charging: jboolean,
 ) -> jint {
     note_taker_set_charging(jint::from(charging))
+}
+
+/// Implements `NativeCore.speechAwaitingPass(): Int`.
+///
+/// Outputs: As `note_taker_speech_awaiting_pass`: the count, or minus a status.
+/// Side effects: Opens the runtime when needed; never call it on the main thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_speechAwaitingPass<'caller>(
+    _unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+) -> jint {
+    note_taker_speech_awaiting_pass()
+}
+
+/// Implements `NativeCore.runWaitingPass(timeoutMs: Int): Int`.
+///
+/// Inputs: The longest wait in milliseconds.
+/// Outputs: As `note_taker_run_waiting_pass`.
+/// Side effects: Loads the model and blocks for a whole round; never call it on the main thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_runWaitingPass<'caller>(
+    _unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    timeout_ms: jint,
+) -> jint {
+    note_taker_run_waiting_pass(timeout_ms)
+}
+
+/// Implements `NativeCore.configure(configurationJson: ByteArray): Int` for the background job,
+/// which runs without Dart (#87).
+///
+/// Inputs: The UTF-8 JSON the app last passed to `note_taker_configure` (no secrets: paths, the
+/// device name and peers).
+/// Outputs: As `note_taker_configure`: `0`, `1` for invalid JSON or a null array, `2` when the
+/// core was already configured (by the app in this process, which is fine).
+/// Side effects: Stores the settings for the process. A JNI failure throws a RuntimeException.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_configure<'caller>(
+    mut unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    configuration_json: JByteArray<'caller>,
+) -> jint {
+    unowned_env
+        .with_env(|env| -> Result<jint, jni::errors::Error> {
+            if configuration_json.is_null() {
+                return Ok(FFI_INVALID_ARGUMENT);
+            }
+            let length = configuration_json.len(env)?;
+            let mut java_bytes = vec![0_i8; length];
+            configuration_json.get_region(env, 0, &mut java_bytes)?;
+            let bytes: Vec<u8> = java_bytes
+                .into_iter()
+                .map(|byte| byte.to_ne_bytes()[0])
+                .collect();
+            let Ok(configuration) = std::ffi::CString::new(bytes) else {
+                return Ok(FFI_INVALID_ARGUMENT);
+            };
+            // SAFETY: `configuration` is a valid NUL-terminated string that outlives the call.
+            Ok(unsafe { note_taker_configure(configuration.as_ptr()) })
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Implements `NativeCore.startRuntime(): Int` for the background job (#87).
+///
+/// Outputs: As `note_taker_start_runtime`: `0` once open, `6` when the key is missing.
+/// Side effects: Opens the database and key store and starts P2P; never call it on the main
+/// thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_startRuntime<'caller>(
+    _unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+) -> jint {
+    note_taker_start_runtime()
 }

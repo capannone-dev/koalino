@@ -622,3 +622,118 @@ fn received_speech_that_is_not_valid_opus_is_refused() {
     assert!(matches!(result, Err(RetainedAudioError::Unreadable)));
     let _ = fs::remove_dir_all(path);
 }
+
+#[test]
+fn speech_awaiting_its_pass_is_counted_apart_from_speech_kept_for_combining() {
+    let path = folder();
+    let index = super::retained_audio_store::RetainedSpeechIndex::new(path.clone());
+    assert_eq!(index.awaiting_pass(), 0);
+    let kept = store(&path);
+    for name in ["meeting-1", "meeting-2"] {
+        kept.append_chunk(
+            &MeetingId::new(name),
+            ChunkSpan {
+                start_ms: 0,
+                end_ms: 100,
+            },
+            None,
+            &samples(3, 1_600),
+        )
+        .unwrap_or_else(|error| panic!("{error}"));
+    }
+    assert_eq!(index.awaiting_pass(), 2);
+
+    kept.mark_passed_alone(&MeetingId::new("meeting-1"))
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(
+        index.awaiting_pass(),
+        1,
+        "speech that took the pass and waits only to be combined needs no charging run"
+    );
+    let _ = fs::remove_dir_all(&path);
+}
+
+/// A window's transcript, as the pass's engine gave it.
+fn window_transcript(meeting: &MeetingId) -> crate::domain::models::Transcript {
+    crate::domain::models::Transcript::new(meeting.clone(), "riservato segreto").with_timed_words(
+        vec![
+            crate::domain::models::TimedWord::new("riservato", 0, 400)
+                .with_probability_permille(Some(910)),
+            crate::domain::models::TimedWord::new("segreto", 450, 900)
+                .with_probability_permille(None),
+        ],
+    )
+}
+
+#[test]
+fn a_finished_window_is_found_again_until_the_speech_changes() {
+    let path = folder();
+    let kept = store(&path);
+    let meeting = MeetingId::new("meeting-1");
+    let key = [7_u8; 32];
+    assert!(kept.finished_window(&meeting, &key).is_none());
+
+    kept.record_finished_window(&meeting, &key, &window_transcript(&meeting))
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let found = kept
+        .finished_window(&meeting, &key)
+        .unwrap_or_else(|| panic!("the window must be found"));
+    assert_eq!(found, window_transcript(&meeting));
+    assert!(kept.finished_window(&meeting, &[8_u8; 32]).is_none());
+    assert!(
+        kept.finished_window(&MeetingId::new("meeting-2"), &key)
+            .is_none()
+    );
+    let on_disk: Vec<u8> = fs::read_dir(&path)
+        .unwrap_or_else(|error| panic!("{error}"))
+        .filter_map(Result::ok)
+        .flat_map(|entry| fs::read(entry.path()).unwrap_or_default())
+        .collect();
+    assert!(
+        !on_disk.windows(7).any(|bytes| bytes == b"segreto"),
+        "the text is sealed"
+    );
+
+    kept.append_chunk(
+        &meeting,
+        ChunkSpan {
+            start_ms: 0,
+            end_ms: 100,
+        },
+        None,
+        &samples(3, 1_600),
+    )
+    .unwrap_or_else(|error| panic!("{error}"));
+    assert!(
+        kept.finished_window(&meeting, &key).is_none(),
+        "new speech starts the pass over"
+    );
+    let _ = fs::remove_dir_all(&path);
+}
+
+#[test]
+fn finished_windows_go_once_the_meeting_took_the_pass_or_is_deleted() {
+    let path = folder();
+    let kept = store(&path);
+    let meeting = MeetingId::new("meeting-1");
+    let key = [7_u8; 32];
+    kept.record_finished_window(&meeting, &key, &window_transcript(&meeting))
+        .unwrap_or_else(|error| panic!("{error}"));
+    kept.mark_passed_alone(&meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(kept.finished_window(&meeting, &key).is_none());
+
+    kept.record_finished_window(&meeting, &key, &window_transcript(&meeting))
+        .unwrap_or_else(|error| panic!("{error}"));
+    kept.delete(&meeting)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert!(kept.finished_window(&meeting, &key).is_none());
+    assert_eq!(
+        fs::read_dir(&path).map_or(0, Iterator::count),
+        0,
+        "nothing is left behind"
+    );
+    let _ = fs::remove_dir_all(&path);
+}

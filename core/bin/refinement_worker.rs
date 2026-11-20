@@ -24,6 +24,7 @@
 //! except at `trace`, where the transcript before and after each pass is logged for comparison
 //! (#87, `application::pass_comparison`).
 
+use crate::resumable_pass_engine::ResumablePassEngine;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
@@ -683,10 +684,12 @@ impl RefinementWorker {
         log_pass_transcript(root, PassStage::Before, || {
             repository.load_transcript_segments(root)
         });
+        // Windows finished before a stop are reused (#87).
+        let resumable = ResumablePassEngine::new(engine, audio_source, &self.store);
         let outcome = refine_combined_meeting(
             &root_recording,
             &member_recordings,
-            engine,
+            &resumable,
             &|recording_id, samples| audio_source.insert(recording_id, samples),
             repository,
             &self.device_id,
@@ -807,10 +810,12 @@ impl RefinementWorker {
         log_pass_transcript(meeting_id, PassStage::Before, || {
             repository.load_transcript_segments(meeting_id)
         });
+        // Windows finished before a stop are reused (#87).
+        let resumable = ResumablePassEngine::new(engine, audio_source, &self.store);
         let outcome = refine_meeting(
             meeting_id,
             &borrowed,
-            engine,
+            &resumable,
             &provide,
             repository,
             &self.device_id,

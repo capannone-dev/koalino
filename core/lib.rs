@@ -179,6 +179,12 @@ pub mod refinement_worker;
 #[cfg(test)]
 #[path = "bin/refinement_worker_tests.rs"]
 mod refinement_worker_tests;
+/// Lets a stopped after-meeting pass resume from the windows it finished (#87).
+#[path = "bin/resumable_pass_engine.rs"]
+pub mod resumable_pass_engine;
+#[cfg(test)]
+#[path = "bin/resumable_pass_engine_tests.rs"]
+mod resumable_pass_engine_tests;
 /// Samples local screen shares beside a recording, on its own thread (Issue #49).
 #[path = "bin/screen_share_watcher.rs"]
 pub mod screen_share_watcher;

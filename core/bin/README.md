@@ -63,7 +63,10 @@ documented nonzero status codes distinguishable from lifecycle states.
   `RetainedSpeechInbox` stores speech paired devices send, only for meetings this device combines
   and only from the device that recorded it. `pipeline_composition::start_transcript_pass`
   connects both to the P2P task (`SpeechLink`, implemented by `P2pHandle`).
-  Originally (#87) it ran only the pass.
+  Originally (#87) it ran only the pass. Both passes go through `resumable_pass_engine.rs`,
+  which keeps each finished window's transcript, sealed, in the meeting's progress file
+  (`RetainedAudioStore::finished_window`), so a pass a phone's background job had to stop
+  resumes instead of starting over.
   `RefinementControl` says when it may run: no recording, not shutting down, and on a phone only
   while charging. The controller holds it while recording (`with_transcript_pass`) and queues
   each speech chunk on the `RetainedSpeechWriter`, which compresses it and appends it to the
@@ -219,6 +222,11 @@ actions work while Dart is in the background. `ffi_android.rs` exports
 another length, and share `store_host_encryption_key`, which keeps the key in a zeroizing buffer
 served through `HostProvidedKeychain`. Without a key, Android start-up fails with status 6
 instead of writing a key file. Desktops use the platform keychain unless a key was provided.
+`WaitingPassJob.kt` (#87) runs a waiting after-meeting pass while the phone charges with the app
+closed, without Dart: `NativeCore.configure`, `startRuntime`, `speechAwaitingPass` and
+`runWaitingPass` wrap `note_taker_configure`, `note_taker_start_runtime`,
+`note_taker_speech_awaiting_pass` (the meetings whose speech has not taken the pass) and
+`note_taker_run_waiting_pass` (one round of the pass, waited for without the runtime lock).
 
 `System.loadLibrary("note_taker_core")` in Kotlin returns the library instance Dart's
 `DynamicLibrary.open` already loaded, so both see the same statics (verified on the S23).

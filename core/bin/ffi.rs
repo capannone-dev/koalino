@@ -1467,6 +1467,30 @@ impl FfiRuntime {
         }
     }
 
+    /// Counts the meetings whose speech still needs the pass on this device (#87).
+    ///
+    /// Outputs: The count; 0 without a speech folder. Side effects: Lists the folder only.
+    fn speech_awaiting_pass(&self) -> usize {
+        self.retained_speech
+            .as_ref()
+            .map_or(0, RetainedSpeechIndex::awaiting_pass)
+    }
+
+    /// Returns the after-meeting pass's control for a phone's background job (#87), building
+    /// the pipeline only when speech awaits the pass or one already exists.
+    ///
+    /// Outputs: The control, or `None` when nothing awaits, the pipeline cannot be built (logged),
+    /// or the device has no pass. Side effects: Building it spawns the worker and may load the
+    /// model; call it off the main thread.
+    fn waiting_pass_control(&mut self) -> Option<Arc<crate::refinement_worker::RefinementControl>> {
+        if self.recording_controller.is_none() && self.speech_awaiting_pass() == 0 {
+            return None;
+        }
+        self.recording_controller()
+            .ok()
+            .and_then(|controller| controller.transcript_pass_control())
+    }
+
     /// Starts a recording with a generated meeting ID, or resumes a paused one.
     ///
     /// Inputs: None.
@@ -2916,6 +2940,61 @@ pub extern "C" fn note_taker_set_charging(charging: c_int) -> c_int {
         runtime.report_charging(charging);
     }
     FFI_SUCCESS
+}
+
+/// Counts the meetings whose speech still awaits the after-meeting pass, for a phone's background
+/// job (#87).
+///
+/// Inputs: None; call after `note_taker_configure` and once the key is provided.
+/// Outputs: The count (0 or more), or minus the status opening the runtime failed with (`-6`
+/// when the keychain is unusable, `-2` when the database is, `-3` for a poisoned lock).
+/// Side effects: Opens the runtime (database, key store, P2P) when it is not open yet.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_speech_awaiting_pass() -> c_int {
+    let mut count = 0;
+    let status = with_runtime(|runtime| {
+        count = runtime.speech_awaiting_pass();
+        FFI_SUCCESS
+    });
+    if status == FFI_SUCCESS {
+        c_int::try_from(count).unwrap_or(c_int::MAX)
+    } else {
+        -status
+    }
+}
+
+/// Runs one round of the after-meeting pass for a phone's background job (#87) and waits for it.
+///
+/// Inputs: The longest wait in milliseconds (at least 0). Report charging first
+/// (`note_taker_set_charging`): the pass runs only while charging, and reporting not charging
+/// ends the round after the window in progress.
+/// Outputs: `FFI_SUCCESS` once a round finished or when nothing awaits the pass,
+/// `FFI_OPERATION_REJECTED` when the wait ran out, `FFI_INVALID_ARGUMENT` for a negative wait,
+/// or the status opening the runtime failed with.
+/// Side effects: Opens the runtime, builds the pipeline (loading the model) when speech awaits,
+/// and blocks the calling thread for the round; the runtime lock is not held while waiting.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_run_waiting_pass(timeout_ms: c_int) -> c_int {
+    let Ok(timeout_ms) = u64::try_from(timeout_ms) else {
+        return FFI_INVALID_ARGUMENT;
+    };
+    let mut control = None;
+    let status = with_runtime(|runtime| {
+        control = runtime.waiting_pass_control();
+        FFI_SUCCESS
+    });
+    if status != FFI_SUCCESS {
+        return status;
+    }
+    let Some(control) = control else {
+        return FFI_SUCCESS;
+    };
+    let ticket = control.request_round();
+    if control.wait_for_round(ticket, std::time::Duration::from_millis(timeout_ms)) {
+        FFI_SUCCESS
+    } else {
+        FFI_OPERATION_REJECTED
+    }
 }
 
 /// Pauses the Rust-owned recording session from UI, lock-screen, or background service threads.
