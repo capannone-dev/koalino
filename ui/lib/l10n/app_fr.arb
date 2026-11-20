@@ -759,5 +759,6 @@
   "recordingsUnavailable": "Les enregistrements sont inaccessibles pour le moment.",
   "playRecording": "Écouter l'enregistrement",
   "stopRecordingPlayback": "Arrêter la lecture",
-  "recordingCouldNotBePlayed": "L'enregistrement n'a pas pu être lu."
+  "recordingCouldNotBePlayed": "L'enregistrement n'a pas pu être lu.",
+  "columnWidth": "Largeur de la colonne"
 }

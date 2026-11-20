@@ -9,6 +9,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:note_taker_ui/presentation/resizable_pane.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
 import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
@@ -146,6 +147,15 @@ Future<void> main() async {
   final AppLanguageController appLanguageController =
       AppLanguageController(store: const FileAppLanguageStore());
   await appLanguageController.load();
+  // Desktop column widths the owner dragged survive restarts (#142); phones have no columns.
+  if (!Platform.isAndroid) {
+    try {
+      paneWidthStore = FilePaneWidthStore(File(
+          '${(await getApplicationSupportDirectory()).path}/ui-layout.json'));
+    } on Object {
+      // Widths then last until the app closes.
+    }
+  }
   runApp(NoteTakerApp(
     recordingController: recordingController,
     appLanguageController: appLanguageController,

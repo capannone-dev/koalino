@@ -759,5 +759,6 @@
   "recordingsUnavailable": "現在、録音にアクセスできません。",
   "playRecording": "録音を再生",
   "stopRecordingPlayback": "再生を停止",
-  "recordingCouldNotBePlayed": "録音を再生できませんでした。"
+  "recordingCouldNotBePlayed": "録音を再生できませんでした。",
+  "columnWidth": "列の幅"
 }

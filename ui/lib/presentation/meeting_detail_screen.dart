@@ -24,6 +24,7 @@ import 'package:note_taker_ui/controllers/transcription_language_controller.dart
 import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_timeline.dart';
+import 'package:note_taker_ui/presentation/readable_width.dart';
 import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
 import 'package:note_taker_ui/presentation/split_meeting_action.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
@@ -467,141 +468,139 @@ final class _MeetingContent extends StatelessWidget {
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
     final MeetingSummary summary = meeting.summary;
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: _maxReadableWidth),
-        child: ListView(
-          padding: const EdgeInsets.all(24),
-          // A passage to scroll to must be built, so build the whole transcript then.
-          scrollCacheExtent: focusStartMs == null
-              ? null
-              : const ScrollCacheExtent.pixels(double.maxFinite),
-          children: <Widget>[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Expanded(
-                  child: Semantics(
-                    header: true,
-                    child: Text(
-                      summary.title,
-                      style: theme.textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
+    // The list fills the pane so the wheel scrolls anywhere across it (#142).
+    return ReadableWidth(
+      maxWidth: _maxReadableWidth,
+      builder: (BuildContext context, EdgeInsets padding) => ListView(
+        padding: padding,
+        // A passage to scroll to must be built, so build the whole transcript then.
+        scrollCacheExtent: focusStartMs == null
+            ? null
+            : const ScrollCacheExtent.pixels(double.maxFinite),
+        children: <Widget>[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(
+                    summary.title,
+                    style: theme.textTheme.headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: l10n.renameMeeting,
-                  icon: const Icon(Icons.edit_outlined),
-                  onPressed: () => showRenameMeetingDialog(
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                tooltip: l10n.renameMeeting,
+                icon: const Icon(Icons.edit_outlined),
+                onPressed: () => showRenameMeetingDialog(
+                  context,
+                  controller: controller,
+                  meeting: summary,
+                ),
+              ),
+              IconButton(
+                key: const ValueKey<String>('delete-open-meeting'),
+                tooltip: l10n.deleteMeeting,
+                icon: const Icon(Icons.delete_outline),
+                onPressed: () async {
+                  final NavigatorState navigator = Navigator.of(context);
+                  final bool deleted = await deleteMeetingAfterAsking(
+                    context,
+                    controller: controller,
+                    meeting: summary,
+                  );
+                  // On a phone the detail is a page of its own; in two panes it empties.
+                  if (deleted && navigator.mounted) {
+                    await navigator.maybePop();
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${formatMeetingCreatedAt(summary.createdAt)} · '
+            '${formatMeetingDuration(summary.durationMs)}',
+            style: theme.textTheme.bodyMedium
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          if (describeTranscriptionLanguages(summary.transcriptionLanguages)
+              case final String languages)
+            Text(
+              languages,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+          if (summary.recordedOnLabel case final String devices)
+            Row(
+              children: <Widget>[
+                Icon(Icons.devices_outlined,
+                    size: 18, color: theme.colorScheme.onSurfaceVariant),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    l10n.recordedOn(devices),
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                ),
+                TextButton.icon(
+                  key: const ValueKey<String>('split-open-meeting'),
+                  icon: const Icon(Icons.call_split),
+                  label: Text(l10n.split),
+                  onPressed: () => splitMeetingAfterAsking(
                     context,
                     controller: controller,
                     meeting: summary,
                   ),
                 ),
-                IconButton(
-                  key: const ValueKey<String>('delete-open-meeting'),
-                  tooltip: l10n.deleteMeeting,
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () async {
-                    final NavigatorState navigator = Navigator.of(context);
-                    final bool deleted = await deleteMeetingAfterAsking(
-                      context,
-                      controller: controller,
-                      meeting: summary,
-                    );
-                    // On a phone the detail is a page of its own; in two panes it empties.
-                    if (deleted && navigator.mounted) {
-                      await navigator.maybePop();
-                    }
-                  },
-                ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              '${formatMeetingCreatedAt(summary.createdAt)} · '
-              '${formatMeetingDuration(summary.durationMs)}',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-            if (describeTranscriptionLanguages(summary.transcriptionLanguages)
-                case final String languages)
-              Text(
-                languages,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            if (summary.recordedOnLabel case final String devices)
-              Row(
+          if (summary.combining case final MeetingCombining combining)
+            Padding(
+              key: const ValueKey<String>('meeting-combining'),
+              padding: const EdgeInsets.only(top: 2, bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Icon(Icons.devices_outlined,
+                  Icon(combiningIcon(combining.state),
                       size: 18, color: theme.colorScheme.onSurfaceVariant),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      l10n.recordedOn(devices),
-                      style: theme.textTheme.bodyMedium
+                      combining.description,
+                      style: theme.textTheme.bodySmall
                           ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                    ),
-                  ),
-                  TextButton.icon(
-                    key: const ValueKey<String>('split-open-meeting'),
-                    icon: const Icon(Icons.call_split),
-                    label: Text(l10n.split),
-                    onPressed: () => splitMeetingAfterAsking(
-                      context,
-                      controller: controller,
-                      meeting: summary,
                     ),
                   ),
                 ],
               ),
-            if (summary.combining case final MeetingCombining combining)
-              Padding(
-                key: const ValueKey<String>('meeting-combining'),
-                padding: const EdgeInsets.only(top: 2, bottom: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Icon(combiningIcon(combining.state),
-                        size: 18, color: theme.colorScheme.onSurfaceVariant),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        combining.description,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            SelectableText(
-              summary.meetingId,
+            ),
+          SelectableText(
+            summary.meetingId,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const Divider(height: 32),
+          if (editController
+              case final MeetingEditController edits) ...<Widget>[
+            MeetingNotesSection(
+                controller: edits, meetingId: summary.meetingId),
+            const Divider(height: 32),
+          ],
+          Text(l10n.transcript, style: theme.textTheme.titleMedium),
+          if (editController != null && meeting.segments.isNotEmpty)
+            Text(
+              l10n.longPressOrRightClickA,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
-            const Divider(height: 32),
-            if (editController
-                case final MeetingEditController edits) ...<Widget>[
-              MeetingNotesSection(
-                  controller: edits, meetingId: summary.meetingId),
-              const Divider(height: 32),
-            ],
-            Text(l10n.transcript, style: theme.textTheme.titleMedium),
-            if (editController != null && meeting.segments.isNotEmpty)
-              Text(
-                l10n.longPressOrRightClickA,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-              ),
-            const SizedBox(height: 12),
-            ..._transcriptChildren(theme),
-          ],
-        ),
+          const SizedBox(height: 12),
+          ..._transcriptChildren(theme),
+        ],
       ),
     );
   }

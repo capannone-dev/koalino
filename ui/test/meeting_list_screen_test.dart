@@ -17,6 +17,7 @@ import 'package:note_taker_ui/infrastructure/meeting_edit_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
+import 'package:note_taker_ui/presentation/resizable_pane.dart';
 
 import 'fake_llm_core.dart';
 import 'fake_meeting_bridge.dart';
@@ -183,6 +184,76 @@ void main() {
         of: find.text('Meeting 2026-10-26 18:00 UTC'),
         matching: find.byType(ListTile)));
     expect(selectedTile.selected, isFalse);
+  });
+
+  testWidgets(
+      'the mouse wheel scrolls the note anywhere across its pane, not only over the text (#142)',
+      (WidgetTester tester) async {
+    final MeetingDetail longMeeting = MeetingDetail(
+      summary: titledMeeting,
+      transcript: null,
+      segments: <MeetingTranscriptSegment>[
+        for (int index = 0; index < 80; index++)
+          MeetingTranscriptSegment(
+              startTimeMs: index * 5000,
+              endTimeMs: index * 5000 + 4000,
+              speaker: 'Alice',
+              text: 'Line $index of a long meeting.'),
+      ],
+    );
+    await pumpMeetingList(
+        tester,
+        FakeMeetingBridge(
+          meetings: <MeetingSummary>[titledMeeting],
+          details: <String, MeetingDetail>{'meeting-titled': longMeeting},
+        ),
+        size: const Size(1800, 800));
+    await tester.tap(find.text('Project Sync'));
+    await tester.pumpAndSettle();
+    final Finder note = find.ancestor(
+        of: find.text('Line 0 of a long meeting.'),
+        matching: find.byType(Scrollable));
+    expect(tester.getTopLeft(note.first).dx, lessThan(500),
+        reason: 'the scrolling area spans the pane, not only the text column');
+
+    final ScrollableState scrollable =
+        tester.state<ScrollableState>(note.first);
+    final TestPointer mouse = TestPointer(1, PointerDeviceKind.mouse);
+    mouse.hover(const Offset(1790, 500));
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 400)));
+    await tester.pumpAndSettle();
+
+    expect(scrollable.position.pixels, greaterThan(0));
+  });
+
+  testWidgets(
+      'dragging the divider widens the meeting list, and the width is remembered (#142)',
+      (WidgetTester tester) async {
+    final MemoryPaneWidthStore store = MemoryPaneWidthStore();
+    paneWidthStore = store;
+    addTearDown(() => paneWidthStore = MemoryPaneWidthStore());
+    final FakeMeetingBridge bridge =
+        FakeMeetingBridge(meetings: <MeetingSummary>[titledMeeting]);
+    await pumpMeetingList(tester, bridge, size: const Size(1280, 800));
+    final Finder pane = find.byKey(const ValueKey<String>('pane-meeting-list'));
+    expect(tester.getSize(pane).width, 360);
+
+    await tester.drag(find.byKey(const ValueKey<String>('resize-meeting-list')),
+        const Offset(120, 0));
+    await tester.pumpAndSettle();
+
+    expect(tester.getSize(pane).width, closeTo(480, 1));
+    expect(store.widths['meeting-list'], closeTo(480, 1));
+
+    await tester.pumpWidget(const SizedBox());
+    await pumpMeetingList(tester, bridge, size: const Size(1280, 800));
+    expect(tester.getSize(pane).width, closeTo(480, 1));
+
+    await tester.drag(find.byKey(const ValueKey<String>('resize-meeting-list')),
+        const Offset(5000, 0));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(pane).width, lessThanOrEqualTo(1280 - 400),
+        reason: 'the note keeps at least 400 px');
   });
 
   group('deleting a meeting', () {

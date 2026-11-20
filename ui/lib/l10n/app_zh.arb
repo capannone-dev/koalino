@@ -759,5 +759,6 @@
   "recordingsUnavailable": "目前无法访问录音。",
   "playRecording": "播放录音",
   "stopRecordingPlayback": "停止播放",
-  "recordingCouldNotBePlayed": "无法播放该录音。"
+  "recordingCouldNotBePlayed": "无法播放该录音。",
+  "columnWidth": "列宽"
 }

@@ -109,6 +109,34 @@ void main() {
     expect(find.text('Meetings screen'), findsOneWidget);
   });
 
+  testWidgets(
+      'a desktop window keeps Settings at the bottom of the rail (#142)',
+      (WidgetTester tester) async {
+    await pumpHomeShell(tester, const Size(1280, 800),
+        withSettings: true, withProjects: true);
+
+    final double settingsTop = tester.getTopLeft(find.text('Settings')).dy;
+    expect(settingsTop, greaterThan(700),
+        reason: 'at the bottom of an 800 px window');
+    expect(settingsTop - tester.getTopLeft(find.text('Voices')).dy,
+        greaterThan(300),
+        reason: 'apart from the other destinations');
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Settings screen'), findsOneWidget);
+    expect(
+        tester
+            .widget<NavigationRail>(find.byType(NavigationRail))
+            .selectedIndex,
+        isNull,
+        reason: 'no other destination looks selected');
+
+    await tester.tap(find.text('Voices'));
+    await tester.pumpAndSettle();
+    expect(find.text('Voices screen'), findsOneWidget);
+  });
+
   testWidgets('Devices is not a destination; it lives in Settings (#84)',
       (WidgetTester tester) async {
     for (final Size size in <Size>[

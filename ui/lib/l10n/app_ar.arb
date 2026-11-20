@@ -759,5 +759,6 @@
   "recordingsUnavailable": "لا يمكن الوصول إلى التسجيلات الآن.",
   "playRecording": "تشغيل التسجيل",
   "stopRecordingPlayback": "إيقاف التشغيل",
-  "recordingCouldNotBePlayed": "تعذّر تشغيل التسجيل."
+  "recordingCouldNotBePlayed": "تعذّر تشغيل التسجيل.",
+  "columnWidth": "عرض العمود"
 }

@@ -10,7 +10,7 @@ import 'package:note_taker_ui/l10n/l10n.dart';
 /// Telemetry (Issue #53) and Devices (Issue #84) are pages of Settings.
 ///
 /// Phones get a bottom `NavigationBar`; windows at least `twoPaneBreakpoint` wide get a
-/// `NavigationRail`. Only the selected destination is built, so hidden screens neither poll
+/// `NavigationRail`, with Settings kept at its bottom (#142). Only the selected destination is built, so hidden screens neither poll
 /// nor hold stale data (the meeting list reloads each time it is opened).
 final class HomeShell extends StatefulWidget {
   /// Creates the shell from one builder per destination.
@@ -121,16 +121,32 @@ final class _HomeShellState extends State<HomeShell> {
             ),
           );
         }
+        // Settings stays at the bottom of the rail, apart from the destinations (#142).
+        final bool settingsApart = widget.settingsScreenBuilder != null;
+        final int railCount =
+            settingsApart ? destinations.length - 1 : destinations.length;
         return Scaffold(
           body: Row(
             children: <Widget>[
               SafeArea(
                 child: NavigationRail(
-                  selectedIndex: selectedIndex,
+                  selectedIndex:
+                      selectedIndex < railCount ? selectedIndex : null,
                   onDestinationSelected: _selectDestination,
                   labelType: NavigationRailLabelType.all,
+                  trailingAtBottom: true,
+                  trailing: settingsApart
+                      ? Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: _RailButton(
+                            destination: destinations.last,
+                            selected: selectedIndex == railCount,
+                            onTap: () => _selectDestination(railCount),
+                          ),
+                        )
+                      : null,
                   destinations: <NavigationRailDestination>[
-                    for (final destination in destinations)
+                    for (final destination in destinations.take(railCount))
                       NavigationRailDestination(
                         icon: Icon(destination.icon),
                         selectedIcon: Icon(destination.selectedIcon),
@@ -145,6 +161,61 @@ final class _HomeShellState extends State<HomeShell> {
           ),
         );
       },
+    );
+  }
+}
+
+/// A destination drawn like the rail's own, for Settings at the rail's bottom (#142).
+final class _RailButton extends StatelessWidget {
+  const _RailButton(
+      {required this.destination, required this.selected, required this.onTap});
+
+  final ({
+    IconData icon,
+    IconData selectedIcon,
+    String label,
+    WidgetBuilder builder
+  }) destination;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final Color foreground =
+        selected ? colors.onSecondaryContainer : colors.onSurfaceVariant;
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: InkWell(
+        key: const ValueKey<String>('rail-settings'),
+        onTap: onTap,
+        customBorder: const StadiumBorder(),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 56,
+                height: 32,
+                decoration: ShapeDecoration(
+                  shape: const StadiumBorder(),
+                  color: selected ? colors.secondaryContainer : null,
+                ),
+                child: Icon(
+                    selected ? destination.selectedIcon : destination.icon,
+                    color: foreground),
+              ),
+              const SizedBox(height: 4),
+              Text(destination.label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: selected ? colors.onSurface : foreground)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

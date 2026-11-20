@@ -108,6 +108,13 @@ a builder, which the app always gives. Its last row, About Koalino (`about_tile.
 the About dialog: the version, the GPL-3.0-or-later notice, and View licenses for the Flutter
 packages.
 
+`resizable_pane.dart` (#142) is a desktop column with a draggable right edge (mouse, arrow keys
+when focused, double-click for the default); widths are kept in `ui-layout.json` in the app's
+support folder. The meeting list uses it, and so do the project columns.
+`readable_width.dart` (#142) lets a scroll view fill its pane while its text stays at a readable
+width, so the mouse wheel scrolls anywhere across the meeting page and the summary page.
+`home_shell.dart` keeps Settings at the bottom of the desktop navigation rail (#142).
+
 `recordings_widgets.dart` (#140) holds `RecordingsSection` (Settings: Keep meeting recordings,
 turned on only after a privacy and space warning, how many are kept, Wipe all recordings with a
 confirmation) and `PlayRecordingButton` (the meeting page's app bar, shown only when a recording is

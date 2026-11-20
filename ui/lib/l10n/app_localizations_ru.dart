@@ -2951,4 +2951,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get recordingCouldNotBePlayed => 'Не удалось воспроизвести запись.';
+
+  @override
+  String get columnWidth => 'Ширина столбца';
 }

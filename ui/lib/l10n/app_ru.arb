@@ -759,5 +759,6 @@
   "recordingsUnavailable": "Записи сейчас недоступны.",
   "playRecording": "Прослушать запись",
   "stopRecordingPlayback": "Остановить воспроизведение",
-  "recordingCouldNotBePlayed": "Не удалось воспроизвести запись."
+  "recordingCouldNotBePlayed": "Не удалось воспроизвести запись.",
+  "columnWidth": "Ширина столбца"
 }

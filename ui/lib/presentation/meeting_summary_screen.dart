@@ -18,6 +18,7 @@ import 'package:note_taker_ui/infrastructure/export_bridge.dart';
 import 'package:note_taker_ui/presentation/handoff_widgets.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
 import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
+import 'package:note_taker_ui/presentation/readable_width.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Finds the "Summarize with" selector in tests.
@@ -424,165 +425,158 @@ final class _MeetingSummaryScreenState extends State<MeetingSummaryScreen> {
                   (connections.isEmpty ? null : connections.first.id);
           final bool writing = controller.isSummarizing(widget.meetingId);
           final StoredSummary? summary = state?.summary;
-          return Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 840),
-              child: ListView(
-                padding: const EdgeInsets.all(24),
-                children: <Widget>[
-                  Text(widget.title,
-                      style: theme.textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 16),
-                  if (controller.asksPairedComputer) ...<Widget>[
-                    _PairedComputerPanel(
-                      request: state?.request,
-                      onAsk: () => controller.askComputer(widget.meetingId),
-                      onCancel: () =>
-                          controller.cancelComputer(widget.meetingId),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (connections.isEmpty)
-                    if (!controller.asksPairedComputer)
-                      Text(l10n.addAnAiConnectionInSettings3)
-                    else
-                      const SizedBox.shrink()
+          // The list fills the page so the wheel scrolls anywhere across it (#142).
+          return ReadableWidth(
+            maxWidth: 840,
+            builder: (BuildContext context, EdgeInsets padding) => ListView(
+              padding: padding,
+              children: <Widget>[
+                Text(widget.title,
+                    style: theme.textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                if (controller.asksPairedComputer) ...<Widget>[
+                  _PairedComputerPanel(
+                    request: state?.request,
+                    onAsk: () => controller.askComputer(widget.meetingId),
+                    onCancel: () => controller.cancelComputer(widget.meetingId),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                if (connections.isEmpty)
+                  if (!controller.asksPairedComputer)
+                    Text(l10n.addAnAiConnectionInSettings3)
                   else
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: <Widget>[
-                        DropdownMenu<String>(
-                          key: summaryConnectionSelectorKey,
-                          label: Text(l10n.summarizeWith2),
-                          initialSelection: chosen,
-                          enabled: !writing,
-                          onSelected: (String? id) =>
-                              setState(() => _connectionId = id),
-                          dropdownMenuEntries: <DropdownMenuEntry<String>>[
-                            for (final LlmConnection connection in connections)
-                              DropdownMenuEntry<String>(
-                                value: connection.id,
-                                label: connection.label,
-                              ),
-                          ],
-                        ),
-                        FilledButton.icon(
-                          icon: const Icon(Icons.auto_awesome_outlined),
-                          label: Text(summary == null
-                              ? l10n.summarize
-                              : l10n.summarizeAgain),
-                          onPressed: writing
-                              ? null
-                              : () => controller.summarize(widget.meetingId,
-                                  connectionId: chosen),
-                        ),
-                      ],
-                    ),
-                  const SizedBox(height: 8),
+                    const SizedBox.shrink()
+                else
                   Wrap(
-                    spacing: 8,
+                    spacing: 12,
+                    runSpacing: 12,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: <Widget>[
-                      TextButton.icon(
-                        icon: const Icon(Icons.edit_note),
-                        label: Text(l10n.editPromptForThisMeeting2),
-                        onPressed: () => editMeetingPrompt(context,
-                            controller: controller,
-                            meetingId: widget.meetingId),
+                      DropdownMenu<String>(
+                        key: summaryConnectionSelectorKey,
+                        label: Text(l10n.summarizeWith2),
+                        initialSelection: chosen,
+                        enabled: !writing,
+                        onSelected: (String? id) =>
+                            setState(() => _connectionId = id),
+                        dropdownMenuEntries: <DropdownMenuEntry<String>>[
+                          for (final LlmConnection connection in connections)
+                            DropdownMenuEntry<String>(
+                              value: connection.id,
+                              label: connection.label,
+                            ),
+                        ],
                       ),
-                      if (state?.meetingPrompt != null)
-                        TextButton.icon(
-                          icon: const Icon(Icons.restore),
-                          label: Text(l10n.useTheSettingsPrompt),
-                          onPressed: () => controller.setMeetingPrompt(
-                              widget.meetingId, null),
+                      FilledButton.icon(
+                        icon: const Icon(Icons.auto_awesome_outlined),
+                        label: Text(summary == null
+                            ? l10n.summarize
+                            : l10n.summarizeAgain),
+                        onPressed: writing
+                            ? null
+                            : () => controller.summarize(widget.meetingId,
+                                connectionId: chosen),
+                      ),
+                    ],
+                  ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: <Widget>[
+                    TextButton.icon(
+                      icon: const Icon(Icons.edit_note),
+                      label: Text(l10n.editPromptForThisMeeting2),
+                      onPressed: () => editMeetingPrompt(context,
+                          controller: controller, meetingId: widget.meetingId),
+                    ),
+                    if (state?.meetingPrompt != null)
+                      TextButton.icon(
+                        icon: const Icon(Icons.restore),
+                        label: Text(l10n.useTheSettingsPrompt),
+                        onPressed: () =>
+                            controller.setMeetingPrompt(widget.meetingId, null),
+                      ),
+                    if (controller.handoff case final HandoffController handoff)
+                      TextButton.icon(
+                        icon: const Icon(Icons.open_in_new),
+                        label: Text(l10n.useYourOwnAiApp),
+                        onPressed: () => showHandoffSheet(context,
+                            controller: handoff,
+                            meetingId: widget.meetingId,
+                            title: widget.title),
+                      ),
+                  ],
+                ),
+                if (writing) ...<Widget>[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(),
+                  const SizedBox(height: 8),
+                  Text(l10n.writingTheSummaryALocalModel),
+                ],
+                if (controller.meetingMessage(widget.meetingId)
+                    case final String message) ...<Widget>[
+                  const SizedBox(height: 12),
+                  Text(message, style: theme.textTheme.bodyMedium),
+                ],
+                const Divider(height: 32),
+                if (summary == null) ...<Widget>[
+                  Text(state == null ? l10n.loading : l10n.noSummaryYet),
+                  if (state != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        icon: const Icon(Icons.edit_outlined),
+                        label: Text(l10n.writeASummary),
+                        onPressed: () => _editText(''),
+                      ),
+                    ),
+                ] else ...<Widget>[
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          summary.connectionLabel.isEmpty &&
+                                  summary.model.isEmpty
+                              ? l10n.writtenByYouOn(
+                                  formatMeetingCreatedAt(summary.createdAt))
+                              : summary.model.isEmpty
+                                  // An answer from the owner's own AI app
+                                  // or website has no model (#114, #126).
+                                  ? l10n.writtenBySourceOn(
+                                      summary.connectionLabel,
+                                      formatMeetingCreatedAt(summary.createdAt))
+                                  : l10n.writtenByOn(
+                                      summary.model,
+                                      summary.connectionLabel,
+                                      formatMeetingCreatedAt(summary.createdAt),
+                                      summary.edited ? ' · edited' : ''),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant),
                         ),
-                      if (controller.handoff
-                          case final HandoffController handoff)
-                        TextButton.icon(
-                          icon: const Icon(Icons.open_in_new),
-                          label: Text(l10n.useYourOwnAiApp),
-                          onPressed: () => showHandoffSheet(context,
-                              controller: handoff,
-                              meetingId: widget.meetingId,
-                              title: widget.title),
+                      ),
+                      TextButton.icon(
+                        icon: const Icon(Icons.edit_outlined),
+                        label: Text(l10n.editSummary),
+                        onPressed:
+                            writing ? null : () => _editText(summary.text),
+                      ),
+                      if (controller.summaryExport
+                          case final SummaryExportController exporter)
+                        _SummaryExportMenu(
+                          exporter: exporter,
+                          meetingId: widget.meetingId,
+                          title: widget.title,
                         ),
                     ],
                   ),
-                  if (writing) ...<Widget>[
-                    const SizedBox(height: 12),
-                    const LinearProgressIndicator(),
-                    const SizedBox(height: 8),
-                    Text(l10n.writingTheSummaryALocalModel),
-                  ],
-                  if (controller.meetingMessage(widget.meetingId)
-                      case final String message) ...<Widget>[
-                    const SizedBox(height: 12),
-                    Text(message, style: theme.textTheme.bodyMedium),
-                  ],
-                  const Divider(height: 32),
-                  if (summary == null) ...<Widget>[
-                    Text(state == null ? l10n.loading : l10n.noSummaryYet),
-                    if (state != null)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          icon: const Icon(Icons.edit_outlined),
-                          label: Text(l10n.writeASummary),
-                          onPressed: () => _editText(''),
-                        ),
-                      ),
-                  ] else ...<Widget>[
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: Text(
-                            summary.connectionLabel.isEmpty &&
-                                    summary.model.isEmpty
-                                ? l10n.writtenByYouOn(
-                                    formatMeetingCreatedAt(summary.createdAt))
-                                : summary.model.isEmpty
-                                    // An answer from the owner's own AI app
-                                    // or website has no model (#114, #126).
-                                    ? l10n.writtenBySourceOn(
-                                        summary.connectionLabel,
-                                        formatMeetingCreatedAt(
-                                            summary.createdAt))
-                                    : l10n.writtenByOn(
-                                        summary.model,
-                                        summary.connectionLabel,
-                                        formatMeetingCreatedAt(
-                                            summary.createdAt),
-                                        summary.edited ? ' · edited' : ''),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant),
-                          ),
-                        ),
-                        TextButton.icon(
-                          icon: const Icon(Icons.edit_outlined),
-                          label: Text(l10n.editSummary),
-                          onPressed:
-                              writing ? null : () => _editText(summary.text),
-                        ),
-                        if (controller.summaryExport
-                            case final SummaryExportController exporter)
-                          _SummaryExportMenu(
-                            exporter: exporter,
-                            meetingId: widget.meetingId,
-                            title: widget.title,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    SelectionArea(
-                        child: MarkdownView(
-                            markdownText: summary.text, embedded: true)),
-                  ],
+                  const SizedBox(height: 12),
+                  SelectionArea(
+                      child: MarkdownView(
+                          markdownText: summary.text, embedded: true)),
                 ],
-              ),
+              ],
             ),
           );
         },

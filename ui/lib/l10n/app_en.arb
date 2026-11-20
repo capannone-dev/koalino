@@ -2297,5 +2297,7 @@
   "stopRecordingPlayback": "Stop playback",
   "@stopRecordingPlayback": {"description": "Kept meeting recordings (#140)."},
   "recordingCouldNotBePlayed": "The recording could not be played.",
-  "@recordingCouldNotBePlayed": {"description": "Kept meeting recordings (#140)."}
+  "@recordingCouldNotBePlayed": {"description": "Kept meeting recordings (#140)."},
+  "columnWidth": "Column width",
+  "@columnWidth": {"description": "Screen-reader label of the divider that resizes a desktop column (#142)."}
 }

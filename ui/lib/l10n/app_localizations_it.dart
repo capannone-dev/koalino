@@ -2946,4 +2946,7 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get recordingCouldNotBePlayed =>
       'Non è stato possibile riprodurre la registrazione.';
+
+  @override
+  String get columnWidth => 'Larghezza della colonna';
 }

@@ -22,14 +22,18 @@ import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/delete_meeting_action.dart';
 import 'package:note_taker_ui/presentation/new_meeting_dialog.dart';
 import 'package:note_taker_ui/presentation/rename_meeting_dialog.dart';
+import 'package:note_taker_ui/presentation/resizable_pane.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Window width from which the list and the detail are shown side by side (Material 3
 /// "expanded" window class).
 const double twoPaneBreakpoint = 840;
 
-/// Width of the list pane in the two-pane layout.
+/// Default width of the list pane in the two-pane layout; the owner can drag it (#142).
 const double _listPaneWidth = 360;
+
+/// Room always left to the open meeting beside the list.
+const double _minDetailWidth = 400;
 
 /// Lists meetings and opens their detail: as a route on phones, beside the list on desktops.
 final class MeetingListScreen extends StatefulWidget {
@@ -332,8 +336,12 @@ final class _MeetingListScreenState extends State<MeetingListScreen> {
               ? Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    SizedBox(width: _listPaneWidth, child: meetingList),
-                    const VerticalDivider(width: 1),
+                    ResizablePane(
+                      id: 'meeting-list',
+                      defaultWidth: _listPaneWidth,
+                      maxWidth: constraints.maxWidth - _minDetailWidth,
+                      child: meetingList,
+                    ),
                     Expanded(
                         child: MeetingDetailView(
                             controller: widget.controller,

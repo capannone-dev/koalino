@@ -2935,4 +2935,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get recordingCouldNotBePlayed => 'No se pudo reproducir la grabación.';
+
+  @override
+  String get columnWidth => 'Ancho de la columna';
 }

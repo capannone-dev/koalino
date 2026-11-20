@@ -2955,4 +2955,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get recordingCouldNotBePlayed => 'تعذّر تشغيل التسجيل.';
+
+  @override
+  String get columnWidth => 'عرض العمود';
 }

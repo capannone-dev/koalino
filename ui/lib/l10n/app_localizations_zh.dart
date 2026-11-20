@@ -2730,4 +2730,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recordingCouldNotBePlayed => '无法播放该录音。';
+
+  @override
+  String get columnWidth => '列宽';
 }

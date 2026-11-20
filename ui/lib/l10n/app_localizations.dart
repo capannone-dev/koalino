@@ -4677,6 +4677,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The recording could not be played.'**
   String get recordingCouldNotBePlayed;
+
+  /// Screen-reader label of the divider that resizes a desktop column (#142).
+  ///
+  /// In en, this message translates to:
+  /// **'Column width'**
+  String get columnWidth;
 }
 
 class _AppLocalizationsDelegate

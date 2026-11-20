@@ -759,5 +759,6 @@
   "recordingsUnavailable": "Las grabaciones no están disponibles ahora.",
   "playRecording": "Reproducir la grabación",
   "stopRecordingPlayback": "Detener la reproducción",
-  "recordingCouldNotBePlayed": "No se pudo reproducir la grabación."
+  "recordingCouldNotBePlayed": "No se pudo reproducir la grabación.",
+  "columnWidth": "Ancho de la columna"
 }

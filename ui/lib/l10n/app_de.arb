@@ -759,5 +759,6 @@
   "recordingsUnavailable": "Aufnahmen sind gerade nicht erreichbar.",
   "playRecording": "Aufnahme abspielen",
   "stopRecordingPlayback": "Wiedergabe stoppen",
-  "recordingCouldNotBePlayed": "Die Aufnahme konnte nicht abgespielt werden."
+  "recordingCouldNotBePlayed": "Die Aufnahme konnte nicht abgespielt werden.",
+  "columnWidth": "Spaltenbreite"
 }

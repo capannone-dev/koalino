@@ -759,5 +759,6 @@
   "recordingsUnavailable": "As gravações não estão acessíveis agora.",
   "playRecording": "Ouvir a gravação",
   "stopRecordingPlayback": "Parar a reprodução",
-  "recordingCouldNotBePlayed": "Não foi possível reproduzir a gravação."
+  "recordingCouldNotBePlayed": "Não foi possível reproduzir a gravação.",
+  "columnWidth": "Largura da coluna"
 }

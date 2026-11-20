@@ -2793,4 +2793,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recordingCouldNotBePlayed => '録音を再生できませんでした。';
+
+  @override
+  String get columnWidth => '列の幅';
 }
