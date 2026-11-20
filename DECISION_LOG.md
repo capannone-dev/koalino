@@ -4043,6 +4043,17 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   the man, the main woman and a second woman; the third woman said one 10 s sentence, under the
   least group size, and was given to the nearest voice, as designed. So the "split voice" of the
   earlier runs was a real second person.
+- **Fourth run (turn's last word kept):** all 12 sentences again, but the words around turn
+  changes were still off: "strette." twice (the engine placed one device's copy of the phrase
+  4 s from the other's), "Dincidente" next to "L'incidente", "alta" and "e si" as turns of a
+  third speaker inside the woman's sentence. Replaying the run's words (an ignored test feeds
+  them to `combine_sources`) led to four rules: two matching neighbours make a copy up to 8 s
+  apart; long words a letter apart within 1 s are one word; the copy set inside more of its own
+  sentence stays; and at most two words split off mid-sentence (one device, under 1.5 s), or
+  left a word or two across a sentence end at a turn change, go back to their sentence. A
+  one-word answer after a question and two people talking at once are kept apart, as before.
+  On the replay, words under the wrong speaker fell from 15 to 12 and the word error from 44.2%
+  to 42.2%; what is left is the speaker pass's own (the start of "Gli ostaggi" under the woman).
 
 
 ## A phone runs the after-meeting pass while charging with Koalino closed (#87; 2026-11-20)

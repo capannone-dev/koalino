@@ -33,6 +33,8 @@ mod combined_meetings_tests;
 pub mod combined_refinement;
 #[cfg(test)]
 mod combined_refinement_tests;
+#[cfg(test)]
+mod combined_replay_tests;
 /// Defines compute-routing policy seams for future distributed AI selection.
 pub mod compute_router;
 #[cfg(test)]

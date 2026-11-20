@@ -409,11 +409,15 @@ one meeting with one transcript built from both microphones.
 - `combined_refinement.rs` runs the pass over every recording. Each is transcribed in 30 s windows
   as in #87. The offset is refined from words both devices wrote. Each word keeps its own device's
   speaker, mapped to the first recording's speakers by identity, else by time overlap. Each
-  speaker's words come from the device that heard that speaker best (more words), and duplicates
-  within 1 s are dropped. On NOTSOFAR's far-field devices, picking a device per speaker scored the
+  speaker's words come from the device that heard that speaker best (more words). A word both
+  devices wrote is kept once (within 1 s, or up to 8 s when the words around it match too), the
+  copy set inside its own sentence winning; stray speaker changes inside a sentence, and changes
+  a word or two off a sentence end, are mended. On NOTSOFAR's far-field devices, picking a device per speaker scored the
   same as one device; merging every word made it worse (duplicates); the union bound across
   devices was 20.3% word error against 36.9% for one device, so the gain depends on placing the
   phone near the people the laptop hears worst.
+- `combined_replay_tests.rs` (ignored) replays the combining from a JSON file of two devices'
+  words and speaker turns, to tune `combine_sources` on a real run.
 - `speech_transfer_exchange.rs` seals the speech parts (`NTR3`, at most 12 MiB of speech each,
   about an hour) and their receipts (`NTR2`) with the pair key, bound to the sender and the
   receiver. The speech is Opus as the sender keeps it, carried unread; the receiver checks that it

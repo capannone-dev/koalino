@@ -12,10 +12,15 @@
 //!    person, else the one they share the most time with);
 //! 4. each person's words are taken from the device that wrote more of them, so in overlapping
 //!    speech each device keeps the person near it;
-//! 5. a word written for both devices within a second, or within three seconds with a
-//!    neighbouring word the same too, is kept once: under the speaker of the words before it, so
-//!    a turn keeps its last word when the other device started the next turn early; else under
-//!    the speaker with more words, so a sentence one device split off stays in its main voice.
+//! 5. a word written for both devices within a second (or spelt a letter apart, for long words),
+//!    within three seconds with a neighbouring word the same too, or within eight with two, is
+//!    kept once. The copy set inside more of its own sentence stays; then the copy under the
+//!    speaker of the words before it, so a turn keeps its last word when the other device started
+//!    the next turn early; else the one under the speaker with more words, so a sentence one
+//!    device split off stays in its main voice;
+//! 6. a word or two set apart mid-sentence, between words of one speaker, go back to that
+//!    speaker; a one-word answer after a question stays its own turn; and a speaker change a
+//!    word or two off a sentence end moves to it.
 //!
 //! Before that, a chunk of one recording that lost a sentence its own text had keeps that text
 //! (`keep_live_where_the_pass_lost_speech`), as in the single pass.
@@ -50,6 +55,22 @@ const DUPLICATE_WINDOW_MS: u64 = 1_000;
 const DUPLICATE_PHRASE_WINDOW_MS: u64 = 3_000;
 /// How much further apart than the word itself its confirming neighbour's copies may be.
 const NEIGHBOUR_DRIFT_MS: u64 = 500;
+/// Two devices' copies of a word up to this far apart are one word when two of the words around
+/// them are the same too: the engine can misplace a whole phrase by seconds (#88 run 4).
+const DUPLICATE_DRIFTED_WINDOW_MS: u64 = 8_000;
+/// Two words this close, the first ending no sentence, belong to one sentence (one device can
+/// leave a second or more between words the other device wrote together).
+const SENTENCE_FLOW_GAP_MS: u64 = 3_000;
+/// Words shorter than this are not matched by spelling alone: short words differ by one letter.
+const NEARLY_SAME_MIN_LETTERS: usize = 6;
+/// At most this many words set apart mid-sentence go back to the speaker around them.
+const STRAY_TURN_MAX_WORDS: usize = 2;
+/// ... and only when they last at most this long.
+const STRAY_TURN_MAX_MS: u64 = 1_500;
+/// At most this many words move across a speaker change to the sentence they belong to...
+const TURN_SNAP_MAX_WORDS: usize = 2;
+/// ... when they are at most this far from the turn they join.
+const TURN_SNAP_GAP_MS: u64 = 1_500;
 
 /// One recording's re-transcribed words and its speakers.
 pub struct SourceWords<'speakers> {
@@ -101,17 +122,17 @@ pub fn combine_sources(
             });
         }
     }
-    let mut placed_keys: Vec<(usize, u64, String)> = placed
+    let mut placed_keys: Vec<SourceEntry> = placed
         .iter()
-        .map(|word| {
-            (
-                word.source,
-                word.word.start_ms(),
-                comparison_key(word.word.text()),
-            )
+        .map(|word| SourceEntry {
+            source: word.source,
+            start_ms: word.word.start_ms(),
+            end_ms: word.word.end_ms(),
+            key: comparison_key(word.word.text()),
+            ends_sentence: ends_sentence(word.word.text()),
         })
         .collect();
-    placed_keys.sort_by_key(|(source, start, _)| (*source, *start));
+    placed_keys.sort_by_key(|entry| (entry.source, entry.start_ms));
     let mut counts: HashMap<Speaker, Vec<usize>> = HashMap::new();
     for word in &placed {
         let per_source = counts
@@ -142,38 +163,65 @@ pub fn combine_sources(
         .collect();
     kept.sort_by_key(|word| (word.word.start_ms(), word.source));
     // Each source's words in time order, to compare a word's neighbours across devices.
-    let mut by_source: Vec<Vec<(u64, String)>> = vec![Vec::new(); members.len() + 1];
+    let mut by_source: Vec<Vec<SourceEntry>> = vec![Vec::new(); members.len() + 1];
     for word in &placed_keys {
-        by_source[word.0].push((word.1, word.2.clone()));
+        by_source[word.source].push(word.clone());
     }
-    // A neighbour confirms a copy when it is the same word at the same distance (the two devices'
-    // words drift apart together), so a fragment the far device caught does not.
+    let position_of = |word: &PlacedWord| {
+        by_source[word.source]
+            .iter()
+            .position(|entry| entry.start_ms == word.word.start_ms())
+    };
+    // The same words around both copies: a neighbour at the same distance (the two devices' words
+    // drift apart together) confirms a copy within `DUPLICATE_PHRASE_WINDOW_MS`, so a fragment
+    // the far device caught does not; two neighbours confirm one up to
+    // `DUPLICATE_DRIFTED_WINDOW_MS`, where the engine misplaced a whole phrase.
     let neighbours_match = |first: &PlacedWord, second: &PlacedWord| {
-        let around = |word: &PlacedWord| -> [Option<&(u64, String)>; 2] {
+        let around = |word: &PlacedWord| -> [Option<&SourceEntry>; 4] {
             let sequence = &by_source[word.source];
-            sequence
-                .iter()
-                .position(|(start, _)| *start == word.word.start_ms())
-                .map_or([None, None], |index| {
-                    [
-                        index.checked_sub(1).and_then(|before| sequence.get(before)),
-                        sequence.get(index + 1),
-                    ]
-                })
+            position_of(word).map_or([None; 4], |index| {
+                let at = |step: isize| {
+                    index
+                        .checked_add_signed(step)
+                        .and_then(|other| sequence.get(other))
+                };
+                [at(-2), at(-1), at(1), at(2)]
+            })
         };
         let shift = |earlier: u64, later: u64| i128::from(later) - i128::from(earlier);
         let word_shift = shift(first.word.start_ms(), second.word.start_ms());
-        around(first)
+        let pairs: Vec<(&SourceEntry, &SourceEntry)> = around(first)
             .into_iter()
             .zip(around(second))
-            .any(|pair| match pair {
-                (Some((first_start, first_key)), Some((second_start, second_key))) => {
-                    first_key == second_key
-                        && (shift(*first_start, *second_start) - word_shift).abs()
-                            <= i128::from(NEIGHBOUR_DRIFT_MS)
-                }
-                _ => false,
+            .filter_map(|pair| match pair {
+                (Some(one), Some(other)) if one.key == other.key => Some((one, other)),
+                _ => None,
             })
+            .collect();
+        let near = pairs.iter().any(|(one, other)| {
+            (shift(one.start_ms, other.start_ms) - word_shift).abs()
+                <= i128::from(NEIGHBOUR_DRIFT_MS)
+        });
+        let apart = word_shift.unsigned_abs();
+        (near && apart <= u128::from(DUPLICATE_PHRASE_WINDOW_MS)) || pairs.len() >= 2
+    };
+    // How many of a copy's neighbours on its own device run on into it: 0 to 2.
+    let flow = |word: &PlacedWord| {
+        let sequence = &by_source[word.source];
+        position_of(word).map_or(0, |index| {
+            let joined = |first: &SourceEntry, second: &SourceEntry| {
+                !first.ends_sentence
+                    && second.start_ms.saturating_sub(first.end_ms) <= SENTENCE_FLOW_GAP_MS
+            };
+            let before = index
+                .checked_sub(1)
+                .and_then(|earlier| sequence.get(earlier))
+                .is_some_and(|earlier| joined(earlier, &sequence[index]));
+            let after = sequence
+                .get(index + 1)
+                .is_some_and(|later| joined(&sequence[index], later));
+            usize::from(before) + usize::from(after)
+        })
     };
     // How many words each speaker keeps: a copy goes to the speaker carrying more of the meeting.
     let mut weight: HashMap<Speaker, usize> = HashMap::new();
@@ -189,27 +237,32 @@ pub fn combine_sources(
             .rev()
             .take_while(|(_, earlier)| {
                 word.word.start_ms().saturating_sub(earlier.word.start_ms())
-                    <= DUPLICATE_PHRASE_WINDOW_MS
+                    <= DUPLICATE_DRIFTED_WINDOW_MS
             })
             .find(|(_, earlier)| {
+                let apart = word.word.start_ms().saturating_sub(earlier.word.start_ms());
+                let earlier_key = comparison_key(earlier.word.text());
                 earlier.source != word.source
-                    && comparison_key(earlier.word.text()) == key
-                    && (word.word.start_ms().saturating_sub(earlier.word.start_ms())
-                        <= DUPLICATE_WINDOW_MS
-                        || neighbours_match(earlier, word))
+                    && ((earlier_key == key
+                        && (apart <= DUPLICATE_WINDOW_MS || neighbours_match(earlier, word)))
+                        || (apart <= DUPLICATE_WINDOW_MS && nearly_same(&earlier_key, &key)))
             })
             .map(|(index, _)| index);
         match copy {
             None => written.push(word),
             Some(index) => {
-                // The copy whose speaker continues the words before it stays (a turn keeps its
-                // last word, a sentence its middle); otherwise the speaker with more words.
+                // The copy set inside more of its own sentence stays; then the copy whose speaker
+                // continues the words before it (a turn keeps its last word); then the speaker
+                // with more words, so a sentence one device split off stays in its main voice.
                 let before = index
                     .checked_sub(1)
                     .and_then(|earlier| written.get(earlier))
                     .map(|earlier| earlier.speaker);
                 let weight_of = |speaker: &Speaker| weight.get(speaker).copied().unwrap_or(0);
-                let takes_over = if before == Some(written[index].speaker) {
+                let (new_flow, old_flow) = (flow(word), flow(written[index]));
+                let takes_over = if new_flow != old_flow {
+                    new_flow > old_flow
+                } else if before == Some(written[index].speaker) {
                     false
                 } else if before == Some(word.speaker) {
                     true
@@ -223,12 +276,156 @@ pub fn combine_sources(
         }
     }
     written.sort_by_key(|word| (word.word.start_ms(), word.source));
+    let mut items: Vec<(&MeetingWord, Speaker, bool, usize)> = written
+        .into_iter()
+        .map(|word| (&word.word, word.speaker, word.doubtful, word.source))
+        .collect();
+    keep_sentences_whole(&mut items);
     segments_of(
         meeting_id,
-        written
+        items
             .into_iter()
-            .map(|word| (&word.word, word.speaker, word.doubtful)),
+            .map(|(word, speaker, doubtful, _)| (word, speaker, doubtful)),
     )
+}
+
+/// One word of one source, as the copy checks compare it.
+#[derive(Clone)]
+struct SourceEntry {
+    source: usize,
+    start_ms: u64,
+    end_ms: u64,
+    key: String,
+    /// The word as written ends with `.`, `?` or `!`.
+    ends_sentence: bool,
+}
+
+/// Reports whether a word ends a sentence. Side effects: None.
+fn ends_sentence(text: &str) -> bool {
+    text.trim_end_matches(['"', '\'', ')', '»'])
+        .ends_with(['.', '?', '!', '…'])
+}
+
+/// Reports whether two different comparison keys are one word spelt a little differently (one
+/// letter changed, added or dropped, apostrophes aside), for words of six letters or more.
+///
+/// Inputs: Two comparison keys. Outputs: true for such a pair. Side effects: None.
+fn nearly_same(first: &str, second: &str) -> bool {
+    let letters = |key: &str| -> Vec<char> { key.chars().filter(|c| *c != '\'').collect() };
+    let (first, second) = (letters(first), letters(second));
+    let (shorter, longer) = if first.len() <= second.len() {
+        (&first, &second)
+    } else {
+        (&second, &first)
+    };
+    if shorter.len() < NEARLY_SAME_MIN_LETTERS || longer.len() - shorter.len() > 1 {
+        return false;
+    }
+    let common_start = shorter
+        .iter()
+        .zip(longer.iter())
+        .take_while(|(one, other)| one == other)
+        .count();
+    let common_end = shorter
+        .iter()
+        .rev()
+        .zip(longer.iter().rev())
+        .take_while(|(one, other)| one == other)
+        .count();
+    // One edit: what is left between the common start and end is at most one letter each.
+    common_start + common_end + 1 >= longer.len()
+}
+
+/// Gives a word or two the speaker pass set apart in the middle of a sentence to the speaker
+/// around them: the words before end no sentence, the same speaker talks on both sides, the
+/// stray words last under `STRAY_TURN_MAX_MS`, and all come from one device (words of two
+/// devices interleaving are two people talking at once). A one-word answer after a question
+/// stays its own.
+///
+/// Inputs: The words in time order with their speakers, doubt and source. Side effects: Changes
+/// those speakers.
+fn keep_sentences_whole(items: &mut [(&MeetingWord, Speaker, bool, usize)]) {
+    let mut start = 0;
+    while start < items.len() {
+        let speaker = items[start].1;
+        let end = items[start..]
+            .iter()
+            .position(|item| item.1 != speaker)
+            .map_or(items.len(), |offset| start + offset);
+        if start > 0 && end < items.len() {
+            let (before, after) = (items[start - 1], items[end]);
+            let lasts = items[end - 1]
+                .0
+                .end_ms()
+                .saturating_sub(items[start].0.start_ms());
+            let one_device = items[start - 1..=end].iter().all(|item| item.3 == before.3);
+            if before.1 == after.1
+                && one_device
+                && end - start <= STRAY_TURN_MAX_WORDS
+                && lasts <= STRAY_TURN_MAX_MS
+                && !ends_sentence(before.0.text())
+            {
+                for item in &mut items[start..end] {
+                    item.1 = before.1;
+                }
+            }
+        }
+        start = end;
+    }
+    snap_turn_changes_to_sentences(items);
+}
+
+/// Moves each speaker change to the sentence end next to it: up to two words opening a sentence
+/// at the end of a turn go to the next speaker, and up to two words ending a sentence at the
+/// start of a turn go back to the previous one, when they are close to the turn they join. The
+/// speaker pass often changes speaker a word late or early (#88 run 4).
+///
+/// Inputs: The words in time order with their speakers. Side effects: Changes those speakers.
+fn snap_turn_changes_to_sentences(items: &mut [(&MeetingWord, Speaker, bool, usize)]) {
+    for change in 1..items.len() {
+        let (previous, next) = (items[change - 1].1, items[change].1);
+        if previous == next {
+            continue;
+        }
+        let joins = |earlier: &MeetingWord, later: &MeetingWord| {
+            later.start_ms().saturating_sub(earlier.end_ms()) <= TURN_SNAP_GAP_MS
+        };
+        // A sentence opening at the end of the previous turn.
+        let opening = (1..=TURN_SNAP_MAX_WORDS).find(|count| {
+            change > *count
+                && ends_sentence(items[change - count - 1].0.text())
+                && items[change - count..change]
+                    .iter()
+                    .all(|item| item.1 == previous && !ends_sentence(item.0.text()))
+        });
+        if let Some(count) = opening
+            && joins(items[change - 1].0, items[change].0)
+        {
+            for item in &mut items[change - count..change] {
+                item.1 = next;
+            }
+            continue;
+        }
+        // A sentence ending at the start of the next turn.
+        let closing = (1..=TURN_SNAP_MAX_WORDS).find(|count| {
+            change + count <= items.len()
+                && ends_sentence(items[change + count - 1].0.text())
+                && items[change..change + count - 1]
+                    .iter()
+                    .all(|item| !ends_sentence(item.0.text()))
+                && items[change..change + count]
+                    .iter()
+                    .all(|item| item.1 == next)
+        });
+        if let Some(count) = closing
+            && !ends_sentence(items[change - 1].0.text())
+            && joins(items[change - 1].0, items[change].0)
+        {
+            for item in &mut items[change..change + count] {
+                item.1 = previous;
+            }
+        }
+    }
 }
 
 /// Maps each speaker of another recording to the first recording's speaker of the same person.
