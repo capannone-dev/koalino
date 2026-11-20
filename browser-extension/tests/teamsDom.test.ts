@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   findRecapCards,
+  findShareVideo,
   findRecapView,
   isInCall,
   isTeamsTranscriptRunning,
@@ -165,5 +166,34 @@ describe("ownerName", () => {
   it("falls back to Me", () => {
     document.body.innerHTML = '<button data-tid="me-control-avatar-trigger" aria-label="Your profile, status Available"></button>';
     expect(ownerName(document)).toBe("Me");
+  });
+});
+
+describe("screen share (#137)", () => {
+  /** A playing video in a stage tile, with the stream Teams gave it. */
+  function stageVideo(streamId: string, width = 1280): HTMLVideoElement {
+    const tile = document.createElement("div");
+    tile.setAttribute("data-tid", "calling-stream");
+    const stage = document.createElement("div");
+    stage.setAttribute("data-tid", "Stage-wrapper");
+    const video = document.createElement("video");
+    Object.defineProperty(video, "videoWidth", { value: width });
+    Object.defineProperty(video, "srcObject", { value: { id: streamId } });
+    tile.append(video);
+    stage.append(tile);
+    document.body.append(stage);
+    return video;
+  }
+
+  it("never takes a camera, however large it is shown", () => {
+    stageVideo("mainVideo-1000");
+    stageVideo("participantVideo-42", 1920);
+    expect(findShareVideo(document)).toBeNull();
+  });
+
+  it("takes the shared screen's stream", () => {
+    stageVideo("mainVideo-1000", 1920);
+    const share = stageVideo("applicationsharingVideo-7", 1032);
+    expect(findShareVideo(document)).toBe(share);
   });
 });

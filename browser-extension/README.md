@@ -18,7 +18,7 @@ Teams, Not now). While recording, an indicator with a Stop button stays on the p
 | Everyone else | the one mixed track Teams plays, tapped in the page | segments whose voices are matched against your voice gallery (`MIXED_REMOTE`) |
 | Live captions | turned on for you (only you see them) and read as they grow | a `teams-captions` WebVTT attachment with names and times |
 | Teams transcript panel | read while Teams transcription runs | a `teams-live-transcript` attachment |
-| Shared slides | a frame of the screen share once it changes and holds still, cropped to the slide | slide attachments at their point in the meeting |
+| Shared slides | a frame of the screen share once it changes and holds still, cropped to the slide; only the shared-screen stream is read, never a camera (#137) | slide attachments at their point in the meeting |
 | The Teams transcript | fetched from the recap in the meeting chat, whoever started transcription: the extension opens the Transcript tab and uses the recap's Download → .vtt (which also leaves a copy in Downloads) | a `teams-transcript` WebVTT attachment of the same meeting |
 
 Optional, off by default: **Start Teams transcription when I record** (More → Record and

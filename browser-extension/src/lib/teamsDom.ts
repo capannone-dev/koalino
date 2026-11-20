@@ -262,27 +262,24 @@ export function findRecapCards(root: ParentNode): RecapCard[] {
   return cards;
 }
 
+/** The stream id prefix Teams gives a screen share (cameras are `mainVideo-…` and others). */
+const SHARE_STREAM_PREFIX = "applicationsharingVideo";
+
 /**
  * Finds the video showing a screen share, when one is on.
  *
- * Inputs: The document. Outputs: The playing share video, or `null`. Teams names a share's stream
- * `applicationsharingVideo-…`; when the stream is not readable, a large video outside the owner's
- * own tile is taken instead. Side effects: None.
+ * Inputs: The document. Outputs: The share video, or `null`. Only a video whose stream Teams
+ * named `applicationsharingVideo-…` counts (#102 probe). Cameras are shown in the same stage
+ * tiles, at the same sizes, so no guess by size or place is made: slides are never taken from a
+ * camera (#137). Side effects: None.
  */
 export function findShareVideo(root: ParentNode): HTMLVideoElement | null {
   const videos = [...root.querySelectorAll("video")];
-  const byStream = videos.find((video) => {
-    const stream = video.srcObject;
-    return stream instanceof MediaStream && stream.id.startsWith("applicationsharingVideo");
-  });
-  if (byStream) return byStream;
   return (
-    videos.find(
-      (video) =>
-        video.videoWidth >= 800 &&
-        !video.closest('[data-tid="myself-video"]') &&
-        video.closest('[data-tid="calling-stream"], [data-tid*="screen-share"], [data-tid="Stage-wrapper"]') !== null,
-    ) ?? null
+    videos.find((video) => {
+      const stream = video.srcObject as { id?: unknown } | null;
+      return typeof stream?.id === "string" && stream.id.startsWith(SHARE_STREAM_PREFIX);
+    }) ?? null
   );
 }
 
