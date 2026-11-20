@@ -11,6 +11,7 @@ import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/presentation/chat_screen.dart';
 import 'package:note_taker_ui/presentation/clear_file.dart';
+import 'package:note_taker_ui/presentation/photo_gallery.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
 import 'package:note_taker_ui/controllers/summaries_controller.dart';
 import 'package:note_taker_ui/presentation/meeting_edit_widgets.dart';
@@ -611,6 +612,13 @@ final class _MeetingContent extends StatelessWidget {
     final int? focusedStart = _focusedStart;
     final List<MeetingTimelineEntry> timeline = buildMeetingTimeline(
         segments: meeting.segments, attachments: meeting.attachments);
+    // The meeting's photos in timeline order: the full-screen viewer moves between them (#144).
+    final List<MeetingAttachment> photos = <MeetingAttachment>[
+      for (final MeetingTimelineEntry entry in timeline)
+        if (entry case AttachmentEntry(:final MeetingAttachment attachment)
+            when attachment.isImage)
+          attachment,
+    ];
     final List<Widget> entries = timeline
         .map((MeetingTimelineEntry entry) => Padding(
               padding: const EdgeInsets.only(bottom: 16),
@@ -624,7 +632,7 @@ final class _MeetingContent extends StatelessWidget {
                 SegmentEntry(:final MeetingTranscriptSegment segment) =>
                   _editable(theme, segment),
                 AttachmentEntry(:final MeetingAttachment attachment) =>
-                  MeetingAttachmentView(attachment: attachment),
+                  MeetingAttachmentView(attachment: attachment, photos: photos),
               },
             ))
         .toList(growable: false);
@@ -786,9 +794,44 @@ const double _maxInlinePhotoHeight = 240;
 /// document as its name and type.
 final class MeetingAttachmentView extends StatelessWidget {
   /// Creates the view of `attachment`.
-  const MeetingAttachmentView({required this.attachment, super.key});
+  ///
+  /// Inputs: The attachment, and the meeting's photos in order (the full-screen viewer moves
+  /// between them; just this one when absent). Outputs: A widget. Side effects: None.
+  const MeetingAttachmentView(
+      {required this.attachment, this.photos, super.key});
 
   final MeetingAttachment attachment;
+
+  /// The meeting's photos, in the order the viewer shows them.
+  final List<MeetingAttachment>? photos;
+
+  /// Opens the full-screen viewer on this photo. Side effects: Pushes a route.
+  void _openViewer(BuildContext context) {
+    final List<MeetingAttachment> all = switch (photos) {
+      final List<MeetingAttachment> photos
+          when photos.any((MeetingAttachment photo) =>
+              photo.attachmentId == attachment.attachmentId) =>
+        photos,
+      _ => <MeetingAttachment>[attachment],
+    };
+    Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (BuildContext context) => PhotoGallery(
+        count: all.length,
+        initialIndex: all.indexWhere((MeetingAttachment photo) =>
+            photo.attachmentId == attachment.attachmentId),
+        titleOf: (int index) => all[index].fileName,
+        photoBuilder: (BuildContext context, int index) => ClearFile(
+          attachmentId: all[index].attachmentId,
+          unavailableBuilder: (BuildContext context) => const Icon(
+              Icons.broken_image_outlined,
+              color: Colors.white70,
+              size: 48),
+          builder: (BuildContext context, String path) =>
+              Image.file(File(path)),
+        ),
+      ),
+    ));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -810,9 +853,7 @@ final class MeetingAttachmentView extends StatelessWidget {
             button: true,
             label: l10n.photoOpenFullScreen(attachment.fileName),
             child: InkWell(
-              onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                  builder: (BuildContext context) =>
-                      _PhotoViewer(attachment: attachment))),
+              onTap: () => _openViewer(context),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
                 child: ConstrainedBox(
@@ -859,35 +900,6 @@ final class _DocumentTile extends StatelessWidget {
             : Icons.insert_drive_file_outlined),
         title: Text(attachment.fileName),
         subtitle: Text(attachment.mimeType),
-      ),
-    );
-  }
-}
-
-/// Shows a photo full screen, with pinch and scroll zoom.
-final class _PhotoViewer extends StatelessWidget {
-  const _PhotoViewer({required this.attachment});
-
-  final MeetingAttachment attachment;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(title: Text(attachment.fileName)),
-      body: InteractiveViewer(
-        maxScale: 5,
-        child: Center(
-          child: ClearFile(
-            attachmentId: attachment.attachmentId,
-            unavailableBuilder: (BuildContext context) => const Icon(
-                Icons.broken_image_outlined,
-                color: Colors.white70,
-                size: 48),
-            builder: (BuildContext context, String path) =>
-                Image.file(File(path)),
-          ),
-        ),
       ),
     );
   }

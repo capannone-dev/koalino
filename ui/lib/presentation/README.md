@@ -172,6 +172,9 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   matched words. A meeting result opens the meeting scrolled to the passage
   (`MeetingDetailScreen.focusStartMs`, which marks it); a file result opens the file
   (`openProjectSearchHit`).
+- `photo_gallery.dart` (#144) is `PhotoGallery`, the full-screen viewer of a meeting's photos and
+  screenshots: ← / → and the on-screen arrows move between them, Esc closes; on a touch screen a
+  sideways swipe turns the page and a swipe up or down closes. A zoomed photo pans instead.
 - `clear_file.dart` (#99) is `ClearFile`: it asks for an attachment's clear copy, shows a progress
   indicator meanwhile, then builds the view from the copy's path, or an "unavailable" view. Meeting
   photos (inline and full screen) and project pictures, Markdown, text and PDFs use it.
