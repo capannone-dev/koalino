@@ -38,6 +38,7 @@ import {
   newMeetingId,
   pendingTranscriptMeetings,
   recapRetryDue,
+  leftMeetingToClose,
   resumableMeeting,
 } from "../lib/meetings";
 import { ExtensionSettings, DEFAULT_SETTINGS } from "../lib/settings";
@@ -221,6 +222,31 @@ function stopRecording(): void {
   toBackground({ kind: "recording", recording: false, title: record.title, meetingId: record.meetingId });
   recorder = null;
   hideOverlay();
+}
+
+/**
+ * The call ended in the page, perhaps dropped: send what was collected, but keep the meeting
+ * open, so rejoining the same call in this tab within two minutes continues it (as a reload
+ * does, #102). Otherwise the background ends it, and this tab marks it ended.
+ * Side effects: Sends audio and captions; tells the background; hides the overlay.
+ */
+function leaveCall(): void {
+  if (!recorder || !record) return;
+  const { title, meetingId } = record;
+  interruptRecording();
+  toBackground({ kind: "recording", recording: false, title, meetingId, interrupted: true });
+  hideOverlay();
+}
+
+/**
+ * Marks ended the meeting this tab left, once it can no longer be rejoined.
+ * Side effects: Updates the stored record; forgets the tab's meeting.
+ */
+async function closeLeftMeeting(): Promise<void> {
+  const closed = leftMeetingToClose(await loadMeetings(), tabMeetingId(), Date.now());
+  if (!closed) return;
+  await saveMeeting(closed);
+  rememberTabMeeting(null);
 }
 
 /**
@@ -455,9 +481,10 @@ async function tick(): Promise<void> {
     }
     return;
   }
-  if (state === "recording") stopRecording();
+  if (state === "recording") leaveCall();
   if (state === "asking") hideOverlay();
   state = "idle";
+  await closeLeftMeeting();
   await checkRecaps();
 }
 

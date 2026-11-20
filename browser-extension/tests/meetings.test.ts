@@ -14,6 +14,7 @@ import {
   pruneMeetings,
   recapRetryDue,
   resumableMeeting,
+  leftMeetingToClose,
 } from "../src/lib/meetings";
 
 const HOUR = 3_600_000;
@@ -150,5 +151,24 @@ describe("resuming after a reload (#102)", () => {
   it("measures the gap from the start when no heartbeat was noted", () => {
     const young = weeklySync({ startMs: seenAt, endMs: null });
     expect(resumableMeeting([young], "browser-teams-1", seenAt + 10_000)?.meetingId).toBe("browser-teams-1");
+  });
+});
+
+describe("leftMeetingToClose (a call left in the page, 2026-11-20)", () => {
+  const leftAt = NOV_9_16H + 30 * 60_000;
+  const left = weeklySync({ endMs: null, lastSeenMs: leftAt });
+
+  it("keeps a left call open while it may be rejoined", () => {
+    expect(leftMeetingToClose([left], "browser-teams-1", leftAt + RESUME_GAP_MS)).toBeNull();
+  });
+
+  it("closes it once the gap passed, ending it when it was last seen", () => {
+    expect(leftMeetingToClose([left], "browser-teams-1", leftAt + RESUME_GAP_MS + 1)).toEqual({ ...left, endMs: leftAt });
+  });
+
+  it("leaves alone ended meetings and other tabs' meetings", () => {
+    expect(leftMeetingToClose([weeklySync()], "browser-teams-1", leftAt + HOUR)).toBeNull();
+    expect(leftMeetingToClose([left], "browser-teams-2", leftAt + HOUR)).toBeNull();
+    expect(leftMeetingToClose([left], null, leftAt + HOUR)).toBeNull();
   });
 });

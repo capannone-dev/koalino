@@ -118,6 +118,27 @@ export function resumableMeeting(
 }
 
 /**
+ * The meeting this tab left without ending it, now past the time to rejoin (2026-11-20): leaving
+ * the call in the page keeps the meeting open for `RESUME_GAP_MS`, so a dropped call that is
+ * rejoined continues it, as a reload does (#102).
+ *
+ * Inputs: The records; the meeting ID this tab remembers (`null` when none); the time now.
+ * Outputs: That record with its end set to when it was last seen, once the gap passed;
+ * otherwise `null`. Side effects: None.
+ */
+export function leftMeetingToClose(
+  meetings: readonly RecordedMeeting[],
+  tabMeetingId: string | null,
+  nowMs: number,
+): RecordedMeeting | null {
+  if (tabMeetingId === null) return null;
+  const meeting = meetings.find((candidate) => candidate.meetingId === tabMeetingId);
+  if (!meeting || meeting.endMs !== null) return null;
+  const lastSeen = recordedEnd(meeting);
+  return nowMs - lastSeen > RESUME_GAP_MS ? { ...meeting, endMs: lastSeen } : null;
+}
+
+/**
  * The meetings whose Teams transcript has not been sent yet.
  * Inputs: The records. Outputs: Those not fetched. Side effects: None.
  */

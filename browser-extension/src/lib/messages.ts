@@ -91,7 +91,14 @@ export interface RecordingProgress {
 export type TabMessage =
   | { kind: "host"; message: HostMessage }
   /** Recording started or stopped in the tab; `meetingId` is the Koalino meeting's (#102). */
-  | { kind: "recording"; recording: boolean; title: string; meetingId: string }
+  | {
+      kind: "recording";
+      recording: boolean;
+      title: string;
+      meetingId: string;
+      /** The call was left in the page: end the meeting unless it is rejoined in time. */
+      interrupted?: boolean;
+    }
   | { kind: "progress"; progress: RecordingProgress }
   /** Asks the tab's recap frames to download the recap transcript (`downloadRecapVtt`). */
   | { kind: "recap-download" }

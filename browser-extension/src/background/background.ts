@@ -170,6 +170,7 @@ chrome.runtime.onConnect.addListener((port) => {
       } else {
         recordings.delete(port);
         recordingMeetings.delete(port);
+        if (message.interrupted) interruptions.interrupted(message.meetingId);
       }
     }
     if (message.kind === "progress" && recordings.has(port)) recordings.set(port, describeProgress(message.progress));
