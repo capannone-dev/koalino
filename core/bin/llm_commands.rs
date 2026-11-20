@@ -128,7 +128,12 @@ impl LlmServices {
             super::llm_settings::llm_settings_file_for(database_path),
             &device_name,
         )
-        .with_keyring(Arc::new(PlatformLlmKeyring::new(key_directory, None)))
+        .with_keyring(Arc::new(
+            PlatformLlmKeyring::new(key_directory, None).with_keychain_enabled(
+                crate::application::crypto::key_manager::KeyManagerConfig::from_environment()
+                    .keychain_enabled(),
+            ),
+        ))
         .with_transcription_settings(super::transcription_settings::settings_file_for(
             database_path,
         ))

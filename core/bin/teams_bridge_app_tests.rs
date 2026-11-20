@@ -355,3 +355,36 @@ async fn the_pipeline_is_built_when_the_first_meeting_arrives() {
     );
     assert_eq!(statistics.processed_audio_chunks, 1);
 }
+
+/// Verifies that with the keychain turned off the app never asks it for the bridge secret (which
+/// would raise a keyring prompt): the bridge needs a configured secret then.
+#[test]
+fn with_the_keychain_off_the_app_bridge_leaves_the_keychain_alone() {
+    let keychain = MemoryKeychain::default();
+
+    assert!(
+        app_bridge_config(
+            &lookup_of(&[("NOTE_TAKER_KEYCHAIN_ENABLED", "false")]),
+            &keychain
+        )
+        .is_none()
+    );
+    assert!(
+        keychain
+            .load_key()
+            .unwrap_or_else(|error| panic!("keychain should read: {error}"))
+            .is_none(),
+        "no secret was created"
+    );
+    assert!(
+        app_bridge_config(
+            &lookup_of(&[
+                ("NOTE_TAKER_KEYCHAIN_ENABLED", "false"),
+                ("NOTE_TAKER_TEAMS_BRIDGE_SECRET", "vm-test-secret"),
+            ]),
+            &keychain
+        )
+        .is_some(),
+        "a configured secret still turns it on"
+    );
+}

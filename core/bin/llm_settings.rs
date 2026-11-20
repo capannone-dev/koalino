@@ -327,6 +327,9 @@ pub trait LlmKeyring: Send + Sync {
 pub struct PlatformLlmKeyring {
     key_directory: PathBuf,
     host_key: Option<Zeroizing<Vec<u8>>>,
+    /// False when the owner turned the platform keychain off (`NOTE_TAKER_KEYCHAIN_ENABLED`):
+    /// keys then go only to a sealed file under a host key, or nowhere (#142 follow-up).
+    keychain_enabled: bool,
 }
 
 impl PlatformLlmKeyring {
@@ -338,12 +341,24 @@ impl PlatformLlmKeyring {
         Self {
             key_directory,
             host_key: host_key.map(Zeroizing::new),
+            keychain_enabled: true,
         }
+    }
+
+    /// Follows the owner's keychain switch: with it off and no host key, keys cannot be saved
+    /// (`KeychainUnavailable`), and the platform keychain is never touched, so no prompt appears.
+    ///
+    /// Inputs: Whether the platform keychain may be used. Outputs: The keyring.
+    /// Side effects: None.
+    #[must_use]
+    pub fn with_keychain_enabled(mut self, keychain_enabled: bool) -> Self {
+        self.keychain_enabled = keychain_enabled;
+        self
     }
 
     /// The store for one connection. Side effects: May initialize the platform store.
     fn store(&self, connection_id: &str) -> ConnectionKeyStore {
-        if cfg!(target_os = "android") || self.host_key.is_some() {
+        if cfg!(target_os = "android") || self.host_key.is_some() || !self.keychain_enabled {
             ConnectionKeyStore::Sealed(SealedFileKeychain::new(
                 self.key_directory
                     .join(format!("llm-{connection_id}.sealed")),

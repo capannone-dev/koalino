@@ -82,10 +82,18 @@ pub(crate) fn services() -> Arc<LlmServices> {
             app_setting("NOTE_TAKER_DEVICE_NAME").unwrap_or_else(|| String::from("this device"));
         Arc::new(
             LlmServices::new(llm_settings_file_for(&database), &device_name)
-                .with_keyring(Arc::new(PlatformLlmKeyring::new(
-                    key_directory.clone(),
-                    crate::ffi::provided_encryption_key(),
-                )))
+                .with_keyring(Arc::new(
+                    PlatformLlmKeyring::new(
+                        key_directory.clone(),
+                        crate::ffi::provided_encryption_key(),
+                    )
+                    .with_keychain_enabled(
+                        crate::application::crypto::key_manager::KeyManagerConfig::from_lookup(
+                            app_setting,
+                        )
+                        .keychain_enabled(),
+                    ),
+                ))
                 .with_transcription_settings(paths.settings_file)
                 .with_saved_device_name(&database),
         )

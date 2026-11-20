@@ -196,3 +196,18 @@ fn answering_other_devices_is_off_until_a_connection_is_chosen_and_follows_remov
     assert_eq!(settings.set_paired_summary_connection(None), Ok(()));
     assert_eq!(settings.paired_summary_connection(), None);
 }
+
+#[test]
+fn with_the_keychain_turned_off_api_keys_never_reach_the_platform_keychain() {
+    use super::llm_settings::{LlmKeyring, PlatformLlmKeyring};
+    let directory = folder("llm-keychain-off");
+    let keyring = PlatformLlmKeyring::new(directory.clone(), None).with_keychain_enabled(false);
+
+    // The platform keychain would prompt or store; the switched-off keyring refuses instead.
+    assert!(keyring.save("online", "sk-test-0123456789").is_err());
+    assert!(matches!(keyring.load("online"), Ok(None) | Err(_)));
+    assert!(
+        !directory.join("llm-online.sealed").exists(),
+        "no key is written without a sealing key"
+    );
+}

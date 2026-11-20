@@ -534,8 +534,9 @@ pub async fn start_teams_bridge_from_environment(
 /// Inputs: The app's settings (`NOTE_TAKER_TEAMS_BRIDGE_*`, as for the daemon) and the keychain
 /// entry of the bridge secret.
 /// Outputs: The configuration, or `None` when turned off, misconfigured, or when no secret is
-/// configured and the keychain cannot keep one (the bridge would otherwise accept any local
-/// program). Each `None` is logged without values.
+/// configured and the keychain cannot keep one, or is turned off (`NOTE_TAKER_KEYCHAIN_ENABLED`,
+/// then never queried) (the bridge would otherwise accept any local program). Each `None` is
+/// logged without values.
 /// Side effects: Creates the keychain secret when none exists, so the browser host (which reads
 /// it there) and the app agree without an install step.
 pub fn app_bridge_config(
@@ -554,6 +555,17 @@ pub fn app_bridge_config(
             return None;
         }
     };
+    // With the keychain turned off, asking it would raise a keyring prompt: the bridge then needs
+    // a configured secret.
+    let keychain_enabled =
+        crate::application::crypto::key_manager::KeyManagerConfig::from_lookup(|name| {
+            setting(name)
+        })
+        .keychain_enabled();
+    if config.shared_secret.is_none() && !keychain_enabled {
+        tracing::info!("Teams bridge off: the keychain is turned off and no secret is configured");
+        return None;
+    }
     if config.shared_secret.is_none() {
         match ensure_bridge_secret(keychain) {
             Ok(secret) => {
