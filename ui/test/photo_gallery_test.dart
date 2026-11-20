@@ -131,4 +131,30 @@ void main() {
     expect(find.byTooltip('Next page'), findsNothing);
     expect(_title(tester), 'only.png');
   });
+
+  testWidgets('a pinch zooms the photo instead of turning the page',
+      (WidgetTester tester) async {
+    await _open(tester);
+    final Finder photo = find.byKey(const ValueKey<String>('photo-0'));
+    final double before = tester.getRect(photo).width;
+    final Offset center = tester.getCenter(photo);
+
+    // Two fingers land; the thumb stays nearly still while the other finger moves away, as in a
+    // real pinch (fingers moving exactly opposite cancel out and hide the problem).
+    final TestGesture left =
+        await tester.startGesture(center - const Offset(20, 0), pointer: 1);
+    final TestGesture right =
+        await tester.startGesture(center + const Offset(20, 0), pointer: 2);
+    for (int step = 0; step < 10; step++) {
+      await left.moveBy(const Offset(-1, 1));
+      await right.moveBy(const Offset(14, 6));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await left.up();
+    await right.up();
+    await tester.pumpAndSettle();
+
+    expect(_title(tester), contains('first.png'));
+    expect(tester.getRect(photo).width, greaterThan(before * 1.5));
+  });
 }

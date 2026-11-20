@@ -2,7 +2,8 @@
 //
 // The left and right arrow keys, the on-screen arrows, and a sideways swipe move between the
 // photos; Esc, the back button, and a swipe up or down close the viewer, as photo apps do.
-// Pinching or scrolling zooms; while a photo is zoomed in, a swipe pans it instead of turning the
+// Pinching or scrolling zooms (while two fingers are down the swipes stand aside, so the pinch
+// is not taken for a swipe); while a photo is zoomed in, a swipe pans it instead of turning the
 // page or closing. The pictures themselves come from `photoBuilder`, so the gallery knows nothing
 // of sealed files.
 
@@ -62,6 +63,13 @@ final class _PhotoGalleryState extends State<PhotoGallery> {
 
   /// Whether the current photo is zoomed in: swipes then pan it.
   bool _zoomed = false;
+
+  /// The fingers on the screen. With two or more the gesture is a pinch: the page swipe and the
+  /// swipe to close stand aside, or they would take it as soon as one finger moves.
+  final Set<int> _fingers = <int>{};
+
+  /// Whether a pinch is under way (two or more fingers down, until all are lifted).
+  bool _pinching = false;
 
   /// The page an arrow is moving to, so a quick second press counts from it.
   int? _heading;
@@ -123,6 +131,31 @@ final class _PhotoGalleryState extends State<PhotoGallery> {
     }
   }
 
+  /// Records a finger landing; a second one starts a pinch.
+  ///
+  /// Side effects: Rebuilds without the page swipe and the swipe to close, which drops them from
+  /// the gesture so the zoom wins it.
+  void _fingerDown(PointerDownEvent event) {
+    if (event.kind != PointerDeviceKind.touch) {
+      return;
+    }
+    _fingers.add(event.pointer);
+    if (_fingers.length >= 2 && !_pinching) {
+      setState(() {
+        _pinching = true;
+        _dismissOffset = 0;
+      });
+    }
+  }
+
+  /// Records a finger lifting; the pinch ends when the last one is lifted.
+  void _fingerUp(PointerEvent event) {
+    _fingers.remove(event.pointer);
+    if (_fingers.isEmpty && _pinching) {
+      setState(() => _pinching = false);
+    }
+  }
+
   /// Closes the viewer. Side effects: Pops the route when it can.
   void _close() => Navigator.of(context).maybePop();
 
@@ -161,40 +194,45 @@ final class _PhotoGalleryState extends State<PhotoGallery> {
           ),
           body: Stack(
             children: <Widget>[
-              GestureDetector(
-                // A zoomed photo pans; otherwise a vertical drag closes the viewer.
-                onVerticalDragUpdate: _zoomed
-                    ? null
-                    : (DragUpdateDetails details) => setState(
-                        () => _dismissOffset += details.primaryDelta ?? 0),
-                onVerticalDragEnd: _zoomed ? null : _dragEnded,
-                child: Transform.translate(
-                  offset: Offset(0, _dismissOffset),
-                  child: ScrollConfiguration(
-                    // Touch screens and touchpads swipe between photos; a mouse uses the arrows.
-                    behavior: ScrollConfiguration.of(context).copyWith(
-                      dragDevices: <PointerDeviceKind>{
-                        PointerDeviceKind.touch,
-                        PointerDeviceKind.stylus,
-                        PointerDeviceKind.invertedStylus,
-                        PointerDeviceKind.trackpad,
-                      },
-                    ),
-                    child: PageView.builder(
-                      controller: _pages,
-                      itemCount: widget.count,
-                      onPageChanged: _pageChanged,
-                      physics: _zoomed
-                          ? const NeverScrollableScrollPhysics()
-                          : const PageScrollPhysics(),
-                      itemBuilder: (BuildContext context, int index) =>
-                          InteractiveViewer(
-                        transformationController: _zoomOf(index),
-                        maxScale: 5,
-                        panEnabled: _zoomed,
-                        onInteractionEnd: (_) => _zoomChanged(),
-                        child:
-                            Center(child: widget.photoBuilder(context, index)),
+              Listener(
+                onPointerDown: _fingerDown,
+                onPointerUp: _fingerUp,
+                onPointerCancel: _fingerUp,
+                child: GestureDetector(
+                  // A zoomed photo pans and a pinch zooms; otherwise a vertical drag closes the viewer.
+                  onVerticalDragUpdate: _zoomed || _pinching
+                      ? null
+                      : (DragUpdateDetails details) => setState(
+                          () => _dismissOffset += details.primaryDelta ?? 0),
+                  onVerticalDragEnd: _zoomed || _pinching ? null : _dragEnded,
+                  child: Transform.translate(
+                    offset: Offset(0, _dismissOffset),
+                    child: ScrollConfiguration(
+                      // Touch screens and touchpads swipe between photos; a mouse uses the arrows.
+                      behavior: ScrollConfiguration.of(context).copyWith(
+                        dragDevices: <PointerDeviceKind>{
+                          PointerDeviceKind.touch,
+                          PointerDeviceKind.stylus,
+                          PointerDeviceKind.invertedStylus,
+                          PointerDeviceKind.trackpad,
+                        },
+                      ),
+                      child: PageView.builder(
+                        controller: _pages,
+                        itemCount: widget.count,
+                        onPageChanged: _pageChanged,
+                        physics: _zoomed || _pinching
+                            ? const NeverScrollableScrollPhysics()
+                            : const PageScrollPhysics(),
+                        itemBuilder: (BuildContext context, int index) =>
+                            InteractiveViewer(
+                          transformationController: _zoomOf(index),
+                          maxScale: 5,
+                          panEnabled: _zoomed,
+                          onInteractionEnd: (_) => _zoomChanged(),
+                          child: Center(
+                              child: widget.photoBuilder(context, index)),
+                        ),
                       ),
                     ),
                   ),
