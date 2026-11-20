@@ -3414,7 +3414,7 @@ abstract class AppLocalizations {
   /// No description provided for @languageModelsForMeetingSummariesAnd.
   ///
   /// In en, this message translates to:
-  /// **'Language models for meeting summaries, and the summary prompt.'**
+  /// **'Language models for meeting summaries and chat, and their prompts.'**
   String get languageModelsForMeetingSummariesAnd;
 
   /// No description provided for @keepProjectsAndMeetingsAsFiles.

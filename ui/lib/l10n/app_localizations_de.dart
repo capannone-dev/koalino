@@ -2040,7 +2040,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get languageModelsForMeetingSummariesAnd =>
-      'Sprachmodelle für Meeting-Zusammenfassungen und der Prompt dafür.';
+      'Sprachmodelle für Meeting-Zusammenfassungen und den Chat, und ihre Prompts.';
 
   @override
   String get keepProjectsAndMeetingsAsFiles =>

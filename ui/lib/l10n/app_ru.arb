@@ -549,7 +549,7 @@
   "pairYourDevicesAndSeeWhich": "Сопрягайте устройства и смотрите, какие из них подключены.",
   "transcriptionModel": "Модель расшифровки",
   "chooseTheWhisperModel": "Выберите модель Whisper.",
-  "languageModelsForMeetingSummariesAnd": "Языковые модели для резюме встреч и промпт для резюме.",
+  "languageModelsForMeetingSummariesAnd": "Языковые модели для резюме встреч и чата и их промпты.",
   "keepProjectsAndMeetingsAsFiles": "Храните проекты и встречи как файлы, которые можно редактировать в любом редакторе.",
   "letYourOwnAssistantSuchAs": "Разрешите своему ассистенту, например Claude Code, читать ваши заметки.",
   "appLock": "Блокировка приложения",

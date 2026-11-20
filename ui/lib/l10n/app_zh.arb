@@ -549,7 +549,7 @@
   "pairYourDevicesAndSeeWhich": "配对你的设备并查看哪些已连接。",
   "transcriptionModel": "转写模型",
   "chooseTheWhisperModel": "选择 Whisper 模型。",
-  "languageModelsForMeetingSummariesAnd": "用于会议摘要的语言模型，以及摘要提示词。",
+  "languageModelsForMeetingSummariesAnd": "用于会议摘要和聊天的语言模型，以及它们的提示词。",
   "keepProjectsAndMeetingsAsFiles": "将项目和会议保存为可用任何编辑器编辑的文件。",
   "letYourOwnAssistantSuchAs": "允许你自己的助手（如 Claude Code）读取你的笔记。",
   "appLock": "应用锁",

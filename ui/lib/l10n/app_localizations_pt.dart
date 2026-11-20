@@ -2004,7 +2004,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get languageModelsForMeetingSummariesAnd =>
-      'Modelos de linguagem para resumos de reuniões, e o prompt do resumo.';
+      'Modelos de linguagem para resumos de reuniões e o chat, e os seus prompts.';
 
   @override
   String get keepProjectsAndMeetingsAsFiles =>

@@ -549,7 +549,7 @@
   "pairYourDevicesAndSeeWhich": "اقرن أجهزتك واعرف أيها متصل.",
   "transcriptionModel": "نموذج التفريغ",
   "chooseTheWhisperModel": "اختر نموذج Whisper.",
-  "languageModelsForMeetingSummariesAnd": "نماذج اللغة لملخصات الاجتماعات، وتعليمات الملخص.",
+  "languageModelsForMeetingSummariesAnd": "نماذج اللغة لملخصات الاجتماعات والمحادثة، وتعليماتهما.",
   "keepProjectsAndMeetingsAsFiles": "احتفظ بالمشاريع والاجتماعات كملفات يمكنك تعديلها بأي محرر.",
   "letYourOwnAssistantSuchAs": "اسمح لمساعدك الخاص، مثل Claude Code، بقراءة ملاحظاتك.",
   "appLock": "قفل التطبيق",

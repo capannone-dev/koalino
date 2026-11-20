@@ -1976,7 +1976,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get languageModelsForMeetingSummariesAnd =>
-      'Language models for meeting summaries, and the summary prompt.';
+      'Language models for meeting summaries and chat, and their prompts.';
 
   @override
   String get keepProjectsAndMeetingsAsFiles =>

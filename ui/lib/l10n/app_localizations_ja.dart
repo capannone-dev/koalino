@@ -1893,7 +1893,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chooseTheWhisperModel => 'Whisper のモデルを選びます。';
 
   @override
-  String get languageModelsForMeetingSummariesAnd => '会議の要約に使う言語モデルと、要約のプロンプト。';
+  String get languageModelsForMeetingSummariesAnd =>
+      '会議の要約とチャットに使う言語モデルと、そのプロンプト。';
 
   @override
   String get keepProjectsAndMeetingsAsFiles =>

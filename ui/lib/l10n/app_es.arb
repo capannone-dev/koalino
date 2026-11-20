@@ -549,7 +549,7 @@
   "pairYourDevicesAndSeeWhich": "Vincula tus dispositivos y mira cuáles están conectados.",
   "transcriptionModel": "Modelo de transcripción",
   "chooseTheWhisperModel": "Elige el modelo de Whisper.",
-  "languageModelsForMeetingSummariesAnd": "Modelos de lenguaje para resumir reuniones, y el prompt del resumen.",
+  "languageModelsForMeetingSummariesAnd": "Modelos de lenguaje para resumir reuniones y el chat, y sus prompts.",
   "keepProjectsAndMeetingsAsFiles": "Guarda proyectos y reuniones como archivos que puedes editar con cualquier editor.",
   "letYourOwnAssistantSuchAs": "Deja que tu propio asistente, como Claude Code, lea tus notas.",
   "appLock": "Bloqueo de la app",

@@ -2006,7 +2006,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get languageModelsForMeetingSummariesAnd =>
-      'Modelli linguistici per i riassunti delle riunioni, e il prompt del riassunto.';
+      'Modelli linguistici per i riassunti delle riunioni e la chat, e i loro prompt.';
 
   @override
   String get keepProjectsAndMeetingsAsFiles =>

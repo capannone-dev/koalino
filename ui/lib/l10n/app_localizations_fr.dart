@@ -2005,7 +2005,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get languageModelsForMeetingSummariesAnd =>
-      'Modèles de langage pour les résumés de réunions, et le prompt de résumé.';
+      'Modèles de langage pour les résumés de réunions et le chat, et leurs prompts.';
 
   @override
   String get keepProjectsAndMeetingsAsFiles =>

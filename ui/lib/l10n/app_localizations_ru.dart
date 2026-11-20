@@ -1981,7 +1981,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get languageModelsForMeetingSummariesAnd =>
-      'Языковые модели для резюме встреч и промпт для резюме.';
+      'Языковые модели для резюме встреч и чата и их промпты.';
 
   @override
   String get keepProjectsAndMeetingsAsFiles =>

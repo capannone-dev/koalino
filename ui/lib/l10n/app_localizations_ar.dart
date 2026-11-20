@@ -1959,7 +1959,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get languageModelsForMeetingSummariesAnd =>
-      'نماذج اللغة لملخصات الاجتماعات، وتعليمات الملخص.';
+      'نماذج اللغة لملخصات الاجتماعات والمحادثة، وتعليماتهما.';
 
   @override
   String get keepProjectsAndMeetingsAsFiles =>

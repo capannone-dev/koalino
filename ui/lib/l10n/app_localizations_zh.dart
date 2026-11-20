@@ -1846,7 +1846,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chooseTheWhisperModel => '选择 Whisper 模型。';
 
   @override
-  String get languageModelsForMeetingSummariesAnd => '用于会议摘要的语言模型，以及摘要提示词。';
+  String get languageModelsForMeetingSummariesAnd => '用于会议摘要和聊天的语言模型，以及它们的提示词。';
 
   @override
   String get keepProjectsAndMeetingsAsFiles => '将项目和会议保存为可用任何编辑器编辑的文件。';

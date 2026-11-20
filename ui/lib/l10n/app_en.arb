@@ -1620,7 +1620,7 @@
   "@transcriptionModel": {},
   "chooseTheWhisperModel": "Choose the Whisper model.",
   "@chooseTheWhisperModel": {},
-  "languageModelsForMeetingSummariesAnd": "Language models for meeting summaries, and the summary prompt.",
+  "languageModelsForMeetingSummariesAnd": "Language models for meeting summaries and chat, and their prompts.",
   "@languageModelsForMeetingSummariesAnd": {},
   "keepProjectsAndMeetingsAsFiles": "Keep projects and meetings as files you can edit with any editor.",
   "@keepProjectsAndMeetingsAsFiles": {},

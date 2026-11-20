@@ -1999,7 +1999,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get languageModelsForMeetingSummariesAnd =>
-      'Modelos de lenguaje para resumir reuniones, y el prompt del resumen.';
+      'Modelos de lenguaje para resumir reuniones y el chat, y sus prompts.';
 
   @override
   String get keepProjectsAndMeetingsAsFiles =>

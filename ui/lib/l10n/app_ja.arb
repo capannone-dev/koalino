@@ -549,7 +549,7 @@
   "pairYourDevicesAndSeeWhich": "デバイスをペアリングし、接続状況を確認します。",
   "transcriptionModel": "文字起こしモデル",
   "chooseTheWhisperModel": "Whisper のモデルを選びます。",
-  "languageModelsForMeetingSummariesAnd": "会議の要約に使う言語モデルと、要約のプロンプト。",
+  "languageModelsForMeetingSummariesAnd": "会議の要約とチャットに使う言語モデルと、そのプロンプト。",
   "keepProjectsAndMeetingsAsFiles": "プロジェクトと会議を、任意のエディターで編集できるファイルとして保存します。",
   "letYourOwnAssistantSuchAs": "Claude Code など自分のアシスタントにメモの読み取りを許可します。",
   "appLock": "アプリロック",
