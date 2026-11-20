@@ -85,7 +85,7 @@ pub async fn deliver_waiting_sessions(
         return 0;
     }
     let mut socket = match connect(config).await {
-        Ok(socket) => socket,
+        Ok((socket, _language)) => socket,
         Err(reason) => {
             tracing::debug!(
                 reason,

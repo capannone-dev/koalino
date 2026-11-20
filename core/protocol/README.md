@@ -34,7 +34,9 @@ When `NOTE_TAKER_TEAMS_BRIDGE_SECRET` is set:
    violation). The secret is never logged.
 
 Without a secret, any local process can connect, and start-up logs a warning. A bot may still
-send the auth frame; the server answers `{"auth":"ok"}`.
+send the auth frame; the server answers `{"auth":"ok"}`, with `"language":"<whisper code>"` when
+the app has a fixed default transcription language (#141; the browser host passes it to the
+extension in its `status` reply).
 
 ### Messages (`TeamsBridgeMessage.payload`, a `oneof`)
 

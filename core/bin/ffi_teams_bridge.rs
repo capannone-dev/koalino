@@ -72,6 +72,10 @@ pub fn start_app_teams_bridge(
             let Some(config) = app_bridge_config(&setting, &bridge_secret_keychain()) else {
                 return;
             };
+            // The extension may set Teams' spoken language to Koalino's (#141).
+            let config = config.with_spoken_language_from(setting);
+            // The extension may set Teams' spoken language to the app's (#141).
+            let config = config.with_spoken_language_from(setting);
             let runtime = match tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()

@@ -135,10 +135,14 @@ impl std::fmt::Debug for BridgeClientConfig {
 }
 
 /// Whether the core can currently be reached.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BridgeStatus {
-    /// Connected (and authenticated).
-    Connected,
+    /// Connected (and authenticated), with Koalino's fixed spoken language when the app named
+    /// one (#141; a Whisper code such as `"it"`).
+    Connected {
+        /// Koalino's fixed language, `None` for Auto or an unauthenticated bridge.
+        language: Option<String>,
+    },
     /// Not running, refusing, or the connection dropped; frames are queued.
     Unavailable,
 }
@@ -327,8 +331,8 @@ pub async fn run_bridge_client(
     let mut delivery_lock: Option<ExclusiveLock> = None;
     let mut reported: Option<BridgeStatus> = None;
     let mut report = |new_status: BridgeStatus| {
-        if reported != Some(new_status) {
-            reported = Some(new_status);
+        if reported.as_ref() != Some(&new_status) {
+            reported = Some(new_status.clone());
             tracing::info!(status = ?new_status, "Teams bridge status");
             let _ = status.send(new_status);
         }
@@ -342,9 +346,9 @@ pub async fn run_bridge_client(
         pending.heartbeat();
         if socket.is_none() {
             match connect(&config).await {
-                Ok(connected) => {
+                Ok((connected, language)) => {
                     socket = Some(connected);
-                    report(BridgeStatus::Connected);
+                    report(BridgeStatus::Connected { language });
                 }
                 Err(reason) => {
                     tracing::debug!(reason, "Teams bridge not reachable");
@@ -447,15 +451,18 @@ pub async fn run_bridge_client(
 
 /// Opens and, when configured, authenticates one connection.
 ///
-/// Outputs: The socket, or a privacy-safe reason.
+/// Outputs: The socket with the spoken language the bridge named (#141), or a privacy-safe reason.
 /// Side effects: Connects to 127.0.0.1 and sends the secret to the bridge only.
-pub(crate) async fn connect(config: &BridgeClientConfig) -> Result<BridgeSocket, &'static str> {
+pub(crate) async fn connect(
+    config: &BridgeClientConfig,
+) -> Result<(BridgeSocket, Option<String>), &'static str> {
     let request = format!("ws://127.0.0.1:{}", config.port)
         .into_client_request()
         .map_err(|_| "invalid bridge address")?;
     let (mut socket, _response) = connect_async(request)
         .await
         .map_err(|_| "connection refused")?;
+    let mut language = None;
     if let Some(secret) = &config.secret {
         let authentication =
             Zeroizing::new(serde_json::json!({ "auth": secret.as_str() }).to_string());
@@ -467,9 +474,23 @@ pub(crate) async fn connect(config: &BridgeClientConfig) -> Result<BridgeSocket,
             .await
             .map_err(|_| "authentication timed out")?;
         match reply {
-            Some(Ok(Message::Text(text))) if text.as_str().contains("\"ok\"") => {}
+            Some(Ok(Message::Text(text))) if text.as_str().contains("\"ok\"") => {
+                language = acknowledged_language(text.as_str());
+            }
             _ => return Err("authentication refused"),
         }
     }
-    Ok(socket)
+    Ok((socket, language))
+}
+
+/// Reads the `"language"` of an authentication acknowledgement, keeping only a plausible
+/// language code (2–8 ASCII letters or `-`), since it travels on to the extension.
+fn acknowledged_language(acknowledgement: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(acknowledgement).ok()?;
+    let language = value.get("language")?.as_str()?;
+    let plausible = (2..=8).contains(&language.len())
+        && language
+            .bytes()
+            .all(|byte| byte.is_ascii_alphabetic() || byte == b'-');
+    plausible.then(|| language.to_owned())
 }

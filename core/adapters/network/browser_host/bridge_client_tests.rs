@@ -63,6 +63,7 @@ async fn start_server(
             port,
             shared_secret: secret.map(|secret| BridgeSecret::new(secret.to_owned())),
             authentication_timeout: DEFAULT_AUTHENTICATION_TIMEOUT,
+            spoken_language: None,
         },
         buffer.clone(),
     )
@@ -115,7 +116,10 @@ async fn frames_reach_the_bridge_in_order_after_authenticating() {
     assert!(
         matches!(&events[2], BridgeEvent::Audio(audio) if audio.media_chunk().timestamp_ms() == 1_000)
     );
-    assert_eq!(status_receiver.recv().await, Some(BridgeStatus::Connected));
+    assert_eq!(
+        status_receiver.recv().await,
+        Some(BridgeStatus::Connected { language: None })
+    );
 
     drop(frame_sender);
     client
@@ -158,7 +162,10 @@ async fn frames_wait_for_the_core_to_start() {
         2,
         "queued frames are delivered once the core listens"
     );
-    assert_eq!(status_receiver.recv().await, Some(BridgeStatus::Connected));
+    assert_eq!(
+        status_receiver.recv().await,
+        Some(BridgeStatus::Connected { language: None })
+    );
 
     drop(frame_sender);
     client
@@ -346,4 +353,40 @@ async fn koalino_is_started_once_when_there_is_something_to_deliver() {
         .await
         .unwrap_or_else(|error| panic!("client should stop: {error}"));
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[tokio::test]
+async fn the_status_carries_koalinos_spoken_language() {
+    use crate::adapters::network::teams_bridge::teams_websocket_server::SpokenLanguageSource;
+    let server = TeamsWebSocketServer::start(
+        TeamsBridgeServerConfig {
+            port: 0,
+            shared_secret: Some(BridgeSecret::new("host-secret".to_owned())),
+            authentication_timeout: DEFAULT_AUTHENTICATION_TIMEOUT,
+            spoken_language: Some(SpokenLanguageSource::new(|| Some("it"))),
+        },
+        BridgeBuffer::new(Duration::from_secs(10)),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("server should start: {error}"));
+    let (frame_sender, frame_receiver) = mpsc::channel(16);
+    let (status_sender, mut status_receiver) = mpsc::unbounded_channel();
+    let client = tokio::spawn(run_bridge_client(
+        client_config(server.local_addr().port(), Some("host-secret")),
+        frame_receiver,
+        status_sender,
+    ));
+
+    assert_eq!(
+        status_receiver.recv().await,
+        Some(BridgeStatus::Connected {
+            language: Some("it".to_owned())
+        })
+    );
+
+    drop(frame_sender);
+    client
+        .await
+        .unwrap_or_else(|error| panic!("client should stop: {error}"));
+    server.shutdown().await;
 }

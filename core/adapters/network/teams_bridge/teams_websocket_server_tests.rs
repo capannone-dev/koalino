@@ -18,7 +18,9 @@ use crate::{
         bridge_buffer::BridgeBuffer,
         log_capture::capture_logs,
         message_decoder::{BridgeEvent, local_meeting_uuid},
-        teams_websocket_server::{BridgeSecret, TeamsBridgeServerConfig, TeamsWebSocketServer},
+        teams_websocket_server::{
+            BridgeSecret, SpokenLanguageSource, TeamsBridgeServerConfig, TeamsWebSocketServer,
+        },
     },
     protocol::teams_bridge::{
         AudioChunk, ExternalParticipant, MeetingMetadata, TeamsBridgeMessage, VideoFrame,
@@ -41,6 +43,7 @@ fn test_config(shared_secret: Option<&str>) -> TeamsBridgeServerConfig {
         port: 0,
         shared_secret: shared_secret.map(|secret| BridgeSecret::new(secret.to_owned())),
         authentication_timeout: Duration::from_millis(300),
+        spoken_language: None,
     }
 }
 
@@ -378,5 +381,29 @@ async fn handshakes_with_an_origin_header_are_refused() {
 async fn server_binds_to_loopback_only() {
     let (server, _buffer) = start_server(None).await;
     assert!(server.local_addr().ip().is_loopback());
+    server.shutdown().await;
+}
+
+/// Verifies the acknowledgement names Koalino's fixed language (#141), read when the client
+/// authenticates, so a change in the app reaches the next connection.
+#[tokio::test]
+async fn the_acknowledgement_names_koalinos_spoken_language() {
+    let mut config = test_config(Some("s3cret-token"));
+    config.spoken_language = Some(SpokenLanguageSource::new(|| Some("it")));
+    let server = TeamsWebSocketServer::start(config, BridgeBuffer::new(Duration::from_secs(10)))
+        .await
+        .unwrap_or_else(|error| panic!("server should start: {error}"));
+    let mut bot = connect_bot(server.local_addr()).await;
+    send(&mut bot, Message::text(r#"{"auth":"s3cret-token"}"#)).await;
+
+    let acknowledgement = tokio::time::timeout(REACTION_TIMEOUT, bot.next())
+        .await
+        .unwrap_or_else(|_| panic!("the server should acknowledge"));
+    match acknowledgement {
+        Some(Ok(Message::Text(text))) => {
+            assert_eq!(text.as_str(), r#"{"auth":"ok","language":"it"}"#)
+        }
+        other => panic!("expected the auth acknowledgement, got {other:?}"),
+    }
     server.shutdown().await;
 }

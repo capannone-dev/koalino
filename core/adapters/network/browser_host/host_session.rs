@@ -5,7 +5,7 @@
 //! stdin ──read_message──▶ to_bridge_frame ──▶ run_bridge_client ──WebSocket──▶ Teams bridge
 //!   (blocking thread)          │ invalid                │ status
 //!                              ▼                        ▼
-//! stdout ◀──write_message── {"type":"rejected"}   {"type":"status","bridge":"connected"|"unavailable"}
+//! stdout ◀──write_message── {"type":"rejected"}   {"type":"status","bridge":"connected"|"unavailable","language"?}
 //! ```
 //!
 //! Replies never contain message contents.
@@ -49,11 +49,16 @@ pub async fn run_host_session<Input, Output>(
     let status_replies = reply_sender.clone();
     let status_forwarder = tokio::spawn(async move {
         while let Some(status) = status_receiver.recv().await {
-            let bridge = match status {
-                BridgeStatus::Connected => "connected",
-                BridgeStatus::Unavailable => "unavailable",
+            let reply = match status {
+                BridgeStatus::Connected {
+                    language: Some(language),
+                } => json!({"type": "status", "bridge": "connected", "language": language}),
+                BridgeStatus::Connected { language: None } => {
+                    json!({"type": "status", "bridge": "connected"})
+                }
+                BridgeStatus::Unavailable => json!({"type": "status", "bridge": "unavailable"}),
             };
-            let _ = status_replies.send(json!({"type": "status", "bridge": bridge}));
+            let _ = status_replies.send(reply);
         }
     });
     run_bridge_client(config, frame_receiver, status_sender).await;

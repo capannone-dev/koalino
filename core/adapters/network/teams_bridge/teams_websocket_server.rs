@@ -104,6 +104,38 @@ pub struct TeamsBridgeServerConfig {
     pub shared_secret: Option<BridgeSecret>,
     /// Time allowed for the handshake and, when required, the authentication frame.
     pub authentication_timeout: Duration,
+    /// Koalino's fixed spoken language, named in the authentication acknowledgement (#141) so
+    /// the browser extension can set Teams' language to it; `None` names none.
+    pub spoken_language: Option<SpokenLanguageSource>,
+}
+
+/// Reads Koalino's default transcription language when a client authenticates (#141).
+///
+/// The function answers a Whisper code (`"it"`), or `None` when the language is Auto. It is read
+/// at each connection, so a change in the app reaches the next one.
+#[derive(Clone)]
+pub struct SpokenLanguageSource(Arc<dyn Fn() -> Option<&'static str> + Send + Sync>);
+
+impl SpokenLanguageSource {
+    /// Wraps the reading function.
+    ///
+    /// Inputs: A function answering the current fixed language. Outputs: The source.
+    /// Side effects: None (the function may read a settings file when called).
+    pub fn new(read: impl Fn() -> Option<&'static str> + Send + Sync + 'static) -> Self {
+        Self(Arc::new(read))
+    }
+
+    /// The current fixed language, if any. Side effects: Those of the function.
+    fn current(&self) -> Option<&'static str> {
+        (self.0)()
+    }
+}
+
+impl std::fmt::Debug for SpokenLanguageSource {
+    /// Names the type only; the language is read on demand.
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("SpokenLanguageSource")
+    }
 }
 
 /// Errors starting the server.
@@ -138,6 +170,7 @@ struct BridgeState {
     buffer: BridgeBuffer,
     shared_secret: Option<BridgeSecret>,
     authentication_timeout: Duration,
+    spoken_language: Option<SpokenLanguageSource>,
     /// The local meeting of the last metadata, kept across reconnects.
     active_meeting: Mutex<Option<Uuid>>,
     active_connection: Mutex<Option<ActiveConnection>>,
@@ -212,6 +245,7 @@ impl TeamsWebSocketServer {
             buffer,
             shared_secret: config.shared_secret,
             authentication_timeout: config.authentication_timeout,
+            spoken_language: config.spoken_language,
             active_meeting: Mutex::new(None),
             active_connection: Mutex::new(None),
             next_connection_number: AtomicU64::new(0),
@@ -308,7 +342,13 @@ async fn handle_connection(
         }
     };
     if let Some(shared_secret) = &state.shared_secret
-        && !authenticate(&mut socket, shared_secret, state.authentication_timeout).await
+        && !authenticate(
+            &mut socket,
+            shared_secret,
+            state.authentication_timeout,
+            state.spoken_language.as_ref(),
+        )
+        .await
     {
         warn!(%peer_address, "Teams bot authentication rejected");
         close_socket(&mut socket, CloseCode::Policy, "authentication required").await;
@@ -333,7 +373,8 @@ async fn handle_connection(
                 Some(Ok(Message::Binary(frame))) => handle_binary_frame(&frame, &state),
                 Some(Ok(Message::Text(text))) => {
                     if state.shared_secret.is_none() && parse_authentication(&text).is_some() {
-                        send_authentication_reply(&mut socket).await;
+                        let reply = authentication_reply(state.spoken_language.as_ref());
+                        send_authentication_reply(&mut socket, &reply).await;
                     } else {
                         warn!(connection_number, "Teams bridge skipped an unexpected text frame");
                     }
@@ -372,11 +413,13 @@ fn refuse_browser_origins(
 /// Waits for the authentication frame and acknowledges a correct secret.
 ///
 /// Outputs: Whether the bot authenticated within `authentication_timeout`.
-/// Side effects: Reads one frame; sends `{"auth":"ok"}` on success. Never logs the secret.
+/// Side effects: Reads one frame; sends `{"auth":"ok"}` on success, with `"language"` when
+/// `spoken_language` names one (#141). Never logs the secret.
 async fn authenticate<S>(
     socket: &mut WebSocketStream<S>,
     shared_secret: &BridgeSecret,
     authentication_timeout: Duration,
+    spoken_language: Option<&SpokenLanguageSource>,
 ) -> bool
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
@@ -388,9 +431,19 @@ where
     let authenticated =
         parse_authentication(&text).is_some_and(|request| shared_secret.matches(&request.auth));
     if authenticated {
-        send_authentication_reply(socket).await;
+        send_authentication_reply(socket, &authentication_reply(spoken_language)).await;
     }
     authenticated
+}
+
+/// The acknowledgement: `{"auth":"ok"}`, with `"language"` when Koalino has a fixed one (#141).
+///
+/// Side effects: Reads the language source.
+fn authentication_reply(spoken_language: Option<&SpokenLanguageSource>) -> String {
+    match spoken_language.and_then(SpokenLanguageSource::current) {
+        Some(language) => serde_json::json!({"auth": "ok", "language": language}).to_string(),
+        None => AUTHENTICATION_ACCEPTED_REPLY.to_owned(),
+    }
 }
 
 /// Parses `{"auth":"..."}`, returning `None` for anything else.
@@ -399,14 +452,11 @@ fn parse_authentication(text: &str) -> Option<AuthenticationRequest> {
 }
 
 /// Sends the authentication acknowledgement, logging transport failures.
-async fn send_authentication_reply<S>(socket: &mut WebSocketStream<S>)
+async fn send_authentication_reply<S>(socket: &mut WebSocketStream<S>, reply: &str)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
-    if let Err(error) = socket
-        .send(Message::text(AUTHENTICATION_ACCEPTED_REPLY))
-        .await
-    {
+    if let Err(error) = socket.send(Message::text(reply)).await {
         warn!(%error, "Teams bridge failed to acknowledge authentication");
     }
 }

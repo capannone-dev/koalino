@@ -50,6 +50,7 @@ async fn messages_become_frames_and_the_extension_hears_back() {
             port: 0,
             shared_secret: None,
             authentication_timeout: DEFAULT_AUTHENTICATION_TIMEOUT,
+            spoken_language: None,
         },
         buffer.clone(),
     )

@@ -62,7 +62,8 @@ use crate::{
             sealed_audio_spool::{DEFAULT_SPOOL_CAP_BYTES, SealedAudioSpool},
             teams_websocket_server::{
                 BridgeSecret, DEFAULT_AUTHENTICATION_TIMEOUT, DEFAULT_TEAMS_BRIDGE_PORT,
-                RunningTeamsBridge, TeamsBridgeServerConfig, TeamsWebSocketServer,
+                RunningTeamsBridge, SpokenLanguageSource, TeamsBridgeServerConfig,
+                TeamsWebSocketServer,
             },
         },
         storage::{
@@ -124,6 +125,8 @@ pub struct TeamsBridgeConfig {
     shared_secret: Option<BridgeSecret>,
     buffer_duration: Duration,
     slide_directory: Option<PathBuf>,
+    /// Koalino's fixed language, told to the browser extension (#141).
+    spoken_language: Option<SpokenLanguageSource>,
 }
 
 impl TeamsBridgeConfig {
@@ -132,7 +135,9 @@ impl TeamsBridgeConfig {
     /// Outputs: The configuration, or an error naming an invalid variable.
     /// Side effects: Reads environment variables; never logs their values.
     pub fn from_environment() -> Result<Self> {
-        let config = Self::from_lookup(|name| std::env::var(name).ok())?;
+        let config = Self::from_lookup(|name| std::env::var(name).ok())?
+            .with_spoken_language_from(|name| std::env::var(name).ok());
+        let config = config.with_spoken_language_from(|name| std::env::var(name).ok());
         if !config.enabled || config.shared_secret.is_some() {
             return Ok(config);
         }
@@ -202,7 +207,30 @@ impl TeamsBridgeConfig {
             shared_secret: read(TEAMS_BRIDGE_SECRET_VARIABLE).map(BridgeSecret::new),
             buffer_duration: Duration::from_secs(buffer_seconds),
             slide_directory: read(TEAMS_BRIDGE_SLIDE_DIR_VARIABLE).map(PathBuf::from),
+            spoken_language: None,
         })
+    }
+
+    /// Tells connecting clients Koalino's fixed language, read from the settings at each
+    /// connection (#141): the default transcription language, `None` for Auto.
+    ///
+    /// Inputs: The settings lookup (`NOTE_TAKER_DATABASE_PATH`, `NOTE_TAKER_WHISPER_LANGUAGE`).
+    /// Outputs: The configuration. Side effects: None until a client connects.
+    #[must_use]
+    pub fn with_spoken_language_from(
+        mut self,
+        setting: impl Fn(&str) -> Option<String> + Send + Sync + 'static,
+    ) -> Self {
+        self.spoken_language =
+            Some(SpokenLanguageSource::new(
+                move || match crate::ffi_language::default_language(&setting) {
+                    crate::domain::transcription_language::TranscriptionLanguage::Auto => None,
+                    crate::domain::transcription_language::TranscriptionLanguage::Code(code) => {
+                        Some(code)
+                    }
+                },
+            ));
+        self
     }
 
     /// Overrides the port (tests use 0 for an ephemeral port).
@@ -242,6 +270,7 @@ impl TeamsBridgeConfig {
             port: self.port,
             shared_secret: self.shared_secret.clone(),
             authentication_timeout: DEFAULT_AUTHENTICATION_TIMEOUT,
+            spoken_language: self.spoken_language.clone(),
         }
     }
 }
