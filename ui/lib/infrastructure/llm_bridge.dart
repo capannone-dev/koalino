@@ -240,6 +240,10 @@ final class LlmSettings {
     required this.autoSummarize,
     required this.placeholders,
     this.pairedSummaryConnection,
+    this.chatPrompt = '',
+    this.defaultChatPrompt = '',
+    this.customChatPrompt = false,
+    this.chatPlaceholders = const <String>['scope'],
   });
 
   /// Reads the settings from the core's JSON.
@@ -261,6 +265,13 @@ final class LlmSettings {
             (json['placeholders'] as List<Object?>? ?? const <Object?>[])
                 .whereType<String>()
                 .toList(growable: false),
+        chatPrompt: json['chat_prompt'] as String? ?? '',
+        defaultChatPrompt: json['default_chat_prompt'] as String? ?? '',
+        customChatPrompt: json['custom_chat_prompt'] as bool? ?? false,
+        chatPlaceholders: (json['chat_placeholders'] as List<Object?>? ??
+                const <Object?>['scope'])
+            .whereType<String>()
+            .toList(growable: false),
       );
 
   final List<LlmConnection> connections;
@@ -286,6 +297,18 @@ final class LlmSettings {
   /// The connection that writes the summaries paired devices ask for (#107), or null when this
   /// device does not answer them.
   final String? pairedSummaryConnection;
+
+  /// The chat prompt in use (#145): the owner's, or the built-in one. Shared by paired devices.
+  final String chatPrompt;
+
+  /// The built-in chat prompt.
+  final String defaultChatPrompt;
+
+  /// Whether the chat prompt was changed from the built-in one.
+  final bool customChatPrompt;
+
+  /// The `{{placeholder}}` names the chat prompt may use.
+  final List<String> chatPlaceholders;
 }
 
 /// A meeting's stored summary.
@@ -517,7 +540,8 @@ final class LlmBridge {
   Future<void> deleteConnection(String id) =>
       _command(<String, Object?>{'command': 'delete_connection', 'id': id});
 
-  /// Changes only the fields given; `resetTemplate` restores the built-in prompt, and
+  /// Changes only the fields given; `resetTemplate` and `resetChatPrompt` restore the built-in
+  /// prompts (both are shared with paired devices, #145), and
   /// `stopAnsweringPairedDevices` stops this device writing summaries for paired ones (#107).
   ///
   /// Outputs: The settings as saved. Side effects: Writes the settings file.
@@ -525,6 +549,8 @@ final class LlmBridge {
     String? defaultConnection,
     String? template,
     bool resetTemplate = false,
+    String? chatPrompt,
+    bool resetChatPrompt = false,
     bool? autoSummarize,
     String? pairedSummaryConnection,
     bool stopAnsweringPairedDevices = false,
@@ -536,6 +562,10 @@ final class LlmBridge {
           'template': null
         else if (template != null)
           'template': template,
+        if (resetChatPrompt)
+          'chat_prompt': null
+        else if (chatPrompt != null)
+          'chat_prompt': chatPrompt,
         if (autoSummarize != null) 'auto_summarize': autoSummarize,
         if (stopAnsweringPairedDevices)
           'paired_summary_connection': null

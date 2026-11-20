@@ -4761,6 +4761,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tap to let Android run it while the phone charges, even with Power saving on. Otherwise it runs only while Koalino is open.'**
   String get backgroundPassAsk;
+
+  /// No description provided for @chatPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat prompt'**
+  String get chatPrompt;
+
+  /// No description provided for @chatPromptHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'{placeholder} stands for what you ask about: a meeting, a project or all your notes. Answers always cite their sources by number, and your notes follow the prompt.'**
+  String chatPromptHelp(String placeholder);
+
+  /// No description provided for @saveChatPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Save chat prompt'**
+  String get saveChatPrompt;
+
+  /// No description provided for @chatPromptSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat prompt saved.'**
+  String get chatPromptSaved;
+
+  /// No description provided for @theBuiltInChatPromptIsBack.
+  ///
+  /// In en, this message translates to:
+  /// **'The built-in chat prompt is back.'**
+  String get theBuiltInChatPromptIsBack;
+
+  /// No description provided for @promptsSharedWithPairedDevices.
+  ///
+  /// In en, this message translates to:
+  /// **'Both prompts are the same on all your paired devices: a change here reaches them when they connect.'**
+  String get promptsSharedWithPairedDevices;
 }
 
 class _AppLocalizationsDelegate

@@ -3009,4 +3009,26 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get backgroundPassAsk =>
       'Нажмите, чтобы Android делал это во время зарядки, даже в режиме энергосбережения. Иначе это происходит только при открытом Koalino.';
+
+  @override
+  String get chatPrompt => 'Промпт чата';
+
+  @override
+  String chatPromptHelp(String placeholder) {
+    return '$placeholder обозначает то, о чём вы спрашиваете: встречу, проект или все ваши заметки. Ответы всегда ссылаются на источники по номеру, а ваши заметки идут после промпта.';
+  }
+
+  @override
+  String get saveChatPrompt => 'Сохранить промпт чата';
+
+  @override
+  String get chatPromptSaved => 'Промпт чата сохранён.';
+
+  @override
+  String get theBuiltInChatPromptIsBack =>
+      'Встроенный промпт чата восстановлен.';
+
+  @override
+  String get promptsSharedWithPairedDevices =>
+      'Оба промпта одинаковы на всех ваших сопряжённых устройствах: изменение здесь дойдёт до них, когда они подключатся.';
 }

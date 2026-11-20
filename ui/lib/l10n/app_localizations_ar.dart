@@ -3013,4 +3013,25 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get backgroundPassAsk =>
       'انقر للسماح لنظام Android بتنفيذ ذلك أثناء شحن الهاتف، حتى مع تفعيل توفير الطاقة. وإلا فلن يحدث إلا وKoalino مفتوح.';
+
+  @override
+  String get chatPrompt => 'موجّه الدردشة';
+
+  @override
+  String chatPromptHelp(String placeholder) {
+    return 'يمثّل $placeholder ما تسأل عنه: اجتماعًا أو مشروعًا أو كل ملاحظاتك. تذكر الإجابات مصادرها دائمًا برقم، وتأتي ملاحظاتك بعد الموجّه.';
+  }
+
+  @override
+  String get saveChatPrompt => 'حفظ موجّه الدردشة';
+
+  @override
+  String get chatPromptSaved => 'تم حفظ موجّه الدردشة.';
+
+  @override
+  String get theBuiltInChatPromptIsBack => 'عاد موجّه الدردشة المدمج.';
+
+  @override
+  String get promptsSharedWithPairedDevices =>
+      'الموجّهان متطابقان على كل أجهزتك المقترنة: يصل أي تغيير هنا إليها عند اتصالها.';
 }

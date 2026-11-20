@@ -79,6 +79,10 @@ Map<String, Object?> settings(
       'auto_summarize': auto,
       'paired_summary_connection': paired,
       'placeholders': <String>['title', 'date'],
+      'chat_prompt': 'Answer about {{scope}}.',
+      'default_chat_prompt': 'Built-in chat',
+      'custom_chat_prompt': true,
+      'chat_placeholders': <String>['scope'],
     };
 
 /// A stored summary as the core describes it.

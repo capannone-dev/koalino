@@ -3003,4 +3003,26 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get backgroundPassAsk =>
       'Touchez pour qu\'Android le fasse pendant la charge, même avec l\'économie d\'énergie activée. Sinon, cela n\'a lieu que Koalino ouvert.';
+
+  @override
+  String get chatPrompt => 'Prompt du chat';
+
+  @override
+  String chatPromptHelp(String placeholder) {
+    return '$placeholder désigne ce sur quoi vous posez la question : une réunion, un projet ou toutes vos notes. Les réponses citent toujours leurs sources par un numéro, et vos notes suivent le prompt.';
+  }
+
+  @override
+  String get saveChatPrompt => 'Enregistrer le prompt du chat';
+
+  @override
+  String get chatPromptSaved => 'Prompt du chat enregistré.';
+
+  @override
+  String get theBuiltInChatPromptIsBack =>
+      'Le prompt du chat intégré est rétabli.';
+
+  @override
+  String get promptsSharedWithPairedDevices =>
+      'Les deux prompts sont identiques sur tous vos appareils associés : une modification ici leur parvient lorsqu\'ils se connectent.';
 }

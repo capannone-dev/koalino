@@ -2783,4 +2783,25 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get backgroundPassAsk =>
       '点按以允许 Android 在手机充电时执行，即使开启了省电模式。否则只会在 Koalino 打开时执行。';
+
+  @override
+  String get chatPrompt => '聊天提示词';
+
+  @override
+  String chatPromptHelp(String placeholder) {
+    return '$placeholder 表示你提问的对象：一个会议、一个项目或你的全部笔记。回答始终用编号注明出处，你的笔记附在提示词之后。';
+  }
+
+  @override
+  String get saveChatPrompt => '保存聊天提示词';
+
+  @override
+  String get chatPromptSaved => '聊天提示词已保存。';
+
+  @override
+  String get theBuiltInChatPromptIsBack => '已恢复内置的聊天提示词。';
+
+  @override
+  String get promptsSharedWithPairedDevices =>
+      '两个提示词在你所有已配对的设备上都相同：在这里所做的更改会在它们连接时同步过去。';
 }

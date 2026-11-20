@@ -122,6 +122,24 @@ void main() {
         "The AI server refused access. Check the connection's API key.");
   });
 
+  test('the chat prompt and its reset are saved (#145)', () async {
+    core.answer('command:update', settings());
+    await controller.saveChatPrompt('Short answers about {{scope}}.');
+    expect(core.lastCommand('update')['chat_prompt'],
+        'Short answers about {{scope}}.');
+    expect(core.lastCommand('update').containsKey('template'), isFalse);
+    expect(controller.message, 'Chat prompt saved.');
+    expect(controller.settings?.chatPrompt, 'Answer about {{scope}}.');
+    expect(controller.settings?.customChatPrompt, isTrue);
+
+    core.answer('command:update', settings());
+    await controller.resetChatPrompt();
+    final Map<String, Object?> reset = core.lastCommand('update');
+    expect(reset.containsKey('chat_prompt'), isTrue);
+    expect(reset['chat_prompt'], isNull);
+    expect(controller.message, 'The built-in chat prompt is back.');
+  });
+
   test('the template, its reset and automatic summaries are saved', () async {
     core.answer('command:update', settings());
     await controller.saveTemplate('Only {{title}}.');

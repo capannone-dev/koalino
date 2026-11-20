@@ -2325,5 +2325,23 @@
   "backgroundPassAllowed": "Allowed: the phone improves waiting transcripts whenever it charges, even with Koalino closed or Power saving on.",
   "@backgroundPassAllowed": {"description": "Phone setting: run the after-meeting pass while the app is closed (#87)."},
   "backgroundPassAsk": "Tap to let Android run it while the phone charges, even with Power saving on. Otherwise it runs only while Koalino is open.",
-  "@backgroundPassAsk": {"description": "Phone setting: run the after-meeting pass while the app is closed (#87)."}
+  "@backgroundPassAsk": {"description": "Phone setting: run the after-meeting pass while the app is closed (#87)."},
+  "chatPrompt": "Chat prompt",
+  "@chatPrompt": {},
+  "chatPromptHelp": "{placeholder} stands for what you ask about: a meeting, a project or all your notes. Answers always cite their sources by number, and your notes follow the prompt.",
+  "@chatPromptHelp": {
+    "placeholders": {
+      "placeholder": {
+        "type": "String"
+      }
+    }
+  },
+  "saveChatPrompt": "Save chat prompt",
+  "@saveChatPrompt": {},
+  "chatPromptSaved": "Chat prompt saved.",
+  "@chatPromptSaved": {},
+  "theBuiltInChatPromptIsBack": "The built-in chat prompt is back.",
+  "@theBuiltInChatPromptIsBack": {},
+  "promptsSharedWithPairedDevices": "Both prompts are the same on all your paired devices: a change here reaches them when they connect.",
+  "@promptsSharedWithPairedDevices": {}
 }

@@ -199,6 +199,7 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   to record calls" and "Stop when the call ends", shown where the system can tell.
 - `ai_settings_screen.dart` (#95) is Settings → AI connections: add (from a preset), edit, test,
   remove and choose the default connection; the summary prompt template with its placeholders;
+  the chat prompt with `{{scope}}` (#145; both prompts are shared with paired devices);
   and automatic summaries (#101). Keys are typed in a hidden field and never shown again. On
   desktops it also offers Claude Code and Codex (#105), which need no address or key and show
   whether the tool is installed. On a computer, "Summaries for my other devices" chooses the

@@ -139,6 +139,22 @@ final class SummariesController extends ChangeNotifier {
         return l10n.theBuiltInPromptIsBack;
       });
 
+  /// Saves the chat prompt (#145); paired devices take it when they connect.
+  ///
+  /// Outputs: Whether it was accepted. Side effects: Writes the settings through the core.
+  Future<bool> saveChatPrompt(String prompt) => _change(() async {
+        _settings = await _bridge.update(chatPrompt: prompt);
+        return l10n.chatPromptSaved;
+      });
+
+  /// Restores the built-in chat prompt, on paired devices too.
+  ///
+  /// Outputs: Whether it was accepted. Side effects: Writes the settings through the core.
+  Future<bool> resetChatPrompt() => _change(() async {
+        _settings = await _bridge.update(resetChatPrompt: true);
+        return l10n.theBuiltInChatPromptIsBack;
+      });
+
   /// Turns automatic summaries of finished meetings on or off (#101).
   Future<bool> setAutoSummarize({required bool enabled}) => _change(() async {
         _settings = await _bridge.update(autoSummarize: enabled);

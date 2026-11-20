@@ -773,5 +773,11 @@
   "chooseAMeetingOrFile": "Choisissez une réunion ou un fichier pour l’afficher ici.",
   "backgroundPassTitle": "Améliorer les transcriptions même Koalino fermé",
   "backgroundPassAllowed": "Autorisé : le téléphone améliore les transcriptions en attente pendant la charge, même Koalino fermé ou avec l'économie d'énergie activée.",
-  "backgroundPassAsk": "Touchez pour qu'Android le fasse pendant la charge, même avec l'économie d'énergie activée. Sinon, cela n'a lieu que Koalino ouvert."
+  "backgroundPassAsk": "Touchez pour qu'Android le fasse pendant la charge, même avec l'économie d'énergie activée. Sinon, cela n'a lieu que Koalino ouvert.",
+  "chatPrompt": "Prompt du chat",
+  "chatPromptHelp": "{placeholder} désigne ce sur quoi vous posez la question : une réunion, un projet ou toutes vos notes. Les réponses citent toujours leurs sources par un numéro, et vos notes suivent le prompt.",
+  "saveChatPrompt": "Enregistrer le prompt du chat",
+  "chatPromptSaved": "Prompt du chat enregistré.",
+  "theBuiltInChatPromptIsBack": "Le prompt du chat intégré est rétabli.",
+  "promptsSharedWithPairedDevices": "Les deux prompts sont identiques sur tous vos appareils associés : une modification ici leur parvient lorsqu'ils se connectent."
 }

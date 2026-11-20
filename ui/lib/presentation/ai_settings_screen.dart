@@ -15,6 +15,9 @@ import 'package:note_taker_ui/l10n/l10n.dart';
 /// Finds the summary prompt field in tests.
 const Key summaryTemplateFieldKey = ValueKey<String>('summary-template');
 
+/// The chat prompt field (#145).
+const Key chatPromptFieldKey = ValueKey<String>('chat-prompt');
+
 /// Finds the automatic summaries switch in tests.
 const Key autoSummarizeSwitchKey = ValueKey<String>('auto-summarize');
 
@@ -50,12 +53,17 @@ final class AiSettingsScreen extends StatefulWidget {
   State<AiSettingsScreen> createState() => _AiSettingsScreenState();
 }
 
-/// Holds the template being edited.
+/// Holds the summary template and chat prompt being edited.
 final class _AiSettingsScreenState extends State<AiSettingsScreen> {
   final TextEditingController _template = TextEditingController();
+  final TextEditingController _chatPrompt = TextEditingController();
 
   /// The saved template the field was last filled from, to refill it after a save or reset.
   String? _shownTemplate;
+
+  /// The saved chat prompt the field was last filled from; a paired device's change also
+  /// refills it when the settings are next read.
+  String? _shownChatPrompt;
 
   @override
   void initState() {
@@ -66,6 +74,7 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
   @override
   void dispose() {
     _template.dispose();
+    _chatPrompt.dispose();
     super.dispose();
   }
 
@@ -169,6 +178,10 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
           if (settings != null && settings.template != _shownTemplate) {
             _shownTemplate = settings.template;
             _template.text = settings.template;
+          }
+          if (settings != null && settings.chatPrompt != _shownChatPrompt) {
+            _shownChatPrompt = settings.chatPrompt;
+            _chatPrompt.text = settings.chatPrompt;
           }
           return ListView(
             padding: const EdgeInsets.only(bottom: 96),
@@ -292,6 +305,58 @@ final class _AiSettingsScreenState extends State<AiSettingsScreen> {
                           child: Text(l10n.resetToBuiltIn),
                         ),
                     ],
+                  ),
+                ),
+                const Divider(height: 32),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: TextField(
+                    key: chatPromptFieldKey,
+                    controller: _chatPrompt,
+                    minLines: 3,
+                    maxLines: 12,
+                    decoration: InputDecoration(
+                      labelText: l10n.chatPrompt,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Text(
+                    l10n.chatPromptHelp(settings.chatPlaceholders
+                        .map((String name) => '{{$name}}')
+                        .join(' ')),
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Wrap(
+                    spacing: 8,
+                    children: <Widget>[
+                      FilledButton.tonal(
+                        onPressed: controller.isBusy
+                            ? null
+                            : () => controller.saveChatPrompt(_chatPrompt.text),
+                        child: Text(l10n.saveChatPrompt),
+                      ),
+                      if (settings.customChatPrompt)
+                        TextButton(
+                          onPressed: controller.isBusy
+                              ? null
+                              : controller.resetChatPrompt,
+                          child: Text(l10n.resetToBuiltIn),
+                        ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Text(
+                    l10n.promptsSharedWithPairedDevices,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),
                 ),
               ],

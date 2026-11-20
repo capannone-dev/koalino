@@ -2846,4 +2846,25 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get backgroundPassAsk =>
       'タップすると、省電力モードでも充電中に Android が実行できるようになります。許可しない場合は Koalino を開いている間だけ実行されます。';
+
+  @override
+  String get chatPrompt => 'チャットのプロンプト';
+
+  @override
+  String chatPromptHelp(String placeholder) {
+    return '$placeholder は質問の対象（会議、プロジェクト、またはすべてのメモ）を表します。回答は常に番号で出典を示し、メモはプロンプトの後に送られます。';
+  }
+
+  @override
+  String get saveChatPrompt => 'チャットのプロンプトを保存';
+
+  @override
+  String get chatPromptSaved => 'チャットのプロンプトを保存しました。';
+
+  @override
+  String get theBuiltInChatPromptIsBack => 'チャットのプロンプトを既定に戻しました。';
+
+  @override
+  String get promptsSharedWithPairedDevices =>
+      'どちらのプロンプトも、ペアリングしたすべてのデバイスで同じです。ここでの変更は、各デバイスが接続したときに反映されます。';
 }

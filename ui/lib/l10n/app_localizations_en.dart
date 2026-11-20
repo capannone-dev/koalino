@@ -2958,4 +2958,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get backgroundPassAsk =>
       'Tap to let Android run it while the phone charges, even with Power saving on. Otherwise it runs only while Koalino is open.';
+
+  @override
+  String get chatPrompt => 'Chat prompt';
+
+  @override
+  String chatPromptHelp(String placeholder) {
+    return '$placeholder stands for what you ask about: a meeting, a project or all your notes. Answers always cite their sources by number, and your notes follow the prompt.';
+  }
+
+  @override
+  String get saveChatPrompt => 'Save chat prompt';
+
+  @override
+  String get chatPromptSaved => 'Chat prompt saved.';
+
+  @override
+  String get theBuiltInChatPromptIsBack => 'The built-in chat prompt is back.';
+
+  @override
+  String get promptsSharedWithPairedDevices =>
+      'Both prompts are the same on all your paired devices: a change here reaches them when they connect.';
 }

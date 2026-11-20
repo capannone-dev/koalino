@@ -773,5 +773,11 @@
   "chooseAMeetingOrFile": "选择一个会议或文件以在此查看。",
   "backgroundPassTitle": "在 Koalino 关闭时也改进转写",
   "backgroundPassAllowed": "已允许：即使 Koalino 已关闭或开启了省电模式，手机充电时也会改进待处理的转写。",
-  "backgroundPassAsk": "点按以允许 Android 在手机充电时执行，即使开启了省电模式。否则只会在 Koalino 打开时执行。"
+  "backgroundPassAsk": "点按以允许 Android 在手机充电时执行，即使开启了省电模式。否则只会在 Koalino 打开时执行。",
+  "chatPrompt": "聊天提示词",
+  "chatPromptHelp": "{placeholder} 表示你提问的对象：一个会议、一个项目或你的全部笔记。回答始终用编号注明出处，你的笔记附在提示词之后。",
+  "saveChatPrompt": "保存聊天提示词",
+  "chatPromptSaved": "聊天提示词已保存。",
+  "theBuiltInChatPromptIsBack": "已恢复内置的聊天提示词。",
+  "promptsSharedWithPairedDevices": "两个提示词在你所有已配对的设备上都相同：在这里所做的更改会在它们连接时同步过去。"
 }

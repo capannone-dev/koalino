@@ -773,5 +773,11 @@
   "chooseAMeetingOrFile": "Wähle eine Besprechung oder eine Datei, um sie hier zu sehen.",
   "backgroundPassTitle": "Transkripte auch bei geschlossenem Koalino verbessern",
   "backgroundPassAllowed": "Erlaubt: Das Telefon verbessert wartende Transkripte, sobald es lädt, auch wenn Koalino geschlossen oder der Energiesparmodus aktiv ist.",
-  "backgroundPassAsk": "Tippen, damit Android dies beim Laden erledigt, auch im Energiesparmodus. Sonst geschieht es nur bei geöffnetem Koalino."
+  "backgroundPassAsk": "Tippen, damit Android dies beim Laden erledigt, auch im Energiesparmodus. Sonst geschieht es nur bei geöffnetem Koalino.",
+  "chatPrompt": "Chat-Prompt",
+  "chatPromptHelp": "{placeholder} steht für das, wonach du fragst: eine Besprechung, ein Projekt oder alle deine Notizen. Antworten nennen ihre Quellen immer mit einer Nummer, und deine Notizen folgen auf den Prompt.",
+  "saveChatPrompt": "Chat-Prompt speichern",
+  "chatPromptSaved": "Chat-Prompt gespeichert.",
+  "theBuiltInChatPromptIsBack": "Der eingebaute Chat-Prompt ist zurück.",
+  "promptsSharedWithPairedDevices": "Beide Prompts sind auf all deinen gekoppelten Geräten gleich: Eine Änderung hier erreicht sie, sobald sie sich verbinden."
 }

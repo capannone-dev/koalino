@@ -3035,4 +3035,26 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get backgroundPassAsk =>
       'Tippen, damit Android dies beim Laden erledigt, auch im Energiesparmodus. Sonst geschieht es nur bei geöffnetem Koalino.';
+
+  @override
+  String get chatPrompt => 'Chat-Prompt';
+
+  @override
+  String chatPromptHelp(String placeholder) {
+    return '$placeholder steht für das, wonach du fragst: eine Besprechung, ein Projekt oder alle deine Notizen. Antworten nennen ihre Quellen immer mit einer Nummer, und deine Notizen folgen auf den Prompt.';
+  }
+
+  @override
+  String get saveChatPrompt => 'Chat-Prompt speichern';
+
+  @override
+  String get chatPromptSaved => 'Chat-Prompt gespeichert.';
+
+  @override
+  String get theBuiltInChatPromptIsBack =>
+      'Der eingebaute Chat-Prompt ist zurück.';
+
+  @override
+  String get promptsSharedWithPairedDevices =>
+      'Beide Prompts sind auf all deinen gekoppelten Geräten gleich: Eine Änderung hier erreicht sie, sobald sie sich verbinden.';
 }

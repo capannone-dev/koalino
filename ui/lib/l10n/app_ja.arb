@@ -773,5 +773,11 @@
   "chooseAMeetingOrFile": "会議またはファイルを選ぶと、ここに表示されます。",
   "backgroundPassTitle": "Koalino を閉じていても文字起こしを改善",
   "backgroundPassAllowed": "許可済み: Koalino を閉じていても、省電力モードでも、充電中に待機中の文字起こしを改善します。",
-  "backgroundPassAsk": "タップすると、省電力モードでも充電中に Android が実行できるようになります。許可しない場合は Koalino を開いている間だけ実行されます。"
+  "backgroundPassAsk": "タップすると、省電力モードでも充電中に Android が実行できるようになります。許可しない場合は Koalino を開いている間だけ実行されます。",
+  "chatPrompt": "チャットのプロンプト",
+  "chatPromptHelp": "{placeholder} は質問の対象（会議、プロジェクト、またはすべてのメモ）を表します。回答は常に番号で出典を示し、メモはプロンプトの後に送られます。",
+  "saveChatPrompt": "チャットのプロンプトを保存",
+  "chatPromptSaved": "チャットのプロンプトを保存しました。",
+  "theBuiltInChatPromptIsBack": "チャットのプロンプトを既定に戻しました。",
+  "promptsSharedWithPairedDevices": "どちらのプロンプトも、ペアリングしたすべてのデバイスで同じです。ここでの変更は、各デバイスが接続したときに反映されます。"
 }

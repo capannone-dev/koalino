@@ -158,6 +158,28 @@ void main() {
     expect(find.text('Prompt saved.'), findsOneWidget);
   });
 
+  testWidgets('saves the chat prompt, shared with paired devices (#145)',
+      (WidgetTester tester) async {
+    core.answer('command:settings', settings());
+    core.answer('command:update', settings());
+    await show(tester);
+
+    final TextField field =
+        tester.widget<TextField>(find.byKey(chatPromptFieldKey));
+    expect(field.controller?.text, 'Answer about {{scope}}.');
+    expect(find.textContaining('paired devices'), findsWidgets);
+    await tester.ensureVisible(find.byKey(chatPromptFieldKey));
+    await tester.enterText(
+        find.byKey(chatPromptFieldKey), 'One line about {{scope}}.');
+    await tester.ensureVisible(find.text('Save chat prompt'));
+    await tester.tap(find.text('Save chat prompt'));
+    await tester.pumpAndSettle();
+
+    expect(
+        core.lastCommand('update')['chat_prompt'], 'One line about {{scope}}.');
+    expect(find.text('Chat prompt saved.'), findsOneWidget);
+  });
+
   testWidgets(
       'adds Claude Code from its preset without an address or a key (#105)',
       (WidgetTester tester) async {
