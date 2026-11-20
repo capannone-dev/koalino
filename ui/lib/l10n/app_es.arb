@@ -178,7 +178,7 @@
   "thisMeetingHasNoTranscriptOr": "Esta reunión aún no tiene transcripción ni notas.",
   "thisMeetingIsTooLongFor": "Esta reunión es demasiado larga para esta conexión. Elige una con un contexto mayor.",
   "theAiServerCouldNotBe2": "No se pudo contactar con el servidor de IA.",
-  "theAiServerRefusedAccessUse": "El servidor de IA denegó el acceso. Usa un servidor que no necesite clave de API.",
+  "theAiServerRefusedAccessUse": "El servidor de IA rechazó el acceso. Revisa la clave de API de la conexión.",
   "theAiServerIsBusyOr": "El servidor de IA está ocupado o superó su límite. Inténtalo más tarde.",
   "theAiServerRejectedTheRequest2": "El servidor de IA rechazó la solicitud. Comprueba el nombre del modelo.",
   "theAiServerFailedTryAgain": "El servidor de IA falló. Inténtalo de nuevo.",
@@ -733,5 +733,17 @@
   "addToASavedPerson": "Añadir a una persona guardada",
   "addVoicesTo": "Añadir voces a {name}",
   "tickTheVoicesThatAre": "Estas voces no se reconocieron como de nadie. Marca las de {name}; usa Reproducir para comprobarlo.",
-  "addTo": "Añadir a {name}"
+  "addTo": "Añadir a {name}",
+  "apiKey": "Clave de API",
+  "onlyForOnlineServicesKeptIn": "Solo para servicios en línea. Se guarda en el llavero de este dispositivo y solo se envía a esta dirección.",
+  "aKeyIsSavedLeaveEmpty": "Hay una clave guardada. Déjalo vacío para conservarla.",
+  "removeTheSavedKey": "Quitar la clave guardada",
+  "presetOllama": "En tu ordenador o red: gratis, privado, funciona sin conexión (Gemma, Qwen, Llama…).",
+  "presetLmStudio": "Como Ollama, con una app de escritorio para elegir modelos.",
+  "presetGemini": "Google. Nivel gratuito con límites; en él Google puede usar lo que envías para mejorar sus productos. Clave: aistudio.google.com.",
+  "presetDeepseek": "Pago por uso, muy barato, crédito prepago. Clave: platform.deepseek.com.",
+  "presetQwen": "Alibaba. Pago por uso. Clave: Alibaba Cloud Model Studio.",
+  "presetKimi": "Moonshot AI. Pago por uso. Clave: platform.moonshot.ai.",
+  "presetMistral": "Mistral (Francia). Nivel gratuito con límites estrictos. Clave: console.mistral.ai.",
+  "presetOpenrouter": "Una clave para muchos modelos (Gemini, DeepSeek, Qwen…), algunos gratis; el texto también pasa por OpenRouter. Clave: openrouter.ai."
 }

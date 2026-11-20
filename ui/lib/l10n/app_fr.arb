@@ -178,7 +178,7 @@
   "thisMeetingHasNoTranscriptOr": "Cette réunion n'a pas encore de transcription ni de notes.",
   "thisMeetingIsTooLongFor": "Cette réunion est trop longue pour cette connexion. Choisissez-en une avec un contexte plus grand.",
   "theAiServerCouldNotBe2": "Impossible de joindre le serveur IA.",
-  "theAiServerRefusedAccessUse": "Le serveur IA a refusé l'accès. Utilisez un serveur qui ne demande pas de clé API.",
+  "theAiServerRefusedAccessUse": "Le serveur d'IA a refusé l'accès. Vérifiez la clé API de la connexion.",
   "theAiServerIsBusyOr": "Le serveur IA est occupé ou a dépassé sa limite. Réessayez plus tard.",
   "theAiServerRejectedTheRequest2": "Le serveur IA a refusé la demande. Vérifiez le nom du modèle.",
   "theAiServerFailedTryAgain": "Le serveur IA a échoué. Réessayez.",
@@ -733,5 +733,17 @@
   "addToASavedPerson": "Ajouter à une personne enregistrée",
   "addVoicesTo": "Ajouter des voix à {name}",
   "tickTheVoicesThatAre": "Ces voix n'ont été reconnues comme celles de personne. Cochez celles de {name} ; utilisez Lire pour vérifier.",
-  "addTo": "Ajouter à {name}"
+  "addTo": "Ajouter à {name}",
+  "apiKey": "Clé API",
+  "onlyForOnlineServicesKeptIn": "Seulement pour les services en ligne. Gardée dans le trousseau de cet appareil, envoyée seulement à cette adresse.",
+  "aKeyIsSavedLeaveEmpty": "Une clé est enregistrée. Laissez vide pour la garder.",
+  "removeTheSavedKey": "Supprimer la clé enregistrée",
+  "presetOllama": "Sur votre ordinateur ou réseau : gratuit, privé, fonctionne hors ligne (Gemma, Qwen, Llama…).",
+  "presetLmStudio": "Comme Ollama, avec une application de bureau pour choisir les modèles.",
+  "presetGemini": "Google. Offre gratuite limitée ; Google peut alors utiliser ce que vous envoyez pour améliorer ses produits. Clé : aistudio.google.com.",
+  "presetDeepseek": "Paiement à l'usage, très bon marché, crédit prépayé. Clé : platform.deepseek.com.",
+  "presetQwen": "Alibaba. Paiement à l'usage. Clé : Alibaba Cloud Model Studio.",
+  "presetKimi": "Moonshot AI. Paiement à l'usage. Clé : platform.moonshot.ai.",
+  "presetMistral": "Mistral (France). Offre gratuite aux limites strictes. Clé : console.mistral.ai.",
+  "presetOpenrouter": "Une clé pour de nombreux modèles (Gemini, DeepSeek, Qwen…), certains gratuits ; le texte passe aussi par OpenRouter. Clé : openrouter.ai."
 }

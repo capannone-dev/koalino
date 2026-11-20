@@ -597,7 +597,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get theAiServerCouldNotBe2 => '无法连接 AI 服务器。';
 
   @override
-  String get theAiServerRefusedAccessUse => 'AI 服务器拒绝访问。请使用无需 API 密钥的服务器。';
+  String get theAiServerRefusedAccessUse => 'AI 服务器拒绝访问。请检查连接的 API 密钥。';
 
   @override
   String get theAiServerIsBusyOr => 'AI 服务器繁忙或已超出限额。请稍后重试。';
@@ -2631,4 +2631,42 @@ class AppLocalizationsZh extends AppLocalizations {
   String addTo(String name) {
     return '添加给 $name';
   }
+
+  @override
+  String get apiKey => 'API 密钥';
+
+  @override
+  String get onlyForOnlineServicesKeptIn => '仅用于在线服务。保存在此设备的钥匙串中，只发送到此地址。';
+
+  @override
+  String get aKeyIsSavedLeaveEmpty => '已保存密钥。留空即保留。';
+
+  @override
+  String get removeTheSavedKey => '删除已保存的密钥';
+
+  @override
+  String get presetOllama => '在你的电脑或网络上：免费、私密、可离线使用（Gemma、Qwen、Llama…）。';
+
+  @override
+  String get presetLmStudio => '与 Ollama 相同，带有选择模型的桌面应用。';
+
+  @override
+  String get presetGemini =>
+      'Google。免费层级有限额；在免费层级 Google 可能使用你发送的内容改进其产品。密钥：aistudio.google.com。';
+
+  @override
+  String get presetDeepseek => '按用量付费，非常便宜，预付额度。密钥：platform.deepseek.com。';
+
+  @override
+  String get presetQwen => '阿里巴巴。按用量付费。密钥：阿里云百炼 (Model Studio)。';
+
+  @override
+  String get presetKimi => 'Moonshot AI。按用量付费。密钥：platform.moonshot.ai。';
+
+  @override
+  String get presetMistral => 'Mistral（法国）。免费层级限额严格。密钥：console.mistral.ai。';
+
+  @override
+  String get presetOpenrouter =>
+      '一个密钥用于多种模型（Gemini、DeepSeek、Qwen…），部分免费；文本也会经过 OpenRouter。密钥：openrouter.ai。';
 }

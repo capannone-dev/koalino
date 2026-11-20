@@ -314,9 +314,12 @@ connections, the default one (the only connection when there is one), the summar
 built-in one until the owner writes their own), and whether meetings are summarized
 automatically, which is on until the owner opts out, and which connection answers paired
 devices' summary requests (#107; none until the owner chooses one). Entries edited by hand into something
-invalid, or of a removed kind such as `anthropic`, are dropped when read. No API keys are kept
-(#117); `forget_sealed_api_keys` deletes the sealed `llm-<id>.sealed` keys an older Android
-version saved.
+invalid, or of a removed kind such as `anthropic`, are dropped when read. API keys of online
+OpenAI-compatible services (#138) are never in the file: `PlatformLlmKeyring` keeps them in the
+platform keychain (`note-taker-llm-<id>`) or, on Android, in `llm-<id>.sealed` under the
+Keystore-protected database key; `llm_commands` saves, clears and deletes them and reports only
+`has_key`. `forget_sealed_api_keys` deletes the old OpenAI transcription key (`openai_key.sealed`,
+#117).
 
 `meeting_summaries.rs` (#95) is shared by the app, the web API and the CLI. `prepare_summary` reads
 the labelled transcript, the owner's notes, the image attachments (oldest first, at most 20, each

@@ -125,7 +125,8 @@ pass a fake runner. `PlatformProjectFilesPicker` picks any file (#94).
 `llm_bridge.dart` (#95) defines `LlmConnection`, `LlmSettings`, `StoredSummary`,
 `MeetingSummaryState` (with `PairedSummaryRequest`, a request to a paired computer, #107),
 `SummaryResult`, the `llmPresets` (a local Ollama or LM Studio
-server, no API keys since #117, and on desktops Claude Code and Codex, #105, through `availableLlmPresets`) and
+server; online services with an API key, each with a one-line description, #138; and on desktops
+Claude Code and Codex, #105, through `availableLlmPresets`) and
 `LlmException`, which words the core's `error_code` for people and, for a rejection or a failed
 local tool, adds what the server or tool said (`error_detail`, #104, #105). `LlmBridge`
 calls `note_taker_llm_command`, `note_taker_summarize_meeting`, `note_taker_get_meeting_summary`,

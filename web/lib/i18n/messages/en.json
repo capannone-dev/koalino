@@ -389,7 +389,7 @@
   "theAiServerFailedTry": "The AI server failed. Try again.",
   "theAiServerIsBusy": "The AI server is busy. Try again later.",
   "theAiServerIsBusy2": "The AI server is busy or over its limit. Try again later.",
-  "theAiServerRefusedAccess": "The AI server refused access. Use a server that needs no API key.",
+  "theAiServerRefusedAccess": "The AI server refused access. Check the connection's API key.",
   "theAiServerRejectedThe": "The AI server rejected the request. The server said: {detail}",
   "theAiServerRejectedThe2": "The AI server rejected the request. Check the model name.",
   "theAiServersAnswerCould": "The AI server's answer could not be read.",
@@ -509,5 +509,17 @@
   "addAVoice": "Add a voice",
   "addAVoiceTo": "Add a voice to {name}",
   "tickTheVoicesThatAre": "These voices were not recognized as anyone. Tick the ones that are {name}; listen to check.",
-  "addTo": "Add to {name}"
+  "addTo": "Add to {name}",
+  "apiKey": "API key",
+  "onlyForOnlineServicesKeptIn": "Only for online services. Kept in this device's keychain, sent only to this address.",
+  "aKeyIsSavedLeaveEmpty": "A key is saved. Leave empty to keep it.",
+  "removeTheSavedKey": "Remove the saved key",
+  "presetOllama": "On your computer or network: free, private, works offline (Gemma, Qwen, Llama…).",
+  "presetLmStudio": "Same as Ollama, with a desktop app to pick models.",
+  "presetGemini": "Google. Free tier with limits; on it Google may use what you send to improve its products. Key: aistudio.google.com.",
+  "presetDeepseek": "Pay per use, very cheap, prepaid credit. Key: platform.deepseek.com.",
+  "presetQwen": "Alibaba. Pay per use. Key: Alibaba Cloud Model Studio.",
+  "presetKimi": "Moonshot AI. Pay per use. Key: platform.moonshot.ai.",
+  "presetMistral": "Mistral (France). Free tier with tight limits. Key: console.mistral.ai.",
+  "presetOpenrouter": "One key for many models (Gemini, DeepSeek, Qwen…), some free; your text also passes through OpenRouter. Key: openrouter.ai."
 }

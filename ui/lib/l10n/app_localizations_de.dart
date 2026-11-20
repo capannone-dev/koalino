@@ -705,7 +705,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get theAiServerRefusedAccessUse =>
-      'Der KI-Server hat den Zugriff verweigert. Verwende einen Server, der keinen API-Schlüssel braucht.';
+      'Der KI-Server hat den Zugriff verweigert. Prüfe den API-Schlüssel der Verbindung.';
 
   @override
   String get theAiServerIsBusyOr =>
@@ -2867,4 +2867,50 @@ class AppLocalizationsDe extends AppLocalizations {
   String addTo(String name) {
     return 'Zu $name hinzufügen';
   }
+
+  @override
+  String get apiKey => 'API-Schlüssel';
+
+  @override
+  String get onlyForOnlineServicesKeptIn =>
+      'Nur für Online-Dienste. Im Schlüsselbund dieses Geräts gespeichert, nur an diese Adresse gesendet.';
+
+  @override
+  String get aKeyIsSavedLeaveEmpty =>
+      'Ein Schlüssel ist gespeichert. Leer lassen, um ihn zu behalten.';
+
+  @override
+  String get removeTheSavedKey => 'Gespeicherten Schlüssel entfernen';
+
+  @override
+  String get presetOllama =>
+      'Auf deinem Computer oder im Netzwerk: kostenlos, privat, offline nutzbar (Gemma, Qwen, Llama…).';
+
+  @override
+  String get presetLmStudio =>
+      'Wie Ollama, mit einer Desktop-App zur Modellwahl.';
+
+  @override
+  String get presetGemini =>
+      'Google. Kostenlose Stufe mit Limits; dabei darf Google Gesendetes zur Produktverbesserung nutzen. Schlüssel: aistudio.google.com.';
+
+  @override
+  String get presetDeepseek =>
+      'Nutzungsbasiert, sehr günstig, Prepaid-Guthaben. Schlüssel: platform.deepseek.com.';
+
+  @override
+  String get presetQwen =>
+      'Alibaba. Nutzungsbasiert. Schlüssel: Alibaba Cloud Model Studio.';
+
+  @override
+  String get presetKimi =>
+      'Moonshot AI. Nutzungsbasiert. Schlüssel: platform.moonshot.ai.';
+
+  @override
+  String get presetMistral =>
+      'Mistral (Frankreich). Kostenlose Stufe mit engen Limits. Schlüssel: console.mistral.ai.';
+
+  @override
+  String get presetOpenrouter =>
+      'Ein Schlüssel für viele Modelle (Gemini, DeepSeek, Qwen…), manche kostenlos; der Text geht auch über OpenRouter. Schlüssel: openrouter.ai.';
 }

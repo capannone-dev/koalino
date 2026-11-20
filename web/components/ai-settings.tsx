@@ -29,8 +29,8 @@ const fieldClass =
 const buttonClass =
   "inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong px-4 hover:bg-surface-muted focus-visible:outline-2 focus-visible:outline-focus disabled:text-faint";
 
-/** The connection form's fields; `id` is set when editing. */
-type Draft = LlmConnectionInput & { id?: string };
+/** The connection form's fields; `id` is set when editing, `has_key` when a key is saved. */
+type Draft = LlmConnectionInput & { id?: string; has_key?: boolean; description?: string };
 
 /** An empty form, starting from the first preset. */
 function emptyDraft(t: Translate): Draft {
@@ -105,6 +105,12 @@ export function AiSettings({ initial }: AiSettingsProps) {
       model: draft.model,
       context_tokens: Number(draft.context_tokens)
     };
+    // An online service's key (#138), only for Chat Completions; blank keeps the saved one.
+    if (draft.kind === "open_ai_compatible") {
+      const key = draft.api_key?.trim();
+      if (key) body.api_key = key;
+      if (draft.clear_key) body.clear_key = true;
+    }
     const id = draft.id;
     // Claude Code and Codex have no address (#105).
     if (isLocalCli(body.kind)) body.base_url = "";
@@ -175,7 +181,7 @@ export function AiSettings({ initial }: AiSettingsProps) {
                 type="button"
                 className={buttonClass}
                 disabled={busy}
-                onClick={() => setDraft({ id: connection.id, label: connection.label, kind: connection.kind, base_url: connection.base_url, model: connection.model, context_tokens: connection.context_tokens })}
+                onClick={() => setDraft({ id: connection.id, label: connection.label, kind: connection.kind, base_url: connection.base_url, model: connection.model, context_tokens: connection.context_tokens, has_key: connection.has_key })}
               >{t("edit")}</button>
               <button
                 type="button"
@@ -312,7 +318,7 @@ function ConnectionForm({
   onCancel: () => void;
 }) {
   const t = useT();
-  const ids = { preset: useId(), label: useId(), kind: useId(), url: useId(), model: useId(), context: useId() };
+  const ids = { preset: useId(), label: useId(), kind: useId(), url: useId(), model: useId(), context: useId(), key: useId(), keyHelp: useId() };
   return (
     <form className="space-y-3 rounded-lg border border-line p-3" onSubmit={onSubmit}>
       <h3 className="font-semibold">{draft.id ? t("editConnection") : t("newConnection")}</h3>
@@ -325,13 +331,14 @@ function ConnectionForm({
             defaultValue={connectionPresets(t)[0].name}
             onChange={(event) => {
               const preset = connectionPresets(t).find((candidate) => candidate.name === event.target.value);
-              if (preset) onChange({ ...draft, ...preset.input });
+              if (preset) onChange({ ...draft, ...preset.input, description: preset.description });
             }}
           >
             {connectionPresets(t).map((preset) => (
               <option key={preset.name}>{preset.name}</option>
             ))}
           </select>
+          {draft.description ? <p className="mt-1 text-sm text-muted">{draft.description}</p> : null}
         </div>
       )}
       <div>
@@ -378,6 +385,30 @@ function ConnectionForm({
           onChange={(event) => onChange({ ...draft, context_tokens: Number(event.target.value) })}
         />
       </div>
+      {draft.kind === "open_ai_compatible" ? (
+        <div>
+          <label htmlFor={ids.key} className="block text-sm font-semibold">{t("apiKey")}</label>
+          <input
+            id={ids.key}
+            type="password"
+            autoComplete="off"
+            className={fieldClass}
+            aria-describedby={ids.keyHelp}
+            disabled={draft.clear_key}
+            value={draft.api_key ?? ""}
+            onChange={(event) => onChange({ ...draft, api_key: event.target.value })}
+          />
+          <p id={ids.keyHelp} className="mt-1 text-sm text-muted">
+            {draft.has_key ? t("aKeyIsSavedLeaveEmpty") : t("onlyForOnlineServicesKeptIn")}
+          </p>
+          {draft.has_key ? (
+            <label className="mt-1 flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={draft.clear_key ?? false} onChange={(event) => onChange({ ...draft, clear_key: event.target.checked })} />
+              {t("removeTheSavedKey")}
+            </label>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <button type="submit" className={buttonClass} disabled={busy}>{t("saveConnection")}</button>
         <button type="button" className={buttonClass} onClick={onCancel}>{t("cancel")}</button>

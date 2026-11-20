@@ -24,7 +24,8 @@ replace the title from the response without reloading (Issue #42).
 `glossary-settings.tsx` edits the transcription glossary, one name or term per line, through
 `PUT /api/settings/glossary`; a refused list stays in the field with a plain reason.
 `ai-settings.tsx` (#95) lists the AI connections (a server on the local network, or Claude Code
-and Codex on this computer; no API keys since #117), adds, edits, tests and removes them, picks the
+and Codex on this computer, or an online service with a write-only API key, #138), adds, edits,
+tests and removes them, picks the
 default, edits the summary prompt template, turns automatic summaries on or off (#101) and chooses
 the connection that writes the summaries paired devices ask for (#107), all through
 `lib/llm-api.ts`. `meeting-summary-panel.tsx` shows a meeting's stored summary, writes one

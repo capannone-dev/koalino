@@ -659,7 +659,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get theAiServerRefusedAccessUse =>
-      'رفض خادم الذكاء الاصطناعي الوصول. استخدم خادمًا لا يحتاج إلى مفتاح API.';
+      'رفض خادم الذكاء الاصطناعي الوصول. تحقق من مفتاح API للاتصال.';
 
   @override
   String get theAiServerIsBusyOr =>
@@ -2846,4 +2846,49 @@ class AppLocalizationsAr extends AppLocalizations {
   String addTo(String name) {
     return 'إضافة إلى $name';
   }
+
+  @override
+  String get apiKey => 'مفتاح API';
+
+  @override
+  String get onlyForOnlineServicesKeptIn =>
+      'للخدمات عبر الإنترنت فقط. يُحفظ في سلسلة مفاتيح هذا الجهاز ويُرسل إلى هذا العنوان فقط.';
+
+  @override
+  String get aKeyIsSavedLeaveEmpty =>
+      'يوجد مفتاح محفوظ. اتركه فارغًا للإبقاء عليه.';
+
+  @override
+  String get removeTheSavedKey => 'إزالة المفتاح المحفوظ';
+
+  @override
+  String get presetOllama =>
+      'على حاسوبك أو شبكتك: مجاني وخاص ويعمل دون اتصال (Gemma وQwen وLlama…).';
+
+  @override
+  String get presetLmStudio => 'مثل Ollama، مع تطبيق سطح مكتب لاختيار النماذج.';
+
+  @override
+  String get presetGemini =>
+      'Google. فئة مجانية بحدود؛ وفيها قد تستخدم Google ما ترسله لتحسين منتجاتها. المفتاح: aistudio.google.com.';
+
+  @override
+  String get presetDeepseek =>
+      'الدفع حسب الاستخدام، رخيص جدًا، برصيد مسبق. المفتاح: platform.deepseek.com.';
+
+  @override
+  String get presetQwen =>
+      'Alibaba. الدفع حسب الاستخدام. المفتاح: Alibaba Cloud Model Studio.';
+
+  @override
+  String get presetKimi =>
+      'Moonshot AI. الدفع حسب الاستخدام. المفتاح: platform.moonshot.ai.';
+
+  @override
+  String get presetMistral =>
+      'Mistral (فرنسا). فئة مجانية بحدود ضيقة. المفتاح: console.mistral.ai.';
+
+  @override
+  String get presetOpenrouter =>
+      'مفتاح واحد لنماذج كثيرة (Gemini وDeepSeek وQwen…)، بعضها مجاني؛ ويمر النص أيضًا عبر OpenRouter. المفتاح: openrouter.ai.';
 }

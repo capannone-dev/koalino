@@ -676,7 +676,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get theAiServerRefusedAccessUse =>
-      'El servidor de IA denegó el acceso. Usa un servidor que no necesite clave de API.';
+      'El servidor de IA rechazó el acceso. Revisa la clave de API de la conexión.';
 
   @override
   String get theAiServerIsBusyOr =>
@@ -2824,4 +2824,50 @@ class AppLocalizationsEs extends AppLocalizations {
   String addTo(String name) {
     return 'Añadir a $name';
   }
+
+  @override
+  String get apiKey => 'Clave de API';
+
+  @override
+  String get onlyForOnlineServicesKeptIn =>
+      'Solo para servicios en línea. Se guarda en el llavero de este dispositivo y solo se envía a esta dirección.';
+
+  @override
+  String get aKeyIsSavedLeaveEmpty =>
+      'Hay una clave guardada. Déjalo vacío para conservarla.';
+
+  @override
+  String get removeTheSavedKey => 'Quitar la clave guardada';
+
+  @override
+  String get presetOllama =>
+      'En tu ordenador o red: gratis, privado, funciona sin conexión (Gemma, Qwen, Llama…).';
+
+  @override
+  String get presetLmStudio =>
+      'Como Ollama, con una app de escritorio para elegir modelos.';
+
+  @override
+  String get presetGemini =>
+      'Google. Nivel gratuito con límites; en él Google puede usar lo que envías para mejorar sus productos. Clave: aistudio.google.com.';
+
+  @override
+  String get presetDeepseek =>
+      'Pago por uso, muy barato, crédito prepago. Clave: platform.deepseek.com.';
+
+  @override
+  String get presetQwen =>
+      'Alibaba. Pago por uso. Clave: Alibaba Cloud Model Studio.';
+
+  @override
+  String get presetKimi =>
+      'Moonshot AI. Pago por uso. Clave: platform.moonshot.ai.';
+
+  @override
+  String get presetMistral =>
+      'Mistral (Francia). Nivel gratuito con límites estrictos. Clave: console.mistral.ai.';
+
+  @override
+  String get presetOpenrouter =>
+      'Una clave para muchos modelos (Gemini, DeepSeek, Qwen…), algunos gratis; el texto también pasa por OpenRouter. Clave: openrouter.ai.';
 }

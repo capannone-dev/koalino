@@ -674,18 +674,24 @@ daemon without a settings file `503` `unavailable`. The apps use
 `GET /api/settings/llm` returns `{"ok":true,"connections":[...],"default_connection","template",
 "default_template","custom_template","auto_summarize","paired_summary_connection",
 "placeholders"}`. Each connection is
-`{"id","label","kind","base_url","model","context_tokens","plain_http","is_default",
+`{"id","label","kind","base_url","model","context_tokens","plain_http","has_key","is_default",
 "tool_installed"}`, where `kind` is `open_ai_compatible` (a server such as Ollama, llama.cpp,
-LM Studio or vLLM) or (#105) `claude_code` or `codex`. The last two run the Claude
+LM Studio or vLLM, or an online service such as Gemini, DeepSeek, Qwen, Kimi, Mistral or
+OpenRouter, #138) or (#105) `claude_code` or `codex`. The last two run the Claude
 Code or Codex CLI installed and signed in on the computer running the core, so a Claude or ChatGPT
 plan answers instead of API credit: they have no `base_url` and no key, their `model` may be
-empty (the tool's default), and `tool_installed` says whether the tool was found. Koalino keeps
-no API keys (#117): requests carry no authorization header, a sent `api_key` is ignored, and the
-`anthropic` kind is refused (an old saved Anthropic connection is dropped when read).
+empty (the tool's default), and `tool_installed` says whether the tool was found. An
+`open_ai_compatible` connection may have an API key (#138, partly reversing #117): it is
+write-only, kept in the platform keychain (`note-taker-llm-<id>`; on Android a file sealed under
+the database key), never returned or logged, and sent as `Authorization: Bearer` only over HTTPS
+or to this computer. `has_key` says whether one is saved. The `anthropic` kind is refused (an old
+saved Anthropic connection is dropped when read).
 
 - `POST /api/settings/llm/connections` creates a connection from `{"label","kind","base_url",
-  "model","context_tokens"}`; `PUT /api/settings/llm/connections/{id}` edits one. Both return
-  `{"connection"}`. `base_url` must be HTTPS, or plain HTTP to a loopback or private LAN address.
+  "model","context_tokens"}` plus optionally `"api_key"` (printable, no spaces, at most 512
+  characters; absent keeps the saved one) or `"clear_key": true`; `PUT
+  /api/settings/llm/connections/{id}` edits one. Both return `{"connection"}`; a key that can't be
+  stored gives `keychain_failed`. Deleting a connection deletes its key. `base_url` must be HTTPS, or plain HTTP to a loopback or private LAN address.
 - `DELETE /api/settings/llm/connections/{id}` removes it.
 - `POST /api/settings/llm/connections/{id}/test` sends a fixed one-line request (no meeting
   content) and returns `{"reply"}`.

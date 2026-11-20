@@ -1,5 +1,5 @@
 // Verifies the web Settings page's AI connections (#95): listing connections without their keys,
-// adding one, testing it, the default, the prompt, automatic summaries (#101), and the
+// adding one (an online service with a write-only API key, #138), testing it, the default, the prompt, automatic summaries (#101), and the
 // connection that answers paired devices' summary requests (#107).
 
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -58,7 +58,7 @@ test("lists connections with their default, a plain-http warning and no key", ()
   expect(screen.getByLabelText(/Summarize meetings automatically/)).toBeChecked();
 });
 
-test("adding a connection from a preset sends no key and lists it (#117)", async () => {
+test("adding a local server from a preset sends no key and lists it", async () => {
   const added: api.LlmConnection = { ...office, id: "c-2", label: "Studio", base_url: "http://192.168.1.10:1234/v1", model: "qwen3-8b", is_default: false };
   vi.mocked(api.saveLlmConnection).mockResolvedValue(added);
   vi.mocked(api.getLlmSettings).mockResolvedValue({ ...settings, connections: [office, added] });
@@ -69,7 +69,7 @@ test("adding a connection from a preset sends no key and lists it (#117)", async
   expect(screen.queryByRole("option", { name: "OpenAI" })).not.toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Start from"), { target: { value: "LM Studio" } });
   fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Studio" } });
-  expect(screen.queryByLabelText("API key")).not.toBeInTheDocument();
+  expect(screen.getByText(/desktop app to pick models/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
 
   expect(await screen.findByText("Saved Studio.")).toBeInTheDocument();
@@ -159,4 +159,41 @@ test("answering paired devices can be turned off (#107)", async () => {
     await screen.findByText("This computer no longer writes summaries or answers chats for your other devices.")
   ).toBeInTheDocument();
   expect(api.updateLlmSettings).toHaveBeenCalledWith({ paired_summary_connection: null });
+});
+
+test("an online service is described and its key is sent once, never shown (#138)", async () => {
+  const added: api.LlmConnection = { ...office, id: "c-2", label: "Gemini", base_url: "https://generativelanguage.googleapis.com/v1beta/openai", plain_http: false, has_key: true, is_default: false };
+  vi.mocked(api.saveLlmConnection).mockResolvedValue(added);
+  vi.mocked(api.getLlmSettings).mockResolvedValue({ ...settings, connections: [office, added] });
+  render(<AiSettings initial={settings} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Add connection" }));
+  fireEvent.change(screen.getByLabelText("Start from"), { target: { value: "Gemini" } });
+  expect(screen.getByText(/aistudio\.google\.com/)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Gemini" } });
+  fireEvent.change(screen.getByLabelText("API key"), { target: { value: " AIza-test " } });
+  fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
+  await screen.findByText("Saved Gemini.");
+
+  const [body] = vi.mocked(api.saveLlmConnection).mock.calls[0];
+  expect(body.api_key).toBe("AIza-test");
+  expect(body.base_url).toBe("https://generativelanguage.googleapis.com/v1beta/openai");
+  expect(screen.queryByDisplayValue(/AIza-test/)).not.toBeInTheDocument();
+});
+
+test("a saved key is kept unless removed (#138)", async () => {
+  const keyed: api.LlmConnection = { ...office, base_url: "https://api.deepseek.com", plain_http: false, has_key: true };
+  vi.mocked(api.saveLlmConnection).mockResolvedValue(keyed);
+  vi.mocked(api.getLlmSettings).mockResolvedValue({ ...settings, connections: [keyed] });
+  render(<AiSettings initial={{ ...settings, connections: [keyed] }} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+  expect(screen.getByText("A key is saved. Leave empty to keep it.")).toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Remove the saved key"));
+  fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
+  await screen.findByText(/Saved/);
+
+  const [body] = vi.mocked(api.saveLlmConnection).mock.calls[0];
+  expect(body.clear_key).toBe(true);
+  expect(body.api_key).toBeUndefined();
 });

@@ -178,7 +178,7 @@
   "thisMeetingHasNoTranscriptOr": "この会議にはまだ文字起こしもメモもありません。",
   "thisMeetingIsTooLongFor": "この会議はこの接続には長すぎます。より大きなコンテキストの接続を選んでください。",
   "theAiServerCouldNotBe2": "AI サーバーに接続できませんでした。",
-  "theAiServerRefusedAccessUse": "AI サーバーがアクセスを拒否しました。API キーが不要なサーバーを使ってください。",
+  "theAiServerRefusedAccessUse": "AI サーバーがアクセスを拒否しました。接続の API キーを確認してください。",
   "theAiServerIsBusyOr": "AI サーバーが混雑しているか上限を超えています。後でもう一度お試しください。",
   "theAiServerRejectedTheRequest2": "AI サーバーがリクエストを拒否しました。モデル名を確認してください。",
   "theAiServerFailedTryAgain": "AI サーバーでエラーが発生しました。もう一度お試しください。",
@@ -733,5 +733,17 @@
   "addToASavedPerson": "保存済みの人に追加",
   "addVoicesTo": "{name} に声を追加",
   "tickTheVoicesThatAre": "これらの声は誰とも認識されませんでした。{name} の声にチェックを入れてください。「再生」で確認できます。",
-  "addTo": "{name} に追加"
+  "addTo": "{name} に追加",
+  "apiKey": "API キー",
+  "onlyForOnlineServicesKeptIn": "オンラインサービス専用。このデバイスのキーチェーンに保存され、このアドレスにのみ送信されます。",
+  "aKeyIsSavedLeaveEmpty": "キーは保存済みです。空欄のままにすると保持されます。",
+  "removeTheSavedKey": "保存済みのキーを削除",
+  "presetOllama": "自分のコンピューターやネットワークで：無料、プライベート、オフラインで動作（Gemma、Qwen、Llama…）。",
+  "presetLmStudio": "Ollama と同様。モデルを選べるデスクトップアプリ付き。",
+  "presetGemini": "Google。制限付きの無料枠あり。無料枠では送信内容が製品改善に使われることがあります。キー：aistudio.google.com。",
+  "presetDeepseek": "従量課金、非常に安価、前払いクレジット。キー：platform.deepseek.com。",
+  "presetQwen": "Alibaba。従量課金。キー：Alibaba Cloud Model Studio。",
+  "presetKimi": "Moonshot AI。従量課金。キー：platform.moonshot.ai。",
+  "presetMistral": "Mistral（フランス）。制限の厳しい無料枠あり。キー：console.mistral.ai。",
+  "presetOpenrouter": "1 つのキーで多くのモデル（Gemini、DeepSeek、Qwen…）、一部無料。テキストは OpenRouter も経由します。キー：openrouter.ai。"
 }

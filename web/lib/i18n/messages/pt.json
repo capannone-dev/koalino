@@ -389,7 +389,7 @@
   "theAiServerFailedTry": "O servidor de IA falhou. Tente novamente.",
   "theAiServerIsBusy": "O servidor de IA está ocupado. Tente mais tarde.",
   "theAiServerIsBusy2": "O servidor de IA está ocupado ou acima do limite. Tente mais tarde.",
-  "theAiServerRefusedAccess": "O servidor de IA recusou o acesso. Use um servidor que não exija chave de API.",
+  "theAiServerRefusedAccess": "O servidor de IA recusou o acesso. Verifique a chave de API da conexão.",
   "theAiServerRejectedThe": "O servidor de IA recusou o pedido. O servidor disse: {detail}",
   "theAiServerRejectedThe2": "O servidor de IA rejeitou a solicitação. Verifique o nome do modelo.",
   "theAiServersAnswerCould": "Não foi possível ler a resposta do servidor de IA.",
@@ -509,5 +509,17 @@
   "addAVoice": "Adicionar uma voz",
   "addAVoiceTo": "Adicionar uma voz a {name}",
   "tickTheVoicesThatAre": "Estas vozes não foram reconhecidas como de ninguém. Marque as de {name}; ouça para conferir.",
-  "addTo": "Adicionar a {name}"
+  "addTo": "Adicionar a {name}",
+  "apiKey": "Chave de API",
+  "onlyForOnlineServicesKeptIn": "Só para serviços online. Guardada no chaveiro deste dispositivo e enviada só para este endereço.",
+  "aKeyIsSavedLeaveEmpty": "Há uma chave salva. Deixe vazio para mantê-la.",
+  "removeTheSavedKey": "Remover a chave salva",
+  "presetOllama": "No seu computador ou rede: grátis, privado, funciona offline (Gemma, Qwen, Llama…).",
+  "presetLmStudio": "Como o Ollama, com um app de desktop para escolher modelos.",
+  "presetGemini": "Google. Nível gratuito com limites; nele o Google pode usar o que você envia para melhorar seus produtos. Chave: aistudio.google.com.",
+  "presetDeepseek": "Pago por uso, muito barato, crédito pré-pago. Chave: platform.deepseek.com.",
+  "presetQwen": "Alibaba. Pago por uso. Chave: Alibaba Cloud Model Studio.",
+  "presetKimi": "Moonshot AI. Pago por uso. Chave: platform.moonshot.ai.",
+  "presetMistral": "Mistral (França). Nível gratuito com limites rígidos. Chave: console.mistral.ai.",
+  "presetOpenrouter": "Uma chave para muitos modelos (Gemini, DeepSeek, Qwen…), alguns grátis; o texto também passa pelo OpenRouter. Chave: openrouter.ai."
 }

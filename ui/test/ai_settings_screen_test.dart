@@ -1,5 +1,5 @@
 // Verifies Settings → AI connections (#95): the connection list with its notes, adding a
-// connection from a preset with a key that is never shown again, testing, the prompt and
+// connection from a preset (an online one with a key that is never shown again, #138), testing, the prompt and
 // automatic summaries (#101).
 
 import 'package:flutter/material.dart';
@@ -90,7 +90,7 @@ void main() {
         isTrue);
   });
 
-  testWidgets('adds a connection from a preset, with no API key field (#117)',
+  testWidgets('adds a local server from a preset, sending no key',
       (WidgetTester tester) async {
     core.answer('command:settings', settings());
     core.answer('command:save_connection', <String, Object?>{
@@ -108,7 +108,10 @@ void main() {
     expect(find.widgetWithText(ActionChip, 'OpenAI'), findsNothing);
     await tester.tap(find.widgetWithText(ActionChip, 'LM Studio'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextField, 'API key'), findsNothing);
+    expect(find.byKey(const ValueKey<String>('api-key')), findsOneWidget,
+        reason: 'offered, but a local server needs none');
+    expect(find.byKey(const ValueKey<String>('preset-description')),
+        findsOneWidget);
     await tester.tap(find.text('Save connection'));
     await tester.pumpAndSettle();
 
@@ -240,5 +243,63 @@ void main() {
     await show(tester);
 
     expect(find.text('Summaries for my other devices'), findsNothing);
+  });
+
+  testWidgets('an online service comes with its description and its key (#138)',
+      (WidgetTester tester) async {
+    core.answer('command:settings', settings());
+    core.answer('command:save_connection', <String, Object?>{
+      'ok': true,
+      'connection': connection('c-2', 'Gemini')
+    });
+    core.answer('command:settings', settings());
+    await show(tester, offerPlans: false);
+
+    await tester.tap(find.text('Add connection'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('preset-Gemini')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('aistudio.google.com'), findsOneWidget);
+    await tester.enterText(
+        find.byKey(const ValueKey<String>('api-key')), ' AIza-test ');
+    await tester.tap(find.text('Save connection'));
+    await tester.pumpAndSettle();
+
+    final Map<String, Object?> request = core.lastCommand('save_connection');
+    expect(request['base_url'],
+        'https://generativelanguage.googleapis.com/v1beta/openai');
+    expect(request['api_key'], 'AIza-test');
+    expect(find.textContaining('AIza-test'), findsNothing,
+        reason: 'the key is never shown again');
+  });
+
+  testWidgets('a saved key is kept unless removed',
+      (WidgetTester tester) async {
+    final Map<String, Object?> keyed = <String, Object?>{
+      ...connection('c-1', 'Office', isDefault: true),
+      'base_url': 'https://api.deepseek.com',
+      'plain_http': false,
+      'has_key': true,
+    };
+    core.answer('command:settings', settings(connections: <Object?>[keyed]));
+    core.answer('command:save_connection',
+        <String, Object?>{'ok': true, 'connection': keyed});
+    core.answer('command:settings', settings(connections: <Object?>[keyed]));
+    await show(tester);
+
+    await tester.tap(find.byTooltip('Actions for Office'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit').last);
+    await tester.pumpAndSettle();
+    expect(
+        find.text('A key is saved. Leave empty to keep it.'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey<String>('clear-key')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save connection'));
+    await tester.pumpAndSettle();
+
+    final Map<String, Object?> request = core.lastCommand('save_connection');
+    expect(request['clear_key'], isTrue);
+    expect(request.containsKey('api_key'), isFalse);
   });
 }

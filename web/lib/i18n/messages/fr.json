@@ -389,7 +389,7 @@
   "theAiServerFailedTry": "Le serveur IA a échoué. Réessayez.",
   "theAiServerIsBusy": "Le serveur IA est occupé. Réessayez plus tard.",
   "theAiServerIsBusy2": "Le serveur IA est occupé ou a dépassé sa limite. Réessayez plus tard.",
-  "theAiServerRefusedAccess": "Le serveur IA a refusé l'accès. Utilisez un serveur qui ne demande pas de clé API.",
+  "theAiServerRefusedAccess": "Le serveur d'IA a refusé l'accès. Vérifiez la clé API de la connexion.",
   "theAiServerRejectedThe": "Le serveur IA a refusé la requête. Réponse du serveur : {detail}",
   "theAiServerRejectedThe2": "Le serveur IA a refusé la demande. Vérifiez le nom du modèle.",
   "theAiServersAnswerCould": "Impossible de lire la réponse du serveur IA.",
@@ -509,5 +509,17 @@
   "addAVoice": "Ajouter une voix",
   "addAVoiceTo": "Ajouter une voix à {name}",
   "tickTheVoicesThatAre": "Ces voix n'ont été reconnues comme celles de personne. Cochez celles de {name} ; écoutez pour vérifier.",
-  "addTo": "Ajouter à {name}"
+  "addTo": "Ajouter à {name}",
+  "apiKey": "Clé API",
+  "onlyForOnlineServicesKeptIn": "Seulement pour les services en ligne. Gardée dans le trousseau de cet appareil, envoyée seulement à cette adresse.",
+  "aKeyIsSavedLeaveEmpty": "Une clé est enregistrée. Laissez vide pour la garder.",
+  "removeTheSavedKey": "Supprimer la clé enregistrée",
+  "presetOllama": "Sur votre ordinateur ou réseau : gratuit, privé, fonctionne hors ligne (Gemma, Qwen, Llama…).",
+  "presetLmStudio": "Comme Ollama, avec une application de bureau pour choisir les modèles.",
+  "presetGemini": "Google. Offre gratuite limitée ; Google peut alors utiliser ce que vous envoyez pour améliorer ses produits. Clé : aistudio.google.com.",
+  "presetDeepseek": "Paiement à l'usage, très bon marché, crédit prépayé. Clé : platform.deepseek.com.",
+  "presetQwen": "Alibaba. Paiement à l'usage. Clé : Alibaba Cloud Model Studio.",
+  "presetKimi": "Moonshot AI. Paiement à l'usage. Clé : platform.moonshot.ai.",
+  "presetMistral": "Mistral (France). Offre gratuite aux limites strictes. Clé : console.mistral.ai.",
+  "presetOpenrouter": "Une clé pour de nombreux modèles (Gemini, DeepSeek, Qwen…), certains gratuits ; le texte passe aussi par OpenRouter. Clé : openrouter.ai."
 }

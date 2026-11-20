@@ -389,7 +389,7 @@
   "theAiServerFailedTry": "Beim KI-Server ist ein Fehler aufgetreten. Versuche es erneut.",
   "theAiServerIsBusy": "Der KI-Server ist ausgelastet. Versuche es später erneut.",
   "theAiServerIsBusy2": "Der KI-Server ist ausgelastet oder über seinem Limit. Versuche es später erneut.",
-  "theAiServerRefusedAccess": "Der KI-Server hat den Zugriff verweigert. Verwende einen Server, der keinen API-Schlüssel braucht.",
+  "theAiServerRefusedAccess": "Der KI-Server hat den Zugriff verweigert. Prüfe den API-Schlüssel der Verbindung.",
   "theAiServerRejectedThe": "Der KI-Server hat die Anfrage abgelehnt. Meldung des Servers: {detail}",
   "theAiServerRejectedThe2": "Der KI-Server hat die Anfrage abgelehnt. Prüfe den Modellnamen.",
   "theAiServersAnswerCould": "Die Antwort des KI-Servers konnte nicht gelesen werden.",
@@ -509,5 +509,17 @@
   "addAVoice": "Stimme hinzufügen",
   "addAVoiceTo": "{name} eine Stimme hinzufügen",
   "tickTheVoicesThatAre": "Diese Stimmen wurden niemandem zugeordnet. Hake die an, die {name} gehören; zum Prüfen anhören.",
-  "addTo": "Zu {name} hinzufügen"
+  "addTo": "Zu {name} hinzufügen",
+  "apiKey": "API-Schlüssel",
+  "onlyForOnlineServicesKeptIn": "Nur für Online-Dienste. Im Schlüsselbund dieses Geräts gespeichert, nur an diese Adresse gesendet.",
+  "aKeyIsSavedLeaveEmpty": "Ein Schlüssel ist gespeichert. Leer lassen, um ihn zu behalten.",
+  "removeTheSavedKey": "Gespeicherten Schlüssel entfernen",
+  "presetOllama": "Auf deinem Computer oder im Netzwerk: kostenlos, privat, offline nutzbar (Gemma, Qwen, Llama…).",
+  "presetLmStudio": "Wie Ollama, mit einer Desktop-App zur Modellwahl.",
+  "presetGemini": "Google. Kostenlose Stufe mit Limits; dabei darf Google Gesendetes zur Produktverbesserung nutzen. Schlüssel: aistudio.google.com.",
+  "presetDeepseek": "Nutzungsbasiert, sehr günstig, Prepaid-Guthaben. Schlüssel: platform.deepseek.com.",
+  "presetQwen": "Alibaba. Nutzungsbasiert. Schlüssel: Alibaba Cloud Model Studio.",
+  "presetKimi": "Moonshot AI. Nutzungsbasiert. Schlüssel: platform.moonshot.ai.",
+  "presetMistral": "Mistral (Frankreich). Kostenlose Stufe mit engen Limits. Schlüssel: console.mistral.ai.",
+  "presetOpenrouter": "Ein Schlüssel für viele Modelle (Gemini, DeepSeek, Qwen…), manche kostenlos; der Text geht auch über OpenRouter. Schlüssel: openrouter.ai."
 }

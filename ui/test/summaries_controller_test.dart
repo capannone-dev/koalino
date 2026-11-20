@@ -119,7 +119,7 @@ void main() {
         <String, Object?>{'ok': false, 'error_code': 'llm_unauthorized'});
     await controller.testConnection('c-1');
     expect(controller.message,
-        'The AI server refused access. Use a server that needs no API key.');
+        "The AI server refused access. Check the connection's API key.");
   });
 
   test('the template, its reset and automatic summaries are saved', () async {

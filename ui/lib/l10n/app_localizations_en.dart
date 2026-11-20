@@ -668,7 +668,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get theAiServerRefusedAccessUse =>
-      'The AI server refused access. Use a server that needs no API key.';
+      'The AI server refused access. Check the connection\'s API key.';
 
   @override
   String get theAiServerIsBusyOr =>
@@ -2793,4 +2793,49 @@ class AppLocalizationsEn extends AppLocalizations {
   String addTo(String name) {
     return 'Add to $name';
   }
+
+  @override
+  String get apiKey => 'API key';
+
+  @override
+  String get onlyForOnlineServicesKeptIn =>
+      'Only for online services. Kept in this device\'s keychain, sent only to this address.';
+
+  @override
+  String get aKeyIsSavedLeaveEmpty => 'A key is saved. Leave empty to keep it.';
+
+  @override
+  String get removeTheSavedKey => 'Remove the saved key';
+
+  @override
+  String get presetOllama =>
+      'On your computer or network: free, private, works offline (Gemma, Qwen, Llama…).';
+
+  @override
+  String get presetLmStudio =>
+      'Same as Ollama, with a desktop app to pick models.';
+
+  @override
+  String get presetGemini =>
+      'Google. Free tier with limits; on it Google may use what you send to improve its products. Key: aistudio.google.com.';
+
+  @override
+  String get presetDeepseek =>
+      'Pay per use, very cheap, prepaid credit. Key: platform.deepseek.com.';
+
+  @override
+  String get presetQwen =>
+      'Alibaba. Pay per use. Key: Alibaba Cloud Model Studio.';
+
+  @override
+  String get presetKimi =>
+      'Moonshot AI. Pay per use. Key: platform.moonshot.ai.';
+
+  @override
+  String get presetMistral =>
+      'Mistral (France). Free tier with tight limits. Key: console.mistral.ai.';
+
+  @override
+  String get presetOpenrouter =>
+      'One key for many models (Gemini, DeepSeek, Qwen…), some free; your text also passes through OpenRouter. Key: openrouter.ai.';
 }

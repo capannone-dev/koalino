@@ -73,6 +73,7 @@ fn router(with_llm: bool) -> axum::Router {
     let folder = std::env::temp_dir().join(format!("llm-routes-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
     let services = LlmServices::new(folder.join("db.llm-settings.json"), "Server")
+        .with_keyring(Arc::new(crate::llm_settings::MemoryLlmKeyring::default()))
         .with_engine_factory(Arc::new(|_| {
             Ok(Box::new(CountingEngine) as Box<dyn LlmEngine>)
         }));

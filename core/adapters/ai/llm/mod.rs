@@ -1,6 +1,6 @@
 //! Language model adapters (#95): one for OpenAI-compatible Chat Completions servers the owner
 //! runs (Ollama, llama.cpp, LM Studio, vLLM), and one for Claude Code and Codex signed in on this
-//! computer (#105), both behind the `LlmEngine` port. No adapter sends an API key.
+//! computer (#105), both behind the `LlmEngine` port. Only Chat Completions sends an API key (#138).
 
 /// Standard base64, for images sent inline.
 pub mod base64;
@@ -30,15 +30,19 @@ use crate::{
 ///
 /// Inputs: The connection. Outputs: The engine; `Unreachable` when no HTTP client can be built.
 /// Side effects: None until the engine is used.
-pub fn engine_for(connection: &LlmConnection) -> Result<Box<dyn LlmEngine>, LlmError> {
+pub fn engine_for(
+    connection: &LlmConnection,
+    api_key: Option<zeroize::Zeroizing<String>>,
+) -> Result<Box<dyn LlmEngine>, LlmError> {
     if connection.kind().is_local_cli() {
         return Ok(Box::new(cli_agent::CliAgentEngine::installed(connection)));
     }
     let transport = Arc::new(transport::ReqwestLlmTransport::new()?);
     Ok(match connection.kind() {
-        LlmKind::OpenAiCompatible => Box::new(openai_compatible::OpenAiCompatibleEngine::new(
-            connection, transport,
-        )),
+        LlmKind::OpenAiCompatible => Box::new(
+            openai_compatible::OpenAiCompatibleEngine::new(connection, transport)
+                .with_api_key(api_key),
+        ),
         LlmKind::ClaudeCode | LlmKind::Codex => {
             Box::new(cli_agent::CliAgentEngine::installed(connection))
         }

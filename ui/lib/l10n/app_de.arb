@@ -178,7 +178,7 @@
   "thisMeetingHasNoTranscriptOr": "Dieses Meeting hat noch kein Transkript und keine Notizen.",
   "thisMeetingIsTooLongFor": "Dieses Meeting ist zu lang für diese Verbindung. Wähle eine mit größerem Kontext.",
   "theAiServerCouldNotBe2": "Der KI-Server war nicht erreichbar.",
-  "theAiServerRefusedAccessUse": "Der KI-Server hat den Zugriff verweigert. Verwende einen Server, der keinen API-Schlüssel braucht.",
+  "theAiServerRefusedAccessUse": "Der KI-Server hat den Zugriff verweigert. Prüfe den API-Schlüssel der Verbindung.",
   "theAiServerIsBusyOr": "Der KI-Server ist ausgelastet oder über seinem Limit. Versuche es später erneut.",
   "theAiServerRejectedTheRequest2": "Der KI-Server hat die Anfrage abgelehnt. Prüfe den Modellnamen.",
   "theAiServerFailedTryAgain": "Beim KI-Server ist ein Fehler aufgetreten. Versuche es erneut.",
@@ -733,5 +733,17 @@
   "addToASavedPerson": "Einer gespeicherten Person hinzufügen",
   "addVoicesTo": "Stimmen zu {name} hinzufügen",
   "tickTheVoicesThatAre": "Diese Stimmen wurden niemandem zugeordnet. Hake die an, die {name} gehören; mit Abspielen prüfen.",
-  "addTo": "Zu {name} hinzufügen"
+  "addTo": "Zu {name} hinzufügen",
+  "apiKey": "API-Schlüssel",
+  "onlyForOnlineServicesKeptIn": "Nur für Online-Dienste. Im Schlüsselbund dieses Geräts gespeichert, nur an diese Adresse gesendet.",
+  "aKeyIsSavedLeaveEmpty": "Ein Schlüssel ist gespeichert. Leer lassen, um ihn zu behalten.",
+  "removeTheSavedKey": "Gespeicherten Schlüssel entfernen",
+  "presetOllama": "Auf deinem Computer oder im Netzwerk: kostenlos, privat, offline nutzbar (Gemma, Qwen, Llama…).",
+  "presetLmStudio": "Wie Ollama, mit einer Desktop-App zur Modellwahl.",
+  "presetGemini": "Google. Kostenlose Stufe mit Limits; dabei darf Google Gesendetes zur Produktverbesserung nutzen. Schlüssel: aistudio.google.com.",
+  "presetDeepseek": "Nutzungsbasiert, sehr günstig, Prepaid-Guthaben. Schlüssel: platform.deepseek.com.",
+  "presetQwen": "Alibaba. Nutzungsbasiert. Schlüssel: Alibaba Cloud Model Studio.",
+  "presetKimi": "Moonshot AI. Nutzungsbasiert. Schlüssel: platform.moonshot.ai.",
+  "presetMistral": "Mistral (Frankreich). Kostenlose Stufe mit engen Limits. Schlüssel: console.mistral.ai.",
+  "presetOpenrouter": "Ein Schlüssel für viele Modelle (Gemini, DeepSeek, Qwen…), manche kostenlos; der Text geht auch über OpenRouter. Schlüssel: openrouter.ai."
 }

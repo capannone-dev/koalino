@@ -624,7 +624,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get theAiServerRefusedAccessUse =>
-      'AI サーバーがアクセスを拒否しました。API キーが不要なサーバーを使ってください。';
+      'AI サーバーがアクセスを拒否しました。接続の API キーを確認してください。';
 
   @override
   String get theAiServerIsBusyOr => 'AI サーバーが混雑しているか上限を超えています。後でもう一度お試しください。';
@@ -2691,4 +2691,45 @@ class AppLocalizationsJa extends AppLocalizations {
   String addTo(String name) {
     return '$name に追加';
   }
+
+  @override
+  String get apiKey => 'API キー';
+
+  @override
+  String get onlyForOnlineServicesKeptIn =>
+      'オンラインサービス専用。このデバイスのキーチェーンに保存され、このアドレスにのみ送信されます。';
+
+  @override
+  String get aKeyIsSavedLeaveEmpty => 'キーは保存済みです。空欄のままにすると保持されます。';
+
+  @override
+  String get removeTheSavedKey => '保存済みのキーを削除';
+
+  @override
+  String get presetOllama =>
+      '自分のコンピューターやネットワークで：無料、プライベート、オフラインで動作（Gemma、Qwen、Llama…）。';
+
+  @override
+  String get presetLmStudio => 'Ollama と同様。モデルを選べるデスクトップアプリ付き。';
+
+  @override
+  String get presetGemini =>
+      'Google。制限付きの無料枠あり。無料枠では送信内容が製品改善に使われることがあります。キー：aistudio.google.com。';
+
+  @override
+  String get presetDeepseek => '従量課金、非常に安価、前払いクレジット。キー：platform.deepseek.com。';
+
+  @override
+  String get presetQwen => 'Alibaba。従量課金。キー：Alibaba Cloud Model Studio。';
+
+  @override
+  String get presetKimi => 'Moonshot AI。従量課金。キー：platform.moonshot.ai。';
+
+  @override
+  String get presetMistral =>
+      'Mistral（フランス）。制限の厳しい無料枠あり。キー：console.mistral.ai。';
+
+  @override
+  String get presetOpenrouter =>
+      '1 つのキーで多くのモデル（Gemini、DeepSeek、Qwen…）、一部無料。テキストは OpenRouter も経由します。キー：openrouter.ai。';
 }

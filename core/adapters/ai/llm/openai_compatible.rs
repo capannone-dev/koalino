@@ -1,9 +1,11 @@
-//! Talks to a server the owner runs that speaks OpenAI's Chat Completions, such as Ollama,
-//! llama.cpp, LM Studio and vLLM. No API key is sent: the app keeps none.
+//! Talks to a server that speaks OpenAI's Chat Completions: one the owner runs (Ollama, llama.cpp,
+//! LM Studio, vLLM), or an online service with an API key (#138: Gemini, DeepSeek, Qwen, Kimi,
+//! Mistral, OpenRouter). The key goes as a Bearer header over HTTPS (or to this computer) only.
 
 use std::sync::Arc;
 
 use serde_json::{Value, json};
+use zeroize::Zeroizing;
 
 use super::{
     base64::encode_base64,
@@ -23,6 +25,28 @@ pub struct OpenAiCompatibleEngine {
     url: String,
     model: String,
     transport: Arc<dyn LlmHttpTransport>,
+    /// The API key, sent only where `may_carry_key` allows.
+    api_key: Option<Zeroizing<String>>,
+}
+
+/// Whether a key may go to `url`: HTTPS, or plain HTTP to this computer only, never in clear
+/// across a network.
+fn may_carry_key(url: &str) -> bool {
+    if url.starts_with("https://") {
+        return true;
+    }
+    let Some(rest) = url.strip_prefix("http://") else {
+        return false;
+    };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = host
+        .strip_prefix('[')
+        .and_then(|bracketed| bracketed.split(']').next())
+        .unwrap_or_else(|| host.rsplit_once(':').map_or(host, |(name, _)| name));
+    host.eq_ignore_ascii_case("localhost")
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|address| address.is_loopback())
 }
 
 impl OpenAiCompatibleEngine {
@@ -34,7 +58,16 @@ impl OpenAiCompatibleEngine {
             url: endpoint_url(connection.base_url(), "/chat/completions"),
             model: connection.model().to_owned(),
             transport,
+            api_key: None,
         }
+    }
+
+    /// Adds the connection's API key (#138); a blank one is ignored.
+    ///
+    /// Inputs: The key. Outputs: The engine. Side effects: None; the key is never logged.
+    pub fn with_api_key(mut self, api_key: Option<Zeroizing<String>>) -> Self {
+        self.api_key = api_key.filter(|key| !key.trim().is_empty());
+        self
     }
 
     /// Builds the request body.
@@ -85,9 +118,13 @@ impl LlmEngine for OpenAiCompatibleEngine {
                 reason: "the conversation is empty",
             });
         }
+        let mut headers = Vec::new();
+        if let Some(key) = self.api_key.as_ref().filter(|_| may_carry_key(&self.url)) {
+            headers.push(("authorization", format!("Bearer {}", key.as_str())));
+        }
         let response = self
             .transport
-            .post_json(&self.url, &[], &self.body(request))?;
+            .post_json(&self.url, &headers, &self.body(request))?;
         read_answer(&response)
     }
 }

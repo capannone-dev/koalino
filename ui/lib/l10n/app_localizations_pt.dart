@@ -682,7 +682,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get theAiServerRefusedAccessUse =>
-      'O servidor de IA recusou o acesso. Use um servidor que não exija chave de API.';
+      'O servidor de IA recusou o acesso. Verifique a chave de API da conexão.';
 
   @override
   String get theAiServerIsBusyOr =>
@@ -2829,4 +2829,50 @@ class AppLocalizationsPt extends AppLocalizations {
   String addTo(String name) {
     return 'Adicionar a $name';
   }
+
+  @override
+  String get apiKey => 'Chave de API';
+
+  @override
+  String get onlyForOnlineServicesKeptIn =>
+      'Só para serviços online. Guardada no chaveiro deste dispositivo e enviada só para este endereço.';
+
+  @override
+  String get aKeyIsSavedLeaveEmpty =>
+      'Há uma chave salva. Deixe vazio para mantê-la.';
+
+  @override
+  String get removeTheSavedKey => 'Remover a chave salva';
+
+  @override
+  String get presetOllama =>
+      'No seu computador ou rede: grátis, privado, funciona offline (Gemma, Qwen, Llama…).';
+
+  @override
+  String get presetLmStudio =>
+      'Como o Ollama, com um app de desktop para escolher modelos.';
+
+  @override
+  String get presetGemini =>
+      'Google. Nível gratuito com limites; nele o Google pode usar o que você envia para melhorar seus produtos. Chave: aistudio.google.com.';
+
+  @override
+  String get presetDeepseek =>
+      'Pago por uso, muito barato, crédito pré-pago. Chave: platform.deepseek.com.';
+
+  @override
+  String get presetQwen =>
+      'Alibaba. Pago por uso. Chave: Alibaba Cloud Model Studio.';
+
+  @override
+  String get presetKimi =>
+      'Moonshot AI. Pago por uso. Chave: platform.moonshot.ai.';
+
+  @override
+  String get presetMistral =>
+      'Mistral (França). Nível gratuito com limites rígidos. Chave: console.mistral.ai.';
+
+  @override
+  String get presetOpenrouter =>
+      'Uma chave para muitos modelos (Gemini, DeepSeek, Qwen…), alguns grátis; o texto também passa pelo OpenRouter. Chave: openrouter.ai.';
 }

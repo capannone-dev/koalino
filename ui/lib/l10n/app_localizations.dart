@@ -1186,7 +1186,7 @@ abstract class AppLocalizations {
   /// No description provided for @theAiServerRefusedAccessUse.
   ///
   /// In en, this message translates to:
-  /// **'The AI server refused access. Use a server that needs no API key.'**
+  /// **'The AI server refused access. Check the connection\'s API key.'**
   String get theAiServerRefusedAccessUse;
 
   /// No description provided for @theAiServerIsBusyOr.
@@ -4521,6 +4521,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add to {name}'**
   String addTo(String name);
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'API key'**
+  String get apiKey;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'Only for online services. Kept in this device\'s keychain, sent only to this address.'**
+  String get onlyForOnlineServicesKeptIn;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'A key is saved. Leave empty to keep it.'**
+  String get aKeyIsSavedLeaveEmpty;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'Remove the saved key'**
+  String get removeTheSavedKey;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'On your computer or network: free, private, works offline (Gemma, Qwen, Llama…).'**
+  String get presetOllama;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'Same as Ollama, with a desktop app to pick models.'**
+  String get presetLmStudio;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'Google. Free tier with limits; on it Google may use what you send to improve its products. Key: aistudio.google.com.'**
+  String get presetGemini;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'Pay per use, very cheap, prepaid credit. Key: platform.deepseek.com.'**
+  String get presetDeepseek;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'Alibaba. Pay per use. Key: Alibaba Cloud Model Studio.'**
+  String get presetQwen;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'Moonshot AI. Pay per use. Key: platform.moonshot.ai.'**
+  String get presetKimi;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'Mistral (France). Free tier with tight limits. Key: console.mistral.ai.'**
+  String get presetMistral;
+
+  /// AI connection form (#138).
+  ///
+  /// In en, this message translates to:
+  /// **'One key for many models (Gemini, DeepSeek, Qwen…), some free; your text also passes through OpenRouter. Key: openrouter.ai.'**
+  String get presetOpenrouter;
 }
 
 class _AppLocalizationsDelegate

@@ -1,5 +1,5 @@
 //! Specifies the language model commands shared by the app (FFI) and the web API (#95): reading
-//! and changing the settings, keeping no API key anywhere (#117), testing a connection, and
+//! and changing the settings, keeping API keys only in the keyring (#138), testing a connection, and
 //! writing a meeting's summary with a fake model.
 
 use std::{
@@ -13,6 +13,7 @@ use super::{
     llm_commands::{
         LlmServices, new_summary_request, run_llm_command, summarize_with, summary_request_json,
     },
+    llm_settings::{LlmKeyring, MemoryLlmKeyring},
     meeting_summaries::PreparedSummary,
 };
 use crate::{
@@ -46,6 +47,7 @@ fn services(name: &str) -> (LlmServices, Arc<Mutex<Vec<String>>>) {
     let seen = Arc::clone(&built);
     let services = LlmServices::new(folder.join("db.sqlite3.llm-settings.json"), "Laptop")
         .with_transcription_settings(PathBuf::from("/nonexistent"))
+        .with_keyring(Arc::new(MemoryLlmKeyring::default()))
         .with_engine_factory(Arc::new(move |connection: &LlmConnection| {
             if let Ok(mut seen) = seen.lock() {
                 seen.push(connection.id().to_owned());
@@ -61,7 +63,7 @@ fn run(services: &LlmServices, request: Value) -> Value {
 }
 
 #[test]
-fn connections_are_saved_listed_and_no_api_key_is_kept() {
+fn connections_are_saved_listed_and_keys_stay_in_the_keyring() {
     let (services, built) = services("save");
     let empty = run(&services, json!({"command": "settings"}));
     assert_eq!(empty["ok"], true, "{empty}");
@@ -85,8 +87,10 @@ fn connections_are_saved_listed_and_no_api_key_is_kept() {
         .as_str()
         .unwrap_or_default()
         .to_owned();
-    assert!(saved["connection"].get("has_key").is_none());
+    assert_eq!(saved["connection"]["has_key"], true);
     assert!(!saved.to_string().contains("sk-ant-secret"));
+    let listed = run(&services, json!({"command": "settings"}));
+    assert!(!listed.to_string().contains("sk-ant-secret"));
 
     let anthropic = run(
         &services,
@@ -340,7 +344,10 @@ fn a_claude_code_connection_needs_no_address_or_key_and_says_whether_the_tool_is
     assert_eq!(connection["kind"], "claude_code", "{saved}");
     assert_eq!(connection["base_url"], "");
     assert_eq!(connection["model"], "");
-    assert!(connection.get("has_key").is_none());
+    assert_eq!(
+        connection["has_key"], false,
+        "Claude Code and Codex keep no key"
+    );
     assert!(connection["tool_installed"].is_boolean());
 }
 
@@ -465,4 +472,86 @@ fn a_request_is_described_for_the_app_by_its_state() {
                "by": "laptop", "error_code": "llm_tool_failed",
                "failed_at": "2026-11-14T10:00:00+00:00"})
     );
+}
+
+/// Verifies an online connection's key (#138): saved in the keyring, cleared on request, removed
+/// with the connection, and refused when it can't be a key.
+#[test]
+fn an_online_connection_keeps_its_key_in_the_keyring_only() {
+    let folder = std::env::temp_dir().join(format!("llm-keys-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
+    let keys = Arc::new(MemoryLlmKeyring::default());
+    let services = LlmServices::new(folder.join("db.sqlite3.llm-settings.json"), "Laptop")
+        .with_keyring(Arc::clone(&keys) as Arc<dyn LlmKeyring>);
+
+    let saved = run(
+        &services,
+        json!({"command": "save_connection", "label": "Gemini", "kind": "open_ai_compatible",
+               "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+               "model": "gemini-2.5-flash", "context_tokens": 1000000, "api_key": " AIza-test-key "}),
+    );
+    assert_eq!(saved["ok"], true, "{saved}");
+    let id = saved["connection"]["id"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+    assert_eq!(
+        keys.load(&id).ok().flatten().map(|key| key.to_string()),
+        Some("AIza-test-key".to_owned())
+    );
+
+    let kept = run(
+        &services,
+        json!({"command": "save_connection", "id": id, "label": "Gemini Flash", "kind": "open_ai_compatible",
+               "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+               "model": "gemini-2.5-flash", "context_tokens": 1000000}),
+    );
+    assert_eq!(
+        kept["connection"]["has_key"], true,
+        "editing without a key keeps it"
+    );
+
+    let cleared = run(
+        &services,
+        json!({"command": "save_connection", "id": id, "label": "Gemini Flash", "kind": "open_ai_compatible",
+               "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+               "model": "gemini-2.5-flash", "context_tokens": 1000000, "clear_key": true}),
+    );
+    assert_eq!(cleared["connection"]["has_key"], false);
+
+    let refused = run(
+        &services,
+        json!({"command": "save_connection", "label": "Bad", "kind": "open_ai_compatible",
+               "base_url": "https://api.deepseek.com", "model": "deepseek-chat",
+               "context_tokens": 64000, "api_key": "two words"}),
+    );
+    assert_eq!(refused["error_code"], "invalid_connection");
+
+    run(
+        &services,
+        json!({"command": "save_connection", "id": id, "label": "Gemini Flash", "kind": "open_ai_compatible",
+               "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+               "model": "gemini-2.5-flash", "context_tokens": 1000000, "api_key": "again"}),
+    );
+    let deleted = run(&services, json!({"command": "delete_connection", "id": id}));
+    assert_eq!(deleted["ok"], true);
+    assert!(
+        keys.load(&id).ok().flatten().is_none(),
+        "its key goes with it"
+    );
+}
+
+/// Verifies a key can't be saved where no keyring is available.
+#[test]
+fn without_a_keyring_a_key_is_refused() {
+    let folder = std::env::temp_dir().join(format!("llm-nokeys-{}", uuid::Uuid::new_v4()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
+    let services = LlmServices::new(folder.join("db.sqlite3.llm-settings.json"), "Laptop");
+    let refused = run(
+        &services,
+        json!({"command": "save_connection", "label": "Kimi", "kind": "open_ai_compatible",
+               "base_url": "https://api.moonshot.ai/v1", "model": "kimi-k2",
+               "context_tokens": 128000, "api_key": "sk-test"}),
+    );
+    assert_eq!(refused["error_code"], "keychain_failed");
 }

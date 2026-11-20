@@ -54,7 +54,7 @@ use crate::{
         LlmServices, handoff_with, new_summary_request, run_llm_command, summarize_with,
         summary_json, summary_request_json,
     },
-    llm_settings::{forget_sealed_api_keys, llm_settings_file_for},
+    llm_settings::{PlatformLlmKeyring, forget_sealed_api_keys, llm_settings_file_for},
     meeting_summaries::{
         MeetingPromptError, PreparedSummary, load_summary, load_summary_request, prepare_summary,
         set_meeting_prompt, store_answered_request, store_summary, store_summary_request,
@@ -82,6 +82,10 @@ pub(crate) fn services() -> Arc<LlmServices> {
             app_setting("NOTE_TAKER_DEVICE_NAME").unwrap_or_else(|| String::from("this device"));
         Arc::new(
             LlmServices::new(llm_settings_file_for(&database), &device_name)
+                .with_keyring(Arc::new(PlatformLlmKeyring::new(
+                    key_directory.clone(),
+                    crate::ffi::provided_encryption_key(),
+                )))
                 .with_transcription_settings(paths.settings_file)
                 .with_saved_device_name(&database),
         )

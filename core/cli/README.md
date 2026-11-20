@@ -197,7 +197,7 @@ paired computer has got. `--on-paired-computer` asks a paired computer to write 
 connection (#107): the request goes into the meeting document, which syncs, and nothing is sent to
 an AI server from this device; `--cancel-request` withdraws it. `ai` manages the connections
 (#95): `add` saves an OpenAI-compatible server on this computer or the local network (Koalino
-keeps no API keys, #117); `test`
+online services with an API key are added in the app or the web UI, #138); `test`
 sends a one-line request holding no meeting content; `auto on|off` turns automatic summaries on or
 off.
 

@@ -137,11 +137,7 @@ fn an_openai_compatible_request_carries_system_text_and_data_url_images() {
     assert_eq!(answer.map(|answer| answer.text), Ok("Notes".to_owned()));
     let (url, headers, body) = transport.only_request();
     assert_eq!(url, "https://api.mistral.ai/v1/chat/completions");
-    assert_eq!(
-        header(&headers, "authorization"),
-        None,
-        "no API key is sent"
-    );
+    assert_eq!(header(&headers, "authorization"), None, "no key, no header");
     assert_eq!(body["model"], "mistral-large");
     assert_eq!(body["stream"], false);
     assert_eq!(
@@ -379,5 +375,35 @@ fn every_server_connection_builds_without_a_key() {
         "http://127.0.0.1:8080/v1",
         "local",
     );
-    assert!(engine_for(&local).is_ok());
+    assert!(engine_for(&local, None).is_ok());
+}
+
+/// Verifies an online connection's key goes as a Bearer header over HTTPS, and to this computer,
+/// but never in clear across a network (#138).
+#[test]
+fn an_api_key_goes_only_over_https_or_to_this_computer() {
+    let answer = json!({"choices": [{"message": {"content": "OK"}, "finish_reason": "stop"}]});
+    for (address, carries_key) in [
+        ("https://api.deepseek.com", true),
+        ("http://127.0.0.1:11434/v1", true),
+        ("http://localhost:1234/v1", true),
+        ("http://192.168.1.20:11434/v1", false),
+    ] {
+        let transport = RecordingTransport::answering(200, answer.clone());
+        let engine = OpenAiCompatibleEngine::new(
+            &connection(LlmKind::OpenAiCompatible, address, "model"),
+            Arc::new(transport.clone()),
+        )
+        .with_api_key(Some(zeroize::Zeroizing::new("sk-test".to_owned())));
+        assert!(engine.complete(&request_with_image()).is_ok());
+        let (_, headers, _) = transport.only_request();
+        assert_eq!(
+            header(&headers, "authorization").is_some(),
+            carries_key,
+            "{address}"
+        );
+        if carries_key {
+            assert_eq!(header(&headers, "authorization"), Some("Bearer sk-test"));
+        }
+    }
 }

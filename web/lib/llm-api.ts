@@ -24,6 +24,8 @@ export type LlmConnection = {
   is_default: boolean;
   /** For Claude Code and Codex: whether the tool was found on the server's computer. */
   tool_installed?: boolean;
+  /** Whether an API key is saved for it (#138); the key itself is never sent back. */
+  has_key?: boolean;
 };
 
 /** The AI settings. */
@@ -46,6 +48,10 @@ export type LlmConnectionInput = {
   base_url: string;
   model: string;
   context_tokens: number;
+  /** A new API key for an online service (#138); absent keeps the saved one. */
+  api_key?: string;
+  /** Deletes the saved key. */
+  clear_key?: boolean;
 };
 
 /** A meeting's stored summary. */
@@ -259,10 +265,23 @@ export async function setMeetingPrompt(meetingId: string, prompt: string | null)
   await request(`/api/meetings/${encodeURIComponent(meetingId)}/summary-prompt`, json("PUT", { prompt }));
 }
 
-/** Ready-made connections the Settings form can start from. */
-export const connectionPresets = (t: Translate) : { name: string; input: Omit<LlmConnectionInput, "label"> }[] => [
-  { name: t("localServerOllama"), input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:11434/v1", model: "llama3.1:8b", context_tokens: 8192 } },
-  { name: "LM Studio", input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:1234/v1", model: "qwen3-8b", context_tokens: 32768 } },
+/** A ready-made connection: its fields, and one line on what it is (#138). */
+export type ConnectionPreset = {
+  name: string;
+  description?: string;
+  input: Omit<LlmConnectionInput, "label" | "api_key" | "clear_key">;
+};
+
+/** Ready-made connections the Settings form can start from; online services need an API key. */
+export const connectionPresets = (t: Translate): ConnectionPreset[] => [
+  { name: t("localServerOllama"), description: t("presetOllama"), input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:11434/v1", model: "llama3.1:8b", context_tokens: 8192 } },
+  { name: "LM Studio", description: t("presetLmStudio"), input: { kind: "open_ai_compatible", base_url: "http://192.168.1.10:1234/v1", model: "qwen3-8b", context_tokens: 32768 } },
   { name: t("claudeCodeClaudePlan"), input: { kind: "claude_code", base_url: "", model: "", context_tokens: 200000 } },
-  { name: t("codexChatgptPlan"), input: { kind: "codex", base_url: "", model: "", context_tokens: 200000 } }
+  { name: t("codexChatgptPlan"), input: { kind: "codex", base_url: "", model: "", context_tokens: 200000 } },
+  { name: "Gemini", description: t("presetGemini"), input: { kind: "open_ai_compatible", base_url: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.5-flash", context_tokens: 1000000 } },
+  { name: "DeepSeek", description: t("presetDeepseek"), input: { kind: "open_ai_compatible", base_url: "https://api.deepseek.com", model: "deepseek-chat", context_tokens: 128000 } },
+  { name: "Qwen", description: t("presetQwen"), input: { kind: "open_ai_compatible", base_url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", model: "qwen-plus", context_tokens: 131072 } },
+  { name: "Kimi", description: t("presetKimi"), input: { kind: "open_ai_compatible", base_url: "https://api.moonshot.ai/v1", model: "kimi-latest", context_tokens: 131072 } },
+  { name: "Mistral", description: t("presetMistral"), input: { kind: "open_ai_compatible", base_url: "https://api.mistral.ai/v1", model: "mistral-medium-latest", context_tokens: 128000 } },
+  { name: "OpenRouter", description: t("presetOpenrouter"), input: { kind: "open_ai_compatible", base_url: "https://openrouter.ai/api/v1", model: "google/gemini-2.5-flash", context_tokens: 1000000 } }
 ];

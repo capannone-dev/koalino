@@ -678,7 +678,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get theAiServerRefusedAccessUse =>
-      'Il server IA ha rifiutato l\'accesso. Usa un server che non richiede una chiave API.';
+      'Il server IA ha rifiutato l\'accesso. Controlla la chiave API della connessione.';
 
   @override
   String get theAiServerIsBusyOr =>
@@ -2833,4 +2833,50 @@ class AppLocalizationsIt extends AppLocalizations {
   String addTo(String name) {
     return 'Aggiungi a $name';
   }
+
+  @override
+  String get apiKey => 'Chiave API';
+
+  @override
+  String get onlyForOnlineServicesKeptIn =>
+      'Solo per servizi online. Conservata nel portachiavi di questo dispositivo, inviata solo a questo indirizzo.';
+
+  @override
+  String get aKeyIsSavedLeaveEmpty =>
+      'Una chiave è salvata. Lascia vuoto per mantenerla.';
+
+  @override
+  String get removeTheSavedKey => 'Rimuovi la chiave salvata';
+
+  @override
+  String get presetOllama =>
+      'Sul tuo computer o in rete: gratuito, privato, funziona offline (Gemma, Qwen, Llama…).';
+
+  @override
+  String get presetLmStudio =>
+      'Come Ollama, con un\'app desktop per scegliere i modelli.';
+
+  @override
+  String get presetGemini =>
+      'Google. Piano gratuito con limiti; con esso Google può usare ciò che invii per migliorare i suoi prodotti. Chiave: aistudio.google.com.';
+
+  @override
+  String get presetDeepseek =>
+      'A consumo, molto economico, credito prepagato. Chiave: platform.deepseek.com.';
+
+  @override
+  String get presetQwen =>
+      'Alibaba. A consumo. Chiave: Alibaba Cloud Model Studio.';
+
+  @override
+  String get presetKimi =>
+      'Moonshot AI. A consumo. Chiave: platform.moonshot.ai.';
+
+  @override
+  String get presetMistral =>
+      'Mistral (Francia). Piano gratuito con limiti stretti. Chiave: console.mistral.ai.';
+
+  @override
+  String get presetOpenrouter =>
+      'Una chiave per molti modelli (Gemini, DeepSeek, Qwen…), alcuni gratuiti; il testo passa anche da OpenRouter. Chiave: openrouter.ai.';
 }

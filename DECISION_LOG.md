@@ -3926,3 +3926,23 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   unmatched voices with Play/listen and checkboxes, and "Add to <name>" gives the ticked ones to
   them (one voice: a single assignment; several: one group naming). No core change: assigning to
   an existing name already adds voice samples to that person.
+
+## 2026-11-20 — API keys for online OpenAI-compatible services, partly reversing #117 (#138)
+
+- **Request:** the owner wants other online models (Gemini, DeepSeek, Qwen, Kimi, Mistral,
+  OpenRouter) offered as OpenAI-compatible connections with a one-line description each. Signing
+  in to fetch keys automatically was dropped: these services offer no OAuth flow for API keys.
+- **Decision (option A):** OpenAI-compatible connections may again have an API key, entered by
+  hand. It is write-only: stored in the platform keychain under `note-taker-llm-<id>` (on Android,
+  and wherever the host provides the database key, a file `llm-<id>.sealed` sealed under it),
+  never in the settings file, an answer or a log; answers carry only `has_key`. Editing without a
+  key keeps the saved one; `clear_key` deletes it; deleting the connection deletes it.
+- The key goes as `Authorization: Bearer` only over HTTPS or plain HTTP to loopback, so a key
+  typed for a LAN server is never sent in clear across the network.
+- `forget_sealed_api_keys` now deletes only the old OpenAI transcription key; `llm-*.sealed` files
+  are connection keys again. The OpenAI transcription key and Anthropic connections stay removed.
+- Presets carry a short description (cost, free-tier data use, where to get the key). Model names
+  are starting points; Test checks them.
+- Without a keychain (headless server with no Secret Service) a key can't be saved:
+  `keychain_failed`, and the connection is not changed.
+

@@ -178,7 +178,7 @@
   "thisMeetingHasNoTranscriptOr": "لا يحتوي هذا الاجتماع على نص مفرَّغ أو ملاحظات بعد.",
   "thisMeetingIsTooLongFor": "هذا الاجتماع طويل جدًا لهذا الاتصال. اختر اتصالاً بسياق أكبر.",
   "theAiServerCouldNotBe2": "تعذّر الوصول إلى خادم الذكاء الاصطناعي.",
-  "theAiServerRefusedAccessUse": "رفض خادم الذكاء الاصطناعي الوصول. استخدم خادمًا لا يحتاج إلى مفتاح API.",
+  "theAiServerRefusedAccessUse": "رفض خادم الذكاء الاصطناعي الوصول. تحقق من مفتاح API للاتصال.",
   "theAiServerIsBusyOr": "خادم الذكاء الاصطناعي مشغول أو تجاوز الحد. حاول لاحقًا.",
   "theAiServerRejectedTheRequest2": "رفض خادم الذكاء الاصطناعي الطلب. تحقق من اسم النموذج.",
   "theAiServerFailedTryAgain": "فشل خادم الذكاء الاصطناعي. حاول مرة أخرى.",
@@ -733,5 +733,17 @@
   "addToASavedPerson": "إضافة إلى شخص محفوظ",
   "addVoicesTo": "إضافة أصوات إلى {name}",
   "tickTheVoicesThatAre": "لم يُتعرَّف على هذه الأصوات على أنها لأي شخص. حدّد أصوات {name}؛ استخدم تشغيل للتحقق.",
-  "addTo": "إضافة إلى {name}"
+  "addTo": "إضافة إلى {name}",
+  "apiKey": "مفتاح API",
+  "onlyForOnlineServicesKeptIn": "للخدمات عبر الإنترنت فقط. يُحفظ في سلسلة مفاتيح هذا الجهاز ويُرسل إلى هذا العنوان فقط.",
+  "aKeyIsSavedLeaveEmpty": "يوجد مفتاح محفوظ. اتركه فارغًا للإبقاء عليه.",
+  "removeTheSavedKey": "إزالة المفتاح المحفوظ",
+  "presetOllama": "على حاسوبك أو شبكتك: مجاني وخاص ويعمل دون اتصال (Gemma وQwen وLlama…).",
+  "presetLmStudio": "مثل Ollama، مع تطبيق سطح مكتب لاختيار النماذج.",
+  "presetGemini": "Google. فئة مجانية بحدود؛ وفيها قد تستخدم Google ما ترسله لتحسين منتجاتها. المفتاح: aistudio.google.com.",
+  "presetDeepseek": "الدفع حسب الاستخدام، رخيص جدًا، برصيد مسبق. المفتاح: platform.deepseek.com.",
+  "presetQwen": "Alibaba. الدفع حسب الاستخدام. المفتاح: Alibaba Cloud Model Studio.",
+  "presetKimi": "Moonshot AI. الدفع حسب الاستخدام. المفتاح: platform.moonshot.ai.",
+  "presetMistral": "Mistral (فرنسا). فئة مجانية بحدود ضيقة. المفتاح: console.mistral.ai.",
+  "presetOpenrouter": "مفتاح واحد لنماذج كثيرة (Gemini وDeepSeek وQwen…)، بعضها مجاني؛ ويمر النص أيضًا عبر OpenRouter. المفتاح: openrouter.ai."
 }

@@ -178,7 +178,7 @@
   "thisMeetingHasNoTranscriptOr": "У этой встречи пока нет расшифровки или заметок.",
   "thisMeetingIsTooLongFor": "Эта встреча слишком длинная для этого подключения. Выберите подключение с большим контекстом.",
   "theAiServerCouldNotBe2": "Не удалось связаться с ИИ-сервером.",
-  "theAiServerRefusedAccessUse": "ИИ-сервер отказал в доступе. Используйте сервер, которому не нужен API-ключ.",
+  "theAiServerRefusedAccessUse": "ИИ-сервер отказал в доступе. Проверьте API-ключ подключения.",
   "theAiServerIsBusyOr": "ИИ-сервер занят или превышен лимит. Попробуйте позже.",
   "theAiServerRejectedTheRequest2": "ИИ-сервер отклонил запрос. Проверьте название модели.",
   "theAiServerFailedTryAgain": "Ошибка ИИ-сервера. Попробуйте ещё раз.",
@@ -733,5 +733,17 @@
   "addToASavedPerson": "Добавить сохранённому человеку",
   "addVoicesTo": "Добавить голоса: {name}",
   "tickTheVoicesThatAre": "Эти голоса ни с кем не сопоставлены. Отметьте голоса {name}; кнопка «Воспроизвести» поможет проверить.",
-  "addTo": "Добавить: {name}"
+  "addTo": "Добавить: {name}",
+  "apiKey": "API-ключ",
+  "onlyForOnlineServicesKeptIn": "Только для онлайн-сервисов. Хранится в связке ключей этого устройства и отправляется только на этот адрес.",
+  "aKeyIsSavedLeaveEmpty": "Ключ сохранён. Оставьте пустым, чтобы сохранить его.",
+  "removeTheSavedKey": "Удалить сохранённый ключ",
+  "presetOllama": "На вашем компьютере или в сети: бесплатно, приватно, работает офлайн (Gemma, Qwen, Llama…).",
+  "presetLmStudio": "Как Ollama, с настольным приложением для выбора моделей.",
+  "presetGemini": "Google. Бесплатный тариф с ограничениями; на нём Google может использовать отправленное для улучшения продуктов. Ключ: aistudio.google.com.",
+  "presetDeepseek": "Оплата за использование, очень дёшево, предоплата. Ключ: platform.deepseek.com.",
+  "presetQwen": "Alibaba. Оплата за использование. Ключ: Alibaba Cloud Model Studio.",
+  "presetKimi": "Moonshot AI. Оплата за использование. Ключ: platform.moonshot.ai.",
+  "presetMistral": "Mistral (Франция). Бесплатный тариф со строгими лимитами. Ключ: console.mistral.ai.",
+  "presetOpenrouter": "Один ключ для многих моделей (Gemini, DeepSeek, Qwen…), часть бесплатно; текст также проходит через OpenRouter. Ключ: openrouter.ai."
 }

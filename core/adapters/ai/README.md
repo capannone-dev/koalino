@@ -55,4 +55,5 @@ The patched whisper.cpp is in `third_party/whisper-rs-sys`; its README lists the
 
 `llm/` holds the adapters that send meeting text and photos to a language model for summaries:
 OpenAI-compatible Chat Completions servers on this device or the local network, and Claude Code
-and Codex signed in on this computer. No API keys (#117). See `llm/README.md`.
+and Codex signed in on this computer, and online Chat Completions services with an API key
+(#138). See `llm/README.md`.

@@ -135,7 +135,7 @@ fn a_hand_edited_file_loses_only_what_is_no_longer_valid() {
 }
 
 #[test]
-fn sealed_api_keys_of_an_earlier_version_are_deleted() {
+fn the_old_openai_transcription_key_is_deleted_but_connection_keys_stay() {
     let keys = folder("old-keys");
     for name in [
         "llm-a.sealed",
@@ -146,9 +146,12 @@ fn sealed_api_keys_of_an_earlier_version_are_deleted() {
         std::fs::write(keys.join(name), b"sealed").unwrap_or_else(|e| panic!("{e}"));
     }
 
-    assert_eq!(forget_sealed_api_keys(&keys), 3);
+    assert_eq!(forget_sealed_api_keys(&keys), 1);
 
-    assert!(!keys.join("llm-a.sealed").exists());
+    assert!(
+        keys.join("llm-a.sealed").exists(),
+        "connection keys are kept again (#138)"
+    );
     assert!(
         !keys.join("openai_key.sealed").exists(),
         "the OpenAI transcription key too"

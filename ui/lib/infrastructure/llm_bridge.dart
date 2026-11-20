@@ -59,6 +59,7 @@ final class LlmConnection {
     required this.plainHttp,
     required this.isDefault,
     this.toolInstalled = false,
+    this.hasKey = false,
   });
 
   /// Reads one connection from the core's JSON.
@@ -74,6 +75,7 @@ final class LlmConnection {
         plainHttp: json['plain_http'] as bool? ?? false,
         isDefault: json['is_default'] as bool? ?? false,
         toolInstalled: json['tool_installed'] as bool? ?? false,
+        hasKey: json['has_key'] as bool? ?? false,
       );
 
   /// Stable identifier chosen by the core.
@@ -102,6 +104,9 @@ final class LlmConnection {
 
   /// For Claude Code and Codex: whether the tool was found on this computer.
   final bool toolInstalled;
+
+  /// Whether an API key is saved for it (#138); the key itself never reaches the app's UI.
+  final bool hasKey;
 }
 
 /// What saving a connection sends.
@@ -113,6 +118,8 @@ final class LlmConnectionInput {
     required this.baseUrl,
     required this.model,
     required this.contextTokens,
+    this.apiKey,
+    this.clearKey = false,
   });
 
   final String label;
@@ -120,19 +127,32 @@ final class LlmConnectionInput {
   final String baseUrl;
   final String model;
   final int contextTokens;
+
+  /// A new API key to save (#138); null or blank keeps the saved one.
+  final String? apiKey;
+
+  /// Whether to delete the saved key.
+  final bool clearKey;
 }
 
 /// A ready-made starting point for a connection.
 final class LlmPreset {
-  /// Creates a preset.
+  /// Creates a preset; `description` says in a line what it is and what it costs (#138).
   const LlmPreset(
-      this.name, this.kind, this.baseUrl, this.model, this.contextTokens);
+      this.name, this.kind, this.baseUrl, this.model, this.contextTokens,
+      [this.description = '', this.needsKey = false]);
 
   final String name;
   final LlmKind kind;
   final String baseUrl;
   final String model;
   final int contextTokens;
+
+  /// One line on the service: who runs it, its cost, where to get a key.
+  final String description;
+
+  /// Whether the service needs an API key.
+  final bool needsKey;
 }
 
 /// Whether this device can run Claude Code or Codex: desktops only.
@@ -147,12 +167,65 @@ List<LlmPreset> get availableLlmPresets => <LlmPreset>[
 
 /// The presets offered when adding a connection, matching the web's.
 List<LlmPreset> get llmPresets => <LlmPreset>[
-      LlmPreset(l10n.localServerOllama, LlmKind.openAiCompatible,
-          'http://192.168.1.10:11434/v1', 'llama3.1:8b', 8192),
-      LlmPreset('LM Studio', LlmKind.openAiCompatible,
-          'http://192.168.1.10:1234/v1', 'qwen3-8b', 32768),
+      LlmPreset(
+          l10n.localServerOllama,
+          LlmKind.openAiCompatible,
+          'http://192.168.1.10:11434/v1',
+          'llama3.1:8b',
+          8192,
+          l10n.presetOllama),
+      LlmPreset(
+          'LM Studio',
+          LlmKind.openAiCompatible,
+          'http://192.168.1.10:1234/v1',
+          'qwen3-8b',
+          32768,
+          l10n.presetLmStudio),
       LlmPreset(l10n.claudeCodeClaudePlan, LlmKind.claudeCode, '', '', 200000),
       LlmPreset(l10n.codexChatgptPlan, LlmKind.codex, '', '', 200000),
+      // Online services with an API key (#138). Model names change often: Test checks them.
+      LlmPreset(
+          'Gemini',
+          LlmKind.openAiCompatible,
+          'https://generativelanguage.googleapis.com/v1beta/openai',
+          'gemini-2.5-flash',
+          1000000,
+          l10n.presetGemini,
+          true),
+      LlmPreset(
+          'DeepSeek',
+          LlmKind.openAiCompatible,
+          'https://api.deepseek.com',
+          'deepseek-chat',
+          128000,
+          l10n.presetDeepseek,
+          true),
+      LlmPreset(
+          'Qwen',
+          LlmKind.openAiCompatible,
+          'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+          'qwen-plus',
+          131072,
+          l10n.presetQwen,
+          true),
+      LlmPreset('Kimi', LlmKind.openAiCompatible, 'https://api.moonshot.ai/v1',
+          'kimi-latest', 131072, l10n.presetKimi, true),
+      LlmPreset(
+          'Mistral',
+          LlmKind.openAiCompatible,
+          'https://api.mistral.ai/v1',
+          'mistral-medium-latest',
+          128000,
+          l10n.presetMistral,
+          true),
+      LlmPreset(
+          'OpenRouter',
+          LlmKind.openAiCompatible,
+          'https://openrouter.ai/api/v1',
+          'google/gemini-2.5-flash',
+          1000000,
+          l10n.presetOpenrouter,
+          true),
     ];
 
 /// The AI settings.
@@ -432,6 +505,9 @@ final class LlmBridge {
       'base_url': input.baseUrl,
       'model': input.model,
       'context_tokens': input.contextTokens,
+      if (input.apiKey case final String key when key.trim().isNotEmpty)
+        'api_key': key.trim(),
+      if (input.clearKey) 'clear_key': true,
     });
     return LlmConnection.fromJson(
         answer['connection']! as Map<String, Object?>);

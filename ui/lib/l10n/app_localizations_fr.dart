@@ -682,7 +682,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get theAiServerRefusedAccessUse =>
-      'Le serveur IA a refusé l\'accès. Utilisez un serveur qui ne demande pas de clé API.';
+      'Le serveur d\'IA a refusé l\'accès. Vérifiez la clé API de la connexion.';
 
   @override
   String get theAiServerIsBusyOr =>
@@ -2833,4 +2833,50 @@ class AppLocalizationsFr extends AppLocalizations {
   String addTo(String name) {
     return 'Ajouter à $name';
   }
+
+  @override
+  String get apiKey => 'Clé API';
+
+  @override
+  String get onlyForOnlineServicesKeptIn =>
+      'Seulement pour les services en ligne. Gardée dans le trousseau de cet appareil, envoyée seulement à cette adresse.';
+
+  @override
+  String get aKeyIsSavedLeaveEmpty =>
+      'Une clé est enregistrée. Laissez vide pour la garder.';
+
+  @override
+  String get removeTheSavedKey => 'Supprimer la clé enregistrée';
+
+  @override
+  String get presetOllama =>
+      'Sur votre ordinateur ou réseau : gratuit, privé, fonctionne hors ligne (Gemma, Qwen, Llama…).';
+
+  @override
+  String get presetLmStudio =>
+      'Comme Ollama, avec une application de bureau pour choisir les modèles.';
+
+  @override
+  String get presetGemini =>
+      'Google. Offre gratuite limitée ; Google peut alors utiliser ce que vous envoyez pour améliorer ses produits. Clé : aistudio.google.com.';
+
+  @override
+  String get presetDeepseek =>
+      'Paiement à l\'usage, très bon marché, crédit prépayé. Clé : platform.deepseek.com.';
+
+  @override
+  String get presetQwen =>
+      'Alibaba. Paiement à l\'usage. Clé : Alibaba Cloud Model Studio.';
+
+  @override
+  String get presetKimi =>
+      'Moonshot AI. Paiement à l\'usage. Clé : platform.moonshot.ai.';
+
+  @override
+  String get presetMistral =>
+      'Mistral (France). Offre gratuite aux limites strictes. Clé : console.mistral.ai.';
+
+  @override
+  String get presetOpenrouter =>
+      'Une clé pour de nombreux modèles (Gemini, DeepSeek, Qwen…), certains gratuits ; le texte passe aussi par OpenRouter. Clé : openrouter.ai.';
 }

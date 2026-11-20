@@ -3,16 +3,28 @@
 //! paired devices' summary requests (#107).
 //!
 //! The settings live per device in `<db>.llm-settings.json`, beside the transcription settings.
-//! The app keeps no API keys: a connection is a server the owner runs, or Claude Code or Codex
-//! signed in on this computer. Connections of a kind removed since (Anthropic, which needed a key)
-//! are dropped when the file is read.
+//! API keys never do (#138): an online connection's key is kept in the platform keychain under
+//! `note-taker-llm-<id>`, or on Android in `<key folder>/llm-<id>.sealed`, sealed under the
+//! Keystore-protected database key. Connections of a removed kind (Anthropic) are dropped when the
+//! file is read.
 
 use std::{
     fs, io,
     path::{Path, PathBuf},
 };
 
-use crate::domain::llm::{LlmConnection, PromptTemplate, PromptTemplateError};
+use zeroize::Zeroizing;
+
+use crate::{
+    adapters::keychain::{
+        platform_keychain::PlatformKeychain, sealed_file_keychain::SealedFileKeychain,
+    },
+    domain::{
+        errors::CryptoError,
+        llm::{LlmConnection, PromptTemplate, PromptTemplateError},
+    },
+    ports::crypto::KeychainStore,
+};
 
 /// Why a default could not be chosen.
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
@@ -276,12 +288,11 @@ pub fn save_llm_settings(settings_file: &Path, settings: &SavedLlmSettings) -> i
     fs::rename(&temporary, settings_file)
 }
 
-/// Deletes the sealed API key files an earlier version kept on Android (#117): the connections'
-/// `llm-<id>.sealed` and the transcription key `openai_key.sealed`.
+/// Deletes the sealed OpenAI transcription key an earlier version kept on Android (#117).
+/// Connection keys (`llm-<id>.sealed`) are kept again since #138.
 ///
 /// Inputs: The folder for sealed keys. Outputs: How many files were deleted. Side effects: Removes
-/// files; a folder that cannot be read deletes nothing. Keys an earlier desktop version put in the
-/// platform keychain stay there: asking the keychain at start-up can prompt to unlock it.
+/// files; a folder that cannot be read deletes nothing.
 pub fn forget_sealed_api_keys(key_directory: &Path) -> usize {
     let Ok(entries) = fs::read_dir(key_directory) else {
         return 0;
@@ -291,8 +302,118 @@ pub fn forget_sealed_api_keys(key_directory: &Path) -> usize {
         .filter(|entry| {
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            name == "openai_key.sealed" || (name.starts_with("llm-") && name.ends_with(".sealed"))
+            name == "openai_key.sealed"
         })
         .filter(|entry| fs::remove_file(entry.path()).is_ok())
         .count()
+}
+
+/// Prefix of each connection's keychain service (#138; the name the app used before #117).
+const LLM_KEYCHAIN_SERVICE_PREFIX: &str = "note-taker-llm-";
+
+/// Keeps the API key of each online connection (#138); tests use an in-memory one.
+pub trait LlmKeyring: Send + Sync {
+    /// Reads a connection's key. Outputs: The key, `None` when none is saved, or the store's
+    /// error; never logged. Side effects: Queries the store.
+    fn load(&self, connection_id: &str) -> Result<Option<Zeroizing<String>>, CryptoError>;
+    /// Saves a connection's key. Side effects: Writes the store.
+    fn save(&self, connection_id: &str, key: &str) -> Result<(), CryptoError>;
+    /// Deletes a connection's key; a missing one is not an error. Side effects: Writes the store.
+    fn remove(&self, connection_id: &str) -> Result<(), CryptoError>;
+}
+
+/// The platform keychain (`note-taker-llm-<id>`), or on Android and wherever the host provides
+/// the database key, a file `llm-<id>.sealed` sealed under that key.
+pub struct PlatformLlmKeyring {
+    key_directory: PathBuf,
+    host_key: Option<Zeroizing<Vec<u8>>>,
+}
+
+impl PlatformLlmKeyring {
+    /// Creates the keyring.
+    ///
+    /// Inputs: The folder for sealed keys and the host-provided database key (Android).
+    /// Outputs: The keyring. Side effects: None.
+    pub fn new(key_directory: PathBuf, host_key: Option<Vec<u8>>) -> Self {
+        Self {
+            key_directory,
+            host_key: host_key.map(Zeroizing::new),
+        }
+    }
+
+    /// The store for one connection. Side effects: May initialize the platform store.
+    fn store(&self, connection_id: &str) -> ConnectionKeyStore {
+        if cfg!(target_os = "android") || self.host_key.is_some() {
+            ConnectionKeyStore::Sealed(SealedFileKeychain::new(
+                self.key_directory
+                    .join(format!("llm-{connection_id}.sealed")),
+                self.host_key.as_ref().map(|key| key.to_vec()),
+            ))
+        } else {
+            ConnectionKeyStore::Platform(PlatformKeychain::for_account(
+                &format!("{LLM_KEYCHAIN_SERVICE_PREFIX}{connection_id}"),
+                "api-key",
+                "Koalino AI connection key",
+            ))
+        }
+    }
+}
+
+/// Where one connection's key is kept.
+enum ConnectionKeyStore {
+    /// The operating system's credential store.
+    Platform(PlatformKeychain),
+    /// A file sealed under the host-provided database key.
+    Sealed(SealedFileKeychain),
+}
+
+impl LlmKeyring for PlatformLlmKeyring {
+    fn load(&self, connection_id: &str) -> Result<Option<Zeroizing<String>>, CryptoError> {
+        let stored = match self.store(connection_id) {
+            ConnectionKeyStore::Platform(store) => store.load_key(),
+            ConnectionKeyStore::Sealed(store) => store.load_key(),
+        }?;
+        Ok(stored.and_then(|bytes| String::from_utf8(bytes.to_vec()).ok().map(Zeroizing::new)))
+    }
+    fn save(&self, connection_id: &str, key: &str) -> Result<(), CryptoError> {
+        match self.store(connection_id) {
+            ConnectionKeyStore::Platform(store) => store.store_key(key.as_bytes()),
+            ConnectionKeyStore::Sealed(store) => store.store_key(key.as_bytes()),
+        }
+    }
+    fn remove(&self, connection_id: &str) -> Result<(), CryptoError> {
+        match self.store(connection_id) {
+            ConnectionKeyStore::Platform(store) => store.delete_key(),
+            ConnectionKeyStore::Sealed(store) => store.delete_key(),
+        }
+    }
+}
+
+/// Keys kept in memory, for tests.
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct MemoryLlmKeyring(std::sync::Mutex<std::collections::HashMap<String, String>>);
+
+#[cfg(test)]
+impl LlmKeyring for MemoryLlmKeyring {
+    fn load(&self, connection_id: &str) -> Result<Option<Zeroizing<String>>, CryptoError> {
+        Ok(self
+            .0
+            .lock()
+            .ok()
+            .and_then(|keys| keys.get(connection_id).cloned())
+            .map(Zeroizing::new))
+    }
+    fn save(&self, connection_id: &str, key: &str) -> Result<(), CryptoError> {
+        if let Ok(mut keys) = self.0.lock() {
+            keys.insert(connection_id.to_owned(), key.to_owned());
+        }
+        Ok(())
+    }
+    fn remove(&self, connection_id: &str) -> Result<(), CryptoError> {
+        if let Ok(mut keys) = self.0.lock() {
+            keys.remove(connection_id);
+        }
+        Ok(())
+    }
 }

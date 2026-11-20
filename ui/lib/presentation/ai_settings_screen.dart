@@ -443,6 +443,15 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
       text:
           '${widget.existing?.contextTokens ?? llmPresets.first.contextTokens}');
   late LlmKind _kind = widget.existing?.kind ?? llmPresets.first.kind;
+
+  /// A new API key (#138); empty keeps the saved one.
+  final TextEditingController _apiKey = TextEditingController();
+
+  /// Whether the saved key is to be deleted.
+  bool _clearKey = false;
+
+  /// The preset last applied, whose description is shown.
+  LlmPreset? _preset;
   String? _error;
 
   @override
@@ -452,6 +461,7 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
       _baseUrl,
       _model,
       _context,
+      _apiKey,
     ]) {
       field.dispose();
     }
@@ -460,6 +470,7 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
 
   /// Fills the fields from a preset.
   void _applyPreset(LlmPreset preset) => setState(() {
+        _preset = preset;
         _kind = preset.kind;
         _baseUrl.text = preset.baseUrl;
         _model.text = preset.model;
@@ -494,6 +505,8 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
       baseUrl: _kind.isLocalCli ? '' : _baseUrl.text.trim(),
       model: _model.text.trim(),
       contextTokens: contextTokens,
+      apiKey: _kind == LlmKind.openAiCompatible ? _apiKey.text.trim() : null,
+      clearKey: _kind == LlmKind.openAiCompatible && _clearKey,
     ));
   }
 
@@ -517,11 +530,22 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
                   children: <Widget>[
                     for (final LlmPreset preset in availableLlmPresets)
                       ActionChip(
+                        key: ValueKey<String>('preset-${preset.name}'),
+                        avatar: preset.needsKey
+                            ? const Icon(Icons.public, size: 16)
+                            : null,
                         label: Text(preset.name),
                         onPressed: () => _applyPreset(preset),
                       ),
                   ],
                 ),
+                if (_preset case final LlmPreset preset
+                    when preset.description.isNotEmpty)
+                  Padding(
+                    key: const ValueKey<String>('preset-description'),
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(preset.description),
+                  ),
                 const SizedBox(height: 12),
               ],
               TextField(
@@ -569,6 +593,33 @@ final class _ConnectionDialogState extends State<_ConnectionDialog> {
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(labelText: l10n.contextTokens),
               ),
+              if (_kind == LlmKind.openAiCompatible) ...<Widget>[
+                TextField(
+                  key: const ValueKey<String>('api-key'),
+                  controller: _apiKey,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  enabled: !_clearKey,
+                  decoration: InputDecoration(
+                    labelText: l10n.apiKey,
+                    helperText: widget.existing?.hasKey ?? false
+                        ? l10n.aKeyIsSavedLeaveEmpty
+                        : l10n.onlyForOnlineServicesKeptIn,
+                    helperMaxLines: 3,
+                  ),
+                ),
+                if (widget.existing?.hasKey ?? false)
+                  CheckboxListTile(
+                    key: const ValueKey<String>('clear-key'),
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: _clearKey,
+                    onChanged: (bool? clear) =>
+                        setState(() => _clearKey = clear ?? false),
+                    title: Text(l10n.removeTheSavedKey),
+                  ),
+              ],
               if (_error case final String error)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),

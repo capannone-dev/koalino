@@ -667,7 +667,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get theAiServerRefusedAccessUse =>
-      'ИИ-сервер отказал в доступе. Используйте сервер, которому не нужен API-ключ.';
+      'ИИ-сервер отказал в доступе. Проверьте API-ключ подключения.';
 
   @override
   String get theAiServerIsBusyOr =>
@@ -2838,4 +2838,50 @@ class AppLocalizationsRu extends AppLocalizations {
   String addTo(String name) {
     return 'Добавить: $name';
   }
+
+  @override
+  String get apiKey => 'API-ключ';
+
+  @override
+  String get onlyForOnlineServicesKeptIn =>
+      'Только для онлайн-сервисов. Хранится в связке ключей этого устройства и отправляется только на этот адрес.';
+
+  @override
+  String get aKeyIsSavedLeaveEmpty =>
+      'Ключ сохранён. Оставьте пустым, чтобы сохранить его.';
+
+  @override
+  String get removeTheSavedKey => 'Удалить сохранённый ключ';
+
+  @override
+  String get presetOllama =>
+      'На вашем компьютере или в сети: бесплатно, приватно, работает офлайн (Gemma, Qwen, Llama…).';
+
+  @override
+  String get presetLmStudio =>
+      'Как Ollama, с настольным приложением для выбора моделей.';
+
+  @override
+  String get presetGemini =>
+      'Google. Бесплатный тариф с ограничениями; на нём Google может использовать отправленное для улучшения продуктов. Ключ: aistudio.google.com.';
+
+  @override
+  String get presetDeepseek =>
+      'Оплата за использование, очень дёшево, предоплата. Ключ: platform.deepseek.com.';
+
+  @override
+  String get presetQwen =>
+      'Alibaba. Оплата за использование. Ключ: Alibaba Cloud Model Studio.';
+
+  @override
+  String get presetKimi =>
+      'Moonshot AI. Оплата за использование. Ключ: platform.moonshot.ai.';
+
+  @override
+  String get presetMistral =>
+      'Mistral (Франция). Бесплатный тариф со строгими лимитами. Ключ: console.mistral.ai.';
+
+  @override
+  String get presetOpenrouter =>
+      'Один ключ для многих моделей (Gemini, DeepSeek, Qwen…), часть бесплатно; текст также проходит через OpenRouter. Ключ: openrouter.ai.';
 }

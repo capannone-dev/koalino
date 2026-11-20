@@ -296,7 +296,7 @@ pub enum LlmError {
     #[error("the language model could not be reached")]
     Unreachable,
     /// The server refused access (it expects a key, which the app does not send).
-    #[error("the language model server refused access; use a server that needs no API key")]
+    #[error("the language model server refused access; check the connection's API key")]
     Unauthorized,
     /// The server asked to slow down.
     #[error("the language model is busy or over its limit; try again later")]
