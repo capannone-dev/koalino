@@ -1,4 +1,5 @@
-//! Configures JSON tracing output for stdout and a daily rolling local log file.
+//! Configures JSON tracing output for stdout and a daily rolling local log file, keeping a week of
+//! files up to 2 GiB (`log_retention`).
 //!
 //! Both sinks use `StructuredJsonFormat`, which stamps the device ID on every entry, groups fields
 //! under `context`, and redacts sensitive values (see `structured_json`).
@@ -6,11 +7,13 @@
 mod live_log_control;
 mod log_export;
 mod log_level_control;
+mod log_retention;
 mod structured_json;
 
 pub use live_log_control::{FilterReloader, LiveLogControl};
 pub use log_export::{LogExport, LogExportError, MAX_EXPORTED_LOG_FILES, export_log_files};
 pub use log_level_control::{LOG_LEVEL_POLL_INTERVAL, LogLevelControlFile, LogLevelWatcher};
+pub use log_retention::{LogRetention, prune_log_files};
 pub use structured_json::StructuredJsonFormat;
 
 use std::{
@@ -98,14 +101,22 @@ impl LoggingRuntime {
 ///
 /// Inputs: `logging_configuration` identifies the emitting device, local log location, and initial verbosity.
 /// Outputs: A runtime guard that must be retained for as long as file logging is required.
-/// Side effects: Creates the log directory, installs the global tracing subscriber, writes JSON events to stdout and disk.
+/// Side effects: Creates the log directory, removes log files beyond `LogRetention::DEFAULT`, installs the
+/// global tracing subscriber, writes JSON events to stdout and disk.
 pub fn initialize_logging(logging_configuration: LoggingConfiguration) -> Result<LoggingRuntime> {
     create_log_directory(&logging_configuration.log_directory)?;
     let initial_filter = EnvFilter::try_new(&logging_configuration.filter_directive)
         .with_context(|| "initial logging filter directive is invalid")?;
     let (reloadable_filter, filter_handle) = reload::Layer::new(initial_filter);
-    let rolling_file_appender =
-        tracing_appender::rolling::daily(&logging_configuration.log_directory, "app_log");
+    // Old days go first, so logs cannot fill the disk (#147); a failure here never stops logging.
+    let pruned = prune_log_files(&logging_configuration.log_directory, LogRetention::DEFAULT);
+    let rolling_file_appender = tracing_appender::rolling::RollingFileAppender::builder()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix("app_log")
+        // A process left running for days drops the oldest file at each new day.
+        .max_log_files(LogRetention::DEFAULT.max_files)
+        .build(&logging_configuration.log_directory)
+        .with_context(|| "the rolling log file could not be opened")?;
     let (non_blocking_file_writer, file_worker_guard) =
         tracing_appender::non_blocking(rolling_file_appender);
     let structured_format = StructuredJsonFormat::new(&logging_configuration.device_id);
@@ -130,6 +141,11 @@ pub fn initialize_logging(logging_configuration: LoggingConfiguration) -> Result
         .try_init()
         .with_context(|| "global tracing subscriber is already initialized")?;
     tracing::info!("structured logging initialized");
+    match pruned {
+        Ok(0) => {}
+        Ok(removed) => tracing::info!(removed, "old log files removed"),
+        Err(error) => tracing::warn!(error = %error, "old log files could not be checked"),
+    }
 
     Ok(LoggingRuntime {
         filter_handle,

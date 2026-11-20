@@ -32,6 +32,12 @@ Issue #46). It streams each file, ends a day cut off mid-line with a newline, wr
 when written, so the export adds no user content. `log_export_tests.rs` covers the order, the
 seven-day bound, other files left out, replacing an earlier export, and the empty case.
 
+`log_retention.rs` (`prune_log_files`, `LogRetention`) removes old daily files when logging
+starts (#147): it keeps the newest seven and, while they exceed 2 GiB, removes the oldest of them,
+never the newest. The rolling appender is also built with `max_log_files(7)`, so a process left
+running for days drops a day at each rotation. Other files are left alone.
+`log_retention_tests.rs` covers the day count, the size limit, and a missing directory.
+
 `live_log_control.rs` (`LiveLogControl`) implements the `LogControl` port over a filter reloader
 built from the daemon's `LoggingRuntime`. The web Settings routes and the daemon's `cli log-level`
 watcher both apply levels through it, so `GET /api/settings/log-level` shows the level in effect.

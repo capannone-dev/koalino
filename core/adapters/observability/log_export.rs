@@ -13,7 +13,7 @@ use std::{
 };
 
 /// The name prefix `initialize_logging` gives the daily files.
-const LOG_FILE_PREFIX: &str = "app_log";
+pub(super) const LOG_FILE_PREFIX: &str = "app_log";
 
 /// How many daily files an export holds, so a long-lived install shares a bounded file.
 pub const MAX_EXPORTED_LOG_FILES: usize = 7;
