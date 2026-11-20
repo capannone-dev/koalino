@@ -41,7 +41,7 @@ use crate::{
     domain::models::MeetingId,
     project_commands::{
         ProjectCommandError, ProjectFiles, delete_project, delete_resource, email_json,
-        existing_project, list_projects, move_meeting, parse_name, parse_project_id,
+        existing_project, list_projects, move_meeting, move_project, parse_name, parse_project_id,
         project_detail, read_email, resource_file_name, resource_json, resource_kind, resource_of,
         summary_json,
     },
@@ -58,6 +58,7 @@ pub(super) fn routes() -> Router<ServerAppState> {
             "/api/projects/{project_id}",
             get(detail).patch(rename).delete(remove),
         )
+        .route("/api/projects/{project_id}/parent", put(move_into_parent))
         .route("/api/meetings/{meeting_id}/project", put(move_into_project))
         .route(
             "/api/projects/{project_id}/resources",
@@ -111,6 +112,7 @@ impl IntoResponse for RouteFailure {
                     "project_not_found" | "meeting_not_found" | "resource_not_found" => {
                         StatusCode::NOT_FOUND
                     }
+                    "invalid_parent" => StatusCode::CONFLICT,
                     _ => StatusCode::INTERNAL_SERVER_ERROR,
                 };
                 (
@@ -168,10 +170,26 @@ struct NameRequest {
     name: String,
 }
 
-/// Creates a project.
+/// Body of `POST /api/projects`: the name, and the parent for a subproject (#142).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CreateRequest {
+    name: String,
+    #[serde(default)]
+    parent_id: Option<String>,
+}
+
+/// Body of `PUT /api/projects/{id}/parent` (#142): the new parent, or null for the top level.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ParentRequest {
+    parent_id: Option<String>,
+}
+
+/// Creates a project, inside `parent_id` when given.
 async fn create(
     State(application_state): State<ServerAppState>,
-    Json(request): Json<NameRequest>,
+    Json(request): Json<CreateRequest>,
 ) -> Result<(StatusCode, Json<Value>), RouteFailure> {
     tracing::info!(
         endpoint = "POST /api/projects",
@@ -179,7 +197,13 @@ async fn create(
     );
     let name = parse_name(&request.name)?;
     let repositories = application_state.repositories().lock_owned().await;
-    let project = repositories.create_project(&name)?;
+    let parent = request
+        .parent_id
+        .as_deref()
+        .map(|parent_id| existing_project(&**repositories, parent_id))
+        .transpose()?
+        .map(|parent| parent.project_id());
+    let project = repositories.create_project_in(&name, parent)?;
     let summary = repositories
         .list_projects()?
         .into_iter()
@@ -222,6 +246,26 @@ async fn rename(
         .list_projects()?
         .into_iter()
         .find(|summary| summary.project.project_id() == project_id)
+        .ok_or(RouteFailure::Internal)?;
+    Ok(Json(summary_json(&summary)))
+}
+
+/// Moves a project inside another one, or to the top level (#142).
+async fn move_into_parent(
+    State(application_state): State<ServerAppState>,
+    Path(project_id): Path<String>,
+    Json(request): Json<ParentRequest>,
+) -> Result<Json<Value>, RouteFailure> {
+    tracing::info!(
+        endpoint = "PUT /api/projects/{id}/parent",
+        "headless API request received"
+    );
+    let repositories = application_state.repositories().lock_owned().await;
+    let project = move_project(&**repositories, &project_id, request.parent_id.as_deref())?;
+    let summary = repositories
+        .list_projects()?
+        .into_iter()
+        .find(|summary| summary.project.project_id() == project.project_id())
         .ok_or(RouteFailure::Internal)?;
     Ok(Json(summary_json(&summary)))
 }

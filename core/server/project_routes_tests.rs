@@ -339,3 +339,40 @@ async fn without_project_files_file_routes_are_unavailable() {
 
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
 }
+
+#[tokio::test]
+async fn projects_nest_through_the_api() {
+    let fixture = Fixture::new(true);
+    let clients = fixture.create("Clients").await;
+
+    let (status, acme) = fixture
+        .send(
+            "POST",
+            "/api/projects",
+            Some(json!({"name": "Acme", "parent_id": clients})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{acme}");
+    assert_eq!(acme["parent_id"], clients.as_str());
+    let acme_id = acme["project_id"].as_str().unwrap_or_default().to_owned();
+
+    let (status, refused) = fixture
+        .send(
+            "PUT",
+            &format!("/api/projects/{clients}/parent"),
+            Some(json!({"parent_id": acme_id})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{refused}");
+    assert_eq!(refused["error_code"], "invalid_parent");
+
+    let (status, moved) = fixture
+        .send(
+            "PUT",
+            &format!("/api/projects/{acme_id}/parent"),
+            Some(json!({"parent_id": null})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{moved}");
+    assert_eq!(moved["parent_id"], Value::Null);
+}

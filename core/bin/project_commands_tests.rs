@@ -280,3 +280,35 @@ fn paths_are_left_out_when_not_asked_for() {
 
     assert!(!note.contains("file_path"), "{note}");
 }
+
+#[test]
+fn subprojects_are_created_moved_and_listed_with_their_parent() {
+    let app = Fixture::new();
+    let clients = app.create("Clients");
+    let created = app.run(json!({"command": "create", "name": "Acme", "parent_id": clients}));
+    assert_eq!(created["project"]["parent_id"], clients.as_str());
+    let acme = created["project"]["project_id"]
+        .as_str()
+        .unwrap_or_default()
+        .to_owned();
+
+    let into_itself =
+        app.run(json!({"command": "move_project", "project_id": clients, "parent_id": acme}));
+    assert_eq!(error_code(&into_itself), "invalid_parent");
+    let unknown = app.run(json!({
+        "command": "move_project",
+        "project_id": acme,
+        "parent_id": "00000000-0000-0000-0000-000000000099",
+    }));
+    assert_eq!(error_code(&unknown), "project_not_found");
+
+    let moved = app.run(json!({"command": "move_project", "project_id": acme, "parent_id": null}));
+    assert_eq!(moved["project"]["parent_id"], Value::Null);
+    let listed = app.run(json!({"command": "list"}));
+    let projects = listed["projects"].as_array().cloned().unwrap_or_default();
+    assert!(
+        projects
+            .iter()
+            .all(|project| project["parent_id"].is_null())
+    );
+}

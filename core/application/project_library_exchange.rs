@@ -4,7 +4,8 @@
 //! `NTP1`, bound to the sender and receiver), holding every project and deletion record. Project
 //! names are private, so they travel only inside the sealed value and are never logged. The sender
 //! holds the pair key but is still peer input, so `decode_project_library_message` validates every
-//! name and bounds the list.
+//! name and bounds the list. Since #142 each project also carries its parent and move time;
+//! both are optional, so devices on either side of that change still understand each other.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -65,6 +66,13 @@ struct ProjectBody {
     created_at: DateTime<Utc>,
     #[serde(with = "rfc3339")]
     updated_at: DateTime<Utc>,
+    /// The parent project (#142); absent at the top level and from devices before nesting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    parent: Option<Uuid>,
+    /// When the parent last changed, RFC 3339; absent from devices before nesting, which reads
+    /// as placed when created, so such a device never undoes a move.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    moved_at: Option<String>,
 }
 
 /// One deletion record in the body.
@@ -105,6 +113,12 @@ pub fn encode_project_library_message(
                 name: project.name().as_str().to_owned(),
                 created_at: project.created_at(),
                 updated_at: project.updated_at(),
+                parent: project.parent().map(|parent| parent.as_uuid()),
+                moved_at: Some(
+                    project
+                        .moved_at()
+                        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                ),
             })
             .collect(),
         tombstones: library
@@ -166,16 +180,21 @@ pub fn decode_project_library_message(
         .projects
         .into_iter()
         .map(|project| {
-            ProjectName::parse(&project.name)
-                .map(|name| {
-                    Project::new(
-                        ProjectId::from_uuid(project.project_id),
-                        name,
-                        project.created_at,
-                        project.updated_at,
-                    )
-                })
-                .map_err(|_| ProjectLibraryMessageError::Invalid)
+            let name = ProjectName::parse(&project.name)
+                .map_err(|_| ProjectLibraryMessageError::Invalid)?;
+            let moved_at = match project.moved_at.as_deref() {
+                Some(text) => DateTime::parse_from_rfc3339(text)
+                    .map(|instant| instant.with_timezone(&Utc))
+                    .map_err(|_| ProjectLibraryMessageError::Invalid)?,
+                None => project.created_at,
+            };
+            Ok(Project::new(
+                ProjectId::from_uuid(project.project_id),
+                name,
+                project.created_at,
+                project.updated_at,
+            )
+            .with_placement(project.parent.map(ProjectId::from_uuid), moved_at))
         })
         .collect::<Result<Vec<Project>, _>>()?;
     Ok(ProjectLibrary {

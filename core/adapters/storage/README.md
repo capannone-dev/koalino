@@ -289,7 +289,8 @@ value bound to the chat and position (`chat-message:v1:<chat>:<position>`). Dele
 or a project deletes its chat.
 
 `sqlite_projects.rs` (Issue #85) stores projects in `projects` and deletions in `project_tombstones` (kept forever, so a
-deleted project never returns). `meetings.project_id` indexes the project named in each meeting's CRDT document, written
+deleted project never returns). Nesting (#142) adds `parent_project_id` and `moved_at_utc`, merged apart from the name;
+`move_project` refuses loops, deleting a project moves its subprojects up, and summaries carry the shown parent. `meetings.project_id` indexes the project named in each meeting's CRDT document, written
 by the projection; `attachments.project_id` marks a project's resources, which never join the unlinked import queue. A
 meeting or resource naming a project this device lacks is not shown in any project. Merging a paired device's list keeps
 the newest name and lets deletions win.

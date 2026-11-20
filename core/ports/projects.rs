@@ -25,6 +25,9 @@ pub struct ProjectSummary {
     pub resource_count: usize,
     /// When its newest meeting started, if it holds any.
     pub latest_meeting_at: Option<DateTime<Utc>>,
+    /// The project it shows inside, or `None` at the top level (#142): its stored parent unless
+    /// that is unknown here or part of a loop (`projects::shown_parents`).
+    pub parent_id: Option<ProjectId>,
 }
 
 /// What merging a paired device's project library changed.
@@ -44,6 +47,27 @@ pub trait ProjectRepository {
     /// as both its creation and last change. Side effects: Writes one row.
     fn create_project(&self, name: &ProjectName) -> Result<Project, StorageError>;
 
+    /// Creates a project inside another one, or at the top level (#142).
+    ///
+    /// Inputs: A validated name and the parent. Outputs: The new project, or `Rejected` for an
+    /// unknown parent. Side effects: Writes one row.
+    fn create_project_in(
+        &self,
+        name: &ProjectName,
+        parent: Option<ProjectId>,
+    ) -> Result<Project, StorageError>;
+
+    /// Moves a project inside another one, or to the top level (#142).
+    ///
+    /// Inputs: The project and its new parent. Outputs: The moved project, last moved now, or
+    /// `Rejected` for an unknown project or parent, or a parent that is the project itself or
+    /// inside it. Side effects: Updates one row; paired devices receive the move.
+    fn move_project(
+        &self,
+        project_id: ProjectId,
+        parent: Option<ProjectId>,
+    ) -> Result<Project, StorageError>;
+
     /// Renames a project.
     ///
     /// Inputs: The project and its new name. Outputs: The renamed project, last changed now, or
@@ -57,7 +81,8 @@ pub trait ProjectRepository {
     /// Deletes a project for good.
     ///
     /// Inputs: The project. Outputs: Whether it existed. Its meetings stay and leave the project;
-    /// its resource rows are deleted, and the caller removes their files.
+    /// its resource rows are deleted, and the caller removes their files. Its subprojects move up
+    /// into its own parent (#142).
     /// Side effects: Deletes rows and records a deletion that paired devices also apply and that
     /// keeps the project from returning.
     fn delete_project(&self, project_id: ProjectId) -> Result<bool, StorageError>;

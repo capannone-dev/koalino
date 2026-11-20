@@ -5,8 +5,15 @@
 //! newest change wins, and at the same instant the greater name). Deletions are recorded as
 //! `ProjectTombstone`s, which always win, so a deleted project cannot return from a device that
 //! was offline. Names are user content: adapters must not log them.
+//!
+//! Projects nest (#142): each one has a parent, or none at the top level, set by its own
+//! last-writer-wins rule (`moved_at`), so a move on one device and a rename on another both
+//! survive. Moves are refused when they would put a project inside itself, but two devices can
+//! still each make a move that together forms a loop; `shown_parents` then breaks every loop at
+//! its newest move, the same way on every device. A project whose parent is unknown here (deleted,
+//! or not synced yet) shows at the top level.
 
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -115,6 +122,11 @@ pub struct Project {
     created_at: DateTime<Utc>,
     /// When the name last changed; decides which name wins between devices.
     updated_at: DateTime<Utc>,
+    /// The project this one sits in, or `None` at the top level (#142).
+    parent: Option<ProjectId>,
+    /// When the parent last changed (the creation instant until the first move); decides which
+    /// placement wins between devices.
+    moved_at: DateTime<Utc>,
 }
 
 impl Project {
@@ -133,7 +145,39 @@ impl Project {
             name,
             created_at,
             updated_at,
+            parent: None,
+            moved_at: created_at,
         }
+    }
+
+    /// Places the project under `parent` (or at the top level), as of `moved_at`.
+    ///
+    /// Inputs: The parent and the instant of the move. Outputs: The project so placed.
+    /// Side effects: None.
+    #[must_use]
+    pub fn with_placement(mut self, parent: Option<ProjectId>, moved_at: DateTime<Utc>) -> Self {
+        self.parent = parent;
+        self.moved_at = moved_at;
+        self
+    }
+
+    /// Returns the stored parent; `shown_parents` decides where the project actually shows.
+    pub fn parent(&self) -> Option<ProjectId> {
+        self.parent
+    }
+
+    /// Returns the instant of the latest move (the creation instant if never moved).
+    pub fn moved_at(&self) -> DateTime<Utc> {
+        self.moved_at
+    }
+
+    /// Tells whether this version's placement replaces `other`'s, for the same project.
+    ///
+    /// Inputs: Another version. Outputs: `true` when this one moved later, or at the same instant
+    /// to a greater parent (the top level counts as least); `false` for an equal placement.
+    /// Side effects: None.
+    pub fn placement_supersedes(&self, other: &Self) -> bool {
+        (self.moved_at, self.parent) > (other.moved_at, other.parent)
     }
 
     /// Returns the ID.
@@ -182,4 +226,69 @@ pub struct ProjectLibrary {
     pub projects: Vec<Project>,
     /// The deleted projects, kept forever.
     pub tombstones: Vec<ProjectTombstone>,
+}
+
+/// Where each project shows: under its parent, or at the top level (`None`) when the parent is
+/// unknown, itself, or part of a loop broken here (#142).
+///
+/// Inputs: Every live project. Outputs: Each project's shown parent. Every loop (possible only
+/// through moves made on two devices before they synced) is broken at the member that moved
+/// last, ties going to the greater ID; loops never share members, so the result does not depend
+/// on the order of `projects`. Side effects: None.
+pub fn shown_parents(projects: &[Project]) -> HashMap<ProjectId, Option<ProjectId>> {
+    let known: HashMap<ProjectId, &Project> = projects
+        .iter()
+        .map(|project| (project.project_id(), project))
+        .collect();
+    let mut parents: HashMap<ProjectId, Option<ProjectId>> = projects
+        .iter()
+        .map(|project| {
+            let parent = project
+                .parent()
+                .filter(|parent| *parent != project.project_id() && known.contains_key(parent));
+            (project.project_id(), parent)
+        })
+        .collect();
+    let mut ids: Vec<ProjectId> = parents.keys().copied().collect();
+    ids.sort();
+    for start in ids {
+        let mut path: Vec<ProjectId> = Vec::new();
+        let mut current = Some(start);
+        while let Some(project_id) = current {
+            if let Some(position) = path.iter().position(|seen| *seen == project_id) {
+                let breaker = path[position..].iter().copied().max_by_key(|member| {
+                    (known.get(member).map(|project| project.moved_at()), *member)
+                });
+                if let Some(breaker) = breaker {
+                    parents.insert(breaker, None);
+                }
+                break;
+            }
+            path.push(project_id);
+            current = parents.get(&project_id).copied().flatten();
+        }
+    }
+    parents
+}
+
+/// Tells whether `project_id` is `ancestor` or sits somewhere inside it.
+///
+/// Inputs: Shown parents (from `shown_parents`, so free of loops), the project and the possible
+/// ancestor. Outputs: Whether moving `ancestor` into `project_id` would make a loop.
+/// Side effects: None.
+pub fn is_within(
+    parents: &HashMap<ProjectId, Option<ProjectId>>,
+    project_id: ProjectId,
+    ancestor: ProjectId,
+) -> bool {
+    let mut current = Some(project_id);
+    // Bounded by the number of projects, in case a caller passes parents that still loop.
+    for _ in 0..=parents.len() {
+        match current {
+            Some(project_id) if project_id == ancestor => return true,
+            Some(project_id) => current = parents.get(&project_id).copied().flatten(),
+            None => return false,
+        }
+    }
+    false
 }

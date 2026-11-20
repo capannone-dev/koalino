@@ -7,8 +7,9 @@
 //! | `command` | Fields | Answer |
 //! | --- | --- | --- |
 //! | `list` | | `projects`: summaries by name |
-//! | `create` | `name` | `project` |
+//! | `create` | `name`, optional `parent_id` (#142) | `project` |
 //! | `rename` | `project_id`, `name` | `project` |
+//! | `move_project` | `project_id`, `parent_id` (null: top level) (#142) | `project` |
 //! | `delete` | `project_id` | `deleted` (its meetings stay, its resources and folder go) |
 //! | `detail` | `project_id` | `project`, `meetings` (newest first), `resources` (oldest first) |
 //! | `move_meeting` | `meeting_id`, `project_id` (null moves it out) | `{}` |
@@ -18,7 +19,10 @@
 //! | `delete_resource` | `project_id`, `attachment_id` | `deleted: true` |
 //! | `read_email` | `project_id`, `attachment_id` | `email` (headers, text body, attachment names) |
 //!
-//! Error codes: `invalid_request`, `invalid_name`, `project_not_found`, `meeting_not_found`,
+//! Every project carries `parent_id`: the project it shows inside, or null at the top level.
+//!
+//! Error codes: `invalid_request`, `invalid_name`, `project_not_found`, `invalid_parent` (a
+//! project cannot move inside itself or its subprojects), `meeting_not_found`,
 //! `resource_not_found`, `not_an_email`, `rejected` (a file or note that cannot be stored), and
 //! `storage_failed`. Resources carry `file_path` only when the caller reads files itself (the app),
 //! never for the web. Names, notes and e-mail contents are never logged.
@@ -233,6 +237,12 @@ enum ProjectCommand {
     List,
     Create {
         name: String,
+        #[serde(default)]
+        parent_id: Option<String>,
+    },
+    MoveProject {
+        project_id: String,
+        parent_id: Option<String>,
     },
     Rename {
         project_id: String,
@@ -336,9 +346,21 @@ fn run<RepositoryPort: ProjectCommandRepository + ?Sized>(
 ) -> Result<Value, ProjectCommandError> {
     match command {
         ProjectCommand::List => Ok(json!({ "projects": list_projects(repository)? })),
-        ProjectCommand::Create { name } => {
-            let project = repository.create_project(&parse_name(&name)?)?;
-            Ok(json!({ "project": project_json(&project, 0, 0, None) }))
+        ProjectCommand::Create { name, parent_id } => {
+            let name = parse_name(&name)?;
+            let parent = parent_id
+                .map(|parent_id| existing_project(repository, &parent_id))
+                .transpose()?
+                .map(|parent| parent.project_id());
+            let project = repository.create_project_in(&name, parent)?;
+            Ok(json!({ "project": project_json(&project, 0, 0, None, project.parent()) }))
+        }
+        ProjectCommand::MoveProject {
+            project_id,
+            parent_id,
+        } => {
+            let project = move_project(repository, &project_id, parent_id.as_deref())?;
+            Ok(json!({ "project": summary_json(&summary_of(repository, &project)?) }))
         }
         ProjectCommand::Rename { project_id, name } => {
             let project_id = existing_project(repository, &project_id)?.project_id();
@@ -467,6 +489,33 @@ fn summary_of<RepositoryPort: ProjectCommandRepository + ?Sized>(
         .into_iter()
         .find(|summary| summary.project.project_id() == project.project_id())
         .ok_or_else(|| ProjectCommandError::new("project_not_found", "the project does not exist"))
+}
+
+/// Moves a project inside another one, or to the top level (#142).
+///
+/// Inputs: The project's ID text and the parent's (`None`: the top level).
+/// Outputs: The moved project, or `invalid_request`, `project_not_found` (either one) or
+/// `invalid_parent` (the parent is the project or inside it). Side effects: Updates a row that
+/// paired devices receive.
+pub fn move_project<RepositoryPort: ProjectCommandRepository + ?Sized>(
+    repository: &RepositoryPort,
+    project_id: &str,
+    parent_id: Option<&str>,
+) -> Result<Project, ProjectCommandError> {
+    let project_id = existing_project(repository, project_id)?.project_id();
+    let parent = parent_id
+        .map(|parent_id| existing_project(repository, parent_id))
+        .transpose()?
+        .map(|parent| parent.project_id());
+    repository
+        .move_project(project_id, parent)
+        .map_err(|error| match error {
+            StorageError::Rejected { .. } => ProjectCommandError::new(
+                "invalid_parent",
+                "a project cannot move inside itself or its subprojects",
+            ),
+            other => ProjectCommandError::from(other),
+        })
 }
 
 /// Deletes a project and its resource folder; its meetings stay, outside any project.
@@ -685,8 +734,10 @@ fn project_json(
     meeting_count: usize,
     resource_count: usize,
     latest_meeting_at: Option<String>,
+    parent: Option<ProjectId>,
 ) -> Value {
     json!({
+        "parent_id": parent.map(|parent| parent.to_string()),
         "project_id": project.project_id().to_string(),
         "name": project.name().as_str(),
         "created_at": project.created_at().to_rfc3339(),
@@ -700,13 +751,14 @@ fn project_json(
 /// Serializes a project list entry.
 ///
 /// Outputs: `{"project_id","name","created_at","updated_at","meeting_count","resource_count",
-/// "latest_meeting_at"}` (RFC 3339 times; the last is null without meetings). Side effects: None.
+/// "latest_meeting_at","parent_id"}` (RFC 3339 times; the last is null without meetings). Side effects: None.
 pub fn summary_json(summary: &ProjectSummary) -> Value {
     project_json(
         &summary.project,
         summary.meeting_count,
         summary.resource_count,
         summary.latest_meeting_at.map(|time| time.to_rfc3339()),
+        summary.parent_id,
     )
 }
 

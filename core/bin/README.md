@@ -163,7 +163,8 @@ HTTP runtime.
 
 ## Projects (`project_commands.rs`, Issue #85)
 
-`run_project_command` carries out one JSON Projects command (`list`, `create`, `rename`,
+`run_project_command` carries out one JSON Projects command (`list`, `create` (optionally inside
+`parent_id`), `move_project` (#142), `rename`,
 `delete`, `detail`, `move_meeting`, `meeting_projects`, `add_files`, `add_note`,
 `delete_resource`, `read_email`). The app reaches it through `note_taker_project_command`; the
 web routes in `server/project_routes.rs` call its functions directly, so both behave alike.

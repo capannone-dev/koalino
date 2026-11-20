@@ -111,3 +111,46 @@ fn an_oversized_list_is_refused() {
         Err(ProjectLibraryMessageError::Invalid)
     );
 }
+
+#[test]
+fn a_nested_project_keeps_its_parent_and_move_time_across_the_message() {
+    let moved_at = Utc
+        .timestamp_millis_opt(1_800_000_100_456)
+        .single()
+        .unwrap_or_else(|| panic!("the instant must exist"));
+    let mut nested = library();
+    nested.projects[0] = nested.projects[0]
+        .clone()
+        .with_placement(Some(ProjectId::from_uuid(Uuid::from_u128(9))), moved_at);
+    let message = encode_project_library_message(&nested, &key(1), &laptop(), &phone())
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(
+        decode_project_library_message(&message, &key(1), &laptop(), &phone()),
+        Ok(nested)
+    );
+}
+
+#[test]
+fn a_message_from_a_device_without_nesting_reads_as_top_level_projects() {
+    // What a device from before #142 sends: no parent and no move time.
+    let body = br#"{"projects":[{"project_id":"00000000-0000-0000-0000-000000000001",
+        "name":"Website relaunch","created_at":"2027-01-15T08:00:00.123Z",
+        "updated_at":"2027-01-15T08:00:00.123Z"}],"tombstones":[]}"#;
+    let sealed = crate::application::crypto::pair_key::seal_for_peer(
+        &key(1),
+        b"NTP1",
+        &laptop(),
+        &phone(),
+        body,
+    )
+    .unwrap_or_else(|error| panic!("{error:?}"));
+    let message = [b"NTP1".as_slice(), &sealed].concat();
+
+    let decoded = decode_project_library_message(&message, &key(1), &laptop(), &phone())
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    let project = &decoded.projects[0];
+    assert_eq!(project.parent(), None);
+    assert_eq!(project.moved_at(), project.created_at());
+}

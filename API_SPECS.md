@@ -616,10 +616,11 @@ same commands as the app (`core/bin/project_commands.rs`); resources never carry
 | Route | Success |
 | --- | --- |
 | `GET /api/projects` | `200`, project summaries by name |
-| `POST /api/projects` `{"name"}` | `201`, the summary |
+| `POST /api/projects` `{"name","parent_id"?}` (a subproject when `parent_id` is given, #142) | `201`, the summary |
 | `GET /api/projects/{project_id}` | `200` `{"project","meetings","resources"}` |
 | `PATCH /api/projects/{project_id}` `{"name"}` | `200`, the summary |
-| `DELETE /api/projects/{project_id}` | `204` |
+| `PUT /api/projects/{project_id}/parent` `{"parent_id"}` (null: the top level, #142) | `200`, the summary |
+| `DELETE /api/projects/{project_id}` | `204` (its subprojects move up into its parent) |
 | `PUT /api/meetings/{meeting_id}/project` `{"project_id"}` (null moves it out) | `204` |
 | `POST /api/projects/{project_id}/resources?name=<file name>`, the file as the body (up to 100 MiB) | `201` `{"added","skipped_attachments"}` |
 | `POST /api/projects/{project_id}/notes` `{"title","text"}` | `201`, the resource |
@@ -627,8 +628,10 @@ same commands as the app (`core/bin/project_commands.rs`); resources never carry
 | `GET /api/projects/{project_id}/resources/{attachment_id}/file` | `200`, the bytes (`Content-Disposition: attachment` for the `document` kind, `inline` otherwise) |
 | `GET /api/projects/{project_id}/resources/{attachment_id}/email` | `200` `{"subject","from","to","cc","sent_at","body_text","body_truncated","attachments"}` (HTML bodies as plain text) |
 
-Failures answer `{"error_code","error"}`: `400` for a bad ID, name, title or file type, `404` for
-an unknown project, meeting or resource (or a file not synced here yet), `503` when the daemon has
+Project summaries carry `parent_id`, the project each one shows inside (null at the top level);
+projects nest to any depth (#142). Failures answer `{"error_code","error"}`: `400` for a bad ID,
+name, title or file type, `409` `invalid_parent` for a move inside the project itself or one of
+its subprojects, `404` for an unknown project, meeting or resource (or a file not synced here yet), `503` when the daemon has
 no project files, `500` for storage errors. Files are served with their stored type,
 `X-Content-Type-Options: nosniff` and a `sandbox` Content Security Policy.
 

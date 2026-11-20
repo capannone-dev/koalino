@@ -44,7 +44,10 @@ Invite text is untrusted, so parsing bounds every part (Issues #64 and #65).
 
 `projects.rs` (Issue #85) defines projects, folders of meetings and resources: `ProjectId`, `ProjectName` (1–200
 characters, trimmed, no control characters), `Project` with the rule paired devices use to agree on a name
-(`supersedes`: newest change, then greater name), and `ProjectTombstone`, the deletion record that always wins.
+(`supersedes`: newest change, then greater name), and `ProjectTombstone`, the deletion record that always wins. Projects nest (#142): each has a parent with its own
+newest-move-wins rule (`with_placement`, `placement_supersedes`), `shown_parents` decides where each one shows (the top
+level for an unknown parent, and every loop that moves on two devices made is broken at its newest move), and `is_within`
+refuses moves into a project's own subtree.
 
 `email.rs` (Issue #85) describes an imported e-mail: `EmailMessage` (subject, people, sending time, text body,
 attachments) with `EmailPerson` and `EmailAttachment`, and the limits that bound a file the user picked

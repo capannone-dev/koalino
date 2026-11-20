@@ -559,3 +559,181 @@ fn a_resource_deleted_on_a_paired_device_goes_here_too_and_is_reported() {
         Some(true)
     );
 }
+
+/// Each listed project's ID and shown parent.
+fn listed_parents(device: &Device) -> Vec<(ProjectId, Option<ProjectId>)> {
+    device
+        .repository
+        .list_projects()
+        .unwrap_or_else(|error| panic!("projects must list: {error}"))
+        .into_iter()
+        .map(|summary| (summary.project.project_id(), summary.parent_id))
+        .collect()
+}
+
+/// The shown parent of `project_id`.
+fn shown_parent_of(device: &Device, project_id: ProjectId) -> Option<ProjectId> {
+    listed_parents(device)
+        .into_iter()
+        .find(|(listed, _)| *listed == project_id)
+        .and_then(|(_, parent)| parent)
+}
+
+#[test]
+fn projects_nest_inside_projects_at_any_depth() {
+    let device = Device::new();
+    let clients = device.create("Clients");
+    let acme = device
+        .repository
+        .create_project_in(&name_of("Acme"), Some(clients.project_id()))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let launch = device
+        .repository
+        .create_project_in(&name_of("Launch"), Some(acme.project_id()))
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(shown_parent_of(&device, clients.project_id()), None);
+    assert_eq!(
+        shown_parent_of(&device, acme.project_id()),
+        Some(clients.project_id())
+    );
+    assert_eq!(
+        shown_parent_of(&device, launch.project_id()),
+        Some(acme.project_id())
+    );
+
+    device
+        .repository
+        .move_project(launch.project_id(), None)
+        .unwrap_or_else(|error| panic!("{error}"));
+    assert_eq!(shown_parent_of(&device, launch.project_id()), None);
+}
+
+#[test]
+fn a_project_cannot_move_into_itself_its_subprojects_or_an_unknown_project() {
+    let device = Device::new();
+    let outer = device.create("Outer");
+    let inner = device.create("Inner");
+    device
+        .repository
+        .move_project(inner.project_id(), Some(outer.project_id()))
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    for (project, parent) in [
+        (outer.project_id(), Some(inner.project_id())),
+        (outer.project_id(), Some(outer.project_id())),
+        (outer.project_id(), Some(ProjectId::new_random())),
+        (ProjectId::new_random(), None),
+    ] {
+        assert!(
+            device.repository.move_project(project, parent).is_err(),
+            "{project} into {parent:?}"
+        );
+    }
+    assert_eq!(shown_parent_of(&device, outer.project_id()), None);
+}
+
+#[test]
+fn deleting_a_project_moves_its_subprojects_up_one_level() {
+    let device = Device::new();
+    let top = device.create("Top");
+    let middle = device.create("Middle");
+    let bottom = device.create("Bottom");
+    for (project, parent) in [(&middle, &top), (&bottom, &middle)] {
+        device
+            .repository
+            .move_project(project.project_id(), Some(parent.project_id()))
+            .unwrap_or_else(|error| panic!("{error}"));
+    }
+
+    device
+        .repository
+        .delete_project(middle.project_id())
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_eq!(
+        shown_parent_of(&device, bottom.project_id()),
+        Some(top.project_id())
+    );
+}
+
+#[test]
+fn a_move_on_one_device_and_a_rename_on_another_both_survive() {
+    let device = Device::new();
+    let project_id = ProjectId::from_uuid(Uuid::from_u128(142));
+    let folder_id = ProjectId::from_uuid(Uuid::from_u128(143));
+    let folder = Project::new(folder_id, name_of("Folder"), at(0), at(0));
+    let renamed_here = Project::new(project_id, name_of("Renamed"), at(0), at(20));
+    let moved_there = Project::new(project_id, name_of("Original"), at(0), at(10))
+        .with_placement(Some(folder_id), at(30));
+    for library in [vec![folder, renamed_here], vec![moved_there]] {
+        device
+            .repository
+            .import_project_library(&ProjectLibrary {
+                projects: library,
+                tombstones: Vec::new(),
+            })
+            .unwrap_or_else(|error| panic!("{error}"));
+    }
+
+    let stored = device
+        .repository
+        .load_project(project_id)
+        .unwrap_or_else(|error| panic!("{error}"))
+        .unwrap_or_else(|| panic!("the project must exist"));
+    assert_eq!(stored.name().as_str(), "Renamed");
+    assert_eq!(stored.parent(), Some(folder_id));
+    assert_eq!(shown_parent_of(&device, project_id), Some(folder_id));
+}
+
+#[test]
+fn a_device_that_knows_no_nesting_never_undoes_a_move() {
+    let device = Device::new();
+    let outer = device.create("Outer");
+    let inner = device.create("Inner");
+    device
+        .repository
+        .move_project(inner.project_id(), Some(outer.project_id()))
+        .unwrap_or_else(|error| panic!("{error}"));
+    let digest_after_move = device.repository.project_library_digest().ok();
+    // An older device sends the project as it knew it: no parent, placed when created.
+    let unplaced = Project::new(
+        inner.project_id(),
+        inner.name().clone(),
+        inner.created_at(),
+        inner.updated_at(),
+    );
+
+    let merged = device
+        .repository
+        .import_project_library(&ProjectLibrary {
+            projects: vec![unplaced],
+            tombstones: Vec::new(),
+        })
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert!(!merged.changed);
+    assert_eq!(
+        shown_parent_of(&device, inner.project_id()),
+        Some(outer.project_id())
+    );
+    assert_eq!(
+        device.repository.project_library_digest().ok(),
+        digest_after_move
+    );
+}
+
+#[test]
+fn a_move_changes_the_digest_so_paired_devices_resync() {
+    let device = Device::new();
+    let outer = device.create("Outer");
+    let inner = device.create("Inner");
+    let before = device.repository.project_library_digest().ok();
+
+    device
+        .repository
+        .move_project(inner.project_id(), Some(outer.project_id()))
+        .unwrap_or_else(|error| panic!("{error}"));
+
+    assert_ne!(device.repository.project_library_digest().ok(), before);
+}

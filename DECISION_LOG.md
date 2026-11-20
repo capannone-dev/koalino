@@ -3972,3 +3972,19 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Not covered:** a device with the after-meeting pass off keeps no speech, so it keeps no
   recording either.
 
+## 2026-11-20 — Nested projects (#142)
+
+- **Request:** the owner wants projects inside projects, to any depth, browsed in columns on the
+  desktop.
+- **Decision:** each project stores its parent and when it last moved. That placement merges
+  between devices on its own newest-wins rule, apart from the name, so a move on one device and a
+  rename on another both survive. A move into the project itself or one of its subprojects is
+  refused. Two devices can still each make a valid move that together forms a loop; every device
+  then breaks each loop at its newest move (ties: greater ID), so all show the same tree without
+  rewriting anything. A project whose parent is unknown (deleted, not synced yet) shows at the top
+  level. Deleting a project moves its subprojects up into its parent, as ordinary moves that sync.
+- **Compatibility:** the `NTP1` message gains optional `parent` and `moved_at`. An older device
+  ignores them, and what it sends reads as "top level, placed when created", which never beats a
+  real move, so it cannot undo nesting; it simply shows every project at the top level.
+- **Counts:** a project's meeting and file counts are its own, not its subprojects'.
+

@@ -42,7 +42,7 @@ and requests without these headers (CLI, scripts) are served. See `core/server/r
   after `VoiceIdentityManager` stores a derived signature variant. It validates both UUIDs and
   never serializes the clip's temporary raw audio or embedding.
 - `/api/projects*` and `PUT /api/meetings/{id}/project` (Issue #85, `project_routes.rs`) list,
-  create, rename and delete projects, move meetings, and add (upload or note), read and delete
+  create (also inside another, #142), move (`PUT /api/projects/{id}/parent`), rename and delete projects, move meetings, and add (upload or note), read and delete
   resources, through the commands the app uses (`bin/project_commands.rs`). File work runs on a
   blocking thread; `ServerAppState::with_project_files` attaches the folder, without which those
   routes answer 503. Resource bytes are served with `nosniff` and a sandboxing CSP. API_SPECS.md
