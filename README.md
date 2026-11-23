@@ -82,6 +82,7 @@ with their SHA-256 sums in `SHA256SUMS.txt`.
 | --- | --- | --- |
 | Linux desktop (x86_64, Debian 13 or newer) | [`koalino-linux-x86_64-0.1.0.tar.gz`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-linux-x86_64-0.1.0.tar.gz) | The app, Whisper `base`, the diarization models, the MCP server and the browser extension's host |
 | Windows desktop (x86_64, Windows 10 or 11) | [`koalino-windows-x86_64-0.1.0.zip`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-windows-x86_64-0.1.0.zip) | The same, for Windows |
+| macOS desktop (Intel and Apple silicon, macOS 12 or newer) | [`koalino-macos-universal-0.1.0.zip`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-macos-universal-0.1.0.zip) | The same, for Mac; on Intel Macs without speaker diarization |
 | Android (64-bit ARM) | [`koalino-android-arm64-0.1.0.apk`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-android-arm64-0.1.0.apk) | The app with Whisper `base` and the diarization models |
 | Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.1.0.tar.gz`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-server-linux-x86_64-0.1.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
 | Chrome, Edge, Chromium | [`koalino-browser-extension-chromium-0.1.0.zip`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-browser-extension-chromium-0.1.0.zip) | The browser extension, to load unpacked |
@@ -106,6 +107,20 @@ start it with `NOTE_TAKER_ENCRYPTION_PASSPHRASE` set. Data lives in
 Unzip `koalino-windows-x86_64-0.1.0.zip` and run `note_taker_ui.exe`. The preview is not code
 signed, so SmartScreen may warn: choose **More info → Run anyway**. The key is kept in Windows
 Credential Manager.
+
+### macOS
+
+Unzip `koalino-macos-universal-0.1.0.zip` and drag **Koalino** into Applications. The preview is
+not notarized by Apple, so the first start is blocked: open it once, then go to **System Settings →
+Privacy & Security** and choose **Open Anyway**. Koalino asks for the microphone the first time it
+records, and keeps its key in the login Keychain. Data lives in
+`~/Library/Application Support/com.example.noteTakerUi/`. For the browser extension, run
+`/Applications/Koalino.app/Contents/MacOS/browser-host install` in Terminal.
+
+Limits of this preview: on Intel Macs recordings are transcribed but not split by speaker, because
+ONNX Runtime, which diarization uses, no longer ships for Intel Macs. Capturing the computer's own
+sound is not available on macOS yet. The core (transcription, Keychain, database) was tested on an
+Intel Mac; the window itself and the Apple silicon build have not been tried on real hardware yet.
 
 ### Android
 
@@ -185,6 +200,8 @@ cargo build --features diarization    # speaker diarization; downloads ONNX Runt
 Run with `NOTE_TAKER_WHISPER_MODEL` set to a GGML model, such as whisper.cpp's multilingual
 `ggml-base.bin`. To build the daemon and CLI for Windows and Android from Linux, with whisper.cpp,
 see [`tools/cross/README.md`](tools/cross/README.md).
+To build and package the macOS app on a Mac with Xcode, see
+[`tools/macos/README.md`](tools/macos/README.md).
 
 For the web dashboard: `cd web && npm install && npm run dev`. For the Teams bot, see
 [`teams-bot/README.md`](teams-bot/README.md). For the browser extension and its native host
