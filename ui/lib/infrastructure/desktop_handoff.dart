@@ -80,15 +80,30 @@ final class DesktopHandoffPlatform implements HandoffPlatform {
 Future<String> _supportDirectory() async =>
     (await getApplicationSupportDirectory()).path;
 
+/// Returns the command that opens `target` with the system's default app.
+///
+/// Inputs: A web address or folder, and `Platform.operatingSystem`.
+/// Outputs: `rundll32 url.dll,FileProtocolHandler` on Windows, `open` on macOS (#151), and
+/// `xdg-open` elsewhere. Side effects: None.
+(String, List<String>) systemOpenCommand(String target,
+        {required String operatingSystem}) =>
+    switch (operatingSystem) {
+      'windows' => (
+          'rundll32',
+          <String>['url.dll,FileProtocolHandler', target]
+        ),
+      'macos' => ('open', <String>[target]),
+      _ => ('xdg-open', <String>[target]),
+    };
+
 /// Opens `target`, a web address or a folder, with the system's default app.
 ///
 /// Inputs: An `https://` address or an absolute folder path that Koalino chose itself.
-/// Side effects: Starts `xdg-open` on Linux or Explorer's URL handler on Windows, detached.
+/// Side effects: Starts the command from `systemOpenCommand`, detached.
 /// Throws `PlatformException` when the system cannot open it.
 Future<void> openWithSystem(String target) async {
-  final (String executable, List<String> arguments) = Platform.isWindows
-      ? ('rundll32', <String>['url.dll,FileProtocolHandler', target])
-      : ('xdg-open', <String>[target]);
+  final (String executable, List<String> arguments) =
+      systemOpenCommand(target, operatingSystem: Platform.operatingSystem);
   try {
     await Process.start(executable, arguments, mode: ProcessStartMode.detached);
   } on ProcessException catch (error) {

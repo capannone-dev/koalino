@@ -447,16 +447,18 @@ final HandoffPlatform _handoffPlatform = Platform.isAndroid
 
 /// Hands meetings to the owner's own Claude or ChatGPT and keeps a summary's answer (#114, #126).
 /// It lives as long as the app, since the answer comes back after a switch of apps.
-final HandoffController? _handoffController =
-    Platform.isAndroid || Platform.isLinux || Platform.isWindows
-        ? HandoffController(
-            // On a computer the owner pastes the message, so it carries the meeting.
-            core: RustHandoffCore(inline: !Platform.isAndroid),
-            platform: _handoffPlatform,
-            onSummaryChanged: (String meetingId) =>
-                unawaited(_summariesController.loadMeeting(meetingId)),
-          )
-        : null;
+final HandoffController? _handoffController = Platform.isAndroid ||
+        Platform.isLinux ||
+        Platform.isMacOS ||
+        Platform.isWindows
+    ? HandoffController(
+        // On a computer the owner pastes the message, so it carries the meeting.
+        core: RustHandoffCore(inline: !Platform.isAndroid),
+        platform: _handoffPlatform,
+        onSummaryChanged: (String meetingId) =>
+            unawaited(_summariesController.loadMeeting(meetingId)),
+      )
+    : null;
 
 /// The owner's meeting notes and transcript corrections (#96), shared by every meeting view.
 final MeetingEditController _meetingEditController = MeetingEditController();

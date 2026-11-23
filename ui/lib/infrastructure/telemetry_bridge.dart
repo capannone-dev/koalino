@@ -2,10 +2,11 @@
 
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+
+import 'core_library.dart';
 
 final class TelemetryDevice {
   const TelemetryDevice(
@@ -111,8 +112,7 @@ final class RustTelemetryBridge implements TelemetryBridge {
           .toList();
 
   /// Opens the platform's Rust core library.
-  static DynamicLibrary _open() => DynamicLibrary.open(
-      Platform.isWindows ? 'note_taker_core.dll' : 'libnote_taker_core.so');
+  static DynamicLibrary _open() => openCoreLibrary();
 }
 
 /// Calls the telemetry export `symbol` on a background isolate and returns its JSON.

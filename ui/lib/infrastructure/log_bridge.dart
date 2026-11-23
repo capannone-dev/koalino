@@ -4,12 +4,13 @@
 
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
+
+import 'core_library.dart';
 
 /// The levels Settings offers, from least to most detail.
 enum LogLevel {
@@ -229,13 +230,7 @@ String? _takeString(DynamicLibrary coreLibrary, Pointer<Utf8> value) {
 
 /// Opens the platform's core library.
 DynamicLibrary _openCoreLibrary() {
-  if (Platform.isAndroid || Platform.isLinux) {
-    return DynamicLibrary.open('libnote_taker_core.so');
-  }
-  if (Platform.isWindows) {
-    return DynamicLibrary.open('note_taker_core.dll');
-  }
-  throw UnsupportedError('The Rust log bridge is unavailable here.');
+  return openCoreLibrary();
 }
 
 /// Represents `char *note_taker_get_log_level(void)`.

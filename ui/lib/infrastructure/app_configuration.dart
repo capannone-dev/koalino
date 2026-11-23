@@ -12,6 +12,8 @@ import 'package:note_taker_ui/infrastructure/diarization_models.dart';
 import 'package:note_taker_ui/infrastructure/whisper_model.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'core_library.dart';
+
 /// Peer addresses compiled in with `--dart-define=NOTE_TAKER_P2P_PEERS=<a>,<b>`, for development
 /// builds that must reach devices mDNS cannot see (such as VMs behind an `adb reverse` tunnel).
 /// Empty in normal builds; addresses are not secrets. Saved Settings replace it (Issue #64).
@@ -145,9 +147,7 @@ Future<int> startCore() => Isolate.run(() => _openCoreLibrary()
         'note_taker_start_runtime')());
 
 /// Opens the platform's core library.
-DynamicLibrary _openCoreLibrary() => Platform.isWindows
-    ? DynamicLibrary.open('note_taker_core.dll')
-    : DynamicLibrary.open('libnote_taker_core.so');
+DynamicLibrary _openCoreLibrary() => openCoreLibrary();
 
 /// Represents `int note_taker_start_runtime(void)`.
 typedef _NativeStartRuntime = Int32 Function();

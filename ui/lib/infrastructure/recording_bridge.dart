@@ -1,10 +1,11 @@
 // Defines the Dart FFI boundary through which Flutter invokes the Rust recording core.
 
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+
+import 'core_library.dart';
 
 /// What a start or resume request achieved.
 enum RecordingStartOutcome {
@@ -159,14 +160,7 @@ final class RustRecordingBridge implements RecordingBridge {
   /// Outputs: A loaded Rust core library.
   /// Side effects: Loads native executable code into the Flutter process.
   static DynamicLibrary _openCoreLibrary() {
-    if (Platform.isAndroid || Platform.isLinux) {
-      return DynamicLibrary.open('libnote_taker_core.so');
-    }
-    if (Platform.isWindows) {
-      return DynamicLibrary.open('note_taker_core.dll');
-    }
-    throw UnsupportedError(
-        'The Rust recording bridge is not configured for this platform.');
+    return openCoreLibrary();
   }
 }
 

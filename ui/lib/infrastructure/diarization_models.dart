@@ -19,18 +19,15 @@ const List<String> diarizationModelFileNames = <String>[
 typedef AndroidAssetInstaller = Future<bool> Function(
     String assetPath, String targetPath);
 
-/// Returns where a Linux or Windows bundle ships the models.
+/// Returns where a desktop bundle ships the models.
 ///
 /// Inputs: The running executable's absolute path; its separator style is kept.
-/// Outputs: `<executable directory>/data/models/diarization`.
+/// Outputs: `diarization` in `bundledModelsDirectory`: `<executable directory>/data/models` on
+/// Linux and Windows, the app's Contents/Resources/models on macOS (#151).
 /// Side effects: None.
 String bundledDiarizationModelDirectory(String executablePath) {
   final String separator = executablePath.contains(r'\') ? r'\' : '/';
-  final int lastSeparator = executablePath.lastIndexOf(separator);
-  final String bundleDirectory =
-      lastSeparator < 0 ? '.' : executablePath.substring(0, lastSeparator);
-  return <String>[bundleDirectory, 'data', 'models', 'diarization']
-      .join(separator);
+  return '${bundledModelsDirectory(executablePath)}${separator}diarization';
 }
 
 /// Picks the folder passed to `note_taker_configure` as `diarization_model_directory`.

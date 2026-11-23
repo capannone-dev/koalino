@@ -2,11 +2,12 @@
 
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:ffi/ffi.dart';
+
+import 'core_library.dart';
 
 /// Describes one unresolved unknown-speaker cluster without biometric vectors.
 final class UnknownSpeakerCluster {
@@ -497,13 +498,7 @@ String _callNativeJson(String symbolName, List<String> arguments) {
 
 /// Opens the platform-specific core library without exposing FFI to widgets.
 DynamicLibrary _openCoreLibrary() {
-  if (Platform.isAndroid || Platform.isLinux) {
-    return DynamicLibrary.open('libnote_taker_core.so');
-  }
-  if (Platform.isWindows) {
-    return DynamicLibrary.open('note_taker_core.dll');
-  }
-  throw UnsupportedError('The Rust Voice Gallery bridge is unavailable here.');
+  return openCoreLibrary();
 }
 
 typedef _NativeDelete = Int32 Function(Pointer<Utf8>);

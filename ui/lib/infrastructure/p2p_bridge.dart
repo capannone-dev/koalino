@@ -3,11 +3,12 @@
 
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
+
+import 'core_library.dart';
 
 /// A device paired with this one.
 final class PairedDevice {
@@ -547,13 +548,7 @@ String _callNativeJson(
 
 /// Opens the platform-specific core library.
 DynamicLibrary _openCoreLibrary() {
-  if (Platform.isAndroid || Platform.isLinux) {
-    return DynamicLibrary.open('libnote_taker_core.so');
-  }
-  if (Platform.isWindows) {
-    return DynamicLibrary.open('note_taker_core.dll');
-  }
-  throw UnsupportedError('The Rust P2P bridge is unavailable here.');
+  return openCoreLibrary();
 }
 
 /// Represents `char *note_taker_p2p_status(void)`.

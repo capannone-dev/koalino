@@ -3,12 +3,13 @@
 
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
+
+import 'core_library.dart';
 
 /// File types Rust accepts as attachments (`AttachmentFileStore`).
 const List<String> attachableExtensions = <String>[
@@ -120,13 +121,7 @@ Future<String> _attachFilesInIsolate(String meetingId, String pathsJson) =>
 
 /// Opens the platform-specific core library.
 DynamicLibrary _openCoreLibrary() {
-  if (Platform.isAndroid || Platform.isLinux) {
-    return DynamicLibrary.open('libnote_taker_core.so');
-  }
-  if (Platform.isWindows) {
-    return DynamicLibrary.open('note_taker_core.dll');
-  }
-  throw UnsupportedError('The Rust attachment bridge is unavailable here.');
+  return openCoreLibrary();
 }
 
 /// Picks several files to attach.

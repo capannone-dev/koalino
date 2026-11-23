@@ -114,4 +114,21 @@ void main() {
 
     expect(sent.single, contains('"inline":true'));
   });
+
+  test('each desktop opens links and folders with its own command (#151)', () {
+    void expectCommand(
+        String target, String os, String executable, List<String> arguments) {
+      final (String, List<String>) command =
+          systemOpenCommand(target, operatingSystem: os);
+      expect(command.$1, executable);
+      expect(command.$2, arguments);
+    }
+
+    expectCommand('https://claude.ai', 'linux', 'xdg-open',
+        <String>['https://claude.ai']);
+    expectCommand(
+        '/Users/me/files', 'macos', 'open', <String>['/Users/me/files']);
+    expectCommand(r'C:\files', 'windows', 'rundll32',
+        <String>['url.dll,FileProtocolHandler', r'C:\files']);
+  });
 }

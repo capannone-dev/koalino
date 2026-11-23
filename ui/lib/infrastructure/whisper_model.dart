@@ -1,6 +1,7 @@
 // Finds the Whisper model the Rust core transcribes with, so a fresh install works out of the
 // box and offline. A model the owner placed in `<data directory>/models` wins. Otherwise Linux
-// and Windows use the copy their bundle ships in `data/models` beside the executable, and
+// and Windows use the copy their bundle ships in `data/models` beside the executable, macOS the
+// one in the app's Contents/Resources/models (#151), and
 // Android copies the one shipped in its APK into the data directory (`WhisperModel.kt`, channel
 // `note_taker/whisper_model`), because whisper.cpp reads the model from a file path.
 
@@ -17,19 +18,35 @@ const String whisperModelChannelName = 'note_taker/whisper_model';
 /// Copies the shipped model to `targetPath` when needed; true once a model is there.
 typedef AndroidModelInstaller = Future<bool> Function(String targetPath);
 
-/// Returns where a Linux or Windows bundle ships the model.
+/// Returns the folder a desktop bundle ships its models in.
 ///
 /// Inputs: The running executable's absolute path (`Platform.resolvedExecutable`); its own
 /// separator style is kept, so Windows paths work on any host.
-/// Outputs: `<executable directory>/data/models/ggml-base.bin`.
+/// Outputs: `<app>.app/Contents/Resources/models` for a macOS app (#151): files beside a Mac
+/// executable in Contents/MacOS would be signed as code. Otherwise
+/// `<executable directory>/data/models`, as the Linux and Windows bundles have it.
 /// Side effects: None.
-String bundledDesktopModelPath(String executablePath) {
+String bundledModelsDirectory(String executablePath) {
   final String separator = executablePath.contains(r'\') ? r'\' : '/';
   final int lastSeparator = executablePath.lastIndexOf(separator);
   final String bundleDirectory =
       lastSeparator < 0 ? '.' : executablePath.substring(0, lastSeparator);
-  return <String>[bundleDirectory, 'data', 'models', whisperModelFileName]
-      .join(separator);
+  const String macosExecutableFolder = '.app/Contents/MacOS';
+  if (separator == '/' && bundleDirectory.endsWith(macosExecutableFolder)) {
+    final String contents =
+        bundleDirectory.substring(0, bundleDirectory.length - '/MacOS'.length);
+    return '$contents/Resources/models';
+  }
+  return <String>[bundleDirectory, 'data', 'models'].join(separator);
+}
+
+/// Returns where a desktop bundle ships the model.
+///
+/// Inputs: The running executable's absolute path. Outputs: `ggml-base.bin` in
+/// `bundledModelsDirectory`. Side effects: None.
+String bundledDesktopModelPath(String executablePath) {
+  final String separator = executablePath.contains(r'\') ? r'\' : '/';
+  return '${bundledModelsDirectory(executablePath)}$separator$whisperModelFileName';
 }
 
 /// Picks the model path passed to `note_taker_configure`.

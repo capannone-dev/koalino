@@ -9,10 +9,11 @@
 
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+
+import 'core_library.dart';
 
 /// Gives the path of a clear copy of one attachment or project resource.
 ///
@@ -116,13 +117,11 @@ Future<String> _clearCopyInIsolate(String attachmentId) => Isolate.run(() {
 
 /// Opens the platform-specific core library.
 DynamicLibrary _openCoreLibrary() {
-  if (Platform.isAndroid || Platform.isLinux) {
-    return DynamicLibrary.open('libnote_taker_core.so');
+  try {
+    return openCoreLibrary();
+  } on UnsupportedError {
+    throw const ClearCopyException('runtime_unavailable');
   }
-  if (Platform.isWindows) {
-    return DynamicLibrary.open('note_taker_core.dll');
-  }
-  throw const ClearCopyException('runtime_unavailable');
 }
 
 typedef _NativeClearCopy = Pointer<Utf8> Function(Pointer<Utf8> attachmentId);

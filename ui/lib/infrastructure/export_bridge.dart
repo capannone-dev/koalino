@@ -15,6 +15,8 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
+import 'core_library.dart';
+
 /// The formats the core exports.
 enum MeetingExportFormat {
   /// A Markdown document (attachments copied into a folder beside it).
@@ -348,13 +350,7 @@ String? _callExportFunction(
 
 /// Opens the platform's core library.
 DynamicLibrary _openCoreLibrary() {
-  if (Platform.isAndroid || Platform.isLinux) {
-    return DynamicLibrary.open('libnote_taker_core.so');
-  }
-  if (Platform.isWindows) {
-    return DynamicLibrary.open('note_taker_core.dll');
-  }
-  throw UnsupportedError('The Rust export bridge is unavailable here.');
+  return openCoreLibrary();
 }
 
 /// Represents `char *note_taker_export_meeting(const char *, const char *, const char *)`.

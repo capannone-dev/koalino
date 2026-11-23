@@ -29,6 +29,13 @@ void main() {
         r'C:\Apps\Note Taker\data\models\ggml-base.bin');
   });
 
+  test('a macOS app keeps the model in its Resources folder (#151)', () {
+    expect(
+        bundledDesktopModelPath(
+            '/Applications/Koalino.app/Contents/MacOS/Koalino'),
+        '/Applications/Koalino.app/Contents/Resources/models/ggml-base.bin');
+  });
+
   test('a model in the data directory wins over the bundled one', () async {
     final String ownModel = createFile('data/models/ggml-base.bin');
     createFile('bundle/data/models/ggml-base.bin');

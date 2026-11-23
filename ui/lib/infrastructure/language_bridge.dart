@@ -2,10 +2,11 @@
 // `note_taker_set_default_language`, `note_taker_set_recording_language`; Issue #62).
 
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+
+import 'core_library.dart';
 
 /// The core's language settings. Codes are `auto` or a Whisper language code.
 abstract interface class LanguageBridge {
@@ -73,9 +74,7 @@ bool _setLanguage(String functionName, String language) {
 }
 
 /// Opens the platform's core library.
-DynamicLibrary _openCoreLibrary() => Platform.isWindows
-    ? DynamicLibrary.open('note_taker_core.dll')
-    : DynamicLibrary.open('libnote_taker_core.so');
+DynamicLibrary _openCoreLibrary() => openCoreLibrary();
 
 /// Represents `char *note_taker_get_default_language(void)`.
 typedef _NativeGetLanguage = Pointer<Utf8> Function();

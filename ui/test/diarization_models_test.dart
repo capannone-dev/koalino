@@ -28,6 +28,13 @@ void main() {
         r'C:\Apps\Note Taker\data\models\diarization');
   });
 
+  test('a macOS app keeps the models in its Resources folder (#151)', () {
+    expect(
+        bundledDiarizationModelDirectory(
+            '/Applications/Koalino.app/Contents/MacOS/Koalino'),
+        '/Applications/Koalino.app/Contents/Resources/models/diarization');
+  });
+
   test('desktops pass the bundled folder only when both models are there',
       () async {
     Future<String?> resolve() => resolveDiarizationModelDirectory(

@@ -3,10 +3,11 @@
 
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:io';
 import 'dart:isolate';
 
 import 'package:ffi/ffi.dart';
+
+import 'core_library.dart';
 
 /// Core status: done.
 const int transcriptionStatusOk = 0;
@@ -596,6 +597,4 @@ int _callWithText(String functionName, String text) {
 }
 
 /// Opens the platform's core library.
-DynamicLibrary _openCoreLibrary() => Platform.isWindows
-    ? DynamicLibrary.open('note_taker_core.dll')
-    : DynamicLibrary.open('libnote_taker_core.so');
+DynamicLibrary _openCoreLibrary() => openCoreLibrary();

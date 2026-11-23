@@ -13,6 +13,8 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
+import 'core_library.dart';
+
 /// The protocols a connection speaks, as the core names them.
 enum LlmKind {
   /// OpenAI's Chat Completions, spoken by Ollama, llama.cpp, LM Studio and vLLM servers.
@@ -657,9 +659,7 @@ Future<String> callRustLlm(String functionName, List<String?> arguments) =>
 
 /// Calls the function inside the isolate and frees every native string.
 String _callNative(String functionName, List<String?> arguments) {
-  final DynamicLibrary core = Platform.isWindows
-      ? DynamicLibrary.open('note_taker_core.dll')
-      : DynamicLibrary.open('libnote_taker_core.so');
+  final DynamicLibrary core = openCoreLibrary();
   final List<Pointer<Utf8>> native = arguments
       .map((String? text) =>
           text == null ? nullptr.cast<Utf8>() : text.toNativeUtf8())
