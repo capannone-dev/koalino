@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 
 use super::host_install::{
     Browser, CHROMIUM_EXTENSION_ID, FIREFOX_EXTENSION_ID, HOST_NAME, bridge_secret_report,
-    host_manifest, install_linux, linux_manifest_path, windows_registry_key,
-    without_verbatim_prefix,
+    host_manifest, install_linux, install_macos, linux_manifest_path, macos_manifest_path,
+    windows_registry_key, without_verbatim_prefix,
 };
 
 /// A unique temporary home directory, removed on drop.
@@ -163,4 +163,60 @@ fn the_report_without_a_secret_says_what_the_app_and_the_daemon_do() {
         !report.starts_with("Bridge secret: not created (store locked); the daemon's bridge then accepts any local program"),
         "{report}"
     );
+}
+
+#[test]
+fn macos_manifests_go_where_each_browser_looks() {
+    let home = Path::new("/Users/ada");
+    for (browser, expected) in [
+        (
+            Browser::Firefox,
+            "/Users/ada/Library/Application Support/Mozilla/NativeMessagingHosts",
+        ),
+        (
+            Browser::Chrome,
+            "/Users/ada/Library/Application Support/Google/Chrome/NativeMessagingHosts",
+        ),
+        (
+            Browser::Chromium,
+            "/Users/ada/Library/Application Support/Chromium/NativeMessagingHosts",
+        ),
+        (
+            Browser::Edge,
+            "/Users/ada/Library/Application Support/Microsoft Edge/NativeMessagingHosts",
+        ),
+    ] {
+        assert_eq!(
+            macos_manifest_path(browser, home),
+            Path::new(expected).join(format!("{HOST_NAME}.json"))
+        );
+    }
+}
+
+#[test]
+fn installing_on_macos_writes_firefox_and_the_browsers_present() {
+    let home = TemporaryHome(
+        std::env::temp_dir().join(format!("note-taker-host-home-{}", uuid::Uuid::new_v4())),
+    );
+    std::fs::create_dir_all(home.0.join("Library/Application Support/Google/Chrome"))
+        .unwrap_or_else(|error| panic!("home should be created: {error}"));
+
+    let host = Path::new("/Applications/Koalino.app/Contents/MacOS/browser-host");
+    let written = install_macos(host, &home.0)
+        .unwrap_or_else(|error| panic!("install should succeed: {error}"));
+
+    assert_eq!(
+        written,
+        vec![
+            macos_manifest_path(Browser::Firefox, &home.0),
+            macos_manifest_path(Browser::Chrome, &home.0),
+        ],
+        "Chromium and Edge are not installed in this home"
+    );
+    let chrome: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(&written[1])
+            .unwrap_or_else(|error| panic!("manifest should exist: {error}")),
+    )
+    .unwrap_or_else(|error| panic!("manifest should be JSON: {error}"));
+    assert_eq!(chrome["path"], host.to_string_lossy().as_ref());
 }

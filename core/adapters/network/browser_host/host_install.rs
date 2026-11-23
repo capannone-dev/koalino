@@ -86,6 +86,23 @@ pub fn linux_manifest_path(browser: Browser, home: &Path) -> PathBuf {
     directory.join(format!("{HOST_NAME}.json"))
 }
 
+/// Where `browser` looks for host manifests on macOS (#151).
+///
+/// Inputs: The browser and the user's home directory.
+/// Outputs: The manifest file path, under `~/Library/Application Support`. Side effects: None.
+pub fn macos_manifest_path(browser: Browser, home: &Path) -> PathBuf {
+    let support = home.join("Library").join("Application Support");
+    let directory = match browser {
+        Browser::Firefox => support.join("Mozilla"),
+        Browser::Chrome => support.join("Google").join("Chrome"),
+        Browser::Chromium => support.join("Chromium"),
+        Browser::Edge => support.join("Microsoft Edge"),
+    };
+    directory
+        .join("NativeMessagingHosts")
+        .join(format!("{HOST_NAME}.json"))
+}
+
 /// The registry key through which `browser` finds the host on Windows.
 ///
 /// Outputs: The key, under `HKCU`. Side effects: None.
@@ -106,9 +123,32 @@ pub fn windows_registry_key(browser: Browser) -> String {
 /// directory (for example `~/.config/chromium`) exists.
 /// Side effects: Creates directories and writes files.
 pub fn install_linux(host_path: &Path, home: &Path) -> Result<Vec<PathBuf>> {
+    install_in_home(host_path, home, linux_manifest_path)
+}
+
+/// Writes the macOS manifests (#151).
+///
+/// Inputs: The absolute host path (inside `Koalino.app/Contents/MacOS`) and the home directory.
+/// Outputs: The manifest files written: Firefox's always, the others when the browser's folder
+/// in `~/Library/Application Support` (for example `Google/Chrome`) exists.
+/// Side effects: Creates directories and writes files.
+pub fn install_macos(host_path: &Path, home: &Path) -> Result<Vec<PathBuf>> {
+    install_in_home(host_path, home, macos_manifest_path)
+}
+
+/// Writes a manifest for Firefox and for each other browser whose folder exists.
+///
+/// Inputs: The host path, the home directory, and where each browser looks for its manifest
+/// (`<browser folder>/<hosts folder>/<name>.json`). Outputs: The manifest files written.
+/// Side effects: Creates directories and writes files.
+fn install_in_home(
+    host_path: &Path,
+    home: &Path,
+    manifest_path_for: fn(Browser, &Path) -> PathBuf,
+) -> Result<Vec<PathBuf>> {
     let mut written = Vec::new();
     for browser in Browser::ALL {
-        let manifest_path = linux_manifest_path(browser, home);
+        let manifest_path = manifest_path_for(browser, home);
         let Some(host_directory) = manifest_path.parent() else {
             continue;
         };

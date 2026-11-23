@@ -32,7 +32,7 @@ use note_taker_core::adapters::{
             bridge_client::{BridgeClientConfig, OutboxSettings},
             host_install::{
                 CHROMIUM_EXTENSION_ID, FIREFOX_EXTENSION_ID, bridge_secret_report, install_linux,
-                install_windows,
+                install_macos, install_windows,
             },
             host_session::run_host_session,
             outbox::{OutboxKey, browser_outbox_root},
@@ -163,6 +163,7 @@ fn install() -> ExitCode {
         install_windows(&host_path)
     } else {
         match std::env::var_os("HOME").map(PathBuf::from) {
+            Some(home) if cfg!(target_os = "macos") => install_macos(&host_path, &home),
             Some(home) => install_linux(&host_path, &home),
             None => {
                 eprintln!("HOME is not set");
