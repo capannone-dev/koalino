@@ -307,41 +307,9 @@ final class _VoiceGalleryScreenState extends State<VoiceGalleryScreen> {
         );
       },
     );
-    if (controller.savedPeople.isEmpty) {
-      return newPersonRow;
-    }
-    // A voice that wasn't matched to someone already saved is given to them here (#136).
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        newPersonRow,
-        const SizedBox(height: 8),
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: MenuAnchor(
-            menuChildren: <Widget>[
-              for (final SavedPerson person in controller.savedPeople)
-                MenuItemButton(
-                  key: ValueKey<String>('add-to-$keyId-${person.identityId}'),
-                  leadingIcon: const Icon(Icons.person_outline),
-                  onPressed: controller.isLoading
-                      ? null
-                      : () => onAssign(person.displayName),
-                  child: Text(person.displayName),
-                ),
-            ],
-            builder:
-                (BuildContext context, MenuController menu, Widget? child) =>
-                    OutlinedButton.icon(
-              key: ValueKey<String>('add-to-person-$keyId'),
-              icon: const Icon(Icons.person_add_alt_1_outlined),
-              label: Text(l10n.addToASavedPerson),
-              onPressed: () => menu.isOpen ? menu.close() : menu.open(),
-            ),
-          ),
-        ),
-      ],
-    );
+    // Typing a saved person's name suggests them, and Assign then adds the voice to them, so
+    // there is no separate "add to a saved person" button (removed at the owner's request).
+    return newPersonRow;
   }
 
   /// The name field; while typing, saved people whose names contain the text are offered.

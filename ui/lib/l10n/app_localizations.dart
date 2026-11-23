@@ -3177,12 +3177,6 @@ abstract class AppLocalizations {
   /// **'Finishing transcription…'**
   String get finishingTranscription;
 
-  /// No description provided for @readyToRecord.
-  ///
-  /// In en, this message translates to:
-  /// **'Ready to record'**
-  String get readyToRecord;
-
   /// No description provided for @meetingTitle.
   ///
   /// In en, this message translates to:
@@ -4497,12 +4491,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} is saved already: this voice will be added to them.'**
   String alreadySavedVoiceAddsToThem(String name);
-
-  /// Voice gallery (#136): button on an unknown voice to give it to someone saved.
-  ///
-  /// In en, this message translates to:
-  /// **'Add to a saved person'**
-  String get addToASavedPerson;
 
   /// Voice gallery (#136): picker dialog title.
   ///

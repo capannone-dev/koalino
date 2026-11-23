@@ -1833,9 +1833,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get finishingTranscription => 'جارٍ إنهاء التفريغ…';
 
   @override
-  String get readyToRecord => 'جاهز للتسجيل';
-
-  @override
   String get meetingTitle => 'عنوان الاجتماع';
 
   @override
@@ -2828,9 +2825,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String alreadySavedVoiceAddsToThem(String name) {
     return '$name محفوظ بالفعل: سيُضاف هذا الصوت إليه.';
   }
-
-  @override
-  String get addToASavedPerson => 'إضافة إلى شخص محفوظ';
 
   @override
   String addVoicesTo(String name) {

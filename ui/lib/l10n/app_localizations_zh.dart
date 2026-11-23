@@ -1726,9 +1726,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get finishingTranscription => '正在完成转写…';
 
   @override
-  String get readyToRecord => '准备录音';
-
-  @override
   String get meetingTitle => '会议标题';
 
   @override
@@ -2613,9 +2610,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String alreadySavedVoiceAddsToThem(String name) {
     return '$name 已保存：此声音将添加给此人。';
   }
-
-  @override
-  String get addToASavedPerson => '添加给已保存的人员';
 
   @override
   String addVoicesTo(String name) {

@@ -564,24 +564,20 @@ void main() {
   });
 
   testWidgets(
-      'an unknown voice is added to a saved person from its own button (#136)',
+      'an unknown voice has no separate button to add it to a saved person',
       (WidgetTester tester) async {
+    // Typing the name in the field already suggests saved people, and Assign adds the voice
+    // to them, so the owner asked to remove the extra button.
     final FakeVoiceGalleryBridge bridge = FakeVoiceGalleryBridge(
       clusters: <UnknownSpeakerCluster>[firstCluster],
       savedPeople: <SavedPerson>[savedAda],
     );
 
     await pumpGallery(tester, bridge, meetingId: null);
-    await tester
-        .tap(find.byKey(const ValueKey<String>('add-to-person-cluster-1')));
-    await tester.pumpAndSettle();
-    await tester
-        .tap(find.byKey(const ValueKey<String>('add-to-cluster-1-identity-1')));
-    await tester.pumpAndSettle();
 
-    expect(bridge.assignedClusters, <(String, String)>[
-      ('cluster-1', 'Ada Lovelace'),
-    ]);
+    expect(find.byKey(const ValueKey<String>('add-to-person-cluster-1')),
+        findsNothing);
+    expect(find.text('Add to a saved person'), findsNothing);
   });
 
   testWidgets('typing suggests saved people, and a match says it adds to them',
@@ -647,16 +643,6 @@ void main() {
             of: find.byKey(const ValueKey<String>('assign-cluster-1')),
             matching: find.text('Assign')),
         findsOneWidget);
-  });
-
-  testWidgets('without saved people there is nobody to add a voice to',
-      (WidgetTester tester) async {
-    await pumpGallery(tester,
-        FakeVoiceGalleryBridge(clusters: <UnknownSpeakerCluster>[firstCluster]),
-        meetingId: null);
-
-    expect(find.byKey(const ValueKey<String>('add-to-person-cluster-1')),
-        findsNothing);
   });
 
   testWidgets(

@@ -1851,9 +1851,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get finishingTranscription => 'Завершение расшифровки…';
 
   @override
-  String get readyToRecord => 'Готово к записи';
-
-  @override
   String get meetingTitle => 'Название встречи';
 
   @override
@@ -2820,9 +2817,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String alreadySavedVoiceAddsToThem(String name) {
     return '$name уже сохранён: этот голос будет добавлен ему.';
   }
-
-  @override
-  String get addToASavedPerson => 'Добавить сохранённому человеку';
 
   @override
   String addVoicesTo(String name) {

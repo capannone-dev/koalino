@@ -1773,9 +1773,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get finishingTranscription => '文字起こしを仕上げています…';
 
   @override
-  String get readyToRecord => '録音の準備ができました';
-
-  @override
   String get meetingTitle => '会議のタイトル';
 
   @override
@@ -2674,9 +2671,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String alreadySavedVoiceAddsToThem(String name) {
     return '$name は保存済みです。この声はこの人に追加されます。';
   }
-
-  @override
-  String get addToASavedPerson => '保存済みの人に追加';
 
   @override
   String addVoicesTo(String name) {

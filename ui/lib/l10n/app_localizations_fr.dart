@@ -1874,9 +1874,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get finishingTranscription => 'Fin de la transcription…';
 
   @override
-  String get readyToRecord => 'Prêt à enregistrer';
-
-  @override
   String get meetingTitle => 'Titre de la réunion';
 
   @override
@@ -2815,9 +2812,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String alreadySavedVoiceAddsToThem(String name) {
     return '$name est déjà enregistré : cette voix lui sera ajoutée.';
   }
-
-  @override
-  String get addToASavedPerson => 'Ajouter à une personne enregistrée';
 
   @override
   String addVoicesTo(String name) {
