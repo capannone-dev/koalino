@@ -170,6 +170,35 @@ void main() {
     expect(bridge.recordingLanguages, <String>['af', 'sq']);
   });
 
+  testWidgets('the Record screen spaces its parts apart vertically',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1200, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final RecordingController recording = _recording();
+    await tester.pumpWidget(MaterialApp(
+      home: RecordingScreen(
+        recordingController: recording,
+        languageController:
+            await _loaded(FakeLanguageBridge(), recording: recording),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final Rect title = tester.getRect(find.byType(TextField));
+    // The menu's outlined box, not the dropdown inside it.
+    final Rect language = tester.getRect(find
+        .ancestor(
+            of: find.byKey(recordingLanguageSelectorKey),
+            matching: find.byType(InputDecorator))
+        .first);
+    final Rect panel = tester
+        .getRect(find.byKey(const ValueKey<String>('recording-status-idle')));
+    // The title field's rect includes its helper line and counter.
+    expect(language.top - title.bottom, greaterThanOrEqualTo(16));
+    expect(panel.top - language.bottom, greaterThanOrEqualTo(32));
+  });
+
   testWidgets('Settings stores the default language',
       (WidgetTester tester) async {
     final FakeLanguageBridge bridge = FakeLanguageBridge();

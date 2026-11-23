@@ -19,6 +19,10 @@ import 'package:note_taker_ui/l10n/l10n.dart';
 const int _maxMeetingTitleLength = 200;
 
 /// Widest the title field and controls grow on desktop, in logical pixels.
+/// The vertical space before the record panel (half of it between the title and the language),
+/// so the screen's parts read as separate (the owner asked for more room).
+const double _sectionGap = 32;
+
 const double _maxContentWidth = 480;
 
 /// Tallest the live transcript grows before it scrolls, in logical pixels.
@@ -212,13 +216,13 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                       if (widget.languageController
                           case final TranscriptionLanguageController
                               languageController) ...<Widget>[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: _sectionGap / 2),
                         _LanguageSelector(
                           controller: languageController,
                           isRecordingActive: isBusy,
                         ),
                       ],
-                      const SizedBox(height: 16),
+                      const SizedBox(height: _sectionGap),
                       _RecordingStatusPanel(
                         controller: recordingController,
                         state: state,
