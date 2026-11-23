@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Koalino is not sandboxed: it is not sold through the Mac App Store, and the sandbox would stop
+     it running the owner's Claude Code and Codex command-line tools for summaries (#105) and keep
+     the browser extension's host from reaching the app (#125). The keys below are what it uses:
+     the microphone, and the network for P2P sync with paired devices (libp2p, mDNS). -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+</dict>
+</plist>
