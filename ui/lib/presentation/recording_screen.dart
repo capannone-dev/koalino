@@ -164,7 +164,6 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                 animation: recordingController,
                 builder: (BuildContext context, Widget? child) {
                   final RecordingUiState state = recordingController.state;
-                  final bool isStarting = state == RecordingUiState.starting;
                   final bool isStopping = state == RecordingUiState.stopping;
                   final bool isBusy = state != RecordingUiState.idle;
                   final String? activeTitle = recordingController.activeTitle;
@@ -187,7 +186,8 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                     (RecordingUiState.paused, null) => l10n.paused2,
                     (RecordingUiState.stopping, _) =>
                       l10n.finishingTranscription,
-                    _ => l10n.readyToRecord,
+                    (RecordingUiState.starting, _) => l10n.startingRecording,
+                    _ => l10n.startRecording,
                   };
 
                   return Column(
@@ -223,6 +223,9 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                         controller: recordingController,
                         state: state,
                         statusLabel: statusLabel,
+                        onStart: state == RecordingUiState.idle
+                            ? _startRecording
+                            : null,
                       ),
                       if (isStopping)
                         const Padding(
@@ -263,14 +266,6 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                         spacing: 12,
                         runSpacing: 12,
                         children: <Widget>[
-                          if (state == RecordingUiState.idle || isStarting)
-                            FilledButton.icon(
-                              onPressed: isBusy ? null : _startRecording,
-                              icon: const Icon(Icons.fiber_manual_record),
-                              label: Text(isStarting
-                                  ? l10n.startingRecording
-                                  : l10n.startRecording),
-                            ),
                           if (state == RecordingUiState.recording)
                             FilledButton.tonalIcon(
                               onPressed: recordingController.pauseRecording,
@@ -336,7 +331,9 @@ String formatRecordedTime(Duration recorded) {
 
 /// Shows where the recorder stands, so recording and waiting can't be mistaken (#132).
 ///
-/// Ready is a neutral panel with a microphone; recording is a red panel with a REC badge and the
+/// Before a recording the panel is the start button: a primary-colored panel with a microphone
+/// and "Start recording", tapped or activated from the keyboard (the separate start button was
+/// removed at the owner's request). Recording is a red panel with a REC badge and the
 /// recorded time counting every second; paused is a tertiary-colored panel whose time holds;
 /// finishing shows the time it reached.
 final class _RecordingStatusPanel extends StatefulWidget {
@@ -344,11 +341,16 @@ final class _RecordingStatusPanel extends StatefulWidget {
     required this.controller,
     required this.state,
     required this.statusLabel,
+    required this.onStart,
   });
 
   final RecordingController controller;
   final RecordingUiState state;
   final String statusLabel;
+
+  /// Starts a recording; `null` unless the recorder is idle. Before a recording the panel is a
+  /// button, disabled while the recording starts.
+  final VoidCallback? onStart;
 
   @override
   State<_RecordingStatusPanel> createState() => _RecordingStatusPanelState();
@@ -413,75 +415,85 @@ final class _RecordingStatusPanelState extends State<_RecordingStatusPanel> {
           Icons.hourglass_top,
         ),
       RecordingUiState.idle || RecordingUiState.starting => (
-          colors.surfaceContainerHighest,
-          colors.onSurfaceVariant,
-          Icons.mic_none,
+          colors.primaryContainer,
+          colors.onPrimaryContainer,
+          Icons.mic,
         ),
     };
     final bool showsTime = state == RecordingUiState.recording ||
         state == RecordingUiState.paused ||
         state == RecordingUiState.stopping;
+    final bool isStartButton =
+        state == RecordingUiState.idle || state == RecordingUiState.starting;
+    final Widget content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      child: Column(
+        children: <Widget>[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Icon(icon,
+                  color: state == RecordingUiState.recording
+                      ? colors.error
+                      : foreground,
+                  size: 28),
+              if (state == RecordingUiState.recording) ...<Widget>[
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: colors.error,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'REC',
+                    style: text.labelLarge?.copyWith(
+                      color: colors.onError,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (showsTime)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                formatRecordedTime(widget.controller.recordedTime),
+                key: const ValueKey<String>('recording-timer'),
+                style: text.displayMedium?.copyWith(
+                  color: foreground,
+                  fontFeatures: const <FontFeature>[
+                    FontFeature.tabularFigures()
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+          Text(
+            widget.statusLabel,
+            textAlign: TextAlign.center,
+            style: text.titleMedium?.copyWith(color: foreground),
+          ),
+        ],
+      ),
+    );
     return Card(
       key: ValueKey<String>('recording-status-${state.name}'),
       color: background,
       elevation: 0,
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-        child: Column(
-          children: <Widget>[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Icon(icon,
-                    color: state == RecordingUiState.recording
-                        ? colors.error
-                        : foreground,
-                    size: 28),
-                if (state == RecordingUiState.recording) ...<Widget>[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: colors.error,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'REC',
-                      style: text.labelLarge?.copyWith(
-                        color: colors.onError,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-            if (showsTime)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  formatRecordedTime(widget.controller.recordedTime),
-                  key: const ValueKey<String>('recording-timer'),
-                  style: text.displayMedium?.copyWith(
-                    color: foreground,
-                    fontFeatures: const <FontFeature>[
-                      FontFeature.tabularFigures()
-                    ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 8),
-            Text(
-              widget.statusLabel,
-              textAlign: TextAlign.center,
-              style: text.titleMedium?.copyWith(color: foreground),
-            ),
-          ],
-        ),
-      ),
+      clipBehavior: Clip.antiAlias,
+      child: isStartButton
+          ? Semantics(
+              button: true,
+              enabled: widget.onStart != null,
+              child: InkWell(onTap: widget.onStart, child: content),
+            )
+          : content,
     );
   }
 }

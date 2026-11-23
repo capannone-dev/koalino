@@ -4,6 +4,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
@@ -247,7 +248,8 @@ void main() {
         .widget<Card>(find.byKey(ValueKey<String>('recording-status-$state')))
         .color;
 
-    expect(panelColor('idle'), colors.surfaceContainerHighest);
+    // Ready is the start button, in the primary container color.
+    expect(panelColor('idle'), colors.primaryContainer);
 
     await tester.tap(find.text('Start recording'));
     await tester.pump();
@@ -390,14 +392,48 @@ void main() {
         FakeRecordingBridge(startResult: true);
     await pumpRecordingScreen(tester, recordingBridge);
 
-    expect(find.text('Ready to record'), findsOneWidget);
+    // The status panel is the start button; there is no separate one.
     expect(find.text('Start recording'), findsOneWidget);
+    expect(find.text('Ready to record'), findsNothing);
+    expect(find.byType(FilledButton), findsNothing);
+    final Finder panel =
+        find.byKey(const ValueKey<String>('recording-status-idle'));
+    expect(
+        tester.getSemantics(panel),
+        matchesSemantics(
+            label: 'Start recording',
+            isButton: true,
+            hasTapAction: true,
+            hasEnabledState: true,
+            isEnabled: true,
+            isFocusable: true,
+            hasFocusAction: true));
 
-    await tester.tap(find.text('Start recording'));
+    await tester.tap(panel);
     await tester.pump();
 
     expect(recordingBridge.startRecordingCallCount, 1);
     expect(find.text('Recording'), findsOneWidget);
+  });
+
+  testWidgets('the start panel works from the keyboard',
+      (WidgetTester tester) async {
+    final FakeRecordingBridge recordingBridge =
+        FakeRecordingBridge(startResult: true);
+    await pumpRecordingScreen(tester, recordingBridge);
+
+    final Finder panel =
+        find.byKey(const ValueKey<String>('recording-status-idle'));
+    final Finder panelFocus =
+        find.descendant(of: panel, matching: find.byType(Focus)).first;
+    Focus.of(tester.element(find.descendant(
+            of: panelFocus, matching: find.text('Start recording'))))
+        .requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(recordingBridge.startRecordingCallCount, 1);
   });
 
   testWidgets('failed bridge start keeps the recorder idle and shows an error',
@@ -410,7 +446,7 @@ void main() {
     await tester.pump();
 
     expect(recordingBridge.startRecordingCallCount, 1);
-    expect(find.text('Ready to record'), findsOneWidget);
+    expect(find.text('Start recording'), findsOneWidget);
     expect(find.text('Unable to start recording'), findsOneWidget);
   });
 
@@ -425,7 +461,7 @@ void main() {
     await tester.tap(find.text('Start recording'));
     await tester.pump();
 
-    expect(find.text('Ready to record'), findsOneWidget);
+    expect(find.text('Start recording'), findsOneWidget);
     expect(find.text('Unable to open the microphone'), findsOneWidget);
   });
 
@@ -443,7 +479,7 @@ void main() {
 
     expect(microphonePermission.requestCount, 1);
     expect(recordingBridge.startRecordingCallCount, 0);
-    expect(find.text('Ready to record'), findsOneWidget);
+    expect(find.text('Start recording'), findsOneWidget);
     expect(find.text('Microphone access is needed to record'), findsOneWidget);
   });
 
@@ -623,7 +659,7 @@ void main() {
       await tester.pump();
 
       expect(recordingBridge.lifecycleCommands, <String>['stop']);
-      expect(find.text('Ready to record'), findsOneWidget);
+      expect(find.text('Start recording'), findsOneWidget);
       expect(find.text('Recording saved'), findsOneWidget);
       final TextField titleField =
           tester.widget<TextField>(find.byType(TextField));
@@ -642,7 +678,7 @@ void main() {
       await tester.pump();
 
       expect(recordingBridge.lifecycleCommands, <String>['pause', 'stop']);
-      expect(find.text('Ready to record'), findsOneWidget);
+      expect(find.text('Start recording'), findsOneWidget);
     });
 
     testWidgets('a failed pause keeps recording and shows an error',
@@ -827,7 +863,7 @@ void main() {
       notifier.emit(RecordingNotificationState.idle);
       await tester.pump();
 
-      expect(find.text('Ready to record'), findsOneWidget);
+      expect(find.text('Start recording'), findsOneWidget);
       expect(find.text('Recording saved'), findsOneWidget);
       expect(recordingBridge.lifecycleCommands, isEmpty);
     });

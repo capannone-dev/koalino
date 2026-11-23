@@ -18,7 +18,8 @@ destinations. This replaces the earlier drawer, whose push used a context above 
 
 ## Recording controls
 
-`RecordingScreen` offers **Start recording**, then **Pause** and **Stop** while recording, and
+`RecordingScreen`'s status panel is itself the **Start recording** button before a recording (tap
+or Enter; there is no separate start button), then it offers **Pause** and **Stop** while recording, and
 **Resume** and **Stop** while paused. Resume calls `note_taker_start_recording`, which continues
 the paused meeting (a titled start would create a new one). Stop shows "Finishing
 transcription…" until Rust has transcribed and persisted every chunk, then "Recording saved" and
