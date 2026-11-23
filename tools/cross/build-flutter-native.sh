@@ -5,6 +5,9 @@
 #   linux   -> ui/native/linux/libnote_taker_core.so (installed into the bundle's lib/ by CMake)
 #   android -> ui/android/app/src/main/jniLibs/arm64-v8a/ (with the NDK's libc++_shared.so and
 #              Microsoft's libonnxruntime.so)
+#   android-emulator -> ui/android/app/src/main/jniLibs/x86_64/ (the same for the Android emulator on a
+#              PC; testing only: no phone GPU or NPU, and build the APK with
+#              --target-platform android-x64)
 #   windows -> ui/native/windows/note_taker_core.dll (installed beside the runner by CMake;
 #              release only: a debug DLL exports more than Windows' 65,535-symbol limit)
 # It also stages the Whisper model from fetch.sh, so the app transcribes out of the box:
@@ -20,7 +23,7 @@
 #   windows -> ui/native/windows/note_taker_mcp.exe (installed beside the runner)
 # and the browser extension's native host, browser-host, the same way (#125), so an owner who
 # installs only the app can run `browser-host install` from its folder.
-# The staging directories are gitignored. Usage: build-flutter-native.sh linux|android|windows ...
+# The staging directories are gitignored. Usage: build-flutter-native.sh linux|android|android-emulator|windows ...
 set -euo pipefail
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 # shellcheck source=env.sh
@@ -121,6 +124,21 @@ for platform in "$@"; do
       stage_model ui/native/android-assets/models
       stage_diarization_models ui/native/android-assets/models
       ;;
+    android-emulator)
+      refresh_whisper_build android-emulator "$CROSS_DIR/cmake/android-x86_64.cmake" --target x86_64-linux-android
+      if [ ! -f "$T/onnxruntime-android-x86_64/libonnxruntime.so" ]; then
+        echo "missing $T/onnxruntime-android-x86_64: run tools/cross/fetch-onnxruntime-android.sh" >&2
+        exit 1
+      fi
+      cargo build --release --features local-ai,microphone,vad,diarization --lib --target x86_64-linux-android
+      jni=ui/android/app/src/main/jniLibs/x86_64
+      mkdir -p "$jni"
+      cp "$CARGO_TARGET_DIR/x86_64-linux-android/release/libnote_taker_core.so" "$jni/"
+      cp "$NDK_BIN/../sysroot/usr/lib/x86_64-linux-android/libc++_shared.so" "$jni/"
+      cp "$T/onnxruntime-android-x86_64/libonnxruntime.so" "$jni/"
+      stage_model ui/native/android-assets/models
+      stage_diarization_models ui/native/android-assets/models
+      ;;
     windows)
       refresh_whisper_build windows "$(cat "$CROSS_DIR"/cmake/windows-gnu-zig.cmake "$CROSS_DIR"/cmake/mingw-library-names.cmake)" \
         --target x86_64-pc-windows-gnu
@@ -136,7 +154,7 @@ for platform in "$@"; do
       stage_onnx_runtime
       ;;
     *)
-      echo "usage: $0 linux|android|windows ..." >&2
+      echo "usage: $0 linux|android|android-emulator|windows ..." >&2
       exit 2
       ;;
   esac

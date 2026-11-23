@@ -13,4 +13,13 @@ curl -sSfL -o "$T/onnxruntime-android/ort.aar" \
 echo "$SHA256  $T/onnxruntime-android/ort.aar" | sha256sum -c -
 unzip -q -o -j "$T/onnxruntime-android/ort.aar" jni/arm64-v8a/libonnxruntime.so -d "$T/onnxruntime-android"
 rm "$T/onnxruntime-android/ort.aar"
+# The x86_64 build for the Android emulator on a PC (testing only), from the plain package: the QNN
+# one has arm64 only.
+EMULATOR_SHA256=e97540ca78fe36f6fe2013f82843414fb843b6c7681fb04644cba5e1406662dd
+mkdir -p "$T/onnxruntime-android-x86_64"
+curl -sSfL -o "$T/onnxruntime-android-x86_64/ort.aar" \
+  "https://repo1.maven.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/$VERSION/onnxruntime-android-$VERSION.aar"
+echo "$EMULATOR_SHA256  $T/onnxruntime-android-x86_64/ort.aar" | sha256sum -c -
+unzip -q -o -j "$T/onnxruntime-android-x86_64/ort.aar" jni/x86_64/libonnxruntime.so -d "$T/onnxruntime-android-x86_64"
+rm "$T/onnxruntime-android-x86_64/ort.aar"
 echo "ONNX Runtime $VERSION for Android in $T/onnxruntime-android"

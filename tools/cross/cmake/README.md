@@ -21,6 +21,8 @@
 - `android-arm64.cmake` (`aarch64-linux-android`) sets `ANDROID_ABI=arm64-v8a` and
   `ANDROID_PLATFORM=android-29`, then includes the NDK's toolchain. Without it, the NDK defaults
   to 32-bit ARM, and the link fails with "incompatible with aarch64linux".
+- `android-x86_64.cmake` (`x86_64-linux-android`) does the same for the Android emulator on a PC,
+  used for testing only (`build-flutter-native.sh android-emulator`).
 - `android-arm64.cmake` also fixes the minimum CPU (`armv8.2-a+dotprod+fp16`), and `windows-gnu-zig.cmake` points
   CMake at `fetch-vulkan.sh`'s files. `build-flutter-native.sh` rebuilds whisper.cpp when these change, since cargo
   doesn't notice that.
