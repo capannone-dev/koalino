@@ -17,6 +17,16 @@ const double _dismissDistance = 120;
 /// How fast a vertical fling must be to close the viewer, in logical pixels per second.
 const double _dismissVelocity = 800;
 
+/// Pointers that touch the screen: fingers, pens, and touches Flutter cannot classify (the
+/// Android emulator's screen reports those). A mouse is left out: it uses the arrows and the
+/// scroll wheel. A touchpad's two-finger swipe reaches the gallery as a pan-zoom, not as these.
+const Set<PointerDeviceKind> _touchKinds = <PointerDeviceKind>{
+  PointerDeviceKind.touch,
+  PointerDeviceKind.stylus,
+  PointerDeviceKind.invertedStylus,
+  PointerDeviceKind.unknown,
+};
+
 /// Scale above which a photo counts as zoomed in.
 const double _zoomedScale = 1.01;
 
@@ -64,7 +74,7 @@ final class _PhotoGalleryState extends State<PhotoGallery> {
   /// Whether the current photo is zoomed in: swipes then pan it.
   bool _zoomed = false;
 
-  /// The fingers on the screen. With two or more the gesture is a pinch: the page swipe and the
+  /// The fingers (or pens) on the screen. With two or more the gesture is a pinch: the page swipe and the
   /// swipe to close stand aside, or they would take it as soon as one finger moves.
   final Set<int> _fingers = <int>{};
 
@@ -136,7 +146,7 @@ final class _PhotoGalleryState extends State<PhotoGallery> {
   /// Side effects: Rebuilds without the page swipe and the swipe to close, which drops them from
   /// the gesture so the zoom wins it.
   void _fingerDown(PointerDownEvent event) {
-    if (event.kind != PointerDeviceKind.touch) {
+    if (!_touchKinds.contains(event.kind)) {
       return;
     }
     _fingers.add(event.pointer);
@@ -211,9 +221,7 @@ final class _PhotoGalleryState extends State<PhotoGallery> {
                       // Touch screens and touchpads swipe between photos; a mouse uses the arrows.
                       behavior: ScrollConfiguration.of(context).copyWith(
                         dragDevices: <PointerDeviceKind>{
-                          PointerDeviceKind.touch,
-                          PointerDeviceKind.stylus,
-                          PointerDeviceKind.invertedStylus,
+                          ..._touchKinds,
                           PointerDeviceKind.trackpad,
                         },
                       ),

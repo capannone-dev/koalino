@@ -2,6 +2,7 @@
 // and a sideways swipe move between them, Esc and a swipe down close it, and a zoomed picture
 // pans instead of turning the page.
 
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -154,6 +155,45 @@ void main() {
     await right.up();
     await tester.pumpAndSettle();
 
+    expect(_title(tester), contains('first.png'));
+    expect(tester.getRect(photo).width, greaterThan(before * 1.5));
+  });
+
+  testWidgets(
+      'a swipe from a touch screen Flutter cannot classify still turns the page',
+      (WidgetTester tester) async {
+    // The Android emulator's screen reports its touches as an unknown kind; Flutter's own
+    // scrolling accepts it, so the gallery must too.
+    await _open(tester);
+    await tester.fling(find.byKey(const ValueKey<String>('photo-0')),
+        const Offset(-400, 0), 1500,
+        deviceKind: PointerDeviceKind.unknown);
+    await tester.pumpAndSettle();
+    expect(_title(tester), contains('second.png'));
+  });
+
+  testWidgets('a pinch from a screen reporting styluses or unknown kinds zooms',
+      (WidgetTester tester) async {
+    await _open(tester);
+    final Finder photo = find.byKey(const ValueKey<String>('photo-0'));
+    final double before = tester.getRect(photo).width;
+    final Offset center = tester.getCenter(photo);
+    final TestGesture left = await tester.startGesture(
+        center - const Offset(20, 0),
+        pointer: 1,
+        kind: PointerDeviceKind.unknown);
+    final TestGesture right = await tester.startGesture(
+        center + const Offset(20, 0),
+        pointer: 2,
+        kind: PointerDeviceKind.stylus);
+    for (int step = 0; step < 10; step++) {
+      await left.moveBy(const Offset(-1, 1));
+      await right.moveBy(const Offset(14, 6));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await left.up();
+    await right.up();
+    await tester.pumpAndSettle();
     expect(_title(tester), contains('first.png'));
     expect(tester.getRect(photo).width, greaterThan(before * 1.5));
   });
