@@ -34,7 +34,9 @@ Settings, Issue #84), with a bottom
 width-capped meeting title field. `MeetingListScreen` renders titles above their date and
 duration, and pushes `MeetingDetailScreen` on phones or shows `MeetingDetailView` beside the list
 on desktops. The detail view puts the title in a bold `headlineMedium` semantic header
-(Issue #36).
+(Issue #36). Below 600 px `MeetingDetailScreen` puts its actions (chat, summary,
+speakers, export, camera, attach, project) on a row of their own under the title, scrolling
+sideways if needed, because beside the title they slid over the back button (#149).
 
 `confirm_delete_dialog.dart` asks before any irreversible deletion, and `delete_meeting_action.dart`
 uses it for the meeting list and detail, reporting a refusal in a snack bar.
@@ -174,7 +176,9 @@ Projects (Issue #85) is the destination between Meetings and Voices:
   (`openProjectSearchHit`).
 - `photo_gallery.dart` (#144) is `PhotoGallery`, the full-screen viewer of a meeting's photos and
   screenshots: ← / → and the on-screen arrows move between them, Esc closes; on a touch screen a
-  sideways swipe turns the page and a swipe up or down closes. A zoomed photo pans instead.
+  sideways swipe turns the page and a swipe up or down closes; with two fingers down the swipes
+  stand aside so a pinch zooms. A zoomed photo pans instead. Fingers, pens and touches Flutter
+  cannot classify (the Android emulator's) all count as touch; a mouse uses the arrows.
 - `clear_file.dart` (#99) is `ClearFile`: it asks for an attachment's clear copy, shows a progress
   indicator meanwhile, then builds the view from the copy's path, or an "unavailable" view. Meeting
   photos (inline and full screen) and project pictures, Markdown, text and PDFs use it.

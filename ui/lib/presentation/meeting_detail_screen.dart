@@ -38,6 +38,10 @@ typedef MeetingScreenBuilder = Widget Function(
 /// Widest the detail content grows, in logical pixels, so transcript lines stay readable.
 const double _maxReadableWidth = 840;
 
+/// Below this width (logical pixels: phones, narrow windows) the meeting's actions get their own
+/// row under the title instead of sharing the title's row.
+const double _actionsBesideTitleMinWidth = 600;
+
 /// Shows one meeting as a full screen; used on phones, where the list pushes it as a route.
 final class MeetingDetailScreen extends StatefulWidget {
   /// Creates a screen that selects and renders `meetingId` through `controller`.
@@ -132,73 +136,88 @@ final class _MeetingDetailScreenState extends State<MeetingDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final List<Widget> actions = <Widget>[
+      if (widget.recordingsBridge case final RecordingsBridge recordings)
+        PlayRecordingButton(bridge: recordings, meetingId: widget.meetingId),
+      if (widget.chatBridge case final ChatBridge bridge)
+        IconButton(
+          tooltip: l10n.chatAboutThisMeeting,
+          icon: const Icon(Icons.chat_outlined),
+          onPressed: () => openChat(context,
+              bridge: bridge,
+              topic: ChatTopic.meeting(widget.meetingId),
+              title: l10n.chat(
+                  widget.controller.selectedMeeting?.summary.title ??
+                      'meeting'),
+              openMeeting: _openCitedMeeting,
+              projectsController: widget.projectsController,
+              handoff: widget.summariesController?.handoff),
+        ),
+      if (widget.summariesController case final SummariesController summaries)
+        ListenableBuilder(
+          listenable: widget.controller,
+          builder: (BuildContext context, Widget? child) =>
+              MeetingSummaryButton(
+            controller: summaries,
+            meetingId: widget.meetingId,
+            title: widget.controller.selectedMeeting?.summary.title ??
+                l10n.thisMeeting,
+          ),
+        ),
+      if (widget.speakersScreenBuilder case final MeetingScreenBuilder builder)
+        NameSpeakersButton(
+          controller: widget.controller,
+          meetingId: widget.meetingId,
+          speakersScreenBuilder: builder,
+        ),
+      if (widget.exportController
+          case final MeetingExportController exportController)
+        ExportMeetingButton(
+          meetingController: widget.controller,
+          exportController: exportController,
+          meetingId: widget.meetingId,
+        ),
+      if (widget.photoScreenBuilder case final MeetingScreenBuilder builder)
+        TakePhotosButton(
+          controller: widget.controller,
+          meetingId: widget.meetingId,
+          photoScreenBuilder: builder,
+        ),
+      if (widget.attachmentsController
+          case final MeetingAttachmentsController attachmentsController)
+        AttachFilesButton(
+          controller: widget.controller,
+          attachmentsController: attachmentsController,
+          meetingId: widget.meetingId,
+        ),
+      if (widget.projectsController
+          case final ProjectsController projectsController)
+        MoveToProjectButton(
+          controller: projectsController,
+          meetingId: widget.meetingId,
+        ),
+    ];
+    // Up to eight actions do not fit beside the title on a phone: the app bar would slide them
+    // over the back button. There they get a row of their own, scrolling sideways if needed.
+    final bool narrow =
+        MediaQuery.sizeOf(context).width < _actionsBesideTitleMinWidth;
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.meeting2),
-        actions: <Widget>[
-          if (widget.recordingsBridge case final RecordingsBridge recordings)
-            PlayRecordingButton(
-                bridge: recordings, meetingId: widget.meetingId),
-          if (widget.chatBridge case final ChatBridge bridge)
-            IconButton(
-              tooltip: l10n.chatAboutThisMeeting,
-              icon: const Icon(Icons.chat_outlined),
-              onPressed: () => openChat(context,
-                  bridge: bridge,
-                  topic: ChatTopic.meeting(widget.meetingId),
-                  title: l10n.chat(
-                      widget.controller.selectedMeeting?.summary.title ??
-                          'meeting'),
-                  openMeeting: _openCitedMeeting,
-                  projectsController: widget.projectsController,
-                  handoff: widget.summariesController?.handoff),
-            ),
-          if (widget.summariesController
-              case final SummariesController summaries)
-            ListenableBuilder(
-              listenable: widget.controller,
-              builder: (BuildContext context, Widget? child) =>
-                  MeetingSummaryButton(
-                controller: summaries,
-                meetingId: widget.meetingId,
-                title: widget.controller.selectedMeeting?.summary.title ??
-                    l10n.thisMeeting,
-              ),
-            ),
-          if (widget.speakersScreenBuilder
-              case final MeetingScreenBuilder builder)
-            NameSpeakersButton(
-              controller: widget.controller,
-              meetingId: widget.meetingId,
-              speakersScreenBuilder: builder,
-            ),
-          if (widget.exportController
-              case final MeetingExportController exportController)
-            ExportMeetingButton(
-              meetingController: widget.controller,
-              exportController: exportController,
-              meetingId: widget.meetingId,
-            ),
-          if (widget.photoScreenBuilder case final MeetingScreenBuilder builder)
-            TakePhotosButton(
-              controller: widget.controller,
-              meetingId: widget.meetingId,
-              photoScreenBuilder: builder,
-            ),
-          if (widget.attachmentsController
-              case final MeetingAttachmentsController attachmentsController)
-            AttachFilesButton(
-              controller: widget.controller,
-              attachmentsController: attachmentsController,
-              meetingId: widget.meetingId,
-            ),
-          if (widget.projectsController
-              case final ProjectsController projectsController)
-            MoveToProjectButton(
-              controller: projectsController,
-              meetingId: widget.meetingId,
-            ),
-        ],
+        actions: narrow ? null : actions,
+        bottom: narrow && actions.isNotEmpty
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(kMinInteractiveDimension),
+                child: Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsetsDirectional.only(end: 4),
+                    child: Row(children: actions),
+                  ),
+                ),
+              )
+            : null,
       ),
       body: MeetingDetailView(
           controller: widget.controller,
