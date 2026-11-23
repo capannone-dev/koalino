@@ -9,7 +9,9 @@ host (`Contents/MacOS/`), and the Whisper and diarization models with their lice
 (`Contents/Resources/models/`) into it. It signs the bundle ad hoc and zips it to
 `dist/koalino-macos-universal-<version>.zip`.
 
-The core is built with `local-ai,microphone,vad,diarization`. Capturing the computer's own sound
+The core is built with `local-ai,microphone,vad`, plus `diarization` on Apple silicon only:
+diarization runs on ONNX Runtime, whose last Intel Mac build (1.23.2) is older than the API the
+core needs, so on Intel Macs recordings are transcribed but not split by speaker. Capturing the computer's own sound
 (`computer-sound`, PulseAudio on Linux) is not available on macOS yet.
 
 The app is not notarized, since that needs a paid Apple Developer ID. Gatekeeper therefore blocks

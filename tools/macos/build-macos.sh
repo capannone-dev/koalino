@@ -2,8 +2,8 @@
 # Builds Koalino for macOS and packages it as a zip, on a Mac with Xcode (#151).
 #
 # The core is built for Intel and Apple silicon and joined into one universal
-# libnote_taker_core.dylib (whisper.cpp, microphone, speech-pause chunking, diarization; no
-# computer-sound capture yet). Flutter builds Koalino.app, and this script then puts into it:
+# libnote_taker_core.dylib (whisper.cpp, microphone, speech-pause chunking; diarization on Apple
+# silicon only, see below; no computer-sound capture yet). Flutter builds Koalino.app, and this script then puts into it:
 #   Contents/Frameworks/libnote_taker_core.dylib   (opened by ui/lib/infrastructure/core_library.dart)
 #   Contents/MacOS/note_taker_mcp, browser-host     (MCP server #112, extension host #125)
 #   Contents/Resources/models/                      (ggml-base.bin and diarization/, with licences)
@@ -31,16 +31,20 @@ for file in ggml-base.bin diarization/segmentation.onnx diarization/embedding.on
   fi
 done
 
-FEATURES=local-ai,microphone,vad,diarization
 TARGETS=(x86_64-apple-darwin aarch64-apple-darwin)
 for target in "${TARGETS[@]}"; do
   # A fixed CPU level for Intel Macs (2013 and later), since a native build would tie the app
   # to the build machine's CPU; Apple silicon always has what whisper.cpp uses.
+  # Diarization runs on ONNX Runtime, whose last Intel Mac build (1.23.2) is older than the 1.27
+  # API the core uses, and `ort` has no Intel Mac prebuilt: Intel Macs get no speaker separation
+  # (segments stay unattributed); Apple silicon links ONNX Runtime in statically.
   if [ "$target" = x86_64-apple-darwin ]; then
     export GGML_NATIVE=OFF GGML_AVX=ON GGML_AVX2=ON GGML_FMA=ON GGML_F16C=ON
+    FEATURES=local-ai,microphone,vad
   else
     export GGML_NATIVE=OFF
     unset GGML_AVX GGML_AVX2 GGML_FMA GGML_F16C
+    FEATURES=local-ai,microphone,vad,diarization
   fi
   cargo build --release --features "$FEATURES" --lib --target "$target"
   cargo build --release --bin note_taker_mcp --bin browser-host --target "$target"

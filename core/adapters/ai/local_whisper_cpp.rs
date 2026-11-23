@@ -235,8 +235,9 @@ pub struct LocalWhisperCppTranscriptionEngine {
     /// The crash marker while the GPU has loaded the model but not yet finished a chunk; the
     /// first inference is guarded by it, so closing the app while idle counts nothing (#133).
     unproven_gpu_marker: Mutex<Option<PathBuf>>,
-    /// The cores for the threads feeding the GPU; empty when they stay free.
-    #[cfg_attr(windows, allow(dead_code))]
+    /// The cores for the threads feeding the GPU; empty when they stay free. Only Linux and Android
+    /// pin threads, so elsewhere (Windows, macOS) it is never read.
+    #[cfg_attr(not(any(target_os = "linux", target_os = "android")), allow(dead_code))]
     pinned_cores: Vec<usize>,
 }
 
