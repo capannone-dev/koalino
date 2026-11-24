@@ -11,6 +11,9 @@
 //! every cluster in it to one identity. Grouping is recomputed on each listing and never stored,
 //! so it needs no sync; each cluster still resolves on its own, as paired devices expect.
 //!
+//! A recording whose speech went into a meeting's combined transcript (#88) is left out: the
+//! combined pass gave that meeting its own voices (#155).
+//!
 //! Each unknown voice may carry a suggested name (#113): the name a call window or the Teams
 //! captions showed while it spoke (`domain::speaker_names`). The gallery offers it; nothing is
 //! named without the owner's tap.
@@ -465,6 +468,36 @@ where
     }
 }
 
+/// The recordings whose speech a combined transcript was built from (#88), other than the meeting
+/// holding it (#155).
+///
+/// The combined pass gives the meeting its own voices, so such a recording's live clusters, one
+/// per chunk where the live matcher was unsure, are no longer anyone's to name.
+/// Inputs: The repository. Outputs: The recordings; none when the repository cannot list them.
+/// Side effects: Reads the meetings' combination index.
+fn recordings_in_combined_transcripts<RepositoryPort>(
+    note_repository: &RepositoryPort,
+) -> std::collections::HashSet<MeetingId>
+where
+    RepositoryPort: NoteRepository + ?Sized,
+{
+    note_repository
+        .meeting_recordings()
+        .map(|recordings| {
+            recordings
+                .into_iter()
+                .flat_map(|recording| {
+                    let meeting_id = recording.meeting_id;
+                    recording
+                        .combined_with
+                        .into_iter()
+                        .filter(move |member| member != &meeting_id)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Loads the voice gallery: unresolved clusters of every meeting and every saved person.
 ///
 /// Inputs: The persistence ports (either may be a `dyn` port).
@@ -498,10 +531,14 @@ where
 {
     let mut listed_clusters: Vec<VoiceLibraryCluster> = Vec::new();
     let mut representatives: Vec<Vec<f32>> = Vec::new();
+    let superseded = recordings_in_combined_transcripts(note_repository);
     for meeting_id in note_repository
         .list_meeting_ids()
         .map_err(ClusteringError::from)?
     {
+        if superseded.contains(&meeting_id) {
+            continue;
+        }
         let clusters = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default())
             .get_clusters_for_meeting(&meeting_id)?;
         if clusters.is_empty() {

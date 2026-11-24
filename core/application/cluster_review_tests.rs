@@ -731,3 +731,63 @@ fn voices_the_captions_name_alike_share_one_card() {
                 && cluster.voice_group_id() == group.group_id())
     );
 }
+
+/// Verifies the gallery leaves out the live voices of a recording whose speech a combined
+/// transcript replaced (#155): the combined pass gave the meeting its own voices, so the
+/// recording's per-chunk clusters would list each speaker many times over.
+#[test]
+fn voices_of_a_recording_folded_into_a_combined_transcript_are_not_listed() {
+    // Combinations live in meeting documents, which need a file-backed repository with a codec.
+    let directory = std::env::temp_dir().join(format!("voice-library-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&directory).unwrap_or_else(|error| panic!("{error}"));
+    let note_repository = SqliteNoteRepository::open(
+        directory.join("notes.sqlite3"),
+        DeviceId::new("laptop"),
+        crate::application::crypto::voice_encryptor::ephemeral_cipher(),
+    )
+    .and_then(|repository| {
+        repository.with_document_codec(std::sync::Arc::new(
+            crate::application::meeting_document::AutomergeMeetingDocumentCodec,
+        ))
+    })
+    .unwrap_or_else(|error| panic!("repository should open: {error}"));
+    let clusterer = UnknownSpeakerClusterer::new(&note_repository, ClusteringConfig::default());
+    let add_voice = |meeting_id: &MeetingId, embedding: &[f32]| {
+        clusterer
+            .find_or_create_cluster(meeting_id, embedding, Uuid::new_v4().to_string(), 1_000)
+            .unwrap_or_else(|error| panic!("chunk should be clustered: {error}"))
+            .cluster_id()
+    };
+    let phone_meeting = MeetingId::new("meeting-phone");
+    let laptop_meeting = MeetingId::new("meeting-laptop");
+    for meeting_id in [&phone_meeting, &laptop_meeting] {
+        note_repository
+            .create_meeting(meeting_id, &automerge::AutoCommit::new().save())
+            .unwrap_or_else(|error| panic!("meeting should be created: {error}"));
+    }
+    let combined_voice = add_voice(&phone_meeting, &[1.0, 0.0]);
+    add_voice(&laptop_meeting, &[0.0, 1.0]);
+    add_voice(&laptop_meeting, &[-1.0, 0.0]);
+    let listed = |repository: &SqliteNoteRepository| {
+        load_voice_library(repository, &InMemoryVoiceVectorDB::new())
+            .unwrap_or_else(|error| panic!("library should load: {error}"))
+            .unknown_clusters()
+            .len()
+    };
+    assert_eq!(listed(&note_repository), 3);
+
+    note_repository
+        .mark_combined(&phone_meeting, std::slice::from_ref(&laptop_meeting))
+        .unwrap_or_else(|error| panic!("combination should be noted: {error}"));
+
+    let library = load_voice_library(&note_repository, &InMemoryVoiceVectorDB::new())
+        .unwrap_or_else(|error| panic!("library should load: {error}"));
+    let listed_ids: Vec<Uuid> = library
+        .unknown_clusters()
+        .iter()
+        .map(|cluster| cluster.summary().cluster_id())
+        .collect();
+    assert_eq!(listed_ids, vec![combined_voice]);
+    drop(note_repository);
+    let _ = std::fs::remove_dir_all(&directory);
+}
