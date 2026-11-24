@@ -50,8 +50,8 @@ impl SystemMicrophoneUsers {
     /// audio session manager and, failing that, runs `reg` (Windows); call it off the UI thread.
     pub fn current(&self) -> Result<Vec<MicrophoneUser>, MicrophoneUsersError> {
         if cfg!(target_os = "linux") {
-            let outputs = run("pactl", &["-f", "json", "list", "source-outputs"])?;
-            let sources = run("pactl", &["-f", "json", "list", "short", "sources"])?;
+            let outputs = run_tool("pactl", &["-f", "json", "list", "source-outputs"])?;
+            let sources = run_tool("pactl", &["-f", "json", "list", "short", "sources"])?;
             Ok(parse_pactl(&outputs, &sources))
         } else if cfg!(windows) {
             // The sessions answer in milliseconds; `reg` costs a process per look, so it is
@@ -60,7 +60,7 @@ impl SystemMicrophoneUsers {
                 Ok(sessions) => Ok(sessions),
                 Err(error) => {
                     warn_sessions_unreadable_once(&error);
-                    Ok(parse_consent_store(&run(
+                    Ok(parse_consent_store(&run_tool(
                         "reg",
                         &["query", CONSENT_STORE, "/s"],
                     )?))
@@ -97,7 +97,7 @@ fn active_capture_sessions() -> Result<Vec<MicrophoneUser>, MicrophoneUsersError
 ///
 /// When the Flutter engine collected the exit status first (`child_process`), the output, read to
 /// its end, is still whole, so it is kept.
-fn run(program: &str, arguments: &[&str]) -> Result<String, MicrophoneUsersError> {
+pub(crate) fn run_tool(program: &str, arguments: &[&str]) -> Result<String, MicrophoneUsersError> {
     use std::io::Read as _;
     let mut command = Command::new(program);
     command

@@ -785,5 +785,7 @@
   "lastSyncedMinutesAgo": "{count, plural, other{最終同期: {count} 分前}}",
   "lastSyncedHoursAgo": "{count, plural, other{最終同期: {count} 時間前}}",
   "lastSyncedOn": "最終同期: {date}",
-  "devicesOnlineCount": "{total} 台中 {online} 台がオンライン"
+  "devicesOnlineCount": "{total} 台中 {online} 台がオンライン",
+  "microphoneSeemsMutedOrOff": "マイクがミュートまたはオフになっているようです。何も聞こえていません。ミュートのスイッチやキーと、システム設定でマイクへのアクセスがオンになっているかを確認してください。",
+  "windowsBlocksTheMicrophone": "Windows がアプリのマイク使用をブロックしています。何も聞こえていません。設定 → プライバシーとセキュリティ → マイク で、「マイクへのアクセス」と「デスクトップ アプリがマイクにアクセスできるようにする」をオンにしてください。"
 }

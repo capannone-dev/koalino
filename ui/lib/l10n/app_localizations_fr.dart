@@ -3063,4 +3063,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String devicesOnlineCount(int online, int total) {
     return '$online sur $total en ligne';
   }
+
+  @override
+  String get microphoneSeemsMutedOrOff =>
+      'Le micro semble coupé ou désactivé : rien n’est entendu. Vérifiez le bouton ou la touche de sourdine, et que l’accès au micro est activé dans les paramètres du système.';
+
+  @override
+  String get windowsBlocksTheMicrophone =>
+      'Windows empêche les applications d’utiliser le micro : rien n’est entendu. Dans Paramètres → Confidentialité et sécurité → Microphone, activez Accès au microphone et Autoriser les applications de bureau à accéder à votre microphone.';
 }

@@ -2904,4 +2904,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String devicesOnlineCount(int online, int total) {
     return '$total 台中 $online 台がオンライン';
   }
+
+  @override
+  String get microphoneSeemsMutedOrOff =>
+      'マイクがミュートまたはオフになっているようです。何も聞こえていません。ミュートのスイッチやキーと、システム設定でマイクへのアクセスがオンになっているかを確認してください。';
+
+  @override
+  String get windowsBlocksTheMicrophone =>
+      'Windows がアプリのマイク使用をブロックしています。何も聞こえていません。設定 → プライバシーとセキュリティ → マイク で、「マイクへのアクセス」と「デスクトップ アプリがマイクにアクセスできるようにする」をオンにしてください。';
 }

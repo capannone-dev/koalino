@@ -3072,4 +3072,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String devicesOnlineCount(int online, int total) {
     return '$online من $total متصل';
   }
+
+  @override
+  String get microphoneSeemsMutedOrOff =>
+      'يبدو أن الميكروفون مكتوم أو مطفأ: لا يُسمع أي شيء. تحقّق من مفتاح أو زر كتم الصوت، ومن أن الوصول إلى الميكروفون مفعّل في إعدادات النظام.';
+
+  @override
+  String get windowsBlocksTheMicrophone =>
+      'يمنع Windows التطبيقات من استخدام الميكروفون: لا يُسمع أي شيء. في الإعدادات ← الخصوصية والأمان ← الميكروفون، فعّل الوصول إلى الميكروفون والسماح لتطبيقات سطح المكتب بالوصول إلى الميكروفون.';
 }

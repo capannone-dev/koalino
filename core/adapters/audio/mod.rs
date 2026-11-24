@@ -25,6 +25,10 @@ pub mod local_recorder;
 pub mod microphone_fallback;
 #[cfg(test)]
 mod microphone_fallback_tests;
+/// Notices a muted, turned-off or blocked microphone from its audio.
+pub mod microphone_silence;
+#[cfg(test)]
+mod microphone_silence_tests;
 /// Which apps capture the microphone, for noticing calls (#111).
 pub mod microphone_users;
 #[cfg(test)]

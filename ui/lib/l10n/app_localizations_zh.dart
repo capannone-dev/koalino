@@ -2840,4 +2840,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String devicesOnlineCount(int online, int total) {
     return '$online/$total 台在线';
   }
+
+  @override
+  String get microphoneSeemsMutedOrOff =>
+      '麦克风似乎已静音或关闭：没有收到任何声音。请检查静音开关或按键，并确认系统设置中已开启麦克风访问权限。';
+
+  @override
+  String get windowsBlocksTheMicrophone =>
+      'Windows 正在阻止应用使用麦克风：没有收到任何声音。请在“设置 → 隐私和安全性 → 麦克风”中开启“麦克风访问权限”和“允许桌面应用访问你的麦克风”。';
 }

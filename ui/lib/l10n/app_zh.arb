@@ -785,5 +785,7 @@
   "lastSyncedMinutesAgo": "{count, plural, other{上次同步：{count} 分钟前}}",
   "lastSyncedHoursAgo": "{count, plural, other{上次同步：{count} 小时前}}",
   "lastSyncedOn": "上次同步：{date}",
-  "devicesOnlineCount": "{online}/{total} 台在线"
+  "devicesOnlineCount": "{online}/{total} 台在线",
+  "microphoneSeemsMutedOrOff": "麦克风似乎已静音或关闭：没有收到任何声音。请检查静音开关或按键，并确认系统设置中已开启麦克风访问权限。",
+  "windowsBlocksTheMicrophone": "Windows 正在阻止应用使用麦克风：没有收到任何声音。请在“设置 → 隐私和安全性 → 麦克风”中开启“麦克风访问权限”和“允许桌面应用访问你的麦克风”。"
 }

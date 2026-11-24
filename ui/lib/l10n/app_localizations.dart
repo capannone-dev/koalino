@@ -4833,6 +4833,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{online} of {total} online'**
   String devicesOnlineCount(int online, int total);
+
+  /// No description provided for @microphoneSeemsMutedOrOff.
+  ///
+  /// In en, this message translates to:
+  /// **'The microphone seems muted or turned off: nothing is being heard. Check its mute switch or key, and that microphone access is on in the system\'s settings.'**
+  String get microphoneSeemsMutedOrOff;
+
+  /// No description provided for @windowsBlocksTheMicrophone.
+  ///
+  /// In en, this message translates to:
+  /// **'Windows is keeping apps from the microphone: nothing is being heard. In Settings → Privacy & security → Microphone, turn on Microphone access and Let desktop apps access your microphone.'**
+  String get windowsBlocksTheMicrophone;
 }
 
 class _AppLocalizationsDelegate

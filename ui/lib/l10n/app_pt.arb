@@ -785,5 +785,7 @@
   "lastSyncedMinutesAgo": "{count, plural, =1{Última sincronização há 1 minuto} other{Última sincronização há {count} minutos}}",
   "lastSyncedHoursAgo": "{count, plural, =1{Última sincronização há 1 hora} other{Última sincronização há {count} horas}}",
   "lastSyncedOn": "Última sincronização: {date}",
-  "devicesOnlineCount": "{online} de {total} online"
+  "devicesOnlineCount": "{online} de {total} online",
+  "microphoneSeemsMutedOrOff": "O microfone parece silenciado ou desligado: nada está a ser ouvido. Verifique o botão ou a tecla de silêncio e se o acesso ao microfone está ativado nas definições do sistema.",
+  "windowsBlocksTheMicrophone": "O Windows está a impedir as apps de usar o microfone: nada está a ser ouvido. Em Definições → Privacidade e segurança → Microfone, ative o Acesso ao microfone e Permitir que as aplicações de ambiente de trabalho acedam ao microfone."
 }

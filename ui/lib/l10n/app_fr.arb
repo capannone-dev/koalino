@@ -785,5 +785,7 @@
   "lastSyncedMinutesAgo": "{count, plural, =1{Dernière synchronisation il y a 1 minute} other{Dernière synchronisation il y a {count} minutes}}",
   "lastSyncedHoursAgo": "{count, plural, =1{Dernière synchronisation il y a 1 heure} other{Dernière synchronisation il y a {count} heures}}",
   "lastSyncedOn": "Dernière synchronisation : {date}",
-  "devicesOnlineCount": "{online} sur {total} en ligne"
+  "devicesOnlineCount": "{online} sur {total} en ligne",
+  "microphoneSeemsMutedOrOff": "Le micro semble coupé ou désactivé : rien n’est entendu. Vérifiez le bouton ou la touche de sourdine, et que l’accès au micro est activé dans les paramètres du système.",
+  "windowsBlocksTheMicrophone": "Windows empêche les applications d’utiliser le micro : rien n’est entendu. Dans Paramètres → Confidentialité et sécurité → Microphone, activez Accès au microphone et Autoriser les applications de bureau à accéder à votre microphone."
 }

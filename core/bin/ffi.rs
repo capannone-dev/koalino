@@ -7,12 +7,15 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex, OnceLock},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::{
     adapters::{
-        audio::{live_microphone::LiveMicrophone, retained_audio_store::RetainedSpeechIndex},
+        audio::{
+            live_microphone::LiveMicrophone, microphone_silence::MicrophoneSilence,
+            retained_audio_store::RetainedSpeechIndex,
+        },
         export::{default_export_directory, default_exporters},
         media::local_file_metadata::LocalFileMetadataExtractor,
         storage::{
@@ -91,6 +94,14 @@ pub const FFI_KEYCHAIN_UNAVAILABLE: c_int = 6;
 /// input device, microphone access denied (Android permission, Windows privacy setting), or an
 /// unsupported format. The recording is not started (Issue #45).
 pub const FFI_MICROPHONE_UNAVAILABLE: c_int = 7;
+/// From `note_taker_microphone_silence`: the microphone is heard, or none is open.
+pub const FFI_MICROPHONE_HEARD: c_int = 0;
+/// From `note_taker_microphone_silence`: the open microphone gives only digital silence or no
+/// audio, as when it is muted or turned off.
+pub const FFI_MICROPHONE_SILENT: c_int = 1;
+/// From `note_taker_microphone_silence`: as `FFI_MICROPHONE_SILENT`, and Windows' privacy
+/// settings keep desktop apps from the microphone.
+pub const FFI_MICROPHONE_BLOCKED_BY_WINDOWS: c_int = 2;
 /// Returns the portable Idle state from `note_taker_get_current_state`.
 pub const FFI_AUDIO_STATE_IDLE: c_int = 10;
 /// Returns the portable Recording state from `note_taker_get_current_state`.
@@ -266,6 +277,10 @@ struct FfiRuntime {
     microphone_source: Option<Arc<dyn MicrophoneSource>>,
     /// The microphone while a recording captures from it.
     live_microphone: Option<LiveMicrophone>,
+    /// Follows the open microphone's audio, to tell the owner when it is muted or turned off.
+    microphone_silence: Option<MicrophoneSilence>,
+    /// Whether Windows' privacy settings block the microphone, read once per silent spell.
+    microphone_blocked_by_windows: Option<bool>,
     /// What the computer plays (#108), captured beside the microphone; `None` without the
     /// `computer-sound` feature or on a platform that cannot.
     computer_sound_source: Option<Arc<dyn MicrophoneSource>>,
@@ -631,6 +646,8 @@ impl FfiRuntime {
             speed_check_due: None,
             microphone_source: None,
             live_microphone: None,
+            microphone_silence: None,
+            microphone_blocked_by_windows: None,
             computer_sound_source: None,
             live_computer_sound: None,
             computer_sound_wanted: || false,
@@ -1603,6 +1620,8 @@ impl FfiRuntime {
         match LiveMicrophone::open(microphone_source.as_ref()) {
             Ok(microphone) => {
                 self.live_microphone = Some(microphone);
+                self.microphone_silence = Some(MicrophoneSilence::new(Instant::now()));
+                self.microphone_blocked_by_windows = None;
                 Ok(true)
             }
             Err(error) => {
@@ -1637,6 +1656,33 @@ impl FfiRuntime {
         }
     }
 
+    /// Says whether the open microphone is heard, so the app can tell the owner it is muted.
+    ///
+    /// Outputs: `FFI_MICROPHONE_HEARD` (also when none is open), `FFI_MICROPHONE_SILENT`, or on
+    /// Windows `FFI_MICROPHONE_BLOCKED_BY_WINDOWS` when the privacy settings explain the silence.
+    /// Side effects: On Windows, the first look in a silent spell reads the privacy settings
+    /// (`reg query`); the answer is kept until the microphone is heard or closed.
+    fn microphone_silence_state(&mut self) -> c_int {
+        let silent = self
+            .microphone_silence
+            .as_ref()
+            .is_some_and(|silence| silence.is_silent(Instant::now()));
+        if !silent {
+            self.microphone_blocked_by_windows = None;
+            return FFI_MICROPHONE_HEARD;
+        }
+        #[cfg(windows)]
+        {
+            let blocked = *self.microphone_blocked_by_windows.get_or_insert_with(
+                crate::adapters::audio::microphone_silence::windows_blocks_microphone,
+            );
+            if blocked {
+                return FFI_MICROPHONE_BLOCKED_BY_WINDOWS;
+            }
+        }
+        FFI_MICROPHONE_SILENT
+    }
+
     /// Moves the microphone's queued audio into the recording; the ticker calls it.
     ///
     /// Outputs: Whether a microphone is still open (the ticker stops when it is not).
@@ -1647,6 +1693,12 @@ impl FfiRuntime {
             return false;
         };
         let blocks = microphone.drain();
+        if let Some(silence) = self.microphone_silence.as_mut() {
+            let now = Instant::now();
+            for block in &blocks {
+                silence.observe(block, now);
+            }
+        }
         let computer_blocks = self
             .live_computer_sound
             .as_ref()
@@ -1661,6 +1713,8 @@ impl FfiRuntime {
     ///
     /// Side effects: Closes the stream (waiting for its thread) and pushes the tail.
     fn close_microphone(&mut self) {
+        self.microphone_silence = None;
+        self.microphone_blocked_by_windows = None;
         if let Some(microphone) = self.live_microphone.take() {
             let tail = microphone.close();
             self.push_microphone_blocks(tail);
@@ -3360,6 +3414,19 @@ pub extern "C" fn note_taker_get_active_meeting_id() -> *mut c_char {
 #[unsafe(no_mangle)]
 pub extern "C" fn note_taker_get_current_state() -> c_int {
     with_runtime(|runtime| runtime.current_recording_state())
+}
+
+/// Says whether the recording's microphone is heard, or seems muted or turned off.
+///
+/// Inputs: None.
+/// Outputs: `FFI_MICROPHONE_HEARD` (also when no microphone is open), `FFI_MICROPHONE_SILENT`
+/// after a few seconds of digital silence or no audio, `FFI_MICROPHONE_BLOCKED_BY_WINDOWS` when
+/// Windows' privacy settings explain it, or `FFI_RUNTIME_UNAVAILABLE`.
+/// Side effects: May lazily initialize the runtime; on Windows may run `reg query` once per
+/// silent spell.
+#[unsafe(no_mangle)]
+pub extern "C" fn note_taker_microphone_silence() -> c_int {
+    with_runtime(|runtime| runtime.microphone_silence_state())
 }
 
 /// Returns telemetry-observed device cards as caller-freed UTF-8 JSON.

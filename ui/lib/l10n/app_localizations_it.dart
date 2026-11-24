@@ -3064,4 +3064,12 @@ class AppLocalizationsIt extends AppLocalizations {
   String devicesOnlineCount(int online, int total) {
     return '$online di $total online';
   }
+
+  @override
+  String get microphoneSeemsMutedOrOff =>
+      'Il microfono sembra disattivato o spento: non si sente nulla. Controlla il tasto o l\'interruttore del muto e che l\'accesso al microfono sia attivo nelle impostazioni di sistema.';
+
+  @override
+  String get windowsBlocksTheMicrophone =>
+      'Windows impedisce alle app di usare il microfono: non si sente nulla. In Impostazioni → Privacy e sicurezza → Microfono, attiva Accesso al microfono e Consenti alle app desktop di accedere al microfono.';
 }

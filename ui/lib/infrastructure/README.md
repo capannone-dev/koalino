@@ -43,6 +43,10 @@ both native strings, and maps non-zero statuses to `MeetingRenameException` thro
 
 `recording_bridge.dart` maps start and resume statuses to `RecordingStartOutcome`: `started`
 (0), `microphoneUnavailable` (7, the Rust core could not open the microphone), or `failed`.
+`microphone_hearing.dart` asks the core (`note_taker_microphone_silence`, on a background isolate)
+whether the recording's microphone is heard, or gives only silence as when it is muted, turned off,
+or blocked by Windows' privacy settings; the Record screen then says so.
+
 `microphone_permission.dart` asks for microphone access before each start or resume: Android
 uses `MicrophonePermission.kt` on `note_taker/microphone` (`RECORD_AUDIO`); desktops have no
 runtime prompt, and a Windows privacy refusal surfaces as status 7 (Issue #45).

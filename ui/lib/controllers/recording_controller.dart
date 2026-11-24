@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:note_taker_ui/infrastructure/microphone_hearing.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recording_notifier.dart';
@@ -41,6 +42,9 @@ final class RecordingController extends ChangeNotifier {
   /// silence because another app holds the microphone for a call; it is asked every
   /// `silenceCheckInterval` while recording.
   ///
+  /// `microphoneHearing` answers whether the open microphone gives only silence, as when it is
+  /// muted, turned off, or blocked by the system; it is asked on the same interval.
+  ///
   /// `now` is the clock for `recordedTime` (#132); tests pass a fake one.
   RecordingController({
     required RecordingBridge recordingBridge,
@@ -48,6 +52,7 @@ final class RecordingController extends ChangeNotifier {
         const GrantedMicrophonePermission(),
     RecordingNotifier recordingNotifier = const NoRecordingNotifier(),
     Future<bool> Function()? microphoneSilenced,
+    Future<MicrophoneHearing> Function()? microphoneHearing,
     Duration silenceCheckInterval = const Duration(seconds: 3),
     DateTime Function() now = DateTime.now,
   })  : _now = now,
@@ -55,10 +60,11 @@ final class RecordingController extends ChangeNotifier {
         _microphonePermission = microphonePermission,
         _recordingNotifier = recordingNotifier,
         _checkSilenced = microphoneSilenced,
+        _checkHearing = microphoneHearing,
         _silenceCheckInterval = silenceCheckInterval {
     _externalChanges =
         recordingNotifier.externalChanges.listen(_applyExternalChange);
-    if (microphoneSilenced != null) {
+    if (microphoneSilenced != null || microphoneHearing != null) {
       addListener(_followRecordingForSilence);
     }
     addListener(_followStateForRecordedTime);
@@ -109,6 +115,7 @@ final class RecordingController extends ChangeNotifier {
   }
 
   final Future<bool> Function()? _checkSilenced;
+  final Future<MicrophoneHearing> Function()? _checkHearing;
   final Duration _silenceCheckInterval;
 
   /// Asks `_checkSilenced` while recording; `null` otherwise.
@@ -119,6 +126,12 @@ final class RecordingController extends ChangeNotifier {
   /// (#111). Always false off Android and while not recording.
   bool get microphoneSilenced => _microphoneSilenced;
 
+  MicrophoneHearing _microphoneHearing = MicrophoneHearing.heard;
+
+  /// Whether the open microphone is heard, or seems muted, turned off, or blocked. Always
+  /// `heard` while not recording.
+  MicrophoneHearing get microphoneHearing => _microphoneHearing;
+
   /// Starts the silence checks when a recording starts and ends them when it stops.
   void _followRecordingForSilence() {
     final bool recording = _state == RecordingUiState.recording;
@@ -128,27 +141,38 @@ final class RecordingController extends ChangeNotifier {
     } else if (!recording && _silenceTimer != null) {
       _silenceTimer?.cancel();
       _silenceTimer = null;
-      if (_microphoneSilenced) {
+      if (_microphoneSilenced ||
+          _microphoneHearing != MicrophoneHearing.heard) {
         _microphoneSilenced = false;
+        _microphoneHearing = MicrophoneHearing.heard;
         notifyListeners();
       }
     }
   }
 
-  /// Asks once and tells listeners when the answer changed; a failed check changes nothing.
+  /// Asks each check once and tells listeners when an answer changed; a failed check changes
+  /// nothing.
   Future<void> _checkSilence() async {
-    final Future<bool> Function()? check = _checkSilenced;
-    if (check == null) {
-      return;
+    bool silenced = _microphoneSilenced;
+    MicrophoneHearing hearing = _microphoneHearing;
+    if (_checkSilenced case final Future<bool> Function() check) {
+      try {
+        silenced = await check();
+      } on Object {
+        // Keeps the last answer.
+      }
     }
-    final bool silenced;
-    try {
-      silenced = await check();
-    } on Object {
-      return;
+    if (_checkHearing case final Future<MicrophoneHearing> Function() check) {
+      try {
+        hearing = await check();
+      } on Object {
+        // Keeps the last answer.
+      }
     }
-    if (_silenceTimer != null && silenced != _microphoneSilenced) {
+    if (_silenceTimer != null &&
+        (silenced != _microphoneSilenced || hearing != _microphoneHearing)) {
       _microphoneSilenced = silenced;
+      _microphoneHearing = hearing;
       notifyListeners();
     }
   }

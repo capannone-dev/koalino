@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:note_taker_ui/presentation/resizable_pane.dart';
+import 'package:note_taker_ui/infrastructure/microphone_hearing.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
 import 'package:note_taker_ui/controllers/call_watch_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_edit_controller.dart';
@@ -103,6 +104,8 @@ Future<void> main() async {
     // Android feeds a recording silence while a call holds the microphone (#111).
     microphoneSilenced:
         Platform.isAndroid ? const AndroidCallSignals().silenced : null,
+    // A muted, turned-off or blocked microphone gives only silence; the core notices.
+    microphoneHearing: readMicrophoneHearing,
   );
   // Lives as long as the app, so a choice survives switching destinations.
   final TranscriptionLanguageController languageController =

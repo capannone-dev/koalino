@@ -3017,4 +3017,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String devicesOnlineCount(int online, int total) {
     return '$online of $total online';
   }
+
+  @override
+  String get microphoneSeemsMutedOrOff =>
+      'The microphone seems muted or turned off: nothing is being heard. Check its mute switch or key, and that microphone access is on in the system\'s settings.';
+
+  @override
+  String get windowsBlocksTheMicrophone =>
+      'Windows is keeping apps from the microphone: nothing is being heard. In Settings → Privacy & security → Microphone, turn on Microphone access and Let desktop apps access your microphone.';
 }

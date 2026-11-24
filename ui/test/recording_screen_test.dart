@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
+import 'package:note_taker_ui/infrastructure/microphone_hearing.dart';
 import 'package:note_taker_ui/infrastructure/microphone_permission.dart';
 import 'package:note_taker_ui/infrastructure/recording_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recording_notifier.dart';
@@ -301,6 +302,64 @@ void main() {
     final int checksAtStop = checks;
     await tester.pump(const Duration(seconds: 10));
     expect(checks, checksAtStop, reason: 'checks end with the recording');
+    controller.dispose();
+  });
+
+  testWidgets('a muted or turned-off microphone is said while recording',
+      (WidgetTester tester) async {
+    final FakeRecordingBridge recordingBridge =
+        FakeRecordingBridge(startResult: true);
+    MicrophoneHearing hearing = MicrophoneHearing.silent;
+    final RecordingController controller = RecordingController(
+      recordingBridge: recordingBridge,
+      microphoneHearing: () async => hearing,
+      silenceCheckInterval: const Duration(seconds: 2),
+    );
+    await tester.pumpWidget(
+        MaterialApp(home: RecordingScreen(recordingController: controller)));
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+    expect(controller.microphoneHearing, MicrophoneHearing.silent);
+    expect(find.textContaining('The microphone seems muted or turned off'),
+        findsOneWidget);
+
+    hearing = MicrophoneHearing.blockedByWindows;
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.textContaining('Windows is keeping apps from the microphone'),
+        findsOneWidget);
+
+    hearing = MicrophoneHearing.heard;
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.textContaining('muted or turned off'), findsNothing);
+    expect(find.textContaining('Windows is keeping'), findsNothing);
+
+    await tester.tap(find.text('Stop'));
+    await tester.pumpAndSettle();
+    controller.dispose();
+  });
+
+  testWidgets('a call silencing the microphone is said instead of a mute',
+      (WidgetTester tester) async {
+    final RecordingController controller = RecordingController(
+      recordingBridge: FakeRecordingBridge(startResult: true),
+      microphoneSilenced: () async => true,
+      microphoneHearing: () async => MicrophoneHearing.silent,
+      silenceCheckInterval: const Duration(seconds: 2),
+    );
+    await tester.pumpWidget(
+        MaterialApp(home: RecordingScreen(recordingController: controller)));
+
+    await tester.tap(find.text('Start recording'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 2));
+
+    expect(find.textContaining('silencing the microphone'), findsOneWidget);
+    expect(find.textContaining('muted or turned off'), findsNothing,
+        reason: 'the call explains the silence');
+    await tester.tap(find.text('Stop'));
+    await tester.pumpAndSettle();
     controller.dispose();
   });
 

@@ -1,7 +1,8 @@
 // Renders the recording lifecycle and optional meeting title using Material 3 controls, the
 // live transcript growing chunk by chunk while recording (Issue #52), and the camera for photos
 // of the meeting (Issue #54). A status panel sets recording apart from waiting, with the recorded
-// time counting while recording (Issue #132).
+// time counting while recording (Issue #132). It says when the microphone seems muted, turned off
+// or blocked, as it does when Android silences it for a call.
 
 import 'dart:async';
 
@@ -11,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/live_transcript_controller.dart';
 import 'package:note_taker_ui/controllers/meeting_attachments_controller.dart';
 import 'package:note_taker_ui/controllers/recording_controller.dart';
+import 'package:note_taker_ui/infrastructure/microphone_hearing.dart';
 import 'package:note_taker_ui/infrastructure/meeting_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
@@ -243,14 +245,30 @@ final class _RecordingScreenState extends State<RecordingScreen> {
                           child: Text(completionMessage,
                               textAlign: TextAlign.center),
                         ),
-                      if (recordingController.microphoneSilenced)
+                      // A call explains the silence better than a mute does.
+                      if (describeMicrophoneProblem(
+                              silencedByCall:
+                                  recordingController.microphoneSilenced,
+                              hearing: recordingController.microphoneHearing)
+                          case final String problem)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
-                          child: Text(
-                            l10n.microphoneSilencedByCall,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.error),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Icon(Icons.mic_off,
+                                  color: Theme.of(context).colorScheme.error),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  problem,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color:
+                                          Theme.of(context).colorScheme.error),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       if (recordingController.errorMessage
@@ -668,3 +686,19 @@ final class _TranscriptLine extends StatelessWidget {
     );
   }
 }
+
+/// Says why the microphone gives the recording silence, or nothing when it is heard.
+///
+/// Inputs: Whether Android silences it for a call (#111), and what the core hears.
+/// Outputs: The call's message first, then the mute or Windows-privacy message, else `null`.
+/// Side effects: None.
+String? describeMicrophoneProblem(
+        {required bool silencedByCall, required MicrophoneHearing hearing}) =>
+    silencedByCall
+        ? l10n.microphoneSilencedByCall
+        : switch (hearing) {
+            MicrophoneHearing.heard => null,
+            MicrophoneHearing.silent => l10n.microphoneSeemsMutedOrOff,
+            MicrophoneHearing.blockedByWindows =>
+              l10n.windowsBlocksTheMicrophone,
+          };

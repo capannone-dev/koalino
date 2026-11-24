@@ -3073,4 +3073,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String devicesOnlineCount(int online, int total) {
     return 'В сети: $online из $total';
   }
+
+  @override
+  String get microphoneSeemsMutedOrOff =>
+      'Похоже, микрофон выключен или в нём отключён звук: ничего не слышно. Проверьте кнопку или клавишу отключения звука и то, что доступ к микрофону включён в настройках системы.';
+
+  @override
+  String get windowsBlocksTheMicrophone =>
+      'Windows не даёт приложениям доступ к микрофону: ничего не слышно. В разделе Параметры → Конфиденциальность и защита → Микрофон включите «Доступ к микрофону» и «Разрешить классическим приложениям доступ к микрофону».';
 }

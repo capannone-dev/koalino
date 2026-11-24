@@ -2355,5 +2355,9 @@
   "lastSyncedOn": "Last synced {date}",
   "@lastSyncedOn": {"placeholders": {"date": {"type": "String"}}},
   "devicesOnlineCount": "{online} of {total} online",
-  "@devicesOnlineCount": {"placeholders": {"online": {"type": "int"}, "total": {"type": "int"}}}
+  "@devicesOnlineCount": {"placeholders": {"online": {"type": "int"}, "total": {"type": "int"}}},
+  "microphoneSeemsMutedOrOff": "The microphone seems muted or turned off: nothing is being heard. Check its mute switch or key, and that microphone access is on in the system's settings.",
+  "@microphoneSeemsMutedOrOff": {},
+  "windowsBlocksTheMicrophone": "Windows is keeping apps from the microphone: nothing is being heard. In Settings → Privacy & security → Microphone, turn on Microphone access and Let desktop apps access your microphone.",
+  "@windowsBlocksTheMicrophone": {}
 }
