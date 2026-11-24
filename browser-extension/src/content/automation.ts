@@ -229,19 +229,109 @@ function spokenLanguageDropdown(root: ParentNode): HTMLElement | null {
   return null;
 }
 
+const CAPTIONS_SETTINGS_BUTTON = '[data-tid="closed-captions-settings-menu-trigger-button"]';
+const CAPTIONS_SPOKEN_LANGUAGE_ITEM = '[data-tid="captions-settings-redesign-spoken-language"]';
+/** Prefix of each language item's `data-tid`; a locale such as `it-it` follows it. */
+const CAPTIONS_SPOKEN_LANGUAGE_OPTION_PREFIX = "captions-settings-redesign-spoken-language-";
+
+/**
+ * The captions settings' language item for `code`: by the locale in its `data-tid` (preferring
+ * the language's own country, `it-it` before `it-ch`), else by its name.
+ *
+ * Inputs: The document, a Whisper code and the language's names. Outputs: The item, or `null`.
+ * Side effects: None.
+ */
+function captionsLanguageOption(root: ParentNode, code: string, names: string[]): HTMLElement | null {
+  const options = [
+    ...root.querySelectorAll<HTMLElement>(`[data-tid^="${CAPTIONS_SPOKEN_LANGUAGE_OPTION_PREFIX}"]`),
+  ];
+  const localeOf = (option: HTMLElement) =>
+    (option.getAttribute("data-tid") ?? "").slice(CAPTIONS_SPOKEN_LANGUAGE_OPTION_PREFIX.length).toLowerCase();
+  const byCode = options.filter((option) => localeOf(option).split("-")[0] === code.toLowerCase());
+  return (
+    byCode.find((option) => localeOf(option) === `${code}-${code}`.toLowerCase()) ??
+    byCode[0] ??
+    options.find((option) => namesLanguage(labelOf(option), names)) ??
+    null
+  );
+}
+
+/**
+ * Sets the spoken language from the live captions' settings menu, where Teams keeps it since
+ * late 2026: the captions gear → Meeting spoken language → a list of languages that applies the
+ * chosen one at once.
+ *
+ * Inputs: The document, a Whisper code and the language's names.
+ * Outputs: The outcome, or `null` when the captions settings are not shown (captions off, or an
+ * older Teams), so the caller tries the More menu instead.
+ * Side effects: Opens and closes the captions settings menu; may change the meeting's language.
+ */
+async function setSpokenLanguageFromCaptions(
+  root: ParentNode,
+  code: string,
+  names: string[],
+): Promise<SpokenLanguageOutcome | null> {
+  const gear = root.querySelector<HTMLElement>(CAPTIONS_SETTINGS_BUTTON);
+  if (!gear) return null;
+  const closeSettings = () => {
+    if (gear.getAttribute("aria-expanded") === "true") press(gear);
+  };
+  if (gear.getAttribute("aria-expanded") !== "true") press(gear);
+  const spoken = await waitFor(() => root.querySelector<HTMLElement>(CAPTIONS_SPOKEN_LANGUAGE_ITEM));
+  if (!spoken) {
+    closeSettings();
+    return "failed";
+  }
+  // The item reads "Meeting spoken language" then the current language, in its last element.
+  const current = (spoken.lastElementChild?.textContent ?? spoken.textContent ?? "").replace(/\s+/g, " ").trim();
+  if (namesLanguage(current, names)) {
+    closeSettings();
+    return "already";
+  }
+  press(spoken);
+  const option = await waitFor(() => captionsLanguageOption(root, code, names), 2_000);
+  if (!option) {
+    closeSettings();
+    return "failed";
+  }
+  if (option.getAttribute("aria-checked") === "true") {
+    closeSettings();
+    return "already";
+  }
+  press(option);
+  // Some tenants confirm the change in a dialog; press its button when one shows.
+  const confirm = await waitFor(() => {
+    for (const dialog of root.querySelectorAll<HTMLElement>("[role='dialog'], [role='alertdialog']")) {
+      const button = findControl(dialog, APPLY_LANGUAGE.label);
+      if (button) return button;
+    }
+    return null;
+  }, 1_500);
+  if (confirm) press(confirm);
+  closeSettings();
+  return "set";
+}
+
 /**
  * Sets the meeting's spoken language in Teams to Koalino's (#141; the owner's opt-in).
  *
  * Inputs: The document and a Whisper language code. Outputs: `set`, `already` when Teams used
- * it already, or `failed` (control or language not found; the dialog is cancelled).
- * Side effects: Opens More → Language and speech → Change spoken language, chooses the language
- * and presses Update. Teams applies it to the whole meeting and may tell the participants.
+ * it already, or `failed` (control or language not found; the menu or dialog is closed).
+ * Side effects: Uses the live captions' settings (gear → Meeting spoken language) when captions
+ * are shown, else More → Language and speech → Change spoken language and Update, as older Teams
+ * versions have it. Teams applies it to the whole meeting and may tell the participants.
  */
 export function setTeamsSpokenLanguage(root: ParentNode, code: string): Promise<SpokenLanguageOutcome> {
   let outcome: SpokenLanguageOutcome = "failed";
   return oneAtATime(async () => {
     const names = languageNames(code);
-    if (names.length === 0 || !(await openMoreMenu(root))) return false;
+    if (names.length === 0) return false;
+    const fromCaptions = await setSpokenLanguageFromCaptions(root, code, names);
+    if (fromCaptions) {
+      outcome = fromCaptions;
+      return fromCaptions !== "failed";
+    }
+    if (!(await openMoreMenu(root))) return false;
     const direct = await waitFor(() => findSpec(root, SPOKEN_LANGUAGE), 1_500);
     if (direct) {
       press(direct);

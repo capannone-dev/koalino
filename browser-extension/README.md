@@ -27,9 +27,11 @@ transcript.
 
 Optional, off by default: **Set Teams' spoken language to Koalino's** (#141). Koalino names its
 default transcription language when the host connects (nothing for Auto); about 20 s into a
-recording, before transcription would start, the extension opens More → Language and speech →
-Change spoken language, picks that language (matched by name in the page's language or English)
-and presses Update. A language Teams already uses is left alone; one Teams does not offer is
+recording, before transcription would start, the extension opens the live captions' settings
+(gear → Meeting spoken language, where Teams keeps it since November 2026) and picks that
+language, by the locale in the item's `data-tid` (`it-it`) or by its name. Older Teams versions
+have it under More → Language and speech → Change spoken language, which the extension uses when
+captions are not shown (it picks the language there and presses Update). A language Teams already uses is left alone; one Teams does not offer is
 cancelled and shown as a problem in the popup. Teams applies it to the whole meeting.
 
 **A reload stays one meeting.** If the Teams page reloads (or the owner rejoins) in the same tab

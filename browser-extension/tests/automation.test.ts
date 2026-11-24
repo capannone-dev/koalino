@@ -271,3 +271,84 @@ describe("Teams spoken language (#141)", () => {
     expect(document.querySelector("[role='dialog']")).toBeNull();
   });
 });
+
+/**
+ * A model of the captions pane's settings menu, as Teams showed it on 2026-11-24: the gear
+ * (`closed-captions-settings-menu-trigger-button`) opens a menu whose "Meeting spoken language"
+ * item opens a list of radio items, one per locale (`…-spoken-language-it-it`). Choosing one
+ * applies it at once. `applied` holds the chosen locale.
+ */
+function buildCaptionsLanguageMenu(current: string, locales: Record<string, string>): { applied: string | null } {
+  const result: { applied: string | null } = { applied: null };
+  document.body.innerHTML =
+    '<div data-tid="closed-caption-v2-window-wrapper"><button data-tid="closed-captions-settings-menu-trigger-button" aria-haspopup="menu" aria-expanded="false" aria-label="Live Caption, Caption Settings"></button></div>';
+  const gear = document.querySelector<HTMLElement>('[data-tid="closed-captions-settings-menu-trigger-button"]')!;
+  const closeAll = () => {
+    document.getElementById("captions-menu")?.remove();
+    document.getElementById("submenu")?.remove();
+    gear.setAttribute("aria-expanded", "false");
+  };
+  gear.addEventListener("click", () => {
+    if (gear.getAttribute("aria-expanded") === "true") {
+      closeAll();
+      return;
+    }
+    gear.setAttribute("aria-expanded", "true");
+    const menu = document.createElement("div");
+    menu.id = "captions-menu";
+    menu.setAttribute("role", "menu");
+    const spoken = document.createElement("div");
+    spoken.setAttribute("role", "menuitem");
+    spoken.setAttribute("data-tid", "captions-settings-redesign-spoken-language");
+    spoken.setAttribute("aria-haspopup", "menu");
+    spoken.innerHTML = `<span>Meeting spoken language</span><span>${current}</span>`;
+    spoken.addEventListener("click", () => {
+      const items = Object.entries(locales).map(([locale, name]) => {
+        const radio = document.createElement("div");
+        radio.setAttribute("role", "menuitemradio");
+        radio.setAttribute("data-tid", `captions-settings-redesign-spoken-language-${locale}`);
+        radio.setAttribute("aria-checked", String(name === current));
+        radio.textContent = name;
+        radio.addEventListener("click", () => {
+          result.applied = locale;
+          closeAll();
+        });
+        return radio;
+      });
+      showSubmenu(items);
+    });
+    menu.append(spoken);
+    document.body.append(menu);
+  });
+  return result;
+}
+
+describe("Teams spoken language from the captions settings (#141)", () => {
+  const locales = {
+    "en-us": "English (US)",
+    "fr-fr": "French (France)",
+    "it-it": "Italian (Italy)",
+    "it-ch": "Italian (Switzerland)",
+  };
+
+  it("chooses Koalino's language in the captions settings", async () => {
+    const teams = buildCaptionsLanguageMenu("English (US)", locales);
+    expect(await setTeamsSpokenLanguage(document, "it")).toBe("set");
+    expect(teams.applied).toBe("it-it");
+    expect(document.querySelector("[role='menu']")).toBeNull();
+  });
+
+  it("leaves a language that already matches alone and closes the menu", async () => {
+    const teams = buildCaptionsLanguageMenu("Italian (Italy)", locales);
+    expect(await setTeamsSpokenLanguage(document, "it")).toBe("already");
+    expect(teams.applied).toBeNull();
+    expect(document.querySelector("[role='menu']")).toBeNull();
+  });
+
+  it("closes the menu when Teams does not offer the language", async () => {
+    const teams = buildCaptionsLanguageMenu("English (US)", locales);
+    expect(await setTeamsSpokenLanguage(document, "fi")).toBe("failed");
+    expect(teams.applied).toBeNull();
+    expect(document.querySelector("[role='menu']")).toBeNull();
+  });
+});
