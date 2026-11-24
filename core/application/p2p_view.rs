@@ -78,6 +78,11 @@ pub struct TrustedDeviceView {
     pub peer_id: String,
     pub device_name: String,
     pub paired_at_ms: u64,
+    /// Whether the device is connected to this one right now (#153).
+    pub connected: bool,
+    /// When the device last synced with this one, in milliseconds since the Unix epoch; `None`
+    /// (JSON `null`) when it never has (#153).
+    pub last_synced_at_ms: Option<u64>,
     /// The device's manifest while it is connected; `None` (JSON `null`) otherwise.
     pub capabilities: Option<CapabilitiesView>,
 }
@@ -222,6 +227,8 @@ pub fn status_view(snapshot: Option<&P2pSnapshot>) -> P2pStatusView {
                     peer_id: device.peer_id().as_str().to_owned(),
                     device_name: device.device_name().as_str().to_owned(),
                     paired_at_ms: device.paired_at_ms(),
+                    connected: status.connected_devices.contains(device.peer_id()),
+                    last_synced_at_ms: device.last_synced_at_ms(),
                     capabilities: status
                         .peer_manifests
                         .iter()

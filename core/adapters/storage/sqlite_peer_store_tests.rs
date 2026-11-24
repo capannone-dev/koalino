@@ -227,6 +227,39 @@ fn renaming_a_paired_peer_keeps_its_pairing_time() {
     assert_eq!(peers, vec![trusted_peer("peer-phone", "S23", 2_000)]);
 }
 
+/// A paired device's last sync time is kept across reopening and re-pairing (#153); an older time
+/// never replaces a newer one, and an unpaired device is not added.
+#[test]
+fn the_last_sync_time_is_kept_and_only_moves_forward() {
+    let scratch = ScratchDirectory::new();
+    let store = open_store(&scratch.database_path());
+    let phone = DeviceId::new("peer-phone");
+    store
+        .trust_peer(&trusted_peer("peer-phone", "Phone", 1_000))
+        .unwrap_or_else(|error| panic!("peer must be trusted: {error}"));
+    let record = |peer: &DeviceId, synced_at_ms: u64| {
+        store
+            .record_last_synced(peer, synced_at_ms)
+            .unwrap_or_else(|error| panic!("sync time must be recorded: {error}"));
+    };
+
+    record(&phone, 5_000);
+    record(&phone, 4_000);
+    record(&DeviceId::new("peer-stranger"), 9_000);
+    store
+        .trust_peer(&trusted_peer("peer-phone", "Phone", 2_000))
+        .unwrap_or_else(|error| panic!("peer must be trusted again: {error}"));
+    drop(store);
+    let reopened_peers = open_store(&scratch.database_path())
+        .trusted_peers()
+        .unwrap_or_else(|error| panic!("peers must list: {error}"));
+
+    assert_eq!(
+        reopened_peers,
+        vec![trusted_peer("peer-phone", "Phone", 2_000).with_last_synced_at_ms(Some(5_000))]
+    );
+}
+
 /// Revoking removes the peer, reports whether it existed, and persists across reopening.
 #[test]
 fn revoking_a_peer_removes_it_persistently() {

@@ -13,6 +13,9 @@ The initial public contracts are Rust traits, not a network protocol:
   `note_taker_p2p_status` show this device's `capabilities` and each connected paired device's
   (`cpu_cores`, `gpu_vram_megabytes`, `transcription_models` such as `whisper`/`openai`,
   `supports_vad`; `null` while a device is not connected).
+  Each paired device also carries `connected` (whether it is connected right now) and
+  `last_synced_at_ms` (Unix milliseconds of the last message it sent here or the end of its last
+  connection, kept across restarts; `null` when it never synced) (Issue #153).
 - Each node with a pair-agreement secret also sends every connected paired device its X25519
   public key: `NTK1` followed by exactly 32 bytes, on the same encrypted stream
   (`core/application/pair_key_exchange.rs`). The pair key derived from it protects review clips

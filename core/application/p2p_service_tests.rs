@@ -1056,6 +1056,61 @@ async fn paired_devices_exchange_manifests_and_forget_revoked_ones() {
     assert!(laptop.status().peer_manifests.is_empty());
 }
 
+/// The status tells which paired devices are connected and when each last synced (#153): the
+/// time is kept in the allowlist, so it is still shown after the device leaves.
+#[tokio::test]
+async fn the_status_tells_which_paired_devices_are_online_and_when_they_last_synced() {
+    let laptop_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let mut phone_adapter = Libp2pNetworkAdapter::new_for_memory_transport()
+        .unwrap_or_else(|error| panic!("memory adapter must initialize: {error}"));
+    let phone_address: Multiaddr = "/memory/9531"
+        .parse()
+        .unwrap_or_else(|error| panic!("memory multiaddress must parse: {error}"));
+    phone_adapter
+        .listen_on_memory(phone_address.clone())
+        .unwrap_or_else(|error| panic!("phone must listen: {error}"));
+    let (mut laptop, laptop_database) = service_with_database("Laptop", laptop_adapter);
+    let mut phone = service("Phone", phone_adapter);
+    let phone_id = phone.transport().local_peer_id();
+
+    pair(&mut laptop, &mut phone, phone_address).await;
+    drive(&mut laptop, &mut phone, |laptop, _| {
+        let status = laptop.status();
+        status.connected_devices.contains(&phone_id)
+            && status.trusted_devices[0].last_synced_at_ms().is_some()
+    })
+    .await;
+    // The test clock always reads 7.
+    assert_eq!(
+        laptop.status().trusted_devices[0].last_synced_at_ms(),
+        Some(7)
+    );
+
+    drop(phone);
+    tokio::time::timeout(DRIVE_DEADLINE, async {
+        while laptop.status().connected_devices.contains(&phone_id) {
+            laptop.process_pending_events();
+            let _ = tokio::time::timeout(
+                Duration::from_millis(20),
+                laptop.transport_mut().drive_next_swarm_event(),
+            )
+            .await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("the phone must be seen leaving"));
+
+    assert_eq!(
+        laptop.status().trusted_devices[0].last_synced_at_ms(),
+        Some(7)
+    );
+    let stored = trust_store_connection(&laptop_database)
+        .trusted_peers()
+        .unwrap_or_else(|error| panic!("peers must list: {error}"));
+    assert_eq!(stored[0].last_synced_at_ms(), Some(7));
+}
+
 /// Paired devices agree a per-pair key once connected (Issue #50): each sends its X25519 public
 /// key, and both allowlists end up holding the same key for the other device. Devices paired
 /// before #50 get theirs the same way, at their next connection.

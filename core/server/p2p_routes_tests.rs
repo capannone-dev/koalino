@@ -82,7 +82,11 @@ fn snapshot() -> P2pSnapshot {
             transcription_route: crate::application::compute_router::ComputePreference::LocalOnly,
             local_peer_id: laptop.clone(),
             device_name: name("Laptop"),
-            trusted_devices: vec![TrustedPeer::new(phone.clone(), name("Phone"), 1_700)],
+            trusted_devices: vec![
+                TrustedPeer::new(phone.clone(), name("Phone"), 1_700)
+                    .with_last_synced_at_ms(Some(2_500)),
+            ],
+            connected_devices: vec![phone.clone()],
             nearby_devices: vec![tablet.clone()],
             nearby_device_names: vec![(tablet.clone(), name("Tablet"))],
             incoming_requests: vec![IncomingPairingRequest {
@@ -218,6 +222,8 @@ async fn status_lists_devices_pairings_and_updates() {
                     "peer_id": PHONE,
                     "device_name": "Phone",
                     "paired_at_ms": 1700,
+                    "connected": true,
+                    "last_synced_at_ms": 2500,
                     "capabilities": {
                         "cpu_cores": 4,
                         "gpu_vram_megabytes": 0,

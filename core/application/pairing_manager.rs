@@ -510,4 +510,11 @@ where
     pub fn store(&self) -> &Store {
         &self.store
     }
+
+    /// Reads this manager's clock.
+    ///
+    /// Outputs: The current time in milliseconds since the Unix epoch. Side effects: None.
+    pub fn now_ms(&self) -> u64 {
+        (self.clock)()
+    }
 }

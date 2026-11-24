@@ -129,6 +129,20 @@ pub trait TrustedPeerStore {
     ) -> Result<(), StorageError> {
         Ok(())
     }
+
+    /// Records that this device synced with a paired device at `synced_at_ms` (#153), so the
+    /// Devices screens can say when it last did, even after a restart.
+    ///
+    /// Inputs: The paired device and the time in milliseconds since the Unix epoch.
+    /// Outputs: Success (nothing happens for an unpaired device or an older time), or a storage
+    /// error. Side effects: Updates the device's row; stores that keep nothing ignore it.
+    fn record_last_synced(
+        &self,
+        _peer_id: &DeviceId,
+        _synced_at_ms: u64,
+    ) -> Result<(), StorageError> {
+        Ok(())
+    }
 }
 
 /// Something that happened during pairing, reported by the transport.

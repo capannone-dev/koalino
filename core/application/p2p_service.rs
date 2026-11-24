@@ -112,6 +112,10 @@ pub const DEFAULT_RETRY_DELAY: Duration = Duration::from_secs(2);
 /// Most pairing updates kept for the Devices screens, newest last.
 const MAX_RECENT_UPDATES: usize = 16;
 
+/// How often a connected device's last-sync time is written to the allowlist (#153); the end of
+/// a connection is always written, so at most this much is lost if the app stops abruptly.
+const LAST_SYNC_STORE_INTERVAL_MS: u64 = 60_000;
+
 /// Most queued network events handled per `process_pending_events` call, so one call always ends.
 const MAX_EVENTS_PER_PASS: usize = 1024;
 /// How long a paired device may take to transcribe one chunk before this device gives up on it.
@@ -345,6 +349,8 @@ pub struct P2pStatus {
     pub local_manifest: DeviceManifest,
     /// Manifests received from connected paired devices, ordered by peer ID.
     pub peer_manifests: Vec<DeviceManifest>,
+    /// Paired devices connected right now (#153), ordered by peer ID.
+    pub connected_devices: Vec<DeviceId>,
 }
 
 /// What this device can run, advertised in its manifest.
@@ -509,6 +515,11 @@ pub struct P2pService<Transport, Store, Repository> {
     shared_prompts: Option<Box<dyn SharedPromptsSync>>,
     /// The prompts each connected device was last sent.
     sent_prompts: HashMap<DeviceId, SharedPrompts>,
+    /// When each paired device last synced with this one (#153), newer than the allowlist's
+    /// copy until `record_sync` writes it there.
+    last_synced_ms: HashMap<DeviceId, u64>,
+    /// The last-sync time last written to the allowlist, by device, so writes are spaced out.
+    stored_synced_ms: HashMap<DeviceId, u64>,
 }
 
 impl<Transport, Store, Repository> P2pService<Transport, Store, Repository>
@@ -560,6 +571,8 @@ where
             shared_project_digests: HashMap::new(),
             shared_prompts: None,
             sent_prompts: HashMap::new(),
+            last_synced_ms: HashMap::new(),
+            stored_synced_ms: HashMap::new(),
         }
     }
 
@@ -813,6 +826,7 @@ where
                 peer_device_id,
                 payload,
             } => {
+                self.record_sync(peer_device_id, false);
                 if let Some(decoded) = decode_manifest_message(payload) {
                     self.accept_manifest(peer_device_id, decoded);
                     return;
@@ -881,6 +895,10 @@ where
                 Some(peer_device_id.clone())
             }
             NetworkEvent::PeerExpired(peer_device_id) => {
+                // The devices stayed in step until the connection ended.
+                if self.connected_peers.contains(peer_device_id) {
+                    self.record_sync(peer_device_id, true);
+                }
                 self.peer_manifests.remove(peer_device_id);
                 self.connected_peers.remove(peer_device_id);
                 self.pair_key_answered.remove(peer_device_id);
@@ -2130,6 +2148,48 @@ where
         }
     }
 
+    /// Notes that a paired device synced with this one now (#153), and writes the time to the
+    /// allowlist when `always_store` is set or the stored time is `LAST_SYNC_STORE_INTERVAL_MS` old.
+    ///
+    /// Inputs: The device a message came from, or whose connection ended, and whether to write
+    /// the time regardless of the last write.
+    /// Side effects: Updates the in-memory time; may update the device's allowlist row. Unpaired
+    /// devices are ignored. A failed write is logged (peer ID only) and retried on the next call.
+    fn record_sync(&mut self, peer_device_id: &DeviceId, always_store: bool) {
+        let paired = self
+            .trusted_devices
+            .iter()
+            .any(|device| device.peer_id() == peer_device_id);
+        if !paired {
+            return;
+        }
+        let now_ms = self.pairing_manager.now_ms();
+        self.last_synced_ms.insert(peer_device_id.clone(), now_ms);
+        let stored_recently = self
+            .stored_synced_ms
+            .get(peer_device_id)
+            .is_some_and(|stored_ms| {
+                now_ms.saturating_sub(*stored_ms) < LAST_SYNC_STORE_INTERVAL_MS
+            });
+        if stored_recently && !always_store {
+            return;
+        }
+        match self
+            .pairing_manager
+            .store()
+            .record_last_synced(peer_device_id, now_ms)
+        {
+            Ok(()) => {
+                self.stored_synced_ms.insert(peer_device_id.clone(), now_ms);
+            }
+            Err(error) => tracing::warn!(
+                peer = %peer_device_id.as_str(),
+                error = %error,
+                "a paired device's last sync time could not be stored"
+            ),
+        }
+    }
+
     /// Remembers the storage ID a paired device's manifest names, when it is new (#88).
     ///
     /// Side effects: Updates the trusted-peer store and this service's list; a failure is logged.
@@ -2286,7 +2346,23 @@ where
             local_peer_id: self.pairing_manager.transport().local_peer_id(),
             device_name: self.pairing_manager.local_name().clone(),
             transcription_route: self.transcription_route.clone(),
-            trusted_devices: self.trusted_devices.clone(),
+            // The allowlist's time may lag the one noted in memory by up to a store interval.
+            trusted_devices: self
+                .trusted_devices
+                .iter()
+                .map(|device| {
+                    let last_synced_at_ms = device
+                        .last_synced_at_ms()
+                        .max(self.last_synced_ms.get(device.peer_id()).copied());
+                    device.clone().with_last_synced_at_ms(last_synced_at_ms)
+                })
+                .collect(),
+            connected_devices: {
+                let mut connected_devices: Vec<DeviceId> =
+                    self.connected_peers.iter().cloned().collect();
+                connected_devices.sort_by(|first, second| first.as_str().cmp(second.as_str()));
+                connected_devices
+            },
             nearby_devices: self.pairing_manager.nearby_devices(),
             nearby_device_names: self
                 .pairing_manager

@@ -793,6 +793,7 @@ fn laptop_status() -> crate::application::p2p_service::P2pStatus {
         recent_updates: Vec::new(),
         local_manifest: manifest("peer-laptop", "laptop"),
         peer_manifests: vec![manifest("peer-tablet", "tablet")],
+        connected_devices: vec![DeviceId::new("peer-tablet")],
     }
 }
 

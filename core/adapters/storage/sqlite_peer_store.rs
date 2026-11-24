@@ -149,6 +149,19 @@ impl SqlitePeerStore {
                 .execute_batch("ALTER TABLE p2p_trusted_peers ADD COLUMN storage_device_id TEXT")
                 .map_err(|error| sqlite_error("unable to add the storage-ID column", error))?;
         }
+        let has_last_synced_column: bool = connection
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM pragma_table_info('p2p_trusted_peers')
+                 WHERE name = 'last_synced_at_ms')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| sqlite_error("unable to inspect the trusted-peer columns", error))?;
+        if !has_last_synced_column {
+            connection
+                .execute_batch("ALTER TABLE p2p_trusted_peers ADD COLUMN last_synced_at_ms INTEGER")
+                .map_err(|error| sqlite_error("unable to add the last-synced column", error))?;
+        }
         Ok(Self { connection, cipher })
     }
 }
@@ -366,7 +379,7 @@ impl TrustedPeerStore for SqlitePeerStore {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT peer_id, device_name, paired_at_ms, storage_device_id
+                "SELECT peer_id, device_name, paired_at_ms, storage_device_id, last_synced_at_ms
                  FROM p2p_trusted_peers ORDER BY paired_at_ms, peer_id",
             )
             .map_err(|error| sqlite_error("unable to prepare the trusted-peer listing", error))?;
@@ -377,12 +390,13 @@ impl TrustedPeerStore for SqlitePeerStore {
                     row.get::<_, String>(1)?,
                     row.get::<_, i64>(2)?,
                     row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<i64>>(4)?,
                 ))
             })
             .map_err(|error| sqlite_error("unable to list trusted peers", error))?;
         let mut peers = Vec::new();
         for row in rows {
-            let (peer_id, device_name, paired_at_ms, storage_device_id) =
+            let (peer_id, device_name, paired_at_ms, storage_device_id, last_synced_at_ms) =
                 row.map_err(|error| sqlite_error("unable to read a trusted peer", error))?;
             let device_name =
                 DeviceName::parse(&device_name).map_err(|error| StorageError::Rejected {
@@ -393,7 +407,11 @@ impl TrustedPeerStore for SqlitePeerStore {
             })?;
             peers.push(
                 TrustedPeer::new(DeviceId::new(peer_id), device_name, paired_at_ms)
-                    .with_storage_device_id(storage_device_id.map(DeviceId::new)),
+                    .with_storage_device_id(storage_device_id.map(DeviceId::new))
+                    // A negative time cannot be written by this store; it reads as never.
+                    .with_last_synced_at_ms(
+                        last_synced_at_ms.and_then(|synced_at_ms| u64::try_from(synced_at_ms).ok()),
+                    ),
             );
         }
         Ok(peers)
@@ -487,6 +505,25 @@ impl TrustedPeerStore for SqlitePeerStore {
                 params![peer_id.as_str(), storage_device_id.as_str()],
             )
             .map_err(|error| sqlite_error("unable to remember the device's storage ID", error))?;
+        Ok(())
+    }
+
+    /// Moves the row's last-sync time forward, never back. Side effects: Writes at most one row.
+    fn record_last_synced(
+        &self,
+        peer_id: &DeviceId,
+        synced_at_ms: u64,
+    ) -> Result<(), StorageError> {
+        let synced_at_ms = i64::try_from(synced_at_ms).map_err(|_| StorageError::Rejected {
+            reason: String::from("sync time exceeds SQLite integer range"),
+        })?;
+        self.connection
+            .execute(
+                "UPDATE p2p_trusted_peers SET last_synced_at_ms = ?2
+                 WHERE peer_id = ?1 AND (last_synced_at_ms IS NULL OR last_synced_at_ms < ?2)",
+                params![peer_id.as_str(), synced_at_ms],
+            )
+            .map_err(|error| sqlite_error("unable to record the last sync time", error))?;
         Ok(())
     }
 }

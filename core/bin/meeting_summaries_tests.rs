@@ -290,6 +290,7 @@ fn computer_paired_with_the_recording_phone() -> crate::application::p2p_service
         recent_updates: Vec::new(),
         local_manifest,
         peer_manifests: Vec::new(),
+        connected_devices: Vec::new(),
     }
 }
 

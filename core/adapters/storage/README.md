@@ -118,6 +118,9 @@ secret, so these rows are not sealed. The `sealed_pair_key` column (Issue #50, a
 tables on open) holds the key agreed with that device, sealed under
 `p2p_trusted_peers:pair_key:<peer id>`. `pin_pair_key` writes it only while the column is empty,
 so the first key stays pinned; re-pairing keeps it and revoking deletes it with the row.
+The `last_synced_at_ms` column (Issue #153, added to older tables on open) is when this device
+last synced with that one; `record_last_synced` only moves it forward. The P2P service writes it
+at most once a minute while connected and always when the connection ends.
 It also implements `PairAgreementSecretStore`: the singleton table
 `p2p_pair_agreement_secret(singleton, sealed_secret)` keeps this device's X25519 secret, sealed
 under `p2p_pair_agreement_secret` and inserted like the node identity.

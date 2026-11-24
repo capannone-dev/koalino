@@ -62,6 +62,9 @@ pub struct TrustedPeer {
     paired_at_ms: u64,
     /// The ID the device writes on the meetings it records (#88), once its manifest said.
     storage_device_id: Option<DeviceId>,
+    /// When this device last synced with it (#153), in milliseconds since the Unix epoch; `None`
+    /// until it first does.
+    last_synced_at_ms: Option<u64>,
 }
 
 impl TrustedPeer {
@@ -76,7 +79,23 @@ impl TrustedPeer {
             device_name,
             paired_at_ms,
             storage_device_id: None,
+            last_synced_at_ms: None,
         }
+    }
+
+    /// Returns the record with the time this device last synced with it (#153).
+    ///
+    /// Inputs: Milliseconds since the Unix epoch, or `None` for never. Outputs: The record.
+    /// Side effects: None.
+    pub fn with_last_synced_at_ms(mut self, last_synced_at_ms: Option<u64>) -> Self {
+        self.last_synced_at_ms = last_synced_at_ms;
+        self
+    }
+
+    /// When this device last synced with it (#153): the last message it sent here, or the end
+    /// of its last connection. `None` until it first syncs.
+    pub fn last_synced_at_ms(&self) -> Option<u64> {
+        self.last_synced_at_ms
     }
 
     /// Returns the record with the ID the device writes on its meetings.
