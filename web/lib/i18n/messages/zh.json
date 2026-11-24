@@ -547,5 +547,18 @@
   "moveProjectTo": "移动到",
   "topLevel": "顶层",
   "moveProject": "移动",
-  "projectMoved": "项目已移动"
+  "projectMoved": "项目已移动",
+  "refresh": "刷新",
+  "deviceOnline": "在线",
+  "deviceOffline": "离线",
+  "neverSynced": "从未同步",
+  "syncedJustNow": "刚刚同步",
+  "lastSyncedMinutesAgo": {
+    "other": "上次同步：{count} 分钟前"
+  },
+  "lastSyncedHoursAgo": {
+    "other": "上次同步：{count} 小时前"
+  },
+  "lastSyncedOn": "上次同步：{date}",
+  "devicesOnlineCount": "{online}/{total} 台在线"
 }

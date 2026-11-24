@@ -19,7 +19,16 @@ export type DeviceCapabilities = {
  * A paired device. `paired_at_ms` is Unix milliseconds; `capabilities` is `null` while the device
  * is not connected.
  */
-export type TrustedDevice = { peer_id: string; device_name: string; paired_at_ms: number; capabilities: DeviceCapabilities | null };
+export type TrustedDevice = {
+  peer_id: string;
+  device_name: string;
+  paired_at_ms: number;
+  /** Whether the device is connected right now (#153); absent from servers older than #153. */
+  connected?: boolean;
+  /** When it last synced, in Unix milliseconds; `null` (or absent) when it never has (#153). */
+  last_synced_at_ms?: number | null;
+  capabilities: DeviceCapabilities | null;
+};
 /** An unpaired device seen on the local network. */
 /** `device_name` is present once the device told it; it tells only while discoverable (#121). */
 export type NearbyDevice = { peer_id: string; device_name?: string | null };

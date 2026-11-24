@@ -549,5 +549,20 @@
   "moveProjectTo": "Mover para",
   "topLevel": "Nível superior",
   "moveProject": "Mover",
-  "projectMoved": "Projeto movido"
+  "projectMoved": "Projeto movido",
+  "refresh": "Atualizar",
+  "deviceOnline": "Online",
+  "deviceOffline": "Offline",
+  "neverSynced": "Nunca sincronizado",
+  "syncedJustNow": "Sincronizado agora mesmo",
+  "lastSyncedMinutesAgo": {
+    "=1": "Última sincronização há 1 minuto",
+    "other": "Última sincronização há {count} minutos"
+  },
+  "lastSyncedHoursAgo": {
+    "=1": "Última sincronização há 1 hora",
+    "other": "Última sincronização há {count} horas"
+  },
+  "lastSyncedOn": "Última sincronização: {date}",
+  "devicesOnlineCount": "{online} de {total} online"
 }

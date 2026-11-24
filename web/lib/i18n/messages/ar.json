@@ -576,5 +576,20 @@
   "moveProjectTo": "نقل إلى",
   "topLevel": "المستوى الأعلى",
   "moveProject": "نقل",
-  "projectMoved": "نُقل المشروع"
+  "projectMoved": "نُقل المشروع",
+  "refresh": "تحديث",
+  "deviceOnline": "متصل",
+  "deviceOffline": "غير متصل",
+  "neverSynced": "لم تتم المزامنة بعد",
+  "syncedJustNow": "تمت المزامنة الآن",
+  "lastSyncedMinutesAgo": {
+    "=1": "آخر مزامنة قبل دقيقة واحدة",
+    "other": "آخر مزامنة قبل {count} دقيقة"
+  },
+  "lastSyncedHoursAgo": {
+    "=1": "آخر مزامنة قبل ساعة واحدة",
+    "other": "آخر مزامنة قبل {count} ساعة"
+  },
+  "lastSyncedOn": "آخر مزامنة: {date}",
+  "devicesOnlineCount": "{online} من {total} متصل"
 }

@@ -211,6 +211,44 @@ test("shows what each device can run, and which paired devices are not connected
   expect(screen.getByText(/^Not connected\. Put both devices on the same Wi-Fi/)).toBeInTheDocument();
 });
 
+test("paired devices say whether they are online and when they last synced (#153)", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(Date.UTC(2026, 10, 24, 10)));
+  render(
+    <DevicesPanel
+      initialStatus={runningStatus({
+        trusted_devices: [
+          {
+            peer_id: pairedPeerId,
+            device_name: "Laptop",
+            paired_at_ms: Date.UTC(2026, 9, 28, 12),
+            connected: true,
+            last_synced_at_ms: Date.UTC(2026, 10, 24, 9, 55),
+            capabilities: null
+          },
+          { peer_id: nearbyPeerId, device_name: "Phone", paired_at_ms: Date.UTC(2026, 9, 28, 12), connected: false, last_synced_at_ms: null, capabilities: null }
+        ]
+      })}
+    />
+  );
+
+  expect(screen.getByText("1 of 2 online")).toBeInTheDocument();
+  expect(screen.getByText("Online")).toBeInTheDocument();
+  expect(screen.getByText("Offline")).toBeInTheDocument();
+  expect(screen.getByText("Last synced 5 minutes ago")).toBeInTheDocument();
+  expect(screen.getByText("Never synced")).toBeInTheDocument();
+});
+
+test("the refresh button reads the status again (#153)", async () => {
+  render(<DevicesPanel initialStatus={runningStatus()} />);
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+  });
+
+  expect(p2pApi.getP2pStatus).toHaveBeenCalledTimes(1);
+});
+
 test("a device that runs no models says so", () => {
   render(
     <DevicesPanel

@@ -126,6 +126,24 @@ export function describeCapabilities(t: Translate, capabilities: DeviceCapabilit
   return parts.join(" · ");
 }
 
+/**
+ * Says when a paired device last synced, as `Last synced 5 minutes ago` (#153).
+ *
+ * Inputs: the last sync time in Unix milliseconds (`null`/absent for never) and the current time.
+ * Outputs: never; just now under a minute or for a time ahead of `nowMs`; minutes under an hour;
+ * hours under a day; then the local date and time. Side effects: none.
+ */
+export function describeLastSynced(t: Translate, lastSyncedAtMs: number | null | undefined, nowMs: number): string {
+  if (lastSyncedAtMs === null || lastSyncedAtMs === undefined) return t("neverSynced");
+  const sinceSyncMs = nowMs - lastSyncedAtMs;
+  const minuteMs = 60_000;
+  if (sinceSyncMs < minuteMs) return t("syncedJustNow");
+  if (sinceSyncMs < 60 * minuteMs) return t("lastSyncedMinutesAgo", { count: Math.floor(sinceSyncMs / minuteMs) });
+  if (sinceSyncMs < 24 * 60 * minuteMs) return t("lastSyncedHoursAgo", { count: Math.floor(sinceSyncMs / (60 * minuteMs)) });
+  const date = new Date(lastSyncedAtMs).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return t("lastSyncedOn", { date });
+}
+
 const primaryButton = "min-h-11 rounded-lg bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:bg-disabled";
 const secondaryButton = "min-h-11 rounded-lg border border-line-strong px-4 font-medium hover:bg-canvas disabled:text-faint";
 
@@ -323,15 +341,34 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
         </DeviceSection>
       )}
 
-      <DeviceSection title={t("pairedDevices")}>
+      <DeviceSection
+        title={t("pairedDevices")}
+        note={
+          status.trusted_devices.length === 0
+            ? undefined
+            : t("devicesOnlineCount", { online: status.trusted_devices.filter((device) => device.connected).length, total: status.trusted_devices.length })
+        }
+        action={
+          <button type="button" className={secondaryButton} onClick={() => void refreshStatus()}>
+            {t("refresh")}
+          </button>
+        }
+      >
         {status.trusted_devices.length === 0 && <p className="text-muted">{t("noPairedDevicesYet")}</p>}
         {status.trusted_devices.map((device) => (
           <div key={device.peer_id} className="card space-y-2">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <p className="font-semibold">{device.device_name}</p>
+                <p className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold">{device.device_name}</span>
+                  <ConnectionBadge online={device.connected === true} />
+                </p>
+                <p className="text-sm">{describeLastSynced(t, device.last_synced_at_ms, Date.now())}</p>
                 <p className="text-sm text-muted">{t("paired", { pairedDate: formatPairedDate(device.paired_at_ms) })}</p>
-                <p className="text-sm text-muted">{device.capabilities ? describeCapabilities(t, device.capabilities) : describeDisconnectedDevice(t, hasRelay)}</p>
+                {/* A device can be connected a moment before its manifest arrives. */}
+                {(device.capabilities || !device.connected) && (
+                  <p className="text-sm text-muted">{device.capabilities ? describeCapabilities(t, device.capabilities) : describeDisconnectedDevice(t, hasRelay)}</p>
+                )}
               </div>
               {deviceToRemove?.peer_id !== device.peer_id && (
                 <button type="button" className={secondaryButton} aria-label={t("remove2", { deviceName: device.device_name })} disabled={isBusy} onClick={() => setDeviceToRemove(device)}>{t("remove")}</button>
@@ -422,16 +459,31 @@ export function DevicesPanel({ initialStatus }: DevicesPanelProps) {
   );
 }
 
-/** A titled section, exposed as a region named by its heading. */
-function DeviceSection({ title, children }: { title: string; children: React.ReactNode }) {
+/** A titled section, exposed as a region named by its heading; `note` shows muted beside it, then `action`. */
+function DeviceSection({ title, note, action, children }: { title: string; note?: string; action?: React.ReactNode; children: React.ReactNode }) {
   const headingId = `devices-${title.toLowerCase().replaceAll(" ", "-")}`;
   return (
     <section aria-labelledby={headingId} className="space-y-3">
-      <h2 id={headingId} className="text-lg font-semibold">
-        {title}
-      </h2>
+      <div className="flex items-center gap-4">
+        <h2 id={headingId} className="grow text-lg font-semibold">
+          {title}
+        </h2>
+        {note && <p className="text-sm text-muted">{note}</p>}
+        {action}
+      </div>
       {children}
     </section>
+  );
+}
+
+/** A pill reading `Online` (green dot) or `Offline` (grey dot) beside a paired device's name (#153). */
+function ConnectionBadge({ online }: { online: boolean }) {
+  const t = useT();
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 text-sm ${online ? "border-current text-success" : "border-line-strong text-muted"}`}>
+      <span aria-hidden="true" className="inline-block size-2 rounded-full bg-current" />
+      {online ? t("deviceOnline") : t("deviceOffline")}
+    </span>
   );
 }
 

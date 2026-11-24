@@ -549,5 +549,20 @@
   "moveProjectTo": "Move to",
   "topLevel": "Top level",
   "moveProject": "Move",
-  "projectMoved": "Project moved"
+  "projectMoved": "Project moved",
+  "refresh": "Refresh",
+  "deviceOnline": "Online",
+  "deviceOffline": "Offline",
+  "neverSynced": "Never synced",
+  "syncedJustNow": "Synced just now",
+  "lastSyncedMinutesAgo": {
+    "=1": "Last synced 1 minute ago",
+    "other": "Last synced {count} minutes ago"
+  },
+  "lastSyncedHoursAgo": {
+    "=1": "Last synced 1 hour ago",
+    "other": "Last synced {count} hours ago"
+  },
+  "lastSyncedOn": "Last synced {date}",
+  "devicesOnlineCount": "{online} of {total} online"
 }

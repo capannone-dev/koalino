@@ -549,5 +549,20 @@
   "moveProjectTo": "Verschieben nach",
   "topLevel": "Oberste Ebene",
   "moveProject": "Verschieben",
-  "projectMoved": "Projekt verschoben"
+  "projectMoved": "Projekt verschoben",
+  "refresh": "Aktualisieren",
+  "deviceOnline": "Online",
+  "deviceOffline": "Offline",
+  "neverSynced": "Noch nie synchronisiert",
+  "syncedJustNow": "Gerade synchronisiert",
+  "lastSyncedMinutesAgo": {
+    "=1": "Zuletzt vor 1 Minute synchronisiert",
+    "other": "Zuletzt vor {count} Minuten synchronisiert"
+  },
+  "lastSyncedHoursAgo": {
+    "=1": "Zuletzt vor 1 Stunde synchronisiert",
+    "other": "Zuletzt vor {count} Stunden synchronisiert"
+  },
+  "lastSyncedOn": "Zuletzt synchronisiert: {date}",
+  "devicesOnlineCount": "{online} von {total} online"
 }

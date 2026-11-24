@@ -547,5 +547,18 @@
   "moveProjectTo": "移動先",
   "topLevel": "最上位",
   "moveProject": "移動",
-  "projectMoved": "プロジェクトを移動しました"
+  "projectMoved": "プロジェクトを移動しました",
+  "refresh": "更新",
+  "deviceOnline": "オンライン",
+  "deviceOffline": "オフライン",
+  "neverSynced": "未同期",
+  "syncedJustNow": "たった今同期しました",
+  "lastSyncedMinutesAgo": {
+    "other": "最終同期: {count} 分前"
+  },
+  "lastSyncedHoursAgo": {
+    "other": "最終同期: {count} 時間前"
+  },
+  "lastSyncedOn": "最終同期: {date}",
+  "devicesOnlineCount": "{total} 台中 {online} 台がオンライン"
 }
