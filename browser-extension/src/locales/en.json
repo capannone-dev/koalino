@@ -36,6 +36,7 @@
   "transcriptFailedRetrying": "Teams transcript of {title}: {reason}; trying again in a minute.",
   "recapNoTranscriptTab": "the recap has no Transcript tab",
   "recapNothingArrived": "the transcript could not be downloaded",
+  "recapWrongSession": "Teams showed another session's recap, and none listed matches the recording",
   "transcriptError": "Teams transcript: {error}.",
   "recordQuestion": "Record this meeting with Koalino?",
   "record": "Record",

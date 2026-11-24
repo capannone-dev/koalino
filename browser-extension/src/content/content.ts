@@ -41,9 +41,11 @@ import {
   RecordedMeeting,
   heartbeatDue,
   matchRecapToMeeting,
+  matchRecapViewToMeeting,
   newMeetingId,
   pendingTranscriptMeetings,
   recapRetryDue,
+  recordedEnd,
   leftMeetingToClose,
   resumableMeeting,
 } from "../lib/meetings";
@@ -385,6 +387,17 @@ function recapsOnScreen(): { title: string; startMs: number | null; endMs: numbe
   return view ? [{ title: view.title, startMs: view.startMs, endMs: view.endMs, open: null }, ...cards] : cards;
 }
 
+/**
+ * The recording a recap on screen belongs to. The recap view (`open` null) lists every session of
+ * the meeting in its picker, so it also takes a same-title recording of another session (#158).
+ */
+function recapMeeting(
+  recap: { title: string; startMs: number | null; endMs: number | null; open: HTMLElement | null },
+  meetings: readonly RecordedMeeting[],
+): RecordedMeeting | null {
+  return recap.open === null ? matchRecapViewToMeeting(recap, meetings) : matchRecapToMeeting(recap, meetings);
+}
+
 /** Tells the popup what happened to the Teams transcript fetch, when it changed. */
 function reportRecapStatus(status: string): void {
   if (status === recapStatus) return;
@@ -402,6 +415,7 @@ function sessionTime(recap: { startMs: number | null; endMs: number | null }): s
 /** What a failed fetch step means, for the popup. */
 const RECAP_FAILURES: Record<Exclude<RecapFetchOutcome, "sent">, MessageKey> = {
   "no-transcript-tab": "recapNoTranscriptTab",
+  "wrong-session": "recapWrongSession",
   "nothing-arrived": "recapNothingArrived",
 };
 
@@ -415,7 +429,7 @@ async function checkRecaps(): Promise<void> {
     const meetings = await loadMeetings();
     const pending = pendingTranscriptMeetings(meetings);
     for (const recap of recaps) {
-      const meeting = matchRecapToMeeting(recap, pending);
+      const meeting = recapMeeting(recap, pending);
       if (!meeting) {
         const sent = matchRecapToMeeting(
           recap,
@@ -433,7 +447,13 @@ async function checkRecaps(): Promise<void> {
       recapAttempts.set(meeting.meetingId, { count: (attempts?.count ?? 0) + 1, lastMs: Date.now() });
       const title = meeting.title || msg("teamsMeeting");
       reportRecapStatus(msg("fetchingTranscript", { title }));
-      const outcome = await fetchRecapTranscript(document, recap.open, requestRecapDownload, transcriptArrival(meeting));
+      const outcome = await fetchRecapTranscript(
+        document,
+        recap.open,
+        { startMs: meeting.startMs, endMs: recordedEnd(meeting) },
+        requestRecapDownload,
+        transcriptArrival(meeting),
+      );
       const triesLeft = recapRetryDue({ count: (attempts?.count ?? 0) + 1, lastMs: 0 }, Date.now());
       reportRecapStatus(
         outcome === "sent"

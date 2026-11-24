@@ -9,7 +9,8 @@
  * not find its control gives up quietly (closing the menu it opened) and reports `false`; nothing
  * here changes the meeting otherwise. Page text is never logged.
  */
-import { withoutDoubledLabel } from "../lib/teamsDom";
+import { closestSession } from "../lib/meetings";
+import { parseRecapTimeRange, withoutDoubledLabel } from "../lib/teamsDom";
 
 /** How long a step waits for the next control. */
 const STEP_TIMEOUT_MS = 4_000;
@@ -386,7 +387,63 @@ export function setTeamsSpokenLanguage(root: ParentNode, code: string): Promise<
 const RECAP_DOWNLOAD_ATTEMPTS = 3;
 
 /** How fetching a recap transcript ended: sent, or the step that failed. */
-export type RecapFetchOutcome = "sent" | "no-transcript-tab" | "nothing-arrived";
+export type RecapFetchOutcome = "sent" | "no-transcript-tab" | "wrong-session" | "nothing-arrived";
+
+/** The recap view's session picker ("Select the meeting by time"), when shown. */
+function sessionPicker(root: ParentNode): HTMLElement | null {
+  return (
+    [...root.querySelectorAll<HTMLElement>('[role="combobox"]')].find((element) =>
+      /select the meeting by time/i.test(element.getAttribute("aria-label") ?? ""),
+    ) ?? null
+  );
+}
+
+/** The session times a picker or option shows, or nulls when it shows none. */
+function sessionTimes(element: Element | null): { startMs: number | null; endMs: number | null } {
+  const times = element ? parseRecapTimeRange((element.textContent ?? "").replace(/\s+/g, " ")) : null;
+  return { startMs: times?.startMs ?? null, endMs: times?.endMs ?? null };
+}
+
+/**
+ * Makes the recap view show the recording's session (#158).
+ *
+ * A meeting chat keeps one recap per session and Teams may open any of them, so the session shown
+ * decides whose transcript a download yields.
+ *
+ * Inputs: The Teams document, the recording's start and end, and how long to wait for each step.
+ * Outputs: `true` when the view shows the session nearest the recording (`closestSession`), or
+ * shows no session picker at all (a chat with one session); `false` when no listed session fits.
+ * Side effects: May open the picker and choose a session.
+ */
+async function showRecordedSession(
+  root: ParentNode,
+  recording: { startMs: number; endMs: number },
+  timeoutMs: number,
+): Promise<boolean> {
+  const picker = sessionPicker(root);
+  if (!picker) return true;
+  const shown = sessionTimes(picker);
+  // A session the recording overlaps is right; anything else is checked against the list.
+  const shownEnd = shown.endMs ?? shown.startMs;
+  if (shown.startMs !== null && shownEnd !== null && shown.startMs <= recording.endMs && shownEnd >= recording.startMs) {
+    return true;
+  }
+  press(picker);
+  const options = await waitFor(() => {
+    const found = [...root.querySelectorAll<HTMLElement>('[role="option"]')];
+    return found.length > 0 ? found : null;
+  }, timeoutMs);
+  const best = closestSession(
+    (options ?? []).map((option) => ({ option, ...sessionTimes(option) })),
+    recording,
+  );
+  if (!best) {
+    if (options) press(picker);
+    return false;
+  }
+  press(best.option);
+  return Boolean(await waitFor(() => (sessionTimes(sessionPicker(root)).startMs === best.startMs ? true : null), timeoutMs));
+}
 
 /**
  * Opens a meeting's recap transcript and has the recap frame download it.
@@ -395,22 +452,34 @@ export type RecapFetchOutcome = "sent" | "no-transcript-tab" | "nothing-arrived"
  * Only Download → "Download as .vtt" there yields WebVTT, which the page hook in that frame copies
  * (the browser also keeps the file in its downloads).
  *
+ * A meeting chat keeps one recap per session, and the view may open on another session than the
+ * recorded one, so the session shown is checked first (#158).
+ *
  * Inputs: The Teams document; a recap card's "View recap" button, or `null` when the chat already
- * shows the recap; `requestFrameDownload`, which asks the recap frame to run `downloadRecapVtt`;
- * and a wait for the copied transcript (true once one arrived).
- * `tabTimeoutMs` is how long to wait for the Transcript tab.
- * Outputs: `sent` once a transcript arrived, otherwise the step that failed.
- * Side effects: Navigates within Teams; downloads a file.
+ * shows the recap; the recording's start and end (`null` skips the session check);
+ * `requestFrameDownload`, which asks the recap frame to run `downloadRecapVtt`; and a wait for the
+ * copied transcript (true once one arrived). `tabTimeoutMs` is how long to wait for the
+ * Transcript tab.
+ * Outputs: `sent` once a transcript arrived, otherwise the step that failed (`wrong-session` when
+ * no session listed fits the recording; nothing was downloaded then).
+ * Side effects: Navigates within Teams (may choose another session); downloads a file.
  */
 export async function fetchRecapTranscript(
   root: ParentNode,
   viewRecapButton: HTMLElement | null,
+  recording: { startMs: number; endMs: number } | null,
   requestFrameDownload: () => void,
   transcriptArrived: (timeoutMs: number) => Promise<boolean>,
   tabTimeoutMs = 20_000,
 ): Promise<RecapFetchOutcome> {
   if (viewRecapButton) press(viewRecapButton);
-  if (!(await pressWhenShown(root, { label: /^transcript$/i }, tabTimeoutMs))) return "no-transcript-tab";
+  const transcriptTab = { label: /^transcript$/i };
+  if (!(await pressWhenShown(root, transcriptTab, tabTimeoutMs))) return "no-transcript-tab";
+  if (recording) {
+    if (!(await showRecordedSession(root, recording, STEP_TIMEOUT_MS))) return "wrong-session";
+    // Choosing a session reloads the recap: open its Transcript tab again.
+    if (!(await pressWhenShown(root, transcriptTab, tabTimeoutMs))) return "no-transcript-tab";
+  }
   // The frame may still be loading: ask again until a transcript arrives.
   for (let attempt = 0; attempt < RECAP_DOWNLOAD_ATTEMPTS; attempt += 1) {
     requestFrameDownload();

@@ -36,6 +36,7 @@
   "transcriptFailedRetrying": "Trascrizione di Teams di {title}: {reason}; nuovo tentativo tra un minuto.",
   "recapNoTranscriptTab": "il riepilogo non ha la scheda Trascrizione",
   "recapNothingArrived": "non è stato possibile scaricare la trascrizione",
+  "recapWrongSession": "Teams mostrava il riepilogo di un'altra sessione e nessuna di quelle elencate corrisponde alla registrazione",
   "transcriptError": "Trascrizione di Teams: {error}.",
   "recordQuestion": "Registrare questa riunione con Koalino?",
   "record": "Registra",

@@ -8,7 +8,9 @@ import {
   RESUME_GAP_MS,
   RecordedMeeting,
   heartbeatDue,
+  closestSession,
   matchRecapToMeeting,
+  matchRecapViewToMeeting,
   newMeetingId,
   pendingTranscriptMeetings,
   pruneMeetings,
@@ -170,5 +172,48 @@ describe("leftMeetingToClose (a call left in the page, 2026-11-20)", () => {
     expect(leftMeetingToClose([weeklySync()], "browser-teams-1", leftAt + HOUR)).toBeNull();
     expect(leftMeetingToClose([left], "browser-teams-2", leftAt + HOUR)).toBeNull();
     expect(leftMeetingToClose([left], null, leftAt + HOUR)).toBeNull();
+  });
+});
+
+describe("closestSession (#158)", () => {
+  const at = (hours: number, minutes: number) => new Date(2026, 10, 24, hours, minutes).getTime();
+  const earlier = { name: "earlier", startMs: at(14, 24), endMs: at(15, 5) };
+  const recorded = { name: "recorded", startMs: at(17, 16), endMs: at(17, 18) };
+  const recording = { startMs: at(17, 11), endMs: at(17, 18) };
+
+  it("picks the session the recording overlaps, not an earlier one", () => {
+    expect(closestSession([earlier, recorded], recording)?.name).toBe("recorded");
+    expect(closestSession([recorded, earlier], recording)?.name).toBe("recorded");
+  });
+
+  it("prefers the larger overlap between back-to-back sessions", () => {
+    const first = { name: "first", startMs: at(10, 0), endMs: at(10, 30) };
+    const second = { name: "second", startMs: at(10, 30), endMs: at(11, 0) };
+    expect(closestSession([first, second], { startMs: at(10, 25), endMs: at(11, 0) })?.name).toBe("second");
+  });
+
+  it("finds no session far from the recording or without times", () => {
+    expect(closestSession([earlier], recording)).toBeNull();
+    expect(closestSession([{ name: "untimed", startMs: null, endMs: null }], recording)).toBeNull();
+  });
+});
+
+describe("matchRecapViewToMeeting (#158)", () => {
+  // The chat's recap view shows one session; its picker lists the others.
+  const earlierSession = { title: "Weekly sync", startMs: NOV_9_16H - 3 * HOUR, endMs: NOV_9_16H - 2 * HOUR };
+
+  it("matches a recording of the same meeting whatever session the view shows", () => {
+    expect(matchRecapViewToMeeting(earlierSession, [weeklySync()])?.meetingId).toBe("browser-teams-1");
+  });
+
+  it("prefers the recording the shown session overlaps", () => {
+    const shown = { title: "Weekly sync", startMs: NOV_9_16H, endMs: NOV_9_16H + HOUR };
+    const later = weeklySync({ meetingId: "browser-teams-2", startMs: NOV_9_16H + 5 * HOUR, endMs: NOV_9_16H + 6 * HOUR });
+    expect(matchRecapViewToMeeting(shown, [later, weeklySync()])?.meetingId).toBe("browser-teams-1");
+  });
+
+  it("matches by title only recordings that saw Teams transcription", () => {
+    expect(matchRecapViewToMeeting(earlierSession, [weeklySync({ teamsTranscriptSeen: false })])).toBeNull();
+    expect(matchRecapViewToMeeting({ ...earlierSession, title: "Other" }, [weeklySync()])).toBeNull();
   });
 });

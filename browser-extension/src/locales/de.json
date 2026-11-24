@@ -36,6 +36,7 @@
   "transcriptFailedRetrying": "Teams-Transkript von {title}: {reason}; neuer Versuch in einer Minute.",
   "recapNoTranscriptTab": "die Zusammenfassung hat keinen Tab „Transkript“",
   "recapNothingArrived": "das Transkript konnte nicht heruntergeladen werden",
+  "recapWrongSession": "Teams zeigte die Zusammenfassung einer anderen Sitzung, und keine aufgeführte passt zur Aufnahme",
   "transcriptError": "Teams-Transkript: {error}.",
   "recordQuestion": "Diese Besprechung mit Koalino aufnehmen?",
   "record": "Aufnehmen",

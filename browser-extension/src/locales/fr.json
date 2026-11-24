@@ -36,6 +36,7 @@
   "transcriptFailedRetrying": "Transcription Teams de {title} : {reason} ; nouvel essai dans une minute.",
   "recapNoTranscriptTab": "le récapitulatif n'a pas d'onglet Transcription",
   "recapNothingArrived": "la transcription n'a pas pu être téléchargée",
+  "recapWrongSession": "Teams affichait le récapitulatif d'une autre session, et aucune de celles listées ne correspond à l'enregistrement",
   "transcriptError": "Transcription Teams : {error}.",
   "recordQuestion": "Enregistrer cette réunion avec Koalino ?",
   "record": "Enregistrer",

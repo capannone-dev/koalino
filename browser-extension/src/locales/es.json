@@ -36,6 +36,7 @@
   "transcriptFailedRetrying": "Transcripción de Teams de {title}: {reason}; se volverá a intentar en un minuto.",
   "recapNoTranscriptTab": "el resumen no tiene pestaña Transcripción",
   "recapNothingArrived": "no se pudo descargar la transcripción",
+  "recapWrongSession": "Teams mostraba el resumen de otra sesión y ninguna de las listadas coincide con la grabación",
   "transcriptError": "Transcripción de Teams: {error}.",
   "recordQuestion": "¿Grabar esta reunión con Koalino?",
   "record": "Grabar",

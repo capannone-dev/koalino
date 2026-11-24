@@ -36,6 +36,7 @@
   "transcriptFailedRetrying": "{title} の Teams 文字起こし: {reason}。1 分後に再試行します。",
   "recapNoTranscriptTab": "要約に「トランスクリプト」タブがありません",
   "recapNothingArrived": "文字起こしをダウンロードできませんでした",
+  "recapWrongSession": "Teams は別のセッションの要約を表示しており、一覧のどのセッションも録音と一致しません",
   "transcriptError": "Teams 文字起こし: {error}。",
   "recordQuestion": "この会議を Koalino で録音しますか？",
   "record": "録音",

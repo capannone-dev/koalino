@@ -159,6 +159,7 @@ describe("recap transcript", () => {
     const fetched = await fetchRecapTranscript(
       document,
       null,
+      null,
       () => {
         requested += 1;
       },
@@ -172,15 +173,90 @@ describe("recap transcript", () => {
   it("gives up when no transcript arrives", async () => {
     document.body.innerHTML = '<button role="tab" data-tid="Transcript">Transcript</button>';
     let requested = 0;
-    const fetched = await fetchRecapTranscript(document, null, () => (requested += 1), async () => false);
+    const fetched = await fetchRecapTranscript(document, null, null, () => (requested += 1), async () => false);
     expect(fetched).toBe("nothing-arrived");
     expect(requested).toBe(3);
   });
 
   it("reports a recap without a Transcript tab", async () => {
     document.body.innerHTML = "<div>AI summary</div>";
-    const fetched = await fetchRecapTranscript(document, null, () => undefined, async () => true, 300);
+    const fetched = await fetchRecapTranscript(document, null, null, () => undefined, async () => true, 300);
     expect(fetched).toBe("no-transcript-tab");
+  });
+
+  /**
+   * A recap view on `shown`, with a "Select the meeting by time" picker listing `sessions` as
+   * options (labelled as Teams does, live markup of 2026-11-24). Choosing one shows it.
+   */
+  function buildSessionPicker(shown: string, sessions: string[]): void {
+    document.body.innerHTML = `
+      <button role="combobox" aria-label="Select the meeting by time" aria-expanded="false">${shown}</button>
+      <button role="tab" data-tid="Transcript">Transcript</button>`;
+    const picker = document.querySelector<HTMLElement>('[role="combobox"]') as HTMLElement;
+    picker.addEventListener("click", () => {
+      document.getElementById("sessions")?.remove();
+      const list = document.createElement("div");
+      list.id = "sessions";
+      list.setAttribute("role", "listbox");
+      for (const session of sessions) {
+        list.append(
+          item(`option-${list.childElementCount}`, "option", session, () => {
+            picker.textContent = session;
+            list.remove();
+          }),
+        );
+      }
+      document.body.append(list);
+    });
+  }
+
+  const at = (hours: number, minutes: number) => new Date(2026, 10, 24, hours, minutes).getTime();
+  const EARLIER = "Tuesday, November 24, 2026 2:24 PM - 3:05 PM";
+  const RECORDED = "Tuesday, November 24, 2026 5:16 PM - 5:18 PM";
+
+  it("switches the recap to the recorded session before downloading (#158)", async () => {
+    buildSessionPicker(EARLIER, [EARLIER, RECORDED]);
+    let requested = 0;
+    const fetched = await fetchRecapTranscript(
+      document,
+      null,
+      { startMs: at(17, 11), endMs: at(17, 18) },
+      () => {
+        // The download must come from the recorded session.
+        expect(document.querySelector('[role="combobox"]')?.textContent).toBe(RECORDED);
+        requested += 1;
+      },
+      async () => true,
+    );
+    expect(fetched).toBe("sent");
+    expect(requested).toBe(1);
+  });
+
+  it("downloads nothing when no session matches the recording (#158)", async () => {
+    buildSessionPicker(EARLIER, [EARLIER]);
+    let requested = 0;
+    const fetched = await fetchRecapTranscript(
+      document,
+      null,
+      { startMs: at(17, 11), endMs: at(17, 18) },
+      () => (requested += 1),
+      async () => true,
+      300,
+    );
+    expect(fetched).toBe("wrong-session");
+    expect(requested).toBe(0);
+  });
+
+  it("keeps a recap already showing the recorded session", async () => {
+    buildSessionPicker(RECORDED, []);
+    const fetched = await fetchRecapTranscript(
+      document,
+      null,
+      { startMs: at(17, 11), endMs: at(17, 18) },
+      () => undefined,
+      async () => true,
+    );
+    expect(fetched).toBe("sent");
   });
 });
 

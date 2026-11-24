@@ -76,6 +76,60 @@ export function matchRecapToMeeting(
 }
 
 /**
+ * Finds the recorded meeting a chat's recap view belongs to (#158).
+ *
+ * The view shows one session at a time, and its session picker lists the others, so a recording
+ * of the same meeting may belong to a session not shown (`fetchRecapTranscript` then chooses it).
+ *
+ * Inputs: The view's title and shown session times (null when not shown), and the records.
+ * Outputs: The meeting the shown session fits (`matchRecapToMeeting`), else the latest recording
+ * with the same title that saw Teams transcription (only those can have a transcript); `null`
+ * when none fits.
+ * Side effects: None.
+ */
+export function matchRecapViewToMeeting(
+  view: { title: string; startMs: number | null; endMs: number | null },
+  meetings: readonly RecordedMeeting[],
+): RecordedMeeting | null {
+  return (
+    matchRecapToMeeting(view, meetings) ??
+    matchRecapToMeeting(
+      { title: view.title, startMs: null, endMs: null },
+      meetings.filter((meeting) => meeting.teamsTranscriptSeen),
+    )
+  );
+}
+
+/**
+ * Picks the recap session a recording belongs to (#158).
+ *
+ * A meeting chat keeps a recap per session, and Teams may open it on any of them, so the session
+ * shown must be checked against the recording before its transcript is taken.
+ *
+ * Inputs: The sessions (times null when not shown) and the recording's start and end (epoch ms).
+ * Outputs: The session nearest the recording, within the recap slack (30 min): the one it
+ * overlaps most, else the one with the smallest gap. `null` when none is near or none has times.
+ * Side effects: None.
+ */
+export function closestSession<Session extends { startMs: number | null; endMs: number | null }>(
+  sessions: readonly Session[],
+  recording: { startMs: number; endMs: number },
+): Session | null {
+  let best: { session: Session; gapMs: number; overlapMs: number } | null = null;
+  for (const session of sessions) {
+    if (session.startMs === null) continue;
+    const sessionEnd = session.endMs ?? session.startMs;
+    const gapMs = Math.max(0, session.startMs - recording.endMs, recording.startMs - sessionEnd);
+    if (gapMs > TIME_SLACK_MS) continue;
+    const overlapMs = Math.max(0, Math.min(sessionEnd, recording.endMs) - Math.max(session.startMs, recording.startMs));
+    if (!best || gapMs < best.gapMs || (gapMs === best.gapMs && overlapMs > best.overlapMs)) {
+      best = { session, gapMs, overlapMs };
+    }
+  }
+  return best?.session ?? null;
+}
+
+/**
  * When a recording ended: its end, else the last time it was seen running, else its start.
  * Inputs: The record. Outputs: Epoch ms. Side effects: None.
  */

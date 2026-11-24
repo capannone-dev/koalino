@@ -36,6 +36,7 @@
   "transcriptFailedRetrying": "Расшифровка Teams для «{title}»: {reason}; повтор через минуту.",
   "recapNoTranscriptTab": "в сводке нет вкладки «Расшифровка»",
   "recapNothingArrived": "не удалось скачать расшифровку",
+  "recapWrongSession": "Teams показал сводку другого сеанса, и ни один из перечисленных не совпадает с записью",
   "transcriptError": "Расшифровка Teams: {error}.",
   "recordQuestion": "Записать эту встречу с помощью Koalino?",
   "record": "Записать",

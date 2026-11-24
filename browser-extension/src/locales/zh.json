@@ -36,6 +36,7 @@
   "transcriptFailedRetrying": "{title} 的 Teams 转录：{reason}；一分钟后重试。",
   "recapNoTranscriptTab": "会议回顾中没有“转录”选项卡",
   "recapNothingArrived": "无法下载转录",
+  "recapWrongSession": "Teams 显示的是另一个会话的摘要，列出的会话都与录音不匹配",
   "transcriptError": "Teams 转录：{error}。",
   "recordQuestion": "用 Koalino 录制此会议？",
   "record": "录制",

@@ -36,6 +36,7 @@
   "transcriptFailedRetrying": "نص Teams المكتوب لـ {title}: {reason}؛ ستُعاد المحاولة بعد دقيقة.",
   "recapNoTranscriptTab": "لا يحتوي الملخص على علامة تبويب النص المكتوب",
   "recapNothingArrived": "تعذّر تنزيل النص المكتوب",
+  "recapWrongSession": "عرض Teams ملخص جلسة أخرى، ولا تطابق أي جلسة مدرجة التسجيل",
   "transcriptError": "نص Teams المكتوب: {error}.",
   "recordQuestion": "هل تريد تسجيل هذا الاجتماع باستخدام Koalino؟",
   "record": "تسجيل",
