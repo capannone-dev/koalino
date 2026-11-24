@@ -125,3 +125,100 @@ pub fn is_non_speech_marker(segment_text: &str) -> bool {
         && !inner.contains([opening, expected_closing])
         && !inner.trim().is_empty()
 }
+
+/// How many times in a row a run of words must repeat before it counts as a decoding loop.
+///
+/// People repeat themselves ("sì, sì, sì, sì"), but five or more identical repeats in a row are
+/// Whisper looping on noise or silence: on a real meeting it wrote "sì, sì, sì" for 18 s.
+const LOOP_MIN_REPEATS: usize = 5;
+/// How many repeats of a loop are kept: enough to read like what was said.
+const LOOP_KEPT_REPEATS: usize = 3;
+/// The longest run of words looked at as one repeated unit.
+const LOOP_MAX_UNIT_WORDS: usize = 4;
+
+/// A word as compared for loops: lower case, without surrounding punctuation or quotes.
+fn loop_key(word: &str) -> String {
+    let trimmed = word.trim_matches(|character: char| !character.is_alphanumeric());
+    if trimmed.is_empty() {
+        word.to_owned()
+    } else {
+        trimmed.to_lowercase()
+    }
+}
+
+/// Shortens Whisper decoding loops: a run of one to four words repeated five or more times in a
+/// row keeps its first three repeats.
+///
+/// Inputs: The transcript text and its timed words (empty when there is no timing).
+/// Outputs: The text with each loop shortened, and the timed words of what is kept (still matching
+/// the text word for word when they matched it before; returned unchanged otherwise, since the
+/// caller then ignores them). Natural repeats of up to four times are left alone.
+/// Side effects: None.
+pub fn collapse_repetition_loops(text: &str, words: Vec<TimedWord>) -> (String, Vec<TimedWord>) {
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let keys: Vec<String> = tokens.iter().map(|token| loop_key(token)).collect();
+    let mut kept = vec![true; tokens.len()];
+    let mut index = 0;
+    while index < tokens.len() {
+        // The unit length whose repeats cover the most words from here.
+        let mut best: Option<(usize, usize)> = None;
+        for unit in 1..=LOOP_MAX_UNIT_WORDS {
+            let mut repeats = 1;
+            while index + (repeats + 1) * unit <= tokens.len()
+                && keys[index + repeats * unit..index + (repeats + 1) * unit]
+                    == keys[index..index + unit]
+            {
+                repeats += 1;
+            }
+            if repeats >= LOOP_MIN_REPEATS
+                && best.is_none_or(|(best_unit, best_repeats)| {
+                    repeats * unit > best_unit * best_repeats
+                })
+            {
+                best = Some((unit, repeats));
+            }
+        }
+        match best {
+            Some((unit, repeats)) => {
+                for dropped in &mut kept[index + LOOP_KEPT_REPEATS * unit..index + repeats * unit] {
+                    *dropped = false;
+                }
+                index += repeats * unit;
+            }
+            None => index += 1,
+        }
+    }
+    if kept.iter().all(|keep| *keep) {
+        return (text.to_owned(), words);
+    }
+    let words = if words_match_text(&words, text) {
+        // Each text word belongs to one timed word; a timed word stays only if all of it stays.
+        let mut owners: Vec<usize> = Vec::with_capacity(tokens.len());
+        for (word_index, word) in words.iter().enumerate() {
+            owners.extend(word.text().split_whitespace().map(|_| word_index));
+        }
+        let mut word_kept = vec![true; words.len()];
+        for (token_index, owner) in owners.iter().enumerate() {
+            if !kept[token_index] {
+                word_kept[*owner] = false;
+            }
+        }
+        for (token_index, owner) in owners.iter().enumerate() {
+            kept[token_index] = word_kept[*owner];
+        }
+        words
+            .into_iter()
+            .zip(word_kept)
+            .filter_map(|(word, keep)| keep.then_some(word))
+            .collect()
+    } else {
+        words
+    };
+    let text = tokens
+        .iter()
+        .zip(&kept)
+        .filter_map(|(token, keep)| keep.then_some(*token))
+        .collect::<Vec<_>>()
+        .join(" ");
+    (text, words)
+}

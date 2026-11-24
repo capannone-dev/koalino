@@ -449,9 +449,16 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
             Vec::new()
         };
 
+        // Whisper sometimes loops on noise ("sì, sì, sì, …" for seconds); keep a few repeats.
+        let (transcript_content, timed_words) =
+            super::whisper_word_timing::collapse_repetition_loops(
+                transcript_content.trim(),
+                timed_words,
+            );
+
         Ok(Transcript::new(
             audio_recording.meeting_id().clone(),
-            transcript_content.trim(),
+            transcript_content,
         )
         .with_timed_words(timed_words))
     }

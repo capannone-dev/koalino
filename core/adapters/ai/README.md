@@ -13,7 +13,7 @@ The rest of this directory contains opt-in local AI infrastructure. It is compil
 `--features local-ai`; the default crate, `make rust-test`, and application layer remain free of
 Whisper/whisper.cpp types and native model initialization.
 
-`whisper_word_timing.rs` builds timed words from whisper.cpp tokens (#69), and `whisper_model_download.rs` downloads
+`whisper_word_timing.rs` builds timed words from whisper.cpp tokens (#69) and shortens decoding loops (a run of one to four words repeated five or more times keeps three repeats, in the text and timed words alike; both engines apply it), and `whisper_model_download.rs` downloads
 a model from Hugging Face, installing it only when its pinned hash matches (#67). Both compile without `local-ai`.
 
 `compute_resources.rs` decides how inference uses the machine: at most 8 threads on fast cores, the minimum CPU

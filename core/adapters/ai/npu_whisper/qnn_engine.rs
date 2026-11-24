@@ -377,9 +377,11 @@ impl TranscriptionEngine for QnnWhisperEngine {
                 tracing::warn!(%error, "NPU transcription failed");
                 TranscriptionError::Unavailable
             })?;
-        Ok(
-            Transcript::new(audio_recording.meeting_id().clone(), transcript.text)
-                .with_timed_words(transcript.words),
-        )
+        // Shorten decoding loops, as for whisper.cpp.
+        let (text, words) = crate::adapters::ai::whisper_word_timing::collapse_repetition_loops(
+            &transcript.text,
+            transcript.words,
+        );
+        Ok(Transcript::new(audio_recording.meeting_id().clone(), text).with_timed_words(words))
     }
 }

@@ -1,6 +1,9 @@
 //! Tests turning whisper.cpp tokens into timed words.
 
-use super::whisper_word_timing::{WhisperTokenTiming, words_from_tokens, words_match_text};
+use super::whisper_word_timing::{
+    WhisperTokenTiming, collapse_repetition_loops, words_from_tokens, words_match_text,
+};
+use crate::domain::models::TimedWord;
 
 fn token(bytes: &[u8], start_units: i64, end_units: i64) -> WhisperTokenTiming<'_> {
     WhisperTokenTiming {
@@ -86,4 +89,56 @@ fn a_word_takes_the_probability_of_its_least_sure_token() {
     ]);
     let probabilities: Vec<Option<u16>> = words.iter().map(|w| w.probability_permille()).collect();
     assert_eq!(probabilities, [Some(310), Some(880)]);
+}
+
+/// Timed words for `text`, one per space-separated word, 100 ms each.
+fn timed(text: &str) -> Vec<TimedWord> {
+    text.split_whitespace()
+        .enumerate()
+        .map(|(index, word)| TimedWord::new(word, index as u64 * 100, index as u64 * 100 + 100))
+        .collect()
+}
+
+/// Verifies a decoding loop ("sì, sì, sì, …" for seconds) keeps only a few repeats, in the text
+/// and in the timed words alike (seen on a real meeting, 2026-11-24).
+#[test]
+fn a_repetition_loop_keeps_only_a_few_repeats() {
+    let looping = format!("Però basta. {}e poi", "Sì, sì, sì. ".repeat(12));
+    let (text, words) = collapse_repetition_loops(&looping, timed(&looping));
+    assert_eq!(text, "Però basta. Sì, sì, sì. e poi");
+    assert!(words_match_text(&words, &text));
+    assert_eq!(words.last().map(TimedWord::text), Some("poi"));
+}
+
+/// Verifies a loop of one word is shortened too, whatever its punctuation or case.
+#[test]
+fn a_one_word_loop_is_shortened() {
+    let looping = format!("quindi {}fine", "si ".repeat(40));
+    let (text, words) = collapse_repetition_loops(&looping, timed(&looping));
+    assert_eq!(text, "quindi si si si fine");
+    assert!(words_match_text(&words, &text));
+}
+
+/// Verifies ordinary speech, and a few natural repeats, are left as they are.
+#[test]
+fn natural_repeats_are_kept() {
+    for spoken in [
+        "no no no, non è così",
+        "sì, sì, sì, sì, certo",
+        "molto molto bene, grazie grazie",
+        "va bene. Va bene. Va bene.",
+    ] {
+        let (text, words) = collapse_repetition_loops(spoken, timed(spoken));
+        assert_eq!(text, spoken);
+        assert_eq!(words.len(), spoken.split_whitespace().count());
+    }
+}
+
+/// Verifies a loop is shortened even without timed words, which stay empty.
+#[test]
+fn a_loop_without_timing_is_shortened() {
+    let looping = "ok ".repeat(30);
+    let (text, words) = collapse_repetition_loops(looping.trim(), Vec::new());
+    assert_eq!(text, "ok ok ok");
+    assert!(words.is_empty());
 }
