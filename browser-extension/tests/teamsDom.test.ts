@@ -109,6 +109,36 @@ describe("recap cards", () => {
     expect(card?.endMs).toBe(new Date(2026, 10, 9, 16, 21).getTime());
   });
 
+  it("sees the transcript in the lower half of a Teams recap card (live markup, November 2026)", () => {
+    // The card Teams posted in a meeting chat on 2026-11-24 (#102), with styles, icons and text
+    // replaced: the title, date and "View recap" sit in the top container, the Transcript below.
+    document.body.innerHTML = `
+      <div><div data-testid="meeting-recap-chiclet">
+        <div data-testid="meeting-recap-chiclet-top-container">
+          <div><div><span>Weekly sync</span><span>Monday, November 9, 2026 4:10 PM - 4:21 PM</span></div></div>
+          <div><div><button type="button" data-tid="recap-share-button" aria-label="Share"><span></span></button></div>
+          <button type="button" data-testid="meeting-recap-chiclet-view-recap-button"><span dir="auto">View recap</span></button></div>
+        </div>
+        <div role="separator" aria-orientation="horizontal"></div>
+        <div data-testid="meeting-recap-chiclet-bottom-container">
+          <div data-testid="meeting-recap-chiclet-bottom-left-container">
+            <div data-testid="meeting-recap-chiclet-catch-up-wrapper">
+              <span><button type="button" aria-label="1 file"><span></span><span>1</span></button></span>
+              <span dir="auto">Content</span>
+            </div>
+            <div data-testid="meeting-recap-chiclet-artifacts-list"><div data-tid="apc-item-renderer">
+              <button type="button" aria-label="Transcript"><span></span><span>Transcript</span><div></div></button>
+            </div></div>
+          </div>
+        </div>
+      </div></div>`;
+    const [card] = findRecapCards(document);
+    expect(card?.title).toBe("Weekly sync");
+    expect(card?.hasTranscript).toBe(true);
+    expect(card?.startMs).toBe(new Date(2026, 10, 9, 16, 10).getTime());
+    expect(card?.viewRecapButton.dataset.testid).toBe("meeting-recap-chiclet-view-recap-button");
+  });
+
   it("reads the recap a meeting chat opens on, with its session times and Transcript tab", () => {
     document.body.innerHTML = `
       <h2 data-tid="chat-title"><span>Weekly sync</span></h2>

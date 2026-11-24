@@ -232,6 +232,9 @@ export function parseRecapTimeRange(text: string): { startMs: number; endMs: num
   return { startMs, endMs };
 }
 
+/** A whole recap card in a meeting chat (live test, November 2026). */
+const RECAP_CARD = '[data-testid="meeting-recap-chiclet"]';
+
 /**
  * Finds the recap cards in a meeting chat.
  *
@@ -243,8 +246,13 @@ export function findRecapCards(root: ParentNode): RecapCard[] {
     (button) => /^view recap$/i.test(textOf(button)) || /^view recap$/i.test(button.getAttribute("aria-label") ?? ""),
   );
   for (const viewRecapButton of buttons) {
-    let card: Element = viewRecapButton;
-    while (card.parentElement && parseRecapTimeRange(textOf(card)) === null) card = card.parentElement;
+    // Teams' card (2026) puts the title, times and "View recap" in its top half and the
+    // Transcript in its bottom half, so the whole card is taken, not the first block with times.
+    let card: Element | null = viewRecapButton.closest(RECAP_CARD);
+    if (!card) {
+      card = viewRecapButton;
+      while (card.parentElement && parseRecapTimeRange(textOf(card)) === null) card = card.parentElement;
+    }
     const times = parseRecapTimeRange(textOf(card));
     const leaves = textLeaves(card).map(textOf);
     const dateIndex = leaves.findIndex((leaf) => parseRecapTimeRange(leaf) !== null);
