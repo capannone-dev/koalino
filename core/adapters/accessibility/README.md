@@ -37,5 +37,11 @@ minimized stops rendering, and its accessibility tree keeps the last labels. The
 one stale name for as long as the window stays covered. `domain::speaker_names::suggest_names`
 therefore drops a name that wins for more than one voice.
 
-The labels of real call apps were not captured. An app whose labels differ gives no readings until
-`domain::speaker_names` learns its phrasing.
+New Teams on Windows (a real call, win11, 2026-11-24) shows who is speaking only visually. The
+meeting window exposes about 100 elements. The tiles are labelled with name and microphone state
+("Myself video, <name>, Unmuted"), and so is the People roster ("<name>, Organizer, External,
+Unmuted"). Name, help text, item status, ARIA properties and full description never said
+"speaking" during minutes of speech. So the reader finds no names in Teams. For Teams calls in
+the browser, names come from the live captions instead (#102). The labels of Zoom and Meet were
+not captured. An app whose labels differ gives no readings until `domain::speaker_names` learns
+its phrasing.
