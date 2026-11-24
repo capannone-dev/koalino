@@ -42,6 +42,16 @@ meeting window exposes about 100 elements. The tiles are labelled with name and 
 ("Myself video, <name>, Unmuted"), and so is the People roster ("<name>, Organizer, External,
 Unmuted"). Name, help text, item status, ARIA properties and full description never said
 "speaking" during minutes of speech. So the reader finds no names in Teams. For Teams calls in
-the browser, names come from the live captions instead (#102). The labels of Zoom and Meet were
-not captured. An app whose labels differ gives no readings until `domain::speaker_names` learns
-its phrasing.
+the browser, names come from the live captions instead (#102).
+
+Google Meet and the Zoom web client (real calls between the test VMs, 2026-11-24) do the same.
+Meet in Firefox on Windows labels its tiles and People list with names only, plus a status line
+about the owner's own microphone and camera. Over minutes of speech nothing said "speaking". Zoom's
+web client marks the active speaker with a tile border only. In Chrome on Linux its tiles are
+labelled with names only. In Firefox on Windows its page shows UI Automation no elements at all.
+So the reader finds no names in these apps either. An app whose labels differ gives no readings
+until `domain::speaker_names` learns its phrasing.
+
+Chrome on Linux exposes only its window frame to AT-SPI, even when the session's `IsEnabled` and
+`ScreenReaderEnabled` flags are on and Chrome was started after them. It builds the page tree
+only when started with `--force-renderer-accessibility` (verified on deb-gui, 2026-11-24).
