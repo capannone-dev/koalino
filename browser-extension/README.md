@@ -14,7 +14,7 @@ Teams, Not now). While recording, an indicator with a Stop button stays on the p
 
 | What | How | Becomes in Koalino |
 | --- | --- | --- |
-| Your microphone | the audio track Teams opened, tapped in the page | your segments of the transcript |
+| Your microphone | the audio track Teams sends in the call (found even when Teams opened it before the extension loaded, #157), tapped in the page | your segments of the transcript |
 | Everyone else | the one mixed track Teams plays, tapped in the page | segments whose voices are matched against your voice gallery (`MIXED_REMOTE`) |
 | Live captions | turned on for you (only you see them) and read as they grow | a `teams-captions` WebVTT attachment with names and times |
 | Teams transcript panel | read while Teams transcription runs | a `teams-live-transcript` attachment |
@@ -50,7 +50,7 @@ Limits found in the #102 probes:
 ## How it reaches the app
 
 ```text
-Teams page ── hook.js (page world: getUserMedia, <audio>, fetch) ─postMessage─▶ content.js
+Teams page ── hook.js (page world: call connection, getUserMedia, <audio>, fetch) ─postMessage─▶ content.js
 content.js ─runtime port─▶ background.js ─connectNative─▶ browser-host ─WebSocket 127.0.0.1─▶ daemon (Teams bridge)
 recap frame (SharePoint, opened by Teams): hook.js (copies the .vtt download) ─▶ recap-frame.js ─port─▶ background.js ─▶ content.js
 ```

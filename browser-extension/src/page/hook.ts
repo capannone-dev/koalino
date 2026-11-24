@@ -3,8 +3,10 @@
  * because only there can the extension see the microphone stream Teams opens and the remote
  * audio Teams plays, and the transcript file the page downloads.
  *
- * - Microphone: `getUserMedia` is wrapped to remember the audio tracks Teams opens. A muted
- *   microphone yields silence, which the content script does not send.
+ * - Microphone: the audio track Teams sends on its call connection (`sentMicrophone`, #157), which
+ *   is found even when Teams opened the microphone before this hook ran. Before a call connection
+ *   is seen, the audio tracks `getUserMedia` opened stand in. A muted microphone yields silence or
+ *   no track, which the content script does not send.
  * - Remote audio: the `<audio>` elements Teams plays a call through (one track with every remote
  *   participant mixed) are tapped with an `AudioContext`; playback is unaffected.
  * - Teams transcript: responses of the page's own transcript requests (`/transcripts/…`) are
@@ -23,6 +25,7 @@
  */
 import { resampleTo16k } from "../lib/pcm";
 import { findSlideBox, signatureOf } from "../lib/slides";
+import { claimHookGeneration, observeConnections, sentMicrophone } from "../lib/sentMicrophone";
 import { embeddedInTeams } from "../lib/siteAccess";
 import { findShareVideo } from "../lib/teamsDom";
 import { AudioTrack, CONTENT_SOURCE, HOOK_SOURCE, HookCommand, HookMessage } from "../lib/messages";
@@ -35,8 +38,17 @@ const PROCESSOR_FRAMES = 4096;
 /** How often the tapped elements and tracks are re-checked. */
 const RESCAN_MS = 1_000;
 
+/**
+ * Whether this copy of the hook is the newest in the page. An extension update injects a new copy
+ * while the old one stays; the old one then stops tapping and ignores commands (#157).
+ */
+const isNewestHook = claimHookGeneration(window);
+
 /** Microphone tracks Teams opened, newest last. */
 const microphoneTracks: MediaStreamTrack[] = [];
+
+/** Call connections Teams used (closed ones are dropped on each rescan). */
+const callConnections = new Set<RTCPeerConnection>();
 
 /** Posts a message to the content script (same window, same origin). */
 function post(message: HookMessage, transfer: Transferable[] = []): void {
@@ -109,6 +121,10 @@ function tap(track: AudioTrack, stream: MediaStream): void {
   const state: Tap = { stream, source, processor, pending: [], pendingLength: 0 };
   const sampleRate = context.sampleRate;
   processor.onaudioprocess = (event) => {
+    if (!isNewestHook()) {
+      stopAudio();
+      return;
+    }
     const samples = resampleTo16k(event.inputBuffer.getChannelData(0), sampleRate);
     state.pending.push(samples);
     state.pendingLength += samples.length;
@@ -139,10 +155,26 @@ function untap(track: AudioTrack): void {
   taps.delete(track);
 }
 
+/**
+ * The microphone track to tap: the one Teams sends, else the newest live `getUserMedia` track
+ * while no call connection sends audio; null when Teams muted it or none is open.
+ */
+function currentMicrophone(): MediaStreamTrack | null {
+  for (const connection of callConnections) {
+    if (connection.connectionState === "closed") callConnections.delete(connection);
+  }
+  const sent = sentMicrophone<MediaStreamTrack>(callConnections);
+  if (sent.kind === "track") return sent.track;
+  if (sent.kind === "muted") return null;
+  return [...microphoneTracks].reverse().find((track) => track.readyState === "live") ?? null;
+}
+
 /** Finds the current microphone and remote streams and taps them. */
 function rescan(): void {
-  const microphone = [...microphoneTracks].reverse().find((track) => track.readyState === "live");
-  if (microphone) {
+  const microphone = currentMicrophone();
+  if (!microphone) {
+    untap("microphone");
+  } else {
     const current = taps.get("microphone");
     if (!current || current.stream.getAudioTracks()[0] !== microphone) {
       tap("microphone", new MediaStream([microphone]));
@@ -153,7 +185,9 @@ function rescan(): void {
     .find(
       (stream): stream is MediaStream =>
         stream instanceof MediaStream &&
-        stream.getAudioTracks().some((track) => track.readyState === "live" && !microphoneTracks.includes(track)),
+        stream
+          .getAudioTracks()
+          .some((track) => track.readyState === "live" && track !== microphone && !microphoneTracks.includes(track)),
     );
   if (remote) tap("remote", remote);
 }
@@ -245,6 +279,11 @@ function encodeSlide(): void {
 
 window.addEventListener("message", (event: MessageEvent<HookCommand>) => {
   if (!onTeams || event.source !== window || event.data?.source !== CONTENT_SOURCE) return;
+  if (!isNewestHook()) {
+    // A newer copy of the hook answers; this one only lets go of its audio.
+    stopAudio();
+    return;
+  }
   if (event.data.command === "start-audio") startAudio();
   if (event.data.command === "stop-audio") stopAudio();
   try {
@@ -258,6 +297,7 @@ window.addEventListener("message", (event: MessageEvent<HookCommand>) => {
 
 if (onTeams) {
   hookGetUserMedia();
+  observeConnections(window.RTCPeerConnection?.prototype, (connection) => callConnections.add(connection));
   hookFetch();
 } else if (embeddedInTeams(window.top === window, document.referrer)) {
   // A recap frame: only its transcript download is copied.
