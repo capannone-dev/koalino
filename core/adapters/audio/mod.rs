@@ -21,6 +21,10 @@ pub mod fake_microphone;
 pub mod live_microphone;
 /// Implements `AudioCapture` using a deterministic local stream seam pending OS integration.
 pub mod local_recorder;
+/// Tries the microphone's ways in, in order, until one opens (#152).
+pub mod microphone_fallback;
+#[cfg(test)]
+mod microphone_fallback_tests;
 /// Which apps capture the microphone, for noticing calls (#111).
 pub mod microphone_users;
 #[cfg(test)]

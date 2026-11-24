@@ -1,7 +1,8 @@
 //! Captures the platform's default microphone with `cpal` (Issue #45, `microphone` feature).
 //!
 //! `cpal` uses ALSA on Linux (PipeWire and PulseAudio through their ALSA plugins), WASAPI on
-//! Windows, and AAudio on Android. The device opens in its own default format, and
+//! Windows, and AAudio on Android. On Linux, when ALSA has no usable `default` input, the
+//! microphone falls back to the sound server and to ALSA's `pipewire`/`pulse` devices (#152). The device opens in its own default format, and
 //! `PcmResampler` converts each buffer to 16 kHz mono PCM16 on the audio callback thread.
 //!
 //! `cpal` streams are not `Send` on every platform, so each stream lives on a dedicated thread.
@@ -20,7 +21,11 @@ use cpal::{
 };
 
 use crate::{
-    adapters::audio::{capture_error_throttle::CaptureErrorThrottle, pcm_resampler::PcmResampler},
+    adapters::audio::{
+        capture_error_throttle::CaptureErrorThrottle,
+        microphone_fallback::{MICROPHONE_FIX_HINT, MicrophoneAttempt, open_first},
+        pcm_resampler::PcmResampler,
+    },
     domain::errors::AudioError,
     ports::audio::{MicrophoneSource, MicrophoneStream},
 };
@@ -109,31 +114,133 @@ impl MicrophoneStream for CpalStream {
     }
 }
 
-/// Builds and starts a stream on the default input device, converting into `frames`.
+/// Builds and starts a stream on the default microphone, converting into `frames`.
 ///
-/// Inputs: The channel for converted blocks; it moves into the audio callback.
-/// Outputs: The playing stream, or a privacy-safe reason.
-/// Side effects: Turns the microphone on.
+/// On Linux it tries, in order: ALSA's `default` device (as before #152); the sound server's
+/// default source through cpal's PulseAudio host, which PipeWire also serves (only in builds with
+/// `computer-sound`, which compiles that host in); then ALSA's `pipewire` and `pulse` devices.
+/// Elsewhere it opens the platform's default input.
+///
+/// Inputs: The channel for converted blocks; it moves into the audio callback of the attempt that
+/// opens.
+/// Outputs: The playing stream, or a privacy-safe reason naming every attempt (and, on Linux, how
+/// to give ALSA a default microphone).
+/// Side effects: Turns the microphone on. A fallback, or a failure of every attempt, is logged.
 fn start_default_input(frames: Sender<Vec<i16>>) -> Result<cpal::Stream, String> {
-    let host = microphone_host();
-    let device = host
-        .default_input_device()
-        .ok_or_else(|| String::from("no microphone is available"))?;
+    let attempts = microphone_attempts(&frames);
+    let hint = if cfg!(target_os = "linux") {
+        MICROPHONE_FIX_HINT
+    } else {
+        ""
+    };
+    match open_first(attempts, hint) {
+        Ok((stream, _label)) => Ok(stream),
+        Err(reason) => {
+            // The app only says it could not open the microphone; the reason is in the log.
+            tracing::error!(reason = %reason, "The microphone could not be opened");
+            Err(reason)
+        }
+    }
+}
+
+/// The ways to open the microphone on Linux, most preferred first (#152).
+#[cfg(target_os = "linux")]
+fn microphone_attempts(frames: &Sender<Vec<i16>>) -> Vec<MicrophoneAttempt<'static, cpal::Stream>> {
+    let mut attempts: Vec<MicrophoneAttempt<'static, cpal::Stream>> = Vec::new();
+    let alsa_default_frames = frames.clone();
+    attempts.push((
+        "ALSA default",
+        Box::new(move || {
+            let host = cpal::host_from_id(cpal::HostId::Alsa)
+                .map_err(|error| format!("ALSA is not available: {error}"))?;
+            let device = host
+                .default_input_device()
+                .ok_or_else(|| String::from("no default input device"))?;
+            start_on_device(&device, alsa_default_frames, None)
+        }),
+    ));
+    #[cfg(feature = "computer-sound")]
+    {
+        let server_frames = frames.clone();
+        attempts.push((
+            "sound server (PulseAudio/PipeWire)",
+            Box::new(move || {
+                let host = cpal::host_from_id(cpal::HostId::PulseAudio)
+                    .map_err(|error| format!("the sound server is not available: {error}"))?;
+                let device = host
+                    .default_input_device()
+                    .ok_or_else(|| String::from("no default source"))?;
+                let supported = device
+                    .default_input_config()
+                    .map_err(|error| format!("unable to read the microphone format: {error}"))?;
+                // PulseAudio's default fragments are about 2 s; ask for 50 ms like the computer's
+                // sound (#108), so the live transcript and the echo check keep their timing.
+                let (min_frames, max_frames) = match supported.buffer_size() {
+                    cpal::SupportedBufferSize::Range { min, max } => (*min, *max),
+                    cpal::SupportedBufferSize::Unknown => (1, u32::MAX),
+                };
+                let buffer_frames =
+                    crate::adapters::audio::cpal_computer_sound::monitor_buffer_frames(
+                        supported.sample_rate(),
+                        min_frames,
+                        max_frames,
+                    );
+                start_capture(
+                    "microphone",
+                    &device,
+                    supported,
+                    server_frames,
+                    Some(buffer_frames),
+                )
+            }),
+        ));
+    }
+    for (label, pcm_name) in [("ALSA pipewire", "pipewire"), ("ALSA pulse", "pulse")] {
+        let pcm_frames = frames.clone();
+        attempts.push((
+            label,
+            Box::new(move || {
+                let host = cpal::host_from_id(cpal::HostId::Alsa)
+                    .map_err(|error| format!("ALSA is not available: {error}"))?;
+                let device = host
+                    .device_by_id(&cpal::DeviceId::new(cpal::HostId::Alsa, pcm_name))
+                    .ok_or_else(|| format!("ALSA has no `{pcm_name}` device"))?;
+                start_on_device(&device, pcm_frames, None)
+            }),
+        ));
+    }
+    attempts
+}
+
+/// The way to open the microphone elsewhere: the platform's default input.
+#[cfg(not(target_os = "linux"))]
+fn microphone_attempts(frames: &Sender<Vec<i16>>) -> Vec<MicrophoneAttempt<'static, cpal::Stream>> {
+    let default_frames = frames.clone();
+    vec![(
+        "default input",
+        Box::new(move || {
+            let device = cpal::default_host()
+                .default_input_device()
+                .ok_or_else(|| String::from("no microphone is available"))?;
+            start_on_device(&device, default_frames, None)
+        }),
+    )]
+}
+
+/// Opens `device` in its default input format and starts capturing into `frames`.
+///
+/// Inputs: The device, the channel for converted blocks, and the frames per block (`None` for the
+/// host's default). Outputs: The playing stream, or a privacy-safe reason.
+/// Side effects: Turns the microphone on.
+fn start_on_device(
+    device: &cpal::Device,
+    frames: Sender<Vec<i16>>,
+    buffer_frames: Option<u32>,
+) -> Result<cpal::Stream, String> {
     let supported = device
         .default_input_config()
         .map_err(|error| format!("unable to read the microphone format: {error}"))?;
-    start_capture("microphone", &device, supported, frames, None)
-}
-
-/// The host the microphone opens on: ALSA on Linux even when the PulseAudio host is built in for
-/// the computer's sound (#108), so the microphone behaves as before; the platform default
-/// elsewhere.
-fn microphone_host() -> cpal::Host {
-    #[cfg(target_os = "linux")]
-    if let Ok(host) = cpal::host_from_id(cpal::HostId::Alsa) {
-        return host;
-    }
-    cpal::default_host()
+    start_capture("microphone", device, supported, frames, buffer_frames)
 }
 
 /// Builds and plays an input stream on `device` in `supported`'s format, converting into
