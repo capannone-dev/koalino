@@ -17,6 +17,8 @@ final class PairedDevice {
     required this.peerId,
     required this.deviceName,
     required this.pairedAt,
+    this.connected = false,
+    this.lastSyncedAt,
     this.capabilities,
   });
 
@@ -28,6 +30,12 @@ final class PairedDevice {
 
   /// When the pairing completed, in UTC.
   final DateTime pairedAt;
+
+  /// Whether the device is connected to this one right now (#153).
+  final bool connected;
+
+  /// When the device last synced with this one, in UTC; `null` when it never has (#153).
+  final DateTime? lastSyncedAt;
 
   /// What the device advertised in its manifest; `null` while it is not connected.
   final DeviceCapabilities? capabilities;
@@ -293,6 +301,14 @@ P2pStatus decodeP2pStatus(String json) {
                 pairedAt: DateTime.fromMillisecondsSinceEpoch(
                     (device['paired_at_ms']! as num).toInt(),
                     isUtc: true),
+                // Cores older than #153 send neither field.
+                connected: device['connected'] as bool? ?? false,
+                lastSyncedAt: switch (device['last_synced_at_ms']) {
+                  final num syncedAtMs => DateTime.fromMillisecondsSinceEpoch(
+                      syncedAtMs.toInt(),
+                      isUtc: true),
+                  _ => null,
+                },
                 capabilities: _capabilities(device['capabilities']),
               ))
           .toList(growable: false),

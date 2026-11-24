@@ -3028,4 +3028,48 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get promptsSharedWithPairedDevices =>
       'الموجّهان متطابقان على كل أجهزتك المقترنة: يصل أي تغيير هنا إليها عند اتصالها.';
+
+  @override
+  String get deviceOnline => 'متصل';
+
+  @override
+  String get deviceOffline => 'غير متصل';
+
+  @override
+  String get neverSynced => 'لم تتم المزامنة بعد';
+
+  @override
+  String get syncedJustNow => 'تمت المزامنة الآن';
+
+  @override
+  String lastSyncedMinutesAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'آخر مزامنة قبل $count دقيقة',
+      one: 'آخر مزامنة قبل دقيقة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lastSyncedHoursAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'آخر مزامنة قبل $count ساعة',
+      one: 'آخر مزامنة قبل ساعة واحدة',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lastSyncedOn(String date) {
+    return 'آخر مزامنة: $date';
+  }
+
+  @override
+  String devicesOnlineCount(int online, int total) {
+    return '$online من $total متصل';
+  }
 }

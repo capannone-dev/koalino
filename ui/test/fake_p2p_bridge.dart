@@ -153,6 +153,8 @@ P2pStatus busyStatus() => P2pStatus(
           peerId: '12D3KooWPhone',
           deviceName: 'Galaxy',
           pairedAt: DateTime.utc(2026, 10, 28, 9, 52),
+          connected: true,
+          lastSyncedAt: DateTime.utc(2026, 10, 30, 9, 55),
           capabilities: const DeviceCapabilities(
             cpuCores: 16,
             gpuVramMegabytes: 8192,

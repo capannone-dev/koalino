@@ -777,5 +777,13 @@
   "saveChatPrompt": "保存聊天提示词",
   "chatPromptSaved": "聊天提示词已保存。",
   "theBuiltInChatPromptIsBack": "已恢复内置的聊天提示词。",
-  "promptsSharedWithPairedDevices": "两个提示词在你所有已配对的设备上都相同：在这里所做的更改会在它们连接时同步过去。"
+  "promptsSharedWithPairedDevices": "两个提示词在你所有已配对的设备上都相同：在这里所做的更改会在它们连接时同步过去。",
+  "deviceOnline": "在线",
+  "deviceOffline": "离线",
+  "neverSynced": "从未同步",
+  "syncedJustNow": "刚刚同步",
+  "lastSyncedMinutesAgo": "{count, plural, other{上次同步：{count} 分钟前}}",
+  "lastSyncedHoursAgo": "{count, plural, other{上次同步：{count} 小时前}}",
+  "lastSyncedOn": "上次同步：{date}",
+  "devicesOnlineCount": "{online}/{total} 台在线"
 }

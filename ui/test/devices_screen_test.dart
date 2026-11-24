@@ -24,6 +24,73 @@ Future<DevicesController> pumpDevices(
 }
 
 void main() {
+  testWidgets(
+      'paired devices say whether they are online and when they last synced (#153)',
+      (WidgetTester tester) async {
+    await pumpDevices(tester, FakeP2pBridge(status: busyStatus()));
+    await tester.scrollUntilVisible(find.text('Old tablet'), 200);
+
+    expect(find.text('1 of 2 online'), findsOneWidget);
+    expect(find.text('Online'), findsOneWidget);
+    expect(find.text('Offline'), findsOneWidget);
+    expect(find.text('Never synced'), findsOneWidget);
+    expect(find.textContaining('Last synced'), findsOneWidget);
+  });
+
+  testWidgets('pulling the list down reloads the status (#153)',
+      (WidgetTester tester) async {
+    final FakeP2pBridge bridge = FakeP2pBridge(status: busyStatus());
+    await pumpDevices(tester, bridge);
+    final int requestsBefore = bridge.statusRequestCount;
+
+    await tester.fling(find.text('Studio laptop'), const Offset(0, 400), 1000);
+    await tester.pumpAndSettle();
+
+    expect(bridge.statusRequestCount, greaterThan(requestsBefore));
+  });
+
+  testWidgets('the refresh button reloads the status (#153)',
+      (WidgetTester tester) async {
+    final FakeP2pBridge bridge = FakeP2pBridge(status: busyStatus());
+    await pumpDevices(tester, bridge);
+    final int requestsBefore = bridge.statusRequestCount;
+
+    await tester.tap(find.byTooltip('Refresh'));
+    await tester.pumpAndSettle();
+
+    expect(bridge.statusRequestCount, requestsBefore + 1);
+  });
+
+  group('describeLastSynced (#153)', () {
+    final DateTime now = DateTime.utc(2026, 11, 24, 10);
+
+    test('says never, just now, minutes, hours, then the date', () {
+      expect(describeLastSynced(null, now: now), 'Never synced');
+      expect(
+          describeLastSynced(now.subtract(const Duration(seconds: 30)),
+              now: now),
+          'Synced just now');
+      expect(
+          describeLastSynced(now.subtract(const Duration(minutes: 1)),
+              now: now),
+          'Last synced 1 minute ago');
+      expect(
+          describeLastSynced(now.subtract(const Duration(minutes: 5)),
+              now: now),
+          'Last synced 5 minutes ago');
+      expect(
+          describeLastSynced(now.subtract(const Duration(hours: 3)), now: now),
+          'Last synced 3 hours ago');
+      expect(describeLastSynced(DateTime.utc(2026, 11, 20, 8, 5), now: now),
+          'Last synced ${formatLastSyncedDate(DateTime.utc(2026, 11, 20, 8, 5))}');
+    });
+
+    test('a time ahead of this clock reads as just now', () {
+      expect(describeLastSynced(now.add(const Duration(minutes: 2)), now: now),
+          'Synced just now');
+    });
+  });
+
   testWidgets('shows this device and every section of a busy status',
       (WidgetTester tester) async {
     await pumpDevices(tester, FakeP2pBridge(status: busyStatus()));
@@ -52,6 +119,8 @@ void main() {
     expect(find.text(shortPeerId('12D3KooWNearbyDevice1234')), findsOneWidget,
         reason:
             'the peer ID stays as a subtitle, to tell same-named devices apart');
+    await tester.scrollUntilVisible(
+        find.text(shortPeerId('12D3KooWQuietDevice5678')), 200);
     expect(find.text(shortPeerId('12D3KooWQuietDevice5678')), findsOneWidget);
 
     await tester.tap(find.text('Pair').first);

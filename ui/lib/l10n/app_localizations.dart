@@ -4785,6 +4785,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Both prompts are the same on all your paired devices: a change here reaches them when they connect.'**
   String get promptsSharedWithPairedDevices;
+
+  /// No description provided for @deviceOnline.
+  ///
+  /// In en, this message translates to:
+  /// **'Online'**
+  String get deviceOnline;
+
+  /// No description provided for @deviceOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get deviceOffline;
+
+  /// No description provided for @neverSynced.
+  ///
+  /// In en, this message translates to:
+  /// **'Never synced'**
+  String get neverSynced;
+
+  /// No description provided for @syncedJustNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced just now'**
+  String get syncedJustNow;
+
+  /// No description provided for @lastSyncedMinutesAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Last synced 1 minute ago} other{Last synced {count} minutes ago}}'**
+  String lastSyncedMinutesAgo(int count);
+
+  /// No description provided for @lastSyncedHoursAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Last synced 1 hour ago} other{Last synced {count} hours ago}}'**
+  String lastSyncedHoursAgo(int count);
+
+  /// No description provided for @lastSyncedOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Last synced {date}'**
+  String lastSyncedOn(String date);
+
+  /// No description provided for @devicesOnlineCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{online} of {total} online'**
+  String devicesOnlineCount(int online, int total);
 }
 
 class _AppLocalizationsDelegate

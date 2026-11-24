@@ -777,5 +777,13 @@
   "saveChatPrompt": "حفظ موجّه الدردشة",
   "chatPromptSaved": "تم حفظ موجّه الدردشة.",
   "theBuiltInChatPromptIsBack": "عاد موجّه الدردشة المدمج.",
-  "promptsSharedWithPairedDevices": "الموجّهان متطابقان على كل أجهزتك المقترنة: يصل أي تغيير هنا إليها عند اتصالها."
+  "promptsSharedWithPairedDevices": "الموجّهان متطابقان على كل أجهزتك المقترنة: يصل أي تغيير هنا إليها عند اتصالها.",
+  "deviceOnline": "متصل",
+  "deviceOffline": "غير متصل",
+  "neverSynced": "لم تتم المزامنة بعد",
+  "syncedJustNow": "تمت المزامنة الآن",
+  "lastSyncedMinutesAgo": "{count, plural, =1{آخر مزامنة قبل دقيقة واحدة} other{آخر مزامنة قبل {count} دقيقة}}",
+  "lastSyncedHoursAgo": "{count, plural, =1{آخر مزامنة قبل ساعة واحدة} other{آخر مزامنة قبل {count} ساعة}}",
+  "lastSyncedOn": "آخر مزامنة: {date}",
+  "devicesOnlineCount": "{online} من {total} متصل"
 }

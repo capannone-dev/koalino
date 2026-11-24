@@ -1,9 +1,12 @@
 // Shows this device, pairing requests and codes, paired devices, and nearby devices, and
 // forwards the owner's choices to `DevicesController` (Issue #43). It also explains why devices on
 // other networks are not found (Issue #66) and offers pairing invites (Issue #65). Nearby devices
-// show the name they tell, and this device can be renamed (Issue #121).
+// show the name they tell, and this device can be renamed (Issue #121). Paired devices say whether
+// they are online and when they last synced, and pulling the list down reloads it (Issue #153).
 
 // ignore: deprecated_member_use
+import 'package:clock/clock.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/controllers/devices_controller.dart';
 import 'package:note_taker_ui/infrastructure/p2p_bridge.dart';
@@ -24,7 +27,17 @@ final class DevicesScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(l10n.devices)),
+        appBar: AppBar(
+          title: Text(l10n.devices),
+          actions: <Widget>[
+            // Pulling down does the same; this serves mice without a drag habit.
+            IconButton(
+              tooltip: l10n.refresh,
+              icon: const Icon(Icons.refresh),
+              onPressed: controller.refresh,
+            ),
+          ],
+        ),
         body: ListenableBuilder(
           listenable: controller,
           builder: (BuildContext context, Widget? child) {
@@ -36,12 +49,39 @@ final class DevicesScreen extends StatelessWidget {
                     : Text(controller.errorMessage!),
               );
             }
-            if (!status.enabled) {
-              return const _SyncOffMessage();
-            }
-            return _DevicesList(controller: controller, status: status);
+            return _PullToRefresh(
+              onRefresh: controller.refresh,
+              child: status.enabled
+                  ? _DevicesList(controller: controller, status: status)
+                  : const _SyncOffMessage(),
+            );
           },
         ),
+      );
+}
+
+/// Reloads the status when the owner pulls `child` down past its top (#153).
+///
+/// Mice and trackpads can pull too, so desktops behave like phones; `child` must be a scrollable
+/// that can always scroll, so a pull works even when everything fits on screen.
+final class _PullToRefresh extends StatelessWidget {
+  const _PullToRefresh({required this.onRefresh, required this.child});
+
+  /// Reloads the status; the spinner shows until it completes.
+  final Future<void> Function() onRefresh;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          dragDevices: <PointerDeviceKind>{
+            PointerDeviceKind.touch,
+            PointerDeviceKind.mouse,
+            PointerDeviceKind.trackpad,
+            PointerDeviceKind.stylus,
+          },
+        ),
+        child: RefreshIndicator(onRefresh: onRefresh, child: child),
       );
 }
 
@@ -50,24 +90,34 @@ final class _SyncOffMessage extends StatelessWidget {
   const _SyncOffMessage();
 
   @override
-  Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(Icons.sync_disabled,
-                  size: 48, color: Theme.of(context).colorScheme.outline),
-              const SizedBox(height: 16),
-              Text(l10n.deviceSyncIsOff,
-                  style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Text(
-                l10n.meetingsStayOnThisDeviceUntil,
-                textAlign: TextAlign.center,
-              ),
-            ],
+  Widget build(BuildContext context) => LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) =>
+            SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: constraints.maxHeight),
+            child: Center(child: _syncOffContent(context)),
           ),
+        ),
+      );
+
+  /// The icon and the two lines of explanation.
+  Widget _syncOffContent(BuildContext context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.sync_disabled,
+                size: 48, color: Theme.of(context).colorScheme.outline),
+            const SizedBox(height: 16),
+            Text(l10n.deviceSyncIsOff,
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text(
+              l10n.meetingsStayOnThisDeviceUntil,
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       );
 }
@@ -82,7 +132,11 @@ final class _DevicesList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TextTheme textTheme = Theme.of(context).textTheme;
+    final int onlineCount = status.pairedDevices
+        .where((PairedDevice device) => device.connected)
+        .length;
     return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: <Widget>[
         if (controller.errorMessage case final String message)
@@ -163,20 +217,54 @@ final class _DevicesList extends StatelessWidget {
               ],
             ),
         ],
-        _SectionTitle(l10n.pairedDevices),
+        _SectionTitle(
+          l10n.pairedDevices,
+          trailing: status.pairedDevices.isEmpty
+              ? null
+              : l10n.devicesOnlineCount(
+                  onlineCount, status.pairedDevices.length),
+        ),
         if (status.pairedDevices.isEmpty) _EmptyText(l10n.noPairedDevicesYet),
         for (final PairedDevice device in status.pairedDevices)
           ListTile(
-            leading: const Icon(Icons.verified_user_outlined),
-            title: Text(device.deviceName),
-            subtitle: Text(l10n.paired(
-                formatPairedDate(device.pairedAt),
-                switch (device.capabilities) {
-                  final DeviceCapabilities capabilities =>
-                    describeCapabilities(capabilities),
-                  null => describeDisconnectedDevice(
-                      hasRelay: status.network.hasRelay),
-                })),
+            isThreeLine: true,
+            leading: Icon(
+              Icons.verified_user_outlined,
+              color: device.connected
+                  ? onlineColor(Theme.of(context).colorScheme)
+                  : Theme.of(context).colorScheme.outline,
+            ),
+            title: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: <Widget>[
+                Text(device.deviceName),
+                _ConnectionBadge(online: device.connected),
+              ],
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  describeLastSynced(device.lastSyncedAt, now: clock.now()),
+                  style: textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurface),
+                ),
+                // A device can be connected a moment before its manifest arrives.
+                Text(l10n
+                    .paired(
+                        formatPairedDate(device.pairedAt),
+                        switch (device.capabilities) {
+                          final DeviceCapabilities capabilities =>
+                            describeCapabilities(capabilities),
+                          null when device.connected => '',
+                          null => describeDisconnectedDevice(
+                              hasRelay: status.network.hasRelay),
+                        })
+                    .trimRight()),
+              ],
+            ),
             trailing: IconButton(
               tooltip: l10n.remove3(device.deviceName),
               icon: const Icon(Icons.delete_outline),
@@ -302,22 +390,110 @@ final class _CodeCard extends StatelessWidget {
   }
 }
 
-/// A section heading.
+/// A section heading, with an optional note at its end such as `1 of 2 online`.
 final class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
+  const _SectionTitle(this.text, {this.trailing});
 
   final String text;
 
+  /// Shown muted at the end of the heading; `null` shows nothing.
+  final String? trailing;
+
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
-        child: Text(text,
-            style: Theme.of(context)
-                .textTheme
-                .titleSmall
-                ?.copyWith(color: Theme.of(context).colorScheme.primary)),
-      );
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Text(text,
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(color: theme.colorScheme.primary)),
+          ),
+          if (trailing case final String note)
+            Text(note,
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
 }
+
+/// A small pill reading `Online` (green dot) or `Offline` (grey dot) beside a device's name.
+final class _ConnectionBadge extends StatelessWidget {
+  const _ConnectionBadge({required this.online});
+
+  /// Whether the device is connected right now.
+  final bool online;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    final Color dotColor =
+        online ? onlineColor(theme.colorScheme) : theme.colorScheme.outline;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: dotColor),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.circle, size: 8, color: dotColor),
+            const SizedBox(width: 6),
+            Text(
+              online ? l10n.deviceOnline : l10n.deviceOffline,
+              style: theme.textTheme.labelMedium?.copyWith(color: dotColor),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The colour that marks a connected device: green, readable on the theme's surface.
+///
+/// Inputs: The theme's colours. Outputs: A darker green on light themes, a lighter one on dark.
+/// Side effects: None.
+Color onlineColor(ColorScheme colorScheme) =>
+    colorScheme.brightness == Brightness.dark
+        ? const Color(0xFF81C784)
+        : const Color(0xFF2E7D32);
+
+/// Says when a paired device last synced, as `Last synced 5 minutes ago` (#153).
+///
+/// Inputs: The last sync time (UTC or local), `null` for never; and the current time, which tests
+/// fix. Outputs: `Never synced`; `Synced just now` under a minute, or for a time ahead of `now`
+/// (the other device's clock does not matter, but this one may have moved); minutes under an hour;
+/// hours under a day; then the local date and time. Side effects: None.
+String describeLastSynced(DateTime? lastSyncedAt, {required DateTime now}) {
+  if (lastSyncedAt == null) {
+    return l10n.neverSynced;
+  }
+  final Duration sinceSync = now.difference(lastSyncedAt);
+  if (sinceSync < const Duration(minutes: 1)) {
+    return l10n.syncedJustNow;
+  }
+  if (sinceSync < const Duration(hours: 1)) {
+    return l10n.lastSyncedMinutesAgo(sinceSync.inMinutes);
+  }
+  if (sinceSync < const Duration(days: 1)) {
+    return l10n.lastSyncedHoursAgo(sinceSync.inHours);
+  }
+  return l10n.lastSyncedOn(formatLastSyncedDate(lastSyncedAt));
+}
+
+/// Formats an older sync time in local time, as `20 Nov 2026, 09:05` in English.
+///
+/// Inputs: The sync time. Outputs: The date and 24-hour time in the app's language.
+/// Side effects: None.
+String formatLastSyncedDate(DateTime lastSyncedAt) =>
+    formatDatePattern(lastSyncedAt.toLocal(), 'd MMM y, HH:mm');
 
 /// Muted text for an empty section.
 final class _EmptyText extends StatelessWidget {

@@ -2862,4 +2862,46 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get promptsSharedWithPairedDevices =>
       'どちらのプロンプトも、ペアリングしたすべてのデバイスで同じです。ここでの変更は、各デバイスが接続したときに反映されます。';
+
+  @override
+  String get deviceOnline => 'オンライン';
+
+  @override
+  String get deviceOffline => 'オフライン';
+
+  @override
+  String get neverSynced => '未同期';
+
+  @override
+  String get syncedJustNow => 'たった今同期しました';
+
+  @override
+  String lastSyncedMinutesAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '最終同期: $count 分前',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lastSyncedHoursAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '最終同期: $count 時間前',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lastSyncedOn(String date) {
+    return '最終同期: $date';
+  }
+
+  @override
+  String devicesOnlineCount(int online, int total) {
+    return '$total 台中 $online 台がオンライン';
+  }
 }

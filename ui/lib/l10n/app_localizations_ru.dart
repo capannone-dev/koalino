@@ -3025,4 +3025,52 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get promptsSharedWithPairedDevices =>
       'Оба промпта одинаковы на всех ваших сопряжённых устройствах: изменение здесь дойдёт до них, когда они подключатся.';
+
+  @override
+  String get deviceOnline => 'В сети';
+
+  @override
+  String get deviceOffline => 'Не в сети';
+
+  @override
+  String get neverSynced => 'Ещё не синхронизировано';
+
+  @override
+  String get syncedJustNow => 'Синхронизировано только что';
+
+  @override
+  String lastSyncedMinutesAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Синхронизировано $count минуты назад',
+      many: 'Синхронизировано $count минут назад',
+      few: 'Синхронизировано $count минуты назад',
+      one: 'Синхронизировано $count минуту назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lastSyncedHoursAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Синхронизировано $count часа назад',
+      many: 'Синхронизировано $count часов назад',
+      few: 'Синхронизировано $count часа назад',
+      one: 'Синхронизировано $count час назад',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lastSyncedOn(String date) {
+    return 'Последняя синхронизация: $date';
+  }
+
+  @override
+  String devicesOnlineCount(int online, int total) {
+    return 'В сети: $online из $total';
+  }
 }

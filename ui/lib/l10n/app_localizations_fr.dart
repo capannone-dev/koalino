@@ -3019,4 +3019,48 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get promptsSharedWithPairedDevices =>
       'Les deux prompts sont identiques sur tous vos appareils associés : une modification ici leur parvient lorsqu\'ils se connectent.';
+
+  @override
+  String get deviceOnline => 'En ligne';
+
+  @override
+  String get deviceOffline => 'Hors ligne';
+
+  @override
+  String get neverSynced => 'Jamais synchronisé';
+
+  @override
+  String get syncedJustNow => 'Synchronisé à l’instant';
+
+  @override
+  String lastSyncedMinutesAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dernière synchronisation il y a $count minutes',
+      one: 'Dernière synchronisation il y a 1 minute',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lastSyncedHoursAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Dernière synchronisation il y a $count heures',
+      one: 'Dernière synchronisation il y a 1 heure',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lastSyncedOn(String date) {
+    return 'Dernière synchronisation : $date';
+  }
+
+  @override
+  String devicesOnlineCount(int online, int total) {
+    return '$online sur $total en ligne';
+  }
 }

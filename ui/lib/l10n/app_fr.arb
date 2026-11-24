@@ -777,5 +777,13 @@
   "saveChatPrompt": "Enregistrer le prompt du chat",
   "chatPromptSaved": "Prompt du chat enregistré.",
   "theBuiltInChatPromptIsBack": "Le prompt du chat intégré est rétabli.",
-  "promptsSharedWithPairedDevices": "Les deux prompts sont identiques sur tous vos appareils associés : une modification ici leur parvient lorsqu'ils se connectent."
+  "promptsSharedWithPairedDevices": "Les deux prompts sont identiques sur tous vos appareils associés : une modification ici leur parvient lorsqu'ils se connectent.",
+  "deviceOnline": "En ligne",
+  "deviceOffline": "Hors ligne",
+  "neverSynced": "Jamais synchronisé",
+  "syncedJustNow": "Synchronisé à l’instant",
+  "lastSyncedMinutesAgo": "{count, plural, =1{Dernière synchronisation il y a 1 minute} other{Dernière synchronisation il y a {count} minutes}}",
+  "lastSyncedHoursAgo": "{count, plural, =1{Dernière synchronisation il y a 1 heure} other{Dernière synchronisation il y a {count} heures}}",
+  "lastSyncedOn": "Dernière synchronisation : {date}",
+  "devicesOnlineCount": "{online} sur {total} en ligne"
 }

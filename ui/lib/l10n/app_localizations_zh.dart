@@ -2798,4 +2798,46 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get promptsSharedWithPairedDevices =>
       '两个提示词在你所有已配对的设备上都相同：在这里所做的更改会在它们连接时同步过去。';
+
+  @override
+  String get deviceOnline => '在线';
+
+  @override
+  String get deviceOffline => '离线';
+
+  @override
+  String get neverSynced => '从未同步';
+
+  @override
+  String get syncedJustNow => '刚刚同步';
+
+  @override
+  String lastSyncedMinutesAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '上次同步：$count 分钟前',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lastSyncedHoursAgo(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '上次同步：$count 小时前',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String lastSyncedOn(String date) {
+    return '上次同步：$date';
+  }
+
+  @override
+  String devicesOnlineCount(int online, int total) {
+    return '$online/$total 台在线';
+  }
 }

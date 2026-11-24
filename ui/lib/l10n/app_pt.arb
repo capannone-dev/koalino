@@ -777,5 +777,13 @@
   "saveChatPrompt": "Salvar prompt do chat",
   "chatPromptSaved": "Prompt do chat salvo.",
   "theBuiltInChatPromptIsBack": "O prompt do chat padrão voltou.",
-  "promptsSharedWithPairedDevices": "Os dois prompts são iguais em todos os seus dispositivos pareados: uma alteração aqui chega a eles quando se conectam."
+  "promptsSharedWithPairedDevices": "Os dois prompts são iguais em todos os seus dispositivos pareados: uma alteração aqui chega a eles quando se conectam.",
+  "deviceOnline": "Online",
+  "deviceOffline": "Offline",
+  "neverSynced": "Nunca sincronizado",
+  "syncedJustNow": "Sincronizado agora mesmo",
+  "lastSyncedMinutesAgo": "{count, plural, =1{Última sincronização há 1 minuto} other{Última sincronização há {count} minutos}}",
+  "lastSyncedHoursAgo": "{count, plural, =1{Última sincronização há 1 hora} other{Última sincronização há {count} horas}}",
+  "lastSyncedOn": "Última sincronização: {date}",
+  "devicesOnlineCount": "{online} de {total} online"
 }

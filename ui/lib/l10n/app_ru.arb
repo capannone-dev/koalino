@@ -777,5 +777,13 @@
   "saveChatPrompt": "Сохранить промпт чата",
   "chatPromptSaved": "Промпт чата сохранён.",
   "theBuiltInChatPromptIsBack": "Встроенный промпт чата восстановлен.",
-  "promptsSharedWithPairedDevices": "Оба промпта одинаковы на всех ваших сопряжённых устройствах: изменение здесь дойдёт до них, когда они подключатся."
+  "promptsSharedWithPairedDevices": "Оба промпта одинаковы на всех ваших сопряжённых устройствах: изменение здесь дойдёт до них, когда они подключатся.",
+  "deviceOnline": "В сети",
+  "deviceOffline": "Не в сети",
+  "neverSynced": "Ещё не синхронизировано",
+  "syncedJustNow": "Синхронизировано только что",
+  "lastSyncedMinutesAgo": "{count, plural, one{Синхронизировано {count} минуту назад} few{Синхронизировано {count} минуты назад} many{Синхронизировано {count} минут назад} other{Синхронизировано {count} минуты назад}}",
+  "lastSyncedHoursAgo": "{count, plural, one{Синхронизировано {count} час назад} few{Синхронизировано {count} часа назад} many{Синхронизировано {count} часов назад} other{Синхронизировано {count} часа назад}}",
+  "lastSyncedOn": "Последняя синхронизация: {date}",
+  "devicesOnlineCount": "В сети: {online} из {total}"
 }

@@ -2339,5 +2339,21 @@
   "theBuiltInChatPromptIsBack": "The built-in chat prompt is back.",
   "@theBuiltInChatPromptIsBack": {},
   "promptsSharedWithPairedDevices": "Both prompts are the same on all your paired devices: a change here reaches them when they connect.",
-  "@promptsSharedWithPairedDevices": {}
+  "@promptsSharedWithPairedDevices": {},
+  "deviceOnline": "Online",
+  "@deviceOnline": {},
+  "deviceOffline": "Offline",
+  "@deviceOffline": {},
+  "neverSynced": "Never synced",
+  "@neverSynced": {},
+  "syncedJustNow": "Synced just now",
+  "@syncedJustNow": {},
+  "lastSyncedMinutesAgo": "{count, plural, =1{Last synced 1 minute ago} other{Last synced {count} minutes ago}}",
+  "@lastSyncedMinutesAgo": {"placeholders": {"count": {"type": "int"}}},
+  "lastSyncedHoursAgo": "{count, plural, =1{Last synced 1 hour ago} other{Last synced {count} hours ago}}",
+  "@lastSyncedHoursAgo": {"placeholders": {"count": {"type": "int"}}},
+  "lastSyncedOn": "Last synced {date}",
+  "@lastSyncedOn": {"placeholders": {"date": {"type": "String"}}},
+  "devicesOnlineCount": "{online} of {total} online",
+  "@devicesOnlineCount": {"placeholders": {"online": {"type": "int"}, "total": {"type": "int"}}}
 }

@@ -20,6 +20,18 @@ const String runningStatusJson = '''
 
 void main() {
   group('decodeP2pStatus', () {
+    test('a paired device tells whether it is online and when it synced (#153)',
+        () {
+      final P2pStatus status = decodeP2pStatus(runningStatusJson.replaceFirst(
+          '"paired_at_ms":1793181121148,',
+          '"paired_at_ms":1793181121148,"connected":true,'
+              '"last_synced_at_ms":1793190000000,'));
+
+      expect(status.pairedDevices.single.connected, isTrue);
+      expect(status.pairedDevices.single.lastSyncedAt,
+          DateTime.fromMillisecondsSinceEpoch(1793190000000, isUtc: true));
+    });
+
     test('a running task lists every kind of device', () {
       final P2pStatus status = decodeP2pStatus(runningStatusJson);
 
@@ -37,6 +49,10 @@ void main() {
       expect(status.capabilities?.transcriptionModels,
           <String>['whisper', 'openai']);
       expect(status.pairedDevices.single.capabilities, isNull);
+      expect(status.pairedDevices.single.connected, isFalse,
+          reason:
+              'a core older than #153 says nothing, which reads as offline');
+      expect(status.pairedDevices.single.lastSyncedAt, isNull);
       expect(status.nearbyPeerIds, <String>['12D3KooWNearby', '12D3KooWQuiet']);
       expect(status.nearbyDeviceNames,
           <String, String>{'12D3KooWNearby': 'Kitchen tablet'},
