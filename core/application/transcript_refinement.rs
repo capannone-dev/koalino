@@ -722,6 +722,75 @@ fn samples_between<'samples>(
     chunk.samples.get(first..last.min(chunk.samples.len()))
 }
 
+/// How many of the previous window's last words a restatement is looked for in.
+const RESTATEMENT_MAX_WORDS: usize = 30;
+/// The fewest words a restatement has: shorter repeats happen in ordinary speech.
+const RESTATEMENT_MIN_WORDS: usize = 5;
+/// The share of a restatement's words that must match, in order (Whisper rewords a few).
+const RESTATEMENT_MIN_MATCH_PERCENT: usize = 80;
+
+/// A word as compared for restatements: lower case, accents and punctuation removed.
+fn restatement_key(word: &str) -> String {
+    word.chars()
+        .filter(|character| character.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .map(|character| match character {
+            'à' | 'á' | 'â' => 'a',
+            'è' | 'é' | 'ê' => 'e',
+            'ì' | 'í' | 'î' => 'i',
+            'ò' | 'ó' | 'ô' => 'o',
+            'ù' | 'ú' | 'û' => 'u',
+            other => other,
+        })
+        .collect()
+}
+
+/// Whether two compared words are the same word as Whisper may write it twice: equal, sharing
+/// their first five letters ("guardiamo", "guarderò"), or, for the previous window's cut-off last
+/// word, a beginning of the other.
+fn same_restated_word(previous: &str, next: &str, previous_is_cut: bool) -> bool {
+    const SHARED_START: usize = 5;
+    previous == next
+        || (previous.chars().count() >= SHARED_START
+            && next.chars().count() >= SHARED_START
+            && previous.chars().take(SHARED_START).eq(next.chars().take(SHARED_START)))
+        || (previous_is_cut && !previous.is_empty() && next.starts_with(previous))
+}
+
+/// How many words at the start of a window restate the end of the previous window.
+///
+/// Whisper is prompted with the previous window's text, and sometimes opens the next window by
+/// saying the end of it again, a little reworded, as if it were new speech. A run of at least five
+/// words that ends the previous window and starts this one, with four in five matching in order
+/// and the first one matching, is that restatement.
+/// Inputs: The previous window's words and this window's words, as the engine wrote them.
+/// Outputs: How many of this window's first words to drop; 0 when it does not restate.
+/// Side effects: None.
+pub(crate) fn restated_lead(previous: &[&str], next: &[&str]) -> usize {
+    let previous: Vec<String> = previous[previous.len().saturating_sub(RESTATEMENT_MAX_WORDS)..]
+        .iter()
+        .map(|word| restatement_key(word))
+        .collect();
+    let next: Vec<String> = next.iter().map(|word| restatement_key(word)).collect();
+    let longest = previous.len().min(next.len());
+    for length in (RESTATEMENT_MIN_WORDS..=longest).rev() {
+        let tail = &previous[previous.len() - length..];
+        let matching = tail
+            .iter()
+            .zip(&next[..length])
+            .enumerate()
+            .filter(|(position, (earlier, later))| {
+                same_restated_word(earlier, later, *position + 1 == length)
+            })
+            .count();
+        let first_matches = same_restated_word(&tail[0], &next[0], length == 1);
+        if first_matches && matching * 100 >= length * RESTATEMENT_MIN_MATCH_PERCENT {
+            return length;
+        }
+    }
+    0
+}
+
 /// Re-transcribes speech chunks in long windows.
 ///
 /// Inputs: The meeting the audio belongs to; a name for the windows' audio ids; the chunks in time
@@ -765,7 +834,21 @@ where
             &AudioRecording::new(recording_id, meeting_id.clone(), device_id.clone()),
             &context,
         )?;
-        words.extend(transcript.timed_words().iter().map(|word| {
+        // A window that opens by restating the previous one's end loses the restatement.
+        let window_words: Vec<&str> = transcript
+            .timed_words()
+            .iter()
+            .map(|word| word.text())
+            .collect();
+        let previous_words: Vec<&str> = previous_text
+            .as_deref()
+            .map(|text| text.split_whitespace().collect())
+            .unwrap_or_default();
+        let restated = restated_lead(&previous_words, &window_words);
+        if restated > 0 {
+            tracing::debug!(window_number, restated_words = restated, "the window restated the previous one's end");
+        }
+        words.extend(transcript.timed_words().iter().skip(restated).map(|word| {
             MeetingWord::new(
                 word.text(),
                 window.to_meeting_ms(word.start_ms()),

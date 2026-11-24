@@ -828,3 +828,37 @@ fn a_sentence_moved_over_a_skipped_one_is_caught_by_the_neighbours_live_text() {
     assert_eq!(replaced, 2);
     assert_eq!(texts(&words), format!("{TURN_TWO} {TURN_THREE}"));
 }
+
+/// Splits `text` on spaces, as window words are.
+fn split(text: &str) -> Vec<&str> {
+    text.split_whitespace().collect()
+}
+
+/// Verifies a window that opens by restating the end of the previous one, as Whisper does with
+/// its prompt (seen at a 30 s seam of a real meeting, 2026-11-24), loses the restated words,
+/// although Whisper worded them a little differently and the previous window cut the last word.
+#[test]
+fn a_window_restating_the_previous_ones_end_drops_the_restatement() {
+    let previous = split("va bene così. Ok, comunque si guardiamo. Quindi i risultati s");
+    let next = split("Ok, comunque sì, guarderò. Quindi i risultati si basano su questi numeri");
+    assert_eq!(super::transcript_refinement::restated_lead(&previous, &next), 8);
+}
+
+/// Verifies ordinary continuations keep every word: new speech, a short coincidence, or a
+/// sentence that only shares a few words with the end of the previous window.
+#[test]
+fn a_window_continuing_the_previous_one_keeps_its_words() {
+    let restated = |previous: &str, next: &str| {
+        super::transcript_refinement::restated_lead(&split(previous), &split(next))
+    };
+    assert_eq!(restated("abbiamo finito la prova", "poi passiamo al modello"), 0);
+    assert_eq!(restated("e poi", "e poi andiamo"), 0);
+    assert_eq!(
+        restated(
+            "abbiamo visto i risultati del modello",
+            "i risultati del test sono buoni"
+        ),
+        0
+    );
+    assert_eq!(restated("", "una frase nuova qui"), 0);
+}
