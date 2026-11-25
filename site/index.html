@@ -1,144 +1,234 @@
 <!doctype html>
-<!-- Koalino's home page on GitHub Pages (#166): what the app does, where to get it, and links to
-     the source and the privacy policy. Static; it loads nothing from other sites. -->
+<!-- Koalino's landing page on GitHub Pages (#166, #173): what the app does, screenshots on a
+     computer and a phone, and direct downloads, with the visitor's own system offered first
+     (download.js). Static; it loads nothing from other sites. When a new release comes out,
+     update the links in this page (search for the release tag) and the version in download.js. -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Koalino: private meeting notes</title>
+    <title>Koalino: private meeting notes, on your own devices</title>
     <meta
       name="description"
-      content="Koalino records meetings and transcribes them on your own devices. Free software, works offline, syncs between your devices without a server."
+      content="Koalino records your meetings, transcribes them on your own devices and knows who spoke. Works offline, syncs between your devices without a server, free software."
     />
+    <meta property="og:title" content="Koalino: private meeting notes" />
+    <meta
+      property="og:description"
+      content="Record, transcribe and summarize meetings on your own devices. No cloud, no account."
+    />
+    <meta property="og:image" content="https://capannone-dev.github.io/koalino/screens/desktop.png" />
     <link rel="icon" href="koalino.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="style.css" />
+    <script src="download.js" defer></script>
   </head>
-  <body>
+  <body class="landing">
     <header>
-      <a href="./"><img src="koalino.svg" alt="" width="36" height="36" />Koalino</a>
+      <a href="./"><img src="koalino.svg" alt="" width="34" height="34" />Koalino</a>
       <nav aria-label="Site">
+        <a href="#features">Features</a>
         <a href="#download">Download</a>
         <a href="privacy.html">Privacy</a>
-        <a href="https://github.com/capannone-dev/koalino">Source</a>
+        <a href="https://github.com/capannone-dev/koalino">GitHub</a>
       </nav>
     </header>
 
     <main>
-      <div class="hero">
-        <div>
-          <h1>Meeting notes that stay on your devices</h1>
-          <p>
-            Koalino records your meetings and turns them into transcripts, notes and summaries,
-            on your phone and computers. It works offline, and your devices sync with each other
-            directly, encrypted, without a server in between.
-          </p>
-          <a class="button" href="#download">Download</a>
-          <a class="button secondary" href="https://github.com/capannone-dev/koalino">Source code</a>
+      <section class="hero" aria-labelledby="hero-title">
+        <p class="eyebrow">Free · Offline · No account</p>
+        <h1 id="hero-title">Your meetings, written down.<br /><span>Without leaving your devices.</span></h1>
+        <p class="lead">
+          Koalino records meetings, transcribes them right on your phone or computer, and knows who
+          said what. Notes, photos and files sit next to the transcript, and your devices keep each
+          other in sync, encrypted, with no cloud in between.
+        </p>
+        <div class="actions">
+          <a class="button" id="primary-download" href="#download">Download Koalino</a>
+          <a class="button ghost" href="#download">All platforms</a>
         </div>
-        <img src="koalino.svg" alt="Koalino's logo: a koala holding a notepad" width="200" height="200" />
-      </div>
+        <p class="small" id="primary-note">Android · Windows · Linux · macOS · Free software (GPL)</p>
 
-      <section aria-labelledby="features">
-        <h2 id="features">What it does</h2>
-        <div class="features">
-          <div class="feature">
-            <h3>Transcribes on the device</h3>
-            <p>
-              Whisper runs locally, in more than 90 languages. Add a glossary of names and terms
-              so they come out right.
-            </p>
-          </div>
-          <div class="feature">
-            <h3>Knows who spoke</h3>
-            <p>
-              Speaker separation splits the conversation by voice; name a voice once and Koalino
-              recognizes it in later meetings.
-            </p>
-          </div>
-          <div class="feature">
-            <h3>Notes, photos and files</h3>
-            <p>
-              Keep a meeting's notes, whiteboard photos and documents with its transcript, and
-              group meetings into projects you can search.
-            </p>
-          </div>
-          <div class="feature">
-            <h3>Syncs without a server</h3>
-            <p>
-              Pair your devices with a QR code. They exchange notes directly, end-to-end
-              encrypted, whenever they can reach each other.
-            </p>
-          </div>
-          <div class="feature">
-            <h3>Summaries if you want them</h3>
-            <p>
-              Summaries and chat over your notes use an AI connection you choose, or your own
-              Claude or ChatGPT subscription. Without one, everything else still works.
-            </p>
-          </div>
-          <div class="feature">
-            <h3>Encrypted, and yours</h3>
-            <p>
-              Data is encrypted at rest, with the key in your device's keychain. Encrypted
-              backups go wherever you choose. Free software under the GPL.
-            </p>
-          </div>
+        <div class="showcase" aria-label="Koalino on a computer and on a phone">
+          <figure class="laptop">
+            <div class="screen">
+              <img
+                src="screens/desktop.png"
+                width="1280"
+                height="720"
+                alt="Koalino on a computer: a meeting's transcript, split by speaker with timestamps"
+              />
+            </div>
+            <div class="base" aria-hidden="true"></div>
+          </figure>
+          <figure class="phone">
+            <img
+              src="screens/phone.png"
+              width="390"
+              height="740"
+              alt="Koalino's phone layout: the same meeting, with its notes and transcript"
+            />
+          </figure>
         </div>
       </section>
 
-      <section aria-labelledby="download">
-        <h2 id="download">Download</h2>
-        <p>
-          Koalino is in preview. Packages for every platform are on the
-          <a href="https://github.com/capannone-dev/koalino/releases">releases page</a>, with
-          their SHA-256 sums.
+      <section class="points" aria-label="In short">
+        <div><strong>On-device AI</strong><span>Whisper runs on your hardware</span></div>
+        <div><strong>90+ languages</strong><span>transcribed, and 10 app languages</span></div>
+        <div><strong>0 servers</strong><span>devices sync directly, end to end</span></div>
+        <div><strong>AES-256</strong><span>encryption for everything stored</span></div>
+      </section>
+
+      <section id="features" aria-labelledby="features-title">
+        <h2 id="features-title">Everything a meeting leaves behind, in one place</h2>
+        <p class="section-lead">Built for people who talk about things that shouldn't end up on someone else's server.</p>
+        <div class="features">
+          <article>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1A7 7 0 0 0 19 12Z"/></svg>
+            <h3>Transcribes on the device</h3>
+            <p>
+              Whisper runs on your phone or computer, even in airplane mode. Add a glossary so
+              names and jargon come out right, and correct any passage with a long press.
+            </p>
+          </article>
+          <article>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-2.7 0-8 1.3-8 4v2h16v-2c0-2.7-5.3-4-8-4Zm7.8-9.6-1.4 1.4a3.9 3.9 0 0 1 0 4.4l1.4 1.4a5.8 5.8 0 0 0 0-7.2Zm2.8-2.8-1.4 1.4a7.8 7.8 0 0 1 0 10.6l1.4 1.4a9.7 9.7 0 0 0 0-13.4Z"/></svg>
+            <h3>Knows who spoke</h3>
+            <p>
+              Speaker separation splits the conversation by voice. Name a voice once and Koalino
+              recognizes it in the next meeting. Voices are stored as numbers, never as audio.
+            </p>
+          </article>
+          <article>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H5.2L4 17.2Zm0-2a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Zm3 5h10v2H7Zm0 4h7v2H7Z"/></svg>
+            <h3>Summaries and chat, your way</h3>
+            <p>
+              Get a summary or ask "what did we decide?" using the AI you choose: your own Claude
+              or ChatGPT subscription, a cloud provider, or a model on your computer. Or none.
+            </p>
+          </article>
+          <article>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8Z"/></svg>
+            <h3>Notes, photos, files, projects</h3>
+            <p>
+              Keep notes, whiteboard photos and slides with the transcript. Group meetings into
+              projects and search across all of them.
+            </p>
+          </article>
+          <article>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1H7a2 2 0 0 0-2 2v18a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V3a2 2 0 0 0-2-2Zm0 18H7V5h10ZM2 7h2v10H2Zm18 0h2v10h-2Z"/></svg>
+            <h3>Syncs without a cloud</h3>
+            <p>
+              Pair your phone and computers with a QR code. They exchange notes directly and end
+              to end encrypted, and catch up whenever they meet again. Fully works offline.
+            </p>
+          </article>
+          <article>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 6h-2v9H6v2a1 1 0 0 0 1 1h11l4 4V7a1 1 0 0 0-1-1Zm-4 6V3a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v14l4-4h10a1 1 0 0 0 1-1Z"/></svg>
+            <h3>Online meetings too</h3>
+            <p>
+              The browser extension records Microsoft Teams calls you join in Chrome, Edge or
+              Firefox, with live captions and shared slides, after you agree in each meeting.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="privacy-band" aria-labelledby="privacy-title">
+        <div>
+          <h2 id="privacy-title">Private by design, not by promise</h2>
+          <p>
+            There is no Koalino cloud, no account, no analytics and no ads. Recordings are deleted
+            once transcribed, everything kept is encrypted with a key in your device's keychain,
+            and backups are encrypted with your passphrase before they leave the app. The code is
+            public, so anyone can check.
+          </p>
+          <a href="privacy.html">Read the privacy policy →</a>
+        </div>
+        <ul>
+          <li>No account or sign-up</li>
+          <li>Audio deleted after transcription</li>
+          <li>AES-256-GCM encryption at rest</li>
+          <li>Encrypted device-to-device sync</li>
+          <li>Free software, GPL-3.0-or-later</li>
+        </ul>
+      </section>
+
+      <section id="download" aria-labelledby="download-title">
+        <h2 id="download-title">Download</h2>
+        <p class="section-lead">
+          Version 0.2.0 preview · free ·
+          <a href="https://github.com/capannone-dev/koalino/releases/tag/v0.2.0-preview.2">release notes and checksums</a>
         </p>
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">Platform</th>
-              <th scope="col">Package</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Android (64-bit ARM)</td>
-              <td>APK on the releases page; F-Droid coming</td>
-            </tr>
-            <tr>
-              <td>Linux (x86_64)</td>
-              <td>.deb (Debian, Ubuntu), .rpm (Fedora, openSUSE), Flatpak or tarball</td>
-            </tr>
-            <tr>
-              <td>Windows 10 and 11</td>
-              <td>zip</td>
-            </tr>
-            <tr>
-              <td>macOS 12 or newer</td>
-              <td>zip, untested on real Macs: <a href="https://github.com/capannone-dev/koalino#apple-devices-help-wanted">help wanted</a></td>
-            </tr>
-            <tr>
-              <td>Firefox, Chrome, Edge</td>
-              <td>browser extension that records Teams meetings joined in the browser</td>
-            </tr>
-            <tr>
-              <td>Linux server</td>
-              <td>always-on sync and transcription, with a web dashboard</td>
-            </tr>
-          </tbody>
-        </table>
+        <div class="platforms">
+          <article data-platform="android">
+            <img src="icons/android.svg" alt="" width="28" height="28" />
+            <h3>Android</h3>
+            <p>Phones with a 64-bit processor. Allow installs from your browser when asked.</p>
+            <a class="button" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-android-arm64-0.2.0.apk">Download APK</a>
+            <span class="meta">Coming to F-Droid</span>
+          </article>
+          <article data-platform="windows">
+            <img src="icons/windows.svg" alt="" width="28" height="28" />
+            <h3>Windows</h3>
+            <p>Windows 10 and 11, 64-bit. Unzip and run Koalino.</p>
+            <a class="button" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-x86_64-0.2.0.zip">Download for Windows</a>
+            <span class="meta">Not yet code signed: choose “Run anyway”</span>
+          </article>
+          <article data-platform="linux">
+            <img src="icons/linux.svg" alt="" width="28" height="28" />
+            <h3>Linux</h3>
+            <p>64-bit PCs, with a menu entry and icon.</p>
+            <a class="button" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino_0.2.0.preview.2_amd64.deb">Debian, Ubuntu (.deb)</a>
+            <span class="meta links">
+              <a href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-0.2.0.preview.2-1.x86_64.rpm">Fedora, openSUSE (.rpm)</a>
+              <a href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-x86_64-0.2.0.flatpak">Flatpak</a>
+              <a href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-linux-x86_64-0.2.0.tar.gz">Tarball</a>
+            </span>
+          </article>
+          <article data-platform="mac">
+            <img src="icons/apple.svg" alt="" width="28" height="28" />
+            <h3>macOS</h3>
+            <p>macOS 12 or newer, Intel and Apple silicon. Experimental: not yet tried on real Macs.</p>
+            <a class="button secondary" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-macos-universal-0.2.0.zip">Download for Mac</a>
+            <span class="meta"><a href="https://github.com/capannone-dev/koalino#apple-devices-help-wanted">Help us test it</a></span>
+          </article>
+          <article data-platform="browser">
+            <img src="icons/googlechrome.svg" alt="" width="28" height="28" />
+            <h3>Browser extension</h3>
+            <p>Records Teams meetings joined in the browser. Needs the Koalino app on the same computer.</p>
+            <a class="button secondary" href="https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-browser-extension-firefox-0.1.0.xpi">Firefox</a>
+            <span class="meta links">
+              <a href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-chromium-0.2.0.zip">Chrome, Edge (load unpacked)</a>
+            </span>
+          </article>
+          <article data-platform="server">
+            <img src="icons/linux.svg" alt="" width="28" height="28" />
+            <h3>Home server</h3>
+            <p>An always-on Linux box that syncs and transcribes for your devices, with a web dashboard.</p>
+            <a class="button secondary" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-linux-x86_64-0.2.0.tar.gz">Download server</a>
+          </article>
+        </div>
         <p class="note">
-          Installation steps for each platform are in the
-          <a href="https://github.com/capannone-dev/koalino#install">README</a>.
+          Step-by-step installation for each platform is in the
+          <a href="https://github.com/capannone-dev/koalino#install">README</a>. Koalino is a
+          preview: back up your meetings from Settings, and
+          <a href="https://github.com/capannone-dev/koalino/issues">tell us</a> what breaks.
         </p>
       </section>
     </main>
 
     <footer>
-      Koalino is free software, licensed under the
-      <a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU GPL, version 3 or later</a>.
-      <a href="privacy.html">Privacy policy</a> ·
-      <a href="https://github.com/capannone-dev/koalino/issues">Report a problem</a>
+      <div>
+        <img src="koalino.svg" alt="" width="24" height="24" />
+        Koalino is free software under the
+        <a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU GPL, version 3 or later</a>.
+        Screenshots: <a href="https://groups.inf.ed.ac.uk/ami/corpus/">AMI Meeting Corpus</a>, CC BY 4.0.
+      </div>
+      <nav aria-label="Footer">
+        <a href="privacy.html">Privacy</a>
+        <a href="https://github.com/capannone-dev/koalino">Source code</a>
+        <a href="https://github.com/capannone-dev/koalino/issues">Report a problem</a>
+      </nav>
     </footer>
   </body>
 </html>
