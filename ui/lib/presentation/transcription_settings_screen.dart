@@ -56,10 +56,20 @@ const Key npuRemoveKey = ValueKey<String>('npu-remove');
 /// Finds the button that saves the glossary.
 const Key glossarySaveKey = ValueKey<String>('glossary-save');
 
+/// Whether this build ships Whisper `base` inside the app. The F-Droid build (#163) does not: it
+/// is built with `--dart-define=KOALINO_NO_BUNDLED_MODELS=true` and downloads models on request.
+const bool appBundlesWhisperModel =
+    !bool.fromEnvironment('KOALINO_NO_BUNDLED_MODELS');
+
 /// Speed and accuracy hints for each size, from measurements on Italian speech (see #67, #69).
-Map<String, String> get _familyHints => <String, String>{
+///
+/// Inputs: Whether the app ships `base`, which its hint then says. Outputs: Hints by size.
+/// Side effects: None.
+Map<String, String> _familyHints(bool bundlesWhisperModel) => <String, String>{
       'tiny': l10n.fastestLeastAccurate,
-      'base': l10n.fastManyMistakesTheAppShips,
+      'base': bundlesWhisperModel
+          ? l10n.fastManyMistakesTheAppShips
+          : l10n.fastManyMistakes,
       'small': l10n.goodBalanceOnMostComputers,
       'medium': l10n.accurateSlowerNeedsAbout2Gb,
       'large-v1': l10n.olderNeedsAPowerfulComputer,
@@ -122,17 +132,21 @@ final class TranscriptionSettingsScreen extends StatefulWidget {
   /// Creates the page.
   ///
   /// Inputs: The controller, the default transcription language's code (for the warning on
-  /// English-only models), and on a phone the bridge for running the after-meeting pass while
-  /// the app is closed (#87).
+  /// English-only models), on a phone the bridge for running the after-meeting pass while the app
+  /// is closed (#87), and whether the app ships Whisper `base` (default: this build's setting).
   const TranscriptionSettingsScreen({
     required this.controller,
     required this.languageCode,
     this.backgroundPass,
+    this.bundlesWhisperModel = appBundlesWhisperModel,
     super.key,
   });
 
   final TranscriptionSettingsController controller;
   final String languageCode;
+
+  /// Whether the app ships Whisper `base`; tests set it, the build decides it otherwise.
+  final bool bundlesWhisperModel;
 
   /// Offers the battery exemption the background pass needs; null off Android.
   final BackgroundPassBridge? backgroundPass;
@@ -441,7 +455,8 @@ final class _TranscriptionSettingsScreenState
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Align(
             alignment: AlignmentDirectional.centerStart,
-            child: Text('${model.family}: ${_familyHints[model.family] ?? ''}',
+            child: Text(
+                '${model.family}: ${_familyHints(widget.bundlesWhisperModel)[model.family] ?? ''}',
                 style: Theme.of(context).textTheme.labelLarge),
           ),
         ));
@@ -642,7 +657,9 @@ final class _TranscriptionSettingsScreenState
         widget.languageCode != 'auto';
     final List<String> notes = <String>[
       if (withHint && model.name == model.family)
-        if (_familyHints[model.family] case final String hint) hint,
+        if (_familyHints(widget.bundlesWhisperModel)[model.family]
+            case final String hint)
+          hint,
       formatModelSize(model.sizeBytes),
       if (model.onDevice) l10n.onThisDevice,
       if (settings.automatic.enabled &&

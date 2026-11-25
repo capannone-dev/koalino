@@ -1,0 +1,47 @@
+# Draft of Koalino's F-Droid recipe (#163), to be submitted as metadata/io.github.capannone_dev.koalino.yml
+# in a merge request to https://gitlab.com/fdroid/fdroiddata once the repository is public. See
+# README.md beside it for what the build leaves out and why. Check the flutter and rustup srclib
+# versions against fdroiddata's srclibs/ when submitting.
+Categories:
+  - Writing
+  - Multimedia
+License: GPL-3.0-or-later
+AuthorName: The Koalino contributors
+SourceCode: https://github.com/capannone-dev/koalino
+IssueTracker: https://github.com/capannone-dev/koalino/issues
+Changelog: https://github.com/capannone-dev/koalino/releases
+
+AutoName: Koalino
+
+RepoType: git
+Repo: https://github.com/capannone-dev/koalino.git
+
+Builds:
+  - versionName: 0.2.0
+    versionCode: 2
+    commit: v0.2.0-preview.2
+    subdir: ui
+    sudo:
+      - apt-get update
+      - apt-get install -y cmake clang libclang-dev curl
+    output: build/app/outputs/flutter-apk/app-release.apk
+    srclibs:
+      - flutter@3.47.8
+      - rustup@1.28.2
+    prebuild:
+      - ../tools/fdroid/prepare.sh
+      - $$flutter$$/bin/flutter config --no-analytics
+      - $$flutter$$/bin/flutter pub get
+    scanignore:
+      - core/protocol/fixtures
+    build:
+      - $$rustup$$/rustup-init.sh -y --profile minimal --default-toolchain 1.99.1 --target aarch64-linux-android
+      - source $HOME/.cargo/env
+      - ANDROID_NDK=$$NDK$$ ../tools/fdroid/build-core.sh arm64
+      - $$flutter$$/bin/flutter build apk --release --target-platform android-arm64 --dart-define=KOALINO_NO_BUNDLED_MODELS=true
+    ndk: r27c
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9.]+(-preview\.[0-9]+)?$
+CurrentVersion: 0.2.0
+CurrentVersionCode: 2

@@ -13,6 +13,7 @@ import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/infrastructure/chat_bridge.dart';
 import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
+import 'package:note_taker_ui/presentation/pdf_view.dart';
 import 'package:note_taker_ui/presentation/project_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart'
     show twoPaneBreakpoint;

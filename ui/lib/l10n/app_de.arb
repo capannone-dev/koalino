@@ -590,6 +590,7 @@
   "powerConsumptionEstimate": "Geschätzter Energieverbrauch",
   "fastestLeastAccurate": "Am schnellsten, am wenigsten genau",
   "fastManyMistakesTheAppShips": "Schnell, viele Fehler. Wird mit der App ausgeliefert",
+  "fastManyMistakes": "Schnell, viele Fehler",
   "goodBalanceOnMostComputers": "Gute Balance auf den meisten Computern",
   "accurateSlowerNeedsAbout2Gb": "Genau, langsamer, braucht etwa 2 GB Arbeitsspeicher",
   "olderNeedsAPowerfulComputer": "Älter, braucht einen leistungsstarken Computer",

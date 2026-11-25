@@ -62,12 +62,15 @@ android {
         }
     }
 
+    // F-Droid signs its builds itself: tools/fdroid/prepare.sh leaves this marker so the release
+    // APK stays unsigned (#163).
+    val fdroidUnsigned = rootProject.file("fdroid-unsigned").exists()
     buildTypes {
         release {
-            signingConfig = if (releaseKeyFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            signingConfig = when {
+                fdroidUnsigned -> null
+                releaseKeyFile.exists() -> signingConfigs.getByName("release")
+                else -> signingConfigs.getByName("debug")
             }
         }
     }

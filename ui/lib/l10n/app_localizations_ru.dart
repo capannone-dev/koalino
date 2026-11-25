@@ -2126,6 +2126,9 @@ class AppLocalizationsRu extends AppLocalizations {
       'Быстрая, много ошибок; входит в приложение';
 
   @override
+  String get fastManyMistakes => 'Быстрая, много ошибок';
+
+  @override
   String get goodBalanceOnMostComputers =>
       'Хороший баланс на большинстве компьютеров';
 

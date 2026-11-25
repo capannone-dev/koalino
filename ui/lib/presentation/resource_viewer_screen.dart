@@ -1,5 +1,5 @@
 // Shows one project resource inside the app (Issue #85): pictures full screen, Markdown rendered,
-// PDFs with PDFium (`pdfrx`), e-mails as headers and plain text, and text files as text. Office
+// PDFs with PDFium (`pdf_view.dart`), e-mails as headers and plain text, and text files as text. Office
 // documents cannot be shown and say so. Files are sealed at rest, so each view reads a short-lived
 // clear copy the core makes (#99). Nothing here reaches the network.
 
@@ -11,14 +11,11 @@ import 'package:note_taker_ui/controllers/projects_controller.dart';
 import 'package:note_taker_ui/infrastructure/project_bridge.dart';
 import 'package:note_taker_ui/presentation/clear_file.dart';
 import 'package:note_taker_ui/presentation/markdown_view.dart';
-import 'package:pdfrx/pdfrx.dart';
+import 'package:note_taker_ui/presentation/pdf_view.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
 /// Builds the PDF view; tests replace it, since PDFium is not loaded there.
 typedef PdfViewBuilder = Widget Function(String filePath);
-
-/// The default PDF view: every page, zoomable.
-Widget defaultPdfView(String filePath) => PdfViewer.file(filePath);
 
 /// A full-screen viewer for `resource`.
 final class ResourceViewerScreen extends StatelessWidget {

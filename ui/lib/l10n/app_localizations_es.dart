@@ -2144,6 +2144,9 @@ class AppLocalizationsEs extends AppLocalizations {
       'Rápido, muchos errores. La app incluye este';
 
   @override
+  String get fastManyMistakes => 'Rápido, muchos errores';
+
+  @override
   String get goodBalanceOnMostComputers =>
       'Buen equilibrio en la mayoría de ordenadores';
 

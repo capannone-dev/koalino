@@ -3657,6 +3657,12 @@ abstract class AppLocalizations {
   /// **'Fast, many mistakes. The app ships with this one'**
   String get fastManyMistakesTheAppShips;
 
+  /// Hint for the Whisper base model in builds that do not ship it (F-Droid).
+  ///
+  /// In en, this message translates to:
+  /// **'Fast, many mistakes'**
+  String get fastManyMistakes;
+
   /// No description provided for @goodBalanceOnMostComputers.
   ///
   /// In en, this message translates to:

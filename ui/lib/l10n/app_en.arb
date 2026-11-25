@@ -1731,6 +1731,10 @@
   "fastestLeastAccurate": "Fastest, least accurate",
   "@fastestLeastAccurate": {},
   "fastManyMistakesTheAppShips": "Fast, many mistakes. The app ships with this one",
+  "fastManyMistakes": "Fast, many mistakes",
+  "@fastManyMistakes": {
+    "description": "Hint for the Whisper base model in builds that do not ship it (F-Droid)."
+  },
   "@fastManyMistakesTheAppShips": {},
   "goodBalanceOnMostComputers": "Good balance on most computers",
   "@goodBalanceOnMostComputers": {},

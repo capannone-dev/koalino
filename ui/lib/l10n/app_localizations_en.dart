@@ -2120,6 +2120,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Fast, many mistakes. The app ships with this one';
 
   @override
+  String get fastManyMistakes => 'Fast, many mistakes';
+
+  @override
   String get goodBalanceOnMostComputers => 'Good balance on most computers';
 
   @override

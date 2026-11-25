@@ -247,3 +247,8 @@ folder under `cache/incoming` (a shared URI is readable only while the share las
 Dart takes the share on `note_taker/incoming_shares` (`takePending`, and `sharesArrived` while it
 runs), asks which project it goes into, and calls `release(directory)` once Rust has copied the
 files. Folders left behind are removed after a day.
+
+The F-Droid build (#163) is made from this project by `tools/fdroid/`: it leaves out ONNX Runtime
+and the bundled models, and `tools/fdroid/prepare.sh` creates `fdroid-unsigned` here (ignored by
+git), which makes `app/build.gradle.kts` leave the release APK unsigned for F-Droid to sign.
+

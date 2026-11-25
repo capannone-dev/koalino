@@ -1980,6 +1980,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fastManyMistakesTheAppShips => '快速，错误较多。应用自带此模型';
 
   @override
+  String get fastManyMistakes => '快速，错误较多';
+
+  @override
   String get goodBalanceOnMostComputers => '在大多数电脑上表现均衡';
 
   @override

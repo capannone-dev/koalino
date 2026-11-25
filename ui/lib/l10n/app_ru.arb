@@ -590,6 +590,7 @@
   "powerConsumptionEstimate": "Оценка энергопотребления",
   "fastestLeastAccurate": "Самая быстрая, наименее точная",
   "fastManyMistakesTheAppShips": "Быстрая, много ошибок; входит в приложение",
+  "fastManyMistakes": "Быстрая, много ошибок",
   "goodBalanceOnMostComputers": "Хороший баланс на большинстве компьютеров",
   "accurateSlowerNeedsAbout2Gb": "Точная, медленнее, нужно около 2 ГБ памяти",
   "olderNeedsAPowerfulComputer": "Старая, нужен мощный компьютер",

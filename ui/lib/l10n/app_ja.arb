@@ -590,6 +590,7 @@
   "powerConsumptionEstimate": "推定消費電力",
   "fastestLeastAccurate": "最速、精度は最低",
   "fastManyMistakesTheAppShips": "高速、誤りが多い。アプリに同梱",
+  "fastManyMistakes": "高速、誤りが多い",
   "goodBalanceOnMostComputers": "多くのコンピューターでバランスが良い",
   "accurateSlowerNeedsAbout2Gb": "高精度、やや遅い、約 2 GB のメモリが必要",
   "olderNeedsAPowerfulComputer": "旧版、高性能なコンピューターが必要",

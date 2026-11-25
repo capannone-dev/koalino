@@ -2150,6 +2150,9 @@ class AppLocalizationsPt extends AppLocalizations {
       'Rápido, muitos erros. O app vem com este';
 
   @override
+  String get fastManyMistakes => 'Rápido, muitos erros';
+
+  @override
   String get goodBalanceOnMostComputers =>
       'Bom equilíbrio na maioria dos computadores';
 

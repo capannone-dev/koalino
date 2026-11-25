@@ -1,0 +1,1 @@
+Permanent app ID, the Koalino icon, and encrypted backups of all data, also automatic and to the cloud. First F-Droid release.

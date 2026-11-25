@@ -590,6 +590,7 @@
   "powerConsumptionEstimate": "能耗估算",
   "fastestLeastAccurate": "最快，准确度最低",
   "fastManyMistakesTheAppShips": "快速，错误较多。应用自带此模型",
+  "fastManyMistakes": "快速，错误较多",
   "goodBalanceOnMostComputers": "在大多数电脑上表现均衡",
   "accurateSlowerNeedsAbout2Gb": "准确，较慢，约需 2 GB 内存",
   "olderNeedsAPowerfulComputer": "较旧，需要高性能电脑",

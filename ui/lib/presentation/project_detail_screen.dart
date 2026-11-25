@@ -16,6 +16,7 @@ import 'package:note_taker_ui/infrastructure/search_bridge.dart';
 import 'package:note_taker_ui/presentation/confirm_delete_dialog.dart';
 import 'package:note_taker_ui/presentation/meeting_detail_screen.dart';
 import 'package:note_taker_ui/presentation/meeting_summary_screen.dart';
+import 'package:note_taker_ui/presentation/pdf_view.dart';
 import 'package:note_taker_ui/presentation/project_dialogs.dart';
 import 'package:note_taker_ui/presentation/resource_viewer_screen.dart';
 import 'package:note_taker_ui/presentation/chat_screen.dart';

@@ -265,7 +265,9 @@ final class _FakeNpuDownloader implements NpuDownloader {
 /// Pumps the page over a fake core.
 Future<TranscriptionSettingsController> _pump(
     WidgetTester tester, _FakeBridge bridge,
-    {String language = 'it', NpuDownloader? npuDownloader}) async {
+    {String language = 'it',
+    NpuDownloader? npuDownloader,
+    bool bundlesWhisperModel = true}) async {
   final TranscriptionSettingsController controller =
       TranscriptionSettingsController(
           bridge: bridge,
@@ -275,7 +277,9 @@ Future<TranscriptionSettingsController> _pump(
   addTearDown(controller.dispose);
   await tester.pumpWidget(MaterialApp(
     home: TranscriptionSettingsScreen(
-        controller: controller, languageCode: language),
+        controller: controller,
+        languageCode: language,
+        bundlesWhisperModel: bundlesWhisperModel),
   ));
   await tester.pumpAndSettle();
   return controller;
@@ -331,6 +335,19 @@ void main() {
       'large-v3-turbo',
       'large-v3-turbo-q5_0',
     ]);
+  });
+
+  testWidgets('base is said to ship with the app when it does',
+      (WidgetTester tester) async {
+    await _pump(tester, _FakeBridge());
+    expect(find.textContaining('The app ships with this one'), findsWidgets);
+  });
+
+  testWidgets('a build without a bundled model does not claim one (#163)',
+      (WidgetTester tester) async {
+    await _pump(tester, _FakeBridge(), bundlesWhisperModel: false);
+    expect(find.textContaining('The app ships with this one'), findsNothing);
+    expect(find.textContaining('Fast, many mistakes'), findsWidgets);
   });
 
   testWidgets('More models opens the variants and says how many there are',

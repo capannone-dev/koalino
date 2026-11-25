@@ -1,0 +1,9 @@
+<p>Koalino records meetings and turns them into notes on your own devices. Nothing goes to a cloud service unless you choose one.</p>
+<ul>
+<li><b>Transcription on the phone:</b> Whisper runs on the device, in more than 90 languages. Download the model that suits your phone from Settings → Transcription.</li>
+<li><b>Notes, photos and files:</b> keep the meeting's notes, pictures and documents with its transcript, and group meetings into projects.</li>
+<li><b>Sync without a server:</b> pair your phone and computers with a QR code; they sync directly with each other, end-to-end encrypted, and work offline.</li>
+<li><b>Summaries and chat:</b> optional, with an AI connection you choose.</li>
+<li><b>Encrypted at rest:</b> the database is encrypted with a key kept in the Android Keystore; encrypted backups can go to any folder or cloud you pick.</li>
+</ul>
+<p>This F-Droid build leaves out what F-Droid cannot build from source: automatic speaker separation, Whisper on Qualcomm's NPU, and the in-app PDF view.</p>

@@ -2102,6 +2102,9 @@ class AppLocalizationsAr extends AppLocalizations {
       'سريع، أخطاء كثيرة؛ مضمَّن في التطبيق';
 
   @override
+  String get fastManyMistakes => 'سريع، أخطاء كثيرة';
+
+  @override
   String get goodBalanceOnMostComputers => 'توازن جيد على معظم الحواسيب';
 
   @override

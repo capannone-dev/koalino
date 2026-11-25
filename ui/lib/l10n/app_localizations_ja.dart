@@ -2032,6 +2032,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get fastManyMistakesTheAppShips => '高速、誤りが多い。アプリに同梱';
 
   @override
+  String get fastManyMistakes => '高速、誤りが多い';
+
+  @override
   String get goodBalanceOnMostComputers => '多くのコンピューターでバランスが良い';
 
   @override

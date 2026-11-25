@@ -116,9 +116,7 @@ pub fn suggest_whisper_model(device: &DeviceProfile) -> WhisperSuggestion {
             efficient: false,
             reason: "Far fewer mistakes than base, and this computer should keep up with recordings.",
         },
-        _ => base_model(
-            "This computer has limited memory, so the built-in model is the safe choice.",
-        ),
+        _ => base_model("This computer has limited memory, so base is the safe choice."),
     }
 }
 
@@ -129,9 +127,7 @@ pub fn suggest_whisper_model(device: &DeviceProfile) -> WhisperSuggestion {
 /// Side effects: None.
 fn suggest_for_phone(device: &DeviceProfile, memory: u64) -> WhisperSuggestion {
     if memory < PHONE_SMALL_MODEL_MEMORY_BYTES {
-        return base_model(
-            "This phone has limited memory, so the built-in model is the safe choice.",
-        );
+        return base_model("This phone has limited memory, so base is the safe choice.");
     }
     if device.gpu == DeviceGpu::EfficientPhoneGpu {
         return WhisperSuggestion {

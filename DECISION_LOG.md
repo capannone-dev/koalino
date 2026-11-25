@@ -4162,3 +4162,18 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   the bundle, since the tarball installs no desktop entry. **Teams:** the outline icon is the
   koala's dark lines in white.
 
+## 2026-11-25 — F-Droid build variant (#163)
+
+- **Decision:** F-Droid gets a variant of the Android build, made by `tools/fdroid/` from the same
+  source: no speaker separation or NPU (both need Microsoft's prebuilt ONNX Runtime, the NPU also
+  Qualcomm's proprietary libraries), no bundled models (Whisper downloads from whisper.cpp's
+  source, by hash, on request), and no in-app PDF view (`pdfrx` downloads a prebuilt PDFium).
+- **Why not build ONNX Runtime and PDFium from source:** both are large native builds with their
+  own toolchains (PDFium needs Chromium's), beyond what an F-Droid recipe can reasonably run.
+- **How:** `prepare.sh` swaps one Dart file and drops `pdfrx`; `build-core.sh` builds the core with
+  `local-ai,mobile-gpu,microphone,vad` using F-Droid's NDK; `--dart-define=KOALINO_NO_BUNDLED_MODELS`
+  stops the app from saying it ships Whisper `base`. A marker file leaves the release unsigned for
+  F-Droid's own signature.
+- **Diarization models for CI:** published once as the `models-v1` release, checked by SHA-256, so
+  builds that bundle them (macOS on GitHub Actions, #162) need no export toolchain.
+
