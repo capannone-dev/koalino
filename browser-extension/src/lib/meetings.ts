@@ -81,23 +81,23 @@ export function matchRecapToMeeting(
  * The view shows one session at a time, and its session picker lists the others, so a recording
  * of the same meeting may belong to a session not shown (`fetchRecapTranscript` then chooses it).
  *
+ * Teams also shows the view before its session picker, so with no times shown yet the title is
+ * all there is to go by (#159).
+ *
  * Inputs: The view's title and shown session times (null when not shown), and the records.
- * Outputs: The meeting the shown session fits (`matchRecapToMeeting`), else the latest recording
- * with the same title that saw Teams transcription (only those can have a transcript); `null`
- * when none fits.
+ * Outputs: The meeting the shown session overlaps (`matchRecapToMeeting`), else the latest
+ * recording with the same title that saw Teams transcription (only those can have a transcript);
+ * `null` when none fits.
  * Side effects: None.
  */
 export function matchRecapViewToMeeting(
   view: { title: string; startMs: number | null; endMs: number | null },
   meetings: readonly RecordedMeeting[],
 ): RecordedMeeting | null {
-  return (
-    matchRecapToMeeting(view, meetings) ??
-    matchRecapToMeeting(
-      { title: view.title, startMs: null, endMs: null },
-      meetings.filter((meeting) => meeting.teamsTranscriptSeen),
-    )
-  );
+  const transcribed = meetings.filter((meeting) => meeting.teamsTranscriptSeen);
+  const byTitle = { title: view.title, startMs: null, endMs: null };
+  if (view.startMs === null) return matchRecapToMeeting(byTitle, transcribed);
+  return matchRecapToMeeting(view, meetings) ?? matchRecapToMeeting(byTitle, transcribed);
 }
 
 /**

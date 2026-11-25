@@ -247,6 +247,42 @@ describe("recap transcript", () => {
     expect(requested).toBe(0);
   });
 
+  it("waits for a session picker that appears after the Transcript tab (#159)", async () => {
+    // Right after a call Teams shows the recap's Transcript tab before its session picker.
+    document.body.innerHTML = '<button role="tab" data-tid="Transcript">Transcript</button>';
+    setTimeout(() => {
+      const tab = document.querySelector("button");
+      buildSessionPicker(EARLIER, [EARLIER]);
+      if (tab) document.querySelector('[role="tab"]')?.replaceWith(tab);
+    }, 100);
+    let requested = 0;
+    const fetched = await fetchRecapTranscript(
+      document,
+      null,
+      { startMs: at(17, 11), endMs: at(17, 18) },
+      () => (requested += 1),
+      async () => true,
+      1_000,
+    );
+    expect(fetched).toBe("wrong-session");
+    expect(requested).toBe(0);
+  });
+
+  it("downloads from a recap with no session picker once none appears", async () => {
+    document.body.innerHTML = '<button role="tab" data-tid="Transcript">Transcript</button>';
+    let requested = 0;
+    const fetched = await fetchRecapTranscript(
+      document,
+      null,
+      { startMs: at(17, 11), endMs: at(17, 18) },
+      () => (requested += 1),
+      async () => true,
+      300,
+    );
+    expect(fetched).toBe("sent");
+    expect(requested).toBe(1);
+  });
+
   it("keeps a recap already showing the recorded session", async () => {
     buildSessionPicker(RECORDED, []);
     const fetched = await fetchRecapTranscript(

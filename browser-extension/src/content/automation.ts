@@ -410,9 +410,13 @@ function sessionTimes(element: Element | null): { startMs: number | null; endMs:
  * A meeting chat keeps one recap per session and Teams may open any of them, so the session shown
  * decides whose transcript a download yields.
  *
+ * Teams shows the recap's Transcript tab before its session picker, so the picker is waited for
+ * (#159).
+ *
  * Inputs: The Teams document, the recording's start and end, and how long to wait for each step.
  * Outputs: `true` when the view shows the session nearest the recording (`closestSession`), or
- * shows no session picker at all (a chat with one session); `false` when no listed session fits.
+ * no session picker appeared within the wait (a chat with one session); `false` when no listed
+ * session fits.
  * Side effects: May open the picker and choose a session.
  */
 async function showRecordedSession(
@@ -420,7 +424,7 @@ async function showRecordedSession(
   recording: { startMs: number; endMs: number },
   timeoutMs: number,
 ): Promise<boolean> {
-  const picker = sessionPicker(root);
+  const picker = await waitFor(() => sessionPicker(root), timeoutMs);
   if (!picker) return true;
   const shown = sessionTimes(picker);
   // A session the recording overlaps is right; anything else is checked against the list.
@@ -476,7 +480,8 @@ export async function fetchRecapTranscript(
   const transcriptTab = { label: /^transcript$/i };
   if (!(await pressWhenShown(root, transcriptTab, tabTimeoutMs))) return "no-transcript-tab";
   if (recording) {
-    if (!(await showRecordedSession(root, recording, STEP_TIMEOUT_MS))) return "wrong-session";
+    const stepTimeoutMs = Math.min(STEP_TIMEOUT_MS, tabTimeoutMs);
+    if (!(await showRecordedSession(root, recording, stepTimeoutMs))) return "wrong-session";
     // Choosing a session reloads the recap: open its Transcript tab again.
     if (!(await pressWhenShown(root, transcriptTab, tabTimeoutMs))) return "no-transcript-tab";
   }

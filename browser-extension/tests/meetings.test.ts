@@ -212,6 +212,13 @@ describe("matchRecapViewToMeeting (#158)", () => {
     expect(matchRecapViewToMeeting(shown, [later, weeklySync()])?.meetingId).toBe("browser-teams-1");
   });
 
+  it("matches a view showing no session times only to recordings that saw Teams transcription (#159)", () => {
+    // Teams shows the recap view before its session picker, so the view has no times yet.
+    const loading = { title: "Weekly sync", startMs: null, endMs: null };
+    expect(matchRecapViewToMeeting(loading, [weeklySync({ teamsTranscriptSeen: false })])).toBeNull();
+    expect(matchRecapViewToMeeting(loading, [weeklySync()])?.meetingId).toBe("browser-teams-1");
+  });
+
   it("matches by title only recordings that saw Teams transcription", () => {
     expect(matchRecapViewToMeeting(earlierSession, [weeklySync({ teamsTranscriptSeen: false })])).toBeNull();
     expect(matchRecapViewToMeeting({ ...earlierSession, title: "Other" }, [weeklySync()])).toBeNull();
