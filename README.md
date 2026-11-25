@@ -104,7 +104,7 @@ with their SHA-256 sums in `SHA256SUMS.txt`.
 | <img src="docs/icons/android.svg" alt="" width="16" height="16"> Android (64-bit ARM) | [`koalino-android-arm64-0.2.0.apk`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-android-arm64-0.2.0.apk) | The app with Whisper `base` and the diarization models |
 | <img src="docs/icons/linux.svg" alt="" width="16" height="16"> Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-linux-x86_64-0.2.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
 | <img src="docs/icons/googlechrome.svg" alt="" width="16" height="16"> Chrome, Edge, Chromium | [`koalino-browser-extension-chromium-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-chromium-0.2.0.zip) | The browser extension, to load unpacked |
-| <img src="docs/icons/firefoxbrowser.svg" alt="" width="16" height="16"> Firefox (140 or newer) | [`koalino-browser-extension-firefox-0.2.0.xpi`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-firefox-0.2.0.xpi) | The browser extension, signed by Mozilla (unlisted; the listed version awaits Mozilla's review) |
+| <img src="docs/icons/firefoxbrowser.svg" alt="" width="16" height="16"> Firefox (140 or newer) | [Koalino on Firefox Add-ons](https://addons.mozilla.org/addon/66e641dc7c544efb8b82/) | The browser extension, from Mozilla's add-ons site; Firefox keeps it up to date. The signed [`.xpi`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-firefox-0.2.0.xpi) installs the same by hand |
 
 ## Install
 
@@ -212,7 +212,7 @@ service and the other settings, see [`server/README.md`](server/README.md) and
    `bin/`).
 2. Keep the Koalino app open, or on a server run the daemon with
    `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
-3. Firefox: open the `.xpi` in Firefox (drag it onto a window, or File → Open) and press **Add**.
+3. Firefox: open [Koalino on Firefox Add-ons](https://addons.mozilla.org/addon/66e641dc7c544efb8b82/) and press **Add to Firefox**.
    Chrome, Edge or Chromium: unzip the extension, open `chrome://extensions` (`edge://extensions`),
    turn on **Developer mode**, choose **Load unpacked** and pick the unzipped folder.
 4. Open the extension's popup: it says whether Koalino is reachable, and asks for access to Teams
