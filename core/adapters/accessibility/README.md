@@ -49,7 +49,14 @@ Meet in Firefox on Windows labels its tiles and People list with names only, plu
 about the owner's own microphone and camera. Over minutes of speech nothing said "speaking". Zoom's
 web client marks the active speaker with a tile border only. In Chrome on Linux its tiles are
 labelled with names only. In Firefox on Windows its page shows UI Automation no elements at all.
-So the reader finds no names in these apps either. An app whose labels differ gives no readings
+So the reader finds no names in these apps either.
+
+The Zoom desktop app (Zoom Workplace 7.2.5 on Windows, a real call, win11, 2026-11-25) exposes
+even less. Its meeting window shows UI Automation four unnamed panes (`ContentLeftPanel`,
+`VideoPortContainer`, `Zoom Video Container`, `Video content`). They carry no participant
+names, microphone state or speaking state, with the Participants panel open and in the raw view
+too. Setting the system screen-reader flag (`SPI_SETSCREENREADER`) during the call added nothing.
+So the reader finds no names in Zoom desktop calls. An app whose labels differ gives no readings
 until `domain::speaker_names` learns its phrasing.
 
 Chrome on Linux exposes only its window frame to AT-SPI, even when the session's `IsEnabled` and
