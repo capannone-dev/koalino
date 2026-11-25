@@ -2912,4 +2912,119 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get windowsBlocksTheMicrophone =>
       'Windows がアプリのマイク使用をブロックしています。何も聞こえていません。設定 → プライバシーとセキュリティ → マイク で、「マイクへのアクセス」と「デスクトップ アプリがマイクにアクセスできるようにする」をオンにしてください。';
+
+  @override
+  String get backUpAllData => 'すべてのデータをバックアップ';
+
+  @override
+  String get backUpAllDataDescription => '会議、メモ、添付ファイル、保存した録音を1つの暗号化ファイルに保存します';
+
+  @override
+  String get restoreFromBackup => 'バックアップから復元';
+
+  @override
+  String get restoreFromBackupDescription => 'このデバイスのデータをバックアップで置き換えます';
+
+  @override
+  String get backupPassphraseTitle => 'バックアップのパスフレーズ';
+
+  @override
+  String get backupPassphraseExplanation =>
+      'バックアップはこのパスフレーズで暗号化されます。これがないと誰も（あなた自身も）バックアップを開けないため、安全な場所に保管してください。';
+
+  @override
+  String get backupPassphraseLabel => 'パスフレーズ';
+
+  @override
+  String get repeatPassphraseLabel => 'パスフレーズをもう一度入力';
+
+  @override
+  String get passphraseTooShort => '8文字以上にしてください。';
+
+  @override
+  String get passphrasesDoNotMatch => 'パスフレーズが一致しません。';
+
+  @override
+  String get continueAction => '続行';
+
+  @override
+  String get backingUp => 'バックアップ中…';
+
+  @override
+  String get restoringBackup => '復元中…';
+
+  @override
+  String backupSaved(int files, String size) {
+    return 'バックアップを保存しました：$files ファイル、$size MB。';
+  }
+
+  @override
+  String get restoreConfirmTitle => 'このデバイスのデータを置き換えますか？';
+
+  @override
+  String get restoreConfirmBody =>
+      'このデバイスの会議とメモはバックアップの内容に置き換えられます。現在のデータは次の復元まで別に保管されます。その後 Koalino が再起動します。';
+
+  @override
+  String get restoreAction => '復元';
+
+  @override
+  String restoreReady(int files) {
+    return '$files 個のファイルを復元しました。開くために Koalino を再起動します。';
+  }
+
+  @override
+  String get restartNow => '再起動';
+
+  @override
+  String get backupWrongPassphrase => 'パスフレーズが違います。';
+
+  @override
+  String get backupNotABackup => 'このファイルは Koalino のバックアップではありません。';
+
+  @override
+  String get backupTooNew =>
+      'このバックアップは新しいバージョンの Koalino で作成されました。先にアプリを更新してください。';
+
+  @override
+  String get backupDamaged => 'バックアップが破損しているか不完全です。';
+
+  @override
+  String get backupFailed => '処理を完了できませんでした。空き容量を確認して、もう一度お試しください。';
+
+  @override
+  String get automaticBackups => '自動バックアップ';
+
+  @override
+  String get automaticBackupsDescription =>
+      '充電中に毎日、選んだフォルダ（Google Drive、Nextcloud、OneDrive などのクラウドも可）へ保存します。端末を離れる前に暗号化されます。';
+
+  @override
+  String automaticBackupFolder(String folder) {
+    return 'フォルダ：$folder';
+  }
+
+  @override
+  String get noAutomaticBackupYet => '自動バックアップはまだありません。';
+
+  @override
+  String lastAutomaticBackup(String time) {
+    return '前回のバックアップ：$time';
+  }
+
+  @override
+  String lastAutomaticBackupFailed(String time) {
+    return '$time のバックアップに失敗しました。フォルダを確認してください。';
+  }
+
+  @override
+  String get backUpNow => '今すぐバックアップ';
+
+  @override
+  String get backupFolderUnavailable =>
+      'バックアップフォルダに書き込めません。フォルダが存在し、そのアプリにサインインしているか確認するか、別のフォルダを選んでください。';
+
+  @override
+  String get automaticBackupsNotSetUp =>
+      '自動バックアップの再設定が必要です。いったんオフにしてからオンにしてください。';
 }

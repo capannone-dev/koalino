@@ -3071,4 +3071,125 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get windowsBlocksTheMicrophone =>
       'Windows empêche les applications d’utiliser le micro : rien n’est entendu. Dans Paramètres → Confidentialité et sécurité → Microphone, activez Accès au microphone et Autoriser les applications de bureau à accéder à votre microphone.';
+
+  @override
+  String get backUpAllData => 'Sauvegarder toutes les données';
+
+  @override
+  String get backUpAllDataDescription =>
+      'Enregistre réunions, notes, pièces jointes et enregistrements conservés dans un seul fichier chiffré';
+
+  @override
+  String get restoreFromBackup => 'Restaurer une sauvegarde';
+
+  @override
+  String get restoreFromBackupDescription =>
+      'Remplace les données de cet appareil par une sauvegarde';
+
+  @override
+  String get backupPassphraseTitle => 'Phrase secrète de la sauvegarde';
+
+  @override
+  String get backupPassphraseExplanation =>
+      'La sauvegarde est chiffrée avec cette phrase secrète. Sans elle, personne ne peut l\'ouvrir, pas même vous : conservez-la en lieu sûr.';
+
+  @override
+  String get backupPassphraseLabel => 'Phrase secrète';
+
+  @override
+  String get repeatPassphraseLabel => 'Répétez la phrase secrète';
+
+  @override
+  String get passphraseTooShort => 'Utilisez au moins 8 caractères.';
+
+  @override
+  String get passphrasesDoNotMatch =>
+      'Les phrases secrètes ne correspondent pas.';
+
+  @override
+  String get continueAction => 'Continuer';
+
+  @override
+  String get backingUp => 'Sauvegarde en cours…';
+
+  @override
+  String get restoringBackup => 'Restauration en cours…';
+
+  @override
+  String backupSaved(int files, String size) {
+    return 'Sauvegarde enregistrée : $files fichiers, $size Mo.';
+  }
+
+  @override
+  String get restoreConfirmTitle => 'Remplacer les données de cet appareil ?';
+
+  @override
+  String get restoreConfirmBody =>
+      'Les réunions et notes de cet appareil sont remplacées par celles de la sauvegarde. Les données actuelles sont mises de côté jusqu\'à la prochaine restauration. Koalino redémarre ensuite.';
+
+  @override
+  String get restoreAction => 'Restaurer';
+
+  @override
+  String restoreReady(int files) {
+    return '$files fichiers restaurés. Koalino redémarre maintenant pour les ouvrir.';
+  }
+
+  @override
+  String get restartNow => 'Redémarrer';
+
+  @override
+  String get backupWrongPassphrase => 'La phrase secrète est incorrecte.';
+
+  @override
+  String get backupNotABackup =>
+      'Ce fichier n\'est pas une sauvegarde Koalino.';
+
+  @override
+  String get backupTooNew =>
+      'Cette sauvegarde provient d\'une version plus récente de Koalino. Mettez d\'abord l\'application à jour.';
+
+  @override
+  String get backupDamaged => 'La sauvegarde est endommagée ou incomplète.';
+
+  @override
+  String get backupFailed =>
+      'L\'opération n\'a pas pu aboutir. Vérifiez l\'espace libre et réessayez.';
+
+  @override
+  String get automaticBackups => 'Sauvegardes automatiques';
+
+  @override
+  String get automaticBackupsDescription =>
+      'Chaque jour pendant la charge, dans un dossier de votre choix, y compris dans le cloud (Google Drive, Nextcloud, OneDrive…). Chiffré avant de quitter le téléphone.';
+
+  @override
+  String automaticBackupFolder(String folder) {
+    return 'Dossier : $folder';
+  }
+
+  @override
+  String get noAutomaticBackupYet =>
+      'Aucune sauvegarde automatique pour l\'instant.';
+
+  @override
+  String lastAutomaticBackup(String time) {
+    return 'Dernière sauvegarde : $time';
+  }
+
+  @override
+  String lastAutomaticBackupFailed(String time) {
+    return 'La sauvegarde du $time a échoué. Vérifiez le dossier.';
+  }
+
+  @override
+  String get backUpNow => 'Sauvegarder maintenant';
+
+  @override
+  String get backupFolderUnavailable =>
+      'Impossible d\'écrire dans le dossier de sauvegarde. Vérifiez qu\'il existe toujours et que son application est connectée, ou choisissez un autre dossier.';
+
+  @override
+  String get automaticBackupsNotSetUp =>
+      'Les sauvegardes automatiques doivent être reconfigurées : désactivez-les puis réactivez-les.';
 }

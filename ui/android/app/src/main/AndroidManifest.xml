@@ -90,6 +90,11 @@
             android:name=".WaitingPassJob"
             android:exported="false"
             android:permission="android.permission.BIND_JOB_SERVICE"/>
+        <!-- Writes the daily encrypted backup into the owner's chosen folder (#170). -->
+        <service
+            android:name=".AutomaticBackupJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE"/>
         <!-- Serves exported logs in cache/shared to the app picked in the share sheet
              (SharedFiles.kt, Issue #46); reachable only through a share's URI grant. -->
         <provider

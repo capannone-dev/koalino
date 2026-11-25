@@ -3080,4 +3080,122 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get windowsBlocksTheMicrophone =>
       'يمنع Windows التطبيقات من استخدام الميكروفون: لا يُسمع أي شيء. في الإعدادات ← الخصوصية والأمان ← الميكروفون، فعّل الوصول إلى الميكروفون والسماح لتطبيقات سطح المكتب بالوصول إلى الميكروفون.';
+
+  @override
+  String get backUpAllData => 'نسخ احتياطي لكل البيانات';
+
+  @override
+  String get backUpAllDataDescription =>
+      'احفظ الاجتماعات والملاحظات والمرفقات والتسجيلات المحفوظة في ملف واحد مشفّر';
+
+  @override
+  String get restoreFromBackup => 'الاستعادة من نسخة احتياطية';
+
+  @override
+  String get restoreFromBackupDescription =>
+      'استبدل البيانات على هذا الجهاز بنسخة احتياطية';
+
+  @override
+  String get backupPassphraseTitle => 'عبارة مرور النسخة الاحتياطية';
+
+  @override
+  String get backupPassphraseExplanation =>
+      'تُشفَّر النسخة الاحتياطية بهذه العبارة. بدونها لا يمكن لأحد فتحها، ولا حتى أنت، لذا احفظها في مكان آمن.';
+
+  @override
+  String get backupPassphraseLabel => 'عبارة المرور';
+
+  @override
+  String get repeatPassphraseLabel => 'أعد كتابة عبارة المرور';
+
+  @override
+  String get passphraseTooShort => 'استخدم 8 أحرف على الأقل.';
+
+  @override
+  String get passphrasesDoNotMatch => 'عبارتا المرور غير متطابقتين.';
+
+  @override
+  String get continueAction => 'متابعة';
+
+  @override
+  String get backingUp => 'جارٍ النسخ الاحتياطي…';
+
+  @override
+  String get restoringBackup => 'جارٍ الاستعادة…';
+
+  @override
+  String backupSaved(int files, String size) {
+    return 'تم حفظ النسخة الاحتياطية: $files ملفات، $size ميغابايت.';
+  }
+
+  @override
+  String get restoreConfirmTitle => 'استبدال البيانات على هذا الجهاز؟';
+
+  @override
+  String get restoreConfirmBody =>
+      'تُستبدل الاجتماعات والملاحظات على هذا الجهاز بتلك الموجودة في النسخة الاحتياطية. تُحفظ البيانات الحالية جانبًا حتى الاستعادة التالية. ثم يُعاد تشغيل Koalino.';
+
+  @override
+  String get restoreAction => 'استعادة';
+
+  @override
+  String restoreReady(int files) {
+    return 'تمت استعادة $files ملفات. سيُعاد تشغيل Koalino الآن لفتحها.';
+  }
+
+  @override
+  String get restartNow => 'إعادة التشغيل';
+
+  @override
+  String get backupWrongPassphrase => 'عبارة المرور غير صحيحة.';
+
+  @override
+  String get backupNotABackup => 'هذا الملف ليس نسخة احتياطية من Koalino.';
+
+  @override
+  String get backupTooNew =>
+      'أُنشئت هذه النسخة بإصدار أحدث من Koalino. حدّث التطبيق أولًا.';
+
+  @override
+  String get backupDamaged => 'النسخة الاحتياطية تالفة أو غير مكتملة.';
+
+  @override
+  String get backupFailed =>
+      'تعذّر إكمال العملية. تحقّق من المساحة المتاحة وأعد المحاولة.';
+
+  @override
+  String get automaticBackups => 'النسخ الاحتياطي التلقائي';
+
+  @override
+  String get automaticBackupsDescription =>
+      'كل يوم أثناء الشحن، في مجلد تختاره، بما في ذلك السحابة (Google Drive وNextcloud وOneDrive…). تُشفَّر قبل مغادرة الهاتف.';
+
+  @override
+  String automaticBackupFolder(String folder) {
+    return 'المجلد: $folder';
+  }
+
+  @override
+  String get noAutomaticBackupYet => 'لا توجد نسخة تلقائية بعد.';
+
+  @override
+  String lastAutomaticBackup(String time) {
+    return 'آخر نسخة: $time';
+  }
+
+  @override
+  String lastAutomaticBackupFailed(String time) {
+    return 'فشلت نسخة $time. تحقّق من المجلد.';
+  }
+
+  @override
+  String get backUpNow => 'انسخ الآن';
+
+  @override
+  String get backupFolderUnavailable =>
+      'تعذّرت الكتابة في مجلد النسخ. تحقّق من أنه ما زال موجودًا وأن تطبيقه مسجَّل الدخول، أو اختر مجلدًا آخر.';
+
+  @override
+  String get automaticBackupsNotSetUp =>
+      'يجب إعداد النسخ التلقائي من جديد: أوقفه ثم شغّله.';
 }

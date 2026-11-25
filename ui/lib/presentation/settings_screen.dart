@@ -1,7 +1,8 @@
 // The Settings destination, on every platform (Issue #46). Android adds the App lock switch; every
 // platform has Diagnostics: the Telemetry page (Issue #53), the log level and exporting the logs
 // (saved through a dialog on desktops, shared through the share sheet on Android). With device sync
-// on, it also chooses where recordings are transcribed (Issue #59). About Koalino closes the list (#115).
+// on, it also chooses where recordings are transcribed (Issue #59). Android adds Back up all data
+// and Restore from backup (#167). About Koalino closes the list (#115).
 
 import 'dart:io' show Platform;
 
@@ -26,6 +27,8 @@ import 'package:note_taker_ui/infrastructure/assistant_access_bridge.dart';
 import 'package:note_taker_ui/infrastructure/notes_folder_bridge.dart';
 import 'package:note_taker_ui/infrastructure/recordings_bridge.dart';
 import 'package:note_taker_ui/infrastructure/background_core.dart';
+import 'package:note_taker_ui/infrastructure/backup_bridge.dart';
+import 'package:note_taker_ui/presentation/backup_section.dart';
 import 'package:note_taker_ui/presentation/recordings_widgets.dart';
 import 'package:note_taker_ui/presentation/assistant_access_screen.dart';
 import 'package:note_taker_ui/presentation/call_offer_banner.dart';
@@ -72,6 +75,7 @@ final class SettingsScreen extends StatelessWidget {
     this.assistantAccessBridge,
     this.callWatchController,
     this.recordingsBridge,
+    this.backupBridge,
     super.key,
   });
 
@@ -105,6 +109,9 @@ final class SettingsScreen extends StatelessWidget {
 
   /// Shows Keep meeting recordings and Wipe all recordings when given (#140).
   final RecordingsBridge? recordingsBridge;
+
+  /// Shows Back up all data and Restore from backup when given (#167, Android).
+  final BackupBridge? backupBridge;
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +177,10 @@ final class SettingsScreen extends StatelessWidget {
             if (recordingsBridge
                 case final RecordingsBridge recordings) ...<Widget>[
               RecordingsSection(bridge: recordings),
+              const Divider(),
+            ],
+            if (backupBridge case final BackupBridge backup) ...<Widget>[
+              BackupSection(bridge: backup),
               const Divider(),
             ],
             if (summariesController

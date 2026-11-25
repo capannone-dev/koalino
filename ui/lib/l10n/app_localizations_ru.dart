@@ -3081,4 +3081,123 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get windowsBlocksTheMicrophone =>
       'Windows не даёт приложениям доступ к микрофону: ничего не слышно. В разделе Параметры → Конфиденциальность и защита → Микрофон включите «Доступ к микрофону» и «Разрешить классическим приложениям доступ к микрофону».';
+
+  @override
+  String get backUpAllData => 'Резервная копия всех данных';
+
+  @override
+  String get backUpAllDataDescription =>
+      'Сохранить встречи, заметки, вложения и сохранённые записи в одном зашифрованном файле';
+
+  @override
+  String get restoreFromBackup => 'Восстановить из резервной копии';
+
+  @override
+  String get restoreFromBackupDescription =>
+      'Заменить данные на этом устройстве резервной копией';
+
+  @override
+  String get backupPassphraseTitle => 'Парольная фраза копии';
+
+  @override
+  String get backupPassphraseExplanation =>
+      'Копия шифруется этой парольной фразой. Без неё никто не сможет открыть копию, даже вы, поэтому храните её в надёжном месте.';
+
+  @override
+  String get backupPassphraseLabel => 'Парольная фраза';
+
+  @override
+  String get repeatPassphraseLabel => 'Повторите парольную фразу';
+
+  @override
+  String get passphraseTooShort => 'Используйте не менее 8 символов.';
+
+  @override
+  String get passphrasesDoNotMatch => 'Парольные фразы не совпадают.';
+
+  @override
+  String get continueAction => 'Продолжить';
+
+  @override
+  String get backingUp => 'Создание копии…';
+
+  @override
+  String get restoringBackup => 'Восстановление…';
+
+  @override
+  String backupSaved(int files, String size) {
+    return 'Копия сохранена: файлов — $files, $size МБ.';
+  }
+
+  @override
+  String get restoreConfirmTitle => 'Заменить данные на этом устройстве?';
+
+  @override
+  String get restoreConfirmBody =>
+      'Встречи и заметки на этом устройстве будут заменены данными из копии. Текущие данные сохраняются отдельно до следующего восстановления. Затем Koalino перезапустится.';
+
+  @override
+  String get restoreAction => 'Восстановить';
+
+  @override
+  String restoreReady(int files) {
+    return 'Восстановлено файлов: $files. Koalino перезапустится, чтобы открыть их.';
+  }
+
+  @override
+  String get restartNow => 'Перезапустить';
+
+  @override
+  String get backupWrongPassphrase => 'Неверная парольная фраза.';
+
+  @override
+  String get backupNotABackup =>
+      'Этот файл не является резервной копией Koalino.';
+
+  @override
+  String get backupTooNew =>
+      'Эта копия создана более новой версией Koalino. Сначала обновите приложение.';
+
+  @override
+  String get backupDamaged => 'Копия повреждена или неполна.';
+
+  @override
+  String get backupFailed =>
+      'Не удалось завершить операцию. Проверьте свободное место и повторите попытку.';
+
+  @override
+  String get automaticBackups => 'Автоматические копии';
+
+  @override
+  String get automaticBackupsDescription =>
+      'Каждый день во время зарядки в выбранную папку, в том числе в облаке (Google Drive, Nextcloud, OneDrive…). Шифруется до того, как покинет телефон.';
+
+  @override
+  String automaticBackupFolder(String folder) {
+    return 'Папка: $folder';
+  }
+
+  @override
+  String get noAutomaticBackupYet => 'Автоматических копий пока нет.';
+
+  @override
+  String lastAutomaticBackup(String time) {
+    return 'Последняя копия: $time';
+  }
+
+  @override
+  String lastAutomaticBackupFailed(String time) {
+    return 'Копия от $time не создана. Проверьте папку.';
+  }
+
+  @override
+  String get backUpNow => 'Создать копию сейчас';
+
+  @override
+  String get backupFolderUnavailable =>
+      'Не удаётся записать в папку копий. Проверьте, что она существует и её приложение авторизовано, или выберите другую папку.';
+
+  @override
+  String get automaticBackupsNotSetUp =>
+      'Автоматические копии нужно настроить заново: выключите и снова включите их.';
 }

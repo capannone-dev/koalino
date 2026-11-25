@@ -51,6 +51,48 @@ class EncryptionKeyVault(private val keyDirectory: File) {
         return key
     }
 
+    /**
+     * Keeps a restored backup's key (#167) wrapped by this app's Keystore key.
+     *
+     * Inputs: The 32-byte key from the backup; the caller zero-fills it afterwards.
+     * Outputs: None. Throws when the folder already holds a wrapped key (a restore writes into a
+     * fresh folder) or the key cannot be wrapped and verified.
+     * Side effects: Creates the folder and writes `encryption.key.wrapped`.
+     */
+    fun storeRestoredKey(key: ByteArray) {
+        require(key.size == KEY_LENGTH) { "the restored key is not $KEY_LENGTH bytes" }
+        check(!wrappedFile.exists()) { "the restore folder already holds a key" }
+        storeVerified(key)
+    }
+
+    /**
+     * Keeps the automatic backups' passphrase (#170) wrapped by the same Keystore key, so the
+     * backup job can run while nobody is there to type it. The `keys` folder is never backed up.
+     *
+     * Inputs: The UTF-8 passphrase; the caller wipes it. Side effects: Writes
+     * `backup-passphrase.wrapped` atomically.
+     */
+    fun storeBackupPassphrase(passphrase: ByteArray) {
+        require(passphrase.isNotEmpty()) { "the passphrase is empty" }
+        keyDirectory.mkdirs()
+        val temporary = File(keyDirectory, "$BACKUP_PASSPHRASE_FILE.tmp")
+        temporary.writeBytes(wrap(passphrase))
+        check(temporary.renameTo(File(keyDirectory, BACKUP_PASSPHRASE_FILE))) {
+            "the wrapped passphrase could not be saved"
+        }
+    }
+
+    /** The stored backup passphrase, or null when none is kept; the caller wipes it. */
+    fun loadBackupPassphrase(): ByteArray? {
+        val file = File(keyDirectory, BACKUP_PASSPHRASE_FILE)
+        return if (file.exists()) unwrapSecret(file.readBytes()) else null
+    }
+
+    /** Deletes the stored backup passphrase. */
+    fun forgetBackupPassphrase() {
+        File(keyDirectory, BACKUP_PASSPHRASE_FILE).delete()
+    }
+
     /** Writes the wrapped key atomically and checks that it unwraps to the same bytes. */
     private fun storeVerified(key: ByteArray) {
         keyDirectory.mkdirs()
@@ -80,6 +122,16 @@ class EncryptionKeyVault(private val keyDirectory: File) {
     }
 
     private fun unwrap(wrapped: ByteArray): ByteArray {
+        val key = unwrapSecret(wrapped)
+        if (key.size != KEY_LENGTH) {
+            key.fill(0)
+            error("the unwrapped key is not $KEY_LENGTH bytes")
+        }
+        return key
+    }
+
+    /** Opens anything `wrap` sealed; the caller wipes the result. */
+    private fun unwrapSecret(wrapped: ByteArray): ByteArray {
         require(wrapped.size > 1 + IV_LENGTH && wrapped[0] == FORMAT_VERSION) {
             "the wrapped key file has an unknown format"
         }
@@ -89,9 +141,7 @@ class EncryptionKeyVault(private val keyDirectory: File) {
             existingWrappingKey() ?: error("the Keystore key that wraps the database key is gone"),
             GCMParameterSpec(TAG_BITS, wrapped, 1, IV_LENGTH),
         )
-        val key = cipher.doFinal(wrapped, 1 + IV_LENGTH, wrapped.size - 1 - IV_LENGTH)
-        check(key.size == KEY_LENGTH) { "the unwrapped key is not $KEY_LENGTH bytes" }
-        return key
+        return cipher.doFinal(wrapped, 1 + IV_LENGTH, wrapped.size - 1 - IV_LENGTH)
     }
 
     private fun existingWrappingKey(): SecretKey? {
@@ -123,6 +173,7 @@ class EncryptionKeyVault(private val keyDirectory: File) {
     }
 
     private companion object {
+        const val BACKUP_PASSPHRASE_FILE = "backup-passphrase.wrapped"
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val WRAPPING_KEY_ALIAS = "note_taker_database_key_wrapper"
         const val TRANSFORMATION = "AES/GCM/NoPadding"

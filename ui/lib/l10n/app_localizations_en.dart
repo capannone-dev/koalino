@@ -3025,4 +3025,122 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get windowsBlocksTheMicrophone =>
       'Windows is keeping apps from the microphone: nothing is being heard. In Settings → Privacy & security → Microphone, turn on Microphone access and Let desktop apps access your microphone.';
+
+  @override
+  String get backUpAllData => 'Back up all data';
+
+  @override
+  String get backUpAllDataDescription =>
+      'Save meetings, notes, attachments and kept recordings in one encrypted file';
+
+  @override
+  String get restoreFromBackup => 'Restore from backup';
+
+  @override
+  String get restoreFromBackupDescription =>
+      'Replace the data on this device with a backup';
+
+  @override
+  String get backupPassphraseTitle => 'Backup passphrase';
+
+  @override
+  String get backupPassphraseExplanation =>
+      'The backup is encrypted with this passphrase. Without it nobody can open the backup, not even you, so keep it somewhere safe.';
+
+  @override
+  String get backupPassphraseLabel => 'Passphrase';
+
+  @override
+  String get repeatPassphraseLabel => 'Repeat the passphrase';
+
+  @override
+  String get passphraseTooShort => 'Use at least 8 characters.';
+
+  @override
+  String get passphrasesDoNotMatch => 'The passphrases do not match.';
+
+  @override
+  String get continueAction => 'Continue';
+
+  @override
+  String get backingUp => 'Backing up…';
+
+  @override
+  String get restoringBackup => 'Restoring…';
+
+  @override
+  String backupSaved(int files, String size) {
+    return 'Backup saved: $files files, $size MB.';
+  }
+
+  @override
+  String get restoreConfirmTitle => 'Replace the data on this device?';
+
+  @override
+  String get restoreConfirmBody =>
+      'The meetings and notes on this device are replaced by those in the backup. The current data is kept aside until the next restore. Koalino restarts afterwards.';
+
+  @override
+  String get restoreAction => 'Restore';
+
+  @override
+  String restoreReady(int files) {
+    return 'Restored $files files. Koalino restarts now to open them.';
+  }
+
+  @override
+  String get restartNow => 'Restart';
+
+  @override
+  String get backupWrongPassphrase => 'The passphrase is wrong.';
+
+  @override
+  String get backupNotABackup => 'This file is not a Koalino backup.';
+
+  @override
+  String get backupTooNew =>
+      'This backup was made by a newer version of Koalino. Update the app first.';
+
+  @override
+  String get backupDamaged => 'The backup is damaged or incomplete.';
+
+  @override
+  String get backupFailed =>
+      'The backup could not be completed. Check the free space and try again.';
+
+  @override
+  String get automaticBackups => 'Automatic backups';
+
+  @override
+  String get automaticBackupsDescription =>
+      'Every day while charging, into a folder you choose, also in the cloud (Google Drive, Nextcloud, OneDrive…). Encrypted before it leaves the phone.';
+
+  @override
+  String automaticBackupFolder(String folder) {
+    return 'Folder: $folder';
+  }
+
+  @override
+  String get noAutomaticBackupYet => 'No automatic backup yet.';
+
+  @override
+  String lastAutomaticBackup(String time) {
+    return 'Last backup: $time';
+  }
+
+  @override
+  String lastAutomaticBackupFailed(String time) {
+    return 'The backup of $time failed. Check the folder.';
+  }
+
+  @override
+  String get backUpNow => 'Back up now';
+
+  @override
+  String get backupFolderUnavailable =>
+      'The backup folder cannot be written. Check that it still exists and that its app is signed in, or choose another folder.';
+
+  @override
+  String get automaticBackupsNotSetUp =>
+      'Automatic backups need setting up again: turn them off and on.';
 }

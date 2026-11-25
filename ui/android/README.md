@@ -34,6 +34,19 @@ background thread and passes it straight to Rust with `NativeCore.provideEncrypt
 failure answers `keystore_unavailable` and a refused key or missing JNI method `key_rejected`;
 the app shows both as the keychain error with Retry.
 
+`BackupChannel.kt` (#167) serves `note_taker/backup`. It opens Android's document pickers, unwraps
+the key for a backup, and passes the core a detached file descriptor. On restore it wraps the
+backup's key into `note_taker.restore/keys/encryption.key.wrapped` with the same Keystore key and
+writes the `.restore-ready` marker. `restart` reopens the app so Dart swaps the folder in.
+
+`AutomaticBackup.kt` (#170) runs automatic backups: `AutomaticBackupJob`, a daily JobScheduler
+job that runs while charging with storage not low, writes `koalino-auto-<time>.koalino-backup`
+into the folder the owner picked (`ACTION_OPEN_DOCUMENT_TREE`, access kept), which may belong to a
+cloud provider's app. It keeps the last five. The passphrase is stored as
+`keys/backup-passphrase.wrapped`, sealed by the same Keystore key as the database key; a restore
+copies it into the restored key folder. `MainActivity` schedules the job again at each start,
+because a force stop cancels it.
+
 ## Whisper model
 
 The APK ships `ggml-base.bin` as an uncompressed asset (`assets/models/`, staged by

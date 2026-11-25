@@ -2848,4 +2848,116 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get windowsBlocksTheMicrophone =>
       'Windows 正在阻止应用使用麦克风：没有收到任何声音。请在“设置 → 隐私和安全性 → 麦克风”中开启“麦克风访问权限”和“允许桌面应用访问你的麦克风”。';
+
+  @override
+  String get backUpAllData => '备份所有数据';
+
+  @override
+  String get backUpAllDataDescription => '将会议、笔记、附件和保留的录音保存到一个加密文件中';
+
+  @override
+  String get restoreFromBackup => '从备份恢复';
+
+  @override
+  String get restoreFromBackupDescription => '用备份替换此设备上的数据';
+
+  @override
+  String get backupPassphraseTitle => '备份密码短语';
+
+  @override
+  String get backupPassphraseExplanation =>
+      '备份使用此密码短语加密。没有它，任何人（包括你自己）都无法打开备份，请妥善保管。';
+
+  @override
+  String get backupPassphraseLabel => '密码短语';
+
+  @override
+  String get repeatPassphraseLabel => '再次输入密码短语';
+
+  @override
+  String get passphraseTooShort => '请至少使用 8 个字符。';
+
+  @override
+  String get passphrasesDoNotMatch => '两次输入的密码短语不一致。';
+
+  @override
+  String get continueAction => '继续';
+
+  @override
+  String get backingUp => '正在备份…';
+
+  @override
+  String get restoringBackup => '正在恢复…';
+
+  @override
+  String backupSaved(int files, String size) {
+    return '备份已保存：$files 个文件，$size MB。';
+  }
+
+  @override
+  String get restoreConfirmTitle => '替换此设备上的数据？';
+
+  @override
+  String get restoreConfirmBody =>
+      '此设备上的会议和笔记将被备份中的内容替换。当前数据会另行保留，直到下一次恢复。之后 Koalino 会重新启动。';
+
+  @override
+  String get restoreAction => '恢复';
+
+  @override
+  String restoreReady(int files) {
+    return '已恢复 $files 个文件。Koalino 现在将重新启动以打开它们。';
+  }
+
+  @override
+  String get restartNow => '重新启动';
+
+  @override
+  String get backupWrongPassphrase => '密码短语错误。';
+
+  @override
+  String get backupNotABackup => '此文件不是 Koalino 备份。';
+
+  @override
+  String get backupTooNew => '此备份由较新版本的 Koalino 创建。请先更新应用。';
+
+  @override
+  String get backupDamaged => '备份已损坏或不完整。';
+
+  @override
+  String get backupFailed => '无法完成操作。请检查可用空间后重试。';
+
+  @override
+  String get automaticBackups => '自动备份';
+
+  @override
+  String get automaticBackupsDescription =>
+      '每天在充电时保存到你选择的文件夹，也可以是云端（Google Drive、Nextcloud、OneDrive…）。离开手机前即已加密。';
+
+  @override
+  String automaticBackupFolder(String folder) {
+    return '文件夹：$folder';
+  }
+
+  @override
+  String get noAutomaticBackupYet => '尚无自动备份。';
+
+  @override
+  String lastAutomaticBackup(String time) {
+    return '上次备份：$time';
+  }
+
+  @override
+  String lastAutomaticBackupFailed(String time) {
+    return '$time 的备份失败。请检查文件夹。';
+  }
+
+  @override
+  String get backUpNow => '立即备份';
+
+  @override
+  String get backupFolderUnavailable => '无法写入备份文件夹。请确认它仍然存在且其应用已登录，或选择其他文件夹。';
+
+  @override
+  String get automaticBackupsNotSetUp => '需要重新设置自动备份：请将其关闭后再打开。';
 }

@@ -74,4 +74,41 @@ object NativeCore {
      */
     @JvmStatic
     external fun runWaitingPass(timeoutMs: Int): Int
+
+    /**
+     * Writes an encrypted backup of all data (#167).
+     *
+     * Inputs: The data folder and database file name (UTF-8); a descriptor detached from the
+     * picked document (the core closes it); the passphrase (UTF-8); the 32-byte database key; a
+     * 2-element array receiving files and bytes written. The caller wipes the key and passphrase.
+     * Outputs: 0, 1 for a missing argument, or a backup code (20–27, see `backup_commands.rs`).
+     * Side effects: Reads the data folder; runs for seconds to minutes, never on the main thread.
+     */
+    @JvmStatic
+    external fun createBackup(
+        dataDirectory: ByteArray,
+        databaseName: ByteArray,
+        outputFd: Int,
+        passphrase: ByteArray,
+        key: ByteArray,
+        summary: LongArray,
+    ): Int
+
+    /**
+     * Restores a backup into an empty staging folder and gives back its database key (#167).
+     *
+     * Inputs: A descriptor detached from the picked backup (the core closes it); the passphrase;
+     * the staging folder (UTF-8); a 32-byte array receiving the key (the caller wraps, then wipes
+     * it); a 2-element array receiving files and bytes restored.
+     * Outputs: 0, 1 for a missing argument, or a backup code (20–27).
+     * Side effects: Writes the staging folder (removed again on failure); never on the main thread.
+     */
+    @JvmStatic
+    external fun stageRestore(
+        inputFd: Int,
+        passphrase: ByteArray,
+        stagingDirectory: ByteArray,
+        keyOut: ByteArray,
+        summary: LongArray,
+    ): Int
 }

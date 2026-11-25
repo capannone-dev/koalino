@@ -145,6 +145,13 @@ read back.
 `recordings_bridge.dart` (#140) calls `note_taker_recordings_command`: `status`, `setKeep`,
 `wipe`, `has`, `prepare` (the decrypted WAV's path and length) and `release`.
 
+`backup_bridge.dart` (#167) is `BackupBridge` and, on Android, `AndroidBackupBridge` over
+`note_taker/backup` (`BackupChannel.kt`): document pickers, `create` and `stage`, and `restart`.
+The database key never passes through Dart. `restore_on_start.dart` runs first in
+`configureCore`: a staged restore with its ready marker replaces `note_taker`, the old folder is
+kept as `note_taker.before-restore` (with its models moved into the restored folder, since a
+backup leaves them out), and an unfinished staging folder is deleted.
+
 `meeting_edit_bridge.dart` (#96) is `MeetingEditBridge`: the meeting's notes, the summary's text
 and single transcript segments, through `note_taker_meeting_edit` (one JSON request per call, on
 a background isolate through `callRustLlm`). `MeetingEditException` words the core's `error_code`

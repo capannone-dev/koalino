@@ -40,6 +40,7 @@ import 'package:note_taker_ui/controllers/transcription_route_controller.dart';
 import 'package:note_taker_ui/controllers/telemetry_dashboard_controller.dart';
 import 'package:note_taker_ui/controllers/voice_gallery_controller.dart';
 import 'package:note_taker_ui/infrastructure/app_configuration.dart';
+import 'package:note_taker_ui/infrastructure/backup_bridge.dart';
 import 'package:note_taker_ui/infrastructure/app_lock_bridge.dart';
 import 'package:note_taker_ui/infrastructure/desktop_handoff.dart';
 import 'package:note_taker_ui/infrastructure/handoff_bridge.dart';
@@ -651,6 +652,8 @@ final class _SettingsDestinationState extends State<_SettingsDestination> {
         networkSettingsController: _networkSettingsController,
         transcriptionSettingsBridge: const RustTranscriptionSettingsBridge(),
         recordingsBridge: const RecordingsBridge(),
+        // The document pickers and the Keystore hand-over are Android's for now (#167).
+        backupBridge: Platform.isAndroid ? const AndroidBackupBridge() : null,
         summariesController: _summariesController,
         // A folder of plain files is a desktop feature (#98).
         notesFolderBridge: Platform.isAndroid || Platform.isIOS

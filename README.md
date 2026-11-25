@@ -49,6 +49,9 @@ without touching domain logic.
 - One meeting recorded on several devices is combined into one.
 - Notes, transcripts, voice signatures and files are encrypted at rest (AES-256-GCM, key in the
   system keychain). Recorded speech is deleted once it is no longer needed.
+- On Android, back up everything into one passphrase-encrypted file, by hand or automatically
+  every day into a folder you choose, local or in your own cloud (Google Drive, Nextcloud,
+  OneDrive…). The file is encrypted before it leaves the phone.
 
 **Online meetings**
 - A browser extension for Firefox, Chrome and Edge records Teams meetings joined in the browser:

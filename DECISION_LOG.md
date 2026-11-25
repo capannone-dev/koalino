@@ -4104,3 +4104,33 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Lesson:** `NTS1`, chosen first, was already the meeting sync envelope, and taking those
   messages for prompts stopped every meeting from syncing. A test now checks that the prompts
   header does not overlap the others.
+
+## 2026-11-25 — Backup and restore of all data (#167)
+
+- **Decision:** One encrypted file holds the database snapshot, the database key and the kept
+  files, sealed with a passphrase the owner chooses (Argon2id, 64 MiB, 3 passes; AES-256-GCM in
+  1 MiB chunks with counter and last-chunk flag in the nonce, header as associated data). Restore
+  stages into `note_taker.restore`, and the next start swaps it in before the core opens anything.
+- **Why:** The owner needs to move data to the renamed app (#168), whose new ID gives it a new data
+  folder and a new Keystore. The backup must therefore carry the key itself, and it may sit in a
+  cloud folder, so the passphrase cost is above the database's own.
+- **Rejected:** Android's Auto Backup (does not cross app IDs, and leaves the Keystore key
+  behind); a zip with a password (weak, leaks file names); restoring in place while the core runs
+  (open database files and the key in memory would mix).
+- **Kept aside:** the replaced data stays as `note_taker.before-restore` until the next restore,
+  and models move into the restored folder rather than being backed up.
+
+## 2026-11-25 — Automatic backups to a local or cloud folder (#170)
+
+- **Decision:** A daily JobScheduler job (while charging, storage not low) writes the #167 backup
+  into a folder the owner picks with Android's folder picker, and keeps the last five. Cloud
+  backups go through the provider's own document provider (Google Drive, Nextcloud, OneDrive,
+  Dropbox): the file is already encrypted with the owner's passphrase when the provider sees it.
+- **Why:** The owner asked for automatic and cloud backups; a document provider reaches every
+  cloud the owner already uses without a Koalino server, an SDK or the owner's credentials.
+- **Trade-off:** An unattended job needs the passphrase, so it is kept on the phone wrapped by the
+  Keystore key that already protects the database key. Someone who can run code as Koalino could
+  read it, but could read the data directly anyway. It is never written into a backup.
+- **Rejected:** Android Auto Backup (Google only, 25 MB, the Keystore key does not travel);
+  WorkManager (a new library for what JobScheduler already does in `WaitingPassJob`).
+

@@ -131,6 +131,13 @@ turned on only after a privacy and space warning, how many are kept, Wipe all re
 confirmation) and `PlayRecordingButton` (the meeting page's app bar, shown only when a recording is
 kept; it plays the one decrypted file the core prepares and releases it on stop).
 
+`backup_section.dart` (#167) is Settings' Back up all data and Restore from backup (Android): the
+passphrase twice (at least 8 characters) for a backup, a warning before a restore, failures worded
+by status, and the restart once a restore is staged.
+
+Its Automatic backups switch (#170) asks the passphrase, then the folder, and runs a first
+backup; while on, it shows the folder, the last run and Back up now.
+
 The meeting detail's app bar has Name speakers (`NameSpeakersButton`), which opens the voice
 gallery (`voice_gallery_screen.dart`) for that meeting and reloads the meeting on return so the
 transcript shows the new names. The desktop two-pane layout shows it once a meeting is selected.

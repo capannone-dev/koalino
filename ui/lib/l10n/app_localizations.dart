@@ -4845,6 +4845,204 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Windows is keeping apps from the microphone: nothing is being heard. In Settings → Privacy & security → Microphone, turn on Microphone access and Let desktop apps access your microphone.'**
   String get windowsBlocksTheMicrophone;
+
+  /// No description provided for @backUpAllData.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up all data'**
+  String get backUpAllData;
+
+  /// No description provided for @backUpAllDataDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Save meetings, notes, attachments and kept recordings in one encrypted file'**
+  String get backUpAllDataDescription;
+
+  /// No description provided for @restoreFromBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore from backup'**
+  String get restoreFromBackup;
+
+  /// No description provided for @restoreFromBackupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the data on this device with a backup'**
+  String get restoreFromBackupDescription;
+
+  /// No description provided for @backupPassphraseTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup passphrase'**
+  String get backupPassphraseTitle;
+
+  /// No description provided for @backupPassphraseExplanation.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup is encrypted with this passphrase. Without it nobody can open the backup, not even you, so keep it somewhere safe.'**
+  String get backupPassphraseExplanation;
+
+  /// No description provided for @backupPassphraseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Passphrase'**
+  String get backupPassphraseLabel;
+
+  /// No description provided for @repeatPassphraseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeat the passphrase'**
+  String get repeatPassphraseLabel;
+
+  /// No description provided for @passphraseTooShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Use at least 8 characters.'**
+  String get passphraseTooShort;
+
+  /// No description provided for @passphrasesDoNotMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'The passphrases do not match.'**
+  String get passphrasesDoNotMatch;
+
+  /// No description provided for @continueAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get continueAction;
+
+  /// No description provided for @backingUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Backing up…'**
+  String get backingUp;
+
+  /// No description provided for @restoringBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Restoring…'**
+  String get restoringBackup;
+
+  /// No description provided for @backupSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup saved: {files} files, {size} MB.'**
+  String backupSaved(int files, String size);
+
+  /// No description provided for @restoreConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the data on this device?'**
+  String get restoreConfirmTitle;
+
+  /// No description provided for @restoreConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The meetings and notes on this device are replaced by those in the backup. The current data is kept aside until the next restore. Koalino restarts afterwards.'**
+  String get restoreConfirmBody;
+
+  /// No description provided for @restoreAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get restoreAction;
+
+  /// No description provided for @restoreReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored {files} files. Koalino restarts now to open them.'**
+  String restoreReady(int files);
+
+  /// No description provided for @restartNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart'**
+  String get restartNow;
+
+  /// No description provided for @backupWrongPassphrase.
+  ///
+  /// In en, this message translates to:
+  /// **'The passphrase is wrong.'**
+  String get backupWrongPassphrase;
+
+  /// No description provided for @backupNotABackup.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is not a Koalino backup.'**
+  String get backupNotABackup;
+
+  /// No description provided for @backupTooNew.
+  ///
+  /// In en, this message translates to:
+  /// **'This backup was made by a newer version of Koalino. Update the app first.'**
+  String get backupTooNew;
+
+  /// No description provided for @backupDamaged.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup is damaged or incomplete.'**
+  String get backupDamaged;
+
+  /// No description provided for @backupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup could not be completed. Check the free space and try again.'**
+  String get backupFailed;
+
+  /// No description provided for @automaticBackups.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic backups'**
+  String get automaticBackups;
+
+  /// No description provided for @automaticBackupsDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Every day while charging, into a folder you choose, also in the cloud (Google Drive, Nextcloud, OneDrive…). Encrypted before it leaves the phone.'**
+  String get automaticBackupsDescription;
+
+  /// No description provided for @automaticBackupFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'Folder: {folder}'**
+  String automaticBackupFolder(String folder);
+
+  /// No description provided for @noAutomaticBackupYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No automatic backup yet.'**
+  String get noAutomaticBackupYet;
+
+  /// No description provided for @lastAutomaticBackup.
+  ///
+  /// In en, this message translates to:
+  /// **'Last backup: {time}'**
+  String lastAutomaticBackup(String time);
+
+  /// No description provided for @lastAutomaticBackupFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup of {time} failed. Check the folder.'**
+  String lastAutomaticBackupFailed(String time);
+
+  /// No description provided for @backUpNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up now'**
+  String get backUpNow;
+
+  /// No description provided for @backupFolderUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup folder cannot be written. Check that it still exists and that its app is signed in, or choose another folder.'**
+  String get backupFolderUnavailable;
+
+  /// No description provided for @automaticBackupsNotSetUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic backups need setting up again: turn them off and on.'**
+  String get automaticBackupsNotSetUp;
 }
 
 class _AppLocalizationsDelegate

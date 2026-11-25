@@ -14,17 +14,25 @@
 //! after-meeting pass only then (#87). `WaitingPassJob.kt` runs that pass from a JobScheduler
 //! job while the phone charges, with the app closed and the screen locked (#87).
 //!
+//! `BackupChannel.kt` backs up and restores all data from Settings (#167): it hands over the
+//! file Android's document picker opened, the passphrase and, for a backup, the unwrapped key;
+//! on restore it receives the backup's key in an array it wipes after wrapping it.
+//!
 //! The Kotlin side is `com.example.note_taker_ui.NativeCore`. It loads this library with
 //! `System.loadLibrary("note_taker_core")`, which returns the instance Dart already opened, so
 //! both share the runtime's statics.
 
+use std::{fs::File, os::fd::FromRawFd, path::PathBuf};
+
 use jni::{
-    EnvUnowned,
+    Env, EnvUnowned,
     errors::ThrowRuntimeExAndDefault,
-    objects::{JByteArray, JClass},
+    objects::{JByteArray, JClass, JLongArray},
     sys::{jboolean, jint},
 };
 use zeroize::Zeroizing;
+
+use crate::backup_commands::{create_backup, restore_backup};
 
 use crate::ffi::{
     FFI_INVALID_ARGUMENT, HOST_ENCRYPTION_KEY_LENGTH, note_taker_configure,
@@ -185,4 +193,156 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_startRuntime<
     _class: JClass<'caller>,
 ) -> jint {
     note_taker_start_runtime()
+}
+
+/// Copies a Java byte array into a wiped buffer; `None` for a null array.
+fn java_bytes(
+    env: &mut Env<'_>,
+    array: &JByteArray<'_>,
+) -> Result<Option<Zeroizing<Vec<u8>>>, jni::errors::Error> {
+    if array.is_null() {
+        return Ok(None);
+    }
+    let mut java = Zeroizing::new(vec![0_i8; array.len(env)?]);
+    array.get_region(env, 0, java.as_mut_slice())?;
+    Ok(Some(Zeroizing::new(
+        java.iter().map(|byte| byte.to_ne_bytes()[0]).collect(),
+    )))
+}
+
+/// Decodes a Java byte array as UTF-8 into a wiped string; `None` for null or invalid text.
+fn java_text(
+    env: &mut Env<'_>,
+    array: &JByteArray<'_>,
+) -> Result<Option<Zeroizing<String>>, jni::errors::Error> {
+    Ok(java_bytes(env, array)?
+        .and_then(|bytes| String::from_utf8(bytes.to_vec()).ok().map(Zeroizing::new)))
+}
+
+/// Takes over a file descriptor Kotlin detached from a `ParcelFileDescriptor`.
+///
+/// Safety: Kotlin must pass a descriptor it no longer owns (`detachFd()`); the `File` closes it.
+fn owned_file(descriptor: jint) -> Option<File> {
+    // SAFETY: Kotlin detached the descriptor and never uses or closes it again.
+    (descriptor >= 0).then(|| unsafe { File::from_raw_fd(descriptor) })
+}
+
+/// Implements `NativeCore.createBackup(dataDirectory: ByteArray, databaseName: ByteArray,
+/// outputFd: Int, passphrase: ByteArray, key: ByteArray, summary: LongArray): Int` (#167).
+///
+/// Inputs: The data folder and database file name (UTF-8); a writable descriptor detached from
+/// the document the owner picked (taken over and closed); the passphrase (UTF-8); the 32-byte
+/// database key (Kotlin wipes its copy); a 2-element array receiving files and bytes written.
+/// Outputs: `0` on success, `1` for a missing argument, or a `BACKUP_*` code. A JNI failure
+/// throws a RuntimeException (no key or passphrase in its message).
+/// Side effects: As `backup_commands::create_backup`; runs for seconds to minutes, so call it
+/// off the main thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_createBackup<'caller>(
+    mut unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    data_directory: JByteArray<'caller>,
+    database_name: JByteArray<'caller>,
+    output_descriptor: jint,
+    passphrase: JByteArray<'caller>,
+    key: JByteArray<'caller>,
+    summary: JLongArray<'caller>,
+) -> jint {
+    unowned_env
+        .with_env(|env| -> Result<jint, jni::errors::Error> {
+            let output = owned_file(output_descriptor);
+            let (
+                Some(data_directory),
+                Some(database_name),
+                Some(output),
+                Some(passphrase),
+                Some(key),
+            ) = (
+                java_text(env, &data_directory)?,
+                java_text(env, &database_name)?,
+                output,
+                java_text(env, &passphrase)?,
+                java_bytes(env, &key)?,
+            )
+            else {
+                return Ok(FFI_INVALID_ARGUMENT);
+            };
+            let (status, written) = create_backup(
+                &PathBuf::from(data_directory.as_str()),
+                &database_name,
+                output,
+                &passphrase,
+                &key,
+            );
+            if let Some(written) = written
+                && !summary.is_null()
+            {
+                summary.set_region(env, 0, &[written.files as i64, written.bytes as i64])?;
+            }
+            Ok(status)
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
+}
+
+/// Implements `NativeCore.stageRestore(inputFd: Int, passphrase: ByteArray,
+/// stagingDirectory: ByteArray, keyOut: ByteArray, summary: LongArray): Int` (#167).
+///
+/// Inputs: A readable descriptor detached from the backup the owner picked (taken over and
+/// closed); the passphrase (UTF-8); the staging folder (UTF-8, absent or empty); a 32-byte array
+/// receiving the backup's database key (Kotlin wraps it with the Keystore, then wipes it); a
+/// 2-element array receiving files and bytes restored.
+/// Outputs: `0` on success, `1` for a missing argument or a key array of another length, or a
+/// `BACKUP_*` code. A JNI failure throws a RuntimeException.
+/// Side effects: As `backup_commands::restore_backup`; call it off the main thread.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_stageRestore<'caller>(
+    mut unowned_env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    input_descriptor: jint,
+    passphrase: JByteArray<'caller>,
+    staging_directory: JByteArray<'caller>,
+    key_out: JByteArray<'caller>,
+    summary: JLongArray<'caller>,
+) -> jint {
+    unowned_env
+        .with_env(|env| -> Result<jint, jni::errors::Error> {
+            let input = owned_file(input_descriptor);
+            if key_out.is_null() || key_out.len(env)? != HOST_ENCRYPTION_KEY_LENGTH {
+                return Ok(FFI_INVALID_ARGUMENT);
+            }
+            let (Some(input), Some(passphrase), Some(staging_directory)) = (
+                input,
+                java_text(env, &passphrase)?,
+                java_text(env, &staging_directory)?,
+            ) else {
+                return Ok(FFI_INVALID_ARGUMENT);
+            };
+            match restore_backup(
+                input,
+                &passphrase,
+                &PathBuf::from(staging_directory.as_str()),
+            ) {
+                Ok(restored) => {
+                    let java_key: Zeroizing<Vec<i8>> = Zeroizing::new(
+                        restored
+                            .key
+                            .as_bytes()
+                            .iter()
+                            .map(|byte| i8::from_ne_bytes([*byte]))
+                            .collect(),
+                    );
+                    key_out.set_region(env, 0, &java_key)?;
+                    if !summary.is_null() {
+                        summary.set_region(
+                            env,
+                            0,
+                            &[restored.files as i64, restored.bytes as i64],
+                        )?;
+                    }
+                    Ok(0)
+                }
+                Err(status) => Ok(status),
+            }
+        })
+        .resolve::<ThrowRuntimeExAndDefault>()
 }

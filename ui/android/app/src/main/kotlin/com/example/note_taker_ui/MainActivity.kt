@@ -52,6 +52,9 @@ class MainActivity : FlutterActivity() {
     /** Reports charging to the core while the activity exists; created with it. */
     private val chargingReporter by lazy { ChargingReporter(applicationContext) }
 
+    /** Backup and restore from Settings (#167); null until the engine is configured. */
+    private var backupChannel: BackupChannel? = null
+
     /** Runs Keystore work off the main thread. */
     private val keyVaultExecutor = Executors.newSingleThreadExecutor()
 
@@ -70,6 +73,10 @@ class MainActivity : FlutterActivity() {
         microphonePermission = microphone
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/microphone")
             .setMethodCallHandler(microphone)
+        val backup = BackupChannel(this)
+        backupChannel = backup
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/backup")
+            .setMethodCallHandler(backup)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "note_taker/share")
             .setMethodCallHandler(SharedFiles(this))
         val sharesChannel =
@@ -175,6 +182,10 @@ class MainActivity : FlutterActivity() {
         NpuDownload.prepareEnvironment(applicationContext)
         super.onCreate(savedInstanceState)
         chargingReporter.start()
+        // A force stop cancels the app's jobs, so the daily backup is scheduled again (#170).
+        if (AutomaticBackup(applicationContext).folder != null) {
+            AutomaticBackup.schedule(applicationContext)
+        }
         removeCallOfferChannel()
         if (savedInstanceState == null &&
             (pairingLinks.receive(intent) || incomingShares.receive(intent))
@@ -208,6 +219,15 @@ class MainActivity : FlutterActivity() {
         }
         getSystemService(android.app.NotificationManager::class.java)
             ?.deleteNotificationChannel("call_offer")
+    }
+
+    /** Hands the backup document pickers' answers to `BackupChannel` (#167). */
+    @Deprecated("FlutterActivity still delivers results here")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (backupChannel?.onActivityResult(requestCode, resultCode, data) != true) {
+            @Suppress("DEPRECATION")
+            super.onActivityResult(requestCode, resultCode, data)
+        }
     }
 
     /** Hands RECORD_AUDIO answers to `MicrophonePermission`. */

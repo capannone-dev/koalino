@@ -3060,4 +3060,123 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get windowsBlocksTheMicrophone =>
       'Windows impide que las apps usen el micrófono: no se oye nada. En Configuración → Privacidad y seguridad → Micrófono, activa Acceso al micrófono y Permitir que las aplicaciones de escritorio accedan al micrófono.';
+
+  @override
+  String get backUpAllData => 'Copia de seguridad de todos los datos';
+
+  @override
+  String get backUpAllDataDescription =>
+      'Guarda reuniones, notas, adjuntos y grabaciones conservadas en un único archivo cifrado';
+
+  @override
+  String get restoreFromBackup => 'Restaurar desde una copia de seguridad';
+
+  @override
+  String get restoreFromBackupDescription =>
+      'Sustituye los datos de este dispositivo por una copia de seguridad';
+
+  @override
+  String get backupPassphraseTitle => 'Frase de contraseña de la copia';
+
+  @override
+  String get backupPassphraseExplanation =>
+      'La copia se cifra con esta frase de contraseña. Sin ella nadie puede abrirla, ni siquiera tú, así que guárdala en un lugar seguro.';
+
+  @override
+  String get backupPassphraseLabel => 'Frase de contraseña';
+
+  @override
+  String get repeatPassphraseLabel => 'Repite la frase de contraseña';
+
+  @override
+  String get passphraseTooShort => 'Usa al menos 8 caracteres.';
+
+  @override
+  String get passphrasesDoNotMatch => 'Las frases de contraseña no coinciden.';
+
+  @override
+  String get continueAction => 'Continuar';
+
+  @override
+  String get backingUp => 'Creando la copia…';
+
+  @override
+  String get restoringBackup => 'Restaurando…';
+
+  @override
+  String backupSaved(int files, String size) {
+    return 'Copia guardada: $files archivos, $size MB.';
+  }
+
+  @override
+  String get restoreConfirmTitle => '¿Sustituir los datos de este dispositivo?';
+
+  @override
+  String get restoreConfirmBody =>
+      'Las reuniones y notas de este dispositivo se sustituyen por las de la copia. Los datos actuales se guardan aparte hasta la siguiente restauración. Después Koalino se reinicia.';
+
+  @override
+  String get restoreAction => 'Restaurar';
+
+  @override
+  String restoreReady(int files) {
+    return 'Se restauraron $files archivos. Koalino se reinicia ahora para abrirlos.';
+  }
+
+  @override
+  String get restartNow => 'Reiniciar';
+
+  @override
+  String get backupWrongPassphrase => 'La frase de contraseña es incorrecta.';
+
+  @override
+  String get backupNotABackup =>
+      'Este archivo no es una copia de seguridad de Koalino.';
+
+  @override
+  String get backupTooNew =>
+      'Esta copia se creó con una versión más reciente de Koalino. Actualiza primero la app.';
+
+  @override
+  String get backupDamaged => 'La copia está dañada o incompleta.';
+
+  @override
+  String get backupFailed =>
+      'No se pudo completar la operación. Comprueba el espacio libre e inténtalo de nuevo.';
+
+  @override
+  String get automaticBackups => 'Copias automáticas';
+
+  @override
+  String get automaticBackupsDescription =>
+      'Cada día mientras se carga, en una carpeta que elijas, también en la nube (Google Drive, Nextcloud, OneDrive…). Cifrado antes de salir del teléfono.';
+
+  @override
+  String automaticBackupFolder(String folder) {
+    return 'Carpeta: $folder';
+  }
+
+  @override
+  String get noAutomaticBackupYet => 'Todavía no hay copias automáticas.';
+
+  @override
+  String lastAutomaticBackup(String time) {
+    return 'Última copia: $time';
+  }
+
+  @override
+  String lastAutomaticBackupFailed(String time) {
+    return 'La copia del $time falló. Revisa la carpeta.';
+  }
+
+  @override
+  String get backUpNow => 'Copiar ahora';
+
+  @override
+  String get backupFolderUnavailable =>
+      'No se puede escribir en la carpeta de copias. Comprueba que siga existiendo y que su app tenga la sesión iniciada, o elige otra carpeta.';
+
+  @override
+  String get automaticBackupsNotSetUp =>
+      'Hay que volver a configurar las copias automáticas: desactívalas y vuelve a activarlas.';
 }

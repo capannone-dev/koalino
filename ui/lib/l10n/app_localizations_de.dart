@@ -3103,4 +3103,123 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get windowsBlocksTheMicrophone =>
       'Windows hält Apps vom Mikrofon fern: Es ist nichts zu hören. Schalte unter Einstellungen → Datenschutz und Sicherheit → Mikrofon den Mikrofonzugriff und „Desktop-Apps den Zugriff auf Ihr Mikrofon erlauben“ ein.';
+
+  @override
+  String get backUpAllData => 'Alle Daten sichern';
+
+  @override
+  String get backUpAllDataDescription =>
+      'Besprechungen, Notizen, Anhänge und behaltene Aufnahmen in einer verschlüsselten Datei speichern';
+
+  @override
+  String get restoreFromBackup => 'Aus Sicherung wiederherstellen';
+
+  @override
+  String get restoreFromBackupDescription =>
+      'Die Daten auf diesem Gerät durch eine Sicherung ersetzen';
+
+  @override
+  String get backupPassphraseTitle => 'Passphrase der Sicherung';
+
+  @override
+  String get backupPassphraseExplanation =>
+      'Die Sicherung wird mit dieser Passphrase verschlüsselt. Ohne sie kann niemand die Sicherung öffnen, auch du nicht. Bewahre sie sicher auf.';
+
+  @override
+  String get backupPassphraseLabel => 'Passphrase';
+
+  @override
+  String get repeatPassphraseLabel => 'Passphrase wiederholen';
+
+  @override
+  String get passphraseTooShort => 'Verwende mindestens 8 Zeichen.';
+
+  @override
+  String get passphrasesDoNotMatch => 'Die Passphrasen stimmen nicht überein.';
+
+  @override
+  String get continueAction => 'Weiter';
+
+  @override
+  String get backingUp => 'Sicherung läuft…';
+
+  @override
+  String get restoringBackup => 'Wiederherstellung läuft…';
+
+  @override
+  String backupSaved(int files, String size) {
+    return 'Sicherung gespeichert: $files Dateien, $size MB.';
+  }
+
+  @override
+  String get restoreConfirmTitle => 'Daten auf diesem Gerät ersetzen?';
+
+  @override
+  String get restoreConfirmBody =>
+      'Die Besprechungen und Notizen auf diesem Gerät werden durch die der Sicherung ersetzt. Die aktuellen Daten werden bis zur nächsten Wiederherstellung aufbewahrt. Danach startet Koalino neu.';
+
+  @override
+  String get restoreAction => 'Wiederherstellen';
+
+  @override
+  String restoreReady(int files) {
+    return '$files Dateien wiederhergestellt. Koalino startet jetzt neu, um sie zu öffnen.';
+  }
+
+  @override
+  String get restartNow => 'Neu starten';
+
+  @override
+  String get backupWrongPassphrase => 'Die Passphrase ist falsch.';
+
+  @override
+  String get backupNotABackup => 'Diese Datei ist keine Koalino-Sicherung.';
+
+  @override
+  String get backupTooNew =>
+      'Diese Sicherung stammt von einer neueren Koalino-Version. Aktualisiere zuerst die App.';
+
+  @override
+  String get backupDamaged =>
+      'Die Sicherung ist beschädigt oder unvollständig.';
+
+  @override
+  String get backupFailed =>
+      'Der Vorgang konnte nicht abgeschlossen werden. Prüfe den freien Speicher und versuche es erneut.';
+
+  @override
+  String get automaticBackups => 'Automatische Sicherungen';
+
+  @override
+  String get automaticBackupsDescription =>
+      'Täglich während des Ladens in einen Ordner deiner Wahl, auch in der Cloud (Google Drive, Nextcloud, OneDrive…). Verschlüsselt, bevor es das Telefon verlässt.';
+
+  @override
+  String automaticBackupFolder(String folder) {
+    return 'Ordner: $folder';
+  }
+
+  @override
+  String get noAutomaticBackupYet => 'Noch keine automatische Sicherung.';
+
+  @override
+  String lastAutomaticBackup(String time) {
+    return 'Letzte Sicherung: $time';
+  }
+
+  @override
+  String lastAutomaticBackupFailed(String time) {
+    return 'Die Sicherung vom $time ist fehlgeschlagen. Prüfe den Ordner.';
+  }
+
+  @override
+  String get backUpNow => 'Jetzt sichern';
+
+  @override
+  String get backupFolderUnavailable =>
+      'In den Sicherungsordner kann nicht geschrieben werden. Prüfe, ob er noch existiert und seine App angemeldet ist, oder wähle einen anderen Ordner.';
+
+  @override
+  String get automaticBackupsNotSetUp =>
+      'Automatische Sicherungen müssen neu eingerichtet werden: aus- und wieder einschalten.';
 }
