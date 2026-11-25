@@ -82,7 +82,7 @@ with their SHA-256 sums in `SHA256SUMS.txt`.
 | --- | --- | --- |
 | Linux desktop (x86_64, Debian 13 or newer) | [`koalino-linux-x86_64-0.1.0.tar.gz`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-linux-x86_64-0.1.0.tar.gz) | The app, Whisper `base`, the diarization models, the MCP server and the browser extension's host |
 | Windows desktop (x86_64, Windows 10 or 11) | [`koalino-windows-x86_64-0.1.0.zip`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-windows-x86_64-0.1.0.zip) | The same, for Windows |
-| macOS desktop (Intel and Apple silicon, macOS 12 or newer) | [`koalino-macos-universal-0.1.0.zip`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-macos-universal-0.1.0.zip) | The same, for Mac; on Intel Macs without speaker diarization |
+| macOS desktop (Intel and Apple silicon, macOS 12 or newer) | [`koalino-macos-universal-0.1.0.zip`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-macos-universal-0.1.0.zip) | The same, for Mac; untested on real Macs and paused ([help wanted](#apple-devices-help-wanted)); on Intel Macs without speaker diarization |
 | Android (64-bit ARM) | [`koalino-android-arm64-0.1.0.apk`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-android-arm64-0.1.0.apk) | The app with Whisper `base` and the diarization models |
 | Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.1.0.tar.gz`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-server-linux-x86_64-0.1.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
 | Chrome, Edge, Chromium | [`koalino-browser-extension-chromium-0.1.0.zip`](https://github.com/capannone-dev/note_taker/releases/download/v0.1.0-preview.1/koalino-browser-extension-chromium-0.1.0.zip) | The browser extension, to load unpacked |
@@ -121,6 +121,25 @@ Limits of this preview: on Intel Macs recordings are transcribed but not split b
 ONNX Runtime, which diarization uses, no longer ships for Intel Macs. Capturing the computer's own
 sound is not available on macOS yet. The core (transcription, Keychain, database) was tested on an
 Intel Mac; the window itself and the Apple silicon build have not been tried on real hardware yet.
+
+#### Apple devices: help wanted
+
+Work on macOS and iOS is **paused**. The maintainer has no Apple hardware (Mac, iPhone or iPad)
+and no Apple Developer Program membership. So the macOS package above stays an untested, unsigned
+preview, and there is no iPhone or iPad app. Without the membership Apple allows no notarized Mac
+download and no App Store release; without a Mac nothing can be tried on real hardware.
+
+If you develop for Apple platforms and would like to bring Koalino to Mac, iPhone or iPad,
+you are very welcome. Open an issue or comment on
+[#151](https://github.com/capannone-dev/note_taker/issues/151). Useful help, from smallest to
+largest:
+
+- try the macOS preview on a real Mac (especially Apple silicon) and report what works;
+- fix the macOS build where it fails: [`tools/macos/README.md`](tools/macos/README.md) explains
+  how it is built;
+- port the app to iOS and iPadOS. The interface is Flutter and the core is Rust, so the work is
+  mostly the iOS runner, microphone and background recording, the Keychain, and building the core
+  for iOS.
 
 ### Android
 
