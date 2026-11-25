@@ -126,6 +126,20 @@ static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
 }
 
+// Gives `window` Koalino's icon (#165), for title bars and task bars when no installed desktop
+// entry provides one (the tarball). The icon is `data/koalino.png` next to the executable, which
+// the bundle's install step copies there.
+//
+// Inputs: The application window. Outputs: None; a missing or unreadable icon leaves GTK's default.
+// Side effects: Reads the executable's link and the icon file.
+static void set_window_icon(GtkWindow* window) {
+  g_autofree gchar* executable = g_file_read_link("/proc/self/exe", nullptr);
+  if (executable == nullptr) return;
+  g_autofree gchar* bundle = g_path_get_dirname(executable);
+  g_autofree gchar* icon = g_build_filename(bundle, "data", "koalino.png", nullptr);
+  gtk_window_set_icon_from_file(window, icon, nullptr);
+}
+
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
@@ -144,6 +158,7 @@ static void my_application_activate(GApplication* application) {
   // gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
 
   gtk_window_set_title(window, "Koalino");
+  set_window_icon(window);
   follow_desktop_color_scheme(self);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

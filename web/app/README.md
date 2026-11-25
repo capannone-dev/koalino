@@ -19,3 +19,6 @@ which can contain internal details) and offers **Try again**.
 `prefers-color-scheme: dark`. Components use only these tokens (`bg-surface`, `text-muted`), so
 every page follows the browser's light or dark setting. Recharts' fixed SVG colours are
 overridden there too.
+
+`icon.svg` is Koalino's logo, which Next.js serves as the favicon. It is a copy of
+`branding/koalino.svg`, made by `branding/make-icons.sh` (#165).

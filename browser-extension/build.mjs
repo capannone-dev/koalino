@@ -42,8 +42,8 @@ const baseManifest = {
   default_locale: "en",
   permissions: ["nativeMessaging", "storage"],
   host_permissions: [...TEAMS_SITES, ...RECAP_FRAME_SITES],
-  icons: { 48: "icon-48.png", 128: "icon-128.png" },
-  action: { default_popup: "popup.html", default_icon: { 48: "icon-48.png" } },
+  icons: { 16: "icon-16.png", 32: "icon-32.png", 48: "icon-48.png", 128: "icon-128.png" },
+  action: { default_popup: "popup.html", default_icon: { 16: "icon-16.png", 32: "icon-32.png", 48: "icon-48.png" } },
   content_scripts: [
     { matches: TEAMS_SITES, js: ["hook.js"], run_at: "document_start", world: "MAIN" },
     { matches: TEAMS_SITES, js: ["content.js"], run_at: "document_idle" },

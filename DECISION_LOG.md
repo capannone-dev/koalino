@@ -4151,3 +4151,14 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   passwords in `~/.android/koalino-key.properties`, both outside the repository). Without it,
   builds fall back to the debug key, so any checkout builds; F-Droid signs its own builds.
 
+## 2026-11-25 — App icon from koalino.svg (#165)
+
+- **Decision:** every icon is generated from the owner's `branding/koalino.svg` by
+  `branding/make-icons.sh` (rsvg-convert and ImageMagick, already on the build machine), and the
+  generated files are committed, so builds need no image tools.
+- **Android:** an adaptive icon (koala-only foreground at 56 of 108 dp on the logo's purple), so
+  circular launcher masks keep the ears; the plain PNGs remain for older Android.
+- **macOS:** inset to Apple's 824-of-1024 grid. **Linux:** the runner sets the window icon from
+  the bundle, since the tarball installs no desktop entry. **Teams:** the outline icon is the
+  koala's dark lines in white.
+

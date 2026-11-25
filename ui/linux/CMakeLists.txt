@@ -159,6 +159,10 @@ else()
   message(WARNING "Diarization models not staged; run tools/cross/build-flutter-native.sh linux")
 endif()
 
+# Koalino's window icon (#165), loaded by runner/my_application.cc from the bundle's data folder.
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/runner/resources/koalino.png"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}" COMPONENT Runtime)
+
 # Copy the native assets provided by the hook/build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
