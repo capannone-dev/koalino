@@ -6,7 +6,7 @@
     <title>Koalino</title>
     <style>
       body { font: 13px/1.4 system-ui, sans-serif; margin: 0; padding: 12px; width: 300px; color: #111827; }
-      h1 { font-size: 15px; margin: 0 0 8px; }
+      h1 { font-size: 15px; margin: 0 0 8px; display: flex; align-items: center; gap: 8px; }
       .status { padding: 8px; border-radius: 6px; background: #f3f4f6; margin-bottom: 10px; }
       .ok { color: #047857; } .warn { color: #b45309; } .bad { color: #b91c1c; }
       label { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; }
@@ -16,7 +16,7 @@
     </style>
   </head>
   <body>
-    <h1>Koalino</h1>
+    <h1><img src="icon-32.png" alt="" width="24" height="24" />Koalino</h1>
     <div id="access" class="status bad" hidden>
       <div id="access-text" data-i18n="accessMissing">Koalino may not run on Teams (or on the SharePoint page Teams shows transcripts from) yet, so it cannot record your meetings or fetch their transcripts.</div>
       <button id="allow" type="button" data-i18n="allowOnTeams">Allow on Teams</button>

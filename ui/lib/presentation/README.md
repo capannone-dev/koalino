@@ -111,8 +111,9 @@ restarts) and Export logs (Share logs on Android), which saves or shares the las
 logs. On Android it also holds the App lock switch, which explains why it is unavailable without
 a screen lock or before Android 10. `HomeShell` shows Settings as the last destination when given
 a builder, which the app always gives. Its last row, About Koalino (`about_tile.dart`, #115), opens
-the About dialog: the version, the GPL-3.0-or-later notice, and View licenses for the Flutter
-packages.
+the About dialog: the logo, the version, the GPL-3.0-or-later notice, and View licenses for the
+Flutter packages. `KoalinoLogo` (`koalino_logo.dart`, #172) draws Koalino's icon there and at the
+top of the desktop navigation rail.
 
 Projects nest (#142): on phones the Projects tab lists top-level projects and each project's page
 lists its subprojects, with New subproject and Move to… (`chooseProjectParent` in

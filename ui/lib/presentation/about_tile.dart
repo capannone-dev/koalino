@@ -1,15 +1,16 @@
 // Settings -> About Koalino (#115): the app's name and version, the GPL notice that a
-// GPL-3.0-or-later program shows its users, and Flutter's page of the licenses of every package
+// GPL-3.0-or-later program shows its users, the logo (#172), and Flutter's page of the licenses of every package
 // the app is built on. The Rust crates and AI models are listed in THIRD_PARTY_NOTICES.md.
 
 import 'package:flutter/material.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
+import 'package:note_taker_ui/presentation/koalino_logo.dart';
 
 /// The app's visible name.
 const String appName = 'Koalino';
 
-/// The version shown in About; keep in step with `pubspec.yaml`.
-const String appVersion = '0.1.0';
+/// The version shown in About; a test checks it against `pubspec.yaml`.
+const String appVersion = '0.2.0';
 
 /// The license notice, as the GPL asks interactive programs to show it. It stays in English, the
 /// language of the license itself (#124).
@@ -36,6 +37,7 @@ final class AboutKoalinoTile extends StatelessWidget {
           context: context,
           applicationName: appName,
           applicationVersion: appVersion,
+          applicationIcon: const KoalinoLogo(size: 56),
           applicationLegalese: licenseNotice,
         ),
       );

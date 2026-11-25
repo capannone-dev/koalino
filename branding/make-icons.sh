@@ -1,8 +1,8 @@
 #!/bin/bash
-# Generates every app icon from branding/koalino.svg (#165): the Android launcher (legacy and
-# adaptive), the Windows .ico, the macOS app icon set, the Linux window and packaging icons, the
-# browser extension's icons, the server web UI's favicon, the Teams app's icons and the F-Droid
-# listing icon. Rerun it after changing the SVG and commit the results.
+# Generates every app icon from branding/koalino.svg (#165, #172): the Android launcher (legacy
+# and adaptive) and notification icons, the Windows .ico, the macOS app icon set, the Linux window
+# and packaging icons, the logo inside the Flutter app, the browser extension's icons, the server
+# web UI's favicon and header logo, the Teams app's icons and the F-Droid listing icon. Rerun it after changing the SVG and commit the results.
 #
 # Usage: branding/make-icons.sh   (from anywhere; needs rsvg-convert and ImageMagick's `magick`)
 # Side effects: overwrites the generated icon files listed below; writes temporary files in a
@@ -62,6 +62,31 @@ cat >"$android_res/values/ic_launcher_background.xml" <<XML
 </resources>
 XML
 
+# Android's status bar draws notification icons from their alpha only: the koala's silhouette in
+# white, with its eyes, nose and notepad lines (the SVG's last dark group) cut out.
+python3 - "$source_svg" "$work/features.svg" <<'PY'
+import re, sys
+svg = open(sys.argv[1]).read()
+groups = re.findall(r'<g fill="#131211">.*?</g>', svg, re.S)
+head = svg[: svg.index(">", svg.index("<svg")) + 1]
+open(sys.argv[2], "w").write(head + groups[-1] + "</svg>")
+PY
+rsvg-convert -w 2048 -h 2048 "$work/features.svg" -o "$work/features-large.png"
+magick "$work/koala-large.png" -alpha extract "$work/koala-alpha.png"
+magick "$work/features-large.png" -alpha extract -morphology Erode Disk:4 "$work/features-alpha.png"
+magick "$work/koala-alpha.png" "$work/features-alpha.png" -compose minus_src -composite \
+  -trim +repage "$work/silhouette-alpha.png"
+for pair in mdpi:1 hdpi:1.5 xhdpi:2 xxhdpi:3 xxxhdpi:4; do
+  density=${pair%%:*}
+  scale=${pair##*:}
+  size=$(python3 -c "print(round(24 * $scale))")
+  inner=$(python3 -c "print(round(22 * $scale))")
+  mkdir -p "$android_res/drawable-$density"
+  magick "$work/silhouette-alpha.png" -resize "${inner}x${inner}" -background black -gravity center \
+    -extent "${size}x${size}" \( +clone -fill white -colorize 100 \) +swap -alpha off \
+    -compose copy_opacity -composite "$android_res/drawable-$density/ic_stat_koalino.png"
+done
+
 # --- Windows: one .ico holding the sizes Explorer and the taskbar ask for. ---
 for size in 16 24 32 48 64 128 256; do full_icon "$size" "$work/win-$size.png"; done
 magick "$work"/win-{16,24,32,48,64,128,256}.png "$repo/ui/windows/runner/resources/app_icon.ico"
@@ -79,11 +104,17 @@ full_icon 128 "$repo/tools/packaging/linux/koalino-128.png"
 full_icon 192 "$repo/tools/packaging/linux/koalino-192.png"
 cp "$source_svg" "$repo/tools/packaging/linux/koalino.svg"
 
+# --- The logo the Flutter app shows in its navigation and About (#172). ---
+mkdir -p "$repo/ui/assets/branding"
+full_icon 256 "$repo/ui/assets/branding/koalino.png"
+
 # --- Browser extension. ---
 for size in 16 32 48 128; do full_icon "$size" "$repo/browser-extension/static/icon-$size.png"; done
 
 # --- Server web UI: Next.js serves app/icon.svg as the favicon. Project website (#166). ---
 cp "$source_svg" "$repo/web/app/icon.svg"
+mkdir -p "$repo/web/public"
+cp "$source_svg" "$repo/web/public/koalino.svg" # the header logo
 cp "$source_svg" "$repo/site/koalino.svg"
 
 # --- Teams app: a 192 px colour icon and a 32 px white outline on transparency: the koala's dark

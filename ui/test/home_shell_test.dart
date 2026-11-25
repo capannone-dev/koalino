@@ -3,6 +3,7 @@
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:note_taker_ui/presentation/koalino_logo.dart';
 import 'package:note_taker_ui/presentation/home_shell.dart';
 
 /// Pumps the shell at `size` (logical pixels) with placeholder destination screens, and a
@@ -102,6 +103,8 @@ void main() {
 
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byKey(koalinoLogoKey),
+        findsOneWidget); // the logo tops the rail (#172)
 
     await tester.tap(find.text('Meetings'));
     await tester.pumpAndSettle();

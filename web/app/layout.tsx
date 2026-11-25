@@ -26,7 +26,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <body>
         <I18nProvider language={language}>
           <header className="mx-auto flex max-w-7xl items-center justify-between p-4">
-            <Link href="/">Koalino</Link>
+            <Link href="/" className="flex items-center gap-2 font-semibold">
+              {/* Koalino's logo (#172), copied to public/ by branding/make-icons.sh. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/koalino.svg" alt="" width={28} height={28} />
+              Koalino
+            </Link>
             <PrimaryNav />
           </header>
           <main className="mx-auto max-w-7xl p-4">{children}</main>

@@ -2,6 +2,7 @@
 
 // ignore: deprecated_member_use
 import 'package:flutter/material.dart';
+import 'package:note_taker_ui/presentation/koalino_logo.dart';
 import 'package:note_taker_ui/presentation/meeting_list_screen.dart';
 import 'package:note_taker_ui/l10n/l10n.dart';
 
@@ -134,6 +135,11 @@ final class _HomeShellState extends State<HomeShell> {
                       selectedIndex < railCount ? selectedIndex : null,
                   onDestinationSelected: _selectDestination,
                   labelType: NavigationRailLabelType.all,
+                  // The logo tops the rail, so the app shows its own icon (#172).
+                  leading: const Padding(
+                    padding: EdgeInsets.only(top: 8, bottom: 12),
+                    child: KoalinoLogo(size: 40),
+                  ),
                   trailingAtBottom: true,
                   trailing: settingsApart
                       ? Padding(

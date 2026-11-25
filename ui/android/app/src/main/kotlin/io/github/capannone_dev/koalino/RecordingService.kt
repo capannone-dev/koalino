@@ -184,7 +184,7 @@ class RecordingService : Service() {
             else -> "Recording"
         }
         builder
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setSmallIcon(R.drawable.ic_stat_koalino)
             .setContentTitle(heading)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
