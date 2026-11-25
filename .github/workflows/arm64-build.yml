@@ -23,6 +23,9 @@ env:
   # carries the win-arm64 build; the package's x64 DLL is byte-identical to the GitHub release's.
   ONNX_RUNTIME_VERSION: 1.28.0
   ONNX_RUNTIME_NUGET_SHA256: 769d1d3ea8ab6cd69f737c9dd4d4462aa4ad0ccfa106eaf506efc40d7bead5db
+  # LLVM's Windows on ARM build, for clang-cl and libclang (#176).
+  LLVM_VERSION: 23.1.6
+  LLVM_WOA64_SHA256: 18b5b93305262760e107178de218f17fdd487642d34e1502e3a6dc8231e5a50d
 
 jobs:
   linux-arm64:
@@ -130,15 +133,17 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-pc-windows-msvc
-      - name: Find clang-cl and libclang
-        # whisper.cpp needs clang on Windows on ARM, and bindgen needs libclang: Visual Studio's
-        # LLVM when it has one, else LLVM's own ARM64 build.
+      - name: Install LLVM for ARM64
+        # whisper.cpp needs clang on Windows on ARM, and bindgen needs libclang in the build's own
+        # architecture: LLVM's native woa64 build, pinned by SHA-256 (Chocolatey's LLVM is x64,
+        # whose libclang.dll an ARM64 build script cannot load).
         run: |
-          llvm=$(ls -d "/c/Program Files/Microsoft Visual Studio/2022/"*/VC/Tools/Llvm/ARM64/bin 2>/dev/null | head -n 1 || true)
-          if [ -z "$llvm" ] || [ ! -f "$llvm/clang-cl.exe" ]; then
-            choco install llvm -y --no-progress
-            llvm="/c/Program Files/LLVM/bin"
-          fi
+          curl -sSfL -o llvm.msi \
+            "https://github.com/llvm/llvm-project/releases/download/llvmorg-$LLVM_VERSION/LLVM-$LLVM_VERSION-woa64.msi"
+          echo "$LLVM_WOA64_SHA256  llvm.msi" | sha256sum -c -
+          msiexec //i llvm.msi //qn INSTALLDIR="$(cygpath -w "$RUNNER_TEMP")\\llvm"
+          rm llvm.msi
+          llvm="$(cygpath -u "$RUNNER_TEMP")/llvm/bin"
           "$llvm/clang-cl.exe" --version
           echo "$llvm" >> "$GITHUB_PATH"
           echo "LIBCLANG_PATH=$(cygpath -w "$llvm")" >> "$GITHUB_ENV"
