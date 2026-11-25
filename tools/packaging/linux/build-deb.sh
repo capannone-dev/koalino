@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Builds a Debian package (.deb) of the Koalino desktop app from the Linux release tarball.
 #
-# Usage: build-deb.sh <koalino-linux-x86_64-VERSION.tar.gz> <deb-version> <output-dir>
+# Usage: build-deb.sh <koalino-linux-ARCH-VERSION.tar.gz> <deb-version> <output-dir>
 #   e.g. build-deb.sh koalino-linux-x86_64-0.1.0.tar.gz 0.1.0~preview.1 out/
+# ARCH, x86_64 or arm64 (#175), is read from the tarball's name and gives the package's
+# architecture (amd64 or arm64).
 # Needs: dpkg-deb (Debian or Ubuntu). The app goes to /opt/koalino, `koalino` to /usr/bin, and
 # the menu entry, icon and AppStream file to /usr/share. Nothing is downloaded.
 set -euo pipefail
@@ -12,6 +14,11 @@ version=$2
 output=$(realpath "$3")
 here=$(dirname "$(realpath "$0")")
 app_id=io.github.capannone_dev.koalino
+case $(basename "$tarball") in
+  koalino-linux-arm64-*) deb_arch=arm64 ;;
+  koalino-linux-x86_64-*) deb_arch=amd64 ;;
+  *) echo "cannot tell the architecture of $tarball (koalino-linux-x86_64|arm64-VERSION.tar.gz)" >&2; exit 1 ;;
+esac
 
 # On disk, not in a RAM /tmp: the app and its models are over 1 GB unpacked.
 work=$(mktemp -d -p "${TMPDIR:-/var/tmp}")
@@ -40,7 +47,7 @@ installed_kib=$(du -sk "$root" | cut -f1)
 cat > "$root/DEBIAN/control" <<CONTROL
 Package: koalino
 Version: $version
-Architecture: amd64
+Architecture: $deb_arch
 Maintainer: Koalino project <https://github.com/capannone-dev/koalino/issues>
 Installed-Size: $installed_kib
 Depends: libgtk-3-0t64 | libgtk-3-0, libasound2t64 | libasound2, libstdc++6, xdg-utils
@@ -56,6 +63,6 @@ Description: Offline meeting notes: record, transcribe, summarize
 CONTROL
 
 mkdir -p "$output"
-deb="$output/koalino_${version}_amd64.deb"
+deb="$output/koalino_${version}_${deb_arch}.deb"
 dpkg-deb --root-owner-group -Zxz --build "$root" "$deb" >/dev/null
 echo "$deb"

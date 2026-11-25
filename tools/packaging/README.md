@@ -2,9 +2,11 @@
 
 # Packaging
 
-`linux/` turns the Linux desktop tarball (`koalino-linux-x86_64-VERSION.tar.gz`) into
-distribution packages (#164). Each script only repackages the release build; nothing is
-compiled or downloaded.
+`linux/` turns the Linux desktop tarball (`koalino-linux-ARCH-VERSION.tar.gz`, ARCH `x86_64` or
+`arm64`) into distribution packages (#164, #175). Each script only repackages the release build:
+nothing is compiled or downloaded. The scripts read the architecture from the tarball's name.
+The `.deb` is `amd64` or `arm64`, the `.rpm` `x86_64` or `aarch64`, and either can be built on
+any machine.
 
 | File | What it does |
 | --- | --- |
@@ -23,8 +25,8 @@ recommendation.
 
 ## Windows installer
 
-`windows/` turns the Windows release zip (`koalino-windows-x86_64-VERSION.zip`) into an installer,
-`koalino-windows-x86_64-VERSION-setup.exe`, with [NSIS](https://nsis.sourceforge.io/) (zlib
+`windows/` turns the Windows release zip (`koalino-windows-ARCH-VERSION.zip`, ARCH `x86_64` or
+`arm64`, #176) into an installer, `koalino-windows-ARCH-VERSION-setup.exe`, with [NSIS](https://nsis.sourceforge.io/) (zlib
 licence), whose `makensis` runs on Linux (Debian package `nsis`).
 
 | File | What it does |
@@ -38,3 +40,10 @@ The installer needs no administrator rights: it installs for the current user in
 uninstaller in Settings → Apps. Installing again upgrades in place, and asks to close Koalino
 first if it runs. Uninstalling removes the program, its shortcuts and the browser extension's
 registration, and keeps the meetings in `%APPDATA%\capannone-dev\Koalino`. `/S` runs either silently.
+
+The installer checks the computer's architecture before any page shows:
+
+- The ARM64 installer refuses x64 Windows.
+- The x64 installer asks first on Windows on ARM, where it would run under emulation.
+
+Silently (`/S`) the x64 installer goes ahead there.
