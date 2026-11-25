@@ -7,8 +7,9 @@
  *   is found even when Teams opened the microphone before this hook ran. Before a call connection
  *   is seen, the audio tracks `getUserMedia` opened stand in. A muted microphone yields silence or
  *   no track, which the content script does not send.
- * - Remote audio: the `<audio>` elements Teams plays a call through (one track with every remote
- *   participant mixed) are tapped with an `AudioContext`; playback is unaffected.
+ * - Remote audio: the `<audio>` element Teams plays a call through (one track with every remote
+ *   participant mixed) is tapped with an `AudioContext`; playback is unaffected. In Chrome that
+ *   element is never added to the page, so every element given a stream is noted (#160).
  * - Teams transcript: responses of the page's own transcript requests (`/transcripts/…`) are
  *   copied; the extension never makes such requests itself and never uses the page's tokens.
  *   In the recap's SharePoint frame (opened by Teams) the hook does only this, for the WebVTT the
@@ -28,6 +29,7 @@ import { findSlideBox, signatureOf } from "../lib/slides";
 import { claimHookGeneration, observeConnections, sentMicrophone } from "../lib/sentMicrophone";
 import { embeddedInTeams } from "../lib/siteAccess";
 import { findShareVideo } from "../lib/teamsDom";
+import { observePlayedStreams, remoteCallStream } from "../lib/remoteAudio";
 import { AudioTrack, CONTENT_SOURCE, HOOK_SOURCE, HookCommand, HookMessage } from "../lib/messages";
 
 /** Whether this page is Teams itself (the manifest's Teams sites), not a SharePoint frame. */
@@ -46,6 +48,32 @@ const isNewestHook = claimHookGeneration(window);
 
 /** Microphone tracks Teams opened, newest last. */
 const microphoneTracks: MediaStreamTrack[] = [];
+
+/** Most media elements given a stream that are remembered (Teams uses one or two per call). */
+const MAXIMUM_PLAYED_ELEMENTS = 16;
+
+/**
+ * Media elements Teams gave a stream, newest last, held weakly: in Chrome the call's `<audio>`
+ * element is not in the page, so it cannot be found there (#160).
+ */
+const playedElements: WeakRef<HTMLMediaElement>[] = [];
+
+/** Notes a media element Teams gave a stream. */
+function rememberPlayed(element: HTMLMediaElement): void {
+  playedElements.push(new WeakRef(element));
+  if (playedElements.length > MAXIMUM_PLAYED_ELEMENTS) playedElements.shift();
+}
+
+/** The remembered media elements still alive, newest first (dead ones are dropped). */
+function livePlayedElements(): HTMLMediaElement[] {
+  const alive: HTMLMediaElement[] = [];
+  for (let index = playedElements.length - 1; index >= 0; index -= 1) {
+    const element = playedElements[index]?.deref();
+    if (element) alive.push(element);
+    else playedElements.splice(index, 1);
+  }
+  return alive;
+}
 
 /** Call connections Teams used (closed ones are dropped on each rescan). */
 const callConnections = new Set<RTCPeerConnection>();
@@ -180,15 +208,10 @@ function rescan(): void {
       tap("microphone", new MediaStream([microphone]));
     }
   }
-  const remote = [...document.querySelectorAll("audio")]
-    .map((element) => element.srcObject)
-    .find(
-      (stream): stream is MediaStream =>
-        stream instanceof MediaStream &&
-        stream
-          .getAudioTracks()
-          .some((track) => track.readyState === "live" && track !== microphone && !microphoneTracks.includes(track)),
-    );
+  const remote = remoteCallStream<MediaStream>(
+    [...document.querySelectorAll("audio"), ...livePlayedElements()],
+    (track) => track === microphone || microphoneTracks.includes(track as MediaStreamTrack),
+  );
   if (remote) tap("remote", remote);
 }
 
@@ -297,6 +320,7 @@ window.addEventListener("message", (event: MessageEvent<HookCommand>) => {
 
 if (onTeams) {
   hookGetUserMedia();
+  observePlayedStreams(window.HTMLMediaElement?.prototype, rememberPlayed);
   observeConnections(window.RTCPeerConnection?.prototype, (connection) => callConnections.add(connection));
   hookFetch();
 } else if (embeddedInTeams(window.top === window, document.referrer)) {
