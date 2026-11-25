@@ -1,0 +1,13 @@
+{
+  "categories": ["social-communication"],
+  "summary": {
+    "en-US": "Records Microsoft Teams meetings joined in Firefox and sends them to the Koalino app on this computer, which transcribes them offline. Needs the free Koalino desktop app."
+  },
+  "description": {
+    "en-US": "Koalino is a free, open-source (GPL-3.0-or-later) meeting note-taker that transcribes and summarizes meetings on your own devices. This add-on connects Microsoft Teams in Firefox to it.\n\n<b>It needs the Koalino desktop app</b> (Linux or Windows) running on the same computer. The add-on talks only to that app, through Firefox's native messaging; it sends nothing to any other server.\n\nWhen a Teams call starts, it asks whether to record it (Record, Always for Teams, Not now). While it records, an indicator with a Stop button stays on the page. It sends to Koalino:\n<ul><li>your microphone and the call audio Teams plays, for the transcript;</li><li>the live captions (shown only to you) and the Teams transcript panel, for speaker names;</li><li>frames of shared slides (never cameras);</li><li>after the meeting, the Teams transcript from the meeting chat's recap, when there is one.</li></ul>\nOptional and off by default: start Teams transcription when you record, and set Teams' spoken language to Koalino's.\n\nPlease tell the other participants that you are recording.\n\nIt works on teams.microsoft.com, teams.cloud.microsoft and teams.live.com, and on SharePoint frames that Teams opens to show a recap's transcript."
+  },
+  "version": {
+    "license": "GPL-3.0-or-later",
+    "approval_notes": "Build from the attached source: Node.js 20 or newer, then `npm ci` and `node build.mjs` in the source folder. The Firefox build is written to dist/firefox (esbuild bundles the TypeScript entry points; nothing is minified).\n\nThe add-on needs the Koalino desktop app, which provides the native messaging host `com.note_taker.browser_bridge` (registered by `browser-host install`). Without it, the popup says Koalino is not reachable and nothing is recorded. All captured data goes only to that local host; the add-on makes no network requests of its own.\n\nThe page script (hook.js) runs in Teams pages to tap the call's audio tracks (the user's microphone and the remote audio Teams plays) after the user chooses Record; on SharePoint it runs only in frames a Teams page opened, to copy the recap transcript download."
+  }
+}
