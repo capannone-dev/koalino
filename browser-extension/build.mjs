@@ -37,7 +37,7 @@ const FIREFOX_ADDON_ID = "browser-bridge@note-taker.local";
 const baseManifest = {
   manifest_version: 3,
   name: "__MSG_extName__",
-  version: "0.1.5",
+  version: "0.1.6",
   description: "__MSG_extDescription__",
   default_locale: "en",
   permissions: ["nativeMessaging", "storage"],
