@@ -78,7 +78,7 @@ start the daemon with `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
 | `static/` | `popup.html` and icons. |
 | `tests/` | Vitest specs (jsdom). |
 | `sign-firefox.sh` | Signs `dist/firefox` as an unlisted add-on on addons.mozilla.org into `dist/signed`, with the owner's API key from `~/.config/koalino/amo.env` (passed through web-ext's environment variables, never printed). Each signing needs a new `version` in `build.mjs`. With `--listed` it submits the version to the public AMO catalogue instead (#127), with the listing in `amo-listing.json` and a source zip for Mozilla's reviewers, and does not wait for the review. |
-| `amo-listing.json` | The public AMO listing (summary, description, category, licence) and the notes for Mozilla's reviewers, sent by `sign-firefox.sh --listed`. |
+| `amo-listing.json` | The public AMO listing (summary, description, category, and the licence as a custom one: AMO offers only "GPL-3.0-only", not "or later") and the notes for Mozilla's reviewers, sent by `sign-firefox.sh --listed`. |
 | `build.mjs` | Builds `dist/firefox` and `dist/chromium`, with each browser's manifest and `_locales`. |
 
 ## Build, test, install
