@@ -24,10 +24,14 @@
     <!-- Asks once to exempt Koalino from battery optimisation, so that charging job runs even
          with Power saving on (#87); the owner answers in a system dialog. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <!-- Android's own backup is off (#171): Koalino's encrypted backups replace it. -->
     <application
         android:label="Koalino"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <!-- Efficient mode (#75): apps can only open the vendor's OpenCL library if they declare
              it. Not required, so phones without it install the app and stay on the processor. -->
         <uses-native-library android:name="libOpenCL.so" android:required="false"/>

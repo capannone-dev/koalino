@@ -47,6 +47,10 @@ cloud provider's app. It keeps the last five. The passphrase is stored as
 copies it into the restored key folder. `MainActivity` schedules the job again at each start,
 because a force stop cancels it.
 
+Android's own backup is off (#171): the manifest sets `allowBackup="false"` and
+`res/xml/data_extraction_rules.xml` excludes everything from cloud backup and device-to-device
+transfer, so the data leaves the phone only inside Koalino's passphrase-encrypted backups.
+
 ## Whisper model
 
 The APK ships `ggml-base.bin` as an uncompressed asset (`assets/models/`, staged by

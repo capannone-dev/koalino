@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keeps Android from copying Koalino's data off the phone (#171): neither Google's cloud backup
+     nor a device-to-device transfer may take it. The database key is wrapped by this phone's
+     Keystore and cannot move, so a copied database could not be opened anyway, and the data must
+     not leave the phone without Koalino's own encryption. Koalino's backups (Settings → Back up
+     all data, Automatic backups) carry the key inside a passphrase-encrypted file instead. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="."/>
+        <exclude domain="file" path="."/>
+        <exclude domain="database" path="."/>
+        <exclude domain="sharedpref" path="."/>
+        <exclude domain="external" path="."/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="."/>
+        <exclude domain="file" path="."/>
+        <exclude domain="database" path="."/>
+        <exclude domain="sharedpref" path="."/>
+        <exclude domain="external" path="."/>
+    </device-transfer>
+</data-extraction-rules>
