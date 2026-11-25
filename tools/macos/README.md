@@ -20,3 +20,6 @@ README explains.
 
 The models come from `$NOTE_TAKER_MODELS` (default `~/toolchains/models`), laid out as
 `tools/cross/fetch.sh` makes them; copy them from a Linux build machine when the Mac has none.
+
+GitHub Actions runs this script on a hosted macOS runner (`.github/workflows/macos-build.yml`,
+#162), so the package no longer needs a local Mac or VM.

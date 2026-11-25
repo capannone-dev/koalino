@@ -1,0 +1,82 @@
+# Builds and packages the macOS app on GitHub's hosted macOS runners (#162), since the project has
+# no Mac of its own: the universal core, the Flutter app and the zip that tools/macos/build-macos.sh
+# makes. The package stays ad hoc signed and is untested on real Macs (#151).
+
+name: macOS build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version in the zip's name (default: pubspec.yaml's)"
+        required: false
+
+permissions:
+  contents: write # attaching the zip to the tag's release
+
+jobs:
+  build-macos:
+    name: Universal macOS package
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      NOTE_TAKER_MODELS: ${{ github.workspace }}/models
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.8
+          channel: stable
+          cache: true
+      - name: Install Rust targets
+        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+      - name: Cache Rust builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: macos-cargo-
+      - name: Download the models
+        # Whisper base from whisper.cpp's own source, checked against its published SHA-1; the
+        # diarization models from the models-v1 release, checked against their SHA-256.
+        run: |
+          mkdir -p "$NOTE_TAKER_MODELS/diarization"
+          curl -sSfL -o "$NOTE_TAKER_MODELS/ggml-base.bin" \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+          echo "465707469ff3a37a2b9b8d8f89f2f99de7299dac  $NOTE_TAKER_MODELS/ggml-base.bin" | shasum -a 1 -c -
+          gh release download models-v1 --repo "$GITHUB_REPOSITORY" \
+            --pattern segmentation.onnx --pattern embedding.onnx --dir "$NOTE_TAKER_MODELS/diarization"
+          (cd "$NOTE_TAKER_MODELS/diarization" && shasum -a 256 -c - <<'SUMS'
+          057ee564753071c0b09b5b611648b50ac188d50846bff5f01e9f7bbf1591ea25  segmentation.onnx
+          58d412cb009548f1816fd199d41b0d2bfe4f784a6836126fce94bfee820b7ed1  embedding.onnx
+          SUMS
+          )
+      - name: Choose the version
+        id: version
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(sed -n 's/^version: *\([^+]*\).*/\1/p' ui/pubspec.yaml)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Build and package
+        run: tools/macos/build-macos.sh "${{ steps.version.outputs.version }}"
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: koalino-macos-universal-${{ steps.version.outputs.version }}
+          path: dist/koalino-macos-universal-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+      - name: Attach the package to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            "dist/koalino-macos-universal-${{ steps.version.outputs.version }}.zip" --clobber
