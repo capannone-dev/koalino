@@ -9,10 +9,15 @@
 //! `offer` (on by default) is whether the app offers to record when a call starts; `auto_stop`
 //! (on by default) is whether a recording started from that offer stops when the call ends. Both
 //! live in `<db>.call-watch.json`. Nothing here logs the apps seen.
+//!
+//! A poll also says `browser_recording`: whether the browser extension is recording a meeting
+//! into this app through its bridge right now (#174). The extension asks about the call itself, so
+//! the app then does not offer that call again, and withdraws an offer already shown.
 
 use std::{
     fs, io,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
 
@@ -25,6 +30,25 @@ use crate::{
     },
     domain::call_watch::{CallEvent, CallWatch, MicrophoneUser},
 };
+
+/// Whether the app's bridge is recording a meeting from the browser extension (#174). One app
+/// process has one bridge, so the mark is process-wide.
+static BROWSER_MEETING_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// Marks whether the bridge records a browser meeting now.
+///
+/// Inputs: `true` when the bridge opened a meeting from the extension, `false` when it ended.
+/// Outputs: None. Side effects: Changes the process-wide mark the polls report.
+pub fn set_browser_meeting_active(active: bool) {
+    BROWSER_MEETING_ACTIVE.store(active, Ordering::Relaxed);
+}
+
+/// Whether the bridge records a browser meeting now.
+///
+/// Inputs: None. Outputs: The mark set by `set_browser_meeting_active`. Side effects: None.
+pub fn browser_meeting_active() -> bool {
+    BROWSER_MEETING_ACTIVE.load(Ordering::Relaxed)
+}
 
 /// The owner's choices.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -155,11 +179,24 @@ impl CallWatcher {
         now_ms: u64,
         users: Result<Vec<MicrophoneUser>, MicrophoneUsersError>,
     ) -> Value {
+        self.poll_at_with_browser(now_ms, users, browser_meeting_active())
+    }
+
+    /// Takes one look, given whether the browser extension records a meeting now (#174).
+    ///
+    /// Inputs: As `poll_at`, and the browser mark. Outputs: As `poll_at`, with
+    /// `browser_recording` added to every successful answer. Side effects: As `poll_at`.
+    pub fn poll_at_with_browser(
+        &mut self,
+        now_ms: u64,
+        users: Result<Vec<MicrophoneUser>, MicrophoneUsersError>,
+        browser_recording: bool,
+    ) -> Value {
         let users = match users {
             Ok(users) => users,
             Err(MicrophoneUsersError::Unavailable) => {
                 return json!({"ok": true, "available": false, "in_call": false, "app": null,
-                              "event": null});
+                              "event": null, "browser_recording": browser_recording});
             }
             // A look that failed once (the tool busy, its status collected elsewhere) changes
             // nothing; the next look may work.
@@ -186,6 +223,7 @@ impl CallWatcher {
             "in_call": self.watch.in_call().is_some(),
             "app": self.watch.in_call().or(event_app),
             "event": event_name,
+            "browser_recording": browser_recording,
         })
     }
 

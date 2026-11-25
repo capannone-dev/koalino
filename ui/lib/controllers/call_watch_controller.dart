@@ -8,7 +8,8 @@
 // only the owner's tap (on either) starts a recording. A
 // recording started from the offer is tied to the call: when the call ends, and the owner keeps
 // "Stop when the call ends" on, it stops. A recording the owner started themselves is never
-// stopped by a call.
+// stopped by a call. While the browser extension records a meeting into the app (#174), it has
+// asked about the call itself, so no offer is made, and one already shown is withdrawn.
 
 import 'dart:async';
 
@@ -136,7 +137,9 @@ final class CallWatchController extends ChangeNotifier {
       }
       switch (poll.event) {
         case 'started':
-          if (_settings.offer && _recording.state == RecordingUiState.idle) {
+          if (_settings.offer &&
+              _recording.state == RecordingUiState.idle &&
+              !poll.browserRecording) {
             _offeredApp = poll.app;
             if (poll.app case final String app) {
               unawaited(_notify(app));
@@ -150,6 +153,10 @@ final class CallWatchController extends ChangeNotifier {
             await _recording.stopRecording();
             _message = l10n.theCallEndedSoTheRecording(tiedApp);
           }
+      }
+      // The browser extension records the call (#174): its own question was answered.
+      if (poll.browserRecording && _offeredApp != null) {
+        _withdrawOffer();
       }
       notifyListeners();
     } on LlmException {

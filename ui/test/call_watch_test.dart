@@ -77,13 +77,15 @@ final class FakeCallNotifier implements CallNotifier {
   }
 }
 
-Map<String, Object?> poll(String? event, {String app = 'Teams'}) =>
+Map<String, Object?> poll(String? event,
+        {String app = 'Teams', bool browserRecording = false}) =>
     <String, Object?>{
       'ok': true,
       'available': true,
       'in_call': event != 'ended',
       'app': app,
       'event': event,
+      'browser_recording': browserRecording,
     };
 
 void main() {
@@ -240,6 +242,26 @@ void main() {
     await watch.pollOnce();
     expect(recordingBridge.lifecycleCommands, isEmpty);
     expect(recording.state, RecordingUiState.recording);
+  });
+
+  test('a call the browser extension records is not offered again (#174)',
+      () async {
+    core.polls.add(poll('started', app: 'Chrome', browserRecording: true));
+    await watch.start();
+    expect(watch.offeredApp, isNull);
+    expect(notifier.offered, isEmpty);
+  });
+
+  test('an offer is withdrawn once the browser extension records (#174)',
+      () async {
+    core.polls.add(poll('started', app: 'Firefox'));
+    await watch.start();
+    expect(watch.offeredApp, 'Firefox');
+    core.polls.add(poll(null, app: 'Firefox', browserRecording: true));
+    await watch.pollOnce();
+    expect(watch.offeredApp, isNull);
+    expect(notifier.withdrawn, greaterThan(0));
+    expect(recordingBridge.startRecordingCallCount, 0);
   });
 
   test('with the offer off, no offer is shown', () async {

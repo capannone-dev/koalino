@@ -11,7 +11,11 @@ import 'package:note_taker_ui/infrastructure/llm_bridge.dart';
 final class CallPoll {
   /// Creates a poll answer.
   const CallPoll(
-      {required this.available, required this.inCall, this.app, this.event});
+      {required this.available,
+      required this.inCall,
+      this.app,
+      this.event,
+      this.browserRecording = false});
 
   /// Reads the core's JSON.
   factory CallPoll.fromJson(Map<String, Object?> json) => CallPoll(
@@ -19,6 +23,7 @@ final class CallPoll {
         inCall: json['in_call'] == true,
         app: json['app'] as String?,
         event: json['event'] as String?,
+        browserRecording: json['browser_recording'] == true,
       );
 
   /// Whether this system can tell which apps use the microphone.
@@ -32,6 +37,10 @@ final class CallPoll {
 
   /// `started` or `ended` on the look that noticed it, else null.
   final String? event;
+
+  /// Whether the browser extension records a meeting into this app now (#174): it asked about
+  /// the call itself, so the app does not offer it again.
+  final bool browserRecording;
 }
 
 /// An app the host saw using the microphone, sent with a poll where the core cannot look itself.

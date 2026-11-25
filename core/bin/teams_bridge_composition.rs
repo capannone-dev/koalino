@@ -708,6 +708,9 @@ where
                 None => {}
             }
         }
+        if self.active_meeting_id.is_some() {
+            crate::call_watch_commands::set_browser_meeting_active(false);
+        }
         if self.active_meeting_id.is_some()
             && let Some(recording_manager) = self.ports.pipeline.recording_manager()
             && let Err(error) = recording_manager.end_external_meeting()
@@ -772,6 +775,7 @@ where
             return;
         }
         self.active_meeting_id = None;
+        crate::call_watch_commands::set_browser_meeting_active(false);
         let Some(recording_manager) = self.ports.pipeline.recording_manager() else {
             return;
         };
@@ -786,12 +790,13 @@ where
     /// Opens (or resumes) the worker's external session for `meeting`.
     ///
     /// Side effects: May create the meeting in SQLite, store its Teams title, and end a previous
-    /// external meeting.
+    /// external meeting; marks a browser meeting active for the call watch's polls (#174).
     fn begin_meeting(&mut self, meeting: &BridgeMeeting) {
         let recording_manager = match self.ports.pipeline.build() {
             Ok((recording_manager, _)) => recording_manager,
             Err(error) => {
                 self.active_meeting_id = None;
+                crate::call_watch_commands::set_browser_meeting_active(false);
                 tracing::warn!(
                     meeting_id = meeting.meeting_id().as_str(),
                     error = %format!("{error:#}"),
@@ -807,10 +812,13 @@ where
             Ok(()) => {
                 self.statistics.meetings_started += 1;
                 self.active_meeting_id = Some(meeting.meeting_id().clone());
+                // The app's own call offer stays quiet while the extension records (#174).
+                crate::call_watch_commands::set_browser_meeting_active(true);
                 self.store_title_if_untitled(meeting);
             }
             Err(error) => {
                 self.active_meeting_id = None;
+                crate::call_watch_commands::set_browser_meeting_active(false);
                 tracing::warn!(
                     meeting_id = meeting.meeting_id().as_str(),
                     error = %error,

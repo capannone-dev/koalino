@@ -2,7 +2,10 @@
 
 use serde_json::json;
 
-use super::call_watch_commands::{CallWatchSettings, CallWatcher, toast_command};
+use super::call_watch_commands::{
+    CallWatchSettings, CallWatcher, browser_meeting_active, set_browser_meeting_active,
+    toast_command,
+};
 use crate::{
     adapters::{
         audio::microphone_users::MicrophoneUsersError, notification::call_toast::CallToastAnswer,
@@ -179,4 +182,30 @@ fn the_toast_offers_for_an_app_and_withdraws() {
         let answer = toast_command(bad, &mut |_| CallToastAnswer::Record, &mut || {});
         assert_eq!(answer["error_code"], "invalid_request", "{bad}");
     }
+}
+
+#[test]
+fn polls_say_whether_the_browser_extension_records_a_meeting() {
+    let folder = folder();
+    let mut watcher = CallWatcher::new(CallWatchSettings::file_for(&folder.join("n.sqlite3")));
+    watcher.poll_at_with_browser(0, Ok(zoom()), false);
+    let started = watcher.poll_at_with_browser(4_000, Ok(zoom()), true);
+    // The call is still noticed; the app decides not to offer it again (#174).
+    assert_eq!(started["event"], "started");
+    assert_eq!(started["browser_recording"], true);
+    let later = watcher.poll_at_with_browser(8_000, Ok(zoom()), false);
+    assert_eq!(later["browser_recording"], false);
+    let unavailable =
+        watcher.poll_at_with_browser(9_000, Err(MicrophoneUsersError::Unavailable), true);
+    assert_eq!(unavailable["browser_recording"], true);
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn the_bridge_marks_a_browser_meeting_for_the_polls() {
+    // The only test that touches the process-wide mark, so parallel tests do not race on it.
+    set_browser_meeting_active(true);
+    assert!(browser_meeting_active());
+    set_browser_meeting_active(false);
+    assert!(!browser_meeting_active());
 }
