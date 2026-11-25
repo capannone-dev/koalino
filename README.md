@@ -42,6 +42,7 @@ you connect yourself, which may charge you directly.)
 
 **Notes**
 - Meetings, notes and summaries, which you can edit, including the transcript.
+- Every meeting in one place, on all your devices: transcripts, notes, photos and files together.
 - Projects that gather meetings, notes, files and e-mails; search across everything.
 - Export to Markdown, PDF and JSON; an optional notes folder mirrors everything as plain files you
   can edit with any editor.
@@ -62,10 +63,13 @@ you connect yourself, which may charge you directly.)
   every day into a folder you choose, local or in your own cloud (Google Drive, Nextcloud,
   OneDrive…). The file is encrypted before it leaves the phone.
 
-**Online meetings**
-- A browser extension for Firefox, Chrome and Edge records Teams meetings joined in the browser:
-  sound, live captions, shared slides and, after the meeting, the Teams transcript.
-- A Teams bot does the same for meetings it is invited to.
+**In the room or online**
+- In person: put a phone or a laptop on the table; its microphone records the room.
+- Calls in any app on a computer (Zoom, Teams, Google Meet, Webex, Slack, Discord, Jitsi…):
+  Koalino records your microphone and the call's sound, and offers to record when a call starts.
+- For Teams in the browser, an extension for Firefox, Chrome and Edge adds live captions, shared
+  slides and, after the meeting, the Teams transcript. A Teams bot does the same for meetings it
+  is invited to.
 
 **In ten languages**: English, Italian, Spanish, French, German, Portuguese, Chinese (Simplified),
 Japanese, Russian and Arabic, following the system language.
@@ -100,7 +104,7 @@ with their SHA-256 sums in `SHA256SUMS.txt`.
 | <img src="docs/icons/android.svg" alt="" width="16" height="16"> Android (64-bit ARM) | [`koalino-android-arm64-0.2.0.apk`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-android-arm64-0.2.0.apk) | The app with Whisper `base` and the diarization models |
 | <img src="docs/icons/linux.svg" alt="" width="16" height="16"> Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-linux-x86_64-0.2.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
 | <img src="docs/icons/googlechrome.svg" alt="" width="16" height="16"> Chrome, Edge, Chromium | [`koalino-browser-extension-chromium-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-chromium-0.2.0.zip) | The browser extension, to load unpacked |
-| <img src="docs/icons/firefoxbrowser.svg" alt="" width="16" height="16"> Firefox (140 or newer) | [`koalino-browser-extension-firefox-0.1.0.xpi`](https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-browser-extension-firefox-0.1.0.xpi) | The browser extension, signed by Mozilla (unlisted; the listed version awaits Mozilla's review) |
+| <img src="docs/icons/firefoxbrowser.svg" alt="" width="16" height="16"> Firefox (140 or newer) | [`koalino-browser-extension-firefox-0.2.0.xpi`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-firefox-0.2.0.xpi) | The browser extension, signed by Mozilla (unlisted; the listed version awaits Mozilla's review) |
 
 ## Install
 
