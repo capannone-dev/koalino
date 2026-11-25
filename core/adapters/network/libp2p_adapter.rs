@@ -189,31 +189,40 @@ use crate::{
 };
 use zeroize::Zeroizing;
 
-/// Aggregates the decentralized discovery behaviours carried by the libp2p swarm.
-#[derive(NetworkBehaviour)]
-#[behaviour(to_swarm = "NoteTakerBehaviourEvent")]
-struct NoteTakerBehaviour {
-    /// Refuses connections from unpaired peers; listed first so it is consulted first.
-    peer_gate: PeerGate,
-    /// Discovers peers on the local network without a centralized registry.
-    mdns: Toggle<mdns::tokio::Behaviour>,
-    /// Carries opaque versioned application payloads on encrypted authenticated substreams.
-    sync_payloads: request_response::Behaviour<SyncPayloadCodec>,
-    /// Carries attachment-only frames and never CRDT sync bytes.
-    file_transfers: request_response::Behaviour<file_transfer_behaviour::FileTransferCodec>,
-    /// Carries the pairing exchange, the only protocol an unpaired peer may use.
-    pairing: request_response::Behaviour<PairingCodec>,
-    /// Asks a nearby device its name, and answers that question (#121).
-    device_names: request_response::Behaviour<DeviceNameCodec>,
-    /// Forwards encrypted circuits between paired devices, on the node chosen as relay.
-    relay_server: Toggle<relay::Behaviour>,
-    /// Holds a reservation on the owner's relay and opens circuits through it.
-    relay_client: Toggle<relay::client::Behaviour>,
-    /// Upgrades a relayed connection to a direct one by hole punching where the NAT allows.
-    hole_punching: Toggle<dcutr::Behaviour>,
-    /// Learns this node's observed addresses, which hole punching tries.
-    identify: Toggle<identify::Behaviour>,
+// The derive matches on `PeerGate`'s uninhabited event, which Rust 1.100 reports as unreachable
+// code in the generated impl. Lint levels apply per module, so the struct sits in its own.
+#[allow(unreachable_code)]
+mod swarm_behaviour {
+    use super::*;
+
+    /// Aggregates the decentralized discovery behaviours carried by the libp2p swarm.
+    #[derive(NetworkBehaviour)]
+    #[behaviour(to_swarm = "NoteTakerBehaviourEvent")]
+    pub(super) struct NoteTakerBehaviour {
+        /// Refuses connections from unpaired peers; listed first so it is consulted first.
+        pub(super) peer_gate: PeerGate,
+        /// Discovers peers on the local network without a centralized registry.
+        pub(super) mdns: Toggle<mdns::tokio::Behaviour>,
+        /// Carries opaque versioned application payloads on encrypted authenticated substreams.
+        pub(super) sync_payloads: request_response::Behaviour<SyncPayloadCodec>,
+        /// Carries attachment-only frames and never CRDT sync bytes.
+        pub(super) file_transfers:
+            request_response::Behaviour<file_transfer_behaviour::FileTransferCodec>,
+        /// Carries the pairing exchange, the only protocol an unpaired peer may use.
+        pub(super) pairing: request_response::Behaviour<PairingCodec>,
+        /// Asks a nearby device its name, and answers that question (#121).
+        pub(super) device_names: request_response::Behaviour<DeviceNameCodec>,
+        /// Forwards encrypted circuits between paired devices, on the node chosen as relay.
+        pub(super) relay_server: Toggle<relay::Behaviour>,
+        /// Holds a reservation on the owner's relay and opens circuits through it.
+        pub(super) relay_client: Toggle<relay::client::Behaviour>,
+        /// Upgrades a relayed connection to a direct one by hole punching where the NAT allows.
+        pub(super) hole_punching: Toggle<dcutr::Behaviour>,
+        /// Learns this node's observed addresses, which hole punching tries.
+        pub(super) identify: Toggle<identify::Behaviour>,
+    }
 }
+use swarm_behaviour::NoteTakerBehaviour;
 
 /// Normalizes individual behaviour events for the swarm event loop.
 #[derive(Debug)]
