@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Builds Koalino's Windows installer (koalino-windows-ARCH-VERSION-setup.exe) from the Windows
-# release zip, with NSIS's makensis, which runs on Linux. Only repackages the release build:
-# nothing is compiled or downloaded.
+# Builds Koalino's two Windows downloads from the Windows release zip, with NSIS's makensis, which
+# runs on Linux: the installer (koalino-windows-ARCH-VERSION-setup.exe, koalino.nsi) and the
+# portable .exe (koalino-windows-ARCH-VERSION-portable.exe, koalino-portable.nsi, #177), which runs
+# Koalino without installing it. Only repackages the release build: nothing is compiled or
+# downloaded.
 #
 # Usage: build-installer.sh <koalino-windows-ARCH-VERSION.zip> <VERSION> <output-dir>
 #   e.g. build-installer.sh koalino-windows-x86_64-0.2.0.zip 0.2.0 out/
-# ARCH, x86_64 or arm64 (#176), is read from the zip's name; the installer refuses to install
-# on a computer of the other architecture.
+# ARCH, x86_64 or arm64 (#176), is read from the zip's name; both packages refuse a computer of
+# the other architecture (architecture-check.nsh).
 # Needs: makensis (Debian/Ubuntu package `nsis`), unzip or python3.
-# Side effects: writes <output-dir>/koalino-windows-ARCH-VERSION-setup.exe; unpacks the zip in
-# a temporary folder that is removed on exit.
+# Side effects: writes both .exe files into <output-dir>; unpacks the zip in a temporary folder
+# that is removed on exit.
 set -euo pipefail
 
 zip=$(realpath "$1")
@@ -47,3 +49,13 @@ makensis -V2 \
   -DLICENSE_FILE="$work/LICENSE.txt" \
   "$here/koalino.nsi"
 echo "installer: $installer"
+
+portable=$output/koalino-windows-$arch-$version-portable.exe
+makensis -V2 \
+  -DVERSION="$version" \
+  -DARCH="$arch" \
+  -DSOURCE_DIR="$source_dir" \
+  -DOUTPUT="$portable" \
+  -DICON="$repo/ui/windows/runner/resources/app_icon.ico" \
+  "$here/koalino-portable.nsi"
+echo "portable: $portable"

@@ -10,10 +10,7 @@
 ; architecture), SOURCE_DIR (the release folder), OUTPUT (the installer's path), ICON
 ; (app_icon.ico), LICENSE_FILE (LICENSE as text).
 ;
-; The installer itself is a 32-bit x86 program, which Windows on ARM runs too, so it checks that
-; the computer can run the app it carries (#176): an ARM64 app needs an ARM64 Windows, and the
-; x86_64 app an x64 Windows (Windows on ARM can emulate x64 apps, but slowly: it should install
-; the ARM64 build, so it asks first).
+; It first checks that the computer can run the build it carries (architecture-check.nsh, #176).
 
 Unicode true
 SetCompressor /SOLID lzma
@@ -22,6 +19,7 @@ RequestExecutionLevel user
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 !include "x64.nsh"
+!include "architecture-check.nsh"
 
 !define APP_NAME "Koalino"
 !define APP_EXE "note_taker_ui.exe"
@@ -87,22 +85,7 @@ VIAddVersionKey "LegalCopyright" "the Koalino authors. GPL-3.0-or-later"
 
 ; Refuses a computer of the other architecture before any page is shown.
 Function .onInit
-  !if "${ARCH}" == "arm64"
-    ${IfNot} ${IsNativeARM64}
-      MessageBox MB_OK|MB_ICONSTOP "This is ${APP_NAME} for Windows on ARM. Download the x86_64 installer for this computer." /SD IDOK
-      Abort
-    ${EndIf}
-  !else
-    ${IfNot} ${IsNativeAMD64}
-      ${IfNot} ${IsNativeARM64}
-        MessageBox MB_OK|MB_ICONSTOP "${APP_NAME} needs 64-bit Windows." /SD IDOK
-        Abort
-      ${EndIf}
-      ; Windows on ARM runs it under emulation, slowly: offer the ARM64 build instead.
-      MessageBox MB_YESNO|MB_ICONEXCLAMATION "This is ${APP_NAME} for x64 computers. This computer runs Windows on ARM, where the ARM64 installer transcribes much faster.$\r$\n$\r$\nInstall the x64 version anyway?" /SD IDYES IDYES +2
-      Abort
-    ${EndIf}
-  !endif
+  !insertmacro CHECK_ARCHITECTURE "installer"
 FunctionEnd
 
 Section "Koalino" SecMain
