@@ -95,7 +95,7 @@ with their SHA-256 sums in `SHA256SUMS.txt`.
 | <img src="docs/icons/debian.svg" alt="" width="16" height="16"> <img src="docs/icons/ubuntu.svg" alt="" width="16" height="16"> Linux desktop (x86_64): Debian 13+, Ubuntu 24.04+ | [`koalino_0.2.0.preview.2_amd64.deb`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino_0.2.0.preview.2_amd64.deb) | The app, Whisper `base`, the diarization models, the MCP server and the browser extension's host, with a menu entry |
 | <img src="docs/icons/fedora.svg" alt="" width="16" height="16"> <img src="docs/icons/opensuse.svg" alt="" width="16" height="16"> Linux desktop (x86_64): Fedora, openSUSE | [`koalino-0.2.0.preview.2-1.x86_64.rpm`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-0.2.0.preview.2-1.x86_64.rpm) | The same, as an RPM |
 | <img src="docs/icons/flatpak.svg" alt="" width="16" height="16"> <img src="docs/icons/linux.svg" alt="" width="16" height="16"> Linux desktop (x86_64): any distribution | [`koalino-x86_64-0.2.0.flatpak`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-x86_64-0.2.0.flatpak) or [`koalino-linux-x86_64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-linux-x86_64-0.2.0.tar.gz) | The same, as a Flatpak bundle or a tarball (Debian 13-era libraries or newer) |
-| <img src="docs/icons/windows.svg" alt="" width="16" height="16"> Windows desktop (x86_64, Windows 10 or 11) | [`koalino-windows-x86_64-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-x86_64-0.2.0.zip) | The same, for Windows |
+| <img src="docs/icons/windows.svg" alt="" width="16" height="16"> Windows desktop (x86_64, Windows 10 or 11) | [`koalino-windows-x86_64-0.2.0-setup.exe`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-x86_64-0.2.0-setup.exe) (installer) or [`koalino-windows-x86_64-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-x86_64-0.2.0.zip) (portable) | The same, for Windows |
 | <img src="docs/icons/apple.svg" alt="" width="16" height="16"> macOS desktop (Intel and Apple silicon, macOS 12 or newer) | [`koalino-macos-universal-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-macos-universal-0.2.0.zip) | The same, for Mac, built on GitHub Actions; untested on real Macs and paused ([help wanted](#apple-devices-help-wanted)); on Intel Macs without speaker diarization |
 | <img src="docs/icons/android.svg" alt="" width="16" height="16"> Android (64-bit ARM) | [`koalino-android-arm64-0.2.0.apk`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-android-arm64-0.2.0.apk) | The app with Whisper `base` and the diarization models |
 | <img src="docs/icons/linux.svg" alt="" width="16" height="16"> Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-linux-x86_64-0.2.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
@@ -128,8 +128,11 @@ start it with `NOTE_TAKER_ENCRYPTION_PASSPHRASE` set. Data lives in
 
 ### Windows
 
-Unzip `koalino-windows-x86_64-0.2.0.zip` and run `note_taker_ui.exe`. The preview is not code
-signed, so SmartScreen may warn: choose **More info → Run anyway**. The key is kept in Windows
+Run `koalino-windows-x86_64-0.2.0-setup.exe`. It installs Koalino for your user only, with no
+administrator rights, into `%LOCALAPPDATA%\Programs\Koalino`, with Start menu and desktop shortcuts;
+uninstall it from **Settings → Apps** (your meetings are kept). The preview is not code signed, so
+SmartScreen may warn: choose **More info → Run anyway**. To run Koalino without installing it,
+unzip `koalino-windows-x86_64-0.2.0.zip` and run `note_taker_ui.exe`. The key is kept in Windows
 Credential Manager, and data lives in `%APPDATA%\capannone-dev\Koalino\`.
 
 ### macOS

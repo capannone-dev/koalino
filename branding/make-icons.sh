@@ -1,8 +1,9 @@
 #!/bin/bash
 # Generates every app icon from branding/koalino.svg (#165, #172): the Android launcher (legacy
-# and adaptive) and notification icons, the Windows .ico, the macOS app icon set, the Linux window
-# and packaging icons, the logo inside the Flutter app, the browser extension's icons, the server
-# web UI's favicon and header logo, the Teams app's icons and the F-Droid listing icon. Rerun it after changing the SVG and commit the results.
+# and adaptive) and notification icons, the Windows .ico and installer pictures, the macOS app
+# icon set, the Linux window and packaging icons, the logo inside the Flutter app, the browser
+# extension's icons, the server web UI's favicon and header logo, the Teams app's icons and the
+# F-Droid listing icon. Rerun it after changing the SVG and commit the results.
 #
 # Usage: branding/make-icons.sh   (from anywhere; needs rsvg-convert and ImageMagick's `magick`)
 # Side effects: overwrites the generated icon files listed below; writes temporary files in a
@@ -90,6 +91,15 @@ done
 # --- Windows: one .ico holding the sizes Explorer and the taskbar ask for. ---
 for size in 16 24 32 48 64 128 256; do full_icon "$size" "$work/win-$size.png"; done
 magick "$work"/win-{16,24,32,48,64,128,256}.png "$repo/ui/windows/runner/resources/app_icon.ico"
+
+# --- Windows installer (NSIS): the wizard's side panel (164x314) and page header (150x57), as
+# 24-bit BMP: the koala on the purple background. ---
+installer="$repo/tools/packaging/windows"
+mkdir -p "$installer"
+magick -size 164x314 "xc:$background_colour" \( "$work/koala-trimmed.png" -resize 120x120 \) \
+  -gravity north -geometry +0+60 -composite -alpha off -type truecolor "BMP3:$installer/wizard.bmp"
+magick -size 150x57 xc:white \( "$work/koala-trimmed.png" -resize 44x44 \) \
+  -gravity east -geometry +8+0 -composite -alpha off -type truecolor "BMP3:$installer/header.bmp"
 
 # --- macOS: Apple's grid draws the icon 824 of 1024 pixels wide. ---
 mac="$repo/ui/macos/Runner/Assets.xcassets/AppIcon.appiconset"
