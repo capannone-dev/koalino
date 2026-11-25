@@ -35,8 +35,9 @@ done
 export GGML_NATIVE=OFF CMAKE_GENERATOR=Ninja
 export CC_aarch64_pc_windows_msvc=clang-cl CXX_aarch64_pc_windows_msvc=clang-cl
 # clang-cl turns C++ exceptions off unless asked, which MSVC's own toolchain asks by default;
-# whisper.cpp's model loader (gguf.cpp) uses them.
-export CXXFLAGS_aarch64_pc_windows_msvc=/EHsc
+# whisper.cpp's model loader (gguf.cpp) uses them. Written with a dash: Git Bash would turn
+# "/EHsc" into a path under its install folder.
+export CXXFLAGS_aarch64_pc_windows_msvc=-EHsc
 # Git Bash's own `link` (coreutils) comes first on PATH and would stand in for MSVC's linker.
 MSVC_LINKER="${VCToolsInstallDir:?load the Visual Studio ARM64 environment first}/bin/HostARM64/arm64/link.exe"
 [ -f "$MSVC_LINKER" ] || { echo "missing $MSVC_LINKER" >&2; exit 1; }
