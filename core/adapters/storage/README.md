@@ -237,6 +237,17 @@ device seals what it receives with its own key, part by part as it arrives (#99)
 Peer names are reduced to safe characters; a type must match its extension among those that can be
 attached locally; a meeting ID must be a plain folder name.
 
+`backup_archive.rs` (#167) writes and restores the encrypted backup of all of a device's data: a
+`VACUUM INTO` snapshot of the database, the database key, and the kept files (attachments, slides,
+kept recordings, review clips, the device ID and settings files). Models, logs, `keys/`,
+`bridge-spool/` and temporary files are left out. The file is a clear header (magic, version,
+Argon2id parameters, salt, nonce prefix) followed by AES-256-GCM chunks keyed from the owner's
+passphrase; each chunk's nonce carries its counter and a last-chunk flag and authenticates the
+header, so a reordered, dropped, cut or altered chunk fails. File names and the key are only in
+the encrypted stream. `stage_restore` writes into an empty staging folder, refuses paths outside
+it or into `keys/`, checks that the restored key opens the restored database, and removes the
+staging folder on any failure. `backup_archive_tests.rs` covers each case.
+
 The same SQLite adapter implements `MetricsRepository`. Its `task_metrics` table stores only task
 and device identifiers, model labels, timings, coarse power estimates, and timestamps; it contains
 no recordings, transcript text, raw audio, or embeddings. `device_load_stats` stores the latest

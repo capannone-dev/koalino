@@ -9,6 +9,11 @@ mod attachment_file_store_tests;
 pub mod attachment_sync_store;
 #[cfg(test)]
 mod attachment_sync_store_tests;
+
+/// Writes and restores the encrypted backup of all of a device's data (#167).
+pub mod backup_archive;
+#[cfg(test)]
+mod backup_archive_tests;
 #[cfg(test)]
 mod embedding_encryption_tests;
 /// Implements a lightweight in-memory cosine-similarity database for tests and local development.

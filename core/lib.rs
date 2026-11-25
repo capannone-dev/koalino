@@ -13,6 +13,12 @@ pub mod auto_summaries;
 #[cfg(test)]
 #[path = "bin/auto_summaries_tests.rs"]
 mod auto_summaries_tests;
+/// Backup and restore of all of a device's data, for the Android app (#167).
+#[path = "bin/backup_commands.rs"]
+pub mod backup_commands;
+#[cfg(test)]
+#[path = "bin/backup_commands_tests.rs"]
+mod backup_commands_tests;
 /// Notices calls for the desktop app: Settings and polls (#111).
 #[path = "bin/call_watch_commands.rs"]
 pub mod call_watch_commands;

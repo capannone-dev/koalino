@@ -228,6 +228,13 @@ closed, without Dart: `NativeCore.configure`, `startRuntime`, `speechAwaitingPas
 `note_taker_speech_awaiting_pass` (the meetings whose speech has not taken the pass) and
 `note_taker_run_waiting_pass` (one round of the pass, waited for without the runtime lock).
 
+`backup_commands.rs` (#167) holds the backup and restore commands behind Android's Settings and
+their status codes (20–27), so host tests run them (`backup_commands_tests.rs`).
+`ffi_android.rs` exports `NativeCore.createBackup` and `NativeCore.stageRestore` over them: Kotlin
+passes a descriptor detached from the document the owner picked, the passphrase and, for a backup,
+the unwrapped key; a restore hands the backup's key back in an array Kotlin wraps with the
+Keystore and wipes.
+
 `System.loadLibrary("note_taker_core")` in Kotlin returns the library instance Dart's
 `DynamicLibrary.open` already loaded, so both see the same statics (verified on the S23).
 
