@@ -4,8 +4,9 @@
 //! device is only an estimate. Until real recordings measure it (`whisper_proposal`), the device
 //! times a clip with that model; when it falls behind, the next smaller model on the device is
 //! timed too, until one keeps up. Results are kept per hardware and set of models, so a change of
-//! either checks again. This module only decides; the worker runs the clip and saves the timings
-//! to telemetry, where the #68 rule reads them like any recording's.
+//! either checks again. When Automatic's model fell behind and a smaller one kept up, Automatic
+//! runs that one (`stepped_down_model`, #106/#181). This module only decides; the worker runs the
+//! clip and saves the timings to telemetry, where the #68 rule reads them like any recording's.
 
 use serde::{Deserialize, Serialize};
 
@@ -134,6 +135,30 @@ pub fn next_model_to_check(
     None
 }
 
+/// The model Automatic runs instead of its own after the check found its own too slow (#106).
+///
+/// Inputs: The record, the current hardware key, and Automatic's model before any step down.
+/// Outputs: The most accurate smaller model timed on this hardware that keeps up, when Automatic's
+/// model was timed here and falls behind; `None` when it keeps up, was not timed on this hardware,
+/// or no smaller model kept up (stepping down would then lose accuracy and still fall behind).
+/// Side effects: None.
+pub fn stepped_down_model(
+    record: &SpeedCheckRecord,
+    hardware_key: &str,
+    automatic_file: &str,
+) -> Option<&'static str> {
+    let factor = record.factor(hardware_key, automatic_file)?;
+    if factor <= FALLING_BEHIND_FACTOR {
+        return None;
+    }
+    // Most accurate first, so the first that keeps up is the one to run.
+    smaller_models_on_device(automatic_file, &|_| true).find(|smaller| {
+        record
+            .factor(hardware_key, smaller)
+            .is_some_and(|factor| factor <= FALLING_BEHIND_FACTOR)
+    })
+}
+
 /// Words the result for Settings, beside the Automatic row.
 ///
 /// Inputs: The record, the current hardware key, Automatic's model, and whether a smaller model is
@@ -155,25 +180,12 @@ pub fn speed_check_message(
     if checking_next {
         return Some(format!("{slow} A smaller model is being checked."));
     }
-    let keeps_up = record
-        .results_for(hardware_key)
-        .iter()
-        .filter(|model| model.real_time_factor <= FALLING_BEHIND_FACTOR)
-        .filter(|model| {
-            model_cost(&model.file_name)
-                .zip(model_cost(automatic_file))
-                .is_some_and(|(cost, automatic_cost)| cost < automatic_cost)
-        })
-        .max_by(|a, b| {
-            model_cost(&a.file_name)
-                .partial_cmp(&model_cost(&b.file_name))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+    let keeps_up = stepped_down_model(record, hardware_key, automatic_file)
+        .and_then(|file| Some((file, record.factor(hardware_key, file)?)));
     Some(match keeps_up {
-        Some(model) => format!(
-            "{slow} {} keeps up ({:.1}× real time).",
-            model_name(&model.file_name),
-            model.real_time_factor
+        Some((file, factor)) => format!(
+            "{slow} {} keeps up ({factor:.1}× real time), so Automatic uses it.",
+            model_name(file)
         ),
         None => format!("{slow} No smaller model keeps up here either."),
     })

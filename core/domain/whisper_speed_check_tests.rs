@@ -2,7 +2,8 @@
 //! hardware, and how Settings words it.
 
 use super::whisper_speed_check::{
-    SpeedCheckRecord, next_model_to_check, real_time_factor, speed_check_message, with_result,
+    SpeedCheckRecord, next_model_to_check, real_time_factor, speed_check_message,
+    stepped_down_model, with_result,
 };
 
 const HARDWARE: &str = "phone 8 GB, 3.36 GHz; ggml-base, ggml-small";
@@ -151,7 +152,7 @@ fn settings_words_the_result() {
         speed_check_message(&base_keeps_up, HARDWARE, "ggml-small.bin", false).as_deref(),
         Some(
             "Checked on this device: 1.4× real time, too slow to keep up with recordings. \
-             base keeps up (0.5× real time)."
+             base keeps up (0.5× real time), so Automatic uses it."
         )
     );
     let nothing_keeps_up = with_result(
@@ -166,5 +167,72 @@ fn settings_words_the_result() {
             "Checked on this device: 1.4× real time, too slow to keep up with recordings. \
              No smaller model keeps up here either."
         )
+    );
+}
+
+/// A record of `small` and then `base` timed on `HARDWARE`, with the given factors.
+fn small_then_base(small_factor: f32, base_factor: f32) -> SpeedCheckRecord {
+    let record = with_result(
+        SpeedCheckRecord::default(),
+        HARDWARE,
+        "ggml-small.bin",
+        small_factor,
+    );
+    with_result(record, HARDWARE, "ggml-base.bin", base_factor)
+}
+
+#[test]
+fn automatic_steps_down_to_the_smaller_model_that_keeps_up() {
+    // The emulated 8 GB phone of #181: small 1.4x, base 0.3x real time.
+    let record = small_then_base(1.36, 0.34);
+    assert_eq!(
+        stepped_down_model(&record, HARDWARE, "ggml-small.bin"),
+        Some("ggml-base.bin")
+    );
+}
+
+#[test]
+fn automatic_keeps_a_model_that_keeps_up() {
+    let record = small_then_base(0.45, 0.2);
+    assert_eq!(
+        stepped_down_model(&record, HARDWARE, "ggml-small.bin"),
+        None
+    );
+}
+
+#[test]
+fn automatic_keeps_its_model_when_no_smaller_one_keeps_up() {
+    // Stepping down would lose accuracy and still fall behind; the proposal (#68) is left to say so.
+    let record = small_then_base(2.0, 1.2);
+    assert_eq!(
+        stepped_down_model(&record, HARDWARE, "ggml-small.bin"),
+        None
+    );
+}
+
+#[test]
+fn automatic_does_not_step_down_before_its_model_is_timed() {
+    let record = with_result(SpeedCheckRecord::default(), HARDWARE, "ggml-base.bin", 0.3);
+    assert_eq!(
+        stepped_down_model(&record, HARDWARE, "ggml-small.bin"),
+        None
+    );
+}
+
+#[test]
+fn automatic_ignores_timings_from_other_hardware() {
+    let record = small_then_base(1.36, 0.34);
+    assert_eq!(
+        stepped_down_model(&record, "phone 8 GB; ggml-base", "ggml-small.bin"),
+        None
+    );
+}
+
+#[test]
+fn automatic_steps_down_to_the_most_accurate_model_that_keeps_up() {
+    let record = with_result(small_then_base(1.36, 0.34), HARDWARE, "ggml-tiny.bin", 0.15);
+    assert_eq!(
+        stepped_down_model(&record, HARDWARE, "ggml-small.bin"),
+        Some("ggml-base.bin")
     );
 }

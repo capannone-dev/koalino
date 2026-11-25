@@ -4206,3 +4206,19 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
   watch neither offers nor keeps offering while it is set.
 - **Not covered:** services that decode call audio in the page and play it through Web Audio
   without WebRTC; captions and transcripts stay Teams-only.
+
+## 2026-11-25 — #181 Automatic steps down when the speed check finds its model too slow
+
+- **Found:** on an emulated 8 GB phone (#181), Automatic suggested `small`; the speed check (#109)
+  timed it at 1.4× real time and `base` at 0.3×. Automatic still ran `small` and only offered
+  "Try base", although its own reason says it "falls back to base if it does not" (#106, entry of
+  the #108 evidence above). The #109 entry said Automatic itself never changes; the later #106
+  decision replaced that.
+- **Decision:** when the check timed Automatic's model on this hardware and it falls behind,
+  Automatic runs the most accurate smaller model the check found keeps up
+  (`whisper_speed_check::stepped_down_model`). Recordings and Settings both use it, and Settings
+  says so ("base keeps up (0.3× real time), so Automatic uses it"). The check still targets
+  Automatic's own model, so new hardware or a new model times it again.
+- **Unchanged:** a hand-picked model is never stepped down, only proposed (#68). When no smaller
+  model keeps up, Automatic keeps its model: stepping down would lose accuracy and still fall
+  behind. Nothing downloads.

@@ -28,7 +28,7 @@ use crate::{
     device_resources::{available_disk_bytes, total_memory_bytes},
     domain::{
         whisper_catalog::{WHISPER_MODELS, WhisperModelEntry, find_whisper_model},
-        whisper_speed_check::{next_model_to_check, speed_check_message},
+        whisper_speed_check::{next_model_to_check, speed_check_message, stepped_down_model},
         whisper_suggestion::{
             AutomaticModel, DeviceGpu, DeviceProfile, WhisperSuggestion, automatic_model,
             suggest_whisper_model,
@@ -224,6 +224,38 @@ fn automatic_on_this_device(
     (suggestion, automatic)
 }
 
+/// What Automatic runs on this device (#106): its own model, or the smaller one the speed check
+/// (#109) found keeps up when its own falls behind on this hardware (#181).
+///
+/// Inputs: The paths, and Automatic's model as `automatic_on_this_device` resolves it.
+/// Outputs: The model to run; unchanged before the check, when Automatic's model keeps up, when no
+/// smaller model kept up, or when the timings are from other hardware or another set of models.
+/// Side effects: Reads the check's record; may start whisper.cpp's backends to find a GPU.
+fn automatic_to_run<'a>(
+    paths: &TranscriptionPaths,
+    automatic: Option<AutomaticModel<'a>>,
+) -> Option<AutomaticModel<'a>> {
+    let automatic = automatic?;
+    let models = models_on_device(paths);
+    let key = hardware_key(
+        efficient_gpu_status().0.is_some(),
+        gpu_is_blocked(&paths.gpu_attempt_marker),
+        &models,
+    );
+    let record = load_record(&paths.speed_check_file);
+    Some(
+        match stepped_down_model(&record, &key, automatic.file_name)
+            .filter(|smaller| models.contains_key(*smaller))
+        {
+            Some(smaller) => AutomaticModel {
+                file_name: smaller,
+                ..automatic
+            },
+            None => automatic,
+        },
+    )
+}
+
 /// The models on the device, by file name: the catalog's and the shipped one.
 fn models_on_device(paths: &TranscriptionPaths) -> BTreeMap<String, PathBuf> {
     let mut models: BTreeMap<String, PathBuf> = WHISPER_MODELS
@@ -336,7 +368,10 @@ pub(crate) fn effective_settings(
     if saved.whisper_model.is_some() {
         return saved;
     }
-    with_automatic_model(&saved, automatic_on_this_device(paths).1)
+    with_automatic_model(
+        &saved,
+        automatic_to_run(paths, automatic_on_this_device(paths).1),
+    )
 }
 
 /// Describes the NPU engine for Settings (#75).
@@ -409,7 +444,9 @@ fn settings_json() -> String {
                 efficient_gpu_name.is_some(),
             )),
             "enabled": selected.is_none(),
-            "file_name": automatic.map(|choice| choice.file_name),
+            // The model Automatic runs, after any step down; the check's message above is about
+            // Automatic's own model.
+            "file_name": automatic_to_run(&paths, automatic).map(|choice| choice.file_name),
             "efficient": automatic.is_some_and(|choice| choice.efficient),
             "waiting_for_download": automatic.and_then(|choice| choice.waiting_for_download),
         },

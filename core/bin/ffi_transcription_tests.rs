@@ -1,8 +1,11 @@
 //! Specifies what the speed check (#109) times and how Settings shows its result: Automatic's model
 //! on this device, nothing under OpenAI or with a hand-picked model, and a result only for the
-//! hardware and models it was timed on.
+//! hardware and models it was timed on; and that Automatic then runs a smaller model that keeps up
+//! when its own falls behind (#106, #181).
 
-use super::{efficient_gpu_status, speed_check_message_in, speed_check_target_in};
+use super::{
+    effective_settings, efficient_gpu_status, speed_check_message_in, speed_check_target_in,
+};
 use crate::{
     domain::whisper_speed_check::{SpeedCheckRecord, with_result},
     transcription_settings::{SavedTranscriptionSettings, TranscriptionPaths, save_settings},
@@ -167,5 +170,102 @@ fn a_blocked_gpu_counts_as_no_gpu_for_automatic_and_its_check() {
         target.hardware_key.contains("gpu: None"),
         "{}",
         target.hardware_key
+    );
+}
+
+/// Saves `record` as the device's speed check results.
+fn save_record(paths: &TranscriptionPaths, record: &SpeedCheckRecord) {
+    std::fs::write(
+        &paths.speed_check_file,
+        serde_json::to_vec(record).unwrap_or_default(),
+    )
+    .unwrap_or_else(|e| panic!("{e}"));
+}
+
+#[test]
+fn automatic_runs_the_smaller_model_that_keeps_up_when_its_own_falls_behind() {
+    let paths = paths("step-down");
+    std::fs::create_dir_all(&paths.models_directory).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(paths.models_directory.join("ggml-tiny.bin"), b"model")
+        .unwrap_or_else(|e| panic!("{e}"));
+    let target = speed_check_target_in(&paths).unwrap_or_else(|| panic!("a target"));
+    assert_eq!(target.automatic_file, "ggml-base.bin");
+    let automatic = SavedTranscriptionSettings::default();
+    assert_eq!(
+        effective_settings(&automatic, &paths)
+            .whisper_model
+            .as_deref(),
+        Some("ggml-base.bin"),
+        "before the check, Automatic runs its own model"
+    );
+
+    let record = with_result(
+        with_result(
+            SpeedCheckRecord::default(),
+            &target.hardware_key,
+            "ggml-base.bin",
+            2.0,
+        ),
+        &target.hardware_key,
+        "ggml-tiny.bin",
+        0.2,
+    );
+    save_record(&paths, &record);
+    assert_eq!(
+        effective_settings(&automatic, &paths)
+            .whisper_model
+            .as_deref(),
+        Some("ggml-tiny.bin")
+    );
+    // The check still targets Automatic's own model, so new hardware times it again.
+    assert_eq!(
+        speed_check_target_in(&paths).map(|target| target.automatic_file),
+        Some("ggml-base.bin".to_owned())
+    );
+
+    // Timings from other hardware change nothing.
+    let elsewhere = with_result(
+        with_result(SpeedCheckRecord::default(), "other", "ggml-base.bin", 2.0),
+        "other",
+        "ggml-tiny.bin",
+        0.2,
+    );
+    save_record(&paths, &elsewhere);
+    assert_eq!(
+        effective_settings(&automatic, &paths)
+            .whisper_model
+            .as_deref(),
+        Some("ggml-base.bin")
+    );
+}
+
+#[test]
+fn a_hand_picked_model_is_never_stepped_down() {
+    let paths = paths("hand-picked-slow");
+    std::fs::create_dir_all(&paths.models_directory).unwrap_or_else(|e| panic!("{e}"));
+    std::fs::write(paths.models_directory.join("ggml-tiny.bin"), b"model")
+        .unwrap_or_else(|e| panic!("{e}"));
+    let target = speed_check_target_in(&paths).unwrap_or_else(|| panic!("a target"));
+    let record = with_result(
+        with_result(
+            SpeedCheckRecord::default(),
+            &target.hardware_key,
+            "ggml-base.bin",
+            2.0,
+        ),
+        &target.hardware_key,
+        "ggml-tiny.bin",
+        0.2,
+    );
+    save_record(&paths, &record);
+    let hand_picked = SavedTranscriptionSettings {
+        whisper_model: Some("ggml-base.bin".to_owned()),
+        ..SavedTranscriptionSettings::default()
+    };
+    assert_eq!(
+        effective_settings(&hand_picked, &paths)
+            .whisper_model
+            .as_deref(),
+        Some("ggml-base.bin")
     );
 }
