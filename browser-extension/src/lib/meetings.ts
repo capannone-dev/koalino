@@ -197,7 +197,8 @@ export function leftMeetingToClose(
  * Inputs: The records. Outputs: Those not fetched. Side effects: None.
  */
 export function pendingTranscriptMeetings(meetings: readonly RecordedMeeting[]): RecordedMeeting[] {
-  return meetings.filter((meeting) => !meeting.transcriptFetched);
+  // Only Teams meetings have a Teams transcript; other sites' IDs name their site (#174).
+  return meetings.filter((meeting) => !meeting.transcriptFetched && !/^browser-(?!teams-)/.test(meeting.meetingId));
 }
 
 /**
@@ -210,13 +211,16 @@ export function pruneMeetings(meetings: readonly RecordedMeeting[], nowMs: numbe
 
 /**
  * A new meeting ID, unique across browsers and restarts.
- * Inputs: The start time. Outputs: `browser-teams-<ms>-<8 hex>`. Side effects: Reads randomness.
+ * Inputs: The start time, and the site's key (`siteKey`; Teams when left out, #174).
+ * Outputs: `browser-<site>-<ms>-<8 hex>`, the site reduced to letters, digits and dashes.
+ * Side effects: Reads randomness.
  */
-export function newMeetingId(startMs: number): string {
+export function newMeetingId(startMs: number, site = "teams"): string {
   const random = new Uint8Array(4);
   crypto.getRandomValues(random);
   const hex = [...random].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `browser-teams-${startMs}-${hex}`;
+  const safeSite = site.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "web";
+  return `browser-${safeSite}-${startMs}-${hex}`;
 }
 
 /** The tries at fetching one meeting's recap transcript in this tab. */

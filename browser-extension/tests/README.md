@@ -11,3 +11,9 @@ the work account showed (November 2026).
 
 `i18n.test.ts` checks the `msg` fallback, the `_locales` conversion, and that every language in
 `src/locales` has every message with the English placeholders (#124).
+
+The any-site specs (#174): `callSignal.test.ts` (when a page is in a call), `screenShare.test.ts`
+(screen content against a camera on synthetic frames: a slide, a code editor, a noisy webcam with
+a face, a camera-off tile; and which video the tracker keeps), `sites.test.ts` (known services and
+titles) and `anySite.test.ts` (registering the every-site scripts and injecting into one tab,
+over a fake `chrome.scripting`).

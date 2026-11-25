@@ -106,8 +106,18 @@ export function sentMicrophone<Track extends TrackLike>(
   return sawAudioSender ? { kind: "muted" } : { kind: "unknown" };
 }
 
-/** The connection methods Teams calls during a call: `getStats` about once a second. */
-const OBSERVED_METHODS = ["getStats", "addTrack", "addTransceiver"] as const;
+/**
+ * The connection methods a call page calls: Teams calls `getStats` about once a second. Other
+ * services (#174) may receive only, so the negotiation steps every connection takes are watched
+ * too.
+ */
+const OBSERVED_METHODS = [
+  "getStats",
+  "addTrack",
+  "addTransceiver",
+  "setLocalDescription",
+  "setRemoteDescription",
+] as const;
 
 /**
  * Patches a connection prototype so every connection is reported when Teams next uses it.
@@ -115,8 +125,8 @@ const OBSERVED_METHODS = ["getStats", "addTrack", "addTransceiver"] as const;
  * Inputs: `RTCPeerConnection.prototype` (or undefined where there is none); `seen`, called with
  * the connection before each patched call.
  * Outputs: None.
- * Side effects: Replaces `getStats`, `addTrack` and `addTransceiver` on the prototype with
- * wrappers that call `seen` and then the original with the same arguments and result. A throwing
+ * Side effects: Replaces `OBSERVED_METHODS` on the prototype with wrappers that call `seen` and
+ * then the original with the same arguments and result. A throwing
  * `seen` is swallowed, so the page's own call always runs.
  */
 export function observeConnections<Connection extends object>(

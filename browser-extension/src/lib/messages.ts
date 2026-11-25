@@ -3,7 +3,8 @@
  *
  * - page hook (page's own JavaScript world) ⇄ content script: `window.postMessage`, tagged with
  *   `HOOK_SOURCE` or `CONTENT_SOURCE` so other page messages are ignored;
- * - content script ⇄ background: a `chrome.runtime` port named `PORT_NAME` per Teams tab;
+ * - content script ⇄ background: a `chrome.runtime` port named `PORT_NAME` per call tab, and
+ *   `TabCommand`s sent to one tab for "Record this tab" (#174);
  * - recap frame script ⇄ background: a port named `RECAP_FRAME_PORT_NAME` per SharePoint frame a
  *   Teams page opened; the background relays between it and its tab's content script;
  * - background ⇄ native host: `HostMessage`, the JSON schema of
@@ -32,14 +33,25 @@ export type HookMessage =
   /** Answer to `analyse-share`: whether a share is shown and its frame's `signatureOf`. */
   | { source: typeof HOOK_SOURCE; kind: "share-frame"; present: boolean; signature: number[] }
   /** Answer to `encode-slide`: the last analysed frame cropped to the slide, base64 JPEG ("" when none). */
-  | { source: typeof HOOK_SOURCE; kind: "slide-image"; image: string };
+  | { source: typeof HOOK_SOURCE; kind: "slide-image"; image: string }
+  /** Answer to `report-call` (#174): what the page does with calls and media now (`callActivity`). */
+  | {
+      source: typeof HOOK_SOURCE;
+      kind: "call-activity";
+      connected: boolean;
+      microphone: boolean;
+      camera: boolean;
+      remoteAudio: boolean;
+    };
 
 /** From the content script to the page hook. */
 export type HookCommand =
   | { source: typeof CONTENT_SOURCE; command: "start-audio" }
   | { source: typeof CONTENT_SOURCE; command: "stop-audio" }
   | { source: typeof CONTENT_SOURCE; command: "analyse-share" }
-  | { source: typeof CONTENT_SOURCE; command: "encode-slide" };
+  | { source: typeof CONTENT_SOURCE; command: "encode-slide" }
+  /** Asks for a `call-activity` answer (#174). */
+  | { source: typeof CONTENT_SOURCE; command: "report-call" };
 
 /** A participant as the host expects it. */
 export interface HostParticipant {
@@ -124,6 +136,20 @@ export function describeProgress(progress: RecordingProgress): string {
   });
   return progress.problem ? msg("recordingProblem", { line, problem: progress.problem }) : line;
 }
+
+/** From the background to a tab's content script, for "Record this tab" (#174). */
+export type TabCommand = { kind: "record-tab" } | { kind: "stop-tab" };
+
+/** The content script's answer to a `TabCommand`. */
+export interface TabCommandReply {
+  recording: boolean;
+}
+
+/**
+ * Set on the content script's global object once it runs in a tab, so the background injects it
+ * only where it is not loaded yet (#174).
+ */
+export const CONTENT_LOADED_KEY = "koalinoContentLoaded";
 
 /** From the background to a content script. */
 export type BackgroundMessage =

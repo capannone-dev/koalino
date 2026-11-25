@@ -87,7 +87,12 @@ describe("a page reloaded during the call (#102)", () => {
 
 describe("meeting records", () => {
   it("lists meetings whose Teams transcript is still to fetch", () => {
-    const meetings = [weeklySync(), weeklySync({ meetingId: "done", transcriptFetched: true })];
+    const meetings = [
+      weeklySync(),
+      weeklySync({ meetingId: "done", transcriptFetched: true }),
+      // A call recorded on another site has no Teams transcript (#174).
+      weeklySync({ meetingId: "browser-meet-1" }),
+    ];
     expect(pendingTranscriptMeetings(meetings).map((meeting) => meeting.meetingId)).toEqual(["browser-teams-1"]);
   });
 
@@ -102,6 +107,7 @@ describe("meeting records", () => {
     const first = newMeetingId(NOV_9_16H);
     expect(first).toMatch(/^browser-teams-\d+-[0-9a-f]{8}$/);
     expect(newMeetingId(NOV_9_16H)).not.toBe(first);
+    expect(newMeetingId(NOV_9_16H, "meet")).toMatch(/^browser-meet-\d+-[0-9a-f]{8}$/);
   });
 });
 
@@ -112,6 +118,38 @@ describe("settings", async () => {
     expect(normalizeSettings({ alwaysRecordTeams: true, captureSlides: "yes", other: 1 })).toEqual({
       ...DEFAULT_SETTINGS,
       alwaysRecordTeams: true,
+    });
+  });
+
+  it("keeps the per-site choices as lists of site keys (#174)", () => {
+    expect(DEFAULT_SETTINGS.alwaysRecordSites).toEqual([]);
+    expect(DEFAULT_SETTINGS.neverAskSites).toEqual([]);
+    expect(DEFAULT_SETTINGS.watchAllSites).toBe(false);
+    expect(
+      normalizeSettings({ alwaysRecordSites: ["meet", 3, "example.org"], neverAskSites: "zoom", watchAllSites: true }),
+    ).toEqual({ ...DEFAULT_SETTINGS, alwaysRecordSites: ["meet", "example.org"], watchAllSites: true });
+  });
+});
+
+describe("site choices (#174)", async () => {
+  const { DEFAULT_SETTINGS, choiceForSite, withSiteChoice } = await import("../src/lib/settings");
+  it("asks on a site without a choice, records on an always site, stays quiet on a never site", () => {
+    const settings = { ...DEFAULT_SETTINGS, alwaysRecordSites: ["meet"], neverAskSites: ["zoom"] };
+    expect(choiceForSite(settings, "meet")).toBe("always");
+    expect(choiceForSite(settings, "zoom")).toBe("never");
+    expect(choiceForSite(settings, "example.org")).toBe("ask");
+    expect(choiceForSite({ ...DEFAULT_SETTINGS, alwaysRecordTeams: true }, "teams")).toBe("always");
+  });
+
+  it("records a choice for one site, replacing the other one", () => {
+    const always = withSiteChoice(DEFAULT_SETTINGS, "meet", "always");
+    expect(always).toEqual({ alwaysRecordSites: ["meet"], neverAskSites: [] });
+    const never = withSiteChoice({ ...DEFAULT_SETTINGS, ...always }, "meet", "never");
+    expect(never).toEqual({ alwaysRecordSites: [], neverAskSites: ["meet"] });
+    expect(withSiteChoice(DEFAULT_SETTINGS, "teams", "always")).toEqual({ alwaysRecordTeams: true });
+    expect(withSiteChoice({ ...DEFAULT_SETTINGS, ...never }, "meet", "ask")).toEqual({
+      alwaysRecordSites: [],
+      neverAskSites: [],
     });
   });
 });
