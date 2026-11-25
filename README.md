@@ -95,6 +95,16 @@ with their SHA-256 sums in `SHA256SUMS.txt`.
 
 ### Linux desktop
 
+From version 0.2, Koalino also comes as a `.deb` (Debian 13+, Ubuntu 24.04+) and an `.rpm`
+(Fedora, openSUSE). Both put Koalino in the applications menu and `koalino` on the path:
+
+```sh
+sudo apt install ./koalino_<version>_amd64.deb        # Debian, Ubuntu
+sudo dnf install ./koalino-<version>-1.x86_64.rpm     # Fedora (openSUSE: sudo zypper install)
+```
+
+Or unpack the tarball anywhere:
+
 ```sh
 sudo apt install libgtk-3-0t64 libasound2t64 libstdc++6   # usually present on a desktop
 tar -xzf koalino-linux-x86_64-0.1.0.tar.gz

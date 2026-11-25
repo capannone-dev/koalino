@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Koalino
+GenericName=Meeting notes
+Comment=Offline meeting notes: record, transcribe, summarize
+Exec=koalino
+Icon=io.github.capannone_dev.koalino
+Terminal=false
+Categories=Office;
+Keywords=meeting;notes;transcription;recording;minutes;
+StartupWMClass=io.github.capannone_dev.koalino

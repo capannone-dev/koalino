@@ -1,0 +1,48 @@
+# Flatpak manifest for the Koalino desktop app, built from the Linux release tarball
+# (build-flatpak.sh fills in the tarball's path and SHA-256).
+app-id: io.github.capannone_dev.koalino
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: koalino
+finish-args:
+  - --share=ipc
+  - --share=network            # paired devices (libp2p) and the owner's AI connections
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=pulseaudio        # the microphone, through PulseAudio or PipeWire
+  - --device=dri
+  - --filesystem=home          # attaching files, exports and the notes folder (#98)
+  - --talk-name=org.freedesktop.secrets   # the encryption key in the desktop keychain
+  - --talk-name=org.freedesktop.Notifications
+modules:
+  - name: koalino
+    buildsystem: simple
+    # The release's binaries go in as they are, unstripped and without a debug extension.
+    build-options:
+      no-debuginfo: true
+      strip: false
+    build-commands:
+      - mkdir -p /app/koalino /app/bin
+      - cp -a . /app/koalino/
+      - ln -s /app/koalino/note_taker_ui /app/bin/koalino
+      - install -Dm644 io.github.capannone_dev.koalino.desktop /app/share/applications/io.github.capannone_dev.koalino.desktop
+      - install -Dm644 koalino-192.png /app/share/icons/hicolor/192x192/apps/io.github.capannone_dev.koalino.png
+      - install -Dm644 koalino-128.png /app/share/icons/hicolor/128x128/apps/io.github.capannone_dev.koalino.png
+      - install -Dm644 koalino.svg /app/share/icons/hicolor/scalable/apps/io.github.capannone_dev.koalino.svg
+      - install -Dm644 io.github.capannone_dev.koalino.metainfo.xml /app/share/metainfo/io.github.capannone_dev.koalino.metainfo.xml
+      - rm /app/koalino/io.github.capannone_dev.koalino.desktop /app/koalino/koalino-192.png /app/koalino/koalino-128.png /app/koalino/koalino.svg /app/koalino/io.github.capannone_dev.koalino.metainfo.xml
+    sources:
+      - type: archive
+        path: @TARBALL@
+        sha256: @SHA256@
+      - type: file
+        path: io.github.capannone_dev.koalino.desktop
+      - type: file
+        path: koalino-192.png
+      - type: file
+        path: koalino-128.png
+      - type: file
+        path: koalino.svg
+      - type: file
+        path: io.github.capannone_dev.koalino.metainfo.xml

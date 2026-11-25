@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream description of Koalino for software centres and the Flatpak bundle. -->
+<component type="desktop-application">
+  <id>io.github.capannone_dev.koalino</id>
+  <name>Koalino</name>
+  <summary>Offline meeting notes: record, transcribe, summarize</summary>
+  <developer id="io.github.capannone_dev">
+    <name>The Koalino contributors</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>
+      Koalino records meetings and transcribes them on your own devices, with speaker names,
+      notes, photos and files. Your devices sync with each other directly, encrypted, without a
+      server. Summaries and chat can use an AI connection you choose, or your own Claude or
+      ChatGPT account.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.capannone_dev.koalino.desktop</launchable>
+  <url type="homepage">https://github.com/capannone-dev/koalino</url>
+  <url type="bugtracker">https://github.com/capannone-dev/koalino/issues</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.2.0~preview.2" date="2026-11-25">
+      <description>
+        <p>
+          Permanent application ID, the Koalino icon, and encrypted backups of all data on
+          Android. Data from the first preview moves to the new folder on first start.
+        </p>
+      </description>
+    </release>
+    <release version="0.1.0~preview.1" date="2026-11-15">
+      <description><p>First preview.</p></description>
+    </release>
+  </releases>
+</component>
