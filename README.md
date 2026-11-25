@@ -9,9 +9,9 @@ store. Voice embeddings, transcripts and meeting documents are encrypted at rest
 (ports and adapters), so you can swap the AI, network, storage, and export implementations
 without touching domain logic.
 
-> **Status: preview (0.1.0).** Everything below works today on Linux, Windows and Android, and
-> the packages are preview builds: names, IDs and signing keys may still change before the first
-> release. See [AUDIT_V1.md](AUDIT_V1.md) for the compliance matrix and readiness assessment.
+> **Status: preview (0.2.0).** Everything below works today on Linux, Windows and Android, and
+> the packages are preview builds. Since 0.2.0 the application ID and the Android signing key are
+> the permanent ones. See [AUDIT_V1.md](AUDIT_V1.md) for the compliance matrix and readiness assessment.
 
 ## Features
 
@@ -77,38 +77,40 @@ The meeting shown is an excerpt of meeting ES2004a from the
 
 ## Download
 
-Preview packages for 0.1.0 are on the
-[v0.1.0-preview.1 release page](https://github.com/capannone-dev/koalino/releases/tag/v0.1.0-preview.1),
+Preview packages for 0.2.0 are on the
+[v0.2.0-preview.2 release page](https://github.com/capannone-dev/koalino/releases/tag/v0.2.0-preview.2),
 with their SHA-256 sums in `SHA256SUMS.txt`.
 
 | Platform | Package | Contents |
 | --- | --- | --- |
-| Linux desktop (x86_64, Debian 13 or newer) | [`koalino-linux-x86_64-0.1.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-linux-x86_64-0.1.0.tar.gz) | The app, Whisper `base`, the diarization models, the MCP server and the browser extension's host |
-| Windows desktop (x86_64, Windows 10 or 11) | [`koalino-windows-x86_64-0.1.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-windows-x86_64-0.1.0.zip) | The same, for Windows |
-| macOS desktop (Intel and Apple silicon, macOS 12 or newer) | [`koalino-macos-universal-0.1.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-macos-universal-0.1.0.zip) | The same, for Mac; untested on real Macs and paused ([help wanted](#apple-devices-help-wanted)); on Intel Macs without speaker diarization |
-| Android (64-bit ARM) | [`koalino-android-arm64-0.1.0.apk`](https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-android-arm64-0.1.0.apk) | The app with Whisper `base` and the diarization models |
-| Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.1.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-server-linux-x86_64-0.1.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
-| Chrome, Edge, Chromium | [`koalino-browser-extension-chromium-0.1.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-browser-extension-chromium-0.1.0.zip) | The browser extension, to load unpacked |
-| Firefox (140 or newer) | [`koalino-browser-extension-firefox-0.1.0.xpi`](https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-browser-extension-firefox-0.1.0.xpi) | The browser extension, signed by Mozilla (unlisted) |
+| Linux desktop (x86_64): Debian 13+, Ubuntu 24.04+ | [`koalino_0.2.0.preview.2_amd64.deb`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino_0.2.0.preview.2_amd64.deb) | The app, Whisper `base`, the diarization models, the MCP server and the browser extension's host, with a menu entry |
+| Linux desktop (x86_64): Fedora, openSUSE | [`koalino-0.2.0.preview.2-1.x86_64.rpm`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-0.2.0.preview.2-1.x86_64.rpm) | The same, as an RPM |
+| Linux desktop (x86_64): any distribution | [`koalino-x86_64-0.2.0.flatpak`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-x86_64-0.2.0.flatpak) or [`koalino-linux-x86_64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-linux-x86_64-0.2.0.tar.gz) | The same, as a Flatpak bundle or a tarball (Debian 13-era libraries or newer) |
+| Windows desktop (x86_64, Windows 10 or 11) | [`koalino-windows-x86_64-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-x86_64-0.2.0.zip) | The same, for Windows |
+| macOS desktop (Intel and Apple silicon, macOS 12 or newer) | [`koalino-macos-universal-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-macos-universal-0.2.0.zip) | The same, for Mac, built on GitHub Actions; untested on real Macs and paused ([help wanted](#apple-devices-help-wanted)); on Intel Macs without speaker diarization |
+| Android (64-bit ARM) | [`koalino-android-arm64-0.2.0.apk`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-android-arm64-0.2.0.apk) | The app with Whisper `base` and the diarization models |
+| Linux server (x86_64, Debian 13 or newer) | [`koalino-server-linux-x86_64-0.2.0.tar.gz`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-linux-x86_64-0.2.0.tar.gz) | `daemon` (HTTP API and sync), `cli`, `dashboard` (web UI), the browser extension's host, and the models |
+| Chrome, Edge, Chromium | [`koalino-browser-extension-chromium-0.2.0.zip`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-chromium-0.2.0.zip) | The browser extension, to load unpacked |
+| Firefox (140 or newer) | [`koalino-browser-extension-firefox-0.1.0.xpi`](https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-browser-extension-firefox-0.1.0.xpi) | The browser extension, signed by Mozilla (unlisted; the listed version awaits Mozilla's review) |
 
 ## Install
 
 ### Linux desktop
 
-From version 0.2, Koalino also comes as a `.deb` (Debian 13+, Ubuntu 24.04+) and an `.rpm`
-(Fedora, openSUSE). Both put Koalino in the applications menu and `koalino` on the path:
+The `.deb` and `.rpm` put Koalino in the applications menu and `koalino` on the path:
 
 ```sh
-sudo apt install ./koalino_<version>_amd64.deb        # Debian, Ubuntu
-sudo dnf install ./koalino-<version>-1.x86_64.rpm     # Fedora (openSUSE: sudo zypper install)
+sudo apt install ./koalino_0.2.0.preview.2_amd64.deb      # Debian, Ubuntu
+sudo dnf install ./koalino-0.2.0.preview.2-1.x86_64.rpm   # Fedora (openSUSE: sudo zypper install)
+flatpak install --user koalino-x86_64-0.2.0.flatpak       # any distribution with Flatpak
 ```
 
 Or unpack the tarball anywhere:
 
 ```sh
 sudo apt install libgtk-3-0t64 libasound2t64 libstdc++6   # usually present on a desktop
-tar -xzf koalino-linux-x86_64-0.1.0.tar.gz
-koalino-linux-x86_64-0.1.0/note_taker_ui
+tar -xzf koalino-linux-x86_64-0.2.0.tar.gz
+koalino-linux-x86_64-0.2.0/note_taker_ui
 ```
 
 Koalino keeps its encryption key in the desktop keychain (GNOME Keyring, KWallet). Without one,
@@ -117,13 +119,13 @@ start it with `NOTE_TAKER_ENCRYPTION_PASSPHRASE` set. Data lives in
 
 ### Windows
 
-Unzip `koalino-windows-x86_64-0.1.0.zip` and run `note_taker_ui.exe`. The preview is not code
+Unzip `koalino-windows-x86_64-0.2.0.zip` and run `note_taker_ui.exe`. The preview is not code
 signed, so SmartScreen may warn: choose **More info → Run anyway**. The key is kept in Windows
 Credential Manager, and data lives in `%APPDATA%\capannone-dev\Koalino\`.
 
 ### macOS
 
-Unzip `koalino-macos-universal-0.1.0.zip` and drag **Koalino** into Applications. The preview is
+Unzip `koalino-macos-universal-0.2.0.zip` and drag **Koalino** into Applications. The preview is
 not notarized by Apple, so the first start is blocked: open it once, then go to **System Settings →
 Privacy & Security** and choose **Open Anyway**. Koalino asks for the microphone the first time it
 records, and keeps its key in the login Keychain. Data lives in
@@ -158,20 +160,23 @@ largest:
 
 Copy the APK to a 64-bit phone and open it, allowing installs from that app when Android asks.
 Koalino asks for the microphone, and for notifications so it can keep recording with the screen
-off. The preview is signed with a development key: if a later build is signed with the release
-key, Android will refuse to update it in place.
+off. From 0.2 the APK is signed with Koalino's release key, so later releases update it in place.
 
 From version 0.2, Koalino's ID is `io.github.capannone_dev.koalino`, so it installs as a new app
-beside the 0.1 preview (`com.example.note_taker_ui`). To bring your meetings over, open the
-preview's **Settings → Back up all data**, then the new app's **Settings → Restore from backup**;
-uninstall the preview afterwards. Desktop apps move their data to the new folder by themselves on
+beside the 0.1 preview (`com.example.note_taker_ui`). To bring your meetings over:
+
+1. Install [`koalino-android-arm64-0.1.0-backup.apk`](https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-android-arm64-0.1.0-backup.apk)
+   over the preview. It is the 0.1 preview plus backups, and keeps its data.
+2. In it, open **Settings → Back up all data** and choose a passphrase.
+3. Install the 0.2 APK, open **Settings → Restore from backup** and pick the file.
+4. Uninstall the preview. Desktop apps move their data to the new folder by themselves on
 first start and leave a `MOVED-TO-KOALINO.txt` note in the old one.
 
 ### Linux server
 
 ```sh
 sudo apt install libstdc++6 nodejs        # Node.js 20 or newer, for the dashboard only
-tar -xzf koalino-server-linux-x86_64-0.1.0.tar.gz && cd koalino-server-linux-x86_64-0.1.0
+tar -xzf koalino-server-linux-x86_64-0.2.0.tar.gz && cd koalino-server-linux-x86_64-0.2.0
 export NOTE_TAKER_ENCRYPTION_PASSPHRASE='…'   # or rely on the system keychain
 ./daemon &                                # API on 127.0.0.1:8080
 ./dashboard &                             # web UI: open http://localhost:3000
