@@ -105,7 +105,7 @@ header nav a:hover {
   text-decoration: none;
   font-weight: 600;
   border: 1px solid transparent;
-  transition: background 0.15s, transform 0.15s;
+  transition: transform 0.15s; /* not background: download.js recolours buttons on load */
 }
 
 .button:hover {
@@ -513,4 +513,33 @@ footer nav {
   main > section:not(.hero):not(.points):not(.privacy-band) {
     padding-top: 64px;
   }
+}
+
+/* Several download buttons in one card (Linux packages, browser extensions). */
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.choices .button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* The extension button for the visitor's browser (download.js). */
+.button.primary-choice {
+  background: var(--brand);
+  color: #fff;
+}
+
+.card-icons {
+  display: flex;
+  gap: 8px;
+}
+
+#primary-alternatives {
+  margin-top: 6px;
 }
