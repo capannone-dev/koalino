@@ -28,7 +28,7 @@ Builds:
     subdir: ui
     sudo:
       - apt-get update
-      - apt-get install -y rustup cmake clang libclang-dev curl
+      - apt-get install -y rustup cmake make clang libclang-dev curl
     output: build/app/outputs/flutter-apk/app-release.apk
     srclibs:
       - flutter@3.47.8
@@ -55,5 +55,6 @@ Builds:
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v[0-9.]+(-preview\.[0-9]+)?$
+UpdateCheckData: ui/pubspec.yaml|version:\s.+\+(\d+)|.|version:\s(.+)\+
 CurrentVersion: 0.2.0
 CurrentVersionCode: 2
