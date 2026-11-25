@@ -1,0 +1,149 @@
+<!doctype html>
+<!-- Koalino's privacy policy (#166), linked from the app stores (#127) and F-Droid (#163). It must
+     describe what the apps really do: update it with any change to what they store or send. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy policy · Koalino</title>
+    <meta name="description" content="What Koalino stores, what it sends, and to whom." />
+    <link rel="icon" href="koalino.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <a href="./"><img src="koalino.svg" alt="" width="36" height="36" />Koalino</a>
+      <nav aria-label="Site">
+        <a href="./#download">Download</a>
+        <a href="https://github.com/capannone-dev/koalino">Source</a>
+      </nav>
+    </header>
+
+    <main class="policy">
+      <h1>Privacy policy</h1>
+      <p>Last updated: 25 November 2026</p>
+      <p>
+        This policy covers the Koalino apps for Android, Linux, Windows and macOS, the Koalino
+        server, and the Koalino browser extension. Koalino is free software made by volunteers;
+        its source code is public, so anyone can check what it does.
+      </p>
+
+      <h2>In short</h2>
+      <p>
+        The people who make Koalino receive none of your data. There are no accounts, ads,
+        analytics, crash reports or tracking. Your meetings stay on your devices, unless you
+        choose to send them somewhere, as described below.
+      </p>
+
+      <h2>What Koalino stores on your devices</h2>
+      <ul>
+        <li>
+          Meetings: transcripts, notes, summaries, photos, files and projects, in a database
+          encrypted with AES-256-GCM. The key is kept in your system's keychain (Android
+          Keystore, Windows Credential Manager, macOS Keychain, or GNOME Keyring or KWallet on
+          Linux).
+        </li>
+        <li>
+          Audio: recorded speech is deleted once it has been transcribed. If you turn on
+          <em>Keep meeting recordings</em> (off by default), it is kept encrypted on that device
+          until you delete it.
+        </li>
+        <li>
+          Voices: when you name a speaker, Koalino keeps a voice profile, a list of numbers
+          describing the voice, not the audio. Profiles are encrypted and can be deleted at any
+          time.
+        </li>
+        <li>
+          Measurements of how fast transcription and summaries run on each of your devices, used
+          to choose which device does the work. They stay among your own devices.
+        </li>
+      </ul>
+
+      <h2>What Koalino sends, and only when</h2>
+      <ul>
+        <li>
+          <strong>To your other devices:</strong> devices you pair with a QR code sync directly
+          with each other over an end-to-end encrypted connection, on your local network or
+          through a relay you run on one of your own devices. No Koalino server is involved.
+        </li>
+        <li>
+          <strong>To Hugging Face:</strong> when you choose to download a transcription model,
+          the app downloads it from whisper.cpp's page on huggingface.co. Hugging Face sees your
+          IP address, as with any download.
+        </li>
+        <li>
+          <strong>To Qualcomm:</strong> on Android phones with a supported Snapdragon chip, if you
+          choose to run transcription on the NPU, the app downloads Qualcomm's files from Maven
+          Central and Qualcomm AI Hub.
+        </li>
+        <li>
+          <strong>To an AI provider you choose:</strong> summaries and chat are off until you set
+          them up. If you connect a provider (for example OpenAI, Google, Mistral or a model on
+          your own computer), the text of the meetings you summarize or ask about is sent to that
+          provider and handled under its privacy policy. If you use your own Claude Code or Codex
+          installation, Koalino runs it on your computer and it talks to its provider under your
+          account.
+        </li>
+        <li>
+          <strong>Backups:</strong> Koalino's backups are encrypted with a passphrase you choose
+          before they leave the app, and go to the folder you pick, which can be a cloud storage
+          folder. Android's own cloud backup is turned off for Koalino.
+        </li>
+        <li>
+          <strong>Exports and shares:</strong> files you export or share go where you send them.
+        </li>
+      </ul>
+
+      <h2>The browser extension</h2>
+      <p>
+        The extension records Microsoft Teams meetings you join in the browser, after you agree
+        in each meeting. It reads the call's audio, the live captions and transcript Teams shows
+        you, and slides shared on screen (never cameras), and passes them only to the Koalino app
+        on the same computer, through the browser's native messaging. Meetings the app cannot
+        take yet wait, encrypted, in Koalino's own helper on that computer. The extension sends
+        nothing to any other server; it stores only its settings and a list of the meetings it
+        sent (titles and times, kept two weeks).
+      </p>
+
+      <h2>Permissions</h2>
+      <ul>
+        <li>Microphone: to record meetings, only while you record.</li>
+        <li>Notifications: to keep recording with the screen off and show its controls.</li>
+        <li>Camera: to take photos for a meeting, when you choose to.</li>
+        <li>Network: to sync with your devices and for the downloads and providers above.</li>
+        <li>Biometrics: to unlock the app, if you turn on the app lock.</li>
+        <li>
+          Running in the background: to finish transcribing a meeting while charging, if you
+          allow it, and to run scheduled backups.
+        </li>
+      </ul>
+
+      <h2>Other people in your meetings</h2>
+      <p>
+        Recording a meeting records other people. Ask for their consent and follow the rules
+        where you are. Their data is stored and sent only as described above.
+      </p>
+
+      <h2>Your control</h2>
+      <p>
+        Everything Koalino keeps is on your devices: you can delete meetings, voices and
+        recordings in the app, and uninstalling it removes its data. As the makers of Koalino
+        hold no data about you, there is nothing for them to give you or delete.
+      </p>
+
+      <h2>Children</h2>
+      <p>Koalino is not directed at children and collects no data from anyone.</p>
+
+      <h2>Changes and contact</h2>
+      <p>
+        Changes to this policy are published here and in the source repository's history.
+        Questions:
+        <a href="https://github.com/capannone-dev/koalino/issues">open an issue on GitHub</a>.
+      </p>
+    </main>
+
+    <footer>
+      <a href="./">Koalino</a> · free software under the GNU GPL, version 3 or later
+    </footer>
+  </body>
+</html>

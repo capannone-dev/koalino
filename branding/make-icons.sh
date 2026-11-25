@@ -82,8 +82,9 @@ cp "$source_svg" "$repo/tools/packaging/linux/koalino.svg"
 # --- Browser extension. ---
 for size in 16 32 48 128; do full_icon "$size" "$repo/browser-extension/static/icon-$size.png"; done
 
-# --- Server web UI: Next.js serves app/icon.svg as the favicon. ---
+# --- Server web UI: Next.js serves app/icon.svg as the favicon. Project website (#166). ---
 cp "$source_svg" "$repo/web/app/icon.svg"
+cp "$source_svg" "$repo/site/koalino.svg"
 
 # --- Teams app: a 192 px colour icon and a 32 px white outline on transparency: the koala's dark
 # lines in white, its light fill transparent (the dark shape is a silhouette under the fill, so the

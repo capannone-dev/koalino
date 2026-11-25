@@ -1,0 +1,221 @@
+/* Koalino's website (#166): one stylesheet for the home page and the privacy policy. Follows the
+   visitor's light or dark setting; the purple is the logo's. */
+
+:root {
+  --brand: #571775;
+  --brand-soft: #f1e8f6;
+  --ink: #1d1a20;
+  --muted: #5c5663;
+  --canvas: #fcfaf7;
+  --surface: #ffffff;
+  --line: #e4dee8;
+  --link: #6b2a8f;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand-soft: #2c1d36;
+    --ink: #efeaf2;
+    --muted: #b4abbb;
+    --canvas: #141216;
+    --surface: #1d1a20;
+    --line: #342f3a;
+    --link: #d7a8f0;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font: 17px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+}
+
+a {
+  color: var(--link);
+}
+
+main,
+header,
+footer {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 20px;
+}
+
+header a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: inherit;
+  text-decoration: none;
+  font-weight: 650;
+  font-size: 1.15rem;
+}
+
+header nav {
+  margin-left: auto;
+  display: flex;
+  gap: 20px;
+  font-size: 0.95rem;
+}
+
+header nav a {
+  font-weight: 500;
+  font-size: inherit;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 32px;
+  align-items: center;
+  padding: 56px 0 40px;
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 2.9rem);
+  line-height: 1.15;
+  margin: 0 0 16px;
+  letter-spacing: -0.01em;
+}
+
+.hero p {
+  font-size: 1.15rem;
+  color: var(--muted);
+  margin: 0 0 24px;
+  max-width: 34em;
+}
+
+.hero img {
+  width: 200px;
+  height: 200px;
+}
+
+.button {
+  display: inline-block;
+  padding: 12px 22px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.button.secondary {
+  background: transparent;
+  color: var(--link);
+  border: 1px solid var(--line);
+  margin-left: 8px;
+}
+
+section {
+  padding: 32px 0;
+  border-top: 1px solid var(--line);
+}
+
+h2 {
+  font-size: 1.5rem;
+  margin: 0 0 20px;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.feature {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.feature h3 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+}
+
+.feature p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.97rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.97rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.note {
+  background: var(--brand-soft);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-size: 0.95rem;
+}
+
+.policy h2 {
+  margin-top: 36px;
+  font-size: 1.25rem;
+}
+
+.policy {
+  max-width: 46em;
+  padding-bottom: 24px;
+}
+
+footer {
+  padding-top: 24px;
+  padding-bottom: 40px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+@media (max-width: 640px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding-top: 32px;
+  }
+
+  .hero img {
+    width: 120px;
+    height: 120px;
+    order: -1;
+  }
+
+  .button.secondary {
+    margin: 12px 0 0;
+  }
+
+  header nav {
+    gap: 14px;
+  }
+}

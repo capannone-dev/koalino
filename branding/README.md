@@ -12,7 +12,7 @@
   - Linux: the window icon `ui/linux/runner/resources/koalino.png`, and the packages' icons in
     `tools/packaging/linux/`;
   - the browser extension's `static/icon-{16,32,48,128}.png`;
-  - the server web UI's favicon, `web/app/icon.svg`;
+  - the server web UI's favicon, `web/app/icon.svg`, and the website's logo, `site/koalino.svg`;
   - the Teams app's `color.png` and `outline.png`;
   - the F-Droid and store listing icon, `fastlane/metadata/android/en-US/images/icon.png`.
 
