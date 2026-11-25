@@ -1,0 +1,433 @@
+<!doctype html>
+<!-- Koalino's how-to guide (#178): installing on a computer and a phone, the browser extension,
+     pairing devices, and recording meetings in the room and online, step by step with
+     screenshots of the current app (screens/guide/, see README.md for how they were taken).
+     Keep it in step with the apps: a renamed button or a changed screen means a new screenshot. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>How to use Koalino · Koalino</title>
+    <meta
+      name="description"
+      content="Install Koalino on your computer and phone, pair them, and record meetings in the room or online, step by step."
+    />
+    <link rel="icon" href="koalino.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <a href="./"><img src="koalino.svg" alt="" width="34" height="34" />Koalino</a>
+      <nav aria-label="Site">
+        <a href="./#features">Features</a>
+        <a href="guide.html" aria-current="page">How to use</a>
+        <a href="./#download">Download</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="https://github.com/capannone-dev/koalino">GitHub</a>
+      </nav>
+    </header>
+
+    <main class="guide">
+      <h1>How to use Koalino</h1>
+      <p class="section-lead">
+        From the first download to your first transcript, on your computer, your phone and in the
+        browser. Every step takes a minute or two.
+      </p>
+
+      <nav class="toc" aria-label="Steps">
+        <ol>
+          <li><a href="#computer">Install it on your computer</a></li>
+          <li><a href="#phone">Install it on your phone or tablet</a></li>
+          <li><a href="#extension">Add the browser extension</a></li>
+          <li><a href="#sync">Pair your devices so they sync</a></li>
+          <li><a href="#in-person">Record a meeting in the room</a></li>
+          <li><a href="#online">Record an online meeting</a></li>
+        </ol>
+      </nav>
+
+      <section id="computer" aria-labelledby="computer-title">
+        <h2 id="computer-title"><span class="step">1</span>Install it on your computer</h2>
+        <p>
+          Download Koalino for your system from the <a href="./#download">download section</a>. It
+          comes with everything it needs, speech models included, so it works offline straight
+          away. There's nothing to sign up for.
+        </p>
+        <div class="split">
+          <div>
+            <h3>Windows</h3>
+            <ol>
+              <li>Run <code>koalino-windows-x86_64-0.2.0-setup.exe</code>.</li>
+              <li>
+                Koalino isn't code signed yet, so Windows may warn you about it: choose
+                <strong>More info → Run anyway</strong>.
+              </li>
+              <li>
+                Press <strong>Next</strong> through the setup. It installs for you alone and needs no
+                administrator rights; Koalino appears in the Start menu and on the desktop.
+              </li>
+            </ol>
+            <p class="hint">
+              Rather not install anything? The <strong>portable version</strong> is a single
+              <code>.exe</code> that runs Koalino from wherever you put it, a USB stick included.
+            </p>
+          </div>
+          <figure class="shot">
+            <img
+              src="screens/guide/windows-installer.png"
+              width="496"
+              height="390"
+              loading="lazy"
+              alt="The Koalino Setup window on Windows: Welcome to Koalino Setup, no administrator rights needed"
+            />
+            <figcaption>The Windows installer.</figcaption>
+          </figure>
+        </div>
+        <h3>Linux</h3>
+        <p>
+          On Debian or Ubuntu open the <code>.deb</code>, on Fedora or openSUSE the <code>.rpm</code>,
+          and your software center installs it; on any other distribution use the Flatpak. Koalino
+          then appears in your applications menu.
+        </p>
+        <h3>macOS</h3>
+        <p>
+          The Mac version is experimental and hasn't been tried on real Macs yet. If you have one,
+          <a href="https://github.com/capannone-dev/koalino#apple-devices-help-wanted">help us test it</a>.
+        </p>
+        <figure class="shot wide">
+          <img
+            src="screens/guide/desktop-record.png"
+            width="1280"
+            height="722"
+            loading="lazy"
+            alt="Koalino's first screen on a computer: a meeting title field, the language set to Auto, and a Start recording button"
+          />
+          <figcaption>Koalino opens on the Record page, ready to go.</figcaption>
+        </figure>
+      </section>
+
+      <section id="phone" aria-labelledby="phone-title">
+        <h2 id="phone-title"><span class="step">2</span>Install it on your phone or tablet</h2>
+        <div class="split phone-split">
+          <div>
+            <p>
+              Koalino runs on Android phones and tablets with a 64-bit processor, which means
+              nearly every device from the last several years.
+            </p>
+            <ol>
+              <li>
+                On the phone, open this site and tap <a href="./#download">Download APK</a> in the
+                Android card.
+              </li>
+              <li>
+                Open the downloaded file. Android asks whether your browser may install apps:
+                allow it, then tap <strong>Install</strong>.
+              </li>
+              <li>
+                Open Koalino. Allow the microphone when you start your first recording, and
+                notifications, so you can see and stop a recording from the notification shade.
+              </li>
+            </ol>
+            <p class="hint">
+              Koalino is coming to F-Droid, which will keep it up to date for you. There's no
+              iPhone or iPad version yet.
+            </p>
+          </div>
+          <figure class="shot phone-shot">
+            <img
+              src="screens/guide/phone-record.png"
+              width="540"
+              height="1170"
+              loading="lazy"
+              alt="Koalino on an Android phone: the Record page with the navigation bar at the bottom"
+            />
+            <figcaption>Koalino on a phone.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="extension" aria-labelledby="extension-title">
+        <h2 id="extension-title"><span class="step">3</span>Add the browser extension</h2>
+        <p>
+          For meetings you join in a web browser, the Koalino extension records the call's sound
+          (and shared slides) and hands it to the Koalino app on the same computer. Nothing goes
+          anywhere else.
+        </p>
+        <div class="split">
+          <div>
+            <ol>
+              <li>
+                <strong>Firefox:</strong> open
+                <a href="https://addons.mozilla.org/addon/66e641dc7c544efb8b82/">Koalino on Firefox Add-ons</a>
+                and press <strong>Add to Firefox</strong>. Firefox keeps it up to date.
+                <br /><strong>Chrome, Edge, Chromium:</strong> download the
+                <a href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-chromium-0.2.0.zip">extension zip</a>
+                and unzip it. Open <code>chrome://extensions</code> (<code>edge://extensions</code>
+                in Edge), turn on <strong>Developer mode</strong>, choose
+                <strong>Load unpacked</strong> and pick the unzipped folder.
+              </li>
+              <li>
+                Let the extension talk to the app, once per computer. In a terminal, from
+                Koalino's folder, run <code>browser-host install</code>:
+                <ul>
+                  <li>
+                    Windows: <code>&amp; "$env:LOCALAPPDATA\Programs\Koalino\browser-host.exe" install</code>
+                    in PowerShell;
+                  </li>
+                  <li>Linux (<code>.deb</code> or <code>.rpm</code>): <code>/opt/koalino/browser-host install</code>.</li>
+                </ul>
+              </li>
+              <li>
+                Pin the koala to the toolbar (the puzzle-piece menu in Chrome and Edge) and click
+                it. With the Koalino app open, <strong>Check connection</strong> says
+                <em>Connected to the Koalino app</em>. If the popup asks for access to the
+                meeting sites, press <strong>Allow on meeting sites</strong>.
+              </li>
+            </ol>
+            <p class="hint">
+              Firefox's add-on site still has version 0.1.6, which records Teams only. Version
+              0.2.0, which records calls on any site as described below, is waiting for Mozilla's
+              review, and Firefox will update to it by itself.
+            </p>
+          </div>
+          <figure class="shot">
+            <img
+              src="screens/guide/extension-popup.png"
+              width="680"
+              height="600"
+              loading="lazy"
+              alt="The Koalino extension's popup in Chromium: Connected to the Koalino app, a Record this tab button, and the Watch every website for calls option"
+            />
+            <figcaption>The extension's popup, connected to the app.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="sync" aria-labelledby="sync-title">
+        <h2 id="sync-title"><span class="step">4</span>Pair your devices so they sync</h2>
+        <p>
+          Paired devices share every meeting, note and photo with each other directly, end-to-end
+          encrypted, with no server in between. Recorded something on your phone? It shows up on
+          your computer, and the other way round. You pair two devices once; after that they catch
+          up whenever they can reach each other.
+        </p>
+        <p>
+          Start on the computer: <strong>Settings → Devices</strong>. Give it a name you'll
+          recognize with the pencil (here, <em>Work laptop</em>), and do the same on the phone.
+        </p>
+        <h3>From anywhere: with an invite</h3>
+        <ol>
+          <li>On the computer, press <strong>Show invite</strong>. A QR code and a link appear.</li>
+          <li>
+            Scan the QR code with the phone's camera app to copy the link (or send the link to
+            yourself). In Koalino on the phone, open <strong>Settings → Devices → Use invite</strong>,
+            paste it and tap <strong>Find device</strong>. Then tap <strong>Pair</strong>.
+          </li>
+        </ol>
+        <figure class="shot wide">
+          <img
+            src="screens/guide/desktop-invite.png"
+            width="1280"
+            height="722"
+            loading="lazy"
+            alt="Koalino's Devices page on a computer with the Invite a device window: a QR code, the invite link, and a Copy link button"
+          />
+          <figcaption>The computer shows an invite. It works for five minutes.</figcaption>
+        </figure>
+        <h3>On the same Wi-Fi: even simpler</h3>
+        <p>
+          When both devices are on the same network, press <strong>Make discoverable</strong> on
+          one; the other lists it under <strong>Nearby devices</strong>. Tap <strong>Pair</strong>.
+        </p>
+        <h3>Compare the code</h3>
+        <p>
+          Both devices now show the same six-digit code. It proves that you're pairing with your
+          own device and nobody in between. If the codes match, press <strong>Accept</strong> on
+          one and <strong>Codes match</strong> on the other.
+        </p>
+        <div class="pair">
+          <figure class="shot">
+            <img
+              src="screens/guide/desktop-pair-request.png"
+              width="1280"
+              height="722"
+              loading="lazy"
+              alt="The computer's Devices page with a pairing request from Phone, code 524 049, and Accept and Reject buttons"
+            />
+            <figcaption>The computer asks to accept…</figcaption>
+          </figure>
+          <figure class="shot phone-shot">
+            <img
+              src="screens/guide/phone-pair-code.png"
+              width="540"
+              height="1170"
+              loading="lazy"
+              alt="The phone's Devices page, pairing in progress, showing the same code 524 049 and a Codes match button"
+            />
+            <figcaption>…the phone shows the same code.</figcaption>
+          </figure>
+        </div>
+        <div class="split phone-split">
+          <div>
+            <p>
+              That's it: each device lists the other under <strong>Paired devices</strong>,
+              <em>Online</em> while they can reach each other, and when they last synced. Pair more
+              devices the same way; each one syncs with all the others.
+            </p>
+            <p class="hint">
+              Paired devices sync whenever they can reach each other, as on the same Wi-Fi. For
+              devices that are rarely on the same network, set up a relay in Settings: a Koalino
+              home server, for example, that all your devices can reach.
+            </p>
+          </div>
+          <figure class="shot phone-shot">
+            <img
+              src="screens/guide/phone-paired.png"
+              width="540"
+              height="1170"
+              loading="lazy"
+              alt="The phone's Devices page: Work laptop under Paired devices, Online, synced just now"
+            />
+            <figcaption>Paired and synced.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="in-person" aria-labelledby="in-person-title">
+        <h2 id="in-person-title"><span class="step">5</span>Record a meeting in the room</h2>
+        <ol>
+          <li>
+            Put your phone or laptop on the table and open <strong>Record</strong>. Type a title if
+            you like (otherwise the meeting is named by its start time), and leave the language on
+            <strong>Auto</strong> or pick the one people will speak.
+          </li>
+          <li>
+            Press <strong>Start recording</strong>. The transcript appears a few seconds after each
+            pause in speech, with who spoke when. <strong>Pause</strong> it for a break, and use
+            <strong>Attach files</strong> or the camera for slides and whiteboards.
+          </li>
+          <li>
+            Press <strong>Stop</strong> at the end. The audio is deleted once it's transcribed:
+            only the text stays, unless you choose to keep recordings in Settings.
+          </li>
+        </ol>
+        <figure class="shot wide">
+          <img
+            src="screens/guide/desktop-recording.png"
+            width="1280"
+            height="722"
+            loading="lazy"
+            alt="A recording in progress: the REC timer at 1 minute 8 seconds, Pause, Stop and Attach files buttons, and the live transcript below with times and speakers"
+          />
+          <figcaption>Recording, with the live transcript underneath.</figcaption>
+        </figure>
+        <p>
+          The meeting is then in <strong>Meetings</strong>, on every paired device. Write notes next
+          to the transcript, correct a passage with a long press or a right-click, and name the
+          voices in <strong>Voices</strong>: Koalino then recognizes those people in later meetings.
+          With an AI connection set up in Settings, it can also write a summary.
+        </p>
+        <div class="pair">
+          <figure class="shot">
+            <img
+              src="screens/desktop.png"
+              width="1280"
+              height="722"
+              loading="lazy"
+              alt="A meeting on the computer: its notes and its transcript split by speaker with timestamps"
+            />
+            <figcaption>The meeting on the computer…</figcaption>
+          </figure>
+          <figure class="shot phone-shot">
+            <img
+              src="screens/phone.png"
+              width="390"
+              height="740"
+              loading="lazy"
+              alt="The same meeting on the phone, with the notes written on the computer"
+            />
+            <figcaption>…and on the phone, notes included.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="online" aria-labelledby="online-title">
+        <h2 id="online-title"><span class="step">6</span>Record an online meeting in the browser</h2>
+        <p>
+          Join the call as usual: Teams, Google Meet, Zoom, Jitsi, Webex or Whereby in the browser,
+          with the Koalino app open. As soon as someone speaks, the extension asks:
+        </p>
+        <figure class="shot wide">
+          <img
+            src="screens/guide/extension-call-prompt.png"
+            width="1280"
+            height="220"
+            loading="lazy"
+            alt="A banner at the top of a Zoom call in the browser: Looks like a call on Zoom. Record it with Koalino? with Record, Always here, Not now and Never here buttons"
+          />
+          <figcaption>The extension notices the call.</figcaption>
+        </figure>
+        <ul>
+          <li><strong>Record</strong> records this call; <strong>Not now</strong> doesn't.</li>
+          <li>
+            <strong>Always here</strong> records every call on this site without asking;
+            <strong>Never here</strong> stops asking on it. You can forget these choices in the
+            popup.
+          </li>
+        </ul>
+        <p>
+          While it records, a small banner and a <strong>REC</strong> badge on the koala say so.
+          Press <strong>Stop</strong>, or just leave: the recording ends with the call, and the
+          meeting appears in Koalino, transcribed like any other.
+        </p>
+        <figure class="shot wide">
+          <img
+            src="screens/guide/extension-recording.png"
+            width="980"
+            height="130"
+            loading="lazy"
+            alt="The REC badge on the extension's toolbar icon and a banner in the page: Koalino is recording, sending to Koalino, with a Stop button"
+          />
+          <figcaption>Recording, and sending it to the app as it goes.</figcaption>
+        </figure>
+        <h3>Calls on other sites</h3>
+        <p>
+          For a call anywhere else, open the popup and press <strong>Record this tab</strong>. Or
+          turn on <strong>Watch every website for calls</strong>, and the extension offers to
+          record calls on any site. It needs permission to read all sites for that, and nothing
+          leaves your computer.
+        </p>
+        <h3>Calls in desktop apps</h3>
+        <p>
+          Koalino can also record calls in the Zoom, Teams or other desktop apps, together with
+          your microphone, and offers to start when one begins.
+        </p>
+        <p class="note">
+          Tell the other participants that you're recording, and follow your local laws. A short
+          <a href="https://github.com/capannone-dev/koalino/blob/main/docs/meeting-consent-notice.md">notice to paste in the meeting chat</a>
+          is ready to copy.
+        </p>
+      </section>
+
+      <p class="note">
+        Stuck, or something doesn't work as described here?
+        <a href="https://github.com/capannone-dev/koalino/issues">Tell us</a>. More details on
+        every platform are in the
+        <a href="https://github.com/capannone-dev/koalino#install">README</a>.
+      </p>
+    </main>
+
+    <footer>
+      <div>
+        <img src="koalino.svg" alt="" width="24" height="24" />
+        Koalino is free software under the
+        <a href="https://www.gnu.org/licenses/gpl-3.0.html">GNU GPL, version 3 or later</a>.
+        Screenshots: <a href="https://groups.inf.ed.ac.uk/ami/corpus/">AMI Meeting Corpus</a>, CC BY 4.0.
+      </div>
+      <nav aria-label="Footer">
+        <a href="privacy.html">Privacy</a>
+        <a href="https://github.com/capannone-dev/koalino">Source code</a>
+        <a href="https://github.com/capannone-dev/koalino/issues">Report a problem</a>
+      </nav>
+    </footer>
+  </body>
+</html>

@@ -579,3 +579,151 @@ footer nav {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- How-to guide (guide.html, #178) --- */
+
+main.guide {
+  max-width: 960px;
+}
+
+.guide h1 {
+  font-size: clamp(2.2rem, 5vw, 3.2rem);
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  margin: 40px 0 12px;
+}
+
+.guide .toc {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 20px 28px;
+}
+
+.guide .toc ol {
+  margin: 0;
+  padding-left: 1.3em;
+  columns: 2;
+  column-gap: 40px;
+}
+
+.guide .toc li {
+  padding: 4px 0;
+  break-inside: avoid;
+}
+
+main.guide > section {
+  padding-top: 72px;
+}
+
+.guide h2 {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.guide .step {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  font-size: 0.8em;
+}
+
+.guide h3 {
+  margin: 28px 0 8px;
+  font-size: 1.15rem;
+}
+
+.guide li {
+  margin: 6px 0;
+}
+
+.guide code {
+  font-size: 0.9em;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--brand-soft);
+  overflow-wrap: anywhere;
+}
+
+.guide .hint {
+  color: var(--muted);
+  font-size: 0.95rem;
+  border-left: 3px solid var(--line);
+  padding-left: 14px;
+}
+
+/* Text beside a screenshot; a phone screenshot takes a narrow column. */
+.guide .split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  align-items: start;
+}
+
+.guide .split.phone-split {
+  grid-template-columns: 1fr 260px;
+}
+
+/* Two screenshots side by side: a computer and a phone. */
+.guide .pair {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  gap: 24px;
+  align-items: end;
+  margin: 24px 0;
+}
+
+.guide .shot {
+  margin: 24px 0;
+}
+
+.guide .split .shot,
+.guide .pair .shot {
+  margin: 0;
+}
+
+.guide .shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+
+.guide .phone-shot img {
+  border: 9px solid #1b181e;
+  border-radius: 28px;
+}
+
+.guide figcaption {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  text-align: center;
+}
+
+@media (max-width: 760px) {
+  .guide .toc ol {
+    columns: 1;
+  }
+
+  .guide .split,
+  .guide .split.phone-split,
+  .guide .pair {
+    grid-template-columns: 1fr;
+  }
+
+  .guide .phone-shot {
+    max-width: 260px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
