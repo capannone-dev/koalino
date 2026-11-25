@@ -1,0 +1,239 @@
+# Builds and packages Koalino for 64-bit ARM on GitHub's hosted ARM runners: Linux (#175) and
+# Windows on ARM (#176). Both build natively, since Flutter's desktop runners link the target's
+# own system libraries (GTK on Linux) or build only for the machine they run on (Windows). The
+# packages are attached to the tag's release, as the macOS build does (#162).
+
+name: ARM64 build
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version in the packages' names (default: pubspec.yaml's)"
+        required: false
+
+permissions:
+  contents: write # attaching the packages to the tag's release
+
+env:
+  FLUTTER_VERSION: 3.47.8
+  # Microsoft's ONNX Runtime as on x86_64 (tools/cross/fetch.sh), from its NuGet package, which
+  # carries the win-arm64 build; the package's x64 DLL is byte-identical to the GitHub release's.
+  ONNX_RUNTIME_VERSION: 1.28.0
+  ONNX_RUNTIME_NUGET_SHA256: 769d1d3ea8ab6cd69f737c9dd4d4462aa4ad0ccfa106eaf506efc40d7bead5db
+
+jobs:
+  linux-arm64:
+    name: Linux ARM64 packages
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    env:
+      NOTE_TAKER_MODELS: ${{ github.workspace }}/models
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install build tools and libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libasound2-dev libssl-dev \
+            libvulkan-dev glslc xvfb rpm file
+      - name: Install Flutter
+        # subosito/flutter-action has no ARM64 Linux stable download; a clone of the pinned tag
+        # fetches the ARM64 Dart SDK and engine itself.
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+      - name: Cache Rust builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-arm64-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: linux-arm64-cargo-
+      - name: Download the models
+        run: tools/arm64/fetch-models.sh "$NOTE_TAKER_MODELS"
+      - name: Choose the version
+        id: version
+        shell: bash
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(sed -n 's/^version: *\([^+]*\).*/\1/p' ui/pubspec.yaml)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: tools/arm64/build-linux-arm64.sh "${{ steps.version.outputs.version }}"
+      - name: Check that the app starts
+        # The app opens its window, loads the core and stays up; a missing library or a crash
+        # on start ends it before the timeout.
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          mkdir -p "$RUNNER_TEMP/smoke"
+          tar -xzf "dist/koalino-linux-arm64-$version.tar.gz" -C "$RUNNER_TEMP/smoke"
+          app="$RUNNER_TEMP/smoke/koalino-linux-arm64-$version"
+          ldd "$app/note_taker_ui" "$app"/lib/*.so | grep "not found" && exit 1
+          file "$app/lib/libnote_taker_core.so" | grep -q aarch64
+          status=0
+          HOME="$RUNNER_TEMP/smoke-home" NOTE_TAKER_KEYCHAIN_ENABLED=false \
+            NOTE_TAKER_ENCRYPTION_PASSPHRASE=ci-smoke-test-only \
+            timeout 60 xvfb-run -a "$app/note_taker_ui" || status=$?
+          echo "app exit status: $status (124 = still running at the timeout)"
+          [ "$status" -eq 124 ]
+      - name: Package .deb and .rpm
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          package_version="${version/-/\~}"
+          tools/packaging/linux/build-deb.sh "dist/koalino-linux-arm64-$version.tar.gz" "$package_version" dist
+          tools/packaging/linux/build-rpm.sh "dist/koalino-linux-arm64-$version.tar.gz" "$package_version" dist
+      - name: Upload the packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: koalino-linux-arm64-${{ steps.version.outputs.version }}
+          path: |
+            dist/koalino-linux-arm64-*.tar.gz
+            dist/koalino_*_arm64.deb
+            dist/koalino-*.aarch64.rpm
+          if-no-files-found: error
+      - name: Attach the packages to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          gh release upload "$GITHUB_REF_NAME" dist/koalino-linux-arm64-*.tar.gz \
+            dist/koalino_*_arm64.deb dist/koalino-*.aarch64.rpm --clobber
+
+  windows-arm64:
+    name: Windows ARM64 zip
+    runs-on: windows-11-arm
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
+    env:
+      NOTE_TAKER_MODELS: ${{ github.workspace }}/models
+      NOTE_TAKER_ONNX_RUNTIME: ${{ github.workspace }}/onnxruntime
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Load the Visual Studio ARM64 environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: arm64
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - name: Find clang-cl and libclang
+        # whisper.cpp needs clang on Windows on ARM, and bindgen needs libclang: Visual Studio's
+        # LLVM when it has one, else LLVM's own ARM64 build.
+        run: |
+          llvm=$(ls -d "/c/Program Files/Microsoft Visual Studio/2022/"*/VC/Tools/Llvm/ARM64/bin 2>/dev/null | head -n 1 || true)
+          if [ -z "$llvm" ] || [ ! -f "$llvm/clang-cl.exe" ]; then
+            choco install llvm -y --no-progress
+            llvm="/c/Program Files/LLVM/bin"
+          fi
+          "$llvm/clang-cl.exe" --version
+          echo "$llvm" >> "$GITHUB_PATH"
+          echo "LIBCLANG_PATH=$(cygpath -w "$llvm")" >> "$GITHUB_ENV"
+      - name: Install Flutter
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$(cygpath -u "$RUNNER_TEMP")/flutter/bin" >> "$GITHUB_PATH"
+      - name: Cache Rust builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-arm64-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: windows-arm64-cargo-
+      - name: Download the models and ONNX Runtime
+        run: |
+          tools/arm64/fetch-models.sh "$NOTE_TAKER_MODELS"
+          curl -sSfL -o ort.nupkg \
+            "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/$ONNX_RUNTIME_VERSION/microsoft.ml.onnxruntime.$ONNX_RUNTIME_VERSION.nupkg"
+          echo "$ONNX_RUNTIME_NUGET_SHA256  ort.nupkg" | sha256sum -c -
+          mkdir -p "$NOTE_TAKER_ONNX_RUNTIME"
+          unzip -q -j ort.nupkg runtimes/win-arm64/native/onnxruntime.dll LICENSE ThirdPartyNotices.txt \
+            -d "$NOTE_TAKER_ONNX_RUNTIME"
+          rm ort.nupkg
+      - name: Choose the version
+        id: version
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(sed -n 's/^version: *\([^+]*\).*/\1/p' ui/pubspec.yaml)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Build
+        run: tools/arm64/build-windows-arm64.sh "${{ steps.version.outputs.version }}"
+      - name: Check that the app starts
+        # The app loads the core and stays up for a minute; a missing DLL or a crash on start
+        # ends it sooner.
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          Expand-Archive "dist/koalino-windows-arm64-$version.zip" "$env:RUNNER_TEMP/smoke"
+          $app = "$env:RUNNER_TEMP/smoke/koalino-windows-arm64-$version/note_taker_ui.exe"
+          $env:NOTE_TAKER_KEYCHAIN_ENABLED = "false"
+          $env:NOTE_TAKER_ENCRYPTION_PASSPHRASE = "ci-smoke-test-only"
+          $process = Start-Process -FilePath $app -PassThru
+          Start-Sleep -Seconds 60
+          if ($process.HasExited) { throw "the app exited with $($process.ExitCode)" }
+          Stop-Process -Id $process.Id
+      - name: Upload the zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: koalino-windows-arm64-${{ steps.version.outputs.version }}
+          path: dist/koalino-windows-arm64-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+
+  windows-arm64-installer:
+    name: Windows ARM64 installer
+    needs: windows-arm64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Install NSIS
+        run: sudo apt-get update && sudo apt-get install -y nsis
+      - name: Choose the version
+        id: version
+        run: |
+          version="${{ github.event.inputs.version }}"
+          if [ -z "$version" ]; then
+            version=$(sed -n 's/^version: *\([^+]*\).*/\1/p' ui/pubspec.yaml)
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Download the zip
+        uses: actions/download-artifact@v4
+        with:
+          name: koalino-windows-arm64-${{ steps.version.outputs.version }}
+          path: dist
+      - name: Build the installer
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          tools/packaging/windows/build-installer.sh "dist/koalino-windows-arm64-$version.zip" "$version" dist
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: koalino-windows-arm64-${{ steps.version.outputs.version }}-setup
+          path: dist/koalino-windows-arm64-${{ steps.version.outputs.version }}-setup.exe
+          if-no-files-found: error
+      - name: Attach the zip and installer to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          gh release upload "$GITHUB_REF_NAME" "dist/koalino-windows-arm64-$version.zip" \
+            "dist/koalino-windows-arm64-$version-setup.exe" --clobber
