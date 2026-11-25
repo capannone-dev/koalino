@@ -543,3 +543,37 @@ footer nav {
 #primary-alternatives {
   margin-top: 6px;
 }
+
+/* "Free, today and always" (#173). */
+.free-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.free-grid article {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 28px;
+}
+
+.free-grid h3 {
+  margin: 0 0 10px;
+  font-size: 1.25rem;
+}
+
+.free-grid p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.free .small {
+  margin-top: 20px;
+}
+
+@media (max-width: 600px) {
+  .free-grid {
+    grid-template-columns: 1fr;
+  }
+}

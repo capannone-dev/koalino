@@ -13,6 +13,11 @@ store. Voice embeddings, transcripts and meeting documents are encrypted at rest
 (ports and adapters), so you can swap the AI, network, storage, and export implementations
 without touching domain logic.
 
+**Free, and always will be:** free as in freedom, because Koalino is free software under the GPL
+(`GPL-3.0-or-later`), and free as in no payments: no price, subscription or premium tier. It runs
+on your own devices, so there is no service to pay for. (Optional AI summaries can use a service
+you connect yourself, which may charge you directly.)
+
 > **Status: preview (0.2.0).** Everything below works today on Linux, Windows and Android, and
 > the packages are preview builds. Since 0.2.0 the application ID and the Android signing key are
 > the permanent ones. See [AUDIT_V1.md](AUDIT_V1.md) for the compliance matrix and readiness assessment.
