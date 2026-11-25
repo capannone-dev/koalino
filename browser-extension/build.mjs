@@ -9,13 +9,20 @@
 import { build } from "esbuild";
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { chromeLocaleDirectory, chromeMessages } from "./src/lib/localeFormat.ts";
+import { knownSitePatterns } from "./src/lib/sites.ts";
 
-/** The Teams sites the extension works on. */
-const TEAMS_SITES = [
-  "https://teams.microsoft.com/*",
-  "https://teams.cloud.microsoft/*",
-  "https://teams.live.com/*",
-];
+/**
+ * The meeting sites the extension watches for calls without being asked (#174): Teams, Google
+ * Meet, Zoom, Jitsi, Webex and Whereby, listed in `src/lib/sites.ts`.
+ */
+const MEETING_SITES = knownSitePatterns();
+
+/**
+ * Every other site, which the owner may allow from the popup ("Watch every website for calls");
+ * the background then registers the scripts there (#174). "Record this tab" needs no such access:
+ * `activeTab` grants the one tab when the owner opens the popup.
+ */
+const ANY_SITE = ["https://*/*"];
 
 /**
  * SharePoint, where Teams shows a meeting recap's transcript in a frame (Stream's player). The
@@ -37,16 +44,17 @@ const FIREFOX_ADDON_ID = "browser-bridge@note-taker.local";
 const baseManifest = {
   manifest_version: 3,
   name: "__MSG_extName__",
-  version: "0.1.6",
+  version: "0.2.0",
   description: "__MSG_extDescription__",
   default_locale: "en",
-  permissions: ["nativeMessaging", "storage"],
-  host_permissions: [...TEAMS_SITES, ...RECAP_FRAME_SITES],
+  permissions: ["nativeMessaging", "storage", "scripting", "activeTab"],
+  host_permissions: [...MEETING_SITES, ...RECAP_FRAME_SITES],
+  optional_host_permissions: ANY_SITE,
   icons: { 16: "icon-16.png", 32: "icon-32.png", 48: "icon-48.png", 128: "icon-128.png" },
   action: { default_popup: "popup.html", default_icon: { 16: "icon-16.png", 32: "icon-32.png", 48: "icon-48.png" } },
   content_scripts: [
-    { matches: TEAMS_SITES, js: ["hook.js"], run_at: "document_start", world: "MAIN" },
-    { matches: TEAMS_SITES, js: ["content.js"], run_at: "document_idle" },
+    { matches: MEETING_SITES, js: ["hook.js"], run_at: "document_start", world: "MAIN" },
+    { matches: MEETING_SITES, js: ["content.js"], run_at: "document_idle" },
     { matches: RECAP_FRAME_SITES, js: ["hook.js"], run_at: "document_start", world: "MAIN", all_frames: true },
     { matches: RECAP_FRAME_SITES, js: ["recap-frame.js"], run_at: "document_idle", all_frames: true },
   ],

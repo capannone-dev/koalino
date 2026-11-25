@@ -1,11 +1,17 @@
 /**
- * The content script on Teams pages (Issue #102). It watches for a call, asks the owner whether
- * to record it (unless "Always for Teams" is set), and while recording:
+ * The content script on call pages (Issue #102; any site since #174). It watches for a call, asks
+ * the owner whether to record it (unless the site is set to "Always" or "Never"), and while
+ * recording:
  *
  * - tells the page hook to tap the microphone and the remote audio, and sends their chunks;
- * - turns on live captions and follows them, and follows the transcript panel;
- * - starts Teams transcription when the owner opted in;
- * - keeps screen-share slides, cropped to the slide.
+ * - keeps screen-share slides, cropped to the slide;
+ * - on Teams only: turns on live captions and follows them, follows the transcript panel, and
+ *   starts Teams transcription when the owner opted in.
+ *
+ * On Teams the call is read from the page (`isInCall`); elsewhere from the page hook's
+ * `call-activity` (`callActivity`, smoothed by `CallDetector`). The owner can also record any tab
+ * from the popup ("Record this tab"): the background then injects the hook and this script,
+ * and the recording runs until the owner stops it or the call it saw ends.
  *
  * When the call ends it sends the captions and live transcript and ends the meeting. Outside
  * calls, when Teams shows a recap with a transcript for a meeting it recorded (the recap a meeting
@@ -13,7 +19,8 @@
  * frame download the WebVTT (see `src/recap/`), then sends it to the same Koalino meeting.
  *
  * Everything goes to the background over a port, and from there to the native host. Nothing of
- * the meeting is logged.
+ * the meeting is logged. The background injects this script only where it is not loaded yet
+ * (`CONTENT_LOADED_KEY`).
  */
 import { msg, type MessageKey } from "../lib/i18n";
 import {
@@ -23,7 +30,9 @@ import {
   startTeamsTranscription,
   turnOnCaptions,
 } from "./automation";
-import { askConsent, hideOverlay, showRecording } from "./banner";
+import { askConsent, hideOverlay, showRecording, type ConsentAnswer } from "./banner";
+import { CallDetector, looksLikeCall } from "../lib/callSignal";
+import { meetingTitle, serviceForHost, siteKey, siteName } from "../lib/sites";
 import { MeetingRecorder } from "./recorder";
 import {
   BackgroundMessage,
@@ -34,7 +43,9 @@ import {
   HookMessage,
   HostMessage,
   PORT_NAME,
+  TabCommand,
   TabMessage,
+  CONTENT_LOADED_KEY,
 } from "../lib/messages";
 import {
   RecapAttempts,
@@ -49,7 +60,7 @@ import {
   leftMeetingToClose,
   resumableMeeting,
 } from "../lib/meetings";
-import { ExtensionSettings, DEFAULT_SETTINGS } from "../lib/settings";
+import { ExtensionSettings, DEFAULT_SETTINGS, choiceForSite, withSiteChoice } from "../lib/settings";
 import { loadMeetings, loadSettings, saveMeeting, saveSettings, settingsChanged } from "../lib/storage";
 import {
   findRecapCards,
@@ -66,6 +77,18 @@ const TICK_MS = 1_000;
 const CAPTIONS_DELAY_MS = 3_000;
 /** How often recap cards are looked for outside calls. */
 const RECAP_CHECK_MS = 5_000;
+/** A page must look like a call this long before the owner is asked (#174). */
+const CALL_START_MS = 3_000;
+/** A call is over once the page has not looked like one this long (an ICE restart is shorter). */
+const CALL_END_GRACE_MS = 8_000;
+
+/** This page's host, its service (null for a site the extension does not know), and its key. */
+const hostname = window.location.hostname;
+const onTeams = serviceForHost(hostname)?.id === "teams";
+const site = siteKey(hostname);
+
+// Tells the background this script is loaded, so "Record this tab" does not inject it again.
+(globalThis as Record<string, unknown>)[CONTENT_LOADED_KEY] = true;
 
 type CallState = "idle" | "asking" | "declined" | "recording";
 
@@ -86,6 +109,12 @@ let recapFetch: { meeting: RecordedMeeting; arrived: () => void } | null = null;
 const recapAttempts = new Map<string, RecapAttempts>();
 /** The last Teams transcript fetch status sent to the popup. */
 let recapStatus = "";
+/** Elsewhere than Teams: the call as the page hook reports it (#174). */
+const callDetector = new CallDetector(CALL_START_MS, CALL_END_GRACE_MS);
+/** The recording was started with "Record this tab", not when a call was seen (#174). */
+let startedByOwner = false;
+/** A call was seen during a recording the owner started: its end ends the recording. */
+let sawCallWhileRecording = false;
 /** Meetings whose Teams transcript this page already sent (by meeting ID). */
 const transcriptsSent = new Set<string>();
 let overlayStatus = "";
@@ -183,6 +212,12 @@ function rememberTabMeeting(meetingId: string | null): void {
   }
 }
 
+/** The meeting's title from the page: Teams' own, else the page title or "Call on <site>". */
+function currentTitle(): string {
+  if (onTeams) return meetingTitleFromDocumentTitle(document.title);
+  return meetingTitle(hostname, document.title) || msg("callOnSite", { site: siteName(hostname) });
+}
+
 /**
  * Starts recording the current call, or continues `resumed`, the meeting this tab recorded
  * before a reload (#102): same meeting ID and start, so Koalino keeps one meeting.
@@ -190,10 +225,10 @@ function rememberTabMeeting(meetingId: string | null): void {
 function startRecording(resumed: RecordedMeeting | null = null): void {
   const nowMs = Date.now();
   const startMs = resumed?.startMs ?? nowMs;
-  const meetingId = resumed?.meetingId ?? newMeetingId(startMs);
-  const title = resumed?.title || meetingTitleFromDocumentTitle(document.title);
+  const meetingId = resumed?.meetingId ?? newMeetingId(startMs, site);
+  const title = resumed?.title || currentTitle();
   recorder = new MeetingRecorder(
-    { meetingId, title, ownerName: ownerName(document), startMs },
+    { meetingId, title, ownerName: onTeams ? ownerName(document) : "Me", startMs },
     { send: toHost, now: Date.now, root: document },
   );
   record = resumed
@@ -216,6 +251,7 @@ function startRecording(resumed: RecordedMeeting | null = null): void {
   lastProblem = null;
   lastProgress = "";
   shareShown = false;
+  sawCallWhileRecording = false;
   overlayStatus = "\u0000";
   toHook("start-audio");
   toBackground({ kind: "recording", recording: true, title, meetingId });
@@ -289,25 +325,48 @@ function noteStillRecording(): void {
 /** The owner pressed Stop: no more recording until this call ends. */
 function stopByOwner(): void {
   stopRecording();
+  startedByOwner = false;
   state = "declined";
 }
 
 /** Handles the owner's answer to the consent question. */
-function onConsent(answer: "record" | "always" | "not-now"): void {
+function onConsent(answer: ConsentAnswer): void {
   if (state !== "asking") return;
-  if (answer === "not-now") {
+  if (answer === "not-now" || answer === "never") {
+    if (answer === "never") void saveSettings(withSiteChoice(settings, site, "never"));
     state = "declined";
     return;
   }
-  if (answer === "always") void saveSettings({ alwaysRecordTeams: true });
+  if (answer === "always") void saveSettings(withSiteChoice(settings, site, "always"));
+  startRecording();
+}
+
+/**
+ * Starts recording because the owner pressed "Record this tab" (#174), call or not.
+ * Side effects: Hides a pending question; starts recording unless it already runs.
+ */
+function startByOwner(): void {
+  if (state === "recording") return;
+  if (state === "asking") hideOverlay();
+  startedByOwner = true;
   startRecording();
 }
 
 /** One check of the page while recording. */
 async function whileRecording(): Promise<void> {
   if (!recorder) return;
-  recorder.observePage({ captions: settings.captureCaptions });
+  recorder.observePage({ captions: onTeams && settings.captureCaptions, teams: onTeams });
   const elapsed = Date.now() - recordingStartedAt;
+  if (onTeams) teamsWhileRecording(elapsed);
+  if (settings.captureSlides) {
+    // The page hook draws the frame and answers with "share-frame" (see the message listener).
+    toHook("analyse-share");
+  }
+  reportProgress();
+}
+
+/** The Teams steps while recording: captions, spoken language, Teams transcription. */
+function teamsWhileRecording(elapsed: number): void {
   if (settings.captureCaptions && !captionsAttempted && elapsed >= CAPTIONS_DELAY_MS) {
     captionsAttempted = true;
     void turnOnCaptions(document);
@@ -334,11 +393,6 @@ async function whileRecording(): Promise<void> {
     transcriptionAttempted = true;
     void startTeamsTranscription(document);
   }
-  if (settings.captureSlides) {
-    // The page hook draws the frame and answers with "share-frame" (see the message listener).
-    toHook("analyse-share");
-  }
-  reportProgress();
 }
 
 /** Tells the background what was sent so far, when it changed. */
@@ -496,9 +550,21 @@ async function onTranscriptFile(text: string): Promise<void> {
   recapFetch?.arrived();
 }
 
+/**
+ * Whether to treat the page as in a call: Teams' call screen, or the call the hook reports. A
+ * recording the owner started runs until they stop it, or until the call it saw ends.
+ */
+function callGoingOn(): boolean {
+  if (!onTeams) toHook("report-call");
+  const inCall = onTeams ? isInCall(document) : callDetector.inCall;
+  if (state !== "recording" || !startedByOwner) return inCall;
+  if (inCall) sawCallWhileRecording = true;
+  return inCall || !sawCallWhileRecording;
+}
+
 /** One check of the page. */
 async function tick(): Promise<void> {
-  const inCall = isInCall(document);
+  const inCall = callGoingOn();
   if (inCall) {
     if (state === "idle") {
       // The owner already chose to record this call before the page reloaded: continue it.
@@ -508,13 +574,16 @@ async function tick(): Promise<void> {
         Date.now(),
         meetingTitleFromDocumentTitle(document.title),
       );
+      const choice = choiceForSite(settings, site);
       if (resumed) {
         startRecording(resumed);
-      } else if (settings.alwaysRecordTeams) {
+      } else if (choice === "always") {
         startRecording();
+      } else if (choice === "never") {
+        state = "declined";
       } else {
         state = "asking";
-        askConsent(onConsent);
+        askConsent(onConsent, onTeams ? null : siteName(hostname));
       }
     }
     if (state === "recording") {
@@ -526,8 +595,9 @@ async function tick(): Promise<void> {
   if (state === "recording") leaveCall();
   if (state === "asking") hideOverlay();
   state = "idle";
+  startedByOwner = false;
   await closeLeftMeeting();
-  await checkRecaps();
+  if (onTeams) await checkRecaps();
 }
 
 window.addEventListener("message", (event: MessageEvent<HookMessage>) => {
@@ -535,6 +605,7 @@ window.addEventListener("message", (event: MessageEvent<HookMessage>) => {
   if (event.data.kind === "audio") recorder?.addAudio(event.data.track, new Int16Array(event.data.samples));
   if (event.data.kind === "transcript-file") void onTranscriptFile(event.data.text);
   if (event.data.kind === "share-frame") onShareFrame(event.data.present, event.data.signature);
+  if (event.data.kind === "call-activity") callDetector.observe(looksLikeCall(event.data, callDetector.inCall), Date.now());
   if (event.data.kind === "slide-image") {
     if (event.data.image === "") lastProblem = "slides: the shared screen could not be read";
     recorder?.sendSlide(event.data.image);
@@ -556,6 +627,14 @@ function onShareFrame(present: boolean, signature: number[]): void {
   shareShown = true;
   if (signature.length > 0 && recorder.offerShareSignature(signature)) toHook("encode-slide");
 }
+
+// "Record this tab" and its Stop, from the popup through the background (#174).
+chrome.runtime.onMessage.addListener((command: TabCommand, _sender, respond) => {
+  if (command?.kind === "record-tab") startByOwner();
+  if (command?.kind === "stop-tab" && state === "recording") stopByOwner();
+  respond({ recording: state === "recording" });
+  return false;
+});
 
 window.addEventListener("pagehide", () => {
   if (state === "recording") interruptRecording();

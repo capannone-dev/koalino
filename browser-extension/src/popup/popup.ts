@@ -1,14 +1,25 @@
 /**
  * The popup (Issue #102): shows whether the Koalino helper (native host) and app are
  * reachable, which meetings are being recorded, what happened to the last Teams transcript fetch,
- * and the settings as checkboxes. When the extension
- * may not run on the Teams sites, it says so first and offers to allow it.
+ * and the settings as checkboxes. When the extension may not run on the meeting sites, it says so
+ * first and offers to allow it.
+ *
+ * Since #174 it also records the current tab on any site ("Record this tab", through the
+ * background), lets the owner watch every website for calls (asking the browser for access to
+ * all sites), and shows and forgets the per-site Always / Never choices.
  */
-import type { PopupState } from "../background/background";
+import type { PopupRequest, PopupState, TabRecordingReply } from "../background/background";
+import { ANY_SITE_PATTERNS } from "../lib/anySite";
 import { msg, textDirection, uiLanguage, type MessageKey } from "../lib/i18n";
 import { ExtensionSettings } from "../lib/settings";
 import { hasTeamsAccess, requestTeamsAccess } from "../lib/siteAccess";
+import { MEETING_SERVICES } from "../lib/sites";
 import { loadSettings, saveSettings } from "../lib/storage";
+
+/** The tab the popup was opened on, or null (a window without tabs). */
+let currentTabId: number | null = null;
+/** Whether that tab records now. */
+let currentTabRecording = false;
 
 /** Renders the connection and recordings. */
 function render(state: PopupState): void {
@@ -38,6 +49,43 @@ function render(state: PopupState): void {
     transcripts.textContent = state.recapStatuses.join("\n");
     transcripts.hidden = state.recapStatuses.length === 0;
   }
+  renderTabButton(currentTabId !== null && state.recordingTabIds.includes(currentTabId));
+}
+
+/** Shows "Record this tab" or "Stop recording this tab". */
+function renderTabButton(recording: boolean): void {
+  currentTabRecording = recording;
+  const button = document.getElementById("record-tab");
+  if (!button) return;
+  button.textContent = msg(recording ? "stopThisTab" : "recordThisTab");
+  button.toggleAttribute("disabled", currentTabId === null);
+}
+
+/**
+ * Records the current tab, or stops it, through the background.
+ * Side effects: The background injects the scripts and tells the tab; updates the button.
+ */
+async function toggleTabRecording(): Promise<void> {
+  if (currentTabId === null) return;
+  const request: PopupRequest = { kind: currentTabRecording ? "stop-tab" : "record-tab", tabId: currentTabId };
+  const reply = (await chrome.runtime.sendMessage(request)) as TabRecordingReply;
+  document.getElementById("record-tab-problem")?.toggleAttribute("hidden", reply.failed !== true);
+  renderTabButton(reply.recording);
+}
+
+/** A site key as the owner knows it: the service's name, else the host. */
+function siteLabel(key: string): string {
+  return MEETING_SERVICES.find((service) => service.id === key)?.name ?? key;
+}
+
+/** Shows the per-site choices, or hides the line when there are none. */
+function renderSiteChoices(settings: ExtensionSettings): void {
+  const line = document.getElementById("site-choices");
+  const text = document.getElementById("site-choices-text");
+  if (!line || !text) return;
+  const list = (keys: string[]) => (keys.length > 0 ? keys.map(siteLabel).join(", ") : msg("noSites"));
+  text.textContent = msg("siteChoices", { always: list(settings.alwaysRecordSites), never: list(settings.neverAskSites) });
+  line.hidden = settings.alwaysRecordSites.length === 0 && settings.neverAskSites.length === 0;
 }
 
 /** Asks the background for its state. */
@@ -46,16 +94,45 @@ async function refresh(kind: "get-state" | "check-host"): Promise<void> {
   render(state);
 }
 
+/** The settings shown as checkboxes. */
+type SwitchSetting = { [Key in keyof ExtensionSettings]: ExtensionSettings[Key] extends boolean ? Key : never }[keyof ExtensionSettings];
+
 /** Binds the checkboxes to the settings. */
 async function bindSettings(): Promise<void> {
   const settings = await loadSettings();
   for (const input of document.querySelectorAll<HTMLInputElement>("input[data-setting]")) {
-    const key = input.dataset.setting as keyof ExtensionSettings;
+    const key = input.dataset.setting as SwitchSetting;
     input.checked = settings[key];
     input.addEventListener("change", () => {
       void saveSettings({ [key]: input.checked });
     });
   }
+  renderSiteChoices(settings);
+  document.getElementById("forget-sites")?.addEventListener("click", () => {
+    void saveSettings({ alwaysRecordSites: [], neverAskSites: [] }).then(renderSiteChoices);
+  });
+  await bindWatchAllSites(settings);
+}
+
+/**
+ * Binds "Watch every website for calls": on, it asks the browser for access to all sites first.
+ * Side effects: May show the browser's permission prompt; writes the setting.
+ */
+async function bindWatchAllSites(settings: ExtensionSettings): Promise<void> {
+  const input = document.getElementById("watch-all-sites") as HTMLInputElement | null;
+  if (!input) return;
+  input.checked = settings.watchAllSites && (await chrome.permissions.contains({ origins: ANY_SITE_PATTERNS }));
+  input.addEventListener("change", () => {
+    if (!input.checked) {
+      void saveSettings({ watchAllSites: false });
+      return;
+    }
+    // The request must start in the click itself, before any other await.
+    void chrome.permissions.request({ origins: ANY_SITE_PATTERNS }).then((granted) => {
+      input.checked = granted;
+      void saveSettings({ watchAllSites: granted });
+    });
+  });
 }
 
 /**
@@ -104,10 +181,19 @@ document.getElementById("allow")?.addEventListener("click", () => {
   });
 });
 
+document.getElementById("record-tab")?.addEventListener("click", () => void toggleTabRecording());
 document.getElementById("check")?.addEventListener("click", () => {
   void refresh("check-host");
   setTimeout(() => void refresh("get-state"), 1_500);
 });
 void renderAccess();
 void bindSettings();
-void refresh("get-state");
+void chrome.tabs
+  .query({ active: true, currentWindow: true })
+  .then(([tab]) => {
+    // Opened in a tab of its own (after install), the popup has no call tab to record.
+    const ownPage = tab?.url?.startsWith(chrome.runtime.getURL("")) ?? false;
+    currentTabId = tab?.id !== undefined && !ownPage ? tab.id : null;
+  })
+  .catch(() => undefined)
+  .finally(() => void refresh("get-state"));

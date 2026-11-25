@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- The extension's popup: Teams access, connection status, current recordings and settings (Issue #102). Elements with data-i18n get their text in the browser's language from popup.ts (#124). It also opens in a tab after install when Teams access is missing. -->
+<!-- The extension's popup: meeting-site access, connection status, current recordings, "Record this tab", and settings (Issue #102, #174). Elements with data-i18n get their text in the browser's language from popup.ts (#124). It also opens in a tab after install when Teams access is missing. -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -13,13 +13,16 @@
       .hint { color: #6b7280; font-size: 12px; }
       button { font: inherit; margin-top: 6px; }
       #recordings { white-space: pre-line; }
+      h2 { font-size: 13px; margin: 12px 0 2px; }
+      #record-tab { width: 100%; padding: 6px; margin-top: 0; }
+      #record-tab-problem { margin-top: 4px; }
     </style>
   </head>
   <body>
     <h1><img src="icon-32.png" alt="" width="24" height="24" />Koalino</h1>
     <div id="access" class="status bad" hidden>
-      <div id="access-text" data-i18n="accessMissing">Koalino may not run on Teams (or on the SharePoint page Teams shows transcripts from) yet, so it cannot record your meetings or fetch their transcripts.</div>
-      <button id="allow" type="button" data-i18n="allowOnTeams">Allow on Teams</button>
+      <div id="access-text" data-i18n="accessMissing">Koalino may not run on the meeting sites yet.</div>
+      <button id="allow" type="button" data-i18n="allowOnTeams">Allow on meeting sites</button>
     </div>
     <div class="status">
       <div id="host"></div>
@@ -27,9 +30,15 @@
       <div id="transcripts" hidden></div>
       <button id="check" type="button" data-i18n="checkConnection">Check connection</button>
     </div>
+    <button id="record-tab" type="button" data-i18n="recordThisTab">Record this tab</button>
+    <div class="hint" data-i18n="recordThisTabHint">Records the sound and shared screen of a call on any site.</div>
+    <div id="record-tab-problem" class="bad" data-i18n="cannotRecordTab" hidden>This tab can't be recorded.</div>
+    <label><input type="checkbox" id="watch-all-sites" /> <span><span data-i18n="watchAllSites">Watch every website for calls</span><br /><span class="hint" data-i18n="watchAllSitesHint">Offers to record a call on any site.</span></span></label>
+    <label><input type="checkbox" data-setting="captureSlides" /> <span data-i18n="keepSlides">Keep shared slides</span></label>
+    <div id="site-choices" class="hint" hidden><span id="site-choices-text"></span> <button id="forget-sites" type="button" data-i18n="forgetSiteChoices">Forget site choices</button></div>
+    <h2 data-i18n="teamsSettings">Teams</h2>
     <label><input type="checkbox" data-setting="alwaysRecordTeams" /> <span><span data-i18n="alwaysRecord">Always record Teams meetings</span><br /><span class="hint" data-i18n="alwaysRecordHint">Otherwise you are asked when a call starts.</span></span></label>
     <label><input type="checkbox" data-setting="captureCaptions" /> <span><span data-i18n="useCaptions">Use Teams live captions</span><br /><span class="hint" data-i18n="useCaptionsHint">Names who spoke when; turned on in the call for you only.</span></span></label>
-    <label><input type="checkbox" data-setting="captureSlides" /> <span data-i18n="keepSlides">Keep shared slides</span></label>
     <label><input type="checkbox" data-setting="fetchTeamsTranscripts" /> <span><span data-i18n="fetchTranscript">Fetch the Teams transcript after the meeting</span><br /><span class="hint" data-i18n="fetchTranscriptHint">Whoever started it, when your account can see it.</span></span></label>
     <label><input type="checkbox" data-setting="startTeamsTranscription" /> <span><span data-i18n="startTranscription">Start Teams transcription when I record</span><br /><span class="hint" data-i18n="startTranscriptionHint">Everyone sees it, and Microsoft stores the transcript.</span></span></label>
     <label><input type="checkbox" data-setting="matchTeamsSpokenLanguage" /> <span><span data-i18n="matchSpokenLanguage">Set Teams' spoken language to Koalino's</span><br /><span class="hint" data-i18n="matchSpokenLanguageHint">When Koalino has a fixed language. It changes the language for the whole meeting, and others may see it.</span></span></label>

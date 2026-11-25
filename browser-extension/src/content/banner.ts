@@ -1,12 +1,13 @@
 /**
- * The extension's small overlay on the Teams page (Issue #102): the consent question when a call
- * starts ("Record this meeting with Koalino?") and, while recording, a visible indicator with
- * a Stop button. It lives in a closed shadow root so Teams' styles and scripts do not reach it.
+ * The extension's small overlay on a call page (Issue #102; any site since #174): the consent
+ * question when a call starts ("Record this meeting with Koalino?") and, while recording, a
+ * visible indicator with a Stop button. It lives in a closed shadow root so the page's styles and
+ * scripts do not reach it.
  */
 import { msg, textDirection } from "../lib/i18n";
 
 /** What the owner answered. */
-export type ConsentAnswer = "record" | "always" | "not-now";
+export type ConsentAnswer = "record" | "always" | "not-now" | "never";
 
 /** The overlay's styles. */
 const STYLE = `
@@ -55,12 +56,13 @@ function button(label: string, onClick: () => void, primary = false): HTMLButton
 /**
  * Asks whether to record the meeting.
  *
- * Inputs: The answer's receiver. Side effects: Shows the overlay until answered or hidden.
+ * Inputs: The answer's receiver; the site's name for a call elsewhere than Teams (#174), or null
+ * on Teams. Side effects: Shows the overlay until answered or hidden.
  */
-export function askConsent(onAnswer: (answer: ConsentAnswer) => void): void {
+export function askConsent(onAnswer: (answer: ConsentAnswer) => void, site: string | null = null): void {
   const container = panel();
   const text = document.createElement("span");
-  text.textContent = msg("recordQuestion");
+  text.textContent = site === null ? msg("recordQuestion") : msg("recordCallQuestion", { site });
   const answer = (value: ConsentAnswer) => () => {
     hideOverlay();
     onAnswer(value);
@@ -68,9 +70,10 @@ export function askConsent(onAnswer: (answer: ConsentAnswer) => void): void {
   container.append(
     text,
     button(msg("record"), answer("record"), true),
-    button(msg("alwaysForTeams"), answer("always")),
+    button(site === null ? msg("alwaysForTeams") : msg("alwaysOnSite"), answer("always")),
     button(msg("notNow"), answer("not-now")),
   );
+  if (site !== null) container.append(button(msg("neverOnSite"), answer("never")));
 }
 
 /**

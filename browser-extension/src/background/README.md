@@ -11,4 +11,10 @@ tab and its recap frames (`src/recap/`): the tab's `recap-download` goes to them
 they copied comes back to the tab. A tab whose port closes while recording may be reloading, so
 its meeting is ended in Koalino (`ended` to the host) only if no tab resumes it within two minutes
 (`InterruptedRecordings`, #102). On install,
-when the Teams sites are not allowed, it opens the popup in a tab so the owner can allow them.
+when the meeting sites are not allowed, it opens the popup in a tab so the owner can allow them.
+
+Since #174 it also records the tab the owner chooses in the popup ("Record this tab"): it injects
+the hook and the content script where they are missing (`ensureTabScripts`) and tells the tab to
+start or stop. It keeps the scripts registered on every https site while the owner wants that and
+allowed it (`syncAnySiteScripts`, rerun at start and whenever the setting or the permissions
+change), and shows a REC badge on each recording tab.

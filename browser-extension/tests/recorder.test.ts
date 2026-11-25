@@ -114,6 +114,20 @@ describe("MeetingRecorder", () => {
     expect(captions?.type === "document" && captions.text).toContain("00:00:02.000 --> 00:00:02.000\n<v Alan>Hello there.</v>");
   });
 
+  it("elsewhere than Teams, reads no Teams transcript panel (#174)", () => {
+    const { sent, recorder, advance } = recorderFixture();
+    document.body.innerHTML = `
+      <div data-tid="call-transcript-indicator"></div>
+      <div data-tid="transcript-chat-message-g/1"><span data-tid="transcript-item-author">Alan</span>
+        <div data-tid="call-transcript-panel-message">Hello there.</div></div>`;
+    advance(2_000);
+    recorder.observePage({ captions: false, teams: false });
+    recorder.stop();
+
+    expect(recorder.sawTeamsTranscript()).toBe(false);
+    expect(sent.slice(1).map((message) => message.type)).toEqual(["ended"]);
+  });
+
   it("on a page leaving mid-call, keeps what it has but does not end the meeting (#102)", () => {
     const { sent, recorder } = recorderFixture();
     document.body.innerHTML = `<div><div><span>Alan</span></div><span data-tid="closed-caption-text">Hello there.</span></div>`;

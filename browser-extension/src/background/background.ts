@@ -15,8 +15,12 @@
  * transcript in): the tab asks them to download the transcript, and they pass back the WebVTT
  * their page hook copied.
  *
- * After it is installed without access to the Teams sites (Firefox, when loaded by hand), it opens
- * its settings page in a tab, where the owner can allow it.
+ * After it is installed without access to the meeting sites (Firefox, when loaded by hand), it
+ * opens its settings page in a tab, where the owner can allow it.
+ *
+ * Since #174 it also records any tab the owner asks for from the popup ("Record this tab"),
+ * bringing the scripts there first, keeps the scripts registered on every website while the owner
+ * wants that ("Watch every website for calls"), and marks each recording tab with a REC badge.
  */
 import { msg } from "../lib/i18n";
 import {
@@ -32,11 +36,27 @@ import {
   TabMessage,
   describeProgress,
 } from "../lib/messages";
+import { ANY_SITE_PATTERNS, ensureTabScripts, syncAnySiteScripts } from "../lib/anySite";
 import { InterruptedRecordings } from "../lib/interruptions";
 import { hasTeamsAccess } from "../lib/siteAccess";
+import { knownSitePatterns } from "../lib/sites";
+import { loadSettings, settingsChanged } from "../lib/storage";
+import { TabCommand, TabCommandReply } from "../lib/messages";
 
 /** Requests the popup sends. */
-type PopupRequest = { kind: "get-state" } | { kind: "check-host" };
+export type PopupRequest =
+  | { kind: "get-state" }
+  | { kind: "check-host" }
+  /** "Record this tab" or its Stop (#174). */
+  | { kind: "record-tab"; tabId: number }
+  | { kind: "stop-tab"; tabId: number };
+
+/** The answer to `record-tab` and `stop-tab`. */
+export interface TabRecordingReply {
+  /** Whether the tab records now; false with `failed` when the browser refused the tab. */
+  recording: boolean;
+  failed?: boolean;
+}
 
 /** What the popup shows. */
 export interface PopupState {
@@ -45,6 +65,8 @@ export interface PopupState {
   /** Each tab's last Teams transcript fetch status. */
   recapStatuses: string[];
   rejected: number;
+  /** The tabs recording now (#174), so the popup offers Stop on its tab. */
+  recordingTabIds: number[];
 }
 
 let hostPort: chrome.runtime.Port | null = null;
@@ -167,6 +189,7 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onMessage.addListener((message: TabMessage) => {
     if (message.kind === "host") sendToHost(message.message);
     if (message.kind === "recording") {
+      markTab(port.sender?.tab?.id, message.recording);
       if (message.recording) {
         recordings.set(port, message.title || msg("teamsMeeting"));
         recordingMeetings.set(port, message.meetingId);
@@ -182,6 +205,7 @@ chrome.runtime.onConnect.addListener((port) => {
     if (message.kind === "recap-status") recapStatuses.set(port, message.status);
   });
   port.onDisconnect.addListener(() => {
+    if (recordings.has(port)) markTab(port.sender?.tab?.id, false);
     tabs.delete(port);
     recordings.delete(port);
     recapStatuses.delete(port);
@@ -191,17 +215,83 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
+/**
+ * Shows or clears a tab's REC badge.
+ *
+ * Inputs: The tab (none: nothing happens) and whether it records. Side effects: Sets the badge.
+ */
+function markTab(tabId: number | undefined, recording: boolean): void {
+  if (tabId === undefined) return;
+  void chrome.action.setBadgeText({ tabId, text: recording ? "REC" : "" }).catch(() => undefined);
+  if (recording) void chrome.action.setBadgeBackgroundColor({ tabId, color: "#b91c1c" }).catch(() => undefined);
+}
+
+/**
+ * Records a tab the owner chose, or stops it (#174).
+ *
+ * Inputs: The request. Outputs: Whether the tab records now; `failed` when the browser refused
+ * the tab (a browser page, a store page, or no access).
+ * Side effects: Injects the scripts where missing, then tells the tab's content script.
+ */
+async function recordTab(request: { kind: "record-tab" | "stop-tab"; tabId: number }): Promise<TabRecordingReply> {
+  try {
+    if (request.kind === "record-tab") await ensureTabScripts(chrome.scripting, request.tabId);
+    const command: TabCommand = { kind: request.kind };
+    const reply = (await chrome.tabs.sendMessage(request.tabId, command)) as TabCommandReply | undefined;
+    return { recording: reply?.recording === true };
+  } catch {
+    return { recording: false, failed: request.kind === "record-tab" };
+  }
+}
+
+/** The tabs recording now. */
+function recordingTabIds(): number[] {
+  return [...recordings.keys()].flatMap((port) => (port.sender?.tab?.id === undefined ? [] : [port.sender.tab.id]));
+}
+
 chrome.runtime.onMessage.addListener((request: PopupRequest, _sender, respond) => {
+  if (request.kind === "record-tab" || request.kind === "stop-tab") {
+    void recordTab(request).then(respond);
+    return true;
+  }
   if (request.kind === "check-host") ensureHost();
   const state: PopupState = {
     connection,
     recordings: [...recordings.values()],
     recapStatuses: [...recapStatuses.values()],
     rejected,
+    recordingTabIds: recordingTabIds(),
   };
   respond(state);
   return false;
 });
+
+/**
+ * Registers or removes the scripts for every website to match the owner's choice (#174).
+ * Side effects: Reads the settings and the granted permissions; changes the registrations.
+ */
+async function syncAnySite(): Promise<void> {
+  try {
+    const [settings, allowed] = await Promise.all([
+      loadSettings(),
+      chrome.permissions.contains({ origins: ANY_SITE_PATTERNS }),
+    ]);
+    await syncAnySiteScripts(chrome.scripting, {
+      wanted: settings.watchAllSites,
+      allowed,
+      knownSites: knownSitePatterns(),
+    });
+  } catch {
+    // A browser without registered scripts: "Record this tab" still works.
+  }
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && settingsChanged(changes)) void syncAnySite();
+});
+chrome.permissions.onAdded.addListener(() => void syncAnySite());
+chrome.permissions.onRemoved.addListener(() => void syncAnySite());
+void syncAnySite();
 
 chrome.runtime.onInstalled.addListener(() => {
   void hasTeamsAccess(chrome.permissions, chrome.runtime.getManifest()).then((granted) => {

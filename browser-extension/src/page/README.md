@@ -2,8 +2,12 @@
 
 # Page hook (`browser-extension/src/page`)
 
-`hook.ts` runs in the Teams page's own JavaScript world, at document start, before Teams' own
-scripts. Only there can it see the microphone stream Teams opens (`getUserMedia` is wrapped),
+`hook.ts` runs in a call page's own JavaScript world, at document start, before the page's own
+scripts: on Teams, on the other known meeting sites and, once the owner allows it, on every site
+(#174). For "Record this tab" the background injects it mid-call instead. Elsewhere than Teams it
+also reports the page's call activity (`report-call` → `call-activity`), mixes every audio track
+the call receives as the remote side, and finds the shared screen among the page's videos
+(`ShareTracker`), including the screen the owner shares (`getDisplayMedia` is wrapped). On Teams: Only there can it see the microphone stream Teams opens (`getUserMedia` is wrapped),
 the `<audio>` element Teams plays the call through (in Chrome it is never added to the page, so
 every element given a stream is noted through a wrapped `srcObject` setter, #160), and the responses of the page's own
 transcript requests (`fetch` is wrapped and the response is copied, never re-requested). It

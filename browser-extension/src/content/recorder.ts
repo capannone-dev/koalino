@@ -145,12 +145,15 @@ export class MeetingRecorder {
 
   /**
    * Reads captions and the transcript panel (call about once a second).
+   * Inputs: Whether to read captions, and whether the page is Teams (absent: it is).
    * Side effects: Updates the collectors.
    */
-  observePage(options: { captions: boolean }): void {
+  observePage(options: { captions: boolean; teams?: boolean }): void {
     if (this.stopped) return;
     const nowMs = this.elapsedMs();
     if (options.captions) this.captions.observe(readCaptions(this.ports.root), nowMs);
+    // Elsewhere than Teams (#174) the page has no Teams transcript panel to read.
+    if (options.teams === false) return;
     if (isTeamsTranscriptRunning(this.ports.root)) this.teamsTranscriptSeen = true;
     this.transcriptPanel.observe(readTranscriptPanel(this.ports.root), nowMs);
   }

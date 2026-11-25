@@ -7,8 +7,8 @@ entry point into one script (`build.mjs`).
 
 | Folder | Context | Entry point |
 | --- | --- | --- |
-| `page/` | The Teams page's own JavaScript world (`world: MAIN`, document start) | `hook.ts` → `hook.js` |
-| `content/` | The isolated content-script world on Teams pages | `content.ts` → `content.js` |
+| `page/` | A call page's own JavaScript world (`world: MAIN`, document start, or injected for Record this tab) | `hook.ts` → `hook.js` |
+| `content/` | The isolated content-script world on call pages | `content.ts` → `content.js` |
 | `background/` | The background (Chrome service worker, Firefox event page) | `background.ts` → `background.js` |
 | `popup/` | The toolbar popup | `popup.ts` → `popup.js` |
 | `lib/` | Pure logic, used by the others and covered by `tests/` | — |
