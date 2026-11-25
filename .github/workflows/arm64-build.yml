@@ -74,6 +74,8 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Build
         run: tools/arm64/build-linux-arm64.sh "${{ steps.version.outputs.version }}"
+      - name: Check that it transcribes
+        run: tools/arm64/check-transcription.sh target/release/cli "$NOTE_TAKER_MODELS/ggml-base.bin"
       - name: Check that the app starts
         # The app opens its window, loads the core and stays up; a missing library or a crash
         # on start ends it before the timeout.
@@ -180,6 +182,8 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - name: Build
         run: tools/arm64/build-windows-arm64.sh "${{ steps.version.outputs.version }}"
+      - name: Check that it transcribes
+        run: tools/arm64/check-transcription.sh target/aarch64-pc-windows-msvc/release/cli.exe "$NOTE_TAKER_MODELS/ggml-base.bin"
       - name: Check that the app starts
         # The app loads the core and stays up for a minute; a missing DLL or a crash on start
         # ends it sooner.

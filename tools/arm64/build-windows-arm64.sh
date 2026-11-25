@@ -40,6 +40,8 @@ MSVC_LINKER="${VCToolsInstallDir:?load the Visual Studio ARM64 environment first
 export CARGO_TARGET_AARCH64_PC_WINDOWS_MSVC_LINKER=$MSVC_LINKER
 cargo build --release --features local-ai,microphone,computer-sound,vad,diarization --lib --target "$TARGET"
 cargo build --release --bin note_taker_mcp --bin browser-host --target "$TARGET"
+# The CLI with the same AI features, only for tools/arm64/check-transcription.sh (not packed).
+cargo build --release --features local-ai,microphone,computer-sound,vad,diarization --bin cli --target "$TARGET"
 RELEASE=target/$TARGET/release
 
 # The staging folders ui/windows/CMakeLists.txt installs beside the runner.

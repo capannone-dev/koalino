@@ -18,6 +18,7 @@ The workflow runs on a `v*` tag, attaching the packages to that release, or by h
 | `build-linux-arm64.sh` | On ARM64 Linux (`ubuntu-24.04-arm`): builds the core (whisper.cpp with Vulkan, microphone and computer sound, speech-pause chunking, diarization), the MCP server and the browser extension's host, then the Flutter app, and packs `dist/koalino-linux-arm64-VERSION.tar.gz` (#175) |
 | `build-windows-arm64.sh` | On Windows on ARM (`windows-11-arm`), in Git Bash with the Visual Studio ARM64 environment: builds the core for `aarch64-pc-windows-msvc` (whisper.cpp through clang-cl, diarization with Microsoft's ARM64 `onnxruntime.dll` loaded at run time), the MCP server, the host and the app, and packs `dist/koalino-windows-arm64-VERSION.zip` (#176) |
 | `fetch-models.sh` | Downloads Whisper base and the diarization models, checked against pinned hashes |
+| `check-transcription.sh` | Transcribes whisper.cpp's `jfk.wav` sample with the build's CLI and fails unless the transcript holds the known sentence |
 
 The packaging scripts in `tools/packaging/` read the architecture from the archive's name:
 
@@ -38,6 +39,7 @@ installing there under emulation.
 - **ONNX Runtime for Windows:** comes from Microsoft's NuGet package `Microsoft.ML.OnnxRuntime`,
   pinned by SHA-256 in the workflow. That package carries the `win-arm64` build. Its x64 DLL is
   byte-identical to the GitHub release's that `tools/cross/fetch.sh` fetches.
-- **Checks:** the workflow starts each app on the runner (Linux under Xvfb) and fails if it does
-  not stay up for a minute. This project has no ARM64 Windows machine of its own, so real-device
+- **Checks:** on the ARM runner, the workflow transcribes a sample with the build's CLI and
+  checks the text. It also starts each app (Linux under Xvfb) and fails if it does not stay up
+  for a minute. This project has no ARM64 Windows machine of its own, so real-device
   testing of that build is still open.

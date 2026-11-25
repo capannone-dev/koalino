@@ -51,6 +51,8 @@ check_debian_13_compatible() {
 export GGML_NATIVE=OFF
 cargo build --release --features local-ai,microphone,computer-sound,vad,diarization,whisper-rs/vulkan --lib
 cargo build --release --bin note_taker_mcp --bin browser-host
+# The CLI with the same AI features, only for tools/arm64/check-transcription.sh (not packed).
+cargo build --release --features local-ai,microphone,computer-sound,vad,diarization,whisper-rs/vulkan --bin cli
 RELEASE=target/release
 check_debian_13_compatible "$RELEASE/libnote_taker_core.so" "$RELEASE/note_taker_mcp" "$RELEASE/browser-host"
 

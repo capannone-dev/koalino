@@ -19,7 +19,8 @@ workflow), leaving them as the run's artifacts.
 - **Windows on ARM** (`windows-11-arm`): a zip, then an installer, which a Linux job builds with
   NSIS.
 
-Each job starts the built app and fails if it does not stay up for a minute. The scripts are in
+Each job transcribes a sample on the ARM runner with the build's CLI and checks the text. It
+also starts the built app and fails if it does not stay up for a minute. The scripts are in
 `tools/arm64/`.
 
 `pages.yml` (#166) publishes `site/` on GitHub Pages when it changes on `main`. It is skipped while
