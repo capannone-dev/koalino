@@ -4177,3 +4177,32 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Diarization models for CI:** published once as the `models-v1` release, checked by SHA-256, so
   builds that bundle them (macOS on GitHub Actions, #162) need no export toolchain.
 
+
+## 2026-11-25 — The browser extension records calls on any site (#174)
+
+- **Request:** the owner wants the extension to work with any meeting service, started by hand or
+  offered when the browser uses the microphone or camera, and to find shared screens anywhere.
+- **Call detection:** a call starts when an open WebRTC connection carrying audio receives
+  someone's audio for 3 s, goes on while that connection stays open (silence does not end it),
+  and is over 8 s after it closes. The microphone or camera alone is not a call (dictation
+  sites); nor is sending them: the live test showed Google Meet's pre-join screen sending both
+  on a connected connection before anyone joins.
+- **Live test (VMs):** a Zoom web call hosted on one VM and joined as a guest from Chromium on
+  the other: the prompt appeared once the host was heard, the recording reached the app,
+  the host's shared window was found among the page's videos and saved as a slide, and the
+  recording ended by itself when the host ended the meeting.
+- **Audio:** the microphone is the track the page sends, as on Teams (#157); the other side is
+  every audio track the call receives, mixed in the page's Web Audio (Meet plays its loudest
+  speakers as separate tracks). Teams keeps its element-based tap, which works there today.
+- **Shared screens:** the screen the owner shares (`getDisplayMedia` is wrapped) wins; else the
+  largest video whose frame looks like screen content (flat areas, few colours, text edges, little
+  skin) and holds still for a round. Chosen over per-service DOM adapters, which break with every
+  redesign; the slide crop and de-duplication are Teams' (#137).
+- **Where it runs:** declared host access only for known meeting sites (Teams, Meet, Zoom, Jitsi,
+  Webex, Whereby), so the install prompt stays narrow. Any tab by hand through `activeTab` and
+  `scripting` (no site access needed); every https site only after an opt-in that asks for the
+  optional `https://*/*` permission and registers the scripts at run time.
+- **No double offer:** the app's bridge marks a browser meeting as active, and the app's call
+  watch neither offers nor keeps offering while it is set.
+- **Not covered:** services that decode call audio in the page and play it through Web Audio
+  without WebRTC; captions and transcripts stay Teams-only.

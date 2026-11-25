@@ -2,12 +2,40 @@
 
 # Koalino browser extension (`browser-extension/`)
 
-Records Microsoft Teams meetings joined in the browser (Firefox, Chrome, Edge, Chromium) and
-sends them to the Koalino app on the same computer (Issue #102). It works for work or school
-accounts (`teams.cloud.microsoft`, `teams.microsoft.com`) and for personal accounts
-(`teams.live.com`, `teams.microsoft.com/light-meetings`).
+Records calls joined in the browser (Firefox, Chrome, Edge, Chromium) and sends them to the
+Koalino app on the same computer (Issue #102). It started with Microsoft Teams, for work or
+school accounts (`teams.cloud.microsoft`, `teams.microsoft.com`) and personal accounts
+(`teams.live.com`, `teams.microsoft.com/light-meetings`). Since #174 it records calls on any site.
 
-## What it does
+## Any call, on any site (#174)
+
+| Where | How it starts |
+| --- | --- |
+| Teams, Google Meet, Zoom (web client), Jitsi Meet (`meet.jit.si`, `8x8.vc`), Webex, Whereby | It notices the call and asks **Looks like a call on Google Meet. Record it with Koalino?** (Record, Always here, Not now, Never here). Listed in `src/lib/sites.ts`. |
+| Any other https site | **Watch every website for calls** in the popup (off by default) asks the browser for access to all sites, then watches them the same way. |
+| Any tab, at any time | **Record this tab** in the popup. The browser grants that one tab when the popup opens (`activeTab`), so no access to other sites is needed. The recording runs until you press Stop, or until the call it saw ends. |
+
+A call starts when an open WebRTC connection receives someone's audio for 3 seconds; it goes on
+while that connection stays open and is over 8 seconds after it closes (`src/lib/callSignal.ts`).
+The microphone or camera alone is no call: dictation sites use them too, and Google Meet's
+pre-join screen already sends both on a connected connection before anyone is heard. Elsewhere
+than Teams it records:
+
+| What | How |
+| --- | --- |
+| Your microphone | the audio track the page sends on its call connection, as on Teams |
+| Everyone else | every audio track the call receives, mixed (Google Meet plays the three loudest speakers as separate tracks) |
+| Shared slides | the screen you share (`getDisplayMedia`), else the video that looks like a still screen: large areas of one colour, a few colours covering most of it, sharp text edges, little skin, and the same frame for seconds (`src/lib/screenShare.ts`). Of several, the largest. Then cropped and kept once per slide, as on Teams. |
+
+The meeting is titled from the page (`Weekly sync | Jitsi Meet` → `Weekly sync`; a Google Meet
+code as `Google Meet abc-defg-hij`), else **Call on <site>**. Captions, the transcript panel and
+the Teams transcript remain Teams-only. While the extension records, the Koalino app does not
+also offer to record the call, and withdraws an offer it already showed.
+
+Services that play call audio without WebRTC (decoded in the page and played through Web Audio)
+are not covered yet; Zoom's web client, Meet, Jitsi, Webex and Whereby use WebRTC.
+
+## On Teams
 
 When a call starts it asks **Record this meeting with Koalino?** (Record, Always for
 Teams, Not now). While recording, an indicator with a Stop button stays on the page. It sends:
@@ -50,7 +78,7 @@ Limits found in the #102 probes:
 ## How it reaches the app
 
 ```text
-Teams page ── hook.js (page world: call connection, getUserMedia, <audio>, fetch) ─postMessage─▶ content.js
+call page ── hook.js (page world: call connections, getUserMedia, getDisplayMedia, <audio>/<video>, fetch on Teams) ─postMessage─▶ content.js
 content.js ─runtime port─▶ background.js ─connectNative─▶ browser-host ─WebSocket 127.0.0.1─▶ daemon (Teams bridge)
 recap frame (SharePoint, opened by Teams): hook.js (copies the .vtt download) ─▶ recap-frame.js ─port─▶ background.js ─▶ content.js
 ```
@@ -68,12 +96,12 @@ start the daemon with `NOTE_TAKER_TEAMS_BRIDGE_ENABLED=true`.
 
 | Path | Purpose |
 | --- | --- |
-| `src/page/` | `hook.ts`, the page-world script (audio taps, transcript copy, share frames for slides). |
+| `src/page/` | `hook.ts`, the page-world script (call activity, audio taps, transcript copy, share frames for slides). |
 | `src/content/` | The content script: call detection, consent, recording, Teams automation, overlay. |
 | `src/recap/` | The recap frame script: downloads the Teams transcript inside the recap's SharePoint frame. |
-| `src/background/` | The background: the native host connection and the popup's state. |
-| `src/popup/` | The popup: connection status, recording progress, the Teams transcript fetch's status, and settings. |
-| `src/lib/` | Browser-independent logic: PCM, WebVTT, captions, slides, Teams DOM readers, meeting records, settings, messages, translations. |
+| `src/background/` | The background: the native host connection, the popup's state, "Record this tab", the every-site scripts and the REC badge. |
+| `src/popup/` | The popup: connection status, recording progress, Record this tab, the Teams transcript fetch's status, and settings. |
+| `src/lib/` | Browser-independent logic: PCM, WebVTT, captions, slides, call and screen-share detection, meeting sites, Teams DOM readers, meeting records, settings, messages, translations. |
 | `src/locales/` | The extension's text in ten languages (#124); the build turns it into each browser's `_locales`. |
 | `static/` | `popup.html` and icons. |
 | `tests/` | Vitest specs (jsdom). |
@@ -104,7 +132,7 @@ node build.mjs        # dist/firefox and dist/chromium
      Firefox and press **Add**. For development, `about:debugging` → This Firefox → Load Temporary
      Add-on → `dist/firefox/manifest.json` loads the unsigned build until Firefox restarts.
 4. Firefox does not grant a hand-loaded extension its site access. The extension then opens its
-   popup in a tab: press **Allow on Teams** and accept, then reload any open Teams tab. The popup
+   popup in a tab: press **Allow on meeting sites** and accept, then reload any open meeting tab. The popup
    shows the same button later if the access is removed.
 5. Debian's Firefox ESR only: add to the profile's `user.js` and restart Firefox, so screen shares
    (and slides) show:
