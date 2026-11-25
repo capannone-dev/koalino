@@ -8,7 +8,7 @@
 PRODUCT_NAME = Koalino
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.noteTakerUi
+PRODUCT_BUNDLE_IDENTIFIER = io.github.capannone-dev.koalino
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 the Koalino authors. GPL-3.0-or-later.

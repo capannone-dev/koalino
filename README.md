@@ -103,13 +103,13 @@ koalino-linux-x86_64-0.1.0/note_taker_ui
 
 Koalino keeps its encryption key in the desktop keychain (GNOME Keyring, KWallet). Without one,
 start it with `NOTE_TAKER_ENCRYPTION_PASSPHRASE` set. Data lives in
-`~/.local/share/com.example.note_taker_ui/`.
+`~/.local/share/io.github.capannone_dev.koalino/`.
 
 ### Windows
 
 Unzip `koalino-windows-x86_64-0.1.0.zip` and run `note_taker_ui.exe`. The preview is not code
 signed, so SmartScreen may warn: choose **More info → Run anyway**. The key is kept in Windows
-Credential Manager.
+Credential Manager, and data lives in `%APPDATA%\capannone-dev\Koalino\`.
 
 ### macOS
 
@@ -117,7 +117,7 @@ Unzip `koalino-macos-universal-0.1.0.zip` and drag **Koalino** into Applications
 not notarized by Apple, so the first start is blocked: open it once, then go to **System Settings →
 Privacy & Security** and choose **Open Anyway**. Koalino asks for the microphone the first time it
 records, and keeps its key in the login Keychain. Data lives in
-`~/Library/Application Support/com.example.noteTakerUi/`. For the browser extension, run
+`~/Library/Application Support/io.github.capannone-dev.koalino/`. For the browser extension, run
 `/Applications/Koalino.app/Contents/MacOS/browser-host install` in Terminal.
 
 Limits of this preview: on Intel Macs recordings are transcribed but not split by speaker, because
@@ -150,6 +150,12 @@ Copy the APK to a 64-bit phone and open it, allowing installs from that app when
 Koalino asks for the microphone, and for notifications so it can keep recording with the screen
 off. The preview is signed with a development key: if a later build is signed with the release
 key, Android will refuse to update it in place.
+
+From version 0.2, Koalino's ID is `io.github.capannone_dev.koalino`, so it installs as a new app
+beside the 0.1 preview (`com.example.note_taker_ui`). To bring your meetings over, open the
+preview's **Settings → Back up all data**, then the new app's **Settings → Restore from backup**;
+uninstall the preview afterwards. Desktop apps move their data to the new folder by themselves on
+first start and leave a `MOVED-TO-KOALINO.txt` note in the old one.
 
 ### Linux server
 
@@ -293,9 +299,9 @@ option) any later version (`GPL-3.0-or-later`); see [LICENSE](LICENSE). The comp
 on, and their licenses, are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), which
 `tools/licenses/third_party_notices.py` generates.
 
-Until the first release, only the visible name is Koalino. The package and application IDs
-(`com.example.note_taker_ui`), binary and crate names, `NOTE_TAKER_*` variables, data folders and
-keychain entries keep their `note_taker` names, so existing installs keep their data.
+The application ID is `io.github.capannone_dev.koalino` (`io.github.capannone-dev.koalino` on
+macOS, where IDs cannot contain underscores). Binary and crate names, `NOTE_TAKER_*` variables,
+the `note_taker` data subfolder and keychain entries keep their internal names.
 
 ## Project documents
 

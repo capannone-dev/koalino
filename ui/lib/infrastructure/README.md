@@ -152,6 +152,11 @@ The database key never passes through Dart. `restore_on_start.dart` runs first i
 kept as `note_taker.before-restore` (with its models moved into the restored folder, since a
 backup leaves them out), and an unfinished staging folder is deleted.
 
+`legacy_data_migration.dart` (#168) runs before that on desktops: when the permanent app ID's
+folder has no `note_taker` data yet, the most recently used preview folder's contents (Linux
+`com.example.note_taker_ui`, macOS `com.example.noteTakerUi`, Windows `com.example\Koalino` or
+`com.example\note_taker_ui`) move into it, and a `MOVED-TO-KOALINO.txt` note is left behind.
+
 `meeting_edit_bridge.dart` (#96) is `MeetingEditBridge`: the meeting's notes, the summary's text
 and single transcript segments, through `note_taker_meeting_edit` (one JSON request per call, on
 a background isolate through `callRustLlm`). `MeetingEditException` words the core's `error_code`

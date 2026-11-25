@@ -4,8 +4,10 @@
 
 Flutter generated this runner; Koalino changes only its settings:
 
-- `Runner/Configs/AppInfo.xcconfig`: the app is named Koalino. The bundle identifier stays
-  `com.example.noteTakerUi`, like the other platforms' internal IDs, until a release changes them.
+- `Runner/Configs/AppInfo.xcconfig`: the app is named Koalino, with the bundle identifier
+  `io.github.capannone-dev.koalino` (#168; bundle IDs cannot contain the underscore the other
+  platforms use). Data from the preview's `com.example.noteTakerUi` folder moves over on first
+  start.
 - `Runner/*.entitlements`: no App Sandbox, since Koalino is not sold through the Mac App Store and
   must run the owner's Claude Code and Codex tools (#105) and talk to the browser extension's
   host (#125). It declares the microphone and network client and server use (P2P sync).

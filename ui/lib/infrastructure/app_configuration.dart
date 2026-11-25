@@ -9,6 +9,7 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 import 'package:note_taker_ui/infrastructure/background_core.dart';
 import 'package:note_taker_ui/infrastructure/diarization_models.dart';
+import 'package:note_taker_ui/infrastructure/legacy_data_migration.dart';
 import 'package:note_taker_ui/infrastructure/restore_on_start.dart';
 import 'package:note_taker_ui/infrastructure/whisper_model.dart';
 import 'package:path_provider/path_provider.dart';
@@ -89,11 +90,25 @@ Future<String> appKeyDirectory() async =>
 /// Inputs: None; the data directory is the platform's application-support directory.
 /// Outputs: Completes with Rust's status: 0 on success, 1 for invalid settings, 2 when the core
 /// was already configured or started.
-/// Side effects: Swaps in a restored backup staged by Settings (see `restore_on_start.dart`),
+/// Side effects: On desktops, moves the preview's data folder to this app ID's (see
+/// `legacy_data_migration.dart`). Swaps in a restored backup staged by Settings (see `restore_on_start.dart`),
 /// creates `<support>/note_taker`, finds or installs the Whisper model (see
 /// `whisper_model.dart`) and the diarization models (see `diarization_models.dart`), and stores the settings in the native process. On Android it also hands them to the host for the
 /// charging job that runs a waiting pass while the app is closed (#87).
 Future<int> configureCore() async {
+  if (Platform.isLinux || Platform.isMacOS || Platform.isWindows) {
+    final Directory support = await getApplicationSupportDirectory();
+    try {
+      // The preview's data moves to the permanent app ID's folder once (#168).
+      await migrateLegacyAppData(
+        supportDirectory: support,
+        legacySupportDirectories:
+            legacySupportDirectoriesFor(support, Platform.operatingSystem),
+      );
+    } on FileSystemException {
+      // What did not move stays where it was and is tried again at the next start.
+    }
+  }
   try {
     // A restored backup replaces the data before anything opens it (#167).
     await applyPendingRestore(await getApplicationSupportDirectory());

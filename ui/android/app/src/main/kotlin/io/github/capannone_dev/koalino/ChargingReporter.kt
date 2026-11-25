@@ -3,7 +3,7 @@
 // ACTION_BATTERY_CHANGED broadcast gives the state at once and again whenever the battery changes,
 // so a pass waiting from an earlier run starts at the next report after the core has opened the
 // database. Calls go to a background thread, because starting a pass loads the Whisper model.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.content.BroadcastReceiver
 import android.content.Context

@@ -7,7 +7,7 @@
 // `show` as its own recorder changes. The lock-screen version of the notification hides the
 // meeting title. While Android feeds the recording silence because a call holds the microphone,
 // the notification says so (#111), with the text Dart sent. Framework APIs only, no AndroidX.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -274,10 +274,10 @@ class RecordingService : Service() {
         const val STATE_STOPPING = "stopping"
         const val STATE_IDLE = "idle"
 
-        private const val ACTION_SHOW = "com.example.note_taker_ui.recording.SHOW"
-        private const val ACTION_PAUSE = "com.example.note_taker_ui.recording.PAUSE"
-        private const val ACTION_RESUME = "com.example.note_taker_ui.recording.RESUME"
-        private const val ACTION_STOP = "com.example.note_taker_ui.recording.STOP"
+        private const val ACTION_SHOW = "io.github.capannone_dev.koalino.recording.SHOW"
+        private const val ACTION_PAUSE = "io.github.capannone_dev.koalino.recording.PAUSE"
+        private const val ACTION_RESUME = "io.github.capannone_dev.koalino.recording.RESUME"
+        private const val ACTION_STOP = "io.github.capannone_dev.koalino.recording.STOP"
         private const val EXTRA_STATE = "state"
         private const val EXTRA_TITLE = "title"
         private const val EXTRA_SILENCED_TEXT = "silencedText"

@@ -7,7 +7,7 @@
 // It also hands a meeting to the owner's own AI app (#114): `shareFiles` sends a message and the
 // files of `cache/shared/handoff` together, to the Claude or ChatGPT app when one is named and
 // installed, else through the share sheet; `installedApps` says which of those apps are there.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.content.ClipData
 import android.content.ContentProvider

@@ -4134,3 +4134,20 @@ speaker (the default sink, whose monitor the app records) and the owner into a v
 - **Rejected:** Android Auto Backup (Google only, 25 MB, the Keystore key does not travel);
   WorkManager (a new library for what JobScheduler already does in `WaitingPassJob`).
 
+## 2026-11-25 — Permanent application ID (#168)
+
+- **Decision:** `io.github.capannone_dev.koalino` on Android and Linux,
+  `io.github.capannone-dev.koalino` on macOS, and `capannone-dev\Koalino` as the Windows data
+  folder (company and product names). The owner chose it; it is tied to the GitHub organisation,
+  which F-Droid and the stores accept without owning a domain.
+- **Why the two spellings:** Android package names allow no hyphen, and Apple bundle IDs allow no
+  underscore.
+- **Moving data:** desktops move the preview's folder (Linux `com.example.note_taker_ui`, macOS
+  `com.example.noteTakerUi`, Windows `com.example\Koalino` or the older
+  `com.example\note_taker_ui`, whichever was used last) on first start and leave a note in it.
+  Android installs the new ID as a separate app, whose new Keystore cannot unwrap the old key, so
+  the data moves with a backup (#167).
+- **Signing:** release APKs are signed with the owner's key (`~/.android/koalino-release.jks`,
+  passwords in `~/.android/koalino-key.properties`, both outside the repository). Without it,
+  builds fall back to the debug key, so any checkout builds; F-Droid signs its own builds.
+

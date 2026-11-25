@@ -2,7 +2,7 @@
 // device has a screen lock, and the system BiometricPrompt (strong biometrics or the screen
 // lock's PIN, pattern, or password). The framework prompt is used, so no AndroidX library is
 // needed. Locking itself is decided in Dart (`AppLockController`); the Rust core keeps running.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.app.Activity
 import android.app.KeyguardManager

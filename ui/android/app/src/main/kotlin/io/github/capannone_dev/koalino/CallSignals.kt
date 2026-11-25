@@ -1,6 +1,6 @@
 // Tells Dart whether Android is feeding Koalino's recording silence because a call holds the
 // microphone (#111). Answered on `note_taker/call_signals` as `silenced`.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.content.Context
 import android.media.AudioManager

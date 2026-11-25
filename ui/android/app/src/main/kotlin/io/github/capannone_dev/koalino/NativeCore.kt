@@ -2,7 +2,7 @@
 // through Dart: handing over the database key, the recording notification's actions, which
 // run while the app may be in the background (Issue #47), the charging state (#87), and the
 // background job that runs a waiting after-meeting pass without Flutter (`WaitingPassJob`, #87).
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 /** The Rust core's JNI methods; loading it reuses the library instance Dart already opened. */
 object NativeCore {

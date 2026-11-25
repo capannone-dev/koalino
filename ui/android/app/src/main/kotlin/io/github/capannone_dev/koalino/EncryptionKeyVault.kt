@@ -1,6 +1,6 @@
 // Keeps the database encryption key wrapped by a non-exportable Android Keystore key, so the
 // raw key never rests on disk (owner decision: no key file; see DECISION_LOG.md).
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties

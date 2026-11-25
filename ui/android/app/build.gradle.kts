@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -5,7 +7,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.note_taker_ui"
+    namespace = "io.github.capannone_dev.koalino"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,8 +17,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.note_taker_ui"
+        // The permanent ID (#168). Android IDs allow no hyphens, so the GitHub owner
+        // `capannone-dev` is written with an underscore; macOS uses the hyphen.
+        applicationId = "io.github.capannone_dev.koalino"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -37,11 +40,35 @@ android {
         noCompress += listOf("bin", "onnx")
     }
 
+    // The release key (#168) is the owner's. A properties file outside the repository (so it is
+    // never committed or copied with the checkout) names the keystore and its passwords:
+    // `$KOALINO_SIGNING_PROPERTIES`, else `~/.android/koalino-key.properties`. Without it, release
+    // builds are signed with the debug key, so any checkout still builds (F-Droid signs its own).
+    val releaseKeyFile = File(
+        System.getenv("KOALINO_SIGNING_PROPERTIES")
+            ?: "${System.getProperty("user.home")}/.android/koalino-key.properties",
+    )
+    val releaseKey = Properties().apply {
+        if (releaseKeyFile.exists()) releaseKeyFile.inputStream().use { load(it) }
+    }
+    signingConfigs {
+        if (releaseKeyFile.exists()) {
+            create("release") {
+                storeFile = file(releaseKey.getProperty("storeFile"))
+                storePassword = releaseKey.getProperty("storePassword")
+                keyAlias = releaseKey.getProperty("keyAlias")
+                keyPassword = releaseKey.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseKeyFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

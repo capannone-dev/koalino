@@ -8,7 +8,7 @@
 // both archives are complete, so the core never sees a partial install. The archives are deleted
 // afterwards. `ADSP_LIBRARY_PATH` must name `<npu>/qnn` before the core opens the NPU, so the
 // NPU can load its skeleton library: `prepareEnvironment` sets it at start-up.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.content.Context
 import android.os.Handler

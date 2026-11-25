@@ -6,7 +6,7 @@
 // that is already encrypted, and no Koalino server takes part. The job runs while the phone
 // charges, without Flutter: it unwraps the database key and the backup passphrase with the
 // Keystore and calls the core over JNI. The last `KEPT_BACKUPS` automatic backups are kept.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.app.job.JobInfo
 import android.app.job.JobParameters

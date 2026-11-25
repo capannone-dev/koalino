@@ -4,7 +4,7 @@
 // Dart asks which project they belong to, has Rust copy them into it, then releases the folder.
 // Only `content://` URIs are read: a `file://` URI from another app could name this app's own
 // private files (its database, keys or logs), which must never end up in a project.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.content.ContentResolver
 import android.content.Context

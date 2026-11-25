@@ -216,7 +216,7 @@ Keystore and passes it to Rust over JNI before Dart starts the runtime. The reco
 notification (`RecordingService.kt`, Issue #47) also calls `NativeCore.resumeRecording`,
 `pauseRecording`, and `stopRecording`, thin JNI wrappers over the C lifecycle functions, so its
 actions work while Dart is in the background. `ffi_android.rs` exports
-`Java_com_example_note_1taker_1ui_NativeCore_provideEncryptionKey` (Android builds only, with the
+`Java_io_github_capannone_1dev_koalino_NativeCore_provideEncryptionKey` (Android builds only, with the
 `jni` crate). The key never enters the Dart heap. Other hosts can use the C entry point
 `note_taker_provide_encryption_key(key, 32)`. Both return 0 when stored and 1 for a null key or
 another length, and share `store_host_encryption_key`, which keeps the key in a zeroizing buffer

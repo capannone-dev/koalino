@@ -2,7 +2,7 @@
 // device shows holds a `note-taker-invite:` link; the manifest makes Koalino the app for that
 // scheme, and this class keeps the link until Dart takes it on `note_taker/pairing_links`. The
 // link is untrusted text: Dart asks the owner first, and the Rust core checks the invite.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.content.Intent
 import io.flutter.plugin.common.MethodCall

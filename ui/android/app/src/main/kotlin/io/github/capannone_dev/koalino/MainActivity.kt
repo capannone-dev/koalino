@@ -17,7 +17,7 @@
 // `note_taker/background_core` stores the core settings for `WaitingPassJob`, which runs a
 // waiting after-meeting pass while the phone charges with the app closed, and asks once for the
 // battery exemption Power saving requires; leaving the app schedules that job (#87).
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.content.ActivityNotFoundException
 import android.content.Context

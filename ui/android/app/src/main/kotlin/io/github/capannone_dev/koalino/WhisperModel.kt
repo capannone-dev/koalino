@@ -4,7 +4,7 @@
 // offline with no setup. The copy is
 // skipped when the target already has the asset's size, and written through a temporary file
 // so an interrupted copy never leaves a truncated model behind.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.content.res.AssetManager
 import android.os.Handler

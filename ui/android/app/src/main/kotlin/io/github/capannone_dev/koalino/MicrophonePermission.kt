@@ -4,7 +4,7 @@
 // its lock-screen controls are visible (Issue #47); refusing that one does not stop recording. The Rust core opens
 // the microphone itself (cpal, AAudio) and would fail without it. Framework APIs only, so no
 // AndroidX library is needed.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.Manifest
 import android.app.Activity

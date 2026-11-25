@@ -18,7 +18,7 @@
 //! file Android's document picker opened, the passphrase and, for a backup, the unwrapped key;
 //! on restore it receives the backup's key in an array it wipes after wrapping it.
 //!
-//! The Kotlin side is `com.example.note_taker_ui.NativeCore`. It loads this library with
+//! The Kotlin side is `io.github.capannone_dev.koalino.NativeCore`. It loads this library with
 //! `System.loadLibrary("note_taker_core")`, which returns the instance Dart already opened, so
 //! both share the runtime's statics.
 
@@ -48,7 +48,9 @@ use crate::ffi::{
 /// poisoned. A JNI failure throws a Java `RuntimeException` (no key bytes in its message).
 /// Side effects: Replaces the host key for the next runtime start; the temporary copy is wiped.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_provideEncryptionKey<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_provideEncryptionKey<
+    'caller,
+>(
     mut unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
     key: JByteArray<'caller>,
@@ -74,7 +76,7 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_provideEncryp
 /// when the microphone cannot be reopened.
 /// Side effects: As `note_taker_start_recording`: turns the microphone on.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_resumeRecording<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_resumeRecording<'caller>(
     _unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
 ) -> jint {
@@ -86,7 +88,7 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_resumeRecordi
 /// Outputs: The status of `note_taker_pause_recording`.
 /// Side effects: Pauses the recording and turns the microphone off.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_pauseRecording<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_pauseRecording<'caller>(
     _unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
 ) -> jint {
@@ -99,7 +101,7 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_pauseRecordin
 /// Side effects: Blocks until the remaining audio is transcribed and saved; call it off the
 /// main thread.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_stopRecording<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_stopRecording<'caller>(
     _unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
 ) -> jint {
@@ -113,7 +115,7 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_stopRecording
 /// Side effects: As `note_taker_set_charging`: may load the model to start a waiting pass, so
 /// call it off the main thread.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_setCharging<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_setCharging<'caller>(
     _unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
     charging: jboolean,
@@ -126,7 +128,9 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_setCharging<'
 /// Outputs: As `note_taker_speech_awaiting_pass`: the count, or minus a status.
 /// Side effects: Opens the runtime when needed; never call it on the main thread.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_speechAwaitingPass<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_speechAwaitingPass<
+    'caller,
+>(
     _unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
 ) -> jint {
@@ -139,7 +143,7 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_speechAwaitin
 /// Outputs: As `note_taker_run_waiting_pass`.
 /// Side effects: Loads the model and blocks for a whole round; never call it on the main thread.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_runWaitingPass<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_runWaitingPass<'caller>(
     _unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
     timeout_ms: jint,
@@ -156,7 +160,7 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_runWaitingPas
 /// core was already configured (by the app in this process, which is fine).
 /// Side effects: Stores the settings for the process. A JNI failure throws a RuntimeException.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_configure<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_configure<'caller>(
     mut unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
     configuration_json: JByteArray<'caller>,
@@ -188,7 +192,7 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_configure<'ca
 /// Side effects: Opens the database and key store and starts P2P; never call it on the main
 /// thread.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_startRuntime<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_startRuntime<'caller>(
     _unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
 ) -> jint {
@@ -238,7 +242,7 @@ fn owned_file(descriptor: jint) -> Option<File> {
 /// Side effects: As `backup_commands::create_backup`; runs for seconds to minutes, so call it
 /// off the main thread.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_createBackup<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_createBackup<'caller>(
     mut unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
     data_directory: JByteArray<'caller>,
@@ -295,7 +299,7 @@ pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_createBackup<
 /// `BACKUP_*` code. A JNI failure throws a RuntimeException.
 /// Side effects: As `backup_commands::restore_backup`; call it off the main thread.
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_com_example_note_1taker_1ui_NativeCore_stageRestore<'caller>(
+pub extern "system" fn Java_io_github_capannone_1dev_koalino_NativeCore_stageRestore<'caller>(
     mut unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
     input_descriptor: jint,

@@ -8,7 +8,7 @@
 // the job works with the screen locked and with Koalino's app lock on: the app lock gates the UI
 // only. Before the first unlock after a reboot, app storage is unavailable and Android does not
 // start the job.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.app.job.JobInfo
 import android.app.job.JobParameters

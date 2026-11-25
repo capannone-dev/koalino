@@ -4,7 +4,7 @@
 // hands it to the Rust core over JNI; on restore the core hands the backup's key back here, and
 // it is wrapped with this app's Keystore key straight into the restored folder. Files are picked
 // with Android's document picker, so a backup can go to Downloads, a USB drive or a cloud folder.
-package com.example.note_taker_ui
+package io.github.capannone_dev.koalino
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
