@@ -368,21 +368,26 @@ main > section.privacy-band {
 .platforms {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  column-gap: 20px;
+  row-gap: 20px;
 }
 
+/* Every card has the same five parts (icons, title, text, buttons, note) and spans five rows of
+   a shared grid, so the parts line up across a row whatever their length (#173). */
 .platforms article {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-row: span 5;
+  grid-template-rows: subgrid;
+  row-gap: 0;
+  align-content: start;
 }
 
 .platforms article p {
-  flex: 1;
   margin-bottom: 20px;
 }
 
-.platforms article .button {
-  text-align: center;
+.platforms .choices {
+  align-self: start;
 }
 
 .platforms article.yours {
@@ -393,16 +398,10 @@ main > section.privacy-band {
 .meta {
   display: block;
   margin-top: 12px;
+  min-height: 1.4em;
   font-size: 0.85rem;
   color: var(--muted);
   text-align: center;
-}
-
-.meta.links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  justify-content: center;
 }
 
 .note {
@@ -430,9 +429,12 @@ footer {
 }
 
 footer > div {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  flex: 1 1 420px;
+}
+
+footer > div img {
+  vertical-align: middle;
+  margin-right: 8px;
 }
 
 footer nav {

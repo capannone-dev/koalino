@@ -189,21 +189,25 @@
         </p>
         <div class="platforms">
           <article data-platform="android">
-            <img src="icons/android.svg" alt="" width="28" height="28" />
+            <span class="card-icons"><img src="icons/android.svg" alt="" width="28" height="28" /></span>
             <h3>Android</h3>
-            <p>Phones with a 64-bit processor. Allow installs from your browser when asked.</p>
-            <a class="button" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-android-arm64-0.2.0.apk">Download APK</a>
+            <p>Phones with a 64-bit processor. Allow installs from your browser when Android asks.</p>
+            <div class="choices">
+              <a class="button" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-android-arm64-0.2.0.apk">Download APK</a>
+            </div>
             <span class="meta">Coming to F-Droid</span>
           </article>
           <article data-platform="windows">
-            <img src="icons/windows.svg" alt="" width="28" height="28" />
+            <span class="card-icons"><img src="icons/windows.svg" alt="" width="28" height="28" /></span>
             <h3>Windows</h3>
-            <p>Windows 10 and 11, 64-bit. Unzip and run Koalino.</p>
-            <a class="button" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-x86_64-0.2.0.zip">Download for Windows</a>
-            <span class="meta">Not yet code signed: choose “Run anyway”</span>
+            <p>Windows 10 and 11, 64-bit. Installs for you alone, no administrator rights needed.</p>
+            <div class="choices">
+              <a class="button" data-package="installer" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-x86_64-0.2.0-setup.exe">Download installer</a>
+            </div>
+            <span class="meta">Not yet code signed: choose “More info → Run anyway”. Or the <a href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-windows-x86_64-0.2.0.zip">portable zip</a></span>
           </article>
           <article data-platform="linux">
-            <img src="icons/linux.svg" alt="" width="28" height="28" />
+            <span class="card-icons"><img src="icons/linux.svg" alt="" width="28" height="28" /></span>
             <h3>Linux</h3>
             <p>64-bit PCs, with a menu entry and icon. Pick the package for your distribution.</p>
             <div class="choices">
@@ -211,35 +215,35 @@
               <a class="button secondary" data-package="rpm" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-0.2.0.preview.2-1.x86_64.rpm">Fedora, openSUSE (.rpm)</a>
               <a class="button secondary" data-package="flatpak" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-x86_64-0.2.0.flatpak">Any distribution (Flatpak)</a>
             </div>
-            <span class="meta links">
-              <a data-package="tarball" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-linux-x86_64-0.2.0.tar.gz">Tarball</a>
-            </span>
+            <span class="meta">Or the <a data-package="tarball" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-linux-x86_64-0.2.0.tar.gz">tarball</a></span>
           </article>
           <article data-platform="mac">
-            <img src="icons/apple.svg" alt="" width="28" height="28" />
+            <span class="card-icons"><img src="icons/apple.svg" alt="" width="28" height="28" /></span>
             <h3>macOS</h3>
             <p>macOS 12 or newer, Intel and Apple silicon. Experimental: not yet tried on real Macs.</p>
-            <a class="button secondary" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-macos-universal-0.2.0.zip">Download for Mac</a>
+            <div class="choices">
+              <a class="button" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-macos-universal-0.2.0.zip">Download for Mac</a>
+            </div>
             <span class="meta"><a href="https://github.com/capannone-dev/koalino#apple-devices-help-wanted">Help us test it</a></span>
           </article>
           <article data-platform="browser">
-            <span class="card-icons">
-              <img src="icons/firefoxbrowser.svg" alt="" width="28" height="28" />
-              <img src="icons/googlechrome.svg" alt="" width="28" height="28" />
-            </span>
+            <span class="card-icons"><img src="icons/firefoxbrowser.svg" alt="" width="28" height="28" /><img src="icons/googlechrome.svg" alt="" width="28" height="28" /></span>
             <h3>Browser extension</h3>
             <p>Records Teams meetings joined in the browser. Needs the Koalino app on the same computer.</p>
             <div class="choices">
               <a class="button secondary" data-browser="firefox" href="https://github.com/capannone-dev/koalino/releases/download/v0.1.0-preview.1/koalino-browser-extension-firefox-0.1.0.xpi"><img src="icons/firefoxbrowser.svg" alt="" width="18" height="18" />Add to Firefox</a>
               <a class="button secondary" data-browser="chromium" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-browser-extension-chromium-0.2.0.zip"><img src="icons/googlechrome.svg" alt="" width="18" height="18" />Chrome, Edge (zip)</a>
             </div>
-            <span class="meta">Firefox: signed by Mozilla. Chrome and Edge: load it unpacked, see the <a href="https://github.com/capannone-dev/koalino#browser-extension-teams-in-the-browser">README</a>.</span>
+            <span class="meta">Chrome and Edge: load it unpacked, see the <a href="https://github.com/capannone-dev/koalino#browser-extension-teams-in-the-browser">README</a></span>
           </article>
           <article data-platform="server">
-            <img src="icons/linux.svg" alt="" width="28" height="28" />
+            <span class="card-icons"><img src="icons/linux.svg" alt="" width="28" height="28" /></span>
             <h3>Home server</h3>
             <p>An always-on Linux box that syncs and transcribes for your devices, with a web dashboard.</p>
-            <a class="button secondary" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-linux-x86_64-0.2.0.tar.gz">Download server</a>
+            <div class="choices">
+              <a class="button" href="https://github.com/capannone-dev/koalino/releases/download/v0.2.0-preview.2/koalino-server-linux-x86_64-0.2.0.tar.gz">Download server</a>
+            </div>
+            <span class="meta"><a href="https://github.com/capannone-dev/koalino#linux-server">Setup guide</a></span>
           </article>
         </div>
         <p class="note">
