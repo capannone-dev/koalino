@@ -753,7 +753,10 @@ fn same_restated_word(previous: &str, next: &str, previous_is_cut: bool) -> bool
     previous == next
         || (previous.chars().count() >= SHARED_START
             && next.chars().count() >= SHARED_START
-            && previous.chars().take(SHARED_START).eq(next.chars().take(SHARED_START)))
+            && previous
+                .chars()
+                .take(SHARED_START)
+                .eq(next.chars().take(SHARED_START)))
         || (previous_is_cut && !previous.is_empty() && next.starts_with(previous))
 }
 
@@ -846,7 +849,11 @@ where
             .unwrap_or_default();
         let restated = restated_lead(&previous_words, &window_words);
         if restated > 0 {
-            tracing::debug!(window_number, restated_words = restated, "the window restated the previous one's end");
+            tracing::debug!(
+                window_number,
+                restated_words = restated,
+                "the window restated the previous one's end"
+            );
         }
         words.extend(transcript.timed_words().iter().skip(restated).map(|word| {
             MeetingWord::new(

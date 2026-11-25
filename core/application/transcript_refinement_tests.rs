@@ -841,7 +841,10 @@ fn split(text: &str) -> Vec<&str> {
 fn a_window_restating_the_previous_ones_end_drops_the_restatement() {
     let previous = split("va bene così. Ok, comunque si guardiamo. Quindi i risultati s");
     let next = split("Ok, comunque sì, guarderò. Quindi i risultati si basano su questi numeri");
-    assert_eq!(super::transcript_refinement::restated_lead(&previous, &next), 8);
+    assert_eq!(
+        super::transcript_refinement::restated_lead(&previous, &next),
+        8
+    );
 }
 
 /// Verifies ordinary continuations keep every word: new speech, a short coincidence, or a
@@ -851,7 +854,10 @@ fn a_window_continuing_the_previous_one_keeps_its_words() {
     let restated = |previous: &str, next: &str| {
         super::transcript_refinement::restated_lead(&split(previous), &split(next))
     };
-    assert_eq!(restated("abbiamo finito la prova", "poi passiamo al modello"), 0);
+    assert_eq!(
+        restated("abbiamo finito la prova", "poi passiamo al modello"),
+        0
+    );
     assert_eq!(restated("e poi", "e poi andiamo"), 0);
     assert_eq!(
         restated(

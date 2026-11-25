@@ -456,11 +456,10 @@ impl TranscriptionEngine for LocalWhisperCppTranscriptionEngine {
                 timed_words,
             );
 
-        Ok(Transcript::new(
-            audio_recording.meeting_id().clone(),
-            transcript_content,
+        Ok(
+            Transcript::new(audio_recording.meeting_id().clone(), transcript_content)
+                .with_timed_words(timed_words),
         )
-        .with_timed_words(timed_words))
     }
 }
 
