@@ -2,6 +2,11 @@
 # in a merge request to https://gitlab.com/fdroid/fdroiddata once the repository is public. See
 # README.md beside it for what the build leaves out and why. Rust comes from Debian's rustup, pinned
 # to the toolchain the Android builds use; Flutter from fdroiddata's flutter srclib.
+AntiFeatures:
+  NonFreeNet:
+    en-US: Optional summaries and chat can use a cloud AI service the user connects
+      (for example OpenAI, Google or Mistral). Off by default; transcription always
+      runs on the device.
 Categories:
   - Multimedia
   - Writing
