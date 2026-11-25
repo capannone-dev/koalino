@@ -1,10 +1,10 @@
 # Draft of Koalino's F-Droid recipe (#163), to be submitted as metadata/io.github.capannone_dev.koalino.yml
 # in a merge request to https://gitlab.com/fdroid/fdroiddata once the repository is public. See
-# README.md beside it for what the build leaves out and why. Check the flutter and rustup srclib
-# versions against fdroiddata's srclibs/ when submitting.
+# README.md beside it for what the build leaves out and why. Rust comes from Debian's rustup, pinned
+# to the toolchain the Android builds use; Flutter from fdroiddata's flutter srclib.
 Categories:
-  - Writing
   - Multimedia
+  - Writing
 License: GPL-3.0-or-later
 AuthorName: The Koalino contributors
 SourceCode: https://github.com/capannone-dev/koalino
@@ -23,22 +23,29 @@ Builds:
     subdir: ui
     sudo:
       - apt-get update
-      - apt-get install -y cmake clang libclang-dev curl
+      - apt-get install -y rustup cmake clang libclang-dev curl
     output: build/app/outputs/flutter-apk/app-release.apk
     srclibs:
       - flutter@3.47.8
-      - rustup@1.28.2
+    rm:
+      - web
+      - browser-extension
     prebuild:
       - ../tools/fdroid/prepare.sh
+      - export PUB_CACHE=$(pwd)/.pub-cache
       - $$flutter$$/bin/flutter config --no-analytics
       - $$flutter$$/bin/flutter pub get
     scanignore:
       - core/protocol/fixtures
+    scandelete:
+      - ui/.pub-cache
     build:
-      - $$rustup$$/rustup-init.sh -y --profile minimal --default-toolchain 1.99.1 --target aarch64-linux-android
-      - source $HOME/.cargo/env
+      - export PUB_CACHE=$(pwd)/.pub-cache
+      - rustup default 1.99.1
+      - rustup target add aarch64-linux-android
       - ANDROID_NDK=$$NDK$$ ../tools/fdroid/build-core.sh arm64
-      - $$flutter$$/bin/flutter build apk --release --target-platform android-arm64 --dart-define=KOALINO_NO_BUNDLED_MODELS=true
+      - $$flutter$$/bin/flutter build apk --release --target-platform android-arm64
+        --dart-define=KOALINO_NO_BUNDLED_MODELS=true
     ndk: r27c
 
 AutoUpdateMode: Version
