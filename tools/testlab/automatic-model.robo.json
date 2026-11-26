@@ -1,0 +1,100 @@
+[
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 15000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Settings\nTab 5 of 5"
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 3000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Transcription model\nChoose the Whisper model."
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 5000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": true,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Download 488 MB"
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 600000
+  },
+  {
+    "eventType": "PRESSED_BACK",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 3000
+  },
+  {
+    "eventType": "VIEW_CLICKED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 0,
+    "canScrollTo": true,
+    "optional": false,
+    "elementDescriptors": [
+      {
+        "className": "android.view.View",
+        "contentDescription": "Transcription model\nChoose the Whisper model."
+      }
+    ]
+  },
+  {
+    "eventType": "DELAYED_MESSAGE_POSTED",
+    "timestamp": 0,
+    "actionCode": -1,
+    "delayTime": 8000
+  }
+]
