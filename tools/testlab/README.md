@@ -20,8 +20,10 @@ speed check (#109) confirms it:
 Robo then explores the app on its own until the time limit; only the screenshots up to step 4
 matter. Its exploration taps rows too: on the Galaxy A54 it chose "Suggested for this device"
 before the reopened page was captured, which hides the check's result (shown on the Automatic
-row only). Read the screenshots in time order and use the first reopened page. It taps elements by their accessibility labels (Flutter's semantics), so a renamed tab or
-row needs the script updated.
+row only). Read the screenshots in time order and use the first reopened page.
+
+The script taps elements by their accessibility labels (Flutter's semantics), so a renamed tab
+or row needs the script updated.
 
 Run it (needs `gcloud auth login` and the `koalino-test-lab` project). Use the phone build
 (`flutter build apk --target-platform android-arm64`), never the emulator APK: that one carries
